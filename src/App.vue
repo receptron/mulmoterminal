@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
+import TerminalView from "./components/Terminal.vue";
 </script>
 
 <template>
-  <HelloWorld />
+  <TerminalView />
 </template>
