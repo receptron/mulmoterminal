@@ -4,12 +4,12 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,vite -c blue,green \"node server/index.js\" \"vite\"",
-    "dev:server": "node server/index.js",
+    "dev": "concurrently -n server,vite -c blue,green \"node --env-file=.env server/index.js\" \"vite\"",
+    "dev:server": "node --env-file=.env server/index.js",
     "dev:client": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "server": "node server/index.js",
+    "server": "node --env-file=.env server/index.js",
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {
