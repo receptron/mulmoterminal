@@ -1,8 +1,11 @@
-const express = require("express");
-const http = require("http");
-const { WebSocketServer } = require("ws");
-const pty = require("node-pty");
-const path = require("path");
+import express from "express";
+import http from "http";
+import { WebSocketServer } from "ws";
+import pty from "node-pty";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3456;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
