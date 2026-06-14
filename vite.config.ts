@@ -9,6 +9,9 @@ export default defineConfig({
         target: "ws://localhost:3456",
         ws: true,
       },
+      "/api": {
+        target: "http://localhost:3456",
+      },
     },
   },
 });

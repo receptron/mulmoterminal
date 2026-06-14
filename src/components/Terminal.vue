@@ -1,17 +1,63 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch } from "vue";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+
+// `null` => start a fresh session; otherwise resume the given session id.
+// `connectKey` increments on every user action so re-selecting the same
+// session (or starting another fresh one) still forces a reconnect.
+const props = defineProps<{ sessionId: string | null; connectKey: number }>();
 
 const terminalRef = ref<HTMLDivElement>();
 const status = ref<"connecting" | "connected" | "disconnected">("connecting");
 
 let term: Terminal;
 let fitAddon: FitAddon;
-let ws: WebSocket;
+let ws: WebSocket | null = null;
 let resizeObserver: ResizeObserver;
+let reconnecting = false;
+
+function connect() {
+  // Tear down any existing connection without flipping status to disconnected.
+  if (ws) {
+    reconnecting = true;
+    ws.close();
+    ws = null;
+  }
+  term.reset();
+  status.value = "connecting";
+
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  const query = props.sessionId ? `?session=${encodeURIComponent(props.sessionId)}` : "";
+  const sock = new WebSocket(`${proto}//${location.host}/ws${query}`);
+  ws = sock;
+
+  sock.onopen = () => {
+    status.value = "connected";
+    sock.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
+  };
+
+  sock.onmessage = (event) => {
+    const msg = JSON.parse(event.data);
+    if (msg.type === "output") {
+      term.write(msg.data);
+    } else if (msg.type === "exit") {
+      term.write("\r\n\x1b[33m[session ended]\x1b[0m\r\n");
+      status.value = "disconnected";
+    }
+  };
+
+  sock.onclose = () => {
+    // Ignore the close triggered by an intentional reconnect.
+    if (reconnecting && sock !== ws) {
+      reconnecting = false;
+      return;
+    }
+    status.value = "disconnected";
+  };
+}
 
 onMounted(() => {
   term = new Terminal({
@@ -33,32 +79,9 @@ onMounted(() => {
   term.open(terminalRef.value!);
   fitAddon.fit();
 
-  // WebSocket
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
-
-  ws.onopen = () => {
-    status.value = "connected";
-    ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-  };
-
-  ws.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
-    if (msg.type === "output") {
-      term.write(msg.data);
-    } else if (msg.type === "exit") {
-      term.write("\r\n\x1b[33m[session ended]\x1b[0m\r\n");
-      status.value = "disconnected";
-    }
-  };
-
-  ws.onclose = () => {
-    status.value = "disconnected";
-  };
-
   // Terminal input -> server
   term.onData((data) => {
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "input", data }));
     }
   });
@@ -66,14 +89,24 @@ onMounted(() => {
   // Auto-resize
   resizeObserver = new ResizeObserver(() => {
     fitAddon.fit();
-    if (ws.readyState === WebSocket.OPEN) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
     }
   });
   resizeObserver.observe(terminalRef.value!);
 
+  connect();
   term.focus();
 });
+
+// Reconnect (resume a different session / start fresh) on every user action.
+watch(
+  () => props.connectKey,
+  () => {
+    connect();
+    term.focus();
+  }
+);
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
@@ -96,6 +129,8 @@ onUnmounted(() => {
 .terminal-wrapper {
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-width: 0;
   height: 100vh;
   background: #1a1a2e;
 }
