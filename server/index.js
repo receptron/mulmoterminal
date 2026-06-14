@@ -56,13 +56,24 @@ function killPty(id) {
   pubsub?.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
 }
 
-// Update a session's working state and publish the change to subscribers.
-// No-op (and no publish) when the state is unchanged.
+// Publish a session's current activity (working + waiting) to subscribers.
+function publishActivity(id) {
+  const a = activity.get(id) || {};
+  pubsub?.publish(SESSIONS_CHANNEL, {
+    id,
+    working: a.working ?? false,
+    waiting: a.waiting ?? false,
+    event: a.event ?? null,
+  });
+}
+
+// Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
+// publish) when the state is unchanged.
 function setWorking(id, working, event) {
   const prev = activity.get(id) || {};
   if ((prev.working ?? false) === working) return;
-  activity.set(id, { working, event: event ?? prev.event ?? null, at: Date.now() });
-  pubsub?.publish(SESSIONS_CHANNEL, { id, working, event: event ?? null });
+  activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
+  publishActivity(id);
 
   // A background session (no attached client) that just went idle is reaped.
   if (!working) {
@@ -74,15 +85,29 @@ function setWorking(id, working, event) {
   }
 }
 
-// Hook config injected via `claude --settings <json>`. UserPromptSubmit and
-// Stop both POST the hook payload (which includes session_id and
-// hook_event_name) to /api/hook, which flips the session's working state.
+// A background session needs the user's attention: it is waiting for input
+// (Notification: permission / question / idle) or has finished a turn with
+// output the user hasn't seen (Stop). Cleared when brought to the foreground
+// (see the WebSocket connection handler).
+function setWaiting(id, waiting, event) {
+  const prev = activity.get(id) || {};
+  if ((prev.waiting ?? false) === waiting) return;
+  activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
+  publishActivity(id);
+}
+
+// Hook config injected via `claude --settings <json>`. Each event POSTs the
+// hook payload (session_id + hook_event_name) to /api/hook:
+//   UserPromptSubmit => working, Stop => idle,
+//   Notification     => waiting for input (permission / question / idle).
 function hookSettingsJson() {
   const cmd =
     `curl -s -X POST http://localhost:${PORT}/api/hook ` +
     `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
-  return JSON.stringify({ hooks: { UserPromptSubmit: entry, Stop: entry } });
+  return JSON.stringify({
+    hooks: { UserPromptSubmit: entry, Stop: entry, Notification: entry },
+  });
 }
 
 // Claude stores each project's sessions under ~/.claude/projects/<encoded-cwd>/,
@@ -128,11 +153,13 @@ async function readSessionMeta(dir, file) {
 
   const title = aiTitle || lastPrompt || firstUserMsg || "(untitled session)";
   const id = path.basename(file, ".jsonl");
+  const a = activity.get(id);
   return {
     id,
     title,
     mtime: stat.mtimeMs,
-    working: activity.get(id)?.working ?? false,
+    working: a?.working ?? false,
+    waiting: a?.waiting ?? false,
   };
 }
 
@@ -147,8 +174,19 @@ app.use(express.static(path.join(__dirname, "../dist")));
 app.post("/api/hook", (req, res) => {
   const { session_id, hook_event_name } = req.body || {};
   if (session_id) {
-    if (hook_event_name === "UserPromptSubmit") setWorking(session_id, true, hook_event_name);
-    else if (hook_event_name === "Stop") setWorking(session_id, false, hook_event_name);
+    const entry = ptys.get(session_id);
+    const foreground = entry && entry.ws; // a ws is attached => being viewed
+    if (hook_event_name === "UserPromptSubmit") {
+      setWorking(session_id, true, hook_event_name);
+    } else if (hook_event_name === "Stop") {
+      // A background session that finished a turn has output the user hasn't
+      // seen yet (and is ready for another message) — flag it for attention.
+      if (!foreground) setWaiting(session_id, true, hook_event_name);
+      setWorking(session_id, false, hook_event_name);
+    } else if (hook_event_name === "Notification") {
+      // Background session waiting for input (permission / question / idle).
+      if (!foreground) setWaiting(session_id, true, hook_event_name);
+    }
     console.log(`[hook] ${hook_event_name} for ${session_id}`);
   }
   res.json({ ok: true });
@@ -181,6 +219,7 @@ app.get("/api/sessions", async (_req, res) => {
         title: meta.title,
         mtime: meta.createdAt,
         working: activity.get(id)?.working ?? false,
+        waiting: activity.get(id)?.waiting ?? false,
       });
     }
 
@@ -270,6 +309,10 @@ wss.on("connection", (ws, req) => {
       }
     });
   }
+
+  // The session is now in the foreground (being viewed): clear any
+  // "waiting for input" flag so it stops showing as bold.
+  setWaiting(sessionId, false);
 
   // browser -> PTY
   ws.on("message", (raw) => {

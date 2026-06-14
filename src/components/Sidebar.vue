@@ -7,6 +7,7 @@ interface Session {
   title: string;
   mtime: number;
   working: boolean;
+  waiting: boolean;
 }
 
 const props = defineProps<{ activeId: string | null }>();
@@ -77,7 +78,7 @@ onUnmounted(() => unsubscribe?.());
       <li
         v-for="s in sessions"
         :key="s.id"
-        :class="['item', { active: s.id === props.activeId }]"
+        :class="['item', { active: s.id === props.activeId, waiting: s.waiting }]"
         :title="s.title"
         @click="emit('select', s.id)"
       >
@@ -183,6 +184,12 @@ onUnmounted(() => unsubscribe?.());
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Background session waiting for input (Notification); cleared on foreground. */
+.item.waiting .item-title {
+  font-weight: 700;
+  color: #ffffff;
 }
 
 /* Shown while Claude is working in a session (UserPromptSubmit → Stop). */
