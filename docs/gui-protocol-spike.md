@@ -5,9 +5,10 @@ MulmoClaude's **GUI chat protocol** (`presentMarkdown`, `presentForm`, …) on t
 of the **interactive PTY** architecture. The lessons feed the larger MulmoClaude
 migration — see [Background](#background).
 
-> Status: Phase I + II implemented and smoke-tested. See each phase's
-> **Findings**. Remaining: manual check against a real interactive `claude`, and
-> the deferred permission-prompt probe.
+> Status: Phase I + II **validated against a real interactive `claude`**
+> (`presentMarkdown` one-way and `presentForm` round-trip both work). Permissions
+> are **decided, not probed** — terminal-native (see
+> [Decision](#decision-permissions-are-terminal-native)).
 
 ---
 
@@ -62,8 +63,8 @@ markdown, panel renders it), so it isolates the data pipe with no round-trip.
      its mcp-config), mirroring MulmoClaude's `MULMOCLAUDE_CHAT_SESSION_ID`.
 2. **Spawn wiring** — when spawning `claude`, also pass `--mcp-config <file>`
    (alongside the existing `--settings` hooks) and add the tool to
-   `--allowedTools` so it auto-runs (sidesteps the permission prompt, which is a
-   separate probe — see [Deferred](#deferred-probes)).
+   `--allowedTools` so it auto-runs (sidesteps the permission prompt — permissions
+   stay terminal-native, see [Decision](#decision-permissions-are-terminal-native)).
 3. **Server endpoint** — `POST /api/gui` in `server/index.js`: validate the
    frame, store the latest payload(s) **keyed by `sessionId`** (in-memory for
    the spike), and `pubsub.publish("gui", { sessionId, type, data })`.
@@ -94,8 +95,8 @@ interactive `claude` is the remaining manual check.
   --strict-mcp-config --allowedTools mcp__mulmoterminal-gui__presentMarkdown` to
   the existing `--settings`/`--session-id`/`--resume` args. No temp file to
   manage. `--strict-mcp-config` keeps the user's own MCP servers out of the
-  spike; `--allowedTools` auto-runs the tool (no permission prompt — the
-  permission flow stays a deferred probe).
+  spike; `--allowedTools` auto-runs the tool (no permission prompt — permissions
+  are terminal-native by decision, see below).
 - **How `sessionId` propagates to the MCP process:** via the MCP server's `env`
   block in the config (`MULMOTERMINAL_SESSION_ID`, `MULMOTERMINAL_PORT`). This
   is necessary because every PTY shares the server's single `process.env`, so
@@ -175,21 +176,36 @@ claude; history replay shows the form as completed afterward.
   interactive PTY with no special claude support, because the block lives
   entirely in the MCP subprocess (await an HTTP round-trip) and is invisible to
   claude, which just sees a slow tool call. `handlePermission` is the same shape
-  (a blocking ask that returns allow/deny), so the `AskUserQuestion →
-  presentForm` redirect should port cleanly. The remaining open risk is the
-  **native permission prompt** (`--permission-prompt-tool`), still a deferred
-  probe — see below.
+  (a blocking ask that returns allow/deny). We nonetheless chose **not** to use
+  it — permissions stay terminal-native (see
+  [Decision](#decision-permissions-are-terminal-native)).
 
 ---
 
-## Deferred probes
+## Decision: permissions are terminal-native
 
-- **Permission flow (`--permission-prompt-tool`).** `presentMarkdown` is
-  auto-allowed, so it won't exercise permissions. A follow-on probe: add a tool
-  that triggers an "ask" and observe whether interactive mode honors
-  `--permission-prompt-tool` or falls back to its native in-terminal prompt.
-  This is the biggest open risk for the MulmoClaude migration (the
-  `AskUserQuestion → presentForm` redirect).
+We will **not** intercept permission prompts into the GUI. Because the chat is a
+real terminal, Claude's built-in "May I?" prompt renders right there and the user
+answers it in the terminal — simpler, and better than a GUI dialog. This **retires
+the old R1 risk by choice** (no probe needed) and **removes work** from
+MulmoClaude's M3:
+
+- Drop the `handlePermission` MCP tool and all `--permission-prompt-tool` wiring.
+- Drop the `AskUserQuestion → presentForm` redirect — in interactive mode
+  `AskUserQuestion` renders natively in the terminal and the user answers there.
+
+**One caveat — sessions with no terminal attached.** Terminal-native permissions
+work for any session a human will eventually view:
+
+- **foreground chat** → prompt in the terminal, user answers;
+- **visible background chat** → the prompt simply waits in its terminal until the
+  user opens the session (fits the existing "needs attention" model).
+
+But a **fully hidden worker** (`spawnBackgroundChat hidden=true`) or an
+**autonomous mobile-spawned** session has no terminal for anyone to answer at, so
+a prompt would block forever. Those must run with **pre-authorized tools** (broad
+`--allowedTools` / a permissive settings profile) so they never stop to ask.
+Decide that pre-auth policy as part of MulmoClaude M5/M6.
 
 ## Out of scope
 
@@ -199,7 +215,9 @@ real work lands on MulmoClaude's `staging` branch afterward.
 
 ## What this de-risks for MulmoClaude
 
-A working Phase I + II turns MulmoClaude milestone **M3 (plugins + GUI chat
-protocol)** from "invent it on the integration branch" into "port a proven
-pattern" — and tells us early whether the GUI survives the interactive PTY at
-all, which is the load-bearing assumption of the entire migration.
+Phase I + II (validated against a real interactive `claude`) turn MulmoClaude
+milestone **M3 (plugins + GUI chat protocol)** from "invent it on the integration
+branch" into "port a proven pattern" — they confirm the GUI survives the
+interactive PTY, the load-bearing assumption of the entire migration. With
+permissions decided terminal-native (above), M3 has no open risks and the
+`staging` migration can begin.
