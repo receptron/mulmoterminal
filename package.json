@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "node --env-file=.env server/index.js",
+    "test": "vitest run",
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {
@@ -21,6 +22,8 @@
     "@xterm/xterm": "^6.0.0",
     "express": "^5.2.1",
     "node-pty": "^1.1.0",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "vue": "^3.5.34",
     "ws": "^8.21.0"
   },
@@ -30,13 +33,16 @@
     "@types/node": "^25.9.3",
     "@types/ws": "^8.18.1",
     "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/test-utils": "^2.4.11",
     "@vue/tsconfig": "^0.9.1",
     "concurrently": "^10.0.3",
     "eslint": "^10.5.0",
     "eslint-plugin-vue": "^10.9.2",
+    "jsdom": "^29.1.1",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.61.0",
     "vite": "^8.0.12",
+    "vitest": "^4.1.8",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.2.8"
   }

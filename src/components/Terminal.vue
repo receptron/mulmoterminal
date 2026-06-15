@@ -9,6 +9,7 @@ import "@xterm/xterm/css/xterm.css";
 // `connectKey` increments on every user action so re-selecting the same
 // session (or starting another fresh one) still forces a reconnect.
 const props = defineProps<{ sessionId: string | null; connectKey: number }>();
+const emit = defineEmits<{ (e: "session", id: string): void }>();
 
 const terminalRef = ref<HTMLDivElement>();
 const status = ref<"connecting" | "connected" | "disconnected">("connecting");
@@ -17,15 +18,12 @@ let term: Terminal;
 let fitAddon: FitAddon;
 let ws: WebSocket | null = null;
 let resizeObserver: ResizeObserver;
-let reconnecting = false;
 
 function connect() {
-  // Tear down any existing connection without flipping status to disconnected.
-  if (ws) {
-    reconnecting = true;
-    ws.close();
-    ws = null;
-  }
+  // Tear down any existing connection. Its handlers are neutralised below by the
+  // `sock !== ws` guards once `ws` is reassigned, so a late event from the old
+  // socket can't flip the status or leak output into the new session.
+  if (ws) ws.close();
   term.reset();
   status.value = "connecting";
 
@@ -35,14 +33,19 @@ function connect() {
   ws = sock;
 
   sock.onopen = () => {
+    if (sock !== ws) return;
     status.value = "connected";
     sock.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
   };
 
   sock.onmessage = (event) => {
+    if (sock !== ws) return;
     const msg = JSON.parse(event.data);
     if (msg.type === "output") {
       term.write(msg.data);
+    } else if (msg.type === "session") {
+      // Server reports the live session id (esp. for brand-new sessions).
+      emit("session", msg.id);
     } else if (msg.type === "exit") {
       term.write("\r\n\x1b[33m[session ended]\x1b[0m\r\n");
       status.value = "disconnected";
@@ -50,11 +53,8 @@ function connect() {
   };
 
   sock.onclose = () => {
-    // Ignore the close triggered by an intentional reconnect.
-    if (reconnecting && sock !== ws) {
-      reconnecting = false;
-      return;
-    }
+    // A newer socket has superseded this one — ignore its close.
+    if (sock !== ws) return;
     status.value = "disconnected";
   };
 }

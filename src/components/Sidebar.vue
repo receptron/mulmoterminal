@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
+import { usePubSub } from "../composables/usePubSub";
 
 interface Session {
   id: string;
   title: string;
   mtime: number;
+  working: boolean;
+  waiting: boolean;
 }
 
 const props = defineProps<{ activeId: string | null }>();
@@ -18,16 +21,22 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 
 async function load() {
-  loading.value = true;
-  error.value = null;
   try {
     const res = await fetch("/api/sessions");
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     sessions.value = data.sessions ?? [];
+    error.value = null;
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+    // load() runs on every pub/sub push; a transient refetch failure must not
+    // replace an already-populated list with an error banner. Only surface the
+    // error when we have nothing to show yet.
+    if (sessions.value.length === 0) {
+      error.value = e instanceof Error ? e.message : String(e);
+    }
   } finally {
+    // Only the first load shows the "Loading…" state; later refreshes are
+    // silent so the list doesn't flicker.
     loading.value = false;
   }
 }
@@ -43,7 +52,18 @@ function relativeTime(ms: number): string {
 }
 
 defineExpose({ load });
-onMounted(load);
+
+// The server publishes on the "sessions" channel whenever anything about the
+// session list changes (created, working/idle, closed). We just refetch the
+// server's authoritative list — no client-side bookkeeping about what changed.
+const { subscribe } = usePubSub();
+let unsubscribe: (() => void) | undefined;
+
+onMounted(() => {
+  load();
+  unsubscribe = subscribe("sessions", () => load());
+});
+onUnmounted(() => unsubscribe?.());
 </script>
 
 <template>
@@ -73,11 +93,14 @@ onMounted(load);
       <li
         v-for="s in sessions"
         :key="s.id"
-        :class="['item', { active: s.id === props.activeId }]"
+        :class="['item', { active: s.id === props.activeId, waiting: s.waiting }]"
         :title="s.title"
         @click="emit('select', s.id)"
       >
-        <span class="item-title">{{ s.title }}</span>
+        <span class="item-title">
+          <span v-if="s.working" class="dot" title="Claude is working" />
+          {{ s.title }}
+        </span>
         <span class="item-time">{{ relativeTime(s.mtime) }}</span>
       </li>
     </ul>
@@ -176,6 +199,23 @@ onMounted(load);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Background session waiting for input (Notification); cleared on foreground. */
+.item.waiting .item-title {
+  font-weight: 700;
+  color: #ffffff;
+}
+
+/* Shown while Claude is working in a session (UserPromptSubmit → Stop). */
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: #4a8cff;
+  vertical-align: middle;
 }
 
 .item-time {

@@ -5,7 +5,6 @@ import TerminalView from "./components/Terminal.vue";
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
-const sidebar = ref<InstanceType<typeof Sidebar>>();
 
 function selectSession(id: string) {
   activeId.value = id;
@@ -15,20 +14,29 @@ function selectSession(id: string) {
 function newSession() {
   activeId.value = null;
   connectKey.value++;
-  // A fresh session will appear in the list shortly; refresh after it spins up.
-  setTimeout(() => sidebar.value?.load(), 1500);
+}
+
+// The server reports the live session id (a generated id for new sessions).
+// Adopt it as the active id so it highlights. The sidebar list itself is
+// driven server-side: the server publishes the new session on the "sessions"
+// channel, so no client-side reload is needed here.
+function onSession(id: string) {
+  activeId.value = id;
 }
 </script>
 
 <template>
   <div class="app">
     <Sidebar
-      ref="sidebar"
       :active-id="activeId"
       @select="selectSession"
       @new="newSession"
     />
-    <TerminalView :session-id="activeId" :connect-key="connectKey" />
+    <TerminalView
+      :session-id="activeId"
+      :connect-key="connectKey"
+      @session="onSession"
+    />
   </div>
 </template>
 

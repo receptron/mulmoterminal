@@ -5,6 +5,11 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
+      // socket.io pub/sub (sidebar activity). Must precede the "/ws" rule.
+      "/ws/pubsub": {
+        target: "ws://localhost:3456",
+        ws: true,
+      },
       "/ws": {
         target: "ws://localhost:3456",
         ws: true,
