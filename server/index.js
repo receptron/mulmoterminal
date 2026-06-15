@@ -37,6 +37,26 @@ function isAllowedOrigin(origin) {
 // Pub/sub channel the sidebar subscribes to for live session-activity changes.
 const SESSIONS_CHANNEL = "sessions";
 
+// Pub/sub channel the GUI panel subscribes to. The presentMarkdown MCP tool
+// POSTs to /api/gui, which stores the payload and publishes it here keyed by
+// session id (see docs/gui-protocol-spike.md).
+const GUI_CHANNEL = "gui";
+
+// Stdio MCP server wired into each spawned claude (--mcp-config). It exposes the
+// presentMarkdown tool that drives the GUI panel.
+const MCP_SERVER_PATH = path.join(__dirname, "mcp", "present-markdown.js");
+
+// MCP tool name claude uses, in the mcp__<server>__<tool> form. Auto-allowed via
+// --allowedTools so the spike doesn't trip the permission prompt (a deferred
+// probe — see the doc).
+const GUI_MCP_TOOL = "mcp__mulmoterminal-gui__presentMarkdown";
+
+// Latest GUI payloads per session, kept in memory for the spike so the panel can
+// replay them when a session is (re)selected. Each entry is an array, capped to
+// the most recent N frames.
+const guiPayloads = new Map(); // id -> [{ type, data }]
+const GUI_HISTORY_LIMIT = 50;
+
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
 const SESSION_LIST_LIMIT = 50;
@@ -140,6 +160,24 @@ function hookSettingsJson() {
   });
 }
 
+// MCP config injected via `claude --mcp-config <json>`. Registers the stdio
+// presentMarkdown server and passes this session's id + the server port to it
+// via env (the MCP process can't otherwise know which session it belongs to).
+function mcpConfigJson(sessionId) {
+  return JSON.stringify({
+    mcpServers: {
+      "mulmoterminal-gui": {
+        command: process.execPath, // the node running this server
+        args: [MCP_SERVER_PATH],
+        env: {
+          MULMOTERMINAL_SESSION_ID: sessionId,
+          MULMOTERMINAL_PORT: String(PORT),
+        },
+      },
+    },
+  });
+}
+
 // Claude stores each project's sessions under ~/.claude/projects/<encoded-cwd>/,
 // where the absolute cwd has its "/" and "." characters replaced by "-".
 function projectSessionsDir(cwd) {
@@ -221,6 +259,44 @@ app.post("/api/hook", (req, res) => {
     console.log(`[hook] ${hook_event_name} for ${session_id}`);
   }
   res.json({ ok: true });
+});
+
+// The presentMarkdown MCP tool POSTs GUI frames here. We validate the frame,
+// store the latest payloads keyed by session id (in-memory for the spike), and
+// publish on the "gui" channel so the active GUI panel renders it live.
+app.post("/api/gui", (req, res) => {
+  const { sessionId, type, data } = req.body || {};
+  // The MCP process is local and trusted, but the session id flows from env and
+  // ends up in a pub/sub channel filter — keep it to the known UUID shape.
+  if (!sessionId || !SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: "invalid sessionId" });
+  }
+  if (typeof type !== "string" || type !== "presentMarkdown") {
+    return res.status(400).json({ error: "unsupported type" });
+  }
+  if (!data || typeof data !== "object" || typeof data.markdown !== "string") {
+    return res.status(400).json({ error: "invalid data" });
+  }
+
+  const frame = { type, data: { markdown: data.markdown } };
+  const list = guiPayloads.get(sessionId) || [];
+  list.push(frame);
+  if (list.length > GUI_HISTORY_LIMIT) list.splice(0, list.length - GUI_HISTORY_LIMIT);
+  guiPayloads.set(sessionId, list);
+
+  pubsub?.publish(GUI_CHANNEL, { sessionId, ...frame });
+  console.log(`[gui] ${type} for ${sessionId}`);
+  res.json({ ok: true });
+});
+
+// Replay a session's stored GUI payloads so the panel can render them when the
+// user (re)selects that session.
+app.get("/api/gui/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  if (!SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: "invalid sessionId" });
+  }
+  res.json({ sessionId, payloads: guiPayloads.get(sessionId) || [] });
 });
 
 // List the chat sessions for the current project (CLAUDE_CWD), including
@@ -344,9 +420,14 @@ wss.on("connection", (ws, req) => {
     }
   } else {
     const settings = hookSettingsJson();
+    // Register the GUI MCP server and auto-allow its tool so presentMarkdown
+    // runs without a permission prompt (--strict-mcp-config keeps the user's
+    // other MCP servers out of the spike).
+    const mcp = mcpConfigJson(sessionId);
+    const guiArgs = ["--mcp-config", mcp, "--strict-mcp-config", "--allowedTools", GUI_MCP_TOOL];
     const args = resume
-      ? ["--resume", resume, "--settings", settings]
-      : ["--session-id", sessionId, "--settings", settings];
+      ? ["--resume", resume, "--settings", settings, ...guiArgs]
+      : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
 
     console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId})`);
 

@@ -79,12 +79,41 @@ markdown, panel renders it), so it isolates the data pipe with no round-trip.
   shows the tool call and the **right panel** renders the markdown.
 - Switching sessions in the sidebar replays the correct session's GUI.
 
-### Findings (fill in after Phase I)
+### Findings (after Phase I)
 
-- How `--mcp-config` is wired into the interactive spawn:
-- How `sessionId` propagates to the MCP process:
-- Shape of the `data` channel that maps cleanly onto MulmoClaude:
-- Surprises / blockers:
+Status: **implemented and smoke-tested** end-to-end (MCP stdio handshake → tool
+call → `/api/gui` → in-memory store → history replay). Driving it from a real
+interactive `claude` is the remaining manual check.
+
+- **How `--mcp-config` is wired into the interactive spawn:** the interactive
+  `claude` accepts `--mcp-config <configs...>` as **JSON strings** (not only file
+  paths), so `server/index.js` builds the config inline per session
+  (`mcpConfigJson(sessionId)`) and appends `--mcp-config <json>
+  --strict-mcp-config --allowedTools mcp__mulmoterminal-gui__presentMarkdown` to
+  the existing `--settings`/`--session-id`/`--resume` args. No temp file to
+  manage. `--strict-mcp-config` keeps the user's own MCP servers out of the
+  spike; `--allowedTools` auto-runs the tool (no permission prompt — the
+  permission flow stays a deferred probe).
+- **How `sessionId` propagates to the MCP process:** via the MCP server's `env`
+  block in the config (`MULMOTERMINAL_SESSION_ID`, `MULMOTERMINAL_PORT`). This
+  is necessary because every PTY shares the server's single `process.env`, so
+  per-session values can't ride on the parent env — they must be baked into the
+  per-spawn config. Mirrors MulmoClaude's `MULMOCLAUDE_CHAT_SESSION_ID`.
+- **Shape of the `data` channel that maps cleanly onto MulmoClaude:** the MCP
+  tool `POST`s `{ sessionId, type, data }` to `/api/gui`; the server stores it
+  keyed by `sessionId` and `pubsub.publish("gui", { sessionId, type, data })`.
+  The panel filters the `gui` channel by the foreground `sessionId` and replays
+  history from `GET /api/gui/:sessionId`. `type` is the discriminator
+  (`presentMarkdown` now; `presentForm` next) and `data` is the opaque
+  tool-specific payload — exactly MulmoClaude's "MCP server posts a toolResult
+  to an internal route" pattern, transport-agnostic over the PTY.
+- **Surprises / blockers:** none blocking. Notes: used the official
+  `@modelcontextprotocol/sdk` (+ `zod`) for a correct stdio handshake rather
+  than hand-rolling JSON-RPC; the MCP server runs under the **same node binary**
+  (`process.execPath`) as the server. Markdown is rendered with `marked` and
+  **sanitized with DOMPurify** before `v-html` (the one XSS-sensitive seam).
+  GUI history is in-memory and intentionally **not** dropped on PTY reap, so a
+  closed/background session still replays its panel when reselected.
 
 ---
 

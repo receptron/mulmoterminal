@@ -34,6 +34,7 @@ export default [
         console: "readonly",
         process: "readonly",
         URL: "readonly",
+        fetch: "readonly",
       },
     },
   },

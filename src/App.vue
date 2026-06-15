@@ -2,6 +2,7 @@
 import { ref } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import TerminalView from "./components/Terminal.vue";
+import GuiPanel from "./components/GuiPanel.vue";
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
@@ -32,11 +33,14 @@ function onSession(id: string) {
       @select="selectSession"
       @new="newSession"
     />
-    <TerminalView
-      :session-id="activeId"
-      :connect-key="connectKey"
-      @session="onSession"
-    />
+    <div class="main">
+      <TerminalView
+        :session-id="activeId"
+        :connect-key="connectKey"
+        @session="onSession"
+      />
+      <GuiPanel :session-id="activeId" />
+    </div>
   </div>
 </template>
 
@@ -46,5 +50,12 @@ function onSession(id: string) {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
+}
+
+/* Sidebar | [ Terminal | GuiPanel ] — the unified two-panel view in miniature. */
+.main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
 }
 </style>
