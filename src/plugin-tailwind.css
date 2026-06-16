@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+/* gui-chat-protocol plugins from the @mulmochat-plugin family (generate-image and
+   its peer ui-image) are authored against a Tailwind HOST — MulmoClaude provides one
+   globally. ui-image ships no CSS of its own, and generate-image's bundled style.css
+   only contains the utilities used in its own source (not the peer's), so e.g.
+   ImageView's `flex-col` has no rule and the image/prompt layout collapses to a row.
+
+   Scan the consumed @mulmochat-plugin dists and emit exactly the utilities they use.
+   GuiPanel injects the compiled output (imported ?inline) into the plugin's Shadow
+   DOM, so the preflight/reset stays encapsulated and can't touch MulmoTerminal's UI. */
+@source "../node_modules/@mulmochat-plugin/ui-image/dist";
+@source "../node_modules/@mulmochat-plugin/generate-image/dist";

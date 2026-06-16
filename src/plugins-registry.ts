@@ -15,7 +15,11 @@ import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 // MulmoTerminal's own UI.
 import markdownCss from "@gui-chat-plugin/markdown/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
-import generateImageCss from "@mulmochat-plugin/generate-image/style.css?inline";
+// The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
+// CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
+// against those packages' dists (see src/plugin-tailwind.css), supplying the
+// utilities their components use.
+import mulmochatPluginCss from "./plugin-tailwind.css?inline";
 
 interface Registration {
   toolName: string;
@@ -40,7 +44,7 @@ const PACKAGES: Record<string, Registration> = {
   "@mulmochat-plugin/generate-image": {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
     viewComponent: GenerateImagePlugin.plugin.viewComponent as Component,
-    css: generateImageCss,
+    css: mulmochatPluginCss,
   },
 };
 
