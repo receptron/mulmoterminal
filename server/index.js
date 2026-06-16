@@ -8,7 +8,7 @@ import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { createPubSub } from "./pubsub.js";
-import { mountAllRoutes, allowedToolNames } from "./plugins-registry.js";
+import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -123,6 +123,44 @@ async function storeToolResult(sessionId, result) {
   toolResultsStore.save(sessionId);
 }
 
+// Per-session tool-call history, fed by Claude's PreToolUse/PostToolUse hooks so
+// it captures EVERY tool call — built-ins (Bash, Read, …), the user's MCP tools,
+// AND our GUI plugin tools — not just the GUI ones the broker sees. Published on a
+// per-session channel the tools pane subscribes to. (The broker's toolResults
+// store above is separate; it only drives rendering of GUI views.)
+const toolCallsBySession = new Map(); // id -> [{ toolUseId, toolName, toolInput, toolOutput?, status, at, durationMs? }]
+const TOOLCALLS_LIMIT = 200;
+const toolCallsChannel = (id) => `toolcalls:${id}`;
+
+// PreToolUse: a tool started. Append a "running" entry (deduped by tool_use_id).
+function recordToolCallStart(sessionId, { toolUseId, toolName, toolInput }) {
+  const list = toolCallsBySession.get(sessionId) || [];
+  if (toolUseId && list.some((c) => c.toolUseId === toolUseId)) return;
+  const call = { toolUseId, toolName, toolInput, status: "running", at: Date.now() };
+  list.push(call);
+  if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
+  toolCallsBySession.set(sessionId, list);
+  pubsub?.publish(toolCallsChannel(sessionId), call);
+}
+
+// PostToolUse: a tool finished. Complete the matching entry by tool_use_id (or add
+// one if we somehow never saw the start).
+function recordToolCallEnd(sessionId, { toolUseId, toolName, toolInput, toolOutput, durationMs }) {
+  const list = toolCallsBySession.get(sessionId) || [];
+  let call = toolUseId ? list.find((c) => c.toolUseId === toolUseId) : undefined;
+  if (call) {
+    call.status = "completed";
+    call.toolOutput = toolOutput;
+    call.durationMs = durationMs;
+  } else {
+    call = { toolUseId, toolName, toolInput, toolOutput, status: "completed", at: Date.now(), durationMs };
+    list.push(call);
+    if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
+    toolCallsBySession.set(sessionId, list);
+  }
+  pubsub?.publish(toolCallsChannel(sessionId), call);
+}
+
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
 const SESSION_LIST_LIMIT = 50;
@@ -212,17 +250,26 @@ function setWaiting(id, waiting, event) {
   publishActivity(id);
 }
 
-// Hook config injected via `claude --settings <json>`. Each event POSTs the
-// hook payload (session_id + hook_event_name) to /api/hook:
-//   UserPromptSubmit => working, Stop => idle,
-//   Notification     => waiting for input (permission / question / idle).
+// Hook config injected via `claude --settings <json>`. Each event POSTs the full
+// hook payload to /api/hook. UserPromptSubmit => working, Stop => idle,
+// Notification => waiting for input. PreToolUse/PostToolUse (matcher "" => every
+// tool, including built-ins and MCP tools) feed the per-session tool-call history
+// that the GUI's tools pane shows.
 function hookSettingsJson() {
   const cmd =
     `curl -s -X POST http://localhost:${PORT}/api/hook ` +
     `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
+  // Tool hooks take a matcher; "" matches all tools.
+  const toolEntry = [{ matcher: "", hooks: [{ type: "command", command: cmd }] }];
   return JSON.stringify({
-    hooks: { UserPromptSubmit: entry, Stop: entry, Notification: entry },
+    hooks: {
+      UserPromptSubmit: entry,
+      Stop: entry,
+      Notification: entry,
+      PreToolUse: toolEntry,
+      PostToolUse: toolEntry,
+    },
   });
 }
 
@@ -311,7 +358,16 @@ app.use(express.static(path.join(__dirname, "../dist")));
 // Claude hooks (Stop / Notification) POST their payload here so we can flag
 // which background sessions have new activity.
 app.post("/api/hook", (req, res) => {
-  const { session_id, hook_event_name } = req.body || {};
+  const {
+    session_id,
+    hook_event_name,
+    tool_name,
+    tool_input,
+    tool_use_id,
+    tool_output,
+    tool_response,
+    duration_ms,
+  } = req.body || {};
   if (session_id) {
     const entry = ptys.get(session_id);
     const foreground = entry && entry.ws; // a ws is attached => being viewed
@@ -325,6 +381,20 @@ app.post("/api/hook", (req, res) => {
     } else if (hook_event_name === "Notification") {
       // Background session waiting for input (permission / question / idle).
       if (!foreground) setWaiting(session_id, true, hook_event_name);
+    } else if (hook_event_name === "PreToolUse") {
+      recordToolCallStart(session_id, {
+        toolUseId: tool_use_id,
+        toolName: tool_name,
+        toolInput: tool_input,
+      });
+    } else if (hook_event_name === "PostToolUse") {
+      recordToolCallEnd(session_id, {
+        toolUseId: tool_use_id,
+        toolName: tool_name,
+        toolInput: tool_input,
+        toolOutput: tool_output ?? tool_response,
+        durationMs: duration_ms,
+      });
     }
     console.log(`[hook] ${hook_event_name} for ${session_id}`);
   }
@@ -372,6 +442,23 @@ app.get("/api/agent/toolResults/:sessionId", async (req, res) => {
     return res.status(400).json({ error: "invalid sessionId" });
   }
   res.json({ sessionId, toolResults: await toolResultsStore.get(sessionId) });
+});
+
+// The GUI plugin tools available this session (for the tools pane's "Available
+// Tools" list). The full set claude can call — built-ins, other MCP — is not
+// enumerable server-side; those still show up in the tool-call history below.
+app.get("/api/tools", (_req, res) => {
+  res.json({ tools: toolSummaries });
+});
+
+// Replay a session's tool-call history (every tool, via the Pre/PostToolUse hooks)
+// so the tools pane can render it when the user (re)selects that session.
+app.get("/api/tool-calls/:sessionId", (req, res) => {
+  const { sessionId } = req.params;
+  if (!SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: "invalid sessionId" });
+  }
+  res.json({ sessionId, toolCalls: toolCallsBySession.get(sessionId) || [] });
 });
 
 // List the chat sessions for the current project (CLAUDE_CWD), including

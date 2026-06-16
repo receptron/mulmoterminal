@@ -1,12 +1,21 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, watch } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
+import ToolsPane from "./components/ToolsPane.vue";
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
+
+// Tools pane visibility, persisted across reloads (mirrors MulmoClaude's
+// right-sidebar toggle).
+const showTools = ref(localStorage.getItem("tools_pane_visible") === "true");
+watch(showTools, (v) => localStorage.setItem("tools_pane_visible", String(v)));
+function toggleTools() {
+  showTools.value = !showTools.value;
+}
 
 // GUI -> LLM: a plugin view (e.g. a submitted form) calls this with the user's
 // response. Terminal.submitText types it into the PTY and submits it (text + a
@@ -49,7 +58,13 @@ function onSession(id: string) {
         :connect-key="connectKey"
         @session="onSession"
       />
-      <GuiPanel :session-id="activeId" :send-text-message="sendTextMessage" />
+      <GuiPanel
+        :session-id="activeId"
+        :send-text-message="sendTextMessage"
+        :tools-open="showTools"
+        @toggle-tools="toggleTools"
+      />
+      <ToolsPane v-if="showTools" :session-id="activeId" />
     </div>
   </div>
 </template>

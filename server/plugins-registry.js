@@ -46,6 +46,13 @@ export const toolDefinitions = plugins.map((p) => ({
 // toolName -> meta, so the broker can resolve a call to its REST dispatch route.
 export const metas = Object.fromEntries(plugins.map((p) => [p.meta.toolName, p.meta]));
 
+// JSON-serializable summaries (no zod inputSchema) for the GUI's tools pane.
+export const toolSummaries = plugins.map((p) => ({
+  toolName: p.meta.toolName,
+  title: p.definition.title,
+  description: p.definition.description,
+}));
+
 // Mount each enabled plugin's REST routes under /api/<apiNamespace>. The MCP
 // broker POSTs tool args here and gets back the result envelope.
 export function mountAllRoutes(app) {

@@ -21,7 +21,9 @@ interface ToolResult {
 const props = defineProps<{
   sessionId: string | null;
   sendTextMessage: (text: string) => boolean;
+  toolsOpen?: boolean;
 }>();
+const emit = defineEmits<{ toggleTools: [] }>();
 
 const results = ref<ToolResult[]>([]);
 
@@ -93,6 +95,15 @@ const hasContent = computed(() => results.value.length > 0);
   <section class="gui-panel">
     <div class="header">
       <span class="title">GUI</span>
+      <button
+        type="button"
+        class="gear"
+        :class="{ active: toolsOpen }"
+        title="Tools & tool-call history"
+        @click="emit('toggleTools')"
+      >
+        ⚙
+      </button>
     </div>
     <div class="content">
       <div v-if="!hasContent" class="empty">
@@ -130,9 +141,28 @@ const hasContent = computed(() => results.value.length > 0);
   color: #e0e0e0;
   font-family: system-ui, sans-serif;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .title {
   font-weight: 600;
+}
+.gear {
+  background: none;
+  border: none;
+  color: #7c87a8;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.gear:hover {
+  color: #e0e0e0;
+}
+.gear.active {
+  color: #4a8cff;
 }
 
 .content {

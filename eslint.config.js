@@ -18,6 +18,7 @@ export default [
         WebSocket: "readonly",
         ResizeObserver: "readonly",
         location: "readonly",
+        localStorage: "readonly",
         setTimeout: "readonly",
         fetch: "readonly",
       },
