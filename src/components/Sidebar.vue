@@ -1,45 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from "vue";
-import { usePubSub } from "../composables/usePubSub";
-
-interface Session {
-  id: string;
-  title: string;
-  mtime: number;
-  working: boolean;
-  waiting: boolean;
-}
+import { ref, computed } from "vue";
+import { useSessions } from "../composables/useSessions";
+import FilterChip from "./FilterChip.vue";
 
 const props = defineProps<{ activeId: string | null }>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
   (e: "new"): void;
+  (e: "toggle-layout"): void;
 }>();
 
-const sessions = ref<Session[]>([]);
-const loading = ref(true);
-const error = ref<string | null>(null);
+const { sessions, loading, error, load } = useSessions();
 
-async function load() {
-  try {
-    const res = await fetch("/api/sessions");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    sessions.value = data.sessions ?? [];
-    error.value = null;
-  } catch (e) {
-    // load() runs on every pub/sub push; a transient refetch failure must not
-    // replace an already-populated list with an error banner. Only surface the
-    // error when we have nothing to show yet.
-    if (sessions.value.length === 0) {
-      error.value = e instanceof Error ? e.message : String(e);
-    }
-  } finally {
-    // Only the first load shows the "Loading…" state; later refreshes are
-    // silent so the list doesn't flicker.
-    loading.value = false;
-  }
-}
+// A background session that is `waiting` for the user's attention is what
+// mulmoclaude calls "unread" — render it bold and let the user filter to just
+// those rows.
+type Filter = "all" | "unread";
+const filter = ref<Filter>("all");
+const unreadCount = computed(() => sessions.value.filter((s) => s.waiting).length);
+const visibleSessions = computed(() =>
+  filter.value === "unread" ? sessions.value.filter((s) => s.waiting) : sessions.value
+);
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -52,32 +33,43 @@ function relativeTime(ms: number): string {
 }
 
 defineExpose({ load });
-
-// The server publishes on the "sessions" channel whenever anything about the
-// session list changes (created, working/idle, closed). We just refetch the
-// server's authoritative list — no client-side bookkeeping about what changed.
-const { subscribe } = usePubSub();
-let unsubscribe: (() => void) | undefined;
-
-onMounted(() => {
-  load();
-  unsubscribe = subscribe("sessions", () => load());
-});
-onUnmounted(() => unsubscribe?.());
 </script>
 
 <template>
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
-      <button class="icon-btn" title="Refresh" @click="load">
-        ⟳
-      </button>
+      <span class="header-actions">
+        <button class="icon-btn" title="Refresh" @click="load">
+          ⟳
+        </button>
+        <button
+          class="icon-btn"
+          title="Switch to horizontal tabs"
+          @click="emit('toggle-layout')"
+        >
+          ⇥
+        </button>
+      </span>
     </div>
 
     <button class="new-btn" @click="emit('new')">
       + New session
     </button>
+
+    <div class="filters">
+      <FilterChip
+        label="All"
+        :active="filter === 'all'"
+        @click="filter = 'all'"
+      />
+      <FilterChip
+        label="Unread"
+        :count="unreadCount"
+        :active="filter === 'unread'"
+        @click="filter = 'unread'"
+      />
+    </div>
 
     <div v-if="loading" class="state">
       Loading…
@@ -88,17 +80,25 @@ onUnmounted(() => unsubscribe?.());
     <div v-else-if="sessions.length === 0" class="state">
       No sessions yet
     </div>
+    <div v-else-if="visibleSessions.length === 0" class="state">
+      No unread sessions
+    </div>
 
     <ul v-else class="list">
       <li
-        v-for="s in sessions"
+        v-for="s in visibleSessions"
         :key="s.id"
         :class="['item', { active: s.id === props.activeId, waiting: s.waiting }]"
         :title="s.title"
         @click="emit('select', s.id)"
       >
         <span class="item-title">
-          <span v-if="s.working" class="dot" title="Claude is working" />
+          <span
+            v-if="s.working && !s.waiting && s.id !== props.activeId"
+            class="spinner"
+            title="Claude is working"
+            aria-label="Claude is working"
+          />
           {{ s.title }}
         </span>
         <span class="item-time">{{ relativeTime(s.mtime) }}</span>
@@ -135,6 +135,12 @@ onUnmounted(() => unsubscribe?.());
   color: #9aa5c4;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .icon-btn {
   background: none;
   border: none;
@@ -159,6 +165,13 @@ onUnmounted(() => unsubscribe?.());
 }
 .new-btn:hover {
   background: #224a86;
+}
+
+.filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 12px 8px;
 }
 
 .state {
@@ -207,15 +220,24 @@ onUnmounted(() => unsubscribe?.());
   color: #ffffff;
 }
 
-/* Shown while Claude is working in a session (UserPromptSubmit → Stop). */
-.dot {
+/* Shown while Claude is working/"thinking" in a session (UserPromptSubmit →
+   Stop). Mirrors mulmoclaude's spinning role icon: a slowly rotating ring. */
+.spinner {
   display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-right: 4px;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border: 2px solid rgba(74, 140, 255, 0.3);
+  border-top-color: #4a8cff;
   border-radius: 50%;
-  background: #4a8cff;
   vertical-align: middle;
+  animation: sidebar-spin 0.9s linear infinite;
+}
+
+@keyframes sidebar-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .item-time {

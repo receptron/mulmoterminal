@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from "vue";
 import Sidebar from "./components/Sidebar.vue";
+import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
@@ -8,6 +9,18 @@ import ToolsPane from "./components/ToolsPane.vue";
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
+
+// Session-history layout: "vertical" (left Sidebar) or "horizontal" (top
+// SessionTabBar), mirroring mulmoclaude's two history layouts. Persisted across
+// reloads like the tools pane.
+type Layout = "vertical" | "horizontal";
+const layout = ref<Layout>(
+  localStorage.getItem("session_layout") === "horizontal" ? "horizontal" : "vertical"
+);
+watch(layout, (v) => localStorage.setItem("session_layout", v));
+function toggleLayout() {
+  layout.value = layout.value === "vertical" ? "horizontal" : "vertical";
+}
 
 // Tools pane visibility, persisted across reloads (mirrors MulmoClaude's
 // right-sidebar toggle).
@@ -45,11 +58,20 @@ function onSession(id: string) {
 </script>
 
 <template>
-  <div class="app">
+  <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
     <Sidebar
+      v-if="layout === 'vertical'"
       :active-id="activeId"
       @select="selectSession"
       @new="newSession"
+      @toggle-layout="toggleLayout"
+    />
+    <SessionTabBar
+      v-else
+      :active-id="activeId"
+      @select="selectSession"
+      @new="newSession"
+      @toggle-layout="toggleLayout"
     />
     <div class="main">
       <TerminalView
@@ -77,7 +99,17 @@ function onSession(id: string) {
   overflow: hidden;
 }
 
-/* Sidebar | [ Terminal | GuiPanel ] — the unified two-panel view in miniature. */
+/* Vertical: Sidebar | [ Terminal | GuiPanel ]. */
+.app-vertical {
+  flex-direction: row;
+}
+
+/* Horizontal: SessionTabBar stacked above [ Terminal | GuiPanel ]. */
+.app-horizontal {
+  flex-direction: column;
+}
+
+/* [ Terminal | GuiPanel ] — the unified two-panel view in miniature. */
 .main {
   display: flex;
   flex: 1;

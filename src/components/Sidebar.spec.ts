@@ -38,7 +38,7 @@ describe("Sidebar", () => {
     captured = null;
   });
 
-  it("renders sessions from the server and shows the working dot", async () => {
+  it("renders sessions from the server and shows the working spinner", async () => {
     mockSessions([
       row({ id: "a", title: "Alpha", working: true }),
       row({ id: "b", title: "Beta" }),
@@ -49,9 +49,9 @@ describe("Sidebar", () => {
     const items = wrapper.findAll(".item");
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Alpha");
-    // Only the working session shows the dot.
-    expect(items[0].find(".dot").exists()).toBe(true);
-    expect(items[1].find(".dot").exists()).toBe(false);
+    // Only the working session shows the spinner.
+    expect(items[0].find(".spinner").exists()).toBe(true);
+    expect(items[1].find(".spinner").exists()).toBe(false);
   });
 
   it("bolds a waiting session via the .waiting class", async () => {
@@ -65,6 +65,54 @@ describe("Sidebar", () => {
     const items = wrapper.findAll(".item");
     expect(items[0].classes()).toContain("waiting");
     expect(items[1].classes()).not.toContain("waiting");
+  });
+
+  it("hides the spinner while a session is waiting for input", async () => {
+    // A session waiting for input keeps `working` true server-side, but it is
+    // blocked on the user — spinning there reads as "thinking", so suppress it.
+    mockSessions([row({ id: "a", title: "Alpha", working: true, waiting: true })]);
+    const wrapper = mount(Sidebar, { props: { activeId: null } });
+    await flushPromises();
+
+    const item = wrapper.find(".item");
+    expect(item.find(".spinner").exists()).toBe(false);
+    expect(item.classes()).toContain("waiting");
+  });
+
+  it("hides the spinner on the active session even while it is working", async () => {
+    // The open session's progress is visible in the terminal; a spinner on it is
+    // redundant (it also reappears right after selecting a waiting session).
+    mockSessions([
+      row({ id: "a", title: "Alpha", working: true }),
+      row({ id: "b", title: "Beta", working: true }),
+    ]);
+    const wrapper = mount(Sidebar, { props: { activeId: "a" } });
+    await flushPromises();
+
+    const items = wrapper.findAll(".item");
+    expect(items[0].find(".spinner").exists()).toBe(false); // active
+    expect(items[1].find(".spinner").exists()).toBe(true); // background
+  });
+
+  it("filters to unread (waiting) sessions when the Unread chip is active", async () => {
+    mockSessions([
+      row({ id: "a", title: "Alpha", waiting: true }),
+      row({ id: "b", title: "Beta", waiting: false }),
+    ]);
+    const wrapper = mount(Sidebar, { props: { activeId: null } });
+    await flushPromises();
+
+    // "All" by default shows both.
+    expect(wrapper.findAll(".item")).toHaveLength(2);
+
+    // The Unread chip reports the count and, once active, hides read rows.
+    const unreadChip = wrapper.findAll(".chip")[1];
+    expect(unreadChip.text()).toContain("(1)");
+    await unreadChip.trigger("click");
+
+    const items = wrapper.findAll(".item");
+    expect(items).toHaveLength(1);
+    expect(items[0].text()).toContain("Alpha");
   });
 
   it("refetches the authoritative list when a pub/sub event arrives", async () => {
