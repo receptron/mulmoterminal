@@ -7,11 +7,18 @@
 import type { Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@gui-chat-plugin/markdown/vue";
-import { plugin as formPlugin } from "@gui-chat-plugin/form/vue";
+import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
+// Import each package's compiled stylesheet as a STRING (?inline), not as a global
+// side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
+// which encapsulates the plugin's Tailwind preflight so it can't clobber
+// MulmoTerminal's own UI.
+import markdownCss from "@gui-chat-plugin/markdown/style.css?inline";
+import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 
 interface Registration {
   toolName: string;
   viewComponent: Component;
+  css?: string;
 }
 
 // Statically-known packages, keyed by package name; the config gates which load.
@@ -21,10 +28,12 @@ const PACKAGES: Record<string, Registration> = {
   "@gui-chat-plugin/markdown": {
     toolName: markdownPlugin.toolDefinition.name,
     viewComponent: markdownPlugin.viewComponent as Component,
+    css: markdownCss,
   },
-  "@gui-chat-plugin/form": {
+  "@mulmoclaude/form-plugin": {
     toolName: formPlugin.toolDefinition.name,
     viewComponent: formPlugin.viewComponent as Component,
+    css: formCss,
   },
 };
 

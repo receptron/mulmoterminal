@@ -2,6 +2,7 @@
 import { ref, watch, onUnmounted, computed } from "vue";
 import { usePubSub } from "../composables/usePubSub";
 import { getPlugin } from "../plugins-registry";
+import PluginFrame from "./PluginFrame.vue";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -76,8 +77,15 @@ watch(
 
 onUnmounted(() => unsubscribe?.());
 
-// A plugin view changed its state (e.g. a form was submitted): reflect it locally
-// and persist it under the same uuid so it replays as completed on revisit.
+// A plugin view changed its state (e.g. a form field edited / submitted): reflect
+// it locally and persist it under the same uuid so it replays on revisit.
+//
+// `persistOnly` is critical: the view emits this on every change, and without it
+// the server would re-publish the update on the session channel straight back to
+// THIS panel. That echo arrives as a fresh object identity, the view treats it as a
+// new result and re-seeds, which re-emits — an infinite flicker loop. persistOnly
+// tells the server to store but not re-broadcast; the originating panel already
+// updated locally via upsert().
 async function onUpdateResult(result: ToolResult) {
   upsert(result);
   if (!props.sessionId) return;
@@ -85,7 +93,7 @@ async function onUpdateResult(result: ToolResult) {
     await fetch("/api/agent/toolResult", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...result, sessionId: props.sessionId }),
+      body: JSON.stringify({ ...result, sessionId: props.sessionId, persistOnly: true }),
     });
   } catch {
     // Best-effort persistence; the live view already updated.
@@ -117,14 +125,14 @@ const hasContent = computed(() => results.value.length > 0);
         to render content here.
       </div>
       <template v-for="r in results" :key="r.uuid">
-        <component
-          :is="getPlugin(r.toolName)!.viewComponent"
-          v-if="getPlugin(r.toolName)"
-          class="frame"
-          :selected-result="r"
-          :send-text-message="sendTextMessage"
-          @update-result="onUpdateResult"
-        />
+        <PluginFrame v-if="getPlugin(r.toolName)" class="frame" :css="getPlugin(r.toolName)!.css">
+          <component
+            :is="getPlugin(r.toolName)!.viewComponent"
+            :selected-result="r"
+            :send-text-message="sendTextMessage"
+            @update-result="onUpdateResult"
+          />
+        </PluginFrame>
       </template>
     </div>
   </section>

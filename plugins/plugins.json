@@ -1,7 +1,7 @@
 {
   "packages": [
     "@gui-chat-plugin/markdown",
-    "@gui-chat-plugin/form"
+    "@mulmoclaude/form-plugin"
   ],
   "local": []
 }
