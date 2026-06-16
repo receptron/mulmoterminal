@@ -8,12 +8,14 @@ import type { Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@gui-chat-plugin/markdown/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
+import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
 // MulmoTerminal's own UI.
 import markdownCss from "@gui-chat-plugin/markdown/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
+import generateImageCss from "@mulmochat-plugin/generate-image/style.css?inline";
 
 interface Registration {
   toolName: string;
@@ -34,6 +36,11 @@ const PACKAGES: Record<string, Registration> = {
     toolName: formPlugin.toolDefinition.name,
     viewComponent: formPlugin.viewComponent as Component,
     css: formCss,
+  },
+  "@mulmochat-plugin/generate-image": {
+    toolName: GenerateImagePlugin.plugin.toolDefinition.name,
+    viewComponent: GenerateImagePlugin.plugin.viewComponent as Component,
+    css: generateImageCss,
   },
 };
 

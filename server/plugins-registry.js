@@ -15,11 +15,18 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
+import { generateImage } from "./backends/image-gen.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGINS_DIR = path.join(__dirname, "..", "plugins");
 
 const MCP_SERVER_NAME = "mulmoterminal-gui";
+
+// The gui-chat-protocol ToolContext.app — host-provided backends a plugin's
+// execute() may call (e.g. @mulmochat-plugin/generate-image calls
+// `context.app.generateImage(prompt)`). Plugins that don't need a backend simply
+// ignore it. Passed to every package's execute below.
+const APP_CONTEXT = { generateImage };
 
 function loadConfig() {
   const raw = fs.readFileSync(path.join(PLUGINS_DIR, "plugins.json"), "utf8");
@@ -32,8 +39,8 @@ function loadConfig() {
 
 // A gui-chat-protocol package. The core entry exposes TOOL_DEFINITION (a JSON-schema
 // ToolDefinition) and a ToolPluginCore whose execute(context, args) returns the
-// result envelope. We invoke it in-process when the broker dispatches; context.app
-// stays empty for now (host backends like image generation arrive in a later phase).
+// result envelope. We invoke it in-process when the broker dispatches, passing the
+// host backends as context.app (image generation, etc.).
 async function loadPackage(name) {
   const mod = await import(name);
   const definition = mod.TOOL_DEFINITION ?? mod.pluginCore?.toolDefinition;
@@ -41,7 +48,7 @@ async function loadPackage(name) {
   if (!definition || typeof execute !== "function") {
     throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
   }
-  return { toolName: definition.name, definition, execute: (args) => execute({}, args ?? {}) };
+  return { toolName: definition.name, definition, execute: (args) => execute({ app: APP_CONTEXT }, args ?? {}) };
 }
 
 // A local plugin: definition.js exports TOOL_DEFINITION (a gui-chat-protocol

@@ -19,8 +19,11 @@
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {
+    "@google/genai": "^2.8.0",
     "@gui-chat-plugin/markdown": "^0.4.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mulmochat-plugin/generate-image": "^0.4.1",
+    "@mulmochat-plugin/ui-image": "^0.4.0",
     "@mulmoclaude/form-plugin": "^0.1.1",
     "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-fit": "^0.11.0",
