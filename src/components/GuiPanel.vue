@@ -77,23 +77,27 @@ watch(
 
 onUnmounted(() => unsubscribe?.());
 
-// A plugin view changed its state (e.g. a form field edited / submitted): reflect
-// it locally and persist it under the same uuid so it replays on revisit.
+// A plugin view changed its state (e.g. a form field edited / submitted). Per the
+// gui-chat-protocol contract the view may emit a PARTIAL ToolResult (e.g. just
+// `{ viewState }`), so merge it into the existing result rather than replacing —
+// otherwise data/jsonData/uuid/toolName would be lost.
 //
-// `persistOnly` is critical: the view emits this on every change, and without it
-// the server would re-publish the update on the session channel straight back to
-// THIS panel. That echo arrives as a fresh object identity, the view treats it as a
-// new result and re-seeds, which re-emits — an infinite flicker loop. persistOnly
-// tells the server to store but not re-broadcast; the originating panel already
-// updated locally via upsert().
-async function onUpdateResult(result: ToolResult) {
-  upsert(result);
+// `persistOnly` is a deliberate trade-off: the view emits on every change, and
+// without it the server would re-publish on the session channel straight back to
+// THIS panel — the echo arrives with fresh object identity, the view treats it as a
+// new result and re-seeds, re-emitting → an infinite flicker loop. So we suppress
+// the broadcast and rely on the local upsert() above. The cost: a second browser
+// tab on the same session won't see live view-state updates (it picks them up on
+// reload from the stored result) — acceptable for a local single-client tool.
+async function onUpdateResult(existing: ToolResult, update: Partial<ToolResult>) {
+  const merged: ToolResult = { ...existing, ...update };
+  upsert(merged);
   if (!props.sessionId) return;
   try {
     await fetch("/api/agent/toolResult", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...result, sessionId: props.sessionId, persistOnly: true }),
+      body: JSON.stringify({ ...merged, sessionId: props.sessionId, persistOnly: true }),
     });
   } catch {
     // Best-effort persistence; the live view already updated.
@@ -130,7 +134,7 @@ const hasContent = computed(() => results.value.length > 0);
             :is="getPlugin(r.toolName)!.viewComponent"
             :selected-result="r"
             :send-text-message="sendTextMessage"
-            @update-result="onUpdateResult"
+            @update-result="(update: Partial<ToolResult>) => onUpdateResult(r, update)"
           />
         </PluginFrame>
       </template>
