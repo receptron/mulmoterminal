@@ -36,8 +36,8 @@ function hoistAtPropertyRules(css: string | undefined): void {
 // emits, provide/inject, reactivity all work normally).
 const props = defineProps<{ css?: string }>();
 
-const hostEl = ref<HTMLElement>();
-const target = ref<HTMLElement | null>(null);
+const hostEl = ref<HTMLDivElement>();
+const target = ref<HTMLDivElement | null>(null);
 
 onMounted(() => {
   hoistAtPropertyRules(props.css);
