@@ -14,7 +14,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3456;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
-const CLAUDE_CWD = process.env.CLAUDE_CWD || process.env.HOME;
+const CLAUDE_CWD =
+  process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaude");
+
+// CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
+// session state, so it must exist before we spawn anything into it.
+await fs.mkdir(CLAUDE_CWD, { recursive: true });
 
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
