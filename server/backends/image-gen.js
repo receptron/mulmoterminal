@@ -10,11 +10,18 @@
 // serving route. Mirrors MulmoClaude's server/utils/gemini.ts (same model + config).
 import { GoogleGenAI } from "@google/genai";
 
-const DEFAULT_IMAGE_MODEL = "gemini-3.1-flash-image-preview";
+// Mirrors MulmoClaude's default. This is a PREVIEW model Google schedules for
+// retirement (~mid-2026); override with GEMINI_IMAGE_MODEL to pin a stable model
+// (e.g. "gemini-2.5-flash-image") without a code change.
+const DEFAULT_IMAGE_MODEL = process.env.GEMINI_IMAGE_MODEL || "gemini-3.1-flash-image-preview";
 const DEFAULT_IMAGE_CONFIG = {
   responseModalities: ["TEXT", "IMAGE"],
   imageConfig: { aspectRatio: "16:9" },
 };
+
+// The MIME type comes from the (untrusted) model response and is embedded into a
+// `data:` URL, so constrain it to a safe image allowlist and default to PNG.
+const ALLOWED_IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 let client = null;
 function getClient() {
@@ -50,7 +57,8 @@ export async function generateImage(prompt) {
   for (const part of parts) {
     if (part.inlineData?.data) {
       imageData = part.inlineData.data;
-      if (part.inlineData.mimeType) mimeType = part.inlineData.mimeType;
+      const mt = part.inlineData.mimeType;
+      if (mt && ALLOWED_IMAGE_MIME.has(mt)) mimeType = mt;
     } else if (part.text) {
       text = part.text;
     }
