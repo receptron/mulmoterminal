@@ -192,7 +192,7 @@ function formatValue(v: unknown): string {
   flex-direction: column;
   width: 340px;
   flex-shrink: 0;
-  height: 100vh;
+  height: 100%;
   background: #0d1124;
   border-left: 1px solid #2a2a4e;
 }

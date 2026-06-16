@@ -136,7 +136,7 @@ const hasContent = computed(() => results.value.length > 0);
   flex-direction: column;
   flex: 1;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   background: #11162a;
   border-left: 1px solid #2a2a4e;
 }

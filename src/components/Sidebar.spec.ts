@@ -1,51 +1,36 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { describe, it, expect } from "vitest";
+import { mount } from "@vue/test-utils";
 import Sidebar from "./Sidebar.vue";
+import type { Session, Filter } from "../composables/useSessions";
 
-// Capture the pub/sub callback so tests can simulate a server push without a
-// real socket.
-let captured: ((data: unknown) => void) | null = null;
-vi.mock("../composables/usePubSub", () => ({
-  usePubSub: () => ({
-    subscribe: (_channel: string, cb: (data: unknown) => void) => {
-      captured = cb;
-      return () => {};
-    },
-  }),
-}));
+// Sidebar is now presentational: App.vue owns the list + filter and passes them
+// in. These tests drive it purely through props/emits.
 
-interface SessionRow {
-  id: string;
-  title: string;
-  mtime: number;
-  working: boolean;
-  waiting: boolean;
-}
-
-function mockSessions(sessions: SessionRow[]) {
-  globalThis.fetch = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({ cwd: "/x", sessions }),
-  }) as unknown as typeof fetch;
-}
-
-function row(over: Partial<SessionRow> & { id: string }): SessionRow {
+function row(over: Partial<Session> & { id: string }): Session {
   return { title: over.id, mtime: 1, working: false, waiting: false, ...over };
 }
 
-describe("Sidebar", () => {
-  beforeEach(() => {
-    captured = null;
+function mountSidebar(over: {
+  sessions: Session[];
+  activeId?: string | null;
+  filter?: Filter;
+}) {
+  return mount(Sidebar, {
+    props: {
+      sessions: over.sessions,
+      loading: false,
+      error: null,
+      activeId: over.activeId ?? null,
+      filter: over.filter ?? "all",
+    },
   });
+}
 
-  it("renders sessions from the server and shows the working spinner", async () => {
-    mockSessions([
-      row({ id: "a", title: "Alpha", working: true }),
-      row({ id: "b", title: "Beta" }),
-    ]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-
+describe("Sidebar", () => {
+  it("renders sessions and shows the working spinner", () => {
+    const wrapper = mountSidebar({
+      sessions: [row({ id: "a", title: "Alpha", working: true }), row({ id: "b", title: "Beta" })],
+    });
     const items = wrapper.findAll(".item");
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Alpha");
@@ -54,111 +39,62 @@ describe("Sidebar", () => {
     expect(items[1].find(".spinner").exists()).toBe(false);
   });
 
-  it("bolds a waiting session via the .waiting class", async () => {
-    mockSessions([
-      row({ id: "a", title: "Alpha", waiting: true }),
-      row({ id: "b", title: "Beta", waiting: false }),
-    ]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-
+  it("bolds a waiting session via the .waiting class", () => {
+    const wrapper = mountSidebar({
+      sessions: [row({ id: "a", waiting: true }), row({ id: "b", waiting: false })],
+    });
     const items = wrapper.findAll(".item");
     expect(items[0].classes()).toContain("waiting");
     expect(items[1].classes()).not.toContain("waiting");
   });
 
-  it("hides the spinner while a session is waiting for input", async () => {
-    // A session waiting for input keeps `working` true server-side, but it is
-    // blocked on the user — spinning there reads as "thinking", so suppress it.
-    mockSessions([row({ id: "a", title: "Alpha", working: true, waiting: true })]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-
+  it("hides the spinner while a session is waiting for input", () => {
+    // A waiting session keeps `working` true server-side, but it is blocked on
+    // the user — spinning there reads as "thinking", so suppress it.
+    const wrapper = mountSidebar({ sessions: [row({ id: "a", working: true, waiting: true })] });
     const item = wrapper.find(".item");
     expect(item.find(".spinner").exists()).toBe(false);
     expect(item.classes()).toContain("waiting");
   });
 
-  it("hides the spinner on the active session even while it is working", async () => {
-    // The open session's progress is visible in the terminal; a spinner on it is
-    // redundant (it also reappears right after selecting a waiting session).
-    mockSessions([
-      row({ id: "a", title: "Alpha", working: true }),
-      row({ id: "b", title: "Beta", working: true }),
-    ]);
-    const wrapper = mount(Sidebar, { props: { activeId: "a" } });
-    await flushPromises();
-
+  it("hides the spinner on the active session even while it is working", () => {
+    const wrapper = mountSidebar({
+      sessions: [row({ id: "a", working: true }), row({ id: "b", working: true })],
+      activeId: "a",
+    });
     const items = wrapper.findAll(".item");
     expect(items[0].find(".spinner").exists()).toBe(false); // active
     expect(items[1].find(".spinner").exists()).toBe(true); // background
   });
 
-  it("filters to unread (waiting) sessions when the Unread chip is active", async () => {
-    mockSessions([
-      row({ id: "a", title: "Alpha", waiting: true }),
-      row({ id: "b", title: "Beta", waiting: false }),
-    ]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
+  it("shows only unread rows when the filter prop is 'unread'", () => {
+    const wrapper = mountSidebar({
+      sessions: [row({ id: "a", waiting: true }), row({ id: "b", waiting: false })],
+      filter: "unread",
+    });
+    const items = wrapper.findAll(".item");
+    expect(items).toHaveLength(1);
+    expect(items[0].text()).toContain("a");
+  });
 
-    // "All" by default shows both.
-    expect(wrapper.findAll(".item")).toHaveLength(2);
-
-    // The Unread chip reports the count and, once active, hides read rows.
+  it("emits update:filter when an unread chip is clicked, with its count", async () => {
+    const wrapper = mountSidebar({
+      sessions: [row({ id: "a", waiting: true }), row({ id: "b" })],
+    });
     const unreadChip = wrapper.findAll(".chip")[1];
     expect(unreadChip.text()).toContain("(1)");
     await unreadChip.trigger("click");
-
-    const items = wrapper.findAll(".item");
-    expect(items).toHaveLength(1);
-    expect(items[0].text()).toContain("Alpha");
+    expect(wrapper.emitted("update:filter")?.[0]).toEqual(["unread"]);
   });
 
-  it("refetches the authoritative list when a pub/sub event arrives", async () => {
-    mockSessions([row({ id: "a", title: "Alpha" })]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-    expect(wrapper.findAll(".item")).toHaveLength(1);
-
-    // Server now reports a newly-created session; the push should trigger a reload.
-    mockSessions([row({ id: "a", title: "Alpha" }), row({ id: "b", title: "New session" })]);
-    captured?.({ id: "b", working: false, waiting: false, event: "created" });
-    await flushPromises();
-    expect(wrapper.findAll(".item")).toHaveLength(2);
-  });
-
-  it("keeps existing rows in place when a pub/sub refresh reorders the server list", async () => {
-    // Server sorts by recency; switching sessions bumps mtimes and would
-    // reshuffle rows under the user. The displayed order must stay stable.
-    mockSessions([row({ id: "a" }), row({ id: "b" })]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["a", "b"]);
-
-    // b is now newest (server returns it first), but the row order must not move.
-    mockSessions([row({ id: "b" }), row({ id: "a" })]);
-    captured?.({ id: "b", working: false, waiting: false, event: "updated" });
-    await flushPromises();
-    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["a", "b"]);
-  });
-
-  it("re-sorts by recency when the Refresh button is clicked", async () => {
-    mockSessions([row({ id: "a" }), row({ id: "b" })]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-
-    mockSessions([row({ id: "b" }), row({ id: "a" })]);
-    await wrapper.find(".sort-btn").trigger("click"); // ⟳ Sort by most recent
-    await flushPromises();
-    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["b", "a"]);
+  it("emits refresh when the sort button is clicked", async () => {
+    const wrapper = mountSidebar({ sessions: [row({ id: "a" })] });
+    await wrapper.find(".sort-btn").trigger("click");
+    expect(wrapper.emitted("refresh")).toHaveLength(1);
   });
 
   it("emits select with the session id on click", async () => {
-    mockSessions([row({ id: "a", title: "Alpha" })]);
-    const wrapper = mount(Sidebar, { props: { activeId: null } });
-    await flushPromises();
-
+    const wrapper = mountSidebar({ sessions: [row({ id: "a", title: "Alpha" })] });
     await wrapper.find(".item").trigger("click");
     expect(wrapper.emitted("select")?.[0]).toEqual(["a"]);
   });

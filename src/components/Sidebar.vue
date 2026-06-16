@@ -1,25 +1,32 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useSessions } from "../composables/useSessions";
+import { computed } from "vue";
+import type { Session, Filter } from "../composables/useSessions";
 import FilterChip from "./FilterChip.vue";
 
-const props = defineProps<{ activeId: string | null }>();
+// Presentational: the session list + filter are owned by App.vue (a single
+// useSessions instance shared across layouts) so toggling vertical/horizontal
+// doesn't reset or refetch them.
+const props = defineProps<{
+  sessions: Session[];
+  loading: boolean;
+  error: string | null;
+  activeId: string | null;
+  filter: Filter;
+}>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
   (e: "new"): void;
   (e: "toggle-layout"): void;
+  (e: "refresh"): void;
+  (e: "update:filter", f: Filter): void;
 }>();
-
-const { sessions, loading, error, refresh } = useSessions();
 
 // A background session that is `waiting` for the user's attention is what
 // mulmoclaude calls "unread" — render it bold and let the user filter to just
 // those rows.
-type Filter = "all" | "unread";
-const filter = ref<Filter>("all");
-const unreadCount = computed(() => sessions.value.filter((s) => s.waiting).length);
+const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).length);
 const visibleSessions = computed(() =>
-  filter.value === "unread" ? sessions.value.filter((s) => s.waiting) : sessions.value
+  props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions
 );
 
 function relativeTime(ms: number): string {
@@ -31,8 +38,6 @@ function relativeTime(ms: number): string {
   if (hr < 24) return `${hr}h ago`;
   return `${Math.round(hr / 24)}d ago`;
 }
-
-defineExpose({ refresh });
 </script>
 
 <template>
@@ -56,15 +61,15 @@ defineExpose({ refresh });
       <FilterChip
         label="All"
         :active="filter === 'all'"
-        @click="filter = 'all'"
+        @click="emit('update:filter', 'all')"
       />
       <FilterChip
         label="Unread"
         :count="unreadCount"
         :active="filter === 'unread'"
-        @click="filter = 'unread'"
+        @click="emit('update:filter', 'unread')"
       />
-      <button class="icon-btn sort-btn" title="Sort by most recent" @click="refresh">
+      <button class="icon-btn sort-btn" title="Sort by most recent" @click="emit('refresh')">
         ⟳
       </button>
     </div>

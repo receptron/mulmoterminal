@@ -5,10 +5,18 @@ import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
+import { useSessions, type Filter } from "./composables/useSessions";
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
+
+// Single source of truth for the session list, owned here (not inside the
+// layout components) so toggling vertical/horizontal — which swaps Sidebar and
+// SessionTabBar via v-if/v-else — never unmounts the store, refetches, or resets
+// the filter. Both layouts render this same shared state.
+const { sessions, loading, error, refresh } = useSessions();
+const filter = ref<Filter>("all");
 
 // Terminal column width (px), set by dragging the splitter between the terminal
 // and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
@@ -100,17 +108,25 @@ function onSession(id: string) {
   <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
     <Sidebar
       v-if="layout === 'vertical'"
+      v-model:filter="filter"
+      :sessions="sessions"
+      :loading="loading"
+      :error="error"
       :active-id="activeId"
       @select="selectSession"
       @new="newSession"
       @toggle-layout="toggleLayout"
+      @refresh="refresh"
     />
     <SessionTabBar
       v-else
+      v-model:filter="filter"
+      :sessions="sessions"
       :active-id="activeId"
       @select="selectSession"
       @new="newSession"
       @toggle-layout="toggleLayout"
+      @refresh="refresh"
     />
     <div class="main">
       <TerminalView
@@ -155,11 +171,15 @@ function onSession(id: string) {
   flex-direction: column;
 }
 
-/* [ Terminal | GuiPanel ] — the unified two-panel view in miniature. */
+/* [ Terminal | GuiPanel ] — the unified two-panel view in miniature. Bounded to
+   the leftover height (full viewport in vertical mode, viewport minus the tab
+   bar in horizontal mode) so the panes fill it exactly instead of overflowing
+   under `.app { overflow: hidden }`. Panes size to height:100% of this. */
 .main {
   display: flex;
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 /* Terminal pane: fixed flex-basis (set inline from terminalWidth); the GUI

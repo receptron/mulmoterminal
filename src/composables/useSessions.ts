@@ -9,6 +9,9 @@ export interface Session {
   waiting: boolean;
 }
 
+// "unread" = a session whose `waiting` flag is set (mulmoclaude's unread).
+export type Filter = "all" | "unread";
+
 // Merge a freshly-fetched list into the displayed one while keeping the order
 // stable. The server sorts by recency (mtime), so a background update — e.g.
 // switching away from a session bumps its file mtime — would reshuffle rows
@@ -16,7 +19,7 @@ export interface Session {
 // (only their data is refreshed), genuinely-new sessions are prepended (the
 // server returns them newest-first), and vanished ones drop out. Callers that
 // want a true recency re-sort pass `resort` (the ⟳ button).
-function mergeStable(prev: Session[], incoming: Session[], resort: boolean): Session[] {
+export function mergeStable(prev: Session[], incoming: Session[], resort: boolean): Session[] {
   if (resort || prev.length === 0) return incoming;
   const incomingById = new Map(incoming.map((s) => [s.id, s]));
   const prevIds = new Set(prev.map((s) => s.id));

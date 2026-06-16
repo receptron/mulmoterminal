@@ -1,22 +1,26 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
-import { useSessions } from "../composables/useSessions";
+import { computed } from "vue";
+import type { Session, Filter } from "../composables/useSessions";
 import FilterChip from "./FilterChip.vue";
 
-const props = defineProps<{ activeId: string | null }>();
+// Presentational: list + filter are owned by App.vue and shared with the
+// vertical Sidebar, so switching layouts preserves them (no refetch/reset).
+const props = defineProps<{
+  sessions: Session[];
+  activeId: string | null;
+  filter: Filter;
+}>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
   (e: "new"): void;
   (e: "toggle-layout"): void;
+  (e: "refresh"): void;
+  (e: "update:filter", f: Filter): void;
 }>();
-
-const { sessions, refresh } = useSessions();
 
 // Same "unread" = `waiting` mapping as the vertical sidebar; the filter applies
 // to the horizontal tabs too.
-type Filter = "all" | "unread";
-const filter = ref<Filter>("all");
-const unreadCount = computed(() => sessions.value.filter((s) => s.waiting).length);
+const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).length);
 
 // The horizontal bar never scrolls — tabs flex to share the available width.
 // Cap to the most-recent N (sessions are already sorted by recency) so they
@@ -24,7 +28,7 @@ const unreadCount = computed(() => sessions.value.filter((s) => s.waiting).lengt
 // applies before the cap.
 const MAX_TABS = 8;
 const visibleSessions = computed(() => {
-  const list = filter.value === "unread" ? sessions.value.filter((s) => s.waiting) : sessions.value;
+  const list = props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions;
   return list.slice(0, MAX_TABS);
 });
 </script>
@@ -39,15 +43,15 @@ const visibleSessions = computed(() => {
       <FilterChip
         label="All"
         :active="filter === 'all'"
-        @click="filter = 'all'"
+        @click="emit('update:filter', 'all')"
       />
       <FilterChip
         label="Unread"
         :count="unreadCount"
         :active="filter === 'unread'"
-        @click="filter = 'unread'"
+        @click="emit('update:filter', 'unread')"
       />
-      <button class="icon-btn sort-btn" title="Sort by most recent" @click="refresh">
+      <button class="icon-btn sort-btn" title="Sort by most recent" @click="emit('refresh')">
         ⟳
       </button>
     </div>
