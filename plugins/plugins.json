@@ -1,8 +1,7 @@
 {
   "packages": [
-    "@gui-chat-plugin/markdown"
+    "@gui-chat-plugin/markdown",
+    "@gui-chat-plugin/form"
   ],
-  "local": [
-    "form"
-  ]
+  "local": []
 }

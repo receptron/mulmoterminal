@@ -19,6 +19,7 @@
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {
+    "@gui-chat-plugin/form": "file:../plugins/form",
     "@gui-chat-plugin/markdown": "file:../plugins/markdown",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@xterm/addon-attach": "^0.12.0",

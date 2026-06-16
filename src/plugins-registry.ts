@@ -7,6 +7,7 @@
 import type { Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@gui-chat-plugin/markdown/vue";
+import { plugin as formPlugin } from "@gui-chat-plugin/form/vue";
 
 interface Registration {
   toolName: string;
@@ -20,6 +21,10 @@ const PACKAGES: Record<string, Registration> = {
   "@gui-chat-plugin/markdown": {
     toolName: markdownPlugin.toolDefinition.name,
     viewComponent: markdownPlugin.viewComponent as Component,
+  },
+  "@gui-chat-plugin/form": {
+    toolName: formPlugin.toolDefinition.name,
+    viewComponent: formPlugin.viewComponent as Component,
   },
 };
 
