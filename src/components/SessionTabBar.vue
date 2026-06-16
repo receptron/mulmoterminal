@@ -47,6 +47,9 @@ const visibleSessions = computed(() => {
         :active="filter === 'unread'"
         @click="filter = 'unread'"
       />
+      <button class="icon-btn sort-btn" title="Sort by most recent" @click="refresh">
+        ⟳
+      </button>
     </div>
 
     <div class="tabs">
@@ -74,9 +77,6 @@ const visibleSessions = computed(() => {
     </div>
 
     <div class="actions">
-      <button class="icon-btn" title="Sort by most recent" @click="refresh">
-        ⟳
-      </button>
       <button
         class="icon-btn"
         title="Switch to vertical sidebar"
@@ -121,8 +121,13 @@ const visibleSessions = computed(() => {
 
 .filters {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-shrink: 0;
+}
+
+.sort-btn {
+  font-size: 14px;
 }
 
 .tabs {

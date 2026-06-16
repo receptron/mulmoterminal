@@ -39,18 +39,13 @@ defineExpose({ refresh });
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
-      <span class="header-actions">
-        <button class="icon-btn" title="Sort by most recent" @click="refresh">
-          ⟳
-        </button>
-        <button
-          class="icon-btn"
-          title="Switch to horizontal tabs"
-          @click="emit('toggle-layout')"
-        >
-          ⇥
-        </button>
-      </span>
+      <button
+        class="icon-btn"
+        title="Switch to horizontal tabs"
+        @click="emit('toggle-layout')"
+      >
+        ⇥
+      </button>
     </div>
 
     <button class="new-btn" @click="emit('new')">
@@ -69,6 +64,9 @@ defineExpose({ refresh });
         :active="filter === 'unread'"
         @click="filter = 'unread'"
       />
+      <button class="icon-btn sort-btn" title="Sort by most recent" @click="refresh">
+        ⟳
+      </button>
     </div>
 
     <div v-if="loading" class="state">
@@ -135,12 +133,6 @@ defineExpose({ refresh });
   color: #9aa5c4;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
 .icon-btn {
   background: none;
   border: none;
@@ -169,9 +161,15 @@ defineExpose({ refresh });
 
 .filters {
   display: flex;
+  align-items: center;
   gap: 6px;
-  flex-wrap: wrap;
   padding: 0 12px 8px;
+}
+
+/* Recency re-sort sits with the list controls, pushed to the far right. */
+.sort-btn {
+  margin-left: auto;
+  font-size: 14px;
 }
 
 .state {

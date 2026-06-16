@@ -149,7 +149,7 @@ describe("Sidebar", () => {
     await flushPromises();
 
     mockSessions([row({ id: "b" }), row({ id: "a" })]);
-    await wrapper.find(".icon-btn").trigger("click"); // ⟳ Refresh
+    await wrapper.find(".sort-btn").trigger("click"); // ⟳ Sort by most recent
     await flushPromises();
     expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["b", "a"]);
   });
