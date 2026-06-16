@@ -231,12 +231,15 @@ real protocol**, so M3 is a near-copy port rather than a translation. Three shif
 
 **Persistence (what we store, and why so little).** Chat + message history already
 live in the terminal and Claude's `.jsonl` (resume), so the only GUI-side store is
-the **list of toolResults per session id** (`toolResultsBySession`, in-memory for
-the spike), replayed from `GET /api/agent/toolResults/:id` on (re)select. A view's
-state change (e.g. a submitted form's `viewState`) is persisted by re-`POST`ing the
-same `uuid` to `/api/agent/toolResult`, which upserts in place (dedupe by `uuid`,
-mirroring `applyToolResultToSession`) — so a revisited session shows the form as
-already submitted.
+the **list of toolResults per session id**, replayed from
+`GET /api/agent/toolResults/:id` on (re)select. A view's state change (e.g. a
+submitted form's `viewState`) is persisted by re-`POST`ing the same `uuid` to
+`/api/agent/toolResult`, which upserts in place (dedupe by `uuid`, mirroring
+`applyToolResultToSession`) — so a revisited session shows the form as already
+submitted. The store is **mirrored to disk** (one JSON file per session under
+`<workspace>/.toolresults/`, via a small `createSessionStore(dirName)` helper: an
+in-memory Map as the working copy, rewritten on each change and lazy-loaded on
+first access) so the rendered views also survive a **server reboot**.
 
 ### Updated seam
 

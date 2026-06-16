@@ -53,18 +53,66 @@ const MCP_SERVER_PATH = path.join(__dirname, "mcp", "broker.js");
 // prompt (permissions stay terminal-native). Comma-joined into one --allowedTools.
 const GUI_MCP_TOOLS = allowedToolNames().join(",");
 
-// GUI toolResults per session, kept in memory for the spike so the panel can
-// replay them when a session is (re)selected. (Chat + message history already
-// live in the terminal and Claude's .jsonl; this is the only GUI-side store.)
+// A per-session list store mirrored to disk so it survives a server reboot — one
+// JSON file per session under <workspace>/<dirName>/<sessionId>.json
+// (<workspace> = CLAUDE_CWD). The in-memory Map is the working copy; the file is
+// rewritten on each change and lazy-loaded on first access. Session ids are
+// validated UUIDs (SESSION_ID_RE), so they're safe to use as filenames.
+function createSessionStore(dirName) {
+  const dir = path.join(CLAUDE_CWD, dirName);
+  const fileFor = (id) => path.join(dir, `${id}.json`);
+  const map = new Map(); // id -> list (the working copy; mutate in place)
+  const loading = new Map(); // id -> Promise<list>, dedupes concurrent loads
+
+  // Lazily load a session's list from disk, then keep using the in-memory copy.
+  function get(sessionId) {
+    const cached = map.get(sessionId);
+    if (cached) return Promise.resolve(cached);
+    if (loading.has(sessionId)) return loading.get(sessionId);
+    const p = (async () => {
+      let list = [];
+      if (SESSION_ID_RE.test(sessionId)) {
+        try {
+          const parsed = JSON.parse(await fs.readFile(fileFor(sessionId), "utf8"));
+          if (Array.isArray(parsed)) list = parsed;
+        } catch {
+          // No file yet (or unreadable) => start empty.
+        }
+      }
+      map.set(sessionId, list);
+      loading.delete(sessionId);
+      return list;
+    })();
+    loading.set(sessionId, p);
+    return p;
+  }
+
+  // Persist a session's list (best-effort, fire-and-forget).
+  async function save(sessionId) {
+    if (!SESSION_ID_RE.test(sessionId)) return;
+    try {
+      await fs.mkdir(dir, { recursive: true });
+      await fs.writeFile(fileFor(sessionId), JSON.stringify(map.get(sessionId) || []));
+    } catch (e) {
+      console.error(`[${dirName}] failed to persist ${sessionId}: ${e.message}`);
+    }
+  }
+
+  return { get, save };
+}
+
+// GUI toolResults per session, persisted under <workspace>/.toolresults so the
+// panel replays the rendered views even after a server reboot. (Chat + message
+// history live in the terminal and Claude's .jsonl; this is the GUI-side store.)
 // Each entry is an array of toolResults, capped to the most recent N.
-const toolResultsBySession = new Map(); // id -> [toolResult]
+const toolResultsStore = createSessionStore(".toolresults");
 const GUI_HISTORY_LIMIT = 50;
 
 // Upsert a toolResult into a session's list, deduped by uuid — a re-emitted result
 // (e.g. a form whose viewState changed after the user submitted) updates in place.
 // Mirrors MulmoClaude's applyToolResultToSession.
-function storeToolResult(sessionId, result) {
-  const list = toolResultsBySession.get(sessionId) || [];
+async function storeToolResult(sessionId, result) {
+  const list = await toolResultsStore.get(sessionId);
   const idx = list.findIndex((r) => r.uuid === result.uuid);
   if (idx >= 0) {
     list[idx] = result;
@@ -72,7 +120,7 @@ function storeToolResult(sessionId, result) {
     list.push(result);
     if (list.length > GUI_HISTORY_LIMIT) list.splice(0, list.length - GUI_HISTORY_LIMIT);
   }
-  toolResultsBySession.set(sessionId, list);
+  toolResultsStore.save(sessionId);
 }
 
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
@@ -290,7 +338,7 @@ app.post("/api/hook", (req, res) => {
 // We store the result keyed by session id and publish it on that session's channel
 // so the active panel renders/updates it live. Mirrors MulmoClaude's internal
 // toolResult route + applyToolResultToSession.
-app.post("/api/agent/toolResult", (req, res) => {
+app.post("/api/agent/toolResult", async (req, res) => {
   const { sessionId, toolName, uuid } = req.body || {};
   // The session id flows from env (broker) / the client and ends up in a pub/sub
   // channel name — keep it to the known UUID shape.
@@ -308,7 +356,7 @@ app.post("/api/agent/toolResult", (req, res) => {
   // the panel renders.
   const result = { ...req.body };
   delete result.sessionId;
-  storeToolResult(sessionId, result);
+  await storeToolResult(sessionId, result);
 
   pubsub?.publish(sessionChannel(sessionId), result);
   console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
@@ -316,13 +364,14 @@ app.post("/api/agent/toolResult", (req, res) => {
 });
 
 // Replay a session's stored toolResults so the panel can render them when the
-// user (re)selects that session.
-app.get("/api/agent/toolResults/:sessionId", (req, res) => {
+// user (re)selects that session. Loads from disk (<workspace>/.toolresults) on
+// first access so the views survive a reboot.
+app.get("/api/agent/toolResults/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   if (!SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
   }
-  res.json({ sessionId, toolResults: toolResultsBySession.get(sessionId) || [] });
+  res.json({ sessionId, toolResults: await toolResultsStore.get(sessionId) });
 });
 
 // List the chat sessions for the current project (CLAUDE_CWD), including
