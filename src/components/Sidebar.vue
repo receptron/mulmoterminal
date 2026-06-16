@@ -40,7 +40,7 @@ defineExpose({ refresh });
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
       <span class="header-actions">
-        <button class="icon-btn" title="Refresh" @click="refresh">
+        <button class="icon-btn" title="Sort by most recent" @click="refresh">
           ⟳
         </button>
         <button

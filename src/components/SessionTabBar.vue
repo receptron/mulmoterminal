@@ -74,7 +74,7 @@ const visibleSessions = computed(() => {
     </div>
 
     <div class="actions">
-      <button class="icon-btn" title="Refresh" @click="refresh">
+      <button class="icon-btn" title="Sort by most recent" @click="refresh">
         ⟳
       </button>
       <button
