@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
@@ -9,6 +9,45 @@ import ToolsPane from "./components/ToolsPane.vue";
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
+
+// Terminal column width (px), set by dragging the splitter between the terminal
+// and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
+// reloads. The terminal's own ResizeObserver refits xterm's cols/rows as this
+// changes, so a drag live-resizes the PTY.
+const MIN_TERMINAL = 320;
+const MIN_GUI = 360;
+const terminalWidth = ref<number>(Number(localStorage.getItem("terminal_width")) || 560);
+
+function clampWidth(w: number): number {
+  return Math.max(MIN_TERMINAL, Math.min(w, window.innerWidth - MIN_GUI));
+}
+
+let stopDrag: (() => void) | null = null;
+function startDrag(e: MouseEvent) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = terminalWidth.value;
+  const onMove = (ev: MouseEvent) => {
+    terminalWidth.value = clampWidth(startW + (ev.clientX - startX));
+  };
+  const onUp = () => {
+    localStorage.setItem("terminal_width", String(terminalWidth.value));
+    stopDrag?.();
+  };
+  stopDrag = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    stopDrag = null;
+  };
+  // Suppress text selection / keep the resize cursor for the whole drag.
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+onUnmounted(() => stopDrag?.());
 
 // Session-history layout: "vertical" (left Sidebar) or "horizontal" (top
 // SessionTabBar), mirroring mulmoclaude's two history layouts. Persisted across
@@ -76,9 +115,16 @@ function onSession(id: string) {
     <div class="main">
       <TerminalView
         ref="terminalRef"
+        class="terminal-pane"
+        :style="{ flex: `0 0 ${terminalWidth}px` }"
         :session-id="activeId"
         :connect-key="connectKey"
         @session="onSession"
+      />
+      <div
+        class="splitter"
+        title="Drag to resize the terminal"
+        @mousedown="startDrag"
       />
       <GuiPanel
         :session-id="activeId"
@@ -114,5 +160,23 @@ function onSession(id: string) {
   display: flex;
   flex: 1;
   min-width: 0;
+}
+
+/* Terminal pane: fixed flex-basis (set inline from terminalWidth); the GUI
+   panel beside it absorbs the remaining width. */
+.terminal-pane {
+  min-width: 0;
+}
+
+/* Draggable divider between the terminal and the GUI panel. */
+.splitter {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: #16213e;
+  border-left: 1px solid #2a2a4e;
+  border-right: 1px solid #2a2a4e;
+}
+.splitter:hover {
+  background: #2a3b66;
 }
 </style>
