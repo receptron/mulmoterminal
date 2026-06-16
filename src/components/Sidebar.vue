@@ -47,6 +47,7 @@ function relativeTime(ms: number): string {
       <button
         class="icon-btn"
         title="Switch to horizontal tabs"
+        aria-label="Switch to horizontal tabs"
         @click="emit('toggle-layout')"
       >
         ⇥
@@ -69,7 +70,12 @@ function relativeTime(ms: number): string {
         :active="filter === 'unread'"
         @click="emit('update:filter', 'unread')"
       />
-      <button class="icon-btn sort-btn" title="Sort by most recent" @click="emit('refresh')">
+      <button
+        class="icon-btn sort-btn"
+        title="Sort by most recent"
+        aria-label="Sort by most recent"
+        @click="emit('refresh')"
+      >
         ⟳
       </button>
     </div>

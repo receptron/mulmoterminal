@@ -35,7 +35,7 @@ const visibleSessions = computed(() => {
 
 <template>
   <div class="tabbar">
-    <button class="new-btn" title="New session" @click="emit('new')">
+    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">
       +
     </button>
 
@@ -51,7 +51,12 @@ const visibleSessions = computed(() => {
         :active="filter === 'unread'"
         @click="emit('update:filter', 'unread')"
       />
-      <button class="icon-btn sort-btn" title="Sort by most recent" @click="emit('refresh')">
+      <button
+        class="icon-btn sort-btn"
+        title="Sort by most recent"
+        aria-label="Sort by most recent"
+        @click="emit('refresh')"
+      >
         ⟳
       </button>
     </div>
@@ -84,6 +89,7 @@ const visibleSessions = computed(() => {
       <button
         class="icon-btn"
         title="Switch to vertical sidebar"
+        aria-label="Switch to vertical sidebar"
         @click="emit('toggle-layout')"
       >
         ⇤

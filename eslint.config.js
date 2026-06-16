@@ -18,6 +18,7 @@ export default [
         WebSocket: "readonly",
         ResizeObserver: "readonly",
         MouseEvent: "readonly",
+        KeyboardEvent: "readonly",
         window: "readonly",
         document: "readonly",
         location: "readonly",

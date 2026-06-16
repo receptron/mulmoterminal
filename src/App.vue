@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import Sidebar from "./components/Sidebar.vue";
 import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
@@ -26,8 +26,17 @@ const MIN_TERMINAL = 320;
 const MIN_GUI = 360;
 const terminalWidth = ref<number>(Number(localStorage.getItem("terminal_width")) || 560);
 
+// Track the viewport so the splitter's max (and aria-valuemax) stays correct and
+// the saved width re-clamps when the window shrinks.
+const viewportWidth = ref(window.innerWidth);
+const maxTerminal = computed(() => Math.max(MIN_TERMINAL, viewportWidth.value - MIN_GUI));
+
 function clampWidth(w: number): number {
-  return Math.max(MIN_TERMINAL, Math.min(w, window.innerWidth - MIN_GUI));
+  return Math.max(MIN_TERMINAL, Math.min(w, maxTerminal.value));
+}
+
+function persistWidth() {
+  localStorage.setItem("terminal_width", String(terminalWidth.value));
 }
 
 let stopDrag: (() => void) | null = null;
@@ -39,7 +48,7 @@ function startDrag(e: MouseEvent) {
     terminalWidth.value = clampWidth(startW + (ev.clientX - startX));
   };
   const onUp = () => {
-    localStorage.setItem("terminal_width", String(terminalWidth.value));
+    persistWidth();
     stopDrag?.();
   };
   stopDrag = () => {
@@ -55,7 +64,29 @@ function startDrag(e: MouseEvent) {
   window.addEventListener("mousemove", onMove);
   window.addEventListener("mouseup", onUp);
 }
-onUnmounted(() => stopDrag?.());
+
+// Keyboard resize for the separator (arrows nudge, Home/End jump to the limits)
+// so the splitter is operable without a mouse.
+function onSplitterKey(e: KeyboardEvent) {
+  const STEP = 16;
+  if (e.key === "ArrowLeft") terminalWidth.value = clampWidth(terminalWidth.value - STEP);
+  else if (e.key === "ArrowRight") terminalWidth.value = clampWidth(terminalWidth.value + STEP);
+  else if (e.key === "Home") terminalWidth.value = MIN_TERMINAL;
+  else if (e.key === "End") terminalWidth.value = maxTerminal.value;
+  else return;
+  e.preventDefault();
+  persistWidth();
+}
+
+function onViewportResize() {
+  viewportWidth.value = window.innerWidth;
+  terminalWidth.value = clampWidth(terminalWidth.value);
+}
+onMounted(() => window.addEventListener("resize", onViewportResize));
+onUnmounted(() => {
+  stopDrag?.();
+  window.removeEventListener("resize", onViewportResize);
+});
 
 // Session-history layout: "vertical" (left Sidebar) or "horizontal" (top
 // SessionTabBar), mirroring mulmoclaude's two history layouts. Persisted across
@@ -139,8 +170,16 @@ function onSession(id: string) {
       />
       <div
         class="splitter"
-        title="Drag to resize the terminal"
+        role="separator"
+        tabindex="0"
+        aria-orientation="vertical"
+        aria-label="Resize terminal"
+        :aria-valuenow="terminalWidth"
+        :aria-valuemin="MIN_TERMINAL"
+        :aria-valuemax="maxTerminal"
+        title="Drag (or use arrow keys) to resize the terminal"
         @mousedown="startDrag"
+        @keydown="onSplitterKey"
       />
       <GuiPanel
         :session-id="activeId"
@@ -198,5 +237,9 @@ function onSession(id: string) {
 }
 .splitter:hover {
   background: #2a3b66;
+}
+.splitter:focus-visible {
+  outline: none;
+  background: #4a8cff;
 }
 </style>
