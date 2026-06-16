@@ -128,6 +128,32 @@ describe("Sidebar", () => {
     expect(wrapper.findAll(".item")).toHaveLength(2);
   });
 
+  it("keeps existing rows in place when a pub/sub refresh reorders the server list", async () => {
+    // Server sorts by recency; switching sessions bumps mtimes and would
+    // reshuffle rows under the user. The displayed order must stay stable.
+    mockSessions([row({ id: "a" }), row({ id: "b" })]);
+    const wrapper = mount(Sidebar, { props: { activeId: null } });
+    await flushPromises();
+    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["a", "b"]);
+
+    // b is now newest (server returns it first), but the row order must not move.
+    mockSessions([row({ id: "b" }), row({ id: "a" })]);
+    captured?.({ id: "b", working: false, waiting: false, event: "updated" });
+    await flushPromises();
+    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["a", "b"]);
+  });
+
+  it("re-sorts by recency when the Refresh button is clicked", async () => {
+    mockSessions([row({ id: "a" }), row({ id: "b" })]);
+    const wrapper = mount(Sidebar, { props: { activeId: null } });
+    await flushPromises();
+
+    mockSessions([row({ id: "b" }), row({ id: "a" })]);
+    await wrapper.find(".icon-btn").trigger("click"); // ⟳ Refresh
+    await flushPromises();
+    expect(wrapper.findAll(".item-title").map((i) => i.text().trim())).toEqual(["b", "a"]);
+  });
+
   it("emits select with the session id on click", async () => {
     mockSessions([row({ id: "a", title: "Alpha" })]);
     const wrapper = mount(Sidebar, { props: { activeId: null } });

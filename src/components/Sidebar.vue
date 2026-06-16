@@ -10,7 +10,7 @@ const emit = defineEmits<{
   (e: "toggle-layout"): void;
 }>();
 
-const { sessions, loading, error, load } = useSessions();
+const { sessions, loading, error, refresh } = useSessions();
 
 // A background session that is `waiting` for the user's attention is what
 // mulmoclaude calls "unread" — render it bold and let the user filter to just
@@ -32,7 +32,7 @@ function relativeTime(ms: number): string {
   return `${Math.round(hr / 24)}d ago`;
 }
 
-defineExpose({ load });
+defineExpose({ refresh });
 </script>
 
 <template>
@@ -40,7 +40,7 @@ defineExpose({ load });
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
       <span class="header-actions">
-        <button class="icon-btn" title="Refresh" @click="load">
+        <button class="icon-btn" title="Refresh" @click="refresh">
           ⟳
         </button>
         <button

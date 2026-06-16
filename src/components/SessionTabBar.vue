@@ -10,7 +10,7 @@ const emit = defineEmits<{
   (e: "toggle-layout"): void;
 }>();
 
-const { sessions, load } = useSessions();
+const { sessions, refresh } = useSessions();
 
 // Same "unread" = `waiting` mapping as the vertical sidebar; the filter applies
 // to the horizontal tabs too.
@@ -74,7 +74,7 @@ const visibleSessions = computed(() => {
     </div>
 
     <div class="actions">
-      <button class="icon-btn" title="Refresh" @click="load">
+      <button class="icon-btn" title="Refresh" @click="refresh">
         ⟳
       </button>
       <button
