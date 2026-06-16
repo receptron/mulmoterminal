@@ -1,10 +1,17 @@
-// Server-side plugin registry. Reads the configuration data (plugins/plugins.json)
-// and loads each enabled plugin's server halves (meta.js, definition.js, server.js).
-// Both the main server (server/index.js) and the MCP broker (server/mcp/broker.js)
-// import this, so the set of GUI tools is driven entirely by the config file.
+// Server-side plugin registry. Loads two kinds of GUI-protocol plugins and
+// normalizes them into one shape the MCP broker and the dispatch route consume:
 //
-// Mirrors MulmoClaude's role-gated plugin loading (server/agent/activeTools.ts),
-// minus the codegen barrels: here the config is a plain JSON list.
+//   - packages: gui-chat-protocol plugin packages (e.g. @gui-chat-plugin/markdown).
+//       Their core entry exports a ToolPluginCore { toolDefinition, execute } plus
+//       TOOL_DEFINITION. These are shared VERBATIM with MulmoClaude — one source of
+//       truth, loaded as an npm dependency.
+//   - local:    in-tree plugins under plugins/<name>/ whose definition.js exports a
+//       gui-chat-protocol ToolDefinition and whose server.js exports execute(args).
+//       These are pre-extraction holdovers that migrate to packages over time.
+//
+// Both the main server (which mounts the dispatch route) and the MCP broker (which
+// registers the tools) import this, so the GUI tool set is driven entirely by
+// plugins.json.
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
@@ -17,61 +24,77 @@ const MCP_SERVER_NAME = "mulmoterminal-gui";
 function loadConfig() {
   const raw = fs.readFileSync(path.join(PLUGINS_DIR, "plugins.json"), "utf8");
   const parsed = JSON.parse(raw);
-  if (!Array.isArray(parsed.enabled)) {
-    throw new Error("plugins.json must have an `enabled` array.");
-  }
-  return parsed.enabled;
+  return {
+    packages: Array.isArray(parsed.packages) ? parsed.packages : [],
+    local: Array.isArray(parsed.local) ? parsed.local : [],
+  };
 }
 
-async function loadPlugin(name) {
+// A gui-chat-protocol package. The core entry exposes TOOL_DEFINITION (a JSON-schema
+// ToolDefinition) and a ToolPluginCore whose execute(context, args) returns the
+// result envelope. We invoke it in-process when the broker dispatches; context.app
+// stays empty for now (host backends like image generation arrive in a later phase).
+async function loadPackage(name) {
+  const mod = await import(name);
+  const definition = mod.TOOL_DEFINITION ?? mod.pluginCore?.toolDefinition;
+  const execute = mod.pluginCore?.execute ?? mod.execute;
+  if (!definition || typeof execute !== "function") {
+    throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
+  }
+  return { toolName: definition.name, definition, execute: (args) => execute({}, args ?? {}) };
+}
+
+// A local plugin: definition.js exports TOOL_DEFINITION (a gui-chat-protocol
+// ToolDefinition), server.js exports execute(args).
+async function loadLocal(name) {
   const dir = path.join(PLUGINS_DIR, name);
   const importJs = (file) => import(pathToFileURL(path.join(dir, file)).href);
-  const [{ META }, { DEFINITION }, { handlers }] = await Promise.all([
-    importJs("meta.js"),
+  const [{ TOOL_DEFINITION }, { execute }] = await Promise.all([
     importJs("definition.js"),
     importJs("server.js"),
   ]);
-  return { name, meta: META, definition: DEFINITION, handlers };
+  if (!TOOL_DEFINITION || typeof execute !== "function") {
+    throw new Error(`Local plugin "${name}" must export TOOL_DEFINITION and execute().`);
+  }
+  return { toolName: TOOL_DEFINITION.name, definition: TOOL_DEFINITION, execute: (args) => execute(args ?? {}) };
 }
 
+const config = loadConfig();
 // Top-level await: the loaded set is ready by the time importers use it.
-export const plugins = await Promise.all(loadConfig().map(loadPlugin));
+export const plugins = [
+  ...(await Promise.all(config.packages.map(loadPackage))),
+  ...(await Promise.all(config.local.map(loadLocal))),
+];
 
-// MCP tool definitions the broker registers (one per enabled plugin).
-export const toolDefinitions = plugins.map((p) => ({
-  toolName: p.meta.toolName,
-  ...p.definition,
-}));
+const byName = Object.fromEntries(plugins.map((p) => [p.toolName, p]));
 
-// toolName -> meta, so the broker can resolve a call to its REST dispatch route.
-export const metas = Object.fromEntries(plugins.map((p) => [p.meta.toolName, p.meta]));
+// MCP tool definitions the broker registers — gui-chat-protocol ToolDefinitions
+// ({ name, description, prompt?, parameters }), one per enabled plugin.
+export const toolDefinitions = plugins.map((p) => p.definition);
 
-// JSON-serializable summaries (no zod inputSchema) for the GUI's tools pane.
+// JSON-serializable summaries (no schema) for the GUI's tools pane.
 export const toolSummaries = plugins.map((p) => ({
-  toolName: p.meta.toolName,
-  title: p.definition.title,
+  toolName: p.toolName,
+  title: p.toolName,
   description: p.definition.description,
 }));
 
-// Mount each enabled plugin's REST routes under /api/<apiNamespace>. The MCP
-// broker POSTs tool args here and gets back the result envelope.
+// Mount the uniform dispatch route. The MCP broker POSTs a tool's args to
+// /api/plugin/<toolName>; the plugin's execute returns the result envelope
+// { data?, jsonData?, message?, instructions?, title? } the broker forwards.
 export function mountAllRoutes(app) {
-  for (const plugin of plugins) {
-    for (const [key, route] of Object.entries(plugin.meta.apiRoutes)) {
-      const url = `/api/${plugin.meta.apiNamespace}${route.path}`;
-      const method = route.method.toLowerCase();
-      app[method](url, (req, res) => {
-        try {
-          res.json(plugin.handlers[key](req.body));
-        } catch (e) {
-          res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
-        }
-      });
+  app.post("/api/plugin/:toolName", async (req, res) => {
+    const plugin = byName[req.params.toolName];
+    if (!plugin) return res.status(404).json({ error: `Unknown tool: ${req.params.toolName}` });
+    try {
+      res.json(await plugin.execute(req.body));
+    } catch (e) {
+      res.status(400).json({ error: e instanceof Error ? e.message : String(e) });
     }
-  }
+  });
 }
 
 // Fully-qualified MCP tool names for claude's --allowedTools (auto-run, no prompt).
 export function allowedToolNames() {
-  return plugins.map((p) => `mcp__${MCP_SERVER_NAME}__${p.meta.toolName}`);
+  return plugins.map((p) => `mcp__${MCP_SERVER_NAME}__${p.toolName}`);
 }

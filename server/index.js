@@ -451,14 +451,23 @@ app.post("/api/agent/toolResult", async (req, res) => {
     return res.status(400).json({ error: "invalid uuid" });
   }
 
-  // Store everything except the routing field; the result itself is the payload
+  // Store everything except the routing fields; the result itself is the payload
   // the panel renders.
+  // `persistOnly` (set by the GUI panel when a view persists its own state change)
+  // means: store, but do NOT re-publish on the session channel. Re-publishing would
+  // echo the update back to the originating panel as a fresh result, which re-seeds
+  // the view and re-emits — an infinite flicker loop. The broker (new tool calls)
+  // omits the flag, so its results still publish and render live.
   const result = { ...req.body };
   delete result.sessionId;
+  const persistOnly = result.persistOnly === true;
+  delete result.persistOnly;
   await storeToolResult(sessionId, result);
 
-  pubsub?.publish(sessionChannel(sessionId), result);
-  console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
+  if (!persistOnly) {
+    pubsub?.publish(sessionChannel(sessionId), result);
+    console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
+  }
   res.json({ ok: true });
 });
 

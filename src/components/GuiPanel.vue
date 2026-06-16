@@ -2,6 +2,7 @@
 import { ref, watch, onUnmounted, computed } from "vue";
 import { usePubSub } from "../composables/usePubSub";
 import { getPlugin } from "../plugins-registry";
+import PluginFrame from "./PluginFrame.vue";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -76,16 +77,27 @@ watch(
 
 onUnmounted(() => unsubscribe?.());
 
-// A plugin view changed its state (e.g. a form was submitted): reflect it locally
-// and persist it under the same uuid so it replays as completed on revisit.
-async function onUpdateResult(result: ToolResult) {
-  upsert(result);
+// A plugin view changed its state (e.g. a form field edited / submitted). Per the
+// gui-chat-protocol contract the view may emit a PARTIAL ToolResult (e.g. just
+// `{ viewState }`), so merge it into the existing result rather than replacing —
+// otherwise data/jsonData/uuid/toolName would be lost.
+//
+// `persistOnly` is a deliberate trade-off: the view emits on every change, and
+// without it the server would re-publish on the session channel straight back to
+// THIS panel — the echo arrives with fresh object identity, the view treats it as a
+// new result and re-seeds, re-emitting → an infinite flicker loop. So we suppress
+// the broadcast and rely on the local upsert() above. The cost: a second browser
+// tab on the same session won't see live view-state updates (it picks them up on
+// reload from the stored result) — acceptable for a local single-client tool.
+async function onUpdateResult(existing: ToolResult, update: Partial<ToolResult>) {
+  const merged: ToolResult = { ...existing, ...update };
+  upsert(merged);
   if (!props.sessionId) return;
   try {
     await fetch("/api/agent/toolResult", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...result, sessionId: props.sessionId }),
+      body: JSON.stringify({ ...merged, sessionId: props.sessionId, persistOnly: true }),
     });
   } catch {
     // Best-effort persistence; the live view already updated.
@@ -117,14 +129,14 @@ const hasContent = computed(() => results.value.length > 0);
         to render content here.
       </div>
       <template v-for="r in results" :key="r.uuid">
-        <component
-          :is="getPlugin(r.toolName)!.viewComponent"
-          v-if="getPlugin(r.toolName)"
-          class="frame"
-          :selected-result="r"
-          :send-text-message="sendTextMessage"
-          @update-result="onUpdateResult"
-        />
+        <PluginFrame v-if="getPlugin(r.toolName)" class="frame" :css="getPlugin(r.toolName)!.css">
+          <component
+            :is="getPlugin(r.toolName)!.viewComponent"
+            :selected-result="r"
+            :send-text-message="sendTextMessage"
+            @update-result="(update: Partial<ToolResult>) => onUpdateResult(r, update)"
+          />
+        </PluginFrame>
       </template>
     </div>
   </section>
