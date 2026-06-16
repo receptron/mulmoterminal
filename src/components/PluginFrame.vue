@@ -1,6 +1,9 @@
-<script setup lang="ts">
-import { ref, onMounted } from "vue";
-
+<script lang="ts">
+// Module scope — declared ONCE per module and shared across every PluginFrame
+// instance. (If this lived in <script setup> it would be re-created per instance,
+// defeating the dedupe and appending a duplicate <style> to document.head for
+// every rendered tool result.)
+//
 // Tailwind v4 registers its --tw-* custom properties (e.g. --tw-border-style:solid,
 // without which `border-*` utilities render no border) via `@property`. But
 // `@property` at-rules are IGNORED inside a shadow root, and Tailwind disables its
@@ -21,6 +24,10 @@ function hoistAtPropertyRules(css: string | undefined): void {
   style.textContent = blob;
   document.head.appendChild(style);
 }
+</script>
+
+<script setup lang="ts">
+import { ref, onMounted } from "vue";
 
 // Renders a GUI-protocol plugin view inside a Shadow DOM so the plugin's bundled
 // CSS is encapsulated BOTH ways:
