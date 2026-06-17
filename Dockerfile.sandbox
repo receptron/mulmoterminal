@@ -73,6 +73,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g @anthropic-ai/claude-code
 
+# The host mounts its ~/.claude.json into the container, and on a host that used
+# claude's native installer it records `installMethod: "native"` with the binary
+# at ~/.local/bin/claude. Inside the container claude is the npm install at
+# /usr/local/bin/claude, so claude's self-check warns that the native path is
+# "missing or broken". Point the expected native path at the (Linux) npm binary
+# so the check passes — both resolve to the same working claude.
+RUN mkdir -p /home/node/.local/bin \
+ && ln -s "$(command -v claude)" /home/node/.local/bin/claude \
+ && chmod -R a+rx /home/node/.local
+
 COPY sandbox-entrypoint.sh /sandbox-entrypoint.sh
 RUN chmod +x /sandbox-entrypoint.sh
 

@@ -14,6 +14,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { isDockerAvailable, ensureSandboxImage } from "./system/docker.js";
 import { buildSandboxDockerArgs } from "./system/sandbox.js";
+import { refreshCredentials, ensureCredentialsAvailable } from "./system/credentials.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
@@ -101,6 +102,18 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 // Whether sessions run inside the Docker sandbox. Resolved once at startup (see
 // the init block before server.listen); read synchronously by spawnClaudePty.
 let SANDBOX = false;
+
+// Re-export fresh OAuth credentials before spawning a sandboxed session, so the
+// bind-mounted ~/.claude/.credentials.json the container reads isn't stale (macOS
+// keeps the live token in the Keychain). No-op off-sandbox or off-macOS, and
+// best-effort: the container can still self-refresh from a mounted refresh token.
+async function refreshSandboxCredentials(): Promise<void> {
+  if (SANDBOX && process.platform === "darwin") {
+    // Fast path: no interactive renewal in the spawn hot path (startup does the
+    // full refresh; the container self-refreshes from the mounted refresh token).
+    await refreshCredentials({ renew: false });
+  }
+}
 
 // Per-session bearer token guarding /mcp/:sessionId. The endpoint is reachable
 // from the sandbox container (via host.docker.internal), so we require a token
@@ -505,7 +518,7 @@ app.use(express.json({ limit: "25mb" }));
 // `role`/`hidden` are accepted for signature parity with MulmoClaude but ignored:
 // the session is always visible. Registered BEFORE mountAllRoutes so this specific
 // route wins over /api/plugin/:toolName.
-app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
+app.post("/api/plugin/spawnBackgroundChat", async (req, res) => {
   const body = isRecord(req.body) ? req.body : {};
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message) {
@@ -515,6 +528,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   // ws is null: the session runs headless until the user opens it (reattach
   // replays the buffered output). The "created" pubsub event in spawnClaudePty
   // surfaces it in the sidebar right away.
+  await refreshSandboxCredentials();
   spawnClaudePty(sessionId, null, null, message);
   return res.json({
     message: `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
@@ -956,7 +970,7 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
   }
 }
 
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
@@ -972,14 +986,31 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "session", id: sessionId }));
 
   const existing = ptys.get(sessionId);
-  const entry = existing ? reattachPty(existing, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
+
+  // The credential refresh below is async, so attach the message listener up front
+  // and buffer any frames that arrive during it (the client's onopen `resize` can
+  // land before the pty exists) — otherwise they'd be silently dropped.
+  let entry: PtyEntry | null = null;
+  const pendingFrames: RawData[] = [];
+  ws.on("message", (raw) => (entry ? handleClientFrame(entry, ws, raw, sessionId) : pendingFrames.push(raw)));
+
+  if (existing) {
+    entry = reattachPty(existing, ws, sessionId);
+  } else {
+    // Fresh credentials before a new sandboxed spawn, written before `docker run`.
+    await refreshSandboxCredentials();
+    entry = spawnClaudePty(sessionId, resume, ws);
+  }
+  // Flush anything the client sent while we were preparing the spawn.
+  for (const raw of pendingFrames) handleClientFrame(entry, ws, raw, sessionId);
 
   // The session is now in the foreground (being viewed): clear any
   // "waiting for input" flag so it stops showing as bold.
   setWaiting(sessionId, false);
 
-  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
-  ws.on("close", () => handleClientClose(entry, ws, sessionId));
+  ws.on("close", () => {
+    if (entry) handleClientClose(entry, ws, sessionId);
+  });
 });
 
 // Resolve the sandbox once at startup: if Docker is reachable (and not disabled),
@@ -991,6 +1022,12 @@ SANDBOX = await isDockerAvailable();
 if (SANDBOX) {
   try {
     await ensureSandboxImage();
+    // The container authenticates via ~/.claude/.credentials.json (bind-mounted).
+    // On macOS the token lives in the Keychain, so export it host-side now —
+    // don't rely on another app (e.g. MulmoClaude) having written the file.
+    if (!(await ensureCredentialsAvailable())) {
+      console.warn("[sandbox] could not prepare ~/.claude/.credentials.json — claude may fail to authenticate in the container");
+    }
     console.log("[sandbox] Docker available — sessions run sandboxed");
   } catch (err) {
     SANDBOX = false;
