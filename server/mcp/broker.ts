@@ -1,6 +1,7 @@
-// Stdio MCP broker for the GUI chat protocol. Registers one MCP tool per enabled
-// plugin (from server/plugins-registry.js, driven by plugins/plugins.json) and acts
-// as a thin HTTP bridge to the main server:
+// GUI chat-protocol MCP server, built per session and served over HTTP from the
+// main mulmoterminal process (see the `/mcp/:sessionId` route in server/index.ts).
+// Registers one MCP tool per enabled plugin (from server/plugins-registry.js,
+// driven by plugins/plugins.json) and acts as a thin bridge to the host routes:
 //
 //   tool call  ->  POST /api/plugin/<toolName>         (the dispatch route)
 //              ->  envelope { data, message, instructions, title? }
@@ -17,18 +18,15 @@
 // The form round-trip is NOT a blocking call: the user's answer comes back by being
 // typed into the PTY (see the GUI panel / form view), so every tool returns at once.
 //
-// Context reaches this subprocess via env (set when the server builds the mcp-config):
-//   MULMOTERMINAL_SESSION_ID  - the session whose GUI panel should render this
-//   MULMOTERMINAL_PORT        - the mulmoterminal HTTP port to POST to
+// Previously this ran as a per-session stdio subprocess that claude spawned via
+// --mcp-config. It now lives in-process and is exposed over Streamable HTTP so the
+// agent can reach it from anywhere (host or, later, a Docker sandbox) without us
+// shipping the server code + tsx into the agent's environment. The session id and
+// the host base URL are passed in by the caller instead of via env.
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
 import { toolDefinitions } from "../plugins-registry.js";
-
-const SESSION_ID = process.env.MULMOTERMINAL_SESSION_ID;
-const PORT = process.env.MULMOTERMINAL_PORT || "3456";
-const BASE_URL = `http://localhost:${PORT}`;
 
 // Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
 // whether a toolResult is published to the GUI; the rest is narration/metadata.
@@ -41,11 +39,6 @@ interface ToolEnvelope {
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
-
-const server = new Server(
-  { name: "mulmoterminal-gui", version: "0.0.0" },
-  { capabilities: { tools: {} } }
-);
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, {
@@ -64,38 +57,49 @@ function describe(def: { description?: string; prompt?: string }) {
   return [def.description, def.prompt].filter(Boolean).join("\n\n");
 }
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: toolDefinitions.map((def) => ({
-    name: def.name,
-    description: describe(def),
-    inputSchema: def.parameters ?? { type: "object", properties: {} },
-  })),
-}));
+/**
+ * Build a fresh GUI MCP server bound to one chat session. Stateless: create one
+ * per request (Streamable HTTP in stateless mode forbids reusing a transport, and
+ * the server has no per-connection state beyond the captured `sessionId`).
+ *
+ * @param sessionId  the chat session whose GUI panel should render tool results
+ * @param baseUrl    the mulmoterminal host origin to POST plugin dispatch + results to
+ */
+export function buildGuiMcpServer(sessionId: string, baseUrl: string): Server {
+  const server = new Server({ name: "mulmoterminal-gui", version: "0.0.0" }, { capabilities: { tools: {} } });
 
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: toolDefinitions.map((def) => ({
+      name: def.name,
+      description: describe(def),
+      inputSchema: def.parameters ?? { type: "object", properties: {} },
+    })),
+  }));
 
-  // 1. Dispatch to the plugin's server-side handler.
-  const parsed = await (await postJson(`${BASE_URL}/api/plugin/${name}`, args ?? {})).json();
-  const envelope: ToolEnvelope = isRecord(parsed) ? parsed : {};
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
 
-  // 2. Publish a toolResult to the GUI — only when there is data to render.
-  if (envelope.data !== undefined) {
-    await postJson(`${BASE_URL}/api/agent/toolResult`, {
-      sessionId: SESSION_ID,
-      toolName: name,
-      uuid: randomUUID(),
-      title: envelope.title,
-      data: envelope.data,
-      jsonData: envelope.jsonData ?? envelope.data,
-      message: envelope.message,
-    });
-  }
+    // 1. Dispatch to the plugin's server-side handler.
+    const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();
+    const envelope: ToolEnvelope = isRecord(parsed) ? parsed : {};
 
-  // 3. Return the narration to claude.
-  const parts = [envelope.message, envelope.instructions].filter(Boolean);
-  return { content: [{ type: "text", text: parts.length ? parts.join("\n") : "Done" }] };
-});
+    // 2. Publish a toolResult to the GUI — only when there is data to render.
+    if (envelope.data !== undefined) {
+      await postJson(`${baseUrl}/api/agent/toolResult`, {
+        sessionId,
+        toolName: name,
+        uuid: randomUUID(),
+        title: envelope.title,
+        data: envelope.data,
+        jsonData: envelope.jsonData ?? envelope.data,
+        message: envelope.message,
+      });
+    }
 
-const transport = new StdioServerTransport();
-await server.connect(transport);
+    // 3. Return the narration to claude.
+    const parts = [envelope.message, envelope.instructions].filter(Boolean);
+    return { content: [{ type: "text", text: parts.length ? parts.join("\n") : "Done" }] };
+  });
+
+  return server;
+}

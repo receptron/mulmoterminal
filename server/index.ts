@@ -8,8 +8,10 @@ import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
+import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
@@ -121,15 +123,10 @@ const SESSIONS_CHANNEL = "sessions";
 // publishes it here (mirrors MulmoClaude's sessionChannel; see the spike doc).
 const sessionChannel = (id: string) => `session:${id}`;
 
-// Stdio MCP broker wired into each spawned claude (--mcp-config). It exposes one
-// GUI-protocol tool per enabled plugin (driven by plugins/plugins.json) and drives
-// the GUI panel via the toolResult route.
-const MCP_SERVER_PATH = path.join(__dirname, "mcp", "broker.ts");
-// Absolute URL of the tsx ESM loader, so the broker can execute its `.ts` entry
-// regardless of the cwd claude spawns it in. claude runs in the WORKSPACE
-// (CLAUDE_CWD), where tsx isn't installed — a bare `--import tsx` would resolve
-// against that cwd and fail with ERR_MODULE_NOT_FOUND.
-const TSX_LOADER = import.meta.resolve("tsx");
+// The GUI MCP server is served in-process over Streamable HTTP at /mcp/:sessionId
+// (see the route below) and wired into each spawned claude via --mcp-config. It
+// exposes one GUI-protocol tool per enabled plugin (driven by plugins/plugins.json)
+// and drives the GUI panel via the toolResult route.
 
 // MCP tool names claude uses, in the mcp__<server>__<tool> form, one per enabled
 // plugin. Auto-allowed via --allowedTools so the spike doesn't trip the permission
@@ -397,22 +394,18 @@ function hookSettingsJson() {
   });
 }
 
-// MCP config injected via `claude --mcp-config <json>`. Registers the stdio GUI
-// broker and passes this session's id + the server port to it via env (the MCP
-// process can't otherwise know which session it belongs to).
+// MCP config injected via `claude --mcp-config <json>`. Points claude at the
+// in-process GUI MCP server served over Streamable HTTP. The session id rides in
+// the URL path (the MCP server is otherwise stateless), so no env or subprocess is
+// needed — the agent just makes an HTTP call back to this server. Using
+// 127.0.0.1 (not localhost) avoids an IPv6/IPv4 resolution mismatch against the
+// server's listen address.
 function mcpConfigJson(sessionId: string) {
   return JSON.stringify({
     mcpServers: {
       "mulmoterminal-gui": {
-        command: process.execPath, // the node running this server
-        // Run the stdio broker through tsx (same as the main server) — it's a
-        // .ts file, so plain `node broker.ts` can't execute it. Use the resolved
-        // absolute loader URL (see TSX_LOADER) so it works from the workspace cwd.
-        args: ["--import", TSX_LOADER, MCP_SERVER_PATH],
-        env: {
-          MULMOTERMINAL_SESSION_ID: sessionId,
-          MULMOTERMINAL_PORT: String(PORT),
-        },
+        type: "http",
+        url: `http://127.0.0.1:${PORT}/mcp/${sessionId}`,
       },
     },
   });
@@ -515,8 +508,37 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
 });
 
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
-// POST /api/form). The MCP broker dispatches tool calls to these.
+// POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);
+
+// In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
+// mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
+// STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
+// request, no session header / no initialize handshake required across requests.
+// The SDK forbids reusing a stateless transport, so we never cache it.
+const mcpReject = (_req: express.Request, res: express.Response) => res.status(405).set("Allow", "POST").json({ error: "method not allowed" });
+app.post("/mcp/:sessionId", async (req, res) => {
+  const { sessionId } = req.params;
+  if (!SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: "invalid sessionId" });
+  }
+  const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`);
+  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+  res.on("close", () => {
+    transport.close();
+    server.close();
+  });
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error(`[mcp] request failed for ${sessionId}:`, err);
+    if (!res.headersSent) res.status(500).json({ error: "mcp error" });
+  }
+});
+// No SSE stream / session teardown in stateless mode — reject the rest.
+app.get("/mcp/:sessionId", mcpReject);
+app.delete("/mcp/:sessionId", mcpReject);
 
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));
