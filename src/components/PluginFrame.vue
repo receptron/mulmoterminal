@@ -48,7 +48,9 @@ const target = ref<HTMLDivElement | null>(null);
 
 onMounted(() => {
   hoistAtPropertyRules(props.css);
-  const shadow = hostEl.value!.attachShadow({ mode: "open" });
+  const host = hostEl.value;
+  if (!host) return;
+  const shadow = host.attachShadow({ mode: "open" });
   if (props.css) {
     const style = document.createElement("style");
     style.textContent = props.css;

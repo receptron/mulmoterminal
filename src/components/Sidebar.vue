@@ -15,9 +15,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
-  (e: "new"): void;
-  (e: "toggle-layout"): void;
-  (e: "refresh"): void;
+  (e: "new" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 }>();
 

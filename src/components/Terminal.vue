@@ -76,7 +76,9 @@ onMounted(() => {
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
 
-  term.open(terminalRef.value!);
+  const container = terminalRef.value;
+  if (!container) return;
+  term.open(container);
   fitAddon.fit();
 
   // Terminal input -> server
@@ -93,7 +95,7 @@ onMounted(() => {
       ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
     }
   });
-  resizeObserver.observe(terminalRef.value!);
+  resizeObserver.observe(container);
 
   connect();
   term.focus();

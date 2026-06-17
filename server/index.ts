@@ -1,6 +1,6 @@
 import express from "express";
 import http from "http";
-import { WebSocketServer, WebSocket } from "ws";
+import { WebSocketServer, WebSocket, type RawData } from "ws";
 import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "path";
@@ -75,6 +75,8 @@ const hasErrnoCode = (e: unknown): e is { code?: string } => typeof e === "objec
 
 // Error message extracted defensively from an unknown thrown value.
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -410,6 +412,34 @@ function projectSessionsDir(cwd: string) {
   return path.join(os.homedir(), ".claude", "projects", encoded);
 }
 
+// A real user prompt from a JSONL "user" line's content, or null if it's a
+// slash-/local-command wrapper rather than a typed prompt. Content may be a
+// plain string or an array of blocks (guard against null elements).
+function userPromptText(content: unknown): string | null {
+  const text = Array.isArray(content)
+    ? content.map((x) => (isRecord(x) ? String(x.text ?? "") : String(x ?? ""))).join(" ")
+    : content;
+  if (typeof text === "string" && text.trim() && !/^\s*<(local-command|command-|bash-)/.test(text)) {
+    return text.trim();
+  }
+  return null;
+}
+
+// Parse a JSONL file into the objects on each non-blank, valid line.
+function parseJsonl(raw: string): Record<string, unknown>[] {
+  const out: Record<string, unknown>[] = [];
+  for (const line of raw.split("\n")) {
+    if (!line.trim()) continue;
+    try {
+      const o: unknown = JSON.parse(line);
+      if (isRecord(o)) out.push(o);
+    } catch {
+      // Skip malformed lines.
+    }
+  }
+  return out;
+}
+
 // Scan a session JSONL for a human-friendly title and last activity.
 async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> {
   const full = path.join(dir, file);
@@ -418,30 +448,15 @@ async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> 
     fs.stat(full),
   ]);
 
-  let aiTitle = null;
-  let lastPrompt = null;
-  let firstUserMsg = null;
+  let aiTitle: string | null = null;
+  let lastPrompt: string | null = null;
+  let firstUserMsg: string | null = null;
 
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    let o;
-    try {
-      o = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (o.type === "ai-title" && o.aiTitle) aiTitle = o.aiTitle;
-    else if (o.type === "last-prompt" && o.lastPrompt) lastPrompt = o.lastPrompt;
+  for (const o of parseJsonl(raw)) {
+    if (o.type === "ai-title" && o.aiTitle) aiTitle = String(o.aiTitle);
+    else if (o.type === "last-prompt" && o.lastPrompt) lastPrompt = String(o.lastPrompt);
     else if (o.type === "user" && firstUserMsg === null) {
-      let c = o.message?.content;
-      if (Array.isArray(c)) {
-        // Guard against null elements (`typeof null === "object"`).
-        c = c.map((x) => (x && typeof x === "object" ? x.text || "" : x)).join(" ");
-      }
-      // Skip slash-command / local-command wrappers that aren't real prompts.
-      if (typeof c === "string" && c.trim() && !/^\s*<(local-command|command-|bash-)/.test(c)) {
-        firstUserMsg = c.trim();
-      }
+      firstUserMsg = userPromptText(isRecord(o.message) ? o.message.content : undefined);
     }
   }
 
@@ -470,49 +485,60 @@ mountAllRoutes(app);
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));
 
-// Claude hooks (Stop / Notification) POST their payload here so we can flag
-// which background sessions have new activity.
+// Activity hooks update a session's working / needs-attention flags.
+// `foreground` (a ws is attached => being viewed) suppresses the attention flag.
+function handleActivityHook(sessionId: string, event: string, foreground: boolean) {
+  if (event === "UserPromptSubmit") {
+    setWorking(sessionId, true, event);
+  } else if (event === "Stop") {
+    // A background session that finished a turn has output the user hasn't seen
+    // yet (and is ready for another message) — flag it for attention.
+    if (!foreground) setWaiting(sessionId, true, event);
+    setWorking(sessionId, false, event);
+  } else if (event === "Notification") {
+    // Background session waiting for input (permission / question / idle).
+    if (!foreground) setWaiting(sessionId, true, event);
+  }
+}
+
+interface HookToolPayload {
+  tool_use_id?: string;
+  tool_name?: string;
+  tool_input?: unknown;
+  tool_output?: unknown;
+  tool_response?: unknown;
+  duration_ms?: number;
+}
+
+// Pre/PostToolUse hooks feed the per-session tool-call history. A failed tool
+// fires PostToolUseFailure (NOT PostToolUse), so both complete the entry.
+async function handleToolHook(sessionId: string, event: string, p: HookToolPayload) {
+  if (event === "PreToolUse") {
+    await recordToolCallStart(sessionId, { toolUseId: p.tool_use_id, toolName: p.tool_name, toolInput: p.tool_input });
+  } else if (event === "PostToolUse" || event === "PostToolUseFailure") {
+    await recordToolCallEnd(sessionId, {
+      toolUseId: p.tool_use_id,
+      toolName: p.tool_name,
+      toolInput: p.tool_input,
+      toolOutput: p.tool_output ?? p.tool_response,
+      durationMs: p.duration_ms,
+      status: event === "PostToolUseFailure" ? "failed" : "completed",
+    });
+  }
+}
+
+// Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
+// we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
-  const {
-    session_id,
-    hook_event_name,
-    tool_name,
-    tool_input,
-    tool_use_id,
-    tool_output,
-    tool_response,
-    duration_ms,
-  } = req.body || {};
-  if (session_id) {
-    const entry = ptys.get(session_id);
-    const foreground = entry && entry.ws; // a ws is attached => being viewed
-    if (hook_event_name === "UserPromptSubmit") {
-      setWorking(session_id, true, hook_event_name);
-    } else if (hook_event_name === "Stop") {
-      // A background session that finished a turn has output the user hasn't
-      // seen yet (and is ready for another message) — flag it for attention.
-      if (!foreground) setWaiting(session_id, true, hook_event_name);
-      setWorking(session_id, false, hook_event_name);
-    } else if (hook_event_name === "Notification") {
-      // Background session waiting for input (permission / question / idle).
-      if (!foreground) setWaiting(session_id, true, hook_event_name);
-    } else if (hook_event_name === "PreToolUse") {
-      await recordToolCallStart(session_id, {
-        toolUseId: tool_use_id,
-        toolName: tool_name,
-        toolInput: tool_input,
-      });
-    } else if (hook_event_name === "PostToolUse" || hook_event_name === "PostToolUseFailure") {
-      await recordToolCallEnd(session_id, {
-        toolUseId: tool_use_id,
-        toolName: tool_name,
-        toolInput: tool_input,
-        toolOutput: tool_output ?? tool_response,
-        durationMs: duration_ms,
-        status: hook_event_name === "PostToolUseFailure" ? "failed" : "completed",
-      });
-    }
-    console.log(`[hook] ${hook_event_name} for ${session_id}`);
+  const body = req.body || {};
+  const sessionId = body.session_id;
+  const event = body.hook_event_name;
+  if (sessionId) {
+    const entry = ptys.get(sessionId);
+    const foreground = !!(entry && entry.ws);
+    handleActivityHook(sessionId, event, foreground);
+    await handleToolHook(sessionId, event, body);
+    console.log(`[hook] ${event} for ${sessionId}`);
   }
   res.json({ ok: true });
 });
@@ -677,10 +703,129 @@ server.on("upgrade", (req, socket, head) => {
   // Other paths (e.g. /ws/pubsub) are left to socket.io's own upgrade handler.
 });
 
+// Reattach a live background PTY to a new socket: drop any stale socket, swap in
+// the new one, and replay the buffered tail for context.
+function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntry {
+  console.log(`[ws] reattach ${sessionId} (pid=${entry.term.pid})`);
+  // Drop any socket still attached (e.g. the same session open in another tab)
+  // so it can't keep writing to this PTY.
+  if (entry.ws && entry.ws !== ws && entry.ws.readyState === entry.ws.OPEN) {
+    entry.ws.close();
+  }
+  entry.ws = ws;
+  if (entry.buffer && ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify({ type: "output", data: entry.buffer }));
+  }
+  return entry;
+}
+
+// Spawn a fresh claude PTY for this session, register it, and wire its output /
+// exit back to the browser socket.
+function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket): PtyEntry {
+  const settings = hookSettingsJson();
+  // Register the GUI MCP broker and auto-allow its tools so the plugin tools run
+  // without a permission prompt (--strict-mcp-config keeps the user's other MCP
+  // servers out of the spike).
+  const mcp = mcpConfigJson(sessionId);
+  const guiArgs = ["--mcp-config", mcp, "--strict-mcp-config", "--allowedTools", GUI_MCP_TOOLS];
+  const args = resume
+    ? ["--resume", resume, "--settings", settings, ...guiArgs]
+    : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
+
+  console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId})`);
+
+  const term = pty.spawn(CLAUDE_BIN, args, {
+    name: "xterm-256color",
+    cols: 120,
+    rows: 30,
+    cwd: CLAUDE_CWD,
+    env: process.env,
+  });
+  console.log(`[pty] spawned claude (pid=${term.pid})`);
+
+  const entry: PtyEntry = { term, ws, buffer: "" };
+  ptys.set(sessionId, entry);
+
+  if (!resume) {
+    // Brand-new session: surface it in the sidebar before it's persisted.
+    knownSessions.set(sessionId, { createdAt: Date.now(), title: "New session" });
+    pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
+  }
+
+  // PTY -> browser (buffering a bounded tail for reattach).
+  term.onData((data) => {
+    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
+      entry.ws.send(JSON.stringify({ type: "output", data }));
+    }
+  });
+
+  term.onExit(({ exitCode, signal }) => {
+    console.log(`[pty] exited code=${exitCode} signal=${signal}`);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
+      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
+      entry.ws.close();
+    }
+    // Clear the dot if it died mid-turn, then tear down everything (deletes
+    // ptys/knownSessions/activity and publishes "closed") so a process that
+    // exits on its own — e.g. a brand-new session that never persisted —
+    // doesn't linger in the sidebar.
+    setWorking(sessionId, false);
+    reap(sessionId);
+  });
+
+  return entry;
+}
+
+// browser -> PTY. The protocol is client-controlled, so validate every frame
+// before touching node-pty (bad cols/rows or non-string input can throw).
+function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, sessionId: string) {
+  // Ignore frames from a socket that a newer client has already superseded.
+  if (entry.ws !== ws) return;
+  let msg;
+  try {
+    msg = JSON.parse(raw.toString());
+  } catch {
+    return; // not JSON — never write arbitrary payloads to the PTY
+  }
+  try {
+    if (msg.type === "input" && typeof msg.data === "string") {
+      entry.term.write(msg.data);
+    } else if (
+      msg.type === "resize" &&
+      Number.isInteger(msg.cols) &&
+      Number.isInteger(msg.rows) &&
+      msg.cols >= 2 &&
+      msg.cols <= 500 &&
+      msg.rows >= 1 &&
+      msg.rows <= 200
+    ) {
+      entry.term.resize(msg.cols, msg.rows);
+    }
+  } catch (err) {
+    // e.g. a write/resize that races the PTY exiting — drop it, never crash.
+    console.warn(`[ws] dropped message for ${sessionId}: ${messageOf(err)}`);
+  }
+}
+
+// Socket closed: detach it; keep the PTY alive if Claude is mid-turn (reaped on
+// the Stop hook), otherwise reap now.
+function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
+  // Ignore if a newer client already reattached to this session.
+  if (entry.ws !== ws) return;
+  entry.ws = null;
+  if (activity.get(sessionId)?.working) {
+    console.log(`[ws] disconnected; keeping working session ${sessionId} alive`);
+  } else {
+    console.log(`[ws] disconnected; killing idle session ${sessionId}`);
+    reap(sessionId);
+  }
+}
+
 wss.on("connection", (ws, req) => {
-  // ?session=<id> resumes an existing conversation; absent => fresh session.
-  // For new sessions we generate the id ourselves (--session-id) so the server
-  // always knows the current session's id, even before any file exists.
+  // ?session=<id> resumes an existing conversation; absent => fresh session. For
+  // new sessions we generate the id ourselves (--session-id) so the server always
+  // knows the current session's id, even before any file exists.
   const resume = new URL(req.url ?? "/", "http://localhost").searchParams.get("session");
   if (resume && !SESSION_ID_RE.test(resume)) {
     console.warn(`[ws] rejecting non-UUID session id: ${JSON.stringify(resume)}`);
@@ -693,124 +838,14 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "session", id: sessionId }));
 
   const existing = ptys.get(sessionId);
-  let entry: PtyEntry;
-  if (existing) {
-    entry = existing;
-    // A background pty for this session is still alive — reattach instead of
-    // spawning a duplicate claude. Replay recent output for context.
-    console.log(`[ws] reattach ${sessionId} (pid=${entry.term.pid})`);
-    // Drop any socket still attached (e.g. the same session open in another
-    // tab) so it can't keep writing to this PTY.
-    if (entry.ws && entry.ws !== ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.close();
-    }
-    entry.ws = ws;
-    if (entry.buffer && ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "output", data: entry.buffer }));
-    }
-  } else {
-    const settings = hookSettingsJson();
-    // Register the GUI MCP broker and auto-allow its tools so the plugin tools
-    // run without a permission prompt (--strict-mcp-config keeps the user's
-    // other MCP servers out of the spike).
-    const mcp = mcpConfigJson(sessionId);
-    const guiArgs = ["--mcp-config", mcp, "--strict-mcp-config", "--allowedTools", GUI_MCP_TOOLS];
-    const args = resume
-      ? ["--resume", resume, "--settings", settings, ...guiArgs]
-      : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
-
-    console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId})`);
-
-    const term = pty.spawn(CLAUDE_BIN, args, {
-      name: "xterm-256color",
-      cols: 120,
-      rows: 30,
-      cwd: CLAUDE_CWD,
-      env: process.env,
-    });
-    console.log(`[pty] spawned claude (pid=${term.pid})`);
-
-    entry = { term, ws, buffer: "" };
-    ptys.set(sessionId, entry);
-
-    if (!resume) {
-      // Brand-new session: surface it in the sidebar before it's persisted.
-      knownSessions.set(sessionId, { createdAt: Date.now(), title: "New session" });
-      pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
-    }
-
-    // PTY -> browser (buffering a bounded tail for reattach).
-    term.onData((data) => {
-      entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
-      if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-        entry.ws.send(JSON.stringify({ type: "output", data }));
-      }
-    });
-
-    term.onExit(({ exitCode, signal }) => {
-      console.log(`[pty] exited code=${exitCode} signal=${signal}`);
-      if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-        entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
-        entry.ws.close();
-      }
-      // Clear the dot if it died mid-turn, then tear down everything (deletes
-      // ptys/knownSessions/activity and publishes "closed") so a process that
-      // exits on its own — e.g. a brand-new session that never persisted —
-      // doesn't linger in the sidebar.
-      setWorking(sessionId, false);
-      reap(sessionId);
-    });
-  }
+  const entry = existing ? reattachPty(existing, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
 
   // The session is now in the foreground (being viewed): clear any
   // "waiting for input" flag so it stops showing as bold.
   setWaiting(sessionId, false);
 
-  // browser -> PTY. The protocol is client-controlled, so validate every frame
-  // before touching node-pty (bad cols/rows or non-string input can throw).
-  ws.on("message", (raw) => {
-    // Ignore frames from a socket that a newer client has already superseded.
-    if (entry.ws !== ws) return;
-    let msg;
-    try {
-      msg = JSON.parse(raw.toString());
-    } catch {
-      return; // not JSON — never write arbitrary payloads to the PTY
-    }
-    try {
-      if (msg.type === "input" && typeof msg.data === "string") {
-        entry.term.write(msg.data);
-      } else if (
-        msg.type === "resize" &&
-        Number.isInteger(msg.cols) &&
-        Number.isInteger(msg.rows) &&
-        msg.cols >= 2 &&
-        msg.cols <= 500 &&
-        msg.rows >= 1 &&
-        msg.rows <= 200
-      ) {
-        entry.term.resize(msg.cols, msg.rows);
-      }
-    } catch (err) {
-      // e.g. a write/resize that races the PTY exiting — drop it, never crash.
-      console.warn(`[ws] dropped message for ${sessionId}: ${messageOf(err)}`);
-    }
-  });
-
-  ws.on("close", () => {
-    // Ignore if a newer client already reattached to this session.
-    if (entry.ws !== ws) return;
-    entry.ws = null;
-
-    // Keep the pty running if Claude is still working — it will be reaped when
-    // the Stop hook fires (see setWorking). Otherwise kill it now.
-    if (activity.get(sessionId)?.working) {
-      console.log(`[ws] disconnected; keeping working session ${sessionId} alive`);
-    } else {
-      console.log(`[ws] disconnected; killing idle session ${sessionId}`);
-      reap(sessionId);
-    }
-  });
+  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
+  ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
 
 server.listen(PORT, () => {

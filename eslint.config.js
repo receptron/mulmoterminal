@@ -1,12 +1,14 @@
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import pluginVue from "eslint-plugin-vue";
+import sonarjs from "eslint-plugin-sonarjs";
 
 export default [
   { ignores: ["dist/", "node_modules/"] },
   js.configs.recommended,
-  ...tseslint.configs.recommended,
+  ...tseslint.configs.strict,
   ...pluginVue.configs["flat/recommended"],
+  sonarjs.configs.recommended,
   {
     files: ["**/*.vue"],
     languageOptions: {

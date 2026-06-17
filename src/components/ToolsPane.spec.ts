@@ -84,7 +84,7 @@ describe("ToolsPane", () => {
   });
 
   it("drops a stale history response when the session changes mid-flight", async () => {
-    const aGate = deferred<void>();
+    const aGate = deferred<undefined>();
     mockFetch((url) => {
       if (url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ tools: [] }));
       if (url.includes("/api/tool-calls/a")) {
@@ -103,7 +103,7 @@ describe("ToolsPane", () => {
     expect(wrapper.text()).toContain("NewTool");
 
     // A's response arrives late — it must NOT overwrite B's pane.
-    aGate.resolve();
+    aGate.resolve(undefined);
     await flushPromises();
     expect(wrapper.text()).toContain("NewTool");
     expect(wrapper.text()).not.toContain("OldTool");
