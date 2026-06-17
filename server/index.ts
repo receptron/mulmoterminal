@@ -851,12 +851,9 @@ function spawnClaudePty(
   // without a permission prompt (--strict-mcp-config keeps the user's other MCP
   // servers out — they'd be stdio commands absent from the sandbox image anyway).
   const mcp = mcpConfigJson(sessionId, host, mcpToken);
-  // Inside the sandbox claude gets full, unprompted access to every tool (built-in
-  // AND MCP) — Docker is the safety boundary, so we don't gate on permissions.
-  // On the host we keep the configured permission mode.
   const guiArgs = [
     "--permission-mode",
-    SANDBOX ? "bypassPermissions" : CLAUDE_PERMISSION_MODE,
+    CLAUDE_PERMISSION_MODE,
     "--mcp-config",
     mcp,
     "--strict-mcp-config",
