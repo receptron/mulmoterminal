@@ -12,6 +12,27 @@ attention** (waiting for input, or finished with output you haven't seen).
 
 ---
 
+## Install & run
+
+Requires the [`claude`](https://claude.com/claude-code) CLI on your `PATH` and
+**Node ≥ 22.9**.
+
+```bash
+npx mulmoterminal           # start on http://localhost:3456 and open the browser
+# or install globally:
+npm install -g mulmoterminal
+mulmoterminal
+```
+
+Options: `--port <n>` (default 3456), `--no-open`, `--version`, `--help`.
+
+The published package ships the server (run via `tsx`) plus the pre-built web UI;
+`npx mulmoterminal` checks for the `claude` CLI, picks a free port, starts the
+server, and opens the browser. For local development from a clone, see
+[Running](#running).
+
+---
+
 ## Contents
 
 - [Architecture](#architecture)
