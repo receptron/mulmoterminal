@@ -35,7 +35,7 @@ export default [
     },
   },
   {
-    files: ["server/**/*.js"],
+    files: ["server/**/*.js", "bin/**/*.js"],
     languageOptions: {
       globals: {
         console: "readonly",

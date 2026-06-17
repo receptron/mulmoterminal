@@ -1,8 +1,31 @@
 {
   "name": "mulmoterminal",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "MulmoTerminal — browser terminal + GUI panel for Claude Code. One command to start.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/receptron/mulmoterminal.git"
+  },
+  "keywords": [
+    "claude",
+    "claude-code",
+    "terminal",
+    "gui",
+    "ai",
+    "agent",
+    "mulmoterminal"
+  ],
+  "bin": {
+    "mulmoterminal": "bin/mulmoterminal.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "server/",
+    "plugins/"
+  ],
   "engines": {
     "node": ">=22.9"
   },
@@ -17,6 +40,7 @@
     "preview": "vite preview",
     "server": "node --import tsx --env-file-if-exists=.env server/index.ts",
     "test": "vitest run",
+    "prepack": "yarn build",
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {
@@ -37,6 +61,7 @@
     "node-pty": "^1.1.0",
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
+    "tsx": "^4.22.4",
     "vue": "^3.5.34",
     "ws": "^8.21.0"
   },
@@ -55,7 +80,6 @@
     "eslint-plugin-vue": "^10.9.2",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.1",
-    "tsx": "^4.22.4",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.61.0",
     "vite": "^8.0.12",
