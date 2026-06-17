@@ -8,6 +8,7 @@ import type { Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
+import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
@@ -16,6 +17,7 @@ import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 // MulmoTerminal's own UI.
 import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
+import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
 // against those packages' dists (see src/plugin-tailwind.css), supplying the
@@ -49,6 +51,14 @@ const PACKAGES: Record<string, Registration> = {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
     viewComponent: GenerateImagePlugin.plugin.viewComponent as Component,
     css: mulmochatPluginCss,
+  },
+  "@mulmoclaude/chart-plugin": {
+    toolName: chartPlugin.toolDefinition.name,
+    // No runtime wrap: the chart View reads everything from selectedResult.data and
+    // only optionally injects the runtime for locale (inject(KEY, undefined)?.locale
+    // ?? "en"), so it renders standalone. Its style.css is self-contained Tailwind.
+    viewComponent: chartPlugin.viewComponent as Component,
+    css: chartCss,
   },
 };
 

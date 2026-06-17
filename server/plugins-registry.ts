@@ -5,6 +5,12 @@
 //       Their core entry exports a ToolPluginCore { toolDefinition, execute } plus
 //       TOOL_DEFINITION. These are shared VERBATIM with MulmoClaude — one source of
 //       truth, loaded as an npm dependency.
+//   - servers:  server-only MCP-tool packages (e.g. @mulmoclaude/x-plugin) that
+//       export one or more `XTool`-shaped objects ({ definition, requiredEnv,
+//       prompt, handler }) — pure agent tools with NO GUI view. Each is adapted
+//       into the same normalized shape; a tool whose `requiredEnv` is unmet is
+//       dropped at load so claude never sees a tool it cannot run (mirrors
+//       MulmoClaude's isMcpToolEnabled gating).
 //   - local:    in-tree plugins under plugins/<name>/ whose definition.js exports a
 //       gui-chat-protocol ToolDefinition and whose server.js exports execute(args).
 //       These are pre-extraction holdovers that migrate to packages over time.
@@ -18,6 +24,7 @@ import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
 import { generateImage } from "./backends/image-gen.js";
 import { markdownHostApp } from "./backends/markdown.js";
+import { artifactsFileOps } from "./backends/artifacts.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -35,11 +42,18 @@ const MCP_SERVER_NAME = "mulmoterminal-gui";
 // initialised with the workspace + pubsub at boot (server/index.ts).
 const APP_CONTEXT = { generateImage, ...markdownHostApp };
 
+// The gui-chat-protocol ToolContext.files — generic file capabilities keyed by
+// area. `artifacts` is the shared, user-browsable output area (rooted at
+// <workspace>/artifacts), used by @mulmoclaude/chart-plugin's executeChart to
+// persist the chart document. Plugins that don't write artifacts ignore it.
+const FILES_CONTEXT = { artifacts: artifactsFileOps };
+
 function loadConfig() {
   const raw = fs.readFileSync(path.join(PLUGINS_DIR, "plugins.json"), "utf8");
   const parsed = JSON.parse(raw);
   return {
     packages: Array.isArray(parsed.packages) ? parsed.packages : [],
+    servers: Array.isArray(parsed.servers) ? parsed.servers : [],
     local: Array.isArray(parsed.local) ? parsed.local : [],
   };
 }
@@ -55,7 +69,58 @@ async function loadPackage(name: string) {
   if (!definition || typeof execute !== "function") {
     throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
   }
-  return { toolName: definition.name, definition, execute: (args?: unknown) => execute({ app: APP_CONTEXT }, args ?? {}) };
+  return { toolName: definition.name, definition, execute: (args?: unknown) => execute({ app: APP_CONTEXT, files: FILES_CONTEXT }, args ?? {}) };
+}
+
+// An `XTool`-shaped server-only tool (see @mulmoclaude/x-plugin): a JSON-schema
+// definition + an async handler returning a plain string for claude, with no GUI
+// data. `requiredEnv` lists env vars (e.g. X_BEARER_TOKEN) the handler needs.
+interface ServerTool {
+  definition: { name: string; description: string; inputSchema: object };
+  requiredEnv?: string[];
+  prompt?: string;
+  handler: (args: Record<string, unknown>) => Promise<string>;
+}
+
+function isServerTool(value: unknown): value is ServerTool {
+  if (typeof value !== "object" || value === null) return false;
+  const tool = value as Partial<ServerTool>;
+  return typeof tool.definition?.name === "string" && typeof tool.handler === "function";
+}
+
+// A server-only tool package. Import it, pick every XTool-shaped export, and adapt
+// each into the normalized { toolName, definition, execute } shape. Tools whose
+// requiredEnv is not fully satisfied are dropped (and logged) so they never reach
+// the broker's tool list. The handler's string result becomes the envelope
+// `message`; with no `data`, the broker publishes nothing to the GUI.
+async function loadServerToolPackage(name: string) {
+  const mod = await import(name);
+  const tools = Object.values(mod).filter(isServerTool);
+  if (tools.length === 0) {
+    throw new Error(`Server-tool package "${name}" exports no XTool-shaped tools ({ definition, handler }).`);
+  }
+  return tools
+    .filter((tool) => {
+      const missing = (tool.requiredEnv ?? []).filter((key) => !process.env[key]);
+      if (missing.length > 0) {
+        console.warn(`[plugins] skipping server tool "${tool.definition.name}" — missing env: ${missing.join(", ")}`);
+        return false;
+      }
+      return true;
+    })
+    .map((tool) => ({
+      toolName: tool.definition.name,
+      // Adapt the XTool definition into a gui-chat-protocol ToolDefinition the
+      // broker lists: inputSchema -> parameters; prompt folds into the description.
+      definition: {
+        type: "function" as const,
+        name: tool.definition.name,
+        description: tool.definition.description,
+        prompt: tool.prompt,
+        parameters: tool.definition.inputSchema,
+      },
+      execute: async (args?: unknown) => ({ message: await tool.handler((args as Record<string, unknown>) ?? {}) }),
+    }));
 }
 
 // A local plugin: definition.js exports TOOL_DEFINITION (a gui-chat-protocol
@@ -71,8 +136,13 @@ async function loadLocal(name: string) {
 }
 
 const config = loadConfig();
-// Top-level await: the loaded set is ready by the time importers use it.
-export const plugins = [...(await Promise.all(config.packages.map(loadPackage))), ...(await Promise.all(config.local.map(loadLocal)))];
+// Top-level await: the loaded set is ready by the time importers use it. Server-tool
+// packages can contribute more than one tool each, so flatten their results.
+export const plugins = [
+  ...(await Promise.all(config.packages.map(loadPackage))),
+  ...(await Promise.all(config.servers.map(loadServerToolPackage))).flat(),
+  ...(await Promise.all(config.local.map(loadLocal))),
+];
 
 const byName = Object.fromEntries(plugins.map((p) => [p.toolName, p]));
 

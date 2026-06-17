@@ -13,6 +13,7 @@ import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
+import { initArtifactsBackend } from "./backends/artifacts.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -735,6 +736,10 @@ pubsub = createPubSub(server, isAllowedOrigin);
 // pubsub (to forward file-change events to the plugin-scoped channel so the
 // presentDocument view live-refreshes). Done after pubsub exists (task #6).
 initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
+
+// Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
+// @mulmoclaude/chart-plugin's executeChart can persist chart documents there.
+initArtifactsBackend({ workspace: CLAUDE_CWD });
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two

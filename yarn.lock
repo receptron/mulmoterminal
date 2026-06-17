@@ -517,6 +517,11 @@
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.0.tgz#97f60be5541ea464077a54fe061b91e6dd27c97b"
   integrity sha512-mmUm/tJEeyyz0qDhMZL+GSdKXFwOi+pffEJVm6bBUHM+KPVrUiyKIBBi68eQ2S5PKmkJdp/1I/iYXhrU5zcr2Q==
 
+"@mulmoclaude/chart-plugin@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.npmjs.org/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.1.tgz#bef604d53e82a1d406a65ddde3e6c3cdff9cc6e3"
+  integrity sha512-Hv+FyTSiPWsF+eaxmBQ0Le8tu4FLnFMvmMQ+c6/MmM1gvHe49SrHvBcEYvSQb9bkNghJRsgSV0tADVjPFPwZMA==
+
 "@mulmoclaude/form-plugin@^0.1.1":
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.1.tgz#54825cc7ecb3eded0d9d6d7bc0c04214bf7c78da"
@@ -530,6 +535,11 @@
     "@marp-team/marp-core" "^4.3.0"
     js-yaml "^4.2.0"
     marked "^18.0.5"
+
+"@mulmoclaude/x-plugin@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.npmjs.org/@mulmoclaude/x-plugin/-/x-plugin-0.1.1.tgz#9923ac1b981b88af5be297f2fd4372f127ca2781"
+  integrity sha512-+CSxdPUmsJuDBT1M+L5i255ZQN2ewkEBihgxIH1yJ92VPtGtZkX6ANUZRwM6jjXGQRECDxIz3wcTwTE/Ii3hLw==
 
 "@napi-rs/wasm-runtime@^1.1.4":
   version "1.1.5"
@@ -1799,6 +1809,14 @@ ecdsa-sig-formatter@1.0.11, ecdsa-sig-formatter@^1.0.11:
   dependencies:
     safe-buffer "^5.0.1"
 
+echarts@^6.0.0:
+  version "6.1.0"
+  resolved "https://registry.npmjs.org/echarts/-/echarts-6.1.0.tgz#ae0f68590f5ebbd728d900907c27acde7c5456d1"
+  integrity sha512-q0yaFPggC9FUdsWH4blavRWFmxdrIodbkoKNAjJudAI6CA9gNPxHtV2RcZNEepZVlk4yvBYkOkbk6HIVpIyHZA==
+  dependencies:
+    tslib "2.3.0"
+    zrender "6.1.0"
+
 editorconfig@^1.0.4:
   version "1.0.7"
   resolved "https://registry.yarnpkg.com/editorconfig/-/editorconfig-1.0.7.tgz#8d6e178aeb507c206d65e1804c1d7510d110d434"
@@ -2489,10 +2507,15 @@ graceful-fs@^4.2.4:
   resolved "https://registry.yarnpkg.com/graceful-fs/-/graceful-fs-4.2.11.tgz#4183e4e8bf08bb6e05bbb2f7d2e0c8f712ca40e3"
   integrity sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==
 
-gui-chat-protocol@0.3.3, gui-chat-protocol@^0.3.3:
+gui-chat-protocol@^0.3.3:
   version "0.3.3"
   resolved "https://registry.yarnpkg.com/gui-chat-protocol/-/gui-chat-protocol-0.3.3.tgz#6a0f5a887a94c4a75e32fadffc4f762630eba1d5"
   integrity sha512-4OKU8zzb5ZO66ffMQDiIMUp9jFPLeaMImVzJRJ/K6fREqQHiS2dJBnGx16IzTtsUcy1bZR34qUCCfP9qvxyrbA==
+
+gui-chat-protocol@^0.4.0:
+  version "0.4.0"
+  resolved "https://registry.npmjs.org/gui-chat-protocol/-/gui-chat-protocol-0.4.0.tgz#de6baffca33edccd77f0c018e9a15cb11b009031"
+  integrity sha512-uJ6SN3zBz0ATUCxx6sA8b3syyRuQDEyAOweGf6yrZc5fi/SkXd0CN1o7mnyDqoVmohhHXPq2tgiXud0g6gYZew==
 
 has-symbols@^1.1.0:
   version "1.1.0"
@@ -3957,6 +3980,11 @@ ts-api-utils@^2.5.0:
   resolved "https://registry.yarnpkg.com/ts-api-utils/-/ts-api-utils-2.5.0.tgz#4acd4a155e22734990a5ed1fe9e97f113bcb37c1"
   integrity sha512-OJ/ibxhPlqrMM0UiNHJ/0CKQkoKF243/AEmplt3qpRgkW8VG7IfOS41h7V8TjITqdByHzrjcS/2si+y4lIh8NA==
 
+tslib@2.3.0:
+  version "2.3.0"
+  resolved "https://registry.npmjs.org/tslib/-/tslib-2.3.0.tgz#803b8cdab3e12ba581a4ca41c8839bbb0dacb09e"
+  integrity sha512-N82ooyxVNm6h1riLCoyS9e3fuJ3AMG2zIZs2Gd1ATcSFjSA23Q0fzjjZeh0jbJvWVDZ0cJT8yaNNaaXHzueNjg==
+
 tslib@^2.0.1, tslib@^2.1.0, tslib@^2.4.0, tslib@^2.8.1:
   version "2.8.1"
   resolved "https://registry.yarnpkg.com/tslib/-/tslib-2.8.1.tgz#612efe4ed235d567e8aba5f2a5fab70280ade83f"
@@ -4331,3 +4359,10 @@ zod@^3.24.1:
   version "4.4.3"
   resolved "https://registry.yarnpkg.com/zod/-/zod-4.4.3.tgz#b680f172885d18bbebf21a834ea25e55a1bbf356"
   integrity sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==
+
+zrender@6.1.0:
+  version "6.1.0"
+  resolved "https://registry.npmjs.org/zrender/-/zrender-6.1.0.tgz#c3ef06e6426d5c28865b7183035680d685e00136"
+  integrity sha512-oEGMDB6pOP2S6OwRR4PdVv610zrjnA3Bh+JnSG12fYJlBKjtNAoEb5fSUoCOOINlH96I2fU38/A2UpRKs67xYQ==
+  dependencies:
+    tslib "2.3.0"
