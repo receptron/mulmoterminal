@@ -119,7 +119,7 @@ const sessionChannel = (id: string) => `session:${id}`;
 // Stdio MCP broker wired into each spawned claude (--mcp-config). It exposes one
 // GUI-protocol tool per enabled plugin (driven by plugins/plugins.json) and drives
 // the GUI panel via the toolResult route.
-const MCP_SERVER_PATH = path.join(__dirname, "mcp", "broker.js");
+const MCP_SERVER_PATH = path.join(__dirname, "mcp", "broker.ts");
 
 // MCP tool names claude uses, in the mcp__<server>__<tool> form, one per enabled
 // plugin. Auto-allowed via --allowedTools so the spike doesn't trip the permission
@@ -395,7 +395,10 @@ function mcpConfigJson(sessionId: string) {
     mcpServers: {
       "mulmoterminal-gui": {
         command: process.execPath, // the node running this server
-        args: [MCP_SERVER_PATH],
+        // Run the stdio broker through tsx (same as the main server) — it's a
+        // .ts file, so plain `node broker.ts` can't execute it. Before the
+        // server TS migration this was a .js file run without a loader.
+        args: ["--import", "tsx", MCP_SERVER_PATH],
         env: {
           MULMOTERMINAL_SESSION_ID: sessionId,
           MULMOTERMINAL_PORT: String(PORT),
