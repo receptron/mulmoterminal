@@ -40,7 +40,7 @@
     "preview": "vite preview",
     "server": "node --import tsx --env-file-if-exists=.env server/index.ts",
     "test": "vitest run",
-    "prepack": "yarn build",
+    "prepack": "vue-tsc -b && vite build",
     "postinstall": "node server/fix-pty-perms.js"
   },
   "dependencies": {

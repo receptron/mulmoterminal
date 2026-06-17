@@ -8,6 +8,7 @@
 import { execSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { get as httpGet } from "node:http";
+import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +20,9 @@ const DEFAULT_PORT = 3456;
 const READY_TIMEOUT_MS = 15_000;
 const MAX_PORT_PROBES = 20;
 
-const VERSION = "0.1.0";
+// Single source of truth: read the version from the shipped package.json so
+// `--version` never drifts from the published version.
+const { version: VERSION } = createRequire(import.meta.url)("../package.json");
 
 const log = (msg) => console.log(`\x1b[36m[mulmoterminal]\x1b[0m ${msg}`);
 const error = (msg) => console.error(`\x1b[31m[mulmoterminal]\x1b[0m ${msg}`);
