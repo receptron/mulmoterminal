@@ -17,6 +17,7 @@ import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
 import { generateImage } from "./backends/image-gen.js";
+import { markdownHostApp } from "./backends/markdown.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGINS_DIR = path.join(__dirname, "..", "plugins");
@@ -27,7 +28,11 @@ const MCP_SERVER_NAME = "mulmoterminal-gui";
 // execute() may call (e.g. @mulmochat-plugin/generate-image calls
 // `context.app.generateImage(prompt)`). Plugins that don't need a backend simply
 // ignore it. Passed to every package's execute below.
-const APP_CONTEXT = { generateImage };
+// Spread the markdown host app (loadDoc/saveDoc/saveNewDoc/marpThemes/exportPdf/
+// fillImages) alongside generateImage — context.app is a shared capability bag;
+// each plugin's execute uses only what it needs. The markdown backend is
+// initialised with the workspace + pubsub at boot (server/index.ts).
+const APP_CONTEXT = { generateImage, ...markdownHostApp };
 
 function loadConfig() {
   const raw = fs.readFileSync(path.join(PLUGINS_DIR, "plugins.json"), "utf8");
