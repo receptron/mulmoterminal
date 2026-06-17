@@ -491,6 +491,29 @@ const app = express();
 // the hook and leave its tool-call entry stuck on "running").
 app.use(express.json({ limit: "25mb" }));
 
+// Host tool: spawnBackgroundChat. Unlike a plugin (handled by mountAllRoutes'
+// catch-all), it needs server internals — it spawns a brand-new interactive Claude
+// terminal session, seeded with `message`, that the user can open from the sidebar.
+// `role`/`hidden` are accepted for signature parity with MulmoClaude but ignored:
+// the session is always visible. Registered BEFORE mountAllRoutes so this specific
+// route wins over /api/plugin/:toolName.
+app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
+  const body = isRecord(req.body) ? req.body : {};
+  const message = typeof body.message === "string" ? body.message.trim() : "";
+  if (!message) {
+    return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
+  }
+  const sessionId = randomUUID();
+  // ws is null: the session runs headless until the user opens it (reattach
+  // replays the buffered output). The "created" pubsub event in spawnClaudePty
+  // surfaces it in the sidebar right away.
+  spawnClaudePty(sessionId, null, null, message);
+  return res.json({
+    message: `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
+    jsonData: { chatId: sessionId },
+  });
+});
+
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The MCP broker dispatches tool calls to these.
 mountAllRoutes(app);
@@ -738,8 +761,16 @@ function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntr
 }
 
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
-// exit back to the browser socket.
-function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket): PtyEntry {
+// exit back to the browser socket. `ws` may be null for a session spawned without
+// a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
+// reattaches. `initialPrompt`, when given, is passed to claude as the first turn
+// so the session starts working immediately, before anyone opens it.
+function spawnClaudePty(
+  sessionId: string,
+  resume: string | null,
+  ws: WebSocket | null,
+  initialPrompt?: string,
+): PtyEntry {
   const settings = hookSettingsJson();
   // Register the GUI MCP broker and auto-allow its tools so the plugin tools run
   // without a permission prompt (--strict-mcp-config keeps the user's other MCP
@@ -754,9 +785,13 @@ function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket)
     "--allowedTools",
     GUI_MCP_TOOLS,
   ];
-  const args = resume
+  const baseArgs = resume
     ? ["--resume", resume, "--settings", settings, ...guiArgs]
     : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
+  // The initial prompt goes last as a positional arg (claude's initial-prompt
+  // form). "--" ends option parsing so a prompt that happens to start with "-"
+  // can't be reinterpreted as a flag.
+  const args = initialPrompt ? [...baseArgs, "--", initialPrompt] : baseArgs;
 
   console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId})`);
 
@@ -773,8 +808,11 @@ function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket)
   ptys.set(sessionId, entry);
 
   if (!resume) {
-    // Brand-new session: surface it in the sidebar before it's persisted.
-    knownSessions.set(sessionId, { createdAt: Date.now(), title: "New session" });
+    // Brand-new session: surface it in the sidebar before it's persisted. A
+    // spawned session (initialPrompt) gets a title from its first message so it's
+    // recognizable in the sidebar before anyone opens it.
+    const title = initialPrompt ? initialPrompt.replace(/\s+/g, " ").trim().slice(0, 60) || "New session" : "New session";
+    knownSessions.set(sessionId, { createdAt: Date.now(), title });
     pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
   }
 

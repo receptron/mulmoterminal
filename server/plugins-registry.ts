@@ -18,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
 import { generateImage } from "./backends/image-gen.js";
 import { markdownHostApp } from "./backends/markdown.js";
+import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLUGINS_DIR = path.join(__dirname, "..", "plugins");
@@ -82,14 +83,15 @@ export const plugins = [
 const byName = Object.fromEntries(plugins.map((p) => [p.toolName, p]));
 
 // MCP tool definitions the broker registers — gui-chat-protocol ToolDefinitions
-// ({ name, description, prompt?, parameters }), one per enabled plugin.
-export const toolDefinitions = plugins.map((p) => p.definition);
+// ({ name, description, prompt?, parameters }), one per enabled plugin plus the
+// built-in host tools (which the server dispatches itself; see host-tools.ts).
+export const toolDefinitions = [...plugins.map((p) => p.definition), ...HOST_TOOL_DEFINITIONS];
 
 // JSON-serializable summaries (no schema) for the GUI's tools pane.
-export const toolSummaries = plugins.map((p) => ({
-  toolName: p.toolName,
-  title: p.toolName,
-  description: p.definition.description,
+export const toolSummaries = toolDefinitions.map((d) => ({
+  toolName: d.name,
+  title: d.name,
+  description: d.description,
 }));
 
 // Mount the uniform dispatch route. The MCP broker POSTs a tool's args to
@@ -108,6 +110,7 @@ export function mountAllRoutes(app: Express) {
 }
 
 // Fully-qualified MCP tool names for claude's --allowedTools (auto-run, no prompt).
+// Includes host tools so they run without a permission prompt too.
 export function allowedToolNames() {
-  return plugins.map((p) => `mcp__${MCP_SERVER_NAME}__${p.toolName}`);
+  return toolDefinitions.map((d) => `mcp__${MCP_SERVER_NAME}__${d.name}`);
 }
