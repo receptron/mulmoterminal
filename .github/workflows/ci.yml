@@ -24,5 +24,8 @@ jobs:
       - name: Typecheck
         run: yarn typecheck
 
+      - name: Typecheck (server)
+        run: yarn typecheck:server
+
       - name: Build
         run: yarn build
