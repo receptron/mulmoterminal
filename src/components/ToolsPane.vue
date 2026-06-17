@@ -24,6 +24,7 @@ interface ToolCall {
 }
 
 const props = defineProps<{ sessionId: string | null }>();
+const emit = defineEmits<{ close: [] }>();
 
 const availableTools = ref<AvailableTool[]>([]);
 const toolCalls = ref<ToolCall[]>([]);
@@ -146,6 +147,9 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   <section class="tools-pane">
     <div class="header">
       <span class="title">Tools</span>
+      <button type="button" class="close-btn" title="Close tools pane" aria-label="Close tools pane" @click="emit('close')">
+        <span class="material-symbols-outlined">close</span>
+      </button>
     </div>
     <div class="content">
       <!-- Available tools -->
@@ -155,7 +159,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
         <div v-for="tool in availableTools" :key="tool.toolName" class="tool">
           <button class="tool-head" type="button" @click="toggleTool(tool.toolName)">
             <code class="tool-name">{{ tool.toolName }}</code>
-            <span v-if="tool.description" class="caret">{{ expandedTools.has(tool.toolName) ? "▲" : "▼" }}</span>
+            <span v-if="tool.description" class="caret material-symbols-outlined">{{ expandedTools.has(tool.toolName) ? "expand_less" : "expand_more" }}</span>
           </button>
           <div v-if="expandedTools.has(tool.toolName)" class="tool-desc">
             {{ tool.description }}
@@ -175,7 +179,8 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
             :aria-label="historyCopied ? 'Copied!' : 'Copy all call history'"
             @click="copyHistory"
           >
-            {{ historyCopied ? "✓ Copied" : "Copy all" }}
+            <span class="material-symbols-outlined">{{ historyCopied ? "check" : "content_copy" }}</span>
+            {{ historyCopied ? "Copied" : "Copy all" }}
           </button>
         </div>
         <div v-if="toolCalls.length === 0" class="muted">No tool calls yet.</div>
@@ -223,9 +228,25 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   color: #e0e0e0;
   font-family: system-ui, sans-serif;
   font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 .title {
   font-weight: 600;
+}
+.close-btn {
+  background: none;
+  border: none;
+  color: #7c87a8;
+  font-size: 15px;
+  line-height: 1;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.close-btn:hover {
+  color: #e0e0e0;
 }
 
 .content {
@@ -255,6 +276,9 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   gap: 8px;
 }
 .copy-history {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   font-size: 10px;
   font-weight: 600;
   text-transform: none;
@@ -265,6 +289,9 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
+}
+.copy-history .material-symbols-outlined {
+  font-size: 14px;
   transition:
     color 0.15s,
     background 0.15s;
@@ -316,7 +343,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 }
 .caret {
   color: #7c87a8;
-  font-size: 10px;
+  font-size: 18px;
 }
 .tool-desc {
   color: #9aa5c4;

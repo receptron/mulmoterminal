@@ -8,3 +8,18 @@ body {
   background: #1a1a2e;
   overflow: hidden;
 }
+
+/* Project-wide icon convention: Material Symbols (outlined). Icons inherit the
+   surrounding text size by default; set font-size on the element to scale, and
+   the optical-size axis (opsz) follows so weight stays balanced. */
+.material-symbols-outlined {
+  font-size: inherit;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+  font-variation-settings:
+    "FILL" 0,
+    "wght" 400,
+    "GRAD" 0,
+    "opsz" 20;
+}
