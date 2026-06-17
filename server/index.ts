@@ -906,14 +906,18 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
 
+// Exit code the launcher (bin/mulmoterminal.js) treats as "port was taken at
+// bind time" so it can retry on a fresh port. Keep in sync with the launcher.
+const PORT_IN_USE_EXIT_CODE = 75;
+
 // A bind failure (most often the port already in use) must not surface as an
 // unhandled 'error' event / stack trace — exit with a clear message instead.
 server.on("error", (err) => {
   if (hasErrnoCode(err) && err.code === "EADDRINUSE") {
     console.error(`[mulmoterminal] Port ${PORT} is already in use — set PORT=<n> or pass --port <n>.`);
-  } else {
-    console.error(`[mulmoterminal] server error: ${messageOf(err)}`);
+    process.exit(PORT_IN_USE_EXIT_CODE);
   }
+  console.error(`[mulmoterminal] server error: ${messageOf(err)}`);
   process.exit(1);
 });
 

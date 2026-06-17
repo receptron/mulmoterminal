@@ -18,6 +18,10 @@ const PKG_DIR = join(__dirname, "..");
 const SERVER_ENTRY = join(PKG_DIR, "server", "index.ts");
 const DEFAULT_PORT = 3456;
 const READY_TIMEOUT_MS = 15_000;
+const MAX_BIND_RETRIES = 5;
+// Server exit code meaning "port taken at bind time" — keep in sync with
+// server/index.ts (PORT_IN_USE_EXIT_CODE).
+const PORT_IN_USE_EXIT_CODE = 75;
 
 // Single source of truth: read the version from the shipped package.json so
 // `--version` never drifts from the published version.
@@ -58,8 +62,9 @@ function isPortFree(port) {
 }
 
 // Ask the OS for a free port (listen on 0) and return the one it assigned, or
-// null. A collision-proof, effectively-random fallback when the preferred port
-// is taken — no two instances clash.
+// null. An effectively-random fallback when the preferred port is taken; the
+// bind-retry in main() closes the small probe-to-bind race so concurrent starts
+// don't clash.
 function findEphemeralPort() {
   return new Promise((resolve) => {
     const probe = createServer();
@@ -131,6 +136,46 @@ async function choosePort(requested, explicit) {
   return fallback;
 }
 
+// Spawn the server on `port` and report the child via `onChild` (so signal
+// handlers target the live process). Resolves only when the server exits because
+// the port was taken at bind time before it became ready — the caller then
+// retries on a fresh port. In every other case (clean shutdown, fatal error,
+// or the server simply running) the process exits with the server's code.
+function runServer(port, noOpen, onChild) {
+  return new Promise((resolve) => {
+    log(`Starting MulmoTerminal on port ${port}...`);
+    const server = spawn(process.execPath, ["--import", "tsx", SERVER_ENTRY], {
+      cwd: PKG_DIR,
+      env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
+      stdio: "inherit",
+    });
+    onChild(server);
+
+    let ready = false;
+    const url = `http://localhost:${port}`;
+    waitUntilReady(port, () => {
+      ready = true;
+      printReadyBanner(url);
+      if (noOpen) return;
+      try {
+        // The command is a hardcoded literal; url is http://localhost:<numeric port>.
+        // eslint-disable-next-line sonarjs/os-command
+        execSync(`${pickOpenCommand()} ${url}`, { stdio: "pipe" });
+      } catch {
+        log(`Open your browser: ${url}`);
+      }
+    });
+
+    server.on("exit", (code) => {
+      if (!ready && code === PORT_IN_USE_EXIT_CODE) {
+        resolve();
+        return;
+      }
+      process.exit(code ?? 1);
+    });
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -164,36 +209,39 @@ Options:
   }
 
   const { requestedPort, portExplicit } = parsePortArg(args);
-  const port = await choosePort(requestedPort, portExplicit);
-
-  log(`Starting MulmoTerminal on port ${port}...`);
-  const server = spawn(process.execPath, ["--import", "tsx", SERVER_ENTRY], {
-    cwd: PKG_DIR,
-    env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
-    stdio: "inherit",
-  });
-
-  const url = `http://localhost:${port}`;
   const noOpen = args.includes("--no-open");
-  waitUntilReady(port, () => {
-    printReadyBanner(url);
-    if (noOpen) return;
-    try {
-      // The command is a hardcoded literal; url is http://localhost:<numeric port>.
-      // eslint-disable-next-line sonarjs/os-command
-      execSync(`${pickOpenCommand()} ${url}`, { stdio: "pipe" });
-    } catch {
-      log(`Open your browser: ${url}`);
-    }
-  });
 
+  // Registered once; always targets the live child across bind-retries.
+  let child = null;
   const shutdown = () => {
-    server.kill("SIGTERM");
+    child?.kill("SIGTERM");
     process.exit(0);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
-  server.on("exit", (code) => process.exit(code ?? 1));
+
+  // Start on the chosen port; if the server loses the rare probe-to-bind race,
+  // fall back to a fresh OS-assigned port and retry. An explicit --port is not
+  // second-guessed. `runServer` only returns when the port was raced.
+  let port = await choosePort(requestedPort, portExplicit);
+  for (let attempt = 0; attempt <= MAX_BIND_RETRIES; attempt++) {
+    await runServer(port, noOpen, (c) => {
+      child = c;
+    });
+    if (portExplicit) {
+      error(`Port ${port} is already in use. Stop the other process or pick a different --port.`);
+      process.exit(1);
+    }
+    const next = await findEphemeralPort();
+    if (next === null) {
+      error("No free port available to retry on.");
+      process.exit(1);
+    }
+    log(`Port ${port} was taken at bind time → retrying on ${next}.`);
+    port = next;
+  }
+  error(`Could not bind a free port after ${MAX_BIND_RETRIES + 1} attempts.`);
+  process.exit(1);
 }
 
 main();
