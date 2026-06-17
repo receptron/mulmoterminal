@@ -50,19 +50,22 @@ jobs:
 
       - run: yarn install --frozen-lockfile
 
-      # The launcher's pre-flight requires `claude --version` to succeed. The
-      # smoke test only needs the server to boot and serve "/", so a tiny stub
-      # on PATH passes the check without the real CLI + auth.
+      # The launcher's pre-flight requires `claude --version` to succeed, and the
+      # PTY check spawns `claude` — so the stub answers --version AND, for any
+      # other invocation, prints a line and exits cleanly (a real PTY lifecycle)
+      # without needing the real CLI + auth.
       - name: Stub Claude Code CLI
         run: |
           mkdir -p "$HOME/.local/bin"
-          printf '#!/usr/bin/env bash\n[ "$1" = "--version" ] && { echo "claude 0.0.0 (smoke-stub)"; exit 0; }\nexit 1\n' > "$HOME/.local/bin/claude"
+          printf '#!/usr/bin/env bash\nif [ "$1" = "--version" ]; then echo "claude 0.0.0 (smoke-stub)"; exit 0; fi\necho "smoke-stub claude started"\nexit 0\n' > "$HOME/.local/bin/claude"
           chmod +x "$HOME/.local/bin/claude"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       # `npm pack` runs prepack (yarn build) to produce dist/, then we install
-      # the exact tarball into a clean dir and boot the launcher.
-      - name: Pack, install, and boot the tarball
+      # the exact tarball into a clean (hoisted) dir, boot the launcher, and
+      # exercise the /ws PTY path — the failure mode (#33) where node-pty's
+      # spawn-helper shipped non-executable on hoisted installs.
+      - name: Pack, install, boot, and exercise the /ws PTY path
         run: |
           set -euo pipefail
           TGZ="$(npm pack | tail -1)"
@@ -70,13 +73,28 @@ jobs:
           mkdir -p /tmp/mt-smoke && cd /tmp/mt-smoke
           npm init -y >/dev/null
           npm install "$GITHUB_WORKSPACE/$TGZ"
+
+          # Regression guard for #33: the node-pty spawn-helper must be executable
+          # after the postinstall, even though node-pty is hoisted here.
+          HELPER="node_modules/node-pty/prebuilds/linux-x64/spawn-helper"
+          if [ -f "$HELPER" ] && [ ! -x "$HELPER" ]; then
+            echo "regression: $HELPER is not executable (644) after install"; exit 1
+          fi
+
           node_modules/.bin/mulmoterminal --no-open --port 3457 &
           LAUNCHER_PID=$!
+          trap 'kill "$LAUNCHER_PID" 2>/dev/null || true' EXIT
           ok=
           for _ in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:3457/ >/dev/null 2>&1; then ok=1; break; fi
             sleep 1
           done
-          kill "$LAUNCHER_PID" 2>/dev/null || true
           [ -n "$ok" ] || { echo "launcher did not serve / within 30s"; exit 1; }
           echo "✓ tarball booted and served /"
+
+          # A /ws connection must spawn a PTY (session + output/exit), not an
+          # error frame — and the server must survive it. ws resolves from the
+          # repo's own node_modules (installed by the job's `yarn install`).
+          MT_PORT=3457 node "$GITHUB_WORKSPACE/scripts/ci-ws-smoke.mjs"
+          curl -fsS -o /dev/null http://127.0.0.1:3457/ || { echo "server died after the PTY session"; exit 1; }
+          echo "✓ /ws spawned a PTY and the server is still serving"

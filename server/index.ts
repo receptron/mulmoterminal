@@ -489,7 +489,12 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   // ws is null: the session runs headless until the user opens it (reattach
   // replays the buffered output). The "created" pubsub event in spawnClaudePty
   // surfaces it in the sidebar right away.
-  spawnClaudePty(sessionId, null, null, message);
+  try {
+    spawnClaudePty(sessionId, null, null, message);
+  } catch (err) {
+    console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
+    return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
+  }
   return res.json({
     message: `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
     jsonData: { chatId: sessionId },
@@ -896,7 +901,19 @@ wss.on("connection", (ws, req) => {
   ws.send(JSON.stringify({ type: "session", id: sessionId }));
 
   const existing = ptys.get(sessionId);
-  const entry = existing ? reattachPty(existing, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
+  let entry: PtyEntry;
+  try {
+    entry = existing ? reattachPty(existing, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
+  } catch (err) {
+    // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
+    // must close just this connection — never crash the whole server.
+    console.error(`[ws] failed to start session ${sessionId}: ${messageOf(err)}`);
+    if (ws.readyState === ws.OPEN) {
+      ws.send(JSON.stringify({ type: "error", message: "Failed to start Claude. Is the `claude` CLI installed and on your PATH?" }));
+      ws.close();
+    }
+    return;
+  }
 
   // The session is now in the foreground (being viewed): clear any
   // "waiting for input" flag so it stops showing as bold.
