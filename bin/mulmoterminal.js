@@ -6,11 +6,11 @@
 // runs the server via tsx. Mirrors the mulmoclaude launcher.
 
 import { execSync, spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { get as httpGet } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -129,6 +129,29 @@ function parsePortArg(args) {
   return { requestedPort: parsed, portExplicit: true };
 }
 
+// Resolve the workspace directory claude runs in (and whose sessions the sidebar
+// lists). Precedence: --cwd (relative paths allowed) > CLAUDE_CWD env > the
+// directory npx was run from. Always returned absolute. An explicit --cwd that
+// isn't an existing directory is a hard error (catches typos before launch).
+function resolveCwd(args) {
+  const idx = args.indexOf("--cwd");
+  let flagValue;
+  if (idx !== -1) {
+    flagValue = args[idx + 1];
+    if (flagValue === undefined || flagValue.startsWith("-")) {
+      error("--cwd requires a directory path");
+      process.exit(1);
+    }
+  }
+  const chosen = flagValue ?? process.env.CLAUDE_CWD ?? ".";
+  const abs = resolve(process.cwd(), chosen);
+  if (idx !== -1 && (!existsSync(abs) || !statSync(abs).isDirectory())) {
+    error(`--cwd is not a directory: ${abs}`);
+    process.exit(1);
+  }
+  return abs;
+}
+
 async function choosePort(requested, explicit) {
   if (await isPortFree(requested)) return requested;
   if (explicit) {
@@ -149,12 +172,12 @@ async function choosePort(requested, explicit) {
 // the port was taken at bind time before it became ready — the caller then
 // retries on a fresh port. In every other case (clean shutdown, fatal error,
 // or the server simply running) the process exits with the server's code.
-function runServer(port, noOpen, onChild) {
-  return new Promise((resolve) => {
+function runServer(port, noOpen, cwd, onChild) {
+  return new Promise((resolveExit) => {
     log(`Starting MulmoTerminal on port ${port}...`);
     const server = spawn(process.execPath, ["--import", "tsx", SERVER_ENTRY], {
       cwd: PKG_DIR,
-      env: { ...process.env, NODE_ENV: "production", PORT: String(port) },
+      env: { ...process.env, NODE_ENV: "production", PORT: String(port), CLAUDE_CWD: cwd },
       stdio: "inherit",
     });
     onChild(server);
@@ -178,7 +201,7 @@ function runServer(port, noOpen, onChild) {
       // served — always retriable, regardless of what a probe to the port saw
       // (another process could have answered it). Other exits are terminal.
       if (code === PORT_IN_USE_EXIT_CODE) {
-        resolve();
+        resolveExit();
         return;
       }
       process.exit(code ?? 1);
@@ -194,6 +217,7 @@ async function main() {
 Usage: npx mulmoterminal [options]
 
 Options:
+  --cwd <dir>       Working directory claude runs in (default: current directory; relative paths allowed)
   --port <number>   Server port (default: ${DEFAULT_PORT}; a free port is chosen if it's busy)
   --no-open         Don't open the browser automatically
   --version         Show version
@@ -220,6 +244,8 @@ Options:
 
   const { requestedPort, portExplicit } = parsePortArg(args);
   const noOpen = args.includes("--no-open");
+  const cwd = resolveCwd(args);
+  log(`Workspace: ${cwd}`);
 
   // Registered once; always targets the live child across bind-retries.
   let child = null;
@@ -235,7 +261,7 @@ Options:
   // second-guessed. `runServer` only returns when the port was raced.
   let port = await choosePort(requestedPort, portExplicit);
   for (let attempt = 0; attempt <= MAX_BIND_RETRIES; attempt++) {
-    await runServer(port, noOpen, (c) => {
+    await runServer(port, noOpen, cwd, (c) => {
       child = c;
     });
     if (portExplicit) {

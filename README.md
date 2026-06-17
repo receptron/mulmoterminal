@@ -24,7 +24,13 @@ npm install -g mulmoterminal
 mulmoterminal
 ```
 
-Options: `--port <n>` (default 3456), `--no-open`, `--version`, `--help`.
+Options: `--cwd <dir>` (working directory — relative paths allowed; defaults to the
+directory you run the command from), `--port <n>` (default 3456), `--no-open`,
+`--version`, `--help`.
+
+```bash
+npx mulmoterminal --cwd ./my-project   # work in a specific directory
+```
 
 The published package ships the server (run via `tsx`) plus the pre-built web UI;
 `npx mulmoterminal` checks for the `claude` CLI, picks a free port, starts the
@@ -118,7 +124,7 @@ the server runs without one.
 | ------------ | -------------- | ----------- |
 | `PORT`       | `3456`         | HTTP/WebSocket port. |
 | `CLAUDE_BIN` | `claude`       | The Claude Code binary to spawn. |
-| `CLAUDE_CWD` | `$HOME`        | Working directory each `claude` PTY runs in. Determines which project's sessions the sidebar lists. **Must be an absolute path** — `~` is not expanded for values read from `.env`. |
+| `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions the sidebar lists. Via `npx mulmoterminal` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). |
 
 Example `.env` (gitignored):
 
