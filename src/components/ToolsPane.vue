@@ -120,6 +120,26 @@ function formatValue(v: unknown): string {
     return String(v);
   }
 }
+
+// Copy the WHOLE tool-call history (arguments + results) as pretty JSON — handy
+// to paste into a bug report / share when a run goes sideways. Mirrors
+// MulmoClaude's RightSidebar copy-history button.
+const historyCopied = ref(false);
+let historyCopyTimer: ReturnType<typeof window.setTimeout> | undefined;
+async function copyHistory(): Promise<void> {
+  if (toolCalls.value.length === 0) return;
+  try {
+    await window.navigator.clipboard.writeText(JSON.stringify(toolCalls.value, null, 2));
+    historyCopied.value = true;
+    window.clearTimeout(historyCopyTimer);
+    historyCopyTimer = window.setTimeout(() => {
+      historyCopied.value = false;
+    }, 2000);
+  } catch {
+    // Clipboard blocked (insecure context / permissions) — leave the hint off.
+  }
+}
+onUnmounted(() => window.clearTimeout(historyCopyTimer));
 </script>
 
 <template>
@@ -149,8 +169,18 @@ function formatValue(v: unknown): string {
 
       <!-- Tool call history -->
       <div class="section">
-        <div class="section-title">
-          Tool Call History
+        <div class="section-title section-title--with-action">
+          <span>Tool Call History</span>
+          <button
+            class="copy-history"
+            type="button"
+            :disabled="toolCalls.length === 0"
+            :title="historyCopied ? 'Copied!' : 'Copy all call history'"
+            :aria-label="historyCopied ? 'Copied!' : 'Copy all call history'"
+            @click="copyHistory"
+          >
+            {{ historyCopied ? "✓ Copied" : "Copy all" }}
+          </button>
         </div>
         <div v-if="toolCalls.length === 0" class="muted">
           No tool calls yet.
@@ -227,6 +257,35 @@ function formatValue(v: unknown): string {
   letter-spacing: 0.04em;
   color: #7c87a8;
   margin-bottom: 8px;
+}
+.section-title--with-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.copy-history {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: #9aa5c4;
+  background: #1d2b4e;
+  border: 1px solid #2a2a4e;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition:
+    color 0.15s,
+    background 0.15s;
+}
+.copy-history:hover:not(:disabled) {
+  color: #cfe0ff;
+  background: #243763;
+}
+.copy-history:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .muted {
