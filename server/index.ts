@@ -120,6 +120,11 @@ const sessionChannel = (id: string) => `session:${id}`;
 // GUI-protocol tool per enabled plugin (driven by plugins/plugins.json) and drives
 // the GUI panel via the toolResult route.
 const MCP_SERVER_PATH = path.join(__dirname, "mcp", "broker.ts");
+// Absolute URL of the tsx ESM loader, so the broker can execute its `.ts` entry
+// regardless of the cwd claude spawns it in. claude runs in the WORKSPACE
+// (CLAUDE_CWD), where tsx isn't installed — a bare `--import tsx` would resolve
+// against that cwd and fail with ERR_MODULE_NOT_FOUND.
+const TSX_LOADER = import.meta.resolve("tsx");
 
 // MCP tool names claude uses, in the mcp__<server>__<tool> form, one per enabled
 // plugin. Auto-allowed via --allowedTools so the spike doesn't trip the permission
@@ -396,9 +401,9 @@ function mcpConfigJson(sessionId: string) {
       "mulmoterminal-gui": {
         command: process.execPath, // the node running this server
         // Run the stdio broker through tsx (same as the main server) — it's a
-        // .ts file, so plain `node broker.ts` can't execute it. Before the
-        // server TS migration this was a .js file run without a loader.
-        args: ["--import", "tsx", MCP_SERVER_PATH],
+        // .ts file, so plain `node broker.ts` can't execute it. Use the resolved
+        // absolute loader URL (see TSX_LOADER) so it works from the workspace cwd.
+        args: ["--import", TSX_LOADER, MCP_SERVER_PATH],
         env: {
           MULMOTERMINAL_SESSION_ID: sessionId,
           MULMOTERMINAL_PORT: String(PORT),
