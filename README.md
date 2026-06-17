@@ -79,7 +79,7 @@ SDK; we drive the real interactive CLI and relay its TTY over the WebSocket.
 | Layer    | Technology |
 | -------- | ---------- |
 | Frontend | Vue 3 (`<script setup>` + TypeScript), Vite, xterm.js (`@xterm/*`), socket.io-client |
-| Backend  | Node (ESM), Express 5, `ws` (terminal WebSocket), `node-pty`, socket.io |
+| Backend  | Node (ESM, TypeScript run via `tsx`), Express 5, `ws` (terminal WebSocket), `node-pty`, socket.io |
 | Tests    | Vitest + @vue/test-utils + jsdom |
 
 Requires **Node ≥ 22.9** (uses `node --env-file-if-exists`) and the `claude` CLI on `PATH`.
@@ -114,13 +114,18 @@ yarn install            # postinstall fixes node-pty prebuilt binary perms
 
 yarn dev                # server (:3456) + Vite dev server, concurrently
 # or individually:
-yarn dev:server         # backend only  (node --env-file-if-exists=.env server/index.js)
+yarn dev:server         # backend only  (node --import tsx --env-file-if-exists=.env server/index.ts)
 yarn dev:client         # Vite dev server only
 
 yarn build              # type-check (vue-tsc) + vite build -> dist/
+yarn typecheck:server   # type-check the server (tsconfig.server.json)
 yarn server             # run backend; serves dist/ + the APIs on :3456
 yarn test               # vitest run
 ```
+
+The backend is TypeScript run directly via `tsx` (no build step); `server/` is
+type-checked separately through `tsconfig.server.json` (loose to start — see the
+server-TypeScript migration issue).
 
 In dev, open the Vite URL; its proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
 `:3456`. In production, run `yarn build` then `yarn server` and open

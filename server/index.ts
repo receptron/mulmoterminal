@@ -30,7 +30,7 @@ const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 // a malicious website the user visits can't drive the local Claude PTY (a
 // cross-site WebSocket hijack). A missing Origin (non-browser local client) is
 // allowed; any localhost host on any port is allowed (covers the Vite dev proxy).
-function isAllowedOrigin(origin) {
+function isAllowedOrigin(origin?: string) {
   if (!origin) return true;
   try {
     const host = new URL(origin).hostname;
@@ -245,7 +245,7 @@ function publishActivity(id) {
 
 // Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
 // publish) when the state is unchanged.
-function setWorking(id, working, event) {
+function setWorking(id, working, event?) {
   const prev = activity.get(id) || {};
   if ((prev.working ?? false) === working) return;
   activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
@@ -265,7 +265,7 @@ function setWorking(id, working, event) {
 // (Notification: permission / question / idle) or has finished a turn with
 // output the user hasn't seen (Stop). Cleared when brought to the foreground
 // (see the WebSocket connection handler).
-function setWaiting(id, waiting, event) {
+function setWaiting(id, waiting, event?) {
   const prev = activity.get(id) || {};
   if ((prev.waiting ?? false) === waiting) return;
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });

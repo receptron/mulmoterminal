@@ -30,6 +30,18 @@ const SESSION_ID = process.env.MULMOTERMINAL_SESSION_ID;
 const PORT = process.env.MULMOTERMINAL_PORT || "3456";
 const BASE_URL = `http://localhost:${PORT}`;
 
+// Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
+// whether a toolResult is published to the GUI; the rest is narration/metadata.
+interface ToolEnvelope {
+  data?: unknown;
+  title?: unknown;
+  jsonData?: unknown;
+  message?: unknown;
+  instructions?: unknown;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
 const server = new Server(
   { name: "mulmoterminal-gui", version: "0.0.0" },
   { capabilities: { tools: {} } }
@@ -64,7 +76,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
   // 1. Dispatch to the plugin's server-side handler.
-  const envelope = await (await postJson(`${BASE_URL}/api/plugin/${name}`, args ?? {})).json();
+  const parsed = await (await postJson(`${BASE_URL}/api/plugin/${name}`, args ?? {})).json();
+  const envelope: ToolEnvelope = isRecord(parsed) ? parsed : {};
 
   // 2. Publish a toolResult to the GUI — only when there is data to render.
   if (envelope.data !== undefined) {

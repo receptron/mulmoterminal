@@ -4,7 +4,7 @@ import { Server as IOServer } from "socket.io";
 // Channel names are socket.io rooms — subscribe/unsubscribe map to
 // socket.join / socket.leave, and publish broadcasts to the room.
 // socket.io handles reconnect / heartbeat / transport for us.
-export function createPubSub(server, isAllowedOrigin = () => true) {
+export function createPubSub(server, isAllowedOrigin: (origin?: string) => boolean = () => true) {
   const io = new IOServer(server, {
     path: "/ws/pubsub",
     transports: ["websocket"],

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.server.tsbuildinfo",
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "module": "esnext",
+    "types": ["node"],
+    "skipLibCheck": true,
+
+    /* Bundler mode — resolves the `.js` import specifiers to the `.ts` files,
+       matching how tsx runs the server. */
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+
+    /* Loose to start: the server was plain JS. This catches import/shape and
+       arity mistakes without forcing full annotations yet. Tighten later
+       (strictNullChecks, noImplicitAny) as the files get typed — see #14. */
+    "strict": false,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": ["server/**/*.ts"]
+}
