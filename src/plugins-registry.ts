@@ -6,14 +6,15 @@
 // Mirrors MulmoClaude's src/tools/index.ts getPlugin().
 import type { Component } from "vue";
 import config from "../plugins/plugins.json";
-import { plugin as markdownPlugin } from "@gui-chat-plugin/markdown/vue";
+import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
+import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
 // MulmoTerminal's own UI.
-import markdownCss from "@gui-chat-plugin/markdown/style.css?inline";
+import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
@@ -31,9 +32,12 @@ interface Registration {
 // Adding a package is one import + one entry here, until a dynamic (HTTP-bundle)
 // loader lands — the packages are npm deps, so Vite bundles them at build time.
 const PACKAGES: Record<string, Registration> = {
-  "@gui-chat-plugin/markdown": {
+  "@mulmoclaude/markdown-plugin": {
     toolName: markdownPlugin.toolDefinition.name,
-    viewComponent: markdownPlugin.viewComponent as Component,
+    // The package View uses useRuntime() (dispatch/pubsub/locale/openUrl), so wrap
+    // it in MulmoTerminal's runtime provider. scope "markdown" matches the server's
+    // file-change forward channel; dispatch targets the presentDocument route.
+    viewComponent: wrapWithPluginRuntime("markdown", markdownPlugin.toolDefinition.name, markdownPlugin.viewComponent as unknown as Component),
     css: markdownCss,
   },
   "@mulmoclaude/form-plugin": {

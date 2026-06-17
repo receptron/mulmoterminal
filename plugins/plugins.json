@@ -1,6 +1,6 @@
 {
   "packages": [
-    "@gui-chat-plugin/markdown",
+    "@mulmoclaude/markdown-plugin",
     "@mulmoclaude/form-plugin",
     "@mulmochat-plugin/generate-image"
   ],

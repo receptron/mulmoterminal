@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
+import { initMarkdownBackend } from "./backends/markdown.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -659,6 +660,11 @@ app.get("/api/sessions", async (_req, res) => {
 
 const server = http.createServer(app);
 pubsub = createPubSub(server, isAllowedOrigin);
+
+// Give the markdown host app its workspace (for artifacts/documents storage) +
+// pubsub (to forward file-change events to the plugin-scoped channel so the
+// presentDocument view live-refreshes). Done after pubsub exists (task #6).
+initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
