@@ -110,17 +110,9 @@ const hasContent = computed(() => results.value.length > 0);
 <template>
   <section class="gui-panel">
     <div class="header">
-      <span class="title">GUI</span>
-      <button
-        type="button"
-        class="gear"
-        :class="{ active: toolsOpen }"
-        title="Tools & tool-call history"
-        aria-label="Toggle tools pane"
-        :aria-pressed="toolsOpen ? 'true' : 'false'"
-        @click="emit('toggleTools')"
-      >
-        ⚙
+      <span class="title">Canvas</span>
+      <button v-if="!toolsOpen" type="button" class="gear" title="Tools & tool-call history" aria-label="Open tools pane" @click="emit('toggleTools')">
+        <span class="material-symbols-outlined">build</span>
       </button>
     </div>
     <div class="content">
@@ -178,9 +170,6 @@ const hasContent = computed(() => results.value.length > 0);
 }
 .gear:hover {
   color: #e0e0e0;
-}
-.gear.active {
-  color: #4a8cff;
 }
 
 .content {

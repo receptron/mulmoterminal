@@ -33,12 +33,16 @@ const visibleSessions = computed(() => {
 
 <template>
   <div class="tabbar">
-    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">+</button>
+    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">
+      <span class="material-symbols-outlined">add</span>
+    </button>
 
     <div class="filters">
       <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
       <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
-      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">⟳</button>
+      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
     </div>
 
     <div class="tabs">
@@ -57,7 +61,9 @@ const visibleSessions = computed(() => {
     </div>
 
     <div class="actions">
-      <button class="icon-btn" title="Switch to vertical sidebar" aria-label="Switch to vertical sidebar" @click="emit('toggle-layout')">⇤</button>
+      <button class="icon-btn" title="Switch to vertical sidebar" aria-label="Switch to vertical sidebar" @click="emit('toggle-layout')">
+        <span class="material-symbols-outlined">dock_to_right</span>
+      </button>
     </div>
   </div>
 </template>

@@ -40,15 +40,19 @@ function relativeTime(ms: number): string {
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
-      <button class="icon-btn" title="Switch to horizontal tabs" aria-label="Switch to horizontal tabs" @click="emit('toggle-layout')">⇥</button>
+      <button class="icon-btn" title="Switch to horizontal tabs" aria-label="Switch to horizontal tabs" @click="emit('toggle-layout')">
+        <span class="material-symbols-outlined">toolbar</span>
+      </button>
     </div>
 
-    <button class="new-btn" @click="emit('new')">+ New session</button>
+    <button class="new-btn" @click="emit('new')"><span class="material-symbols-outlined">add</span> New session</button>
 
     <div class="filters">
       <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
       <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
-      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">⟳</button>
+      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
     </div>
 
     <div v-if="loading" class="state">Loading…</div>
@@ -99,7 +103,6 @@ function relativeTime(ms: number): string {
 .heading {
   font-size: 13px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #9aa5c4;
 }
@@ -117,6 +120,10 @@ function relativeTime(ms: number): string {
 }
 
 .new-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin: 0 12px 8px;
   padding: 8px;
   background: #1b3a6b;
@@ -125,6 +132,9 @@ function relativeTime(ms: number): string {
   border-radius: 6px;
   font-size: 13px;
   cursor: pointer;
+}
+.new-btn .material-symbols-outlined {
+  font-size: 18px;
 }
 .new-btn:hover {
   background: #224a86;

@@ -2452,14 +2452,9 @@ glob@^10.4.2:
     package-json-from-dist "^1.0.0"
     path-scurry "^1.11.1"
 
-globals@^17.4.0:
+globals@^17.4.0, globals@^17.6.0:
   version "17.6.0"
   resolved "https://registry.yarnpkg.com/globals/-/globals-17.6.0.tgz#0f0be018d5cca8690e6375ead1f65c4bb96191fc"
-  integrity sha512-sepffkT8stwnIYbsMBpoCHJuJM5l98FUF2AnE07hfvE0m/qp3R586hw4jF4uadbhvg1ooIdzuu7CsfD2jzCaNA==
-
-globals@^17.6.0:
-  version "17.6.0"
-  resolved "https://npm.flatt.tech/globals/-/globals-17.6.0.tgz#0f0be018d5cca8690e6375ead1f65c4bb96191fc"
   integrity sha512-sepffkT8stwnIYbsMBpoCHJuJM5l98FUF2AnE07hfvE0m/qp3R586hw4jF4uadbhvg1ooIdzuu7CsfD2jzCaNA==
 
 google-auth-library@^10.3.0:
@@ -2948,6 +2943,11 @@ marked@^18.0.5:
   version "18.0.5"
   resolved "https://registry.yarnpkg.com/marked/-/marked-18.0.5.tgz#c229c0ac6ad1e275ae8e5037c6168f76d2f42e61"
   integrity sha512-S6GcvALHg6K4ohtu4E7x0a1AqhAjp6cV8KhLSyN9qVapnzJkusVBxZRcIU9AeYsbe6P1hKDusSbEOzGyyuce6w==
+
+material-symbols@^0.45.1:
+  version "0.45.1"
+  resolved "https://registry.yarnpkg.com/material-symbols/-/material-symbols-0.45.1.tgz#1d763e8d47cbc126435a52017d6a7a8a763fd1bd"
+  integrity sha512-iQibeoKymxHthNqTjYg/jCN2pRySFQ+DAD0sYK9FS7rUpf38i1qR3N4I1jfi/bLS5qdEKvkkJAvf2mE89amSZw==
 
 math-intrinsics@^1.1.0:
   version "1.1.0"

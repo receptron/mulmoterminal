@@ -142,7 +142,7 @@ onUnmounted(() => {
 <template>
   <div class="terminal-wrapper">
     <div class="header">
-      <span class="title">mulmoterminal</span>
+      <span class="title">Terminal</span>
       <span :class="['status', status]">{{ status }}</span>
     </div>
     <div ref="terminalRef" class="terminal-container" />

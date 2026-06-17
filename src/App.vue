@@ -134,62 +134,94 @@ function onSession(id: string) {
 </script>
 
 <template>
-  <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
-    <Sidebar
-      v-if="layout === 'vertical'"
-      v-model:filter="filter"
-      :sessions="sessions"
-      :loading="loading"
-      :error="error"
-      :active-id="activeId"
-      @select="selectSession"
-      @new="newSession"
-      @toggle-layout="toggleLayout"
-      @refresh="refresh"
-    />
-    <SessionTabBar
-      v-else
-      v-model:filter="filter"
-      :sessions="sessions"
-      :active-id="activeId"
-      @select="selectSession"
-      @new="newSession"
-      @toggle-layout="toggleLayout"
-      @refresh="refresh"
-    />
-    <div class="main">
-      <TerminalView
-        ref="terminalRef"
-        class="terminal-pane"
-        :style="{ flex: `0 0 ${terminalWidth}px` }"
-        :session-id="activeId"
-        :connect-key="connectKey"
-        @session="onSession"
+  <div class="shell">
+    <header class="toolbar">
+      <span class="toolbar-title">MulmoTerminal</span>
+    </header>
+    <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
+      <Sidebar
+        v-if="layout === 'vertical'"
+        v-model:filter="filter"
+        :sessions="sessions"
+        :loading="loading"
+        :error="error"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
       />
-      <div
-        class="splitter"
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        aria-label="Resize terminal"
-        :aria-valuenow="terminalWidth"
-        :aria-valuemin="MIN_TERMINAL"
-        :aria-valuemax="maxTerminal"
-        title="Drag (or use arrow keys) to resize the terminal"
-        @mousedown="startDrag"
-        @keydown="onSplitterKey"
+      <SessionTabBar
+        v-else
+        v-model:filter="filter"
+        :sessions="sessions"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
       />
-      <GuiPanel :session-id="activeId" :send-text-message="sendTextMessage" :tools-open="showTools" @toggle-tools="toggleTools" />
-      <ToolsPane v-if="showTools" :session-id="activeId" />
+      <div class="main">
+        <TerminalView
+          ref="terminalRef"
+          class="terminal-pane"
+          :style="{ flex: `0 0 ${terminalWidth}px` }"
+          :session-id="activeId"
+          :connect-key="connectKey"
+          @session="onSession"
+        />
+        <div
+          class="splitter"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-label="Resize terminal"
+          :aria-valuenow="terminalWidth"
+          :aria-valuemin="MIN_TERMINAL"
+          :aria-valuemax="maxTerminal"
+          title="Drag (or use arrow keys) to resize the terminal"
+          @mousedown="startDrag"
+          @keydown="onSplitterKey"
+        />
+        <GuiPanel :session-id="activeId" :send-text-message="sendTextMessage" :tools-open="showTools" @toggle-tools="toggleTools" />
+        <ToolsPane v-if="showTools" :session-id="activeId" @close="toggleTools" />
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.app {
+.shell {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
+}
+
+/* Top toolbar with the app title. */
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 16px;
+  background: #16213e;
+  border-bottom: 1px solid #2a2a4e;
+}
+.toolbar-title {
+  font-family: system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  color: #e6e6f0;
+  letter-spacing: 0.02em;
+}
+
+.app {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
   overflow: hidden;
 }
 
