@@ -42,10 +42,7 @@ interface ToolEnvelope {
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
-const server = new Server(
-  { name: "mulmoterminal-gui", version: "0.0.0" },
-  { capabilities: { tools: {} } }
-);
+const server = new Server({ name: "mulmoterminal-gui", version: "0.0.0" }, { capabilities: { tools: {} } });
 
 async function postJson(url: string, body: unknown) {
   const res = await fetch(url, {

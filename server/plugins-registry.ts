@@ -62,10 +62,7 @@ async function loadPackage(name: string) {
 async function loadLocal(name: string) {
   const dir = path.join(PLUGINS_DIR, name);
   const importJs = (file: string) => import(pathToFileURL(path.join(dir, file)).href);
-  const [{ TOOL_DEFINITION }, { execute }] = await Promise.all([
-    importJs("definition.js"),
-    importJs("server.js"),
-  ]);
+  const [{ TOOL_DEFINITION }, { execute }] = await Promise.all([importJs("definition.js"), importJs("server.js")]);
   if (!TOOL_DEFINITION || typeof execute !== "function") {
     throw new Error(`Local plugin "${name}" must export TOOL_DEFINITION and execute().`);
   }
@@ -74,10 +71,7 @@ async function loadLocal(name: string) {
 
 const config = loadConfig();
 // Top-level await: the loaded set is ready by the time importers use it.
-export const plugins = [
-  ...(await Promise.all(config.packages.map(loadPackage))),
-  ...(await Promise.all(config.local.map(loadLocal))),
-];
+export const plugins = [...(await Promise.all(config.packages.map(loadPackage))), ...(await Promise.all(config.local.map(loadLocal)))];
 
 const byName = Object.fromEntries(plugins.map((p) => [p.toolName, p]));
 

@@ -72,7 +72,7 @@ watch(
     else results.value = [];
     subscribeTo(id);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onUnmounted(() => unsubscribe?.());

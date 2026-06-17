@@ -10,11 +10,7 @@ function row(over: Partial<Session> & { id: string }): Session {
   return { title: over.id, mtime: 1, working: false, waiting: false, ...over };
 }
 
-function mountSidebar(over: {
-  sessions: Session[];
-  activeId?: string | null;
-  filter?: Filter;
-}) {
+function mountSidebar(over: { sessions: Session[]; activeId?: string | null; filter?: Filter }) {
   return mount(Sidebar, {
     props: {
       sessions: over.sessions,

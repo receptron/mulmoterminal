@@ -1,7 +1,10 @@
 import js from "@eslint/js";
+import globals from "globals";
 import tseslint from "typescript-eslint";
 import pluginVue from "eslint-plugin-vue";
 import sonarjs from "eslint-plugin-sonarjs";
+import security from "eslint-plugin-security";
+import prettierRecommended from "eslint-plugin-prettier/recommended";
 
 export default [
   { ignores: ["dist/", "node_modules/"] },
@@ -9,6 +12,7 @@ export default [
   ...tseslint.configs.strict,
   ...pluginVue.configs["flat/recommended"],
   sonarjs.configs.recommended,
+  security.configs.recommended,
   {
     files: ["**/*.vue"],
     languageOptions: {
@@ -16,17 +20,7 @@ export default [
         parser: tseslint.parser,
       },
       globals: {
-        HTMLDivElement: "readonly",
-        WebSocket: "readonly",
-        ResizeObserver: "readonly",
-        MouseEvent: "readonly",
-        KeyboardEvent: "readonly",
-        window: "readonly",
-        document: "readonly",
-        location: "readonly",
-        localStorage: "readonly",
-        setTimeout: "readonly",
-        fetch: "readonly",
+        ...globals.browser,
       },
     },
     rules: {
@@ -38,13 +32,20 @@ export default [
     files: ["server/**/*.js", "bin/**/*.js"],
     languageOptions: {
       globals: {
-        console: "readonly",
-        process: "readonly",
-        URL: "readonly",
-        fetch: "readonly",
-        setTimeout: "readonly",
-        clearTimeout: "readonly",
+        ...globals.node,
       },
     },
   },
+  {
+    // eslint-plugin-security tuning (mirrors mulmoclaude): these three rules fire
+    // on safe, intentional patterns here — workspace-relative fs paths (session
+    // files keyed by validated UUIDs), dynamic `obj[key]` lookups, and regexps —
+    // so they're high-noise, low-signal. The rest of `recommended` stays on.
+    rules: {
+      "security/detect-non-literal-fs-filename": "off",
+      "security/detect-object-injection": "off",
+      "security/detect-non-literal-regexp": "off",
+    },
+  },
+  prettierRecommended,
 ];

@@ -23,9 +23,7 @@ const emit = defineEmits<{
 // mulmoclaude calls "unread" — render it bold and let the user filter to just
 // those rows.
 const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).length);
-const visibleSessions = computed(() =>
-  props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions
-);
+const visibleSessions = computed(() => (props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions));
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -42,54 +40,23 @@ function relativeTime(ms: number): string {
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
-      <button
-        class="icon-btn"
-        title="Switch to horizontal tabs"
-        aria-label="Switch to horizontal tabs"
-        @click="emit('toggle-layout')"
-      >
-        ⇥
-      </button>
+      <button class="icon-btn" title="Switch to horizontal tabs" aria-label="Switch to horizontal tabs" @click="emit('toggle-layout')">⇥</button>
     </div>
 
-    <button class="new-btn" @click="emit('new')">
-      + New session
-    </button>
+    <button class="new-btn" @click="emit('new')">+ New session</button>
 
     <div class="filters">
-      <FilterChip
-        label="All"
-        :active="filter === 'all'"
-        @click="emit('update:filter', 'all')"
-      />
-      <FilterChip
-        label="Unread"
-        :count="unreadCount"
-        :active="filter === 'unread'"
-        @click="emit('update:filter', 'unread')"
-      />
-      <button
-        class="icon-btn sort-btn"
-        title="Sort by most recent"
-        aria-label="Sort by most recent"
-        @click="emit('refresh')"
-      >
-        ⟳
-      </button>
+      <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
+      <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
+      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">⟳</button>
     </div>
 
-    <div v-if="loading" class="state">
-      Loading…
-    </div>
+    <div v-if="loading" class="state">Loading…</div>
     <div v-else-if="error" class="state error">
       {{ error }}
     </div>
-    <div v-else-if="sessions.length === 0" class="state">
-      No sessions yet
-    </div>
-    <div v-else-if="visibleSessions.length === 0" class="state">
-      No unread sessions
-    </div>
+    <div v-else-if="sessions.length === 0" class="state">No sessions yet</div>
+    <div v-else-if="visibleSessions.length === 0" class="state">No unread sessions</div>
 
     <ul v-else class="list">
       <li
@@ -100,12 +67,7 @@ function relativeTime(ms: number): string {
         @click="emit('select', s.id)"
       >
         <span class="item-title">
-          <span
-            v-if="s.working && !s.waiting && s.id !== props.activeId"
-            class="spinner"
-            title="Claude is working"
-            aria-label="Claude is working"
-          />
+          <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
           {{ s.title }}
         </span>
         <span class="item-time">{{ relativeTime(s.mtime) }}</span>

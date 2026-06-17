@@ -50,7 +50,7 @@ describe("ToolsPane", () => {
             { toolUseId: "t2", toolName: "Read", status: "running", at: 2 },
             { toolUseId: "t3", toolName: "Edit", status: "failed", at: 3, toolOutput: "boom" },
           ],
-        })
+        }),
       );
     });
 
@@ -89,9 +89,7 @@ describe("ToolsPane", () => {
       if (url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ tools: [] }));
       if (url.includes("/api/tool-calls/a")) {
         // Session A's history stays pending until we release the gate.
-        return aGate.promise.then(() =>
-          jsonRes({ toolCalls: [{ toolUseId: "old", toolName: "OldTool", status: "completed", at: 1 }] })
-        );
+        return aGate.promise.then(() => jsonRes({ toolCalls: [{ toolUseId: "old", toolName: "OldTool", status: "completed", at: 1 }] }));
       }
       return Promise.resolve(jsonRes({ toolCalls: [{ toolUseId: "new", toolName: "NewTool", status: "completed", at: 2 }] }));
     });

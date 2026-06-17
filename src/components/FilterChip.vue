@@ -10,15 +10,8 @@ defineEmits<{ (e: "click"): void }>();
 </script>
 
 <template>
-  <button
-    type="button"
-    :aria-pressed="active"
-    :class="['chip', { active }]"
-    @click="$emit('click')"
-  >
-    {{ label }}<template v-if="count !== undefined">
-      ({{ count }})
-    </template>
+  <button type="button" :aria-pressed="active" :class="['chip', { active }]" @click="$emit('click')">
+    {{ label }}<template v-if="count !== undefined"> ({{ count }}) </template>
   </button>
 </template>
 
@@ -34,7 +27,10 @@ defineEmits<{ (e: "click"): void }>();
   background: #1b2647;
   color: #9aa5c4;
   cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
+  transition:
+    background 0.12s,
+    color 0.12s,
+    border-color 0.12s;
 }
 .chip:hover {
   background: #224a86;

@@ -140,12 +140,21 @@ div.marpit > svg > foreignObject > section img:not([data-marp-twemoji]){max-widt
 </style></head><body>${html}</body></html>`;
         await page.setViewport({ width: slideWidth, height: slideHeight });
         await page.setContent(fullHtml, { waitUntil: "load" });
-        pdf = await page.pdf({ width: `${slideWidth}px`, height: `${slideHeight}px`, margin: { top: "0", bottom: "0", left: "0", right: "0" }, printBackground: true });
+        pdf = await page.pdf({
+          width: `${slideWidth}px`,
+          height: `${slideHeight}px`,
+          margin: { top: "0", bottom: "0", left: "0", right: "0" },
+          printBackground: true,
+        });
       } else {
         const body = await marked.parse(options.markdown);
         const fullHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><style>${MARKDOWN_PDF_CSS}</style></head><body>${body}</body></html>`;
         await page.setContent(fullHtml, { waitUntil: "load" });
-        pdf = await page.pdf({ format: options.format === "A4" ? "A4" : "Letter", margin: { top: "16mm", bottom: "16mm", left: "16mm", right: "16mm" }, printBackground: true });
+        pdf = await page.pdf({
+          format: options.format === "A4" ? "A4" : "Letter",
+          margin: { top: "16mm", bottom: "16mm", left: "16mm", right: "16mm" },
+          printBackground: true,
+        });
       }
       return { pdfBase64: Buffer.from(pdf).toString("base64") };
     } finally {

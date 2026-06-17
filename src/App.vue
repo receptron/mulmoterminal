@@ -92,9 +92,7 @@ onUnmounted(() => {
 // SessionTabBar), mirroring mulmoclaude's two history layouts. Persisted across
 // reloads like the tools pane.
 type Layout = "vertical" | "horizontal";
-const layout = ref<Layout>(
-  localStorage.getItem("session_layout") === "horizontal" ? "horizontal" : "vertical"
-);
+const layout = ref<Layout>(localStorage.getItem("session_layout") === "horizontal" ? "horizontal" : "vertical");
 watch(layout, (v) => localStorage.setItem("session_layout", v));
 function toggleLayout() {
   layout.value = layout.value === "vertical" ? "horizontal" : "vertical";
@@ -181,12 +179,7 @@ function onSession(id: string) {
         @mousedown="startDrag"
         @keydown="onSplitterKey"
       />
-      <GuiPanel
-        :session-id="activeId"
-        :send-text-message="sendTextMessage"
-        :tools-open="showTools"
-        @toggle-tools="toggleTools"
-      />
+      <GuiPanel :session-id="activeId" :send-text-message="sendTextMessage" :tools-open="showTools" @toggle-tools="toggleTools" />
       <ToolsPane v-if="showTools" :session-id="activeId" />
     </div>
   </div>

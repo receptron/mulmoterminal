@@ -23,9 +23,7 @@ export function mergeStable(prev: Session[], incoming: Session[], resort: boolea
   if (resort || prev.length === 0) return incoming;
   const incomingById = new Map(incoming.map((s) => [s.id, s]));
   const prevIds = new Set(prev.map((s) => s.id));
-  const kept = prev
-    .filter((s) => incomingById.has(s.id))
-    .map((s) => incomingById.get(s.id) as Session);
+  const kept = prev.filter((s) => incomingById.has(s.id)).map((s) => incomingById.get(s.id) as Session);
   const added = incoming.filter((s) => !prevIds.has(s.id));
   return [...added, ...kept];
 }

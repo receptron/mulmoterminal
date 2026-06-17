@@ -88,7 +88,7 @@ watch(
     else toolCalls.value = [];
     subscribeTo(id);
   },
-  { immediate: true }
+  { immediate: true },
 );
 
 onUnmounted(() => unsubscribe?.());
@@ -150,12 +150,8 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
     <div class="content">
       <!-- Available tools -->
       <div class="section">
-        <div class="section-title">
-          Available Tools
-        </div>
-        <div v-if="availableTools.length === 0" class="muted">
-          No GUI plugin tools enabled.
-        </div>
+        <div class="section-title">Available Tools</div>
+        <div v-if="availableTools.length === 0" class="muted">No GUI plugin tools enabled.</div>
         <div v-for="tool in availableTools" :key="tool.toolName" class="tool">
           <button class="tool-head" type="button" @click="toggleTool(tool.toolName)">
             <code class="tool-name">{{ tool.toolName }}</code>
@@ -182,9 +178,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
             {{ historyCopied ? "✓ Copied" : "Copy all" }}
           </button>
         </div>
-        <div v-if="toolCalls.length === 0" class="muted">
-          No tool calls yet.
-        </div>
+        <div v-if="toolCalls.length === 0" class="muted">No tool calls yet.</div>
         <div v-for="(call, i) in toolCalls" :key="callKey(call, i)" class="call">
           <button class="call-head" type="button" @click="toggleCall(callKey(call, i))">
             <code class="call-name">{{ call.toolName }}</code>
@@ -196,19 +190,15 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
             </span>
           </button>
           <div v-if="expandedCalls.has(callKey(call, i))" class="call-body">
-            <div class="label">
-              arguments
-            </div>
+            <div class="label">arguments</div>
             <pre class="block">{{ formatValue(call.toolInput) }}</pre>
             <template v-if="call.status === 'completed' || call.status === 'failed'">
               <div class="label">
-                {{ call.status === 'failed' ? 'error' : 'result' }}
+                {{ call.status === "failed" ? "error" : "result" }}
               </div>
               <pre class="block" :class="call.status === 'failed' ? 'error' : 'result'">{{ formatValue(call.toolOutput) || "(no output)" }}</pre>
             </template>
-            <div v-else class="muted italic">
-              Waiting for result…
-            </div>
+            <div v-else class="muted italic">Waiting for result…</div>
           </div>
         </div>
       </div>

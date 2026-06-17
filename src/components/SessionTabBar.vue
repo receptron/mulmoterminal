@@ -33,30 +33,12 @@ const visibleSessions = computed(() => {
 
 <template>
   <div class="tabbar">
-    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">
-      +
-    </button>
+    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">+</button>
 
     <div class="filters">
-      <FilterChip
-        label="All"
-        :active="filter === 'all'"
-        @click="emit('update:filter', 'all')"
-      />
-      <FilterChip
-        label="Unread"
-        :count="unreadCount"
-        :active="filter === 'unread'"
-        @click="emit('update:filter', 'unread')"
-      />
-      <button
-        class="icon-btn sort-btn"
-        title="Sort by most recent"
-        aria-label="Sort by most recent"
-        @click="emit('refresh')"
-      >
-        ⟳
-      </button>
+      <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
+      <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
+      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">⟳</button>
     </div>
 
     <div class="tabs">
@@ -68,30 +50,14 @@ const visibleSessions = computed(() => {
         :aria-current="s.id === props.activeId ? 'page' : undefined"
         @click="emit('select', s.id)"
       >
-        <span
-          v-if="s.working && !s.waiting && s.id !== props.activeId"
-          class="spinner"
-          title="Claude is working"
-          aria-label="Claude is working"
-        />
+        <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
         <span class="tab-title">{{ s.title }}</span>
-        <span
-          v-if="s.waiting && s.id !== props.activeId"
-          class="unread-dot"
-          aria-label="Unread"
-        />
+        <span v-if="s.waiting && s.id !== props.activeId" class="unread-dot" aria-label="Unread" />
       </button>
     </div>
 
     <div class="actions">
-      <button
-        class="icon-btn"
-        title="Switch to vertical sidebar"
-        aria-label="Switch to vertical sidebar"
-        @click="emit('toggle-layout')"
-      >
-        ⇤
-      </button>
+      <button class="icon-btn" title="Switch to vertical sidebar" aria-label="Switch to vertical sidebar" @click="emit('toggle-layout')">⇤</button>
     </div>
   </div>
 </template>

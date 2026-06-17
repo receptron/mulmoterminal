@@ -107,7 +107,7 @@ watch(
   () => {
     connect();
     term.focus();
-  }
+  },
 );
 
 // Submit a GUI-originated message into the PTY (same channel as keyboard input).
