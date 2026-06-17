@@ -12,6 +12,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
 import { buildGuiMcpServer } from "./mcp/broker.js";
+import { isDockerAvailable, ensureSandboxImage } from "./system/docker.js";
+import { buildSandboxDockerArgs } from "./system/sandbox.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
@@ -95,6 +97,15 @@ const CLAUDE_CWD =
 // CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
 // session state, so it must exist before we spawn anything into it.
 await fs.mkdir(CLAUDE_CWD, { recursive: true });
+
+// Whether sessions run inside the Docker sandbox. Resolved once at startup (see
+// the init block before server.listen); read synchronously by spawnClaudePty.
+let SANDBOX = false;
+
+// Per-session bearer token guarding /mcp/:sessionId. The endpoint is reachable
+// from the sandbox container (via host.docker.internal), so we require a token
+// that only this session's claude (configured via mcpConfigJson) knows.
+const mcpTokens = new Map<string, string>();
 
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
@@ -315,6 +326,7 @@ function reap(id: string) {
   const entry = ptys.get(id);
   if (!entry) return; // already reaped
   ptys.delete(id);
+  mcpTokens.delete(id);
   // An unpersisted new session vanishes with its pty; a persisted one stays
   // visible via its on-disk record.
   knownSessions.delete(id);
@@ -375,9 +387,11 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
 // per-session tool-call history that the GUI's tools pane shows. A failed tool
 // fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
 // entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson() {
+// `host` is 127.0.0.1 on the host path and host.docker.internal when sandboxed,
+// so the hook curl (which runs wherever claude runs) reaches the host server.
+function hookSettingsJson(host: string) {
   const cmd =
-    `curl -s -X POST http://localhost:${PORT}/api/hook ` +
+    `curl -s -X POST http://${host}:${PORT}/api/hook ` +
     `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
   // Tool hooks take a matcher; "" matches all tools.
@@ -397,15 +411,16 @@ function hookSettingsJson() {
 // MCP config injected via `claude --mcp-config <json>`. Points claude at the
 // in-process GUI MCP server served over Streamable HTTP. The session id rides in
 // the URL path (the MCP server is otherwise stateless), so no env or subprocess is
-// needed — the agent just makes an HTTP call back to this server. Using
-// 127.0.0.1 (not localhost) avoids an IPv6/IPv4 resolution mismatch against the
-// server's listen address.
-function mcpConfigJson(sessionId: string) {
+// needed — the agent just makes an HTTP call back to this server. `host` is
+// 127.0.0.1 on the host (avoids an IPv6/IPv4 mismatch vs the listen address) or
+// host.docker.internal from the sandbox. `token` is checked by the /mcp route.
+function mcpConfigJson(sessionId: string, host: string, token: string) {
   return JSON.stringify({
     mcpServers: {
       "mulmoterminal-gui": {
         type: "http",
-        url: `http://127.0.0.1:${PORT}/mcp/${sessionId}`,
+        url: `http://${host}:${PORT}/mcp/${sessionId}`,
+        headers: { "x-mt-token": token },
       },
     },
   });
@@ -521,6 +536,15 @@ app.post("/mcp/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   if (!SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
+  }
+  // The endpoint is reachable from the sandbox container, so require the
+  // per-session token minted in spawnClaudePty (and sent by claude via the
+  // x-mt-token header). The token is a 128-bit random UUID, so a plain
+  // comparison is sufficient.
+  const expected = mcpTokens.get(sessionId);
+  const provided = req.header("x-mt-token");
+  if (!expected || provided !== expected) {
+    return res.status(401).json({ error: "unauthorized" });
   }
   const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -793,14 +817,25 @@ function spawnClaudePty(
   ws: WebSocket | null,
   initialPrompt?: string,
 ): PtyEntry {
-  const settings = hookSettingsJson();
-  // Register the GUI MCP broker and auto-allow its tools so the plugin tools run
+  // When sandboxed, claude runs inside the container and reaches the host's GUI
+  // MCP server + activity hooks via host.docker.internal; otherwise it's a host
+  // loopback call. A per-session token guards /mcp/:sessionId (now reachable from
+  // the container). Both are minted here, before the args that reference them.
+  const host = SANDBOX ? "host.docker.internal" : "127.0.0.1";
+  const mcpToken = randomUUID();
+  mcpTokens.set(sessionId, mcpToken);
+
+  const settings = hookSettingsJson(host);
+  // Register the GUI MCP server and auto-allow its tools so the plugin tools run
   // without a permission prompt (--strict-mcp-config keeps the user's other MCP
-  // servers out of the spike).
-  const mcp = mcpConfigJson(sessionId);
+  // servers out — they'd be stdio commands absent from the sandbox image anyway).
+  const mcp = mcpConfigJson(sessionId, host, mcpToken);
+  // Inside the sandbox claude gets full, unprompted access to every tool (built-in
+  // AND MCP) — Docker is the safety boundary, so we don't gate on permissions.
+  // On the host we keep the configured permission mode.
   const guiArgs = [
     "--permission-mode",
-    CLAUDE_PERMISSION_MODE,
+    SANDBOX ? "bypassPermissions" : CLAUDE_PERMISSION_MODE,
     "--mcp-config",
     mcp,
     "--strict-mcp-config",
@@ -815,16 +850,22 @@ function spawnClaudePty(
   // can't be reinterpreted as a flag.
   const args = initialPrompt ? [...baseArgs, "--", initialPrompt] : baseArgs;
 
-  console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId})`);
+  console.log(`[ws] client connected (${resume ? "resume" : "new"} ${sessionId}${SANDBOX ? " [sandbox]" : ""})`);
 
-  const term = pty.spawn(CLAUDE_BIN, args, {
+  // Sandbox: wrap the claude argv in `docker run` and let node-pty drive the
+  // container's TTY. Host: spawn claude directly. Either way the PTY I/O,
+  // resize, and exit wiring below is identical.
+  const [bin, spawnArgs] = SANDBOX
+    ? (["docker", buildSandboxDockerArgs({ workspacePath: CLAUDE_CWD, claudeArgs: args, uid: process.getuid?.() ?? 1000, gid: process.getgid?.() ?? 1000 })] as const)
+    : ([CLAUDE_BIN, args] as const);
+  const term = pty.spawn(bin, spawnArgs, {
     name: "xterm-256color",
     cols: 120,
     rows: 30,
     cwd: CLAUDE_CWD,
     env: process.env,
   });
-  console.log(`[pty] spawned claude (pid=${term.pid})`);
+  console.log(`[pty] spawned ${SANDBOX ? "docker/claude" : "claude"} (pid=${term.pid})`);
 
   const entry: PtyEntry = { term, ws, buffer: "" };
   ptys.set(sessionId, entry);
@@ -933,6 +974,24 @@ wss.on("connection", (ws, req) => {
   ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
   ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
+
+// Resolve the sandbox once at startup: if Docker is reachable (and not disabled),
+// every session runs inside the mulmoterminal-sandbox image. The first build can
+// take a few minutes; subsequent boots reuse the cached image unless
+// Dockerfile.sandbox changed. A build failure falls back to the host path rather
+// than blocking startup.
+SANDBOX = await isDockerAvailable();
+if (SANDBOX) {
+  try {
+    await ensureSandboxImage();
+    console.log("[sandbox] Docker available — sessions run sandboxed");
+  } catch (err) {
+    SANDBOX = false;
+    console.warn("[sandbox] image build failed — falling back to host claude:", err);
+  }
+} else {
+  console.log("[sandbox] Docker not available — claude runs on the host (set DISABLE_SANDBOX=1 to force this)");
+}
 
 server.listen(PORT, () => {
   console.log(`mulmoterminal running at http://localhost:${PORT}`);

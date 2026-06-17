@@ -1,0 +1,4 @@
+# The sandbox image only COPYs sandbox-entrypoint.sh — keep the build
+# context tiny so `docker build` doesn't hash/upload the whole repo.
+*
+!sandbox-entrypoint.sh

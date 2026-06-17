@@ -1,0 +1,84 @@
+FROM node:22-slim
+
+# Sandbox tool set for the MulmoTerminal agent. Mirrors mulmoclaude's
+# Dockerfile.sandbox so the agent has the same capabilities. Grouped
+# into layers by purpose so the rationale is obvious from the diff:
+#
+# 1. Core CLI — read local git history, fetch over HTTP, pipeline JSON,
+#    run Makefile-driven workspaces, handle archives, query SQLite.
+#    `ca-certificates` is needed because `node:22-slim` ships without
+#    a trust store. `ripgrep` backs Claude's grep tool. `curl` also
+#    carries the activity/tool-history hooks back to the host server.
+# 2. Data analysis + plotting — Python with pandas/numpy/matplotlib
+#    and `requests`. Graphviz for diagrams, ImageMagick for raster ops.
+# 3. Document + media conversion — pandoc (Markdown <-> PDF/DOCX/...),
+#    ffmpeg (audio/video), poppler-utils (PDF extraction), and
+#    LibreOffice headless (server-side PPTX/DOCX -> PDF).
+# 4. Small extras — `tree`, `bc`, `less`.
+#
+# Unlike mulmoclaude we do NOT install `tsx`: the GUI MCP broker runs on
+# the host (reached over HTTP), so no TypeScript is executed in-container.
+
+# Layer 1: core CLI + SSH client (for future SSH agent forwarding)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git \
+      curl \
+      jq \
+      make \
+      ca-certificates \
+      openssh-client \
+      sqlite3 \
+      zip \
+      unzip \
+      ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer 1b: GitHub CLI. Installed from the official apt repo.
+RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+      -o /usr/share/keyrings/githubcli-archive-keyring.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
+      > /etc/apt/sources.list.d/github-cli.list \
+    && apt-get update && apt-get install -y --no-install-recommends gh \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer 2: data analysis + plotting
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 \
+      python3-pip \
+      graphviz \
+      imagemagick \
+    && rm -rf /var/lib/apt/lists/* \
+ && pip3 install --no-cache-dir --break-system-packages \
+      pandas \
+      numpy \
+      matplotlib \
+      requests
+
+# Layer 3: document + media conversion
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      pandoc \
+      ffmpeg \
+      poppler-utils \
+      libreoffice-core \
+      libreoffice-impress \
+      libreoffice-writer \
+    && rm -rf /var/lib/apt/lists/*
+
+# Layer 4: small extras
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      tree \
+      bc \
+      less \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN npm install -g @anthropic-ai/claude-code
+
+COPY sandbox-entrypoint.sh /sandbox-entrypoint.sh
+RUN chmod +x /sandbox-entrypoint.sh
+
+# No `USER node` — when SSH agent forwarding is added, the entrypoint
+# starts as root to fix /etc/passwd + socket perms, then drops to the
+# host UID:GID. In the default (--user uid:gid) path the entrypoint just
+# execs the command.
+WORKDIR /home/node
+ENTRYPOINT ["/sandbox-entrypoint.sh"]
