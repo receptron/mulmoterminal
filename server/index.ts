@@ -522,6 +522,13 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   });
 });
 
+// Server status for the UI toolbar. `sandbox` reflects whether sessions run
+// inside the Docker container (resolved at startup); the toolbar shows a locked
+// vs unlocked icon from it.
+app.get("/api/status", (_req, res) => {
+  res.json({ sandbox: SANDBOX });
+});
+
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);

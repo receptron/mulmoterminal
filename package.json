@@ -60,6 +60,7 @@
     "gui-chat-protocol": "0.3.3",
     "js-yaml": "^4.1.0",
     "marked": "^18.0.5",
+    "material-symbols": "^0.44.8",
     "node-pty": "^1.1.0",
     "puppeteer": "^24.8.1",
     "socket.io": "^4.8.3",

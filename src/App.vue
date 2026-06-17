@@ -100,6 +100,19 @@ function toggleLayout() {
   layout.value = layout.value === "vertical" ? "horizontal" : "vertical";
 }
 
+// Whether the server runs claude inside the Docker sandbox. Drives the toolbar's
+// lock (sandboxed) vs unlock (running on the host) icon. `null` until the status
+// fetch resolves, so the icon doesn't flash the wrong state on first paint.
+const sandbox = ref<boolean | null>(null);
+onMounted(async () => {
+  try {
+    const res = await fetch("/api/status");
+    if (res.ok) sandbox.value = !!(await res.json()).sandbox;
+  } catch {
+    // Leave sandbox null on failure — the toolbar simply omits the icon.
+  }
+});
+
 // Tools pane visibility, persisted across reloads (mirrors MulmoClaude's
 // right-sidebar toggle).
 const showTools = ref(localStorage.getItem("tools_pane_visible") === "true");
@@ -136,67 +149,130 @@ function onSession(id: string) {
 </script>
 
 <template>
-  <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
-    <Sidebar
-      v-if="layout === 'vertical'"
-      v-model:filter="filter"
-      :sessions="sessions"
-      :loading="loading"
-      :error="error"
-      :active-id="activeId"
-      @select="selectSession"
-      @new="newSession"
-      @toggle-layout="toggleLayout"
-      @refresh="refresh"
-    />
-    <SessionTabBar
-      v-else
-      v-model:filter="filter"
-      :sessions="sessions"
-      :active-id="activeId"
-      @select="selectSession"
-      @new="newSession"
-      @toggle-layout="toggleLayout"
-      @refresh="refresh"
-    />
-    <div class="main">
-      <TerminalView
-        ref="terminalRef"
-        class="terminal-pane"
-        :style="{ flex: `0 0 ${terminalWidth}px` }"
-        :session-id="activeId"
-        :connect-key="connectKey"
-        @session="onSession"
+  <div class="app-root">
+    <header class="toolbar">
+      <span class="toolbar-title">MulmoTerminal</span>
+      <span
+        v-if="sandbox !== null"
+        class="material-symbols-outlined toolbar-lock"
+        :class="sandbox ? 'is-locked' : 'is-unlocked'"
+        :title="sandbox ? 'Sandboxed — claude runs inside Docker' : 'Unsandboxed — claude runs on the host'"
+        :aria-label="sandbox ? 'Sandboxed' : 'Unsandboxed'"
+      >{{ sandbox ? "lock" : "lock_open" }}</span>
+    </header>
+    <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
+      <Sidebar
+        v-if="layout === 'vertical'"
+        v-model:filter="filter"
+        :sessions="sessions"
+        :loading="loading"
+        :error="error"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
       />
-      <div
-        class="splitter"
-        role="separator"
-        tabindex="0"
-        aria-orientation="vertical"
-        aria-label="Resize terminal"
-        :aria-valuenow="terminalWidth"
-        :aria-valuemin="MIN_TERMINAL"
-        :aria-valuemax="maxTerminal"
-        title="Drag (or use arrow keys) to resize the terminal"
-        @mousedown="startDrag"
-        @keydown="onSplitterKey"
+      <SessionTabBar
+        v-else
+        v-model:filter="filter"
+        :sessions="sessions"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
       />
-      <GuiPanel
-        :session-id="activeId"
-        :send-text-message="sendTextMessage"
-        :tools-open="showTools"
-        @toggle-tools="toggleTools"
-      />
-      <ToolsPane v-if="showTools" :session-id="activeId" />
+      <div class="main">
+        <TerminalView
+          ref="terminalRef"
+          class="terminal-pane"
+          :style="{ flex: `0 0 ${terminalWidth}px` }"
+          :session-id="activeId"
+          :connect-key="connectKey"
+          @session="onSession"
+        />
+        <div
+          class="splitter"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-label="Resize terminal"
+          :aria-valuenow="terminalWidth"
+          :aria-valuemin="MIN_TERMINAL"
+          :aria-valuemax="maxTerminal"
+          title="Drag (or use arrow keys) to resize the terminal"
+          @mousedown="startDrag"
+          @keydown="onSplitterKey"
+        />
+        <GuiPanel
+          :session-id="activeId"
+          :send-text-message="sendTextMessage"
+          :tools-open="showTools"
+          @toggle-tools="toggleTools"
+        />
+        <ToolsPane v-if="showTools" :session-id="activeId" />
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.app {
+/* Full-viewport column: narrow toolbar on top, the existing layout fills the
+   rest. */
+.app-root {
   display: flex;
+  flex-direction: column;
   height: 100vh;
   width: 100vw;
+  overflow: hidden;
+}
+
+/* Narrow top toolbar: app title + sandbox lock indicator. */
+/* Height + colors match the SessionTabBar / sidebar header so the toolbar reads
+   as part of the same chrome. */
+.toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 10px;
+  background: #16213e;
+  border-bottom: 1px solid #2a2a4e;
+  /* Match the rest of the app chrome (SessionTabBar, Sidebar, …). */
+  font-family: system-ui, sans-serif;
+  color: #e0e0e0;
+  user-select: none;
+}
+.toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  color: #e6e6f0;
+}
+.toolbar-lock {
+  display: inline-flex;
+  align-items: center;
+  font-size: 18px;
+  /* material-symbols variable-font axes: lighter weight, slightly smaller optical
+     size to sit nicely at toolbar scale. */
+  font-variation-settings: "wght" 400, "opsz" 20;
+  cursor: default;
+}
+/* Green padlock when sandboxed (claude is contained), amber when it runs on the
+   host. */
+.toolbar-lock.is-locked {
+  color: #4ade80;
+}
+.toolbar-lock.is-unlocked {
+  color: #f59e0b;
+}
+
+.app {
+  display: flex;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
