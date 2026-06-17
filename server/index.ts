@@ -83,6 +83,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 3456;
 const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
+// Permission mode for backend-spawned Claude sessions. Defaults to "auto" so
+// the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
+// "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
+const CLAUDE_PERMISSION_MODE = process.env.CLAUDE_PERMISSION_MODE || "auto";
 const CLAUDE_CWD =
   process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaude");
 
@@ -741,7 +745,15 @@ function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket)
   // without a permission prompt (--strict-mcp-config keeps the user's other MCP
   // servers out of the spike).
   const mcp = mcpConfigJson(sessionId);
-  const guiArgs = ["--mcp-config", mcp, "--strict-mcp-config", "--allowedTools", GUI_MCP_TOOLS];
+  const guiArgs = [
+    "--permission-mode",
+    CLAUDE_PERMISSION_MODE,
+    "--mcp-config",
+    mcp,
+    "--strict-mcp-config",
+    "--allowedTools",
+    GUI_MCP_TOOLS,
+  ];
   const args = resume
     ? ["--resume", resume, "--settings", settings, ...guiArgs]
     : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
