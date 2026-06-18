@@ -66,6 +66,62 @@ per-workspace behaviour:
   disables all of that** — today **only the GUI MCP runs**. So "workspace-assuming
   MCP servers" don't run at all right now.
 
+## Where the GUI tools (presentDocument, …) actually come from
+
+They are **not in any `mcp.json` file** — they are code, served in-process. The
+pipeline:
+
+1. **`plugins/plugins.json`** lists the plugin packages (npm dependencies):
+   | Package | Tool it provides |
+   |---|---|
+   | `@mulmoclaude/markdown-plugin` | `presentDocument` |
+   | `@mulmoclaude/form-plugin` | `presentForm` |
+   | `@mulmochat-plugin/generate-image` | `generateImage` |
+   | `@mulmoclaude/chart-plugin` | `presentChart` |
+   | `@mulmoclaude/x-plugin` (`servers`) | X/Twitter integration |
+2. **`server/plugins-registry.ts`** loads those, then appends **host-provided**
+   tools from `HOST_TOOL_DEFINITIONS` (`server/host-tools.ts`) — currently
+   `spawnBackgroundChat`.
+3. **`server/index.ts`** serves them as a **single MCP server named
+   `mulmoterminal-gui`**, in-process over Streamable HTTP at `POST /mcp/<sessionId>`
+   (built by `buildGuiMcpServer()`).
+4. Each spawned claude is pointed at it via `--mcp-config`:
+   ```json
+   { "mcpServers": { "mulmoterminal-gui": { "type": "http", "url": "http://127.0.0.1:<PORT>/mcp/<sessionId>" } } }
+   ```
+
+So claude sees them as `mcp__mulmoterminal-gui__presentDocument`, etc. The live
+list is `GET /api/tools` → currently: **presentDocument, presentForm,
+generateImage, presentChart, spawnBackgroundChat**.
+
+## What MCP is — and isn't — loaded today
+
+| Source | Path | Read by | Loaded in MulmoTerminal now? |
+|---|---|---|---|
+| **GUI MCP** (`mulmoterminal-gui`) | in-process, `/mcp/<sessionId>` (from `plugins/plugins.json`) | injected via `--mcp-config` | ✅ **yes — the only MCP** |
+| Claude Code **user** MCP | `~/.claude.json` | Claude Code | ❌ no — `--strict-mcp-config` ignores it |
+| Claude Code **project** MCP | `<cwd>/.mcp.json` (e.g. `~/mulmoclaude/.mcp.json`) | Claude Code | ❌ no — `--strict-mcp-config` ignores it |
+| **MulmoClaude** MCP | `~/mulmoclaude/config/mcp.json` | **MulmoClaude's server only** | ❌ no — see below |
+
+### Is `~/mulmoclaude/config/mcp.json` ignored? → Yes, completely.
+
+Three independent reasons, any one of which is enough:
+
+1. **It's MulmoClaude's file, not a Claude Code / MulmoTerminal file.** MulmoClaude's
+   server reads `config/mcp.json` and feeds it to claude. MulmoTerminal has **no
+   code that reads it** (confirmed: nothing in `server/` references `mcp.json` /
+   `config/mcp.json`).
+2. **Claude Code wouldn't auto-load `config/mcp.json` anyway.** Its project MCP file
+   is `<cwd>/.mcp.json` (i.e. `~/mulmoclaude/.mcp.json`) — not `config/mcp.json`.
+3. **`--strict-mcp-config`** makes claude load *only* the `--mcp-config` server (the
+   GUI MCP), ignoring even the standard `~/.claude.json` / `<cwd>/.mcp.json`.
+
+→ Your `config/mcp.json` servers run under **MulmoClaude**, not MulmoTerminal. To
+use them in MulmoTerminal you would (a) **drop `--strict-mcp-config`** *and*
+(b) put them where Claude Code looks (`~/.claude.json` user scope, or
+`<cwd>/.mcp.json` project scope) — or have MulmoTerminal explicitly read & merge
+that file. This is exactly the trade-off in the next section.
+
 ## Decision: MCP scoping
 
 | | A. Keep `--strict-mcp-config` (current) | B. Drop `--strict-mcp-config` (like mulmoclaude) |
