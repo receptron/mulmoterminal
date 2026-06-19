@@ -9,11 +9,21 @@
 // view surface (mintViewToken / fetchViewHtml / buildViewSrcdoc), localeTag, confirm.
 // Write / feeds / favorites / chat are typed failures / no-ops until the interactive
 // (Tier 1) and toolbar (Tier 2) work lands.
-import { defineComponent } from "vue";
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity } from "@mulmoclaude/collection-plugin";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
+import { useShortcuts } from "./useShortcuts";
+import {
+  browseGotoIndex,
+  browseGotoDetail,
+  browseNavigateToRecord,
+  browseRouteSlug,
+  browseRouteSelectedId,
+  browseIsFeedRoute,
+  browseSetSelectedId,
+} from "./useCollectionBrowse";
+import PinToggle from "../components/PinToggle.vue";
 
 // ── Modal teleport target (Shadow DOM) ──
 // PluginFrame mounts each card inside a per-instance shadow root, but
@@ -64,9 +74,6 @@ const UNSUPPORTED = "not supported in MulmoTerminal yet";
 const apiFail = { ok: false as const, error: UNSUPPORTED, status: 501 };
 const mutationFail = { ok: false as const, error: UNSUPPORTED };
 
-// Renders nothing — MulmoTerminal has no favorites store yet (Tier 2).
-const PinTogglePlaceholder = defineComponent({ name: "CollectionPinTogglePlaceholder", render: () => null });
-
 configureCollectionUi({
   // ── real (read side) ──
   fetchCollectionDetail: (slug) => apiGet<CollectionDetailResponse>(`/api/collections/${encodeURIComponent(slug)}/detail`),
@@ -77,7 +84,7 @@ configureCollectionUi({
   localeTag: () => (navigator.language || "en").split("-")[0],
   generalRoleId: "general",
   personalRoleId: "personal",
-  pinToggle: PinTogglePlaceholder,
+  pinToggle: PinToggle,
 
   // ── asset URLs → the raw workspace-file route (server/backends/files.ts).
   //    Mirrors MulmoClaude's resolveImageSrc: data: URIs pass through, everything
@@ -87,15 +94,15 @@ configureCollectionUi({
   fileAssetUrl: (value) => (typeof value === "string" && value.length > 0 ? rawFileUrl(value) : null),
   fileRoutePath: () => null,
 
-  // ── routing: no router; these are safe no-ops for an embedded card (wired to
-  //    view-state in the Tier 2 toolbar). ──
-  routeSlug: () => undefined,
-  routeSelectedId: () => undefined,
-  isFeedRoute: () => false,
-  setSelectedId: () => {},
-  gotoIndex: () => {},
-  gotoDetail: () => {},
-  navigateToRecord: () => {},
+  // ── navigation: no router — map onto useCollectionBrowse's view-state, which
+  //    drives the full-screen browse overlay + the toolbar launcher. ──
+  routeSlug: () => browseRouteSlug(),
+  routeSelectedId: () => browseRouteSelectedId(),
+  isFeedRoute: () => browseIsFeedRoute(),
+  setSelectedId: (itemId) => browseSetSelectedId(itemId),
+  gotoIndex: (kind) => browseGotoIndex(kind),
+  gotoDetail: (kind, slug) => browseGotoDetail(kind, slug),
+  navigateToRecord: (targetSlug, recordId) => browseNavigateToRecord(targetSlug, recordId),
 
   // ── custom views (read-only): sandboxed-iframe HTML views over the shared
   //    workspace. Mint a scoped token, fetch the view HTML, and wrap it in a
@@ -123,9 +130,10 @@ configureCollectionUi({
   deleteView: () => Promise.resolve(mutationFail),
   listFeeds: () => Promise.resolve(apiFail),
 
-  // ── favorites / chat / notifications: no stores yet (Tier 2). ──
-  reconcileShortcuts: () => Promise.resolve(),
-  unpin: () => Promise.resolve(false),
+  // ── favorites: the shared useShortcuts store over /api/shortcuts. ──
+  reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
+  unpin: (kind, slug) => useShortcuts().unpin(kind, slug),
+  // ── chat / notifications: no chat-seed hook or notifier in MulmoTerminal. ──
   startChat: () => {},
   notifiedSeverities: () => new Map<string, CollectionNotifySeverity>(),
 

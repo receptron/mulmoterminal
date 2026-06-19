@@ -5,7 +5,13 @@ import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
+import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
+import { useShortcuts } from "./composables/useShortcuts";
+import { browseGotoIndex, browseGotoDetail } from "./composables/useCollectionBrowse";
+
+// Shared launcher favorites (pinned collections / feeds), backing the toolbar.
+const { shortcuts } = useShortcuts();
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
@@ -137,6 +143,23 @@ function onSession(id: string) {
   <div class="shell">
     <header class="toolbar">
       <span class="toolbar-title">MulmoTerminal</span>
+      <nav class="launcher" aria-label="Collections">
+        <button type="button" class="launcher-btn" title="Browse collections" @click="browseGotoIndex('collection')">
+          <span class="material-symbols-outlined">apps</span>
+          <span class="launcher-label">Collections</span>
+        </button>
+        <button
+          v-for="s in shortcuts"
+          :key="`${s.kind}:${s.slug}`"
+          type="button"
+          class="launcher-btn"
+          :title="s.title"
+          @click="browseGotoDetail(s.kind, s.slug)"
+        >
+          <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
+          <span class="launcher-label">{{ s.title }}</span>
+        </button>
+      </nav>
     </header>
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
@@ -187,6 +210,9 @@ function onSession(id: string) {
         <ToolsPane v-if="showTools" :session-id="activeId" @close="toggleTools" />
       </div>
     </div>
+    <!-- Full-screen collection browser; shown when the launcher / an index card / a
+         ref hop opens it (driven by useCollectionBrowse). -->
+    <CollectionsBrowseOverlay />
   </div>
 </template>
 
@@ -215,6 +241,44 @@ function onSession(id: string) {
   font-size: 14px;
   color: #e6e6f0;
   letter-spacing: 0.02em;
+}
+
+/* Collections launcher: a "Collections" button + one per pinned favorite. */
+.launcher {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 16px;
+  min-width: 0;
+  overflow-x: auto;
+}
+.launcher-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #2a3a66;
+  background: #1d2b4e;
+  color: #c8d2f0;
+  border-radius: 14px;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.launcher-btn:hover {
+  background: #26375f;
+  color: #fff;
+}
+.launcher-btn .material-symbols-outlined {
+  font-size: 17px;
+  line-height: 1;
+}
+.launcher-label {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app {

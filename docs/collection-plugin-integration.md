@@ -215,15 +215,27 @@ MulmoTerminal equivalent needs three pieces, adapted to a no-router, state-drive
 
 ---
 
-## Open questions for the maintainers
+## Resolved decisions
 
-- **Shortcuts sharing**: shared package (recommended; the only optional MulmoClaude change) vs
-  reimplement-verbatim + format test?
-- **Browse panel placement**: replace the GuiPanel content, a new tab/pane, or overlay?
-- **CSS isolation**: keep the shadow frame (and the teleport-target wrapper) or treat the collection
-  plugin as first-party in light DOM?
-- **Raw-file route**: add one so `image`/`file` fields render, or accept the v1 gap?
-- **`/feeds`**: wanted, or collections-only?
+- **Shortcuts sharing** → **reimplement verbatim + fixture test** (`server/backends/shortcuts.ts` +
+  `src/types/shortcuts.ts`, `shortcuts.spec.ts` pins the `{ shortcuts: [...] }` wrapper). Keeps
+  MulmoTerminal MulmoClaude-change-free; the shared file is the contract.
+- **Browse panel placement** → **full-screen overlay** (`CollectionsBrowseOverlay.vue`), driven by
+  `useCollectionBrowse` view-state; the binding's nav fns map onto it.
+- **CSS isolation** → keep the shadow frame (the overlay reuses `PluginFrame` + `collectionShadowCss`,
+  and registers its shadow root as the modal teleport target like the card).
+- **Raw-file route** → added (`/api/files/raw`), so `image`/`file` fields render.
+- **`/feeds`** → the launcher/overlay support `kind: "feed"` shortcuts, but the collections index
+  filters feeds out; a dedicated feeds index/`FeedsView` is deferred.
+
+## Tier 2 status (implemented)
+
+Shipped: shared favorites (`GET/PUT /api/shortcuts` over `config/shortcuts.json`), `useShortcuts` store
++ `PinToggle`, the toolbar launcher (`<header class="toolbar">`: a "Collections" button + one per
+favorite), and the full-screen browse overlay (`CollectionsIndexView` / standalone `CollectionView`
+via `useCollectionBrowse`). Verified: MulmoClaude's pinned collections appear in MulmoTerminal's
+toolbar from the shared file; the overlay opens and the index renders. Still open: `startChat` is a
+no-op (collection "create"/action buttons that seed a chat are inert), and Tier 1 write routes.
 
 Bottom line: **the package is drop-in-ready and needs zero MulmoClaude changes.** The work is entirely
 in MulmoTerminal: server read engine + routes, the frontend ToolPlugin + binding + teleport wrapper,

@@ -16,6 +16,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
+import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -522,6 +523,10 @@ mountCollectionRoutes(app);
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
+
+// Shared launcher favorites (GET/PUT /api/shortcuts) over the same
+// <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
+mountShortcutsRoutes(app, { workspace: CLAUDE_CWD });
 
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
