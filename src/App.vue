@@ -9,6 +9,7 @@ import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue"
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
+import { registerChatOpener } from "./composables/useChatLauncher";
 import type { Shortcut } from "./types/shortcuts";
 
 // Shared launcher favorites (pinned collections / feeds), backing the toolbar.
@@ -131,6 +132,13 @@ function selectSession(id: string) {
   activeId.value = id;
   connectKey.value++;
 }
+
+// A collection action (startChat) spawned a new chat and wants it shown: close the
+// browse overlay (if open) and select the session so the terminal displays it.
+registerChatOpener((id: string) => {
+  browseClose();
+  selectSession(id);
+});
 
 function newSession() {
   activeId.value = null;

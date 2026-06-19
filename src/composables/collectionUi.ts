@@ -24,6 +24,7 @@ import {
   browseSetSelectedId,
 } from "./useCollectionBrowse";
 import PinToggle from "../components/PinToggle.vue";
+import { startCollectionChat } from "./useChatLauncher";
 
 // ── Modal teleport target (Shadow DOM) ──
 // PluginFrame mounts each card inside a per-instance shadow root, but
@@ -149,8 +150,12 @@ configureCollectionUi({
   // ── favorites: the shared useShortcuts store over /api/shortcuts. ──
   reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
   unpin: (kind, slug) => useShortcuts().unpin(kind, slug),
-  // ── chat / notifications: no chat-seed hook or notifier in MulmoTerminal. ──
-  startChat: () => {},
+  // ── chat: spawn a new terminal session seeded with the prompt and surface it
+  //    (hidden=false → make it visible). Backs the index "create" button + the
+  //    collection/record action buttons (Repair, etc.). MulmoTerminal has no roles,
+  //    so `role` is ignored. ──
+  startChat: (prompt) => void startCollectionChat(prompt, { hidden: false }),
+  // No notifier in MulmoTerminal.
   notifiedSeverities: () => new Map<string, CollectionNotifySeverity>(),
 
   // ── Shadow-DOM modal target ── ShadowRoot is a valid Teleport target at runtime
