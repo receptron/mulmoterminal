@@ -134,6 +134,14 @@ export function mountCollectionRoutes(app: Express): void {
         res.status(404).json({ error: `view file '${view.file}' not found` });
         return;
       }
+      // This is LLM-authored HTML. The frontend renders it sandboxed via a
+      // fetch()→srcdoc iframe (not by navigating here), so harden the raw response
+      // against DIRECT navigation: `sandbox` gives it an opaque origin (its scripts
+      // can't reach the app origin's /api/*), and `nosniff` stops re-interpretation.
+      // The iframe path is unaffected — a fetch() reads the body regardless of this
+      // response-level CSP.
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "sandbox");
       res.type("text/html").send(html);
     } catch (err) {
       log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
