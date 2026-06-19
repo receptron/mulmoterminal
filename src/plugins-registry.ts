@@ -9,8 +9,10 @@ import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
 import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
+import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
+import CollectionCardView from "./components/CollectionCardView.vue";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -18,11 +20,42 @@ import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
+import collectionCss from "@mulmoclaude/collection-plugin/style.css?inline";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
 // against those packages' dists (see src/plugin-tailwind.css), supplying the
 // utilities their components use.
 import mulmochatPluginCss from "./plugin-tailwind.css?inline";
+
+// The collection plugin renders ~56 icons via the classic `.material-icons` class
+// (plus a few `.material-symbols-outlined`). MulmoTerminal only loads the Material
+// Symbols font (main.ts), and in any case the global icon class rule can't pierce
+// the plugin's Shadow DOM — so the ligature names ("movie", "search", "arrow_upward")
+// render as plain TEXT. The font's `@font-face` IS global (document-level font-faces
+// apply inside shadow roots), so we just need the class rule inside the shadow:
+// map both icon classes to the loaded "Material Symbols Outlined" font (a superset
+// that supports the same ligature names). Prepended BEFORE the plugin's Tailwind so
+// the components' `text-sm`/`text-lg` size overrides still win (equal specificity →
+// later rule wins); unsized icons fall back to the 24px default here.
+const COLLECTION_ICON_CSS = `
+.material-icons, .material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "liga";
+}
+`;
 
 interface Registration {
   toolName: string;
@@ -59,6 +92,15 @@ const PACKAGES: Record<string, Registration> = {
     // ?? "en"), so it renders standalone. Its style.css is self-contained Tailwind.
     viewComponent: chartPlugin.viewComponent as Component,
     css: chartCss,
+  },
+  "@mulmoclaude/collection-plugin": {
+    toolName: collectionPlugin.toolDefinition.name,
+    // CollectionCardView wraps the package's chat View so it can register its shadow
+    // root as the record modal's teleport target (see the component + collectionUi).
+    // The binding (data fetch, asset URLs, nav, confirm) is configured once at
+    // startup by importing ./composables/collectionUi in main.ts.
+    viewComponent: CollectionCardView as Component,
+    css: COLLECTION_ICON_CSS + collectionCss,
   },
 };
 

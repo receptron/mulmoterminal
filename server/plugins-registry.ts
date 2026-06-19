@@ -65,7 +65,16 @@ function loadConfig() {
 async function loadPackage(name: string) {
   const mod = await import(name);
   const definition = mod.TOOL_DEFINITION ?? mod.pluginCore?.toolDefinition;
-  const execute = mod.pluginCore?.execute ?? mod.execute;
+  // Some packages (e.g. @mulmoclaude/collection-plugin) export their executor under
+  // a descriptive name like `executePresentCollection` rather than a bare `execute`,
+  // and ship no `pluginCore` on the core entry (their origin host registers the tool
+  // as a built-in). Fall back to a sole `execute*` function export so such packages
+  // still load without hardcoding their name.
+  const soleExecuteStar = (() => {
+    const fns = Object.entries(mod).filter(([key, val]) => key.startsWith("execute") && typeof val === "function");
+    return fns.length === 1 ? (fns[0][1] as (...args: unknown[]) => unknown) : undefined;
+  })();
+  const execute = mod.pluginCore?.execute ?? mod.execute ?? soleExecuteStar;
   if (!definition || typeof execute !== "function") {
     throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
   }

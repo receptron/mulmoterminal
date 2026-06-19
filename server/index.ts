@@ -14,6 +14,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
+import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -511,6 +512,12 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);
 
+// Read-side collection routes (GET /api/collections/list + /:slug/detail) over the
+// shared workspace, backing the @mulmoclaude/collection-plugin presentCollection
+// card and (later) the collections toolbar. The engine itself is configured below
+// once CLAUDE_CWD is the confirmed workspace.
+mountCollectionRoutes(app);
+
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
 // STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
@@ -750,6 +757,10 @@ initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.
 initArtifactsBackend({ workspace: CLAUDE_CWD });
+
+// Configure the collection engine against the shared workspace (CLAUDE_CWD). The
+// path layout matches MulmoClaude's so discovery sees the same collection skills.
+initCollectionsBackend({ workspace: CLAUDE_CWD });
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
