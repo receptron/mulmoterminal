@@ -22,11 +22,17 @@ import {
   listItems,
   enrichItems,
   readCustomViewHtml,
+  writeItem,
+  deleteItem,
+  generateItemId,
+  resolveCreateItemId,
   toSummary,
   toDetail,
   validateCollectionRecords,
   type RecordIssue,
 } from "@mulmoclaude/collection-plugin/server";
+// CollectionItem lives in the isomorphic core entry (not re-exported from /server).
+import type { CollectionItem } from "@mulmoclaude/collection-plugin";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -63,6 +69,12 @@ export function initCollectionsBackend(deps: { workspace: string }): void {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** A request body usable as a record: a non-null, non-array object. */
+function extractRecord(body: unknown): CollectionItem | null {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return null;
+  return body as CollectionItem;
 }
 
 /** Mount the read-side REST surface. Mirrors MulmoClaude's
@@ -104,6 +116,111 @@ export function mountCollectionRoutes(app: Express): void {
       res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
     } catch (err) {
       log.warn("collections", "detail failed", { slug: collection.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // ── Record CRUD (Tier 1: interactive editing — e.g. checking a to-do item) ──
+  // Create a record. The id is the schema's primaryKey value from the body, or a
+  // generated one; a singleton collection pins every create to its fixed id.
+  app.post("/api/collections/:slug/items", async (req: Request<{ slug: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    const record = extractRecord(req.body);
+    if (!record) {
+      res.status(400).json({ error: "request body must be a JSON object" });
+      return;
+    }
+    const itemId = resolveCreateItemId(collection.schema, record) ?? generateItemId();
+    const recordWithId: CollectionItem = { ...record, [collection.schema.primaryKey]: itemId };
+    try {
+      const result = await writeItem(collection.dataDir, itemId, recordWithId, { refuseOverwrite: true });
+      if (result.kind === "invalid-id") {
+        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
+        return;
+      }
+      if (result.kind === "path-escape") {
+        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
+        return;
+      }
+      if (result.kind === "conflict") {
+        res.status(409).json({ error: `item '${result.itemId}' already exists` });
+        return;
+      }
+      res.json({ itemId: result.itemId, item: result.item });
+    } catch (err) {
+      log.warn("collections", "item create failed", { slug: collection.slug, itemId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Update a record. The primaryKey is pinned to the URL itemId (the body can't
+  // smuggle a different id). Singletons only accept their one fixed id.
+  app.put("/api/collections/:slug/items/:itemId", async (req: Request<{ slug: string; itemId: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    const record = extractRecord(req.body);
+    if (!record) {
+      res.status(400).json({ error: "request body must be a JSON object" });
+      return;
+    }
+    const { singleton, primaryKey } = collection.schema;
+    if (singleton && req.params.itemId !== singleton) {
+      res.status(400).json({ error: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` });
+      return;
+    }
+    const recordWithId: CollectionItem = { ...record, [primaryKey]: req.params.itemId };
+    try {
+      const result = await writeItem(collection.dataDir, req.params.itemId, recordWithId);
+      if (result.kind === "invalid-id") {
+        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
+        return;
+      }
+      if (result.kind === "path-escape") {
+        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
+        return;
+      }
+      if (result.kind === "conflict") {
+        res.status(500).json({ error: "unexpected conflict on update" });
+        return;
+      }
+      res.json({ itemId: result.itemId, item: result.item });
+    } catch (err) {
+      log.warn("collections", "item update failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Delete a record.
+  app.delete("/api/collections/:slug/items/:itemId", async (req: Request<{ slug: string; itemId: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    try {
+      const result = await deleteItem(collection.dataDir, req.params.itemId);
+      if (result.kind === "invalid-id") {
+        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
+        return;
+      }
+      if (result.kind === "path-escape") {
+        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
+        return;
+      }
+      if (result.kind === "not-found") {
+        res.status(404).json({ error: `item '${result.itemId}' not found` });
+        return;
+      }
+      res.json({ deleted: true, itemId: result.itemId });
+    } catch (err) {
+      log.warn("collections", "item delete failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

@@ -131,3 +131,56 @@ describe("custom view routes", () => {
     expect(body.items.map((i) => i.id)).toEqual(["item1"]);
   });
 });
+
+describe("record CRUD", () => {
+  // Functions, not constants: `base` is only assigned in beforeAll (after the
+  // describe body runs), so the URLs must be built at call time.
+  const items = () => `${base}/api/collections/testcol/items`;
+  const itemUrl = (id: string) => `${base}/api/collections/testcol/items/${id}`;
+  const detailItems = async () =>
+    ((await (await fetch(`${base}/api/collections/testcol/detail`)).json()) as { items: Array<{ id: string; name?: string }> }).items;
+
+  it("creates, updates, then deletes a record", async () => {
+    const create = await fetch(items(), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "crud1", name: "New" }),
+    });
+    expect(create.status).toBe(200);
+    expect((await create.json()) as { itemId: string }).toMatchObject({ itemId: "crud1" });
+    expect((await detailItems()).find((i) => i.id === "crud1")).toMatchObject({ name: "New" });
+
+    const upd = await fetch(itemUrl("crud1"), {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "crud1", name: "Updated" }),
+    });
+    expect(upd.status).toBe(200);
+    expect(((await upd.json()) as { item: { name: string } }).item).toMatchObject({ name: "Updated" });
+
+    const del = await fetch(itemUrl("crud1"), { method: "DELETE" });
+    expect(del.status).toBe(200);
+    expect(await del.json()).toEqual({ deleted: true, itemId: "crud1" });
+    expect((await detailItems()).find((i) => i.id === "crud1")).toBeUndefined();
+  });
+
+  it("409s creating a record whose id already exists", async () => {
+    const dupe = await fetch(items(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: "item1", name: "dupe" }) });
+    expect(dupe.status).toBe(409);
+  });
+
+  it("400s on a non-object create body", async () => {
+    const res = await fetch(items(), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify([1, 2, 3]) });
+    expect(res.status).toBe(400);
+  });
+
+  it("404s update/delete on a missing collection", async () => {
+    const put = await fetch(`${base}/api/collections/nope/items/x`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "x" }),
+    });
+    expect(put.status).toBe(404);
+    expect((await fetch(`${base}/api/collections/nope/items/x`, { method: "DELETE" })).status).toBe(404);
+  });
+});

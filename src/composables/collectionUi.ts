@@ -11,7 +11,7 @@
 // (Tier 1) and toolbar (Tier 2) work lands.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity } from "@mulmoclaude/collection-plugin";
+import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/collection-plugin";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { useShortcuts } from "./useShortcuts";
 import {
@@ -54,15 +54,29 @@ async function apiGet<T>(url: string): Promise<CollectionApiResult<T>> {
   }
 }
 
-async function apiPost<T>(url: string, body: unknown): Promise<CollectionApiResult<T>> {
+async function apiSend<T>(method: "POST" | "PUT", url: string, body: unknown): Promise<CollectionApiResult<T>> {
   try {
-    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
     return { ok: true, data: (await res.json()) as T };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err), status: 0 };
   }
 }
+const apiPost = <T>(url: string, body: unknown) => apiSend<T>("POST", url, body);
+const apiPut = <T>(url: string, body: unknown) => apiSend<T>("PUT", url, body);
+
+// Delete → the view layer's CollectionMutationResult ({ ok } | { ok:false, error }).
+async function apiDelete(url: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(url, { method: "DELETE" });
+    return res.ok ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+const itemUrl = (slug: string, itemId: string) => `/api/collections/${encodeURIComponent(slug)}/items/${encodeURIComponent(itemId)}`;
 
 /** Browser URL for a workspace-relative file path, via the raw-file route. */
 function rawFileUrl(value: unknown): string {
@@ -118,10 +132,12 @@ configureCollectionUi({
   },
   buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
 
-  // ── write / feeds / view-delete: deferred to Tier 1. ──
-  createItem: () => Promise.resolve(apiFail),
-  updateItem: () => Promise.resolve(apiFail),
-  deleteItem: () => Promise.resolve(mutationFail),
+  // ── record CRUD: create / update (e.g. checking a to-do item) / delete. ──
+  createItem: (slug, record) => apiPost<ItemMutationResponse>(`/api/collections/${encodeURIComponent(slug)}/items`, record),
+  updateItem: (slug, itemId, record) => apiPut<ItemMutationResponse>(itemUrl(slug, itemId), record),
+  deleteItem: (slug, itemId) => apiDelete(itemUrl(slug, itemId)),
+
+  // ── collection/feed delete, actions, feeds, view-delete: deferred. ──
   deleteCollection: () => Promise.resolve(mutationFail),
   deleteFeed: () => Promise.resolve(mutationFail),
   runItemAction: () => Promise.resolve(apiFail),
