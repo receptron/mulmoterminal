@@ -425,6 +425,12 @@ function projectSessionsDir(cwd: string) {
   return path.join(os.homedir(), ".claude", "projects", encoded);
 }
 
+// Whether a session has an on-disk transcript (claude only writes it after the
+// first prompt). Determines whether `--resume <id>` will succeed.
+function sessionExistsOnDisk(id: string): boolean {
+  return existsSync(path.join(projectSessionsDir(CLAUDE_CWD), `${id}.jsonl`));
+}
+
 // A real user prompt from a JSONL "user" line's content, or null if it's a
 // slash-/local-command wrapper rather than a typed prompt. Content may be a
 // plain string or an array of blocks (guard against null elements).
@@ -836,7 +842,7 @@ function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket 
   // no record — resuming it would fail ("[session ended]"). In that case (no live
   // pty either, since reattach already happened upstream) restart fresh, reusing
   // the same id via --session-id, so a reload of an idle cell just reopens it.
-  const canResume = resume !== null && existsSync(path.join(projectSessionsDir(CLAUDE_CWD), `${resume}.jsonl`));
+  const canResume = resume !== null && sessionExistsOnDisk(resume);
   const baseArgs = canResume ? ["--resume", resume, "--settings", settings, ...guiArgs] : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
   // The initial prompt goes last as a positional arg (claude's initial-prompt
   // form). "--" ends option parsing so a prompt that happens to start with "-"
@@ -940,21 +946,31 @@ wss.on("connection", (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
-  const resume = new URL(req.url ?? "/", "http://localhost").searchParams.get("session");
-  if (resume && !SESSION_ID_RE.test(resume)) {
-    console.warn(`[ws] rejecting non-UUID session id: ${JSON.stringify(resume)}`);
+  const requested = new URL(req.url ?? "/", "http://localhost").searchParams.get("session");
+  if (requested && !SESSION_ID_RE.test(requested)) {
+    console.warn(`[ws] rejecting non-UUID session id: ${JSON.stringify(requested)}`);
     ws.close();
     return;
   }
-  const sessionId = resume || randomUUID();
+
+  // Decide the effective session id BEFORE telling the browser. A requested id
+  // is honored only if it can actually be served: a live pty (reattach) or an
+  // on-disk transcript (`--resume`). A requested id that's neither — e.g. a cell
+  // reloading an idle session claude never persisted — can't be reused: claude
+  // exits with "session id already in use" if we retry `--session-id <same>`.
+  // So mint a fresh id; the browser adopts it from this `session` message and
+  // re-persists, so the reload just reopens a working terminal seamlessly.
+  const reattachId = requested && ptys.has(requested) ? requested : null;
+  const resume = !reattachId && requested && sessionExistsOnDisk(requested) ? requested : null;
+  const sessionId = reattachId ?? resume ?? randomUUID();
+  const live = reattachId ? ptys.get(reattachId) : undefined;
 
   // Tell the browser which session this is (it learns the id of new sessions).
   ws.send(JSON.stringify({ type: "session", id: sessionId }));
 
-  const existing = ptys.get(sessionId);
   let entry: PtyEntry;
   try {
-    entry = existing ? reattachPty(existing, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
+    entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws);
   } catch (err) {
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
     // must close just this connection — never crash the whole server.
