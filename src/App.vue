@@ -8,10 +8,17 @@ import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
-import { browseGotoIndex, browseGotoDetail } from "./composables/useCollectionBrowse";
+import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
+import type { Shortcut } from "./types/shortcuts";
 
 // Shared launcher favorites (pinned collections / feeds), backing the toolbar.
 const { shortcuts } = useShortcuts();
+// Toolbar tabs reflect the browse view-state: Chat (overlay closed) | Collections
+// (index open) | a favorite (its detail open).
+const { view: browseView, isOpen: browseOpen } = useCollectionBrowse();
+function favActive(s: Shortcut): boolean {
+  return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
+}
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
@@ -143,21 +150,31 @@ function onSession(id: string) {
   <div class="shell">
     <header class="toolbar">
       <span class="toolbar-title">MulmoTerminal</span>
-      <nav class="launcher" aria-label="Collections">
-        <button type="button" class="launcher-btn" title="Browse collections" @click="browseGotoIndex('collection')">
+      <nav class="launcher" aria-label="Views">
+        <button type="button" class="launcher-btn" :class="{ active: !browseOpen }" title="Chat" aria-label="Chat" @click="browseClose">
+          <span class="material-symbols-outlined">chat</span>
+        </button>
+        <button
+          type="button"
+          class="launcher-btn"
+          :class="{ active: browseView.mode === 'index' }"
+          title="Collections"
+          aria-label="Collections"
+          @click="browseGotoIndex('collection')"
+        >
           <span class="material-symbols-outlined">apps</span>
-          <span class="launcher-label">Collections</span>
         </button>
         <button
           v-for="s in shortcuts"
           :key="`${s.kind}:${s.slug}`"
           type="button"
           class="launcher-btn"
+          :class="{ active: favActive(s) }"
           :title="s.title"
+          :aria-label="s.title"
           @click="browseGotoDetail(s.kind, s.slug)"
         >
           <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
-          <span class="launcher-label">{{ s.title }}</span>
         </button>
       </nav>
     </header>
@@ -243,11 +260,11 @@ function onSession(id: string) {
   letter-spacing: 0.02em;
 }
 
-/* Collections launcher: a "Collections" button + one per pinned favorite. */
+/* Toolbar tabs: Chat + Collections + one per pinned favorite. Icon-only. */
 .launcher {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   margin-left: 16px;
   min-width: 0;
   overflow-x: auto;
@@ -255,30 +272,28 @@ function onSession(id: string) {
 .launcher-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  height: 28px;
-  padding: 0 10px;
-  border: 1px solid #2a3a66;
-  background: #1d2b4e;
-  color: #c8d2f0;
-  border-radius: 14px;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  white-space: nowrap;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 30px;
+  width: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #9aa6cc;
+  border-radius: 6px;
   cursor: pointer;
 }
 .launcher-btn:hover {
   background: #26375f;
   color: #fff;
 }
-.launcher-btn .material-symbols-outlined {
-  font-size: 17px;
-  line-height: 1;
+.launcher-btn.active {
+  background: #2f59c0;
+  color: #fff;
 }
-.launcher-label {
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.launcher-btn .material-symbols-outlined {
+  font-size: 19px;
+  line-height: 1;
 }
 
 .app {
