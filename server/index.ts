@@ -15,6 +15,7 @@ import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { mountFilesRoutes } from "./backends/files.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -517,6 +518,10 @@ mountAllRoutes(app);
 // card and (later) the collections toolbar. The engine itself is configured below
 // once CLAUDE_CWD is the confirmed workspace.
 mountCollectionRoutes(app);
+
+// Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
+// fields and custom-view <img> URLs. Rooted at the shared workspace.
+mountFilesRoutes(app, { workspace: CLAUDE_CWD });
 
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in

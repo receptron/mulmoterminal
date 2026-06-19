@@ -108,7 +108,7 @@ const PACKAGES: Record<string, Registration> = {
     // areas, and the custom-view iframe has no intrinsic content height). Give it a
     // fixed frame so that chain resolves — matches MulmoClaude's StackView
     // DEFAULT_PLUGIN_HEIGHT.
-    height: "min(100vh, 560px)",
+    height: "100vh",
   },
 };
 

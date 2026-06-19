@@ -44,7 +44,7 @@ import { ref, onMounted } from "vue";
 // `height` (optional): a fixed frame height for plugin views that rely on an
 // internal `h-full` (100%) layout rather than flowing at natural content height —
 // e.g. the collection card's table/kanban/custom-view iframe. Mirrors MulmoClaude's
-// StackView, which wraps such tools in a `min(100vh, 560px)` box. When set, the host
+// StackView, which wraps such tools in a fixed-height box. When set, the host
 // + shadow mount become that height so the plugin's `h-full` chain resolves; when
 // omitted, the frame flows naturally (chart/form/markdown).
 const props = defineProps<{ css?: string; height?: string }>();

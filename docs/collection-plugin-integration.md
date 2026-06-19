@@ -132,9 +132,9 @@ read-only card over the shared workspace:
   `buildViewSrcdoc`/`listFeeds` → typed failure; `reconcileShortcuts`/`unpin` → no-op;
   `notifiedSeverities` → empty map; `startChat` → no-op (the card uses the `sendTextMessage` prop, not
   this binding hook).
-- **Known v1 gap:** `fileAssetUrl`/`fileRoutePath`/`imageSrc` — MulmoTerminal has no general raw-file
-  serving route yet, so these return `null`/`""`. Collections with `image`/`file` fields won't render
-  those assets until a raw-file route is added. Collections without them render fully.
+- **Asset URLs:** `imageSrc`/`fileAssetUrl` resolve to `GET /api/files/raw?path=<workspace-relative>`
+  (server/backends/files.ts), mirroring MulmoClaude's `resolveImageSrc`, so `image`/`file` fields and
+  custom-view `<img>` thumbnails render. `fileRoutePath` stays null (no in-app File Explorer).
 
 ### Teleport + Shadow DOM
 

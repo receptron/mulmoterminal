@@ -54,6 +54,11 @@ async function apiPost<T>(url: string, body: unknown): Promise<CollectionApiResu
   }
 }
 
+/** Browser URL for a workspace-relative file path, via the raw-file route. */
+function rawFileUrl(value: unknown): string {
+  return `/api/files/raw?path=${encodeURIComponent(String(value))}`;
+}
+
 // Shared "not supported yet" results for the write/feeds/view capabilities.
 const UNSUPPORTED = "not supported in MulmoTerminal yet";
 const apiFail = { ok: false as const, error: UNSUPPORTED, status: 501 };
@@ -74,11 +79,13 @@ configureCollectionUi({
   personalRoleId: "personal",
   pinToggle: PinTogglePlaceholder,
 
-  // ── asset URLs: MulmoTerminal has no general raw-file serving route yet, so
-  //    image/file fields don't resolve (collections without them render fully). ──
-  fileAssetUrl: () => null,
+  // ── asset URLs → the raw workspace-file route (server/backends/files.ts).
+  //    Mirrors MulmoClaude's resolveImageSrc: data: URIs pass through, everything
+  //    else resolves to /api/files/raw?path=<workspace-relative>. fileRoutePath
+  //    (in-app File Explorer nav) stays null — MulmoTerminal has no file explorer. ──
+  imageSrc: (imageData) => (typeof imageData === "string" && imageData.startsWith("data:") ? imageData : rawFileUrl(imageData)),
+  fileAssetUrl: (value) => (typeof value === "string" && value.length > 0 ? rawFileUrl(value) : null),
   fileRoutePath: () => null,
-  imageSrc: () => "",
 
   // ── routing: no router; these are safe no-ops for an embedded card (wired to
   //    view-state in the Tier 2 toolbar). ──
