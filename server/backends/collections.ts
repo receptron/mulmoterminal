@@ -14,17 +14,20 @@
 // tier.
 import path from "node:path";
 import os from "node:os";
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import {
   configureCollectionHost,
   discoverCollections,
   loadCollection,
   listItems,
+  enrichItems,
+  readCustomViewHtml,
   toSummary,
   toDetail,
   validateCollectionRecords,
   type RecordIssue,
 } from "@mulmoclaude/collection-plugin/server";
+import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
 // (prefix, message, optional structured data).
@@ -101,6 +104,103 @@ export function mountCollectionRoutes(app: Express): void {
       res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
     } catch (err) {
       log.warn("collections", "detail failed", { slug: collection.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // ── Custom views (sandboxed-iframe HTML views, e.g. a poster gallery) ──
+  // A custom view is LLM-authored HTML rendered in a sandboxed iframe that fetches
+  // its records from view-data with a scoped token. Read-only here: the GET data
+  // route is wired; write (PUT) is deferred to the interactive tier.
+
+  // The custom view's raw HTML, read from the staging path via the package's
+  // path-safe reader. The frontend renders it sandboxed (token injected).
+  app.get("/api/collections/:slug/view-file", async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const viewId = typeof req.query.id === "string" ? req.query.id : "";
+      const collection = await loadCollection(slug);
+      if (!collection) {
+        res.status(404).json({ error: `collection '${slug}' not found` });
+        return;
+      }
+      const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+      if (!view) {
+        res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
+        return;
+      }
+      const html = await readCustomViewHtml(collection, view.file);
+      if (html === null) {
+        res.status(404).json({ error: `view file '${view.file}' not found` });
+        return;
+      }
+      res.type("text/html").send(html);
+    } catch (err) {
+      log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Mint a scoped token for a custom view, clamped to what the view declared so a
+  // read-only view can never obtain a write token.
+  app.post("/api/collections/:slug/view-token", async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const { slug } = req.params;
+      const body = (req.body ?? {}) as { viewId?: unknown; capabilities?: unknown };
+      const viewId = typeof body.viewId === "string" ? body.viewId.trim() : "";
+      if (!viewId) {
+        res.status(400).json({ error: "`viewId` is required" });
+        return;
+      }
+      const collection = await loadCollection(slug);
+      if (!collection) {
+        res.status(404).json({ error: `collection '${slug}' not found` });
+        return;
+      }
+      const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+      if (!view) {
+        res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
+        return;
+      }
+      // Read-only for now: MulmoTerminal has no view-data write route yet, so never
+      // grant `write` even if the view declares it (clamp the request to ["read"]).
+      // Drop the `write` clamp here once the interactive tier wires PUT /view-data.
+      const granted = clampCapabilities(view.capabilities as ViewCapability[] | undefined, ["read"]);
+      const minted = mintViewToken(slug, granted);
+      res.json({ token: minted.token, exp: minted.exp, dataUrl: `/api/collections/${encodeURIComponent(slug)}/view-data`, capabilities: granted });
+    } catch (err) {
+      log.warn("collections", "view-token mint failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // CORS for the view-data endpoint: the sandboxed iframe has an opaque origin, so
+  // its fetch is cross-origin and preflighted. `*` is safe — auth is the unguessable
+  // scoped token in the Authorization header (not a cookie), so no ambient-credential
+  // leak; an origin without the token just gets a 401.
+  const viewDataCors = (_req: Request, res: Response, next: NextFunction): void => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    next();
+  };
+  app.options("/api/collections/:slug/view-data", viewDataCors, (_req: Request, res: Response) => {
+    res.status(204).end();
+  });
+
+  // Scoped read: the view's enriched records as `{ items }` — the shape custom views
+  // fetch from `window.__MC_VIEW.dataUrl`. Guarded by the view token only.
+  app.get("/api/collections/:slug/view-data", viewDataCors, requireViewToken("read"), async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const collection = await loadCollection(req.params.slug);
+      if (!collection) {
+        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+        return;
+      }
+      const items = await enrichItems(collection, await listItems(collection.dataDir));
+      res.json({ items });
+    } catch (err) {
+      log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

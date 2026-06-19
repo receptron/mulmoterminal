@@ -5,13 +5,15 @@
 // vue-i18n host instance, no confirm/shortcut/notifier stores), so most write/chat/
 // favorite capabilities are stubs for this read-side increment.
 //
-// What's REAL here: fetchCollectionDetail + listCollections (→ the server read
-// routes over the shared workspace), localeTag, confirm. Everything else is a typed
-// failure / no-op until the interactive (Tier 1) and toolbar (Tier 2) work lands.
+// What's REAL here: fetchCollectionDetail + listCollections, the read-only custom
+// view surface (mintViewToken / fetchViewHtml / buildViewSrcdoc), localeTag, confirm.
+// Write / feeds / favorites / chat are typed failures / no-ops until the interactive
+// (Tier 1) and toolbar (Tier 2) work lands.
 import { defineComponent } from "vue";
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionApiResult } from "@mulmoclaude/collection-plugin/vue";
+import type { CollectionApiResult, CollectionViewToken } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity } from "@mulmoclaude/collection-plugin";
+import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 
 // ── Modal teleport target (Shadow DOM) ──
 // PluginFrame mounts each card inside a per-instance shadow root, but
@@ -35,6 +37,16 @@ export function popCollectionTeleportTarget(target: HTMLElement | ShadowRoot): v
 async function apiGet<T>(url: string): Promise<CollectionApiResult<T>> {
   try {
     const res = await fetch(url);
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
+    return { ok: true, data: (await res.json()) as T };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err), status: 0 };
+  }
+}
+
+async function apiPost<T>(url: string, body: unknown): Promise<CollectionApiResult<T>> {
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
     return { ok: true, data: (await res.json()) as T };
   } catch (err) {
@@ -78,7 +90,21 @@ configureCollectionUi({
   gotoDetail: () => {},
   navigateToRecord: () => {},
 
-  // ── write / feeds / custom views: deferred to Tier 1. ──
+  // ── custom views (read-only): sandboxed-iframe HTML views over the shared
+  //    workspace. Mint a scoped token, fetch the view HTML, and wrap it in a
+  //    CSP-locked srcdoc with the token injected. ──
+  mintViewToken: (slug, viewId) => apiPost<CollectionViewToken>(`/api/collections/${encodeURIComponent(slug)}/view-token`, { viewId }),
+  fetchViewHtml: async (slug, viewId) => {
+    try {
+      const res = await fetch(`/api/collections/${encodeURIComponent(slug)}/view-file?id=${encodeURIComponent(viewId)}`);
+      return res.ok ? { ok: true as const, html: await res.text() } : { ok: false as const, status: res.status };
+    } catch {
+      return { ok: false as const, status: 0 };
+    }
+  },
+  buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
+
+  // ── write / feeds / view-delete: deferred to Tier 1. ──
   createItem: () => Promise.resolve(apiFail),
   updateItem: () => Promise.resolve(apiFail),
   deleteItem: () => Promise.resolve(mutationFail),
@@ -88,9 +114,6 @@ configureCollectionUi({
   runCollectionAction: () => Promise.resolve(apiFail),
   refreshCollection: () => Promise.resolve(apiFail),
   deleteView: () => Promise.resolve(mutationFail),
-  mintViewToken: () => Promise.resolve(apiFail),
-  fetchViewHtml: () => Promise.resolve({ ok: false as const, status: 501 }),
-  buildViewSrcdoc: () => "",
   listFeeds: () => Promise.resolve(apiFail),
 
   // ── favorites / chat / notifications: no stores yet (Tier 2). ──
