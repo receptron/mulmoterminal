@@ -100,6 +100,21 @@ describe("/api/shortcuts routes", () => {
     expect(res.status).toBe(400);
   });
 
+  it("handles concurrent PUTs without ENOENT/500 (unique temp files)", async () => {
+    const put = (slug: string) =>
+      fetch(`${base}/api/shortcuts`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ shortcuts: [{ kind: "collection", slug }] }),
+      });
+    const results = await Promise.all(Array.from({ length: 8 }, (_, i) => put(`c${i}`)));
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    // The file is intact (valid wrapper) — one of the writers won, none half-written.
+    const onDisk = JSON.parse(readFileSync(path.join(ws, "config", "shortcuts.json"), "utf8"));
+    expect(Array.isArray(onDisk.shortcuts)).toBe(true);
+    expect(onDisk.shortcuts).toHaveLength(1);
+  });
+
   it("reads an existing MulmoClaude-written file (wrapper format)", async () => {
     mkdirSync(path.join(ws, "config"), { recursive: true });
     writeFileSync(path.join(ws, "config", "shortcuts.json"), JSON.stringify({ shortcuts: [{ kind: "feed", slug: "news", title: "News", icon: "rss_feed" }] }));

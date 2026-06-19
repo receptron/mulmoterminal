@@ -11,6 +11,7 @@
 //   PUT /api/shortcuts  → replace the whole array → { shortcuts }
 import path from "node:path";
 import { promises as fs } from "node:fs";
+import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 
 /** Which route family a shortcut points at. */
@@ -92,9 +93,18 @@ async function writeShortcuts(workspace: string, input: unknown): Promise<Shortc
   const payload: ShortcutsFile = { shortcuts: clean };
   const file = shortcutsFilePath(workspace);
   await fs.mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-  await fs.rename(tmp, file);
+  // Unique temp name per write so concurrent PUTs (two tabs / clients) can't clobber
+  // each other's temp file and ENOENT on rename. Each writes its own temp then
+  // atomically renames onto `file` — last writer wins, which is fine for a
+  // replace-all endpoint (the client also serializes its own PUTs).
+  const tmp = `${file}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    await fs.rename(tmp, file);
+  } catch (err) {
+    await fs.rm(tmp, { force: true }); // don't leave a stray temp on failure
+    throw err;
+  }
   return clean;
 }
 
