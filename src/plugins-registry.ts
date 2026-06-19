@@ -61,6 +61,9 @@ interface Registration {
   toolName: string;
   viewComponent: Component;
   css?: string;
+  // Optional fixed frame height for views that rely on an internal h-full layout
+  // (vs flowing at natural content height). See PluginFrame's `height` prop.
+  height?: string;
 }
 
 // Statically-known packages, keyed by package name; the config gates which load.
@@ -101,6 +104,11 @@ const PACKAGES: Record<string, Registration> = {
     // startup by importing ./composables/collectionUi in main.ts.
     viewComponent: CollectionCardView as Component,
     css: COLLECTION_ICON_CSS + collectionCss,
+    // The collection View uses an internal h-full layout (table/kanban scroll
+    // areas, and the custom-view iframe has no intrinsic content height). Give it a
+    // fixed frame so that chain resolves — matches MulmoClaude's StackView
+    // DEFAULT_PLUGIN_HEIGHT.
+    height: "min(60vh, 560px)",
   },
 };
 

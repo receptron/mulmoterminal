@@ -39,7 +39,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootEl">
+  <!-- Fill the fixed-height frame (PluginFrame `height` → shadow mount 100%) so the
+       package View's internal h-full layout — table/kanban scroll, custom-view
+       iframe — resolves against a definite height. Inline style, not scoped CSS:
+       this element lives inside the plugin's shadow root, which document-head
+       <style> (where Vue puts scoped CSS) can't reach. -->
+  <div ref="rootEl" :style="{ height: '100%' }">
     <component
       :is="ChatView"
       :selected-result="selectedResult"
