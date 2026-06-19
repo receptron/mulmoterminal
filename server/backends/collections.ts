@@ -24,15 +24,19 @@ import {
   readCustomViewHtml,
   writeItem,
   deleteItem,
+  readItem,
   generateItemId,
   resolveCreateItemId,
+  readSkillTemplate,
+  buildActionSeedPrompt,
+  buildCollectionActionSeedPrompt,
   toSummary,
   toDetail,
   validateCollectionRecords,
   type RecordIssue,
 } from "@mulmoclaude/collection-plugin/server";
-// CollectionItem lives in the isomorphic core entry (not re-exported from /server).
-import type { CollectionItem } from "@mulmoclaude/collection-plugin";
+// CollectionItem + actionVisible live in the isomorphic core entry.
+import { actionVisible, type CollectionItem } from "@mulmoclaude/collection-plugin";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -221,6 +225,80 @@ export function mountCollectionRoutes(app: Express): void {
       res.json({ deleted: true, itemId: result.itemId });
     } catch (err) {
       log.warn("collections", "item delete failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // ── Actions (kind: "chat") — return a seed prompt + role; the frontend feeds it
+  //    to startChat, which spawns a visible chat. The records are edited by that
+  //    agent session directly (the intended model). ──
+
+  // Per-record action (e.g. Repair / enrich this record).
+  app.post(
+    "/api/collections/:slug/items/:itemId/actions/:actionId",
+    async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response) => {
+      const collection = await loadCollection(req.params.slug);
+      if (!collection) {
+        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+        return;
+      }
+      const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
+      if (!action) {
+        res.status(404).json({ error: `action '${req.params.actionId}' not found on collection '${collection.slug}'` });
+        return;
+      }
+      try {
+        const record = await readItem(collection.dataDir, req.params.itemId);
+        if (!record) {
+          res.status(404).json({ error: `item '${req.params.itemId}' not found` });
+          return;
+        }
+        // The action's `when` predicate is the authorization rule: the client hides
+        // out-of-state buttons, but a stale/crafted request could still target one.
+        if (!actionVisible(action, record)) {
+          res.status(409).json({ error: `action '${action.id}' is not available for item '${req.params.itemId}' in its current state` });
+          return;
+        }
+        const template = await readSkillTemplate(collection.skillDir, action.template);
+        if (template === null) {
+          res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
+          return;
+        }
+        res.json({ prompt: buildActionSeedPrompt(record, template), role: action.role });
+      } catch (err) {
+        log.warn("collections", "item action seed failed", {
+          slug: collection.slug,
+          itemId: req.params.itemId,
+          actionId: req.params.actionId,
+          error: errorMessage(err),
+        });
+        res.status(500).json({ error: errorMessage(err) });
+      }
+    },
+  );
+
+  // Collection-level action (operates over all records).
+  app.post("/api/collections/:slug/actions/:actionId", async (req: Request<{ slug: string; actionId: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
+    if (!action) {
+      res.status(404).json({ error: `collection action '${req.params.actionId}' not found on collection '${collection.slug}'` });
+      return;
+    }
+    try {
+      const template = await readSkillTemplate(collection.skillDir, action.template);
+      if (template === null) {
+        res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
+        return;
+      }
+      const allItems = await listItems(collection.dataDir);
+      res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template), role: action.role });
+    } catch (err) {
+      log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });
