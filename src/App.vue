@@ -5,7 +5,17 @@ import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
+import TerminalGrid from "./components/TerminalGrid.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
+
+// View mode: "single" (the classic terminal + GUI panel) or "grid" (multiple
+// terminals at once). Persisted across reloads. P0: grid is a fixed 2x2.
+type ViewMode = "single" | "grid";
+const viewMode = ref<ViewMode>(localStorage.getItem("view_mode") === "grid" ? "grid" : "single");
+watch(viewMode, (v) => localStorage.setItem("view_mode", v));
+function toggleViewMode() {
+  viewMode.value = viewMode.value === "single" ? "grid" : "single";
+}
 
 const activeId = ref<string | null>(null);
 const connectKey = ref(0);
@@ -137,8 +147,12 @@ function onSession(id: string) {
   <div class="shell">
     <header class="toolbar">
       <span class="toolbar-title">MulmoTerminal</span>
+      <button class="view-toggle" :title="viewMode === 'grid' ? 'Switch to single view' : 'Switch to grid view'" @click="toggleViewMode">
+        {{ viewMode === "grid" ? "▢ Single" : "▦ Grid" }}
+      </button>
     </header>
-    <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
+    <TerminalGrid v-if="viewMode === 'grid'" class="app" />
+    <div v-else :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
         v-if="layout === 'vertical'"
         v-model:filter="filter"
@@ -215,6 +229,22 @@ function onSession(id: string) {
   font-size: 14px;
   color: #e6e6f0;
   letter-spacing: 0.02em;
+}
+
+/* Single ⇄ grid view toggle, pinned to the right of the toolbar. */
+.view-toggle {
+  margin-left: auto;
+  border: 1px solid #2a2a4e;
+  background: #1a1a2e;
+  color: #c7cdf0;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.view-toggle:hover {
+  background: #2a3b66;
 }
 
 .app {
