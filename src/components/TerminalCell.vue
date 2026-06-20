@@ -99,10 +99,11 @@ function launch() {
   launched.value = true;
 }
 
-// Quick-pick a preset directory: fill the field and launch in one click.
-function launchPreset(p: CwdPreset) {
+// Pick a preset directory: fill the field and refresh the resume list for it, so
+// the user can then start fresh OR resume one of that dir's sessions.
+function selectPreset(p: CwdPreset) {
   dirInput.value = p.path;
-  launch();
+  loadResumable();
 }
 
 // Existing sessions for the dir in the form, so an empty cell can resume one
@@ -223,7 +224,9 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
     </template>
     <div v-else class="cell-launch">
       <div v-if="presets.length" class="cell-presets">
-        <button v-for="p in presets" :key="p.label + p.path" class="cell-preset" :title="p.path" @click="launchPreset(p)">{{ p.label }}</button>
+        <button v-for="p in presets" :key="p.label + p.path" :class="['cell-preset', { active: dirInput === p.path }]" :title="p.path" @click="selectPreset(p)">
+          {{ p.label }}
+        </button>
       </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
@@ -375,6 +378,11 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 .cell-preset:hover {
   background: #2a3b66;
   color: #fff;
+}
+.cell-preset.active {
+  background: #2a3b66;
+  color: #fff;
+  border-color: #4a8cff;
 }
 .cell-launch-label {
   display: flex;

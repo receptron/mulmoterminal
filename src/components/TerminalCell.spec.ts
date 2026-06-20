@@ -102,12 +102,18 @@ describe("TerminalCell", () => {
     expect(w.find(".cell-resume").exists()).toBe(false);
   });
 
-  it("launches in a preset dir on one click", async () => {
+  it("selecting a preset sets the dir (doesn't launch); New then launches in it", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
     const btn = w.findAll(".cell-preset").find((b) => b.text() === "proj");
     if (!btn) throw new Error("preset button not found");
     await btn.trigger("click");
+    // No terminal yet — the preset only selects the directory.
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+    expect(btn.classes()).toContain("active");
+    // New terminal launches in the selected dir.
+    await w.find(".cell-start").trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/work/proj");
