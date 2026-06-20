@@ -10,6 +10,7 @@ import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
 import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
 import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
+import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
@@ -20,6 +21,7 @@ import CollectionCardView from "./components/CollectionCardView.vue";
 import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
+import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
 import { collectionShadowCss } from "./collectionShadowCss";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
@@ -52,6 +54,18 @@ const PACKAGES: Record<string, Registration> = {
     toolName: formPlugin.toolDefinition.name,
     viewComponent: formPlugin.viewComponent as Component,
     css: formCss,
+  },
+  "@mulmoclaude/html-plugin": {
+    toolName: htmlPlugin.toolDefinition.name,
+    // The presentHtml View uses useRuntime() (dispatch for loadHtml/saveHtml, pubsub
+    // for live-refresh). scope "html" matches the server's file-change channel
+    // (plugin:html:file:<path>); dispatch targets /api/plugin/presentHtml, where the
+    // server intercepts loadHtml/saveHtml (see server/backends/html.ts).
+    viewComponent: wrapWithPluginRuntime("html", htmlPlugin.toolDefinition.name, htmlPlugin.viewComponent as unknown as Component),
+    css: htmlCss,
+    // The View renders an h-full iframe; give it a definite frame height (like the
+    // collection card) so the page renders, with internal scroll.
+    height: "80vh",
   },
   "@mulmochat-plugin/generate-image": {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
