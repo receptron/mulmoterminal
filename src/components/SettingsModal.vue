@@ -7,21 +7,25 @@ const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "close")
 
 // Edit a local copy; commit on Save.
 const rows = ref<CwdPreset[]>(props.presets.map((p) => ({ ...p })));
+// Becomes true once the user edits, so a late prop sync can't clobber their work.
+const dirty = ref(false);
 // Resync if the presets arrive/change after mount — e.g. the modal opened before
 // /api/config resolved (would otherwise edit empty data and Save could wipe the
-// real presets).
+// real presets). Only while the form is pristine, to preserve in-progress edits.
 watch(
   () => props.presets,
   (next) => {
-    rows.value = next.map((p) => ({ ...p }));
+    if (!dirty.value) rows.value = next.map((p) => ({ ...p }));
   },
 );
 const modalEl = ref<HTMLElement>();
 
 function addRow() {
+  dirty.value = true;
   rows.value.push({ label: "", path: "" });
 }
 function removeRow(i: number) {
+  dirty.value = true;
   rows.value.splice(i, 1);
 }
 function save() {
@@ -69,8 +73,24 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
       <div class="rows">
         <div v-for="(row, i) in rows" :key="i" class="row">
-          <input v-model="row.label" class="field label-field" type="text" placeholder="Label" aria-label="Preset label" spellcheck="false" />
-          <input v-model="row.path" class="field path-field" type="text" placeholder="/absolute/path" aria-label="Preset directory path" spellcheck="false" />
+          <input
+            v-model="row.label"
+            class="field label-field"
+            type="text"
+            placeholder="Label"
+            aria-label="Preset label"
+            spellcheck="false"
+            @input="dirty = true"
+          />
+          <input
+            v-model="row.path"
+            class="field path-field"
+            type="text"
+            placeholder="/absolute/path"
+            aria-label="Preset directory path"
+            spellcheck="false"
+            @input="dirty = true"
+          />
           <button class="icon-btn" title="Remove" aria-label="Remove preset" @click="removeRow(i)">✕</button>
         </div>
         <p v-if="rows.length === 0" class="empty">No presets yet.</p>

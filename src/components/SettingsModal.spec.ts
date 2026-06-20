@@ -63,13 +63,24 @@ describe("SettingsModal", () => {
     expect(save?.attributes("disabled")).toBeDefined();
   });
 
-  it("resyncs rows when presets arrive after mount (early-open race)", async () => {
+  it("resyncs rows when presets arrive after mount while pristine (early-open race)", async () => {
     const w = mountModal([]); // opened before config loaded
     expect(w.findAll(".row")).toHaveLength(0);
     await w.setProps({ presets: [{ label: "a", path: "/a" }] }); // config resolves
     expect(w.findAll(".row")).toHaveLength(1);
     await clickBtn(w, (t) => t === "Save");
     expect(w.emitted("save")?.at(-1)?.[0]).toEqual([{ label: "a", path: "/a" }]);
+  });
+
+  it("does NOT clobber in-progress edits when presets arrive late", async () => {
+    const w = mountModal([]); // opened before config loaded
+    await clickBtn(w, (t) => t.includes("Add"));
+    await w.find(".label-field").setValue("mine");
+    await w.find(".path-field").setValue("/mine");
+    // config resolves with server presets — must not overwrite the user's edits
+    await w.setProps({ presets: [{ label: "server", path: "/server" }] });
+    await clickBtn(w, (t) => t === "Save");
+    expect(w.emitted("save")?.at(-1)?.[0]).toEqual([{ label: "mine", path: "/mine" }]);
   });
 
   it("does not mutate the prop array until save", async () => {
