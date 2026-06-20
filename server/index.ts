@@ -62,6 +62,10 @@ interface SessionMeta {
   mtime: number;
   working: boolean;
   waiting: boolean;
+  /** Spawned as a hidden background worker (spawnBackgroundChat hidden:true). The
+   *  tab still lists, but it never renders bold/unread — a background helper
+   *  finishing shouldn't pull the user's attention. */
+  hidden: boolean;
 }
 
 // Recency rank for an on-disk .jsonl, before its contents are read.
@@ -304,6 +308,12 @@ const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
 // once the file exists (the on-disk record takes over) or the pty is reaped.
 const knownSessions = new Map<string, KnownSession>(); // id -> { createdAt, title }
 
+// Sessions spawned as hidden background workers (spawnBackgroundChat hidden:true).
+// They list normally but never render bold/unread. Process-lifetime only (not
+// persisted) — and tied to `activity`'s lifecycle in reap() so a finished hidden
+// worker that stays `waiting` doesn't lose its hidden flag and re-bold.
+const hiddenSessions = new Set<string>(); // id
+
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
 const OUTPUT_BUFFER_LIMIT = 64 * 1024;
@@ -324,7 +334,12 @@ function reap(id: string) {
   // visible via its on-disk record.
   knownSessions.delete(id);
   const a = activity.get(id);
-  if (!a || (!a.working && !a.waiting)) activity.delete(id);
+  if (!a || (!a.working && !a.waiting)) {
+    activity.delete(id);
+    // Drop the hidden flag only when activity is dropped too — while `waiting`
+    // persists (the bold-until-viewed window), keep it so the row stays un-bold.
+    hiddenSessions.delete(id);
+  }
   try {
     entry.term.kill();
   } catch {
@@ -473,6 +488,7 @@ async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> 
     mtime: stat.mtimeMs,
     working: a?.working ?? false,
     waiting: a?.waiting ?? false,
+    hidden: hiddenSessions.has(id),
   };
 }
 
@@ -485,9 +501,10 @@ app.use(express.json({ limit: "25mb" }));
 // Host tool: spawnBackgroundChat. Unlike a plugin (handled by mountAllRoutes'
 // catch-all), it needs server internals — it spawns a brand-new interactive Claude
 // terminal session, seeded with `message`, that the user can open from the sidebar.
-// `role`/`hidden` are accepted for signature parity with MulmoClaude but ignored:
-// the session is always visible. Registered BEFORE mountAllRoutes so this specific
-// route wins over /api/plugin/:toolName.
+// `role` is ignored (MulmoTerminal has no roles). `hidden:true` marks it a background
+// worker: it still lists in the sidebar but never renders bold/unread when it
+// finishes. Registered BEFORE mountAllRoutes so this specific route wins over
+// /api/plugin/:toolName.
 app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   const body = isRecord(req.body) ? req.body : {};
   const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -495,6 +512,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
   const sessionId = randomUUID();
+  if (body.hidden === true) hiddenSessions.add(sessionId);
   // ws is null: the session runs headless until the user opens it (reattach
   // replays the buffered output). The "created" pubsub event in spawnClaudePty
   // surfaces it in the sidebar right away.
@@ -731,6 +749,7 @@ app.get("/api/sessions", async (_req, res) => {
         mtime: meta.createdAt,
         working: activity.get(id)?.working ?? false,
         waiting: activity.get(id)?.waiting ?? false,
+        hidden: hiddenSessions.has(id),
       });
     }
 
@@ -741,7 +760,7 @@ app.get("/api/sessions", async (_req, res) => {
       await Promise.all(
         top.map((s) =>
           s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting }
+            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, hidden: s.hidden }
             : readSessionMeta(dir, s.file).catch(() => null),
         ),
       )

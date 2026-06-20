@@ -10,8 +10,10 @@ import type { ToolDefinition } from "gui-chat-protocol";
 // tool is a drop-in from the model's point of view — but the implementation is
 // completely different: instead of starting an SDK chat, it spawns a brand-new
 // interactive Claude terminal session on the server, seeded with `message`, that
-// the user can open from the sidebar. `role` and `hidden` are accepted for
-// signature parity but ignored: the spawned session is always a visible terminal.
+// the user can open from the sidebar. `role` is accepted for signature parity but
+// ignored (MulmoTerminal has no roles). `hidden:true` marks the session a background
+// worker: it still lists in the sidebar but never renders bold/unread when it
+// finishes (so a background helper doesn't pull the user's attention).
 export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
   type: "function",
   name: "spawnBackgroundChat",
