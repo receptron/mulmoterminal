@@ -15,6 +15,8 @@ import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
+import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
@@ -544,6 +546,10 @@ mountAllRoutes(app);
 // once CLAUDE_CWD is the confirmed workspace.
 mountCollectionRoutes(app);
 
+// Notification bell REST surface (list active / history, clear). The engine is
+// configured at boot below, after pubsub exists.
+mountNotificationRoutes(app);
+
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
@@ -788,6 +794,11 @@ app.get("/api/sessions", async (_req, res) => {
 const server = http.createServer(app);
 pubsub = createPubSub(server, isAllowedOrigin);
 
+// Configure the notification engine (active+history persistence + fan-out to the
+// bell via the NOTIFIER_CHANNEL pubsub channel). Done after pubsub exists and
+// before the collection watchers below, which publish through it.
+initNotifier({ workspace: CLAUDE_CWD, pubsub });
+
 // Give the markdown host app its workspace (for artifacts/documents storage) +
 // pubsub (to forward file-change events to the plugin-scoped channel so the
 // presentDocument view live-refreshes). Done after pubsub exists (task #6).
@@ -800,6 +811,14 @@ initArtifactsBackend({ workspace: CLAUDE_CWD });
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
 initCollectionsBackend({ workspace: CLAUDE_CWD });
+
+// Start the collection-completion watchers (fs.watch per collection → bell
+// notifications via the notifier). Runs AFTER the collection host + notifier are
+// configured. Fire-and-forget so the boot sweep/reconcile doesn't delay listen;
+// failures are non-fatal (a missing bell is better than a failed boot).
+startCollectionCompletionWatchers().catch((err) => {
+  console.error(`[collection-watchers] start failed (non-fatal): ${messageOf(err)}`);
+});
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two

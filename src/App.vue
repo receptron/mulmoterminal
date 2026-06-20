@@ -6,6 +6,7 @@ import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
+import NotificationBell from "./components/NotificationBell.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
@@ -185,6 +186,7 @@ function onSession(id: string) {
           <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
         </button>
       </nav>
+      <NotificationBell class="toolbar-bell" />
     </header>
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
@@ -302,6 +304,12 @@ function onSession(id: string) {
 .launcher-btn .material-symbols-outlined {
   font-size: 19px;
   line-height: 1;
+}
+
+/* Push the notification bell to the far right of the toolbar. */
+.toolbar-bell {
+  margin-left: auto;
+  padding-left: 8px;
 }
 
 .app {

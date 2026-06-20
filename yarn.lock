@@ -560,6 +560,11 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
+"@mulmoclaude/collection-watchers@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-watchers/-/collection-watchers-0.1.0.tgz#4cc806b13e3c9292aefbecdfe479e63b904acaa6"
+  integrity sha512-20wWJwsoyW9mDjPMadXFH8eHbPqfzLoLj7C2rhmwzGYEcbHALm0mGu8SkgeWzFrS+nZJVXXFXRyrrq8vs7t6cg==
+
 "@mulmoclaude/form-plugin@^0.1.1":
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.1.tgz#54825cc7ecb3eded0d9d6d7bc0c04214bf7c78da"
@@ -578,6 +583,11 @@
     "@marp-team/marp-core" "^4.3.0"
     js-yaml "^4.2.0"
     marked "^18.0.5"
+
+"@mulmoclaude/notifier@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/notifier/-/notifier-0.1.0.tgz#bfec2eabcd25d7516a1a2ed07e32fa62f59cf1ce"
+  integrity sha512-kBv3FkW+WPEgXoYfEJd2WGL43mD3JMFsPMAQ4T7uF1AsRuVlRQlzAu+V9YhIdQzyTu0ccp5MNUS9dvJ93B9xlg==
 
 "@mulmoclaude/x-plugin@^0.1.1":
   version "0.1.1"
