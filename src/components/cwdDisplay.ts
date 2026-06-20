@@ -3,7 +3,17 @@
 // and drop the front behind an ellipsis — e.g. "…hoge/foo/bar".
 
 export function homeRelative(cwd: string, home: string | null): string {
-  if (home && (cwd === home || cwd.startsWith(`${home}/`))) return `~${cwd.slice(home.length)}`;
+  if (!home) return cwd;
+  // Windows paths use "\" and are case-insensitive (incl. the drive letter).
+  const windows = home.includes("\\") || /^[a-zA-Z]:/.test(home);
+  const matches = (a: string, b: string) => (windows ? a.toLowerCase() === b.toLowerCase() : a === b);
+  if (matches(cwd, home)) return "~";
+  // cwd must continue with a separator right after the home prefix (so /Users/me
+  // doesn't match /Users/mehmet).
+  const next = cwd.charAt(home.length);
+  if ((next === "/" || next === "\\") && matches(cwd.slice(0, home.length), home)) {
+    return `~${cwd.slice(home.length)}`;
+  }
   return cwd;
 }
 
