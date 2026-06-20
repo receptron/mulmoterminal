@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, onMounted, onUnmounted, nextTick } from "vue";
 import type { CwdPreset } from "./presets";
 
-const props = defineProps<{ presets: CwdPreset[] }>();
+const props = defineProps<{ presets: CwdPreset[]; saving?: boolean; error?: string | null }>();
 const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "close"): void }>();
 
 // Edit a local copy; commit on Save.
 const rows = ref<CwdPreset[]>(props.presets.map((p) => ({ ...p })));
+const modalEl = ref<HTMLElement>();
 
 function addRow() {
   rows.value.push({ label: "", path: "" });
@@ -18,11 +19,39 @@ function save() {
   const cleaned = rows.value.map((r) => ({ label: r.label.trim(), path: r.path.trim() })).filter((r) => r.label && r.path);
   emit("save", cleaned);
 }
+
+// Modal keyboard behavior: Escape closes; Tab is trapped within the dialog.
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape") {
+    emit("close");
+    return;
+  }
+  if (e.key !== "Tab" || !modalEl.value) return;
+  const focusable = [...modalEl.value.querySelectorAll<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')].filter(
+    (el) => !el.hasAttribute("disabled"),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+}
+
+onMounted(() => {
+  document.addEventListener("keydown", onKeydown);
+  nextTick(() => modalEl.value?.querySelector<HTMLElement>("input, button")?.focus());
+});
+onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
   <div class="overlay" @click.self="emit('close')">
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Settings">
+    <div ref="modalEl" class="modal" role="dialog" aria-modal="true" aria-label="Settings">
       <div class="modal-head">
         <h2 class="modal-title">Directory presets</h2>
         <button class="icon-btn" title="Close" aria-label="Close settings" @click="emit('close')">✕</button>
@@ -38,11 +67,13 @@ function save() {
         <p v-if="rows.length === 0" class="empty">No presets yet.</p>
       </div>
 
+      <p v-if="error" class="error" role="alert">{{ error }}</p>
+
       <div class="modal-foot">
         <button class="btn" @click="addRow">＋ Add preset</button>
         <span class="spacer" />
         <button class="btn" @click="emit('close')">Cancel</button>
-        <button class="btn btn-primary" @click="save">Save</button>
+        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
       </div>
     </div>
   </div>
@@ -120,11 +151,20 @@ function save() {
   font-size: 12px;
   color: #6b7394;
 }
+.error {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: #ff8080;
+}
 .modal-foot {
   display: flex;
   align-items: center;
   gap: 8px;
   margin-top: 16px;
+}
+.btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 .spacer {
   flex: 1;

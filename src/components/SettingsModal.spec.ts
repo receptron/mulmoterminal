@@ -43,6 +43,20 @@ describe("SettingsModal", () => {
     expect(w.emitted("close")).toBeTruthy();
   });
 
+  it("emits close on Escape", async () => {
+    const w = mountModal();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(w.emitted("close")).toBeTruthy();
+    w.unmount();
+  });
+
+  it("shows an error and disables Save while saving", () => {
+    const w = mount(SettingsModal, { props: { presets: [], saving: true, error: "boom" } });
+    expect(w.find(".error").text()).toBe("boom");
+    const save = w.findAll(".btn").find((b) => b.text().includes("Saving"));
+    expect(save?.attributes("disabled")).toBeDefined();
+  });
+
   it("does not mutate the prop array until save", async () => {
     const presets = [{ label: "a", path: "/a" }];
     const w = mountModal(presets);

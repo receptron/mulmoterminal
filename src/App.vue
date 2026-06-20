@@ -14,6 +14,8 @@ watch(layout, (v) => localStorage.setItem("grid_layout", v));
 const defaultCwd = ref<string | null>(null);
 const presets = ref<CwdPreset[]>([]);
 const showSettings = ref(false);
+const savingSettings = ref(false);
+const settingsError = ref<string | null>(null);
 
 async function loadConfig() {
   try {
@@ -29,17 +31,27 @@ async function loadConfig() {
 onMounted(loadConfig);
 
 async function savePresets(next: CwdPreset[]) {
+  savingSettings.value = true;
+  settingsError.value = null;
   try {
     const res = await fetch("/api/config", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ cwdPresets: next }),
     });
-    if (res.ok) presets.value = (await res.json()).cwdPresets ?? [];
+    if (!res.ok) throw new Error(`save failed (${res.status})`);
+    presets.value = (await res.json()).cwdPresets ?? [];
+    showSettings.value = false; // close only on success — keep edits otherwise
   } catch {
-    // keep the modal's intent; leave existing presets on failure
+    settingsError.value = "Couldn't save presets. Check the server and try again.";
+  } finally {
+    savingSettings.value = false;
   }
+}
+
+function closeSettings() {
   showSettings.value = false;
+  settingsError.value = null;
 }
 </script>
 
@@ -55,7 +67,7 @@ async function savePresets(next: CwdPreset[]) {
       <button class="settings-btn" title="Settings" aria-label="Settings" @click="showSettings = true">⚙</button>
     </header>
     <TerminalGrid class="main" :layout="layout" :default-cwd="defaultCwd" :presets="presets" />
-    <SettingsModal v-if="showSettings" :presets="presets" @save="savePresets" @close="showSettings = false" />
+    <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
   </div>
 </template>
 
