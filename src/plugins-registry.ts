@@ -9,8 +9,11 @@ import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
 import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
+import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
+import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
+import CollectionCardView from "./components/CollectionCardView.vue";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -18,6 +21,8 @@ import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
+import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
+import { collectionShadowCss } from "./collectionShadowCss";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
 // against those packages' dists (see src/plugin-tailwind.css), supplying the
@@ -28,6 +33,9 @@ interface Registration {
   toolName: string;
   viewComponent: Component;
   css?: string;
+  // Optional fixed frame height for views that rely on an internal h-full layout
+  // (vs flowing at natural content height). See PluginFrame's `height` prop.
+  height?: string;
 }
 
 // Statically-known packages, keyed by package name; the config gates which load.
@@ -47,6 +55,18 @@ const PACKAGES: Record<string, Registration> = {
     viewComponent: formPlugin.viewComponent as Component,
     css: formCss,
   },
+  "@mulmoclaude/html-plugin": {
+    toolName: htmlPlugin.toolDefinition.name,
+    // The presentHtml View uses useRuntime() (dispatch for loadHtml/saveHtml, pubsub
+    // for live-refresh). scope "html" matches the server's file-change channel
+    // (plugin:html:file:<path>); dispatch targets /api/plugin/presentHtml, where the
+    // server intercepts loadHtml/saveHtml (see server/backends/html.ts).
+    viewComponent: wrapWithPluginRuntime("html", htmlPlugin.toolDefinition.name, htmlPlugin.viewComponent as unknown as Component),
+    css: htmlCss,
+    // The View renders an h-full iframe; give it a definite frame height (like the
+    // collection card) so the page renders, with internal scroll.
+    height: "80vh",
+  },
   "@mulmochat-plugin/generate-image": {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
     viewComponent: GenerateImagePlugin.plugin.viewComponent as Component,
@@ -59,6 +79,20 @@ const PACKAGES: Record<string, Registration> = {
     // ?? "en"), so it renders standalone. Its style.css is self-contained Tailwind.
     viewComponent: chartPlugin.viewComponent as Component,
     css: chartCss,
+  },
+  "@mulmoclaude/collection-plugin": {
+    toolName: collectionPlugin.toolDefinition.name,
+    // CollectionCardView wraps the package's chat View so it can register its shadow
+    // root as the record modal's teleport target (see the component + collectionUi).
+    // The binding (data fetch, asset URLs, nav, confirm) is configured once at
+    // startup by importing ./composables/collectionUi in main.ts.
+    viewComponent: CollectionCardView as Component,
+    css: collectionShadowCss,
+    // The collection View uses an internal h-full layout (table/kanban scroll
+    // areas, and the custom-view iframe has no intrinsic content height). Give it a
+    // fixed frame so that chain resolves — matches MulmoClaude's StackView
+    // DEFAULT_PLUGIN_HEIGHT.
+    height: "80vh",
   },
 };
 

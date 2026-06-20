@@ -41,7 +41,13 @@ import { ref, onMounted } from "vue";
 // We Teleport the slotted view into the shadow root rather than mounting a separate
 // Vue app, so the plugin component stays in the parent app's context (props,
 // emits, provide/inject, reactivity all work normally).
-const props = defineProps<{ css?: string }>();
+// `height` (optional): a fixed frame height for plugin views that rely on an
+// internal `h-full` (100%) layout rather than flowing at natural content height —
+// e.g. the collection card's table/kanban/custom-view iframe. Mirrors MulmoClaude's
+// StackView, which wraps such tools in a fixed-height box. When set, the host
+// + shadow mount become that height so the plugin's `h-full` chain resolves; when
+// omitted, the frame flows naturally (chart/form/markdown).
+const props = defineProps<{ css?: string; height?: string }>();
 
 const hostEl = ref<HTMLDivElement>();
 const target = ref<HTMLDivElement | null>(null);
@@ -65,13 +71,16 @@ onMounted(() => {
   mount.style.color = "#111827";
   mount.style.borderRadius = "8px";
   mount.style.overflow = "hidden";
+  // Carry the fixed height into the shadow so the plugin's internal h-full resolves
+  // (the host below is sized to props.height too).
+  if (props.height) mount.style.height = "100%";
   shadow.appendChild(mount);
   target.value = mount;
 });
 </script>
 
 <template>
-  <div ref="hostEl" class="plugin-frame-host">
+  <div ref="hostEl" class="plugin-frame-host" :style="height ? { height } : undefined">
     <Teleport v-if="target" :to="target">
       <slot />
     </Teleport>

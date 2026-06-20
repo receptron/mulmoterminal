@@ -1,75 +1,254 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from "vue";
-import TerminalGrid from "./components/TerminalGrid.vue";
-import SettingsModal from "./components/SettingsModal.vue";
-import { LAYOUTS, isLayout, type Layout } from "./components/gridLayout";
-import type { CwdPreset } from "./components/presets";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import Sidebar from "./components/Sidebar.vue";
+import SessionTabBar from "./components/SessionTabBar.vue";
+import TerminalView from "./components/Terminal.vue";
+import GuiPanel from "./components/GuiPanel.vue";
+import ToolsPane from "./components/ToolsPane.vue";
+import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
+import GridView from "./components/GridView.vue";
+import { useSessions, type Filter } from "./composables/useSessions";
+import { useShortcuts } from "./composables/useShortcuts";
+import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
+import { registerChatOpener } from "./composables/useChatLauncher";
+import type { Shortcut } from "./types/shortcuts";
 
-// Grid layout (cell arrangement), chosen in the toolbar and persisted.
-const stored = localStorage.getItem("grid_layout");
-const layout = ref<Layout>(isLayout(stored) ? stored : "2x2");
-watch(layout, (v) => localStorage.setItem("grid_layout", v));
+// View mode: the classic single-terminal view (default) or the multi-terminal
+// grid. Persisted so a reload keeps the chosen view.
+type ViewMode = "single" | "grid";
+const viewMode = ref<ViewMode>(localStorage.getItem("view_mode") === "grid" ? "grid" : "single");
+watch(viewMode, (v) => localStorage.setItem("view_mode", v));
 
-// Server config: the default workspace dir + the user's directory presets.
-const defaultCwd = ref<string | null>(null);
-const home = ref<string | null>(null);
-const presets = ref<CwdPreset[]>([]);
-const showSettings = ref(false);
-const savingSettings = ref(false);
-const settingsError = ref<string | null>(null);
-
-async function loadConfig() {
-  try {
-    const res = await fetch("/api/config");
-    if (!res.ok) return;
-    const c = await res.json();
-    defaultCwd.value = c.cwd ?? null;
-    home.value = c.home ?? null;
-    presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
-  } catch {
-    // grid still works; presets just unavailable
-  }
-}
-onMounted(loadConfig);
-
-async function savePresets(next: CwdPreset[]) {
-  savingSettings.value = true;
-  settingsError.value = null;
-  try {
-    const res = await fetch("/api/config", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwdPresets: next }),
-    });
-    if (!res.ok) throw new Error(`save failed (${res.status})`);
-    presets.value = (await res.json()).cwdPresets ?? [];
-    showSettings.value = false; // close only on success — keep edits otherwise
-  } catch {
-    settingsError.value = "Couldn't save presets. Check the server and try again.";
-  } finally {
-    savingSettings.value = false;
-  }
+// Shared launcher favorites (pinned collections / feeds), backing the toolbar.
+const { shortcuts } = useShortcuts();
+// Toolbar tabs reflect the browse view-state: Chat (overlay closed) | Collections
+// (index open) | a favorite (its detail open).
+const { view: browseView, isOpen: browseOpen } = useCollectionBrowse();
+function favActive(s: Shortcut): boolean {
+  return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
 }
 
-function closeSettings() {
-  showSettings.value = false;
-  settingsError.value = null;
+const activeId = ref<string | null>(null);
+const connectKey = ref(0);
+const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
+
+// Single source of truth for the session list, owned here (not inside the
+// layout components) so toggling vertical/horizontal — which swaps Sidebar and
+// SessionTabBar via v-if/v-else — never unmounts the store, refetches, or resets
+// the filter. Both layouts render this same shared state.
+const { sessions, loading, error, refresh } = useSessions();
+const filter = ref<Filter>("all");
+
+// Terminal column width (px), set by dragging the splitter between the terminal
+// and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
+// reloads. The terminal's own ResizeObserver refits xterm's cols/rows as this
+// changes, so a drag live-resizes the PTY.
+const MIN_TERMINAL = 320;
+const MIN_GUI = 360;
+const terminalWidth = ref<number>(Number(localStorage.getItem("terminal_width")) || 560);
+
+// Track the viewport so the splitter's max (and aria-valuemax) stays correct and
+// the saved width re-clamps when the window shrinks.
+const viewportWidth = ref(window.innerWidth);
+const maxTerminal = computed(() => Math.max(MIN_TERMINAL, viewportWidth.value - MIN_GUI));
+
+function clampWidth(w: number): number {
+  return Math.max(MIN_TERMINAL, Math.min(w, maxTerminal.value));
+}
+
+function persistWidth() {
+  localStorage.setItem("terminal_width", String(terminalWidth.value));
+}
+
+let stopDrag: (() => void) | null = null;
+function startDrag(e: MouseEvent) {
+  e.preventDefault();
+  const startX = e.clientX;
+  const startW = terminalWidth.value;
+  const onMove = (ev: MouseEvent) => {
+    terminalWidth.value = clampWidth(startW + (ev.clientX - startX));
+  };
+  const onUp = () => {
+    persistWidth();
+    stopDrag?.();
+  };
+  stopDrag = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    document.body.style.cursor = "";
+    document.body.style.userSelect = "";
+    stopDrag = null;
+  };
+  // Suppress text selection / keep the resize cursor for the whole drag.
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+}
+
+// Keyboard resize for the separator (arrows nudge, Home/End jump to the limits)
+// so the splitter is operable without a mouse.
+function onSplitterKey(e: KeyboardEvent) {
+  const STEP = 16;
+  if (e.key === "ArrowLeft") terminalWidth.value = clampWidth(terminalWidth.value - STEP);
+  else if (e.key === "ArrowRight") terminalWidth.value = clampWidth(terminalWidth.value + STEP);
+  else if (e.key === "Home") terminalWidth.value = MIN_TERMINAL;
+  else if (e.key === "End") terminalWidth.value = maxTerminal.value;
+  else return;
+  e.preventDefault();
+  persistWidth();
+}
+
+function onViewportResize() {
+  viewportWidth.value = window.innerWidth;
+  terminalWidth.value = clampWidth(terminalWidth.value);
+}
+onMounted(() => window.addEventListener("resize", onViewportResize));
+onUnmounted(() => {
+  stopDrag?.();
+  window.removeEventListener("resize", onViewportResize);
+});
+
+// Session-history layout: "vertical" (left Sidebar) or "horizontal" (top
+// SessionTabBar), mirroring mulmoclaude's two history layouts. Persisted across
+// reloads like the tools pane.
+type Layout = "vertical" | "horizontal";
+const layout = ref<Layout>(localStorage.getItem("session_layout") === "horizontal" ? "horizontal" : "vertical");
+watch(layout, (v) => localStorage.setItem("session_layout", v));
+function toggleLayout() {
+  layout.value = layout.value === "vertical" ? "horizontal" : "vertical";
+}
+
+// Tools pane visibility, persisted across reloads (mirrors MulmoClaude's
+// right-sidebar toggle).
+const showTools = ref(localStorage.getItem("tools_pane_visible") === "true");
+watch(showTools, (v) => localStorage.setItem("tools_pane_visible", String(v)));
+function toggleTools() {
+  showTools.value = !showTools.value;
+}
+
+// GUI -> LLM: a plugin view (e.g. a submitted form) calls this with the user's
+// response. Terminal.submitText types it into the PTY and submits it (text + a
+// delayed CR, both pinned to the same socket). Returns whether it was delivered
+// so the caller only locks/persists on success.
+function sendTextMessage(text: string): boolean {
+  return terminalRef.value?.submitText(text) ?? false;
+}
+
+function selectSession(id: string) {
+  activeId.value = id;
+  connectKey.value++;
+}
+
+// A collection action (startChat) spawned a new chat and wants it shown: close the
+// browse overlay (if open) and select the session so the terminal displays it.
+registerChatOpener((id: string) => {
+  browseClose();
+  selectSession(id);
+});
+
+function newSession() {
+  activeId.value = null;
+  connectKey.value++;
+}
+
+// The server reports the live session id (a generated id for new sessions).
+// Adopt it as the active id so it highlights. The sidebar list itself is
+// driven server-side: the server publishes the new session on the "sessions"
+// channel, so no client-side reload is needed here.
+function onSession(id: string) {
+  activeId.value = id;
 }
 </script>
 
 <template>
-  <div class="shell">
+  <GridView v-if="viewMode === 'grid'" @exit="viewMode = 'single'" />
+  <div v-else class="shell">
     <header class="toolbar">
       <span class="toolbar-title">MulmoTerminal</span>
-      <span class="layout-picker" role="group" aria-label="Grid layout">
-        <button v-for="l in LAYOUTS" :key="l" :class="['layout-btn', { active: layout === l }]" :aria-pressed="layout === l" @click="layout = l">
-          {{ l }}
+      <nav class="launcher" aria-label="Views">
+        <button type="button" class="launcher-btn" :class="{ active: !browseOpen }" title="Chat" aria-label="Chat" @click="browseClose">
+          <span class="material-symbols-outlined">chat</span>
         </button>
-      </span>
-      <button class="settings-btn" title="Settings" aria-label="Settings" @click="showSettings = true">⚙</button>
+        <button type="button" class="launcher-btn" title="Grid (multiple terminals)" aria-label="Grid view" @click="viewMode = 'grid'">
+          <span class="material-symbols-outlined">grid_view</span>
+        </button>
+        <button
+          type="button"
+          class="launcher-btn"
+          :class="{ active: browseView.mode === 'index' }"
+          title="Collections"
+          aria-label="Collections"
+          @click="browseGotoIndex('collection')"
+        >
+          <span class="material-symbols-outlined">apps</span>
+        </button>
+        <button
+          v-for="s in shortcuts"
+          :key="`${s.kind}:${s.slug}`"
+          type="button"
+          class="launcher-btn"
+          :class="{ active: favActive(s) }"
+          :title="s.title"
+          :aria-label="s.title"
+          @click="browseGotoDetail(s.kind, s.slug)"
+        >
+          <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
+        </button>
+      </nav>
     </header>
-    <TerminalGrid class="main" :layout="layout" :default-cwd="defaultCwd" :presets="presets" :home="home" />
-    <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
+    <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
+      <Sidebar
+        v-if="layout === 'vertical'"
+        v-model:filter="filter"
+        :sessions="sessions"
+        :loading="loading"
+        :error="error"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
+      />
+      <SessionTabBar
+        v-else
+        v-model:filter="filter"
+        :sessions="sessions"
+        :active-id="activeId"
+        @select="selectSession"
+        @new="newSession"
+        @toggle-layout="toggleLayout"
+        @refresh="refresh"
+      />
+      <div class="main">
+        <TerminalView
+          ref="terminalRef"
+          class="terminal-pane"
+          :style="{ flex: `0 0 ${terminalWidth}px` }"
+          :session-id="activeId"
+          :connect-key="connectKey"
+          @session="onSession"
+        />
+        <div
+          class="splitter"
+          role="separator"
+          tabindex="0"
+          aria-orientation="vertical"
+          aria-label="Resize terminal"
+          :aria-valuenow="terminalWidth"
+          :aria-valuemin="MIN_TERMINAL"
+          :aria-valuemax="maxTerminal"
+          title="Drag (or use arrow keys) to resize the terminal"
+          @mousedown="startDrag"
+          @keydown="onSplitterKey"
+        />
+        <GuiPanel :session-id="activeId" :send-text-message="sendTextMessage" :tools-open="showTools" @toggle-tools="toggleTools" />
+        <ToolsPane v-if="showTools" :session-id="activeId" @close="toggleTools" />
+      </div>
+    </div>
+    <!-- Full-screen collection browser; shown when the launcher / an index card / a
+         ref hop opens it (driven by useCollectionBrowse). -->
+    <CollectionsBrowseOverlay />
   </div>
 </template>
 
@@ -82,12 +261,11 @@ function closeSettings() {
   overflow: hidden;
 }
 
-/* Top toolbar with the app title + layout picker + settings. */
+/* Top toolbar with the app title. */
 .toolbar {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 16px;
   height: 40px;
   padding: 0 16px;
   background: #16213e;
@@ -101,50 +279,90 @@ function closeSettings() {
   letter-spacing: 0.02em;
 }
 
-.layout-picker {
-  margin-left: auto;
+/* Toolbar tabs: Chat + Collections + one per pinned favorite. Icon-only. */
+.launcher {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 3px;
+  margin-left: 16px;
+  min-width: 0;
+  overflow-x: auto;
 }
-.layout-btn {
-  border: 1px solid #2a2a4e;
-  background: #1a1a2e;
-  color: #9aa3c0;
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  padding: 3px 8px;
+.launcher-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 30px;
+  width: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #9aa6cc;
   border-radius: 6px;
   cursor: pointer;
 }
-.layout-btn:hover {
-  background: #2a3b66;
-  color: #e6e6f0;
-}
-.layout-btn.active {
-  background: #2a3b66;
+.launcher-btn:hover {
+  background: #26375f;
   color: #fff;
-  border-color: #4a8cff;
 }
-
-.settings-btn {
-  border: 1px solid #2a2a4e;
-  background: #1a1a2e;
-  color: #c7cdf0;
-  font-size: 15px;
+.launcher-btn.active {
+  background: #2f59c0;
+  color: #fff;
+}
+.launcher-btn .material-symbols-outlined {
+  font-size: 19px;
   line-height: 1;
-  padding: 4px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.settings-btn:hover {
-  background: #2a3b66;
-  color: #fff;
 }
 
-/* The grid fills everything under the toolbar. */
-.main {
+.app {
+  display: flex;
   flex: 1;
   min-height: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Vertical: Sidebar | [ Terminal | GuiPanel ]. */
+.app-vertical {
+  flex-direction: row;
+}
+
+/* Horizontal: SessionTabBar stacked above [ Terminal | GuiPanel ]. */
+.app-horizontal {
+  flex-direction: column;
+}
+
+/* [ Terminal | GuiPanel ] — the unified two-panel view in miniature. Bounded to
+   the leftover height (full viewport in vertical mode, viewport minus the tab
+   bar in horizontal mode) so the panes fill it exactly instead of overflowing
+   under `.app { overflow: hidden }`. Panes size to height:100% of this. */
+.main {
+  display: flex;
+  flex: 1;
   min-width: 0;
+  min-height: 0;
+}
+
+/* Terminal pane: fixed flex-basis (set inline from terminalWidth); the GUI
+   panel beside it absorbs the remaining width. */
+.terminal-pane {
+  min-width: 0;
+}
+
+/* Draggable divider between the terminal and the GUI panel. */
+.splitter {
+  flex: 0 0 5px;
+  cursor: col-resize;
+  background: #16213e;
+  border-left: 1px solid #2a2a4e;
+  border-right: 1px solid #2a2a4e;
+}
+.splitter:hover {
+  background: #2a3b66;
+}
+.splitter:focus-visible {
+  outline: none;
+  background: #4a8cff;
 }
 </style>

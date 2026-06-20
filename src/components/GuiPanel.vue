@@ -121,7 +121,7 @@ const hasContent = computed(() => results.value.length > 0);
         to render content here.
       </div>
       <template v-for="r in results" :key="r.uuid">
-        <PluginFrame v-if="getPlugin(r.toolName)" class="frame" :css="getPlugin(r.toolName)!.css">
+        <PluginFrame v-if="getPlugin(r.toolName)" class="frame" :css="getPlugin(r.toolName)!.css" :height="getPlugin(r.toolName)!.height">
           <component
             :is="getPlugin(r.toolName)!.viewComponent"
             :selected-result="r"

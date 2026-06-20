@@ -9,6 +9,18 @@ export default defineConfig({
   // a global side-effect, so the app's styles are untouched.
   plugins: [vue(), tailwindcss()],
   server: {
+    // Disable Vite's dev CORS middleware. The app is same-origin in dev (the page
+    // and the proxied `/api` both live on :5173), so it needs no CORS headers from
+    // Vite. The one cross-origin consumer is a custom collection view: it renders in
+    // a sandboxed (opaque-origin) iframe whose fetch to
+    // `/api/collections/:slug/view-data` is cross-origin and preflighted. With Vite's
+    // CORS enabled, Vite answers that OPTIONS itself WITHOUT an
+    // `Access-Control-Allow-Origin` (it rejects the "null" origin) and the preflight
+    // fails before reaching the backend. Disabling it lets the preflight (and the
+    // request) flow through the proxy to Express, which sets the correct CORS headers
+    // (viewDataCors in server/backends/collections.ts). Production has no Vite proxy
+    // — the iframe hits Express directly — so this is dev-only. Matches MulmoClaude.
+    cors: false,
     proxy: {
       // socket.io pub/sub (sidebar activity). Must precede the "/ws" rule.
       "/ws/pubsub": {
@@ -21,6 +33,13 @@ export default defineConfig({
       },
       "/api": {
         target: "http://localhost:3456",
+        changeOrigin: true,
+      },
+      // presentHtml page serving (the View's iframe src). Without this, the dev
+      // Vite catch-all returns index.html instead of the HTML artifact.
+      "/artifacts": {
+        target: "http://localhost:3456",
+        changeOrigin: true,
       },
     },
   },

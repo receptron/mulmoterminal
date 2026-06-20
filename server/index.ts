@@ -15,7 +15,11 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { loadPresets, savePresets, sanitizePresets, type CwdPreset } from "./cwd-presets.js";
+import { mountConfigRoutes } from "./config-routes.js";
+import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { mountFilesRoutes } from "./backends/files.js";
+import { mountShortcutsRoutes } from "./backends/shortcuts.js";
+import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -62,6 +66,10 @@ interface SessionMeta {
   mtime: number;
   working: boolean;
   waiting: boolean;
+  /** Spawned as a hidden background worker (spawnBackgroundChat hidden:true). The
+   *  tab still lists, but it never renders bold/unread — a background helper
+   *  finishing shouldn't pull the user's attention. */
+  hidden: boolean;
 }
 
 // Recency rank for an on-disk .jsonl, before its contents are read.
@@ -103,11 +111,6 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the
 // workspace dir, so it stays valid regardless of which directory is active.
 const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
-
-// User config (currently just directory presets the launch form offers),
-// persisted at ~/.mulmoterminal/config.json. Logic lives in ./cwd-presets.
-const CONFIG_FILE = path.join(MULMOTERMINAL_HOME, "config.json");
-let cwdPresets: CwdPreset[] = loadPresets(CONFIG_FILE);
 
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
@@ -314,6 +317,12 @@ const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
 // once the file exists (the on-disk record takes over) or the pty is reaped.
 const knownSessions = new Map<string, KnownSession>(); // id -> { createdAt, title }
 
+// Sessions spawned as hidden background workers (spawnBackgroundChat hidden:true).
+// They list normally but never render bold/unread. Process-lifetime only (not
+// persisted) — and tied to `activity`'s lifecycle in reap() so a finished hidden
+// worker that stays `waiting` doesn't lose its hidden flag and re-bold.
+const hiddenSessions = new Set<string>(); // id
+
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
 const OUTPUT_BUFFER_LIMIT = 64 * 1024;
@@ -364,7 +373,12 @@ function reap(id: string) {
   knownSessions.delete(id);
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   const a = activity.get(id);
-  if (!a || (!a.working && !a.waiting)) activity.delete(id);
+  if (!a || (!a.working && !a.waiting)) {
+    activity.delete(id);
+    // Drop the hidden flag only when activity is dropped too — while `waiting`
+    // persists (the bold-until-viewed window), keep it so the row stays un-bold.
+    hiddenSessions.delete(id);
+  }
   try {
     entry.term.kill();
   } catch {
@@ -534,6 +548,7 @@ async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> 
     mtime: stat.mtimeMs,
     working: a?.working ?? false,
     waiting: a?.waiting ?? false,
+    hidden: hiddenSessions.has(id),
   };
 }
 
@@ -546,9 +561,10 @@ app.use(express.json({ limit: "25mb" }));
 // Host tool: spawnBackgroundChat. Unlike a plugin (handled by mountAllRoutes'
 // catch-all), it needs server internals — it spawns a brand-new interactive Claude
 // terminal session, seeded with `message`, that the user can open from the sidebar.
-// `role`/`hidden` are accepted for signature parity with MulmoClaude but ignored:
-// the session is always visible. Registered BEFORE mountAllRoutes so this specific
-// route wins over /api/plugin/:toolName.
+// `role` is ignored (MulmoTerminal has no roles). `hidden:true` marks it a background
+// worker: it still lists in the sidebar but never renders bold/unread when it
+// finishes. Registered BEFORE mountAllRoutes so this specific route wins over
+// /api/plugin/:toolName.
 app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   const body = isRecord(req.body) ? req.body : {};
   const message = typeof body.message === "string" ? body.message.trim() : "";
@@ -556,6 +572,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
   const sessionId = randomUUID();
+  if (body.hidden === true) hiddenSessions.add(sessionId);
   // ws is null: the session runs headless until the user opens it (reattach
   // replays the buffered output). The "created" pubsub event in spawnClaudePty
   // surfaces it in the sidebar right away.
@@ -571,9 +588,32 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   });
 });
 
+// presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
+// /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
+// catch-all (which handles the tool-call); a request without `kind` falls through.
+mountHtmlDispatchRoute(app, { getPubsub: () => pubsub });
+
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);
+
+// Read-side collection routes (GET /api/collections/list + /:slug/detail) over the
+// shared workspace, backing the @mulmoclaude/collection-plugin presentCollection
+// card and (later) the collections toolbar. The engine itself is configured below
+// once CLAUDE_CWD is the confirmed workspace.
+mountCollectionRoutes(app);
+
+// Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
+// fields and custom-view <img> URLs. Rooted at the shared workspace.
+mountFilesRoutes(app, { workspace: CLAUDE_CWD });
+
+// Serve presentHtml pages for the View's iframe (GET /artifacts/html/<rest>) with an
+// HTML preview CSP. The View navigates the iframe to this URL (htmlArtifactPreviewUrl).
+mountHtmlPreviewRoute(app, { workspace: CLAUDE_CWD });
+
+// Shared launcher favorites (GET/PUT /api/shortcuts) over the same
+// <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
+mountShortcutsRoutes(app, { workspace: CLAUDE_CWD });
 
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
@@ -740,23 +780,8 @@ app.get("/api/tool-calls/:sessionId", async (req, res) => {
   res.json({ sessionId, toolCalls: await toolCallsStore.get(sessionId) });
 });
 
-// Server-wide config the UI shows: the default workspace dir + the user's saved
-// directory presets (offered in the cell launch form).
-app.get("/api/config", (_req, res) => {
-  res.json({ cwd: CLAUDE_CWD, cwdPresets, home: os.homedir() });
-});
-
-// Update the directory presets (from the settings screen) and persist them.
-app.post("/api/config", (req, res) => {
-  const body = req.body || {};
-  if (!Array.isArray(body.cwdPresets)) return res.status(400).json({ error: "cwdPresets must be an array" });
-  // Stage, persist, then commit in-memory only on success — a failed write must
-  // not leave GET exposing presets that won't survive a restart.
-  const next = sanitizePresets(body.cwdPresets);
-  if (!savePresets(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist presets" });
-  cwdPresets = next;
-  res.json({ cwd: CLAUDE_CWD, cwdPresets });
-});
+// GET/POST /api/config (workspace dir + directory presets) — in its own module.
+mountConfigRoutes(app, CLAUDE_CWD);
 
 // Initial per-session status + last prompt, so a cell can render its header
 // immediately (the live updates then arrive via the "sessions" pub/sub channel).
@@ -816,6 +841,7 @@ app.get("/api/sessions", async (_req, res) => {
         mtime: meta.createdAt,
         working: activity.get(id)?.working ?? false,
         waiting: activity.get(id)?.waiting ?? false,
+        hidden: hiddenSessions.has(id),
       });
     }
 
@@ -826,7 +852,7 @@ app.get("/api/sessions", async (_req, res) => {
       await Promise.all(
         top.map((s) =>
           s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting }
+            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, hidden: s.hidden }
             : readSessionMeta(dir, s.file).catch(() => null),
         ),
       )
@@ -852,6 +878,10 @@ initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.
 initArtifactsBackend({ workspace: CLAUDE_CWD });
+
+// Configure the collection engine against the shared workspace (CLAUDE_CWD). The
+// path layout matches MulmoClaude's so discovery sees the same collection skills.
+initCollectionsBackend({ workspace: CLAUDE_CWD });
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
