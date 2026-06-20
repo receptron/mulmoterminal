@@ -34,11 +34,16 @@ const ALLOWED_CDNS = [
   "https://cdn.plot.ly",
 ].join(" ");
 
-// Preview CSP for a presentHtml page. The iframe is sandbox="allow-scripts"
-// (opaque origin), so its scripts can't reach the app origin's cookies/API anyway;
-// this additionally blocks outbound fetch/XHR (connect-src 'none' — no phone-home)
-// while allowing inline scripts + the CDN allowlist + images/media.
+// Preview CSP for a presentHtml page. This HTML is LLM-authored, so the RESPONSE
+// itself must sandbox it — not just the embedding iframe. `sandbox allow-scripts`
+// (no allow-same-origin) gives the document an opaque origin even on DIRECT
+// navigation to /artifacts/html/…, so its inline scripts can't reach the app
+// origin's cookies / /api/* (matches the collection view-file hardening). The
+// iframe (also sandbox="allow-scripts") renders identically — it was already
+// opaque-origin. `connect-src 'none'` additionally blocks fetch/XHR (no phone-home);
+// inline scripts + the CDN allowlist + images/media are allowed.
 const HTML_PREVIEW_CSP = [
+  "sandbox allow-scripts",
   "default-src 'none'",
   `script-src 'unsafe-inline' ${ALLOWED_CDNS}`,
   `style-src 'unsafe-inline' ${ALLOWED_CDNS}`,

@@ -67,6 +67,9 @@ describe("html preview route", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     const csp = res.headers.get("content-security-policy") ?? "";
+    // Response-level sandbox so direct navigation can't run the LLM HTML with the
+    // app origin's privileges (not just relying on the embedding iframe).
+    expect(csp).toContain("sandbox allow-scripts");
     expect(csp).toContain("connect-src 'none'");
     expect(csp).toMatch(/script-src 'unsafe-inline'/);
   });
