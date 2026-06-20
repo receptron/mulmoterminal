@@ -7,10 +7,20 @@ export interface Session {
   mtime: number;
   working: boolean;
   waiting: boolean;
+  /** A hidden background worker (spawnBackgroundChat hidden:true) — listed, but
+   *  never treated as unread/bold. */
+  hidden?: boolean;
 }
 
-// "unread" = a session whose `waiting` flag is set (mulmoclaude's unread).
+// "unread" = a session whose `waiting` flag is set, EXCEPT hidden background
+// workers (mulmoclaude's unread, minus the background noise).
 export type Filter = "all" | "unread";
+
+/** A session that should draw the user's attention (bold + Unread filter): waiting
+ *  for input, and not a hidden background worker. */
+export function isUnread(s: Session): boolean {
+  return !!s.waiting && !s.hidden;
+}
 
 // Merge a freshly-fetched list into the displayed one while keeping the order
 // stable. The server sorts by recency (mtime), so a background update — e.g.

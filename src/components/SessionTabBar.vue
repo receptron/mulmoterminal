@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Session, Filter } from "../composables/useSessions";
+import { isUnread, type Session, type Filter } from "../composables/useSessions";
 import FilterChip from "./FilterChip.vue";
 
 // Presentational: list + filter are owned by App.vue and shared with the
@@ -16,9 +16,9 @@ const emit = defineEmits<{
   (e: "update:filter", f: Filter): void;
 }>();
 
-// Same "unread" = `waiting` mapping as the vertical sidebar; the filter applies
-// to the horizontal tabs too.
-const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).length);
+// Same "unread" mapping as the vertical sidebar (waiting, excluding hidden
+// background workers); the filter applies to the horizontal tabs too.
+const unreadCount = computed(() => props.sessions.filter(isUnread).length);
 
 // The horizontal bar never scrolls — tabs flex to share the available width.
 // Cap to the most-recent N (sessions are already sorted by recency) so they
@@ -26,7 +26,7 @@ const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).lengt
 // applies before the cap.
 const MAX_TABS = 8;
 const visibleSessions = computed(() => {
-  const list = props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions;
+  const list = props.filter === "unread" ? props.sessions.filter(isUnread) : props.sessions;
   return list.slice(0, MAX_TABS);
 });
 </script>
@@ -49,14 +49,14 @@ const visibleSessions = computed(() => {
       <button
         v-for="s in visibleSessions"
         :key="s.id"
-        :class="['tab', { active: s.id === props.activeId, waiting: s.waiting }]"
+        :class="['tab', { active: s.id === props.activeId, waiting: isUnread(s) }]"
         :title="s.title"
         :aria-current="s.id === props.activeId ? 'page' : undefined"
         @click="emit('select', s.id)"
       >
         <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
         <span class="tab-title">{{ s.title }}</span>
-        <span v-if="s.waiting && s.id !== props.activeId" class="unread-dot" aria-label="Unread" />
+        <span v-if="isUnread(s) && s.id !== props.activeId" class="unread-dot" aria-label="Unread" />
       </button>
     </div>
 

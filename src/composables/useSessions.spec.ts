@@ -1,9 +1,23 @@
 import { describe, it, expect } from "vitest";
-import { mergeStable, type Session } from "./useSessions";
+import { mergeStable, isUnread, type Session } from "./useSessions";
 
 function row(id: string): Session {
   return { id, title: id, mtime: 1, working: false, waiting: false };
 }
+
+describe("isUnread", () => {
+  it("is true for a waiting, non-hidden session", () => {
+    expect(isUnread({ ...row("a"), waiting: true })).toBe(true);
+  });
+
+  it("is false when not waiting", () => {
+    expect(isUnread(row("a"))).toBe(false);
+  });
+
+  it("is false for a hidden background worker even when waiting (the bug fix)", () => {
+    expect(isUnread({ ...row("a"), waiting: true, hidden: true })).toBe(false);
+  });
+});
 
 describe("mergeStable", () => {
   it("takes the server order on the first load (empty prev)", () => {
