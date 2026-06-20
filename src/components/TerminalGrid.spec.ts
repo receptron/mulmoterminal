@@ -34,13 +34,15 @@ describe("TerminalGrid", () => {
   });
 
   it("restores each cell's session id and the zoom from localStorage", async () => {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: ["id-a", null, "id-c", null], expanded: 2 }));
+    const idA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const idC = "cccccccc-cccc-cccc-cccc-cccccccccccc";
+    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: [idA, null, idC, null], expanded: 2 }));
     const w = mount(TerminalGrid);
     await flushPromises();
     const cells = cellsOf(w);
-    expect(cells[0].props("initialSessionId")).toBe("id-a");
+    expect(cells[0].props("initialSessionId")).toBe(idA);
     expect(cells[1].props("initialSessionId")).toBe(null);
-    expect(cells[2].props("initialSessionId")).toBe("id-c");
+    expect(cells[2].props("initialSessionId")).toBe(idC);
     expect(cells[2].props("expanded")).toBe(true);
     expect(cells[0].props("expanded")).toBe(false);
   });
@@ -81,6 +83,24 @@ describe("TerminalGrid", () => {
     await nextTick();
     expect(cellsOf(w)[3].props("expanded")).toBe(false);
     expect(saved().expanded).toBe(null);
+  });
+
+  it("drops non-UUID persisted session ids (no invalid id reaches a cell)", async () => {
+    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: ["not-a-uuid", "../etc/passwd", "id-a", null], expanded: null }));
+    const w = mount(TerminalGrid);
+    await flushPromises();
+    const cells = cellsOf(w);
+    expect(cells[0].props("initialSessionId")).toBe(null);
+    expect(cells[1].props("initialSessionId")).toBe(null);
+    expect(cells[2].props("initialSessionId")).toBe(null); // "id-a" isn't a valid UUID either
+  });
+
+  it("keeps a valid UUID persisted id", async () => {
+    const uuid = "abcdef01-2345-6789-abcd-ef0123456789";
+    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: [uuid, null, null, null], expanded: null }));
+    const w = mount(TerminalGrid);
+    await flushPromises();
+    expect(cellsOf(w)[0].props("initialSessionId")).toBe(uuid);
   });
 
   it("ignores a corrupt localStorage payload", async () => {

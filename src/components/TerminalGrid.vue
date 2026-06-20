@@ -25,6 +25,10 @@ onMounted(async () => {
 // Persisted so a page reload restores the open terminals (each cell resumes its
 // session) and the zoom state.
 const STORE_KEY = "grid_state_v1";
+// Session ids are UUIDs. Drop anything else from a stale/tampered localStorage so
+// a cell never mounts with an invalid id (which the server rejects, leaving the
+// terminal reconnecting forever).
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function loadState(): { sessions: (string | null)[]; expanded: number | null } {
   const fallback = { sessions: Array<string | null>(CELL_COUNT).fill(null), expanded: null };
@@ -34,7 +38,7 @@ function loadState(): { sessions: (string | null)[]; expanded: number | null } {
     const parsed = JSON.parse(raw);
     const sessions = Array.from({ length: CELL_COUNT }, (_, i) => {
       const v = parsed?.sessions?.[i];
-      return typeof v === "string" ? v : null;
+      return typeof v === "string" && UUID_RE.test(v) ? v : null;
     });
     const e = parsed?.expanded;
     const expanded = typeof e === "number" && e >= 0 && e < CELL_COUNT ? e : null;

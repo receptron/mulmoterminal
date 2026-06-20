@@ -990,12 +990,14 @@ wss.on("connection", (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
-  const requested = new URL(req.url ?? "/", "http://localhost").searchParams.get("session");
-  if (requested && !SESSION_ID_RE.test(requested)) {
-    console.warn(`[ws] rejecting non-UUID session id: ${JSON.stringify(requested)}`);
-    ws.close();
-    return;
-  }
+  const raw = new URL(req.url ?? "/", "http://localhost").searchParams.get("session");
+  // A non-UUID id is never used (it could smuggle path/flag fragments into
+  // sessionExistsOnDisk / --resume). Treat it as "no session requested" rather
+  // than closing the socket — closing without a replacement id makes the client
+  // auto-reconnect with the same bad id forever. Falling through mints a fresh
+  // session and tells the browser the new id, so the cell self-recovers.
+  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
+  if (raw && !requested) console.warn(`[ws] ignoring non-UUID session id: ${JSON.stringify(raw)} — starting fresh`);
 
   // Decide the effective session id BEFORE telling the browser. A requested id
   // is honored only if it can actually be served: a live pty (reattach) or an
