@@ -1,5 +1,5 @@
 {
-  "packages": ["@mulmoclaude/markdown-plugin", "@mulmoclaude/form-plugin", "@mulmochat-plugin/generate-image", "@mulmoclaude/chart-plugin", "@mulmoclaude/collection-plugin"],
+  "packages": ["@mulmoclaude/markdown-plugin", "@mulmoclaude/form-plugin", "@mulmochat-plugin/generate-image", "@mulmoclaude/chart-plugin", "@mulmoclaude/collection-plugin", "@mulmoclaude/html-plugin"],
   "servers": ["@mulmoclaude/x-plugin"],
   "local": []
 }

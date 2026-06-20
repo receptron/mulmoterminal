@@ -565,6 +565,11 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.1.tgz#54825cc7ecb3eded0d9d6d7bc0c04214bf7c78da"
   integrity sha512-gTXROs5Qs98GVPb5f8MM6EtlDXHFcLeeNMfiUnG/A05rMQobmiTw9QoEGVROIJlFBbFsD7s6DAsrBBx1KDvFBA==
 
+"@mulmoclaude/html-plugin@^0.2.2":
+  version "0.2.2"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/html-plugin/-/html-plugin-0.2.2.tgz#5cf97960ab31d4a0f9551a1e8d3bb7d3633cc599"
+  integrity sha512-Tp3451o/3uQQxoFcYRQLOfom4sG+AC4XERVyV/CdNJFYj1tgagSkhwVqKdQJnc/Xt1oirrAV5E6qyE4CgTOwlA==
+
 "@mulmoclaude/markdown-plugin@^0.1.4":
   version "0.1.4"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-0.1.4.tgz#767684c558686248691148837e0a6107e8d580e6"

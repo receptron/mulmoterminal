@@ -35,6 +35,12 @@ export default defineConfig({
         target: "http://localhost:3456",
         changeOrigin: true,
       },
+      // presentHtml page serving (the View's iframe src). Without this, the dev
+      // Vite catch-all returns index.html instead of the HTML artifact.
+      "/artifacts": {
+        target: "http://localhost:3456",
+        changeOrigin: true,
+      },
     },
   },
 });

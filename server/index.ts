@@ -17,6 +17,7 @@ import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
+import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -528,6 +529,11 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   });
 });
 
+// presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
+// /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
+// catch-all (which handles the tool-call); a request without `kind` falls through.
+mountHtmlDispatchRoute(app, { getPubsub: () => pubsub });
+
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);
@@ -541,6 +547,10 @@ mountCollectionRoutes(app);
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
+
+// Serve presentHtml pages for the View's iframe (GET /artifacts/html/<rest>) with an
+// HTML preview CSP. The View navigates the iframe to this URL (htmlArtifactPreviewUrl).
+mountHtmlPreviewRoute(app, { workspace: CLAUDE_CWD });
 
 // Shared launcher favorites (GET/PUT /api/shortcuts) over the same
 // <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
