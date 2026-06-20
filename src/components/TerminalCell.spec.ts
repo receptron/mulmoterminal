@@ -34,9 +34,18 @@ beforeEach(() => {
   globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) })) as unknown as typeof fetch;
 });
 
-function mountCell(initialSessionId: string | null, opts: { initialCwd?: string | null; defaultCwd?: string | null } = {}) {
+function mountCell(
+  initialSessionId: string | null,
+  opts: { initialCwd?: string | null; defaultCwd?: string | null; presets?: { label: string; path: string }[] } = {},
+) {
   return mount(TerminalCell, {
-    props: { expanded: false, initialSessionId, initialCwd: opts.initialCwd ?? null, defaultCwd: opts.defaultCwd ?? "/home/me/my-project" },
+    props: {
+      expanded: false,
+      initialSessionId,
+      initialCwd: opts.initialCwd ?? null,
+      defaultCwd: opts.defaultCwd ?? "/home/me/my-project",
+      presets: opts.presets ?? [],
+    },
   });
 }
 
@@ -62,6 +71,17 @@ describe("TerminalCell", () => {
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/home/me/picked");
+  });
+
+  it("launches in a preset dir on one click", async () => {
+    const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
+    await flushPromises();
+    const btn = w.findAll(".cell-preset").find((b) => b.text() === "proj");
+    if (!btn) throw new Error("preset button not found");
+    await btn.trigger("click");
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("cwd")).toBe("/work/proj");
   });
 
   it("resets the launch form to the default dir after close", async () => {

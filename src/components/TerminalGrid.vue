@@ -1,30 +1,20 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import { MAX_CELLS, dims, trackStyle, type Layout } from "./gridLayout";
+import type { CwdPreset } from "./presets";
 
 // Zooming interface: the grid is the base view; expanding a cell grows it to fill
 // the area and shrinks the others to zero — animated by transitioning the grid
 // track sizes (Mac-like zoom). All cells stay MOUNTED while zoomed, so their
 // terminals keep running. The layout (cell arrangement) is chosen in the toolbar.
-const props = defineProps<{ layout: Layout }>();
+// `defaultCwd` prefills the launch form; `presets` are the quick-pick dirs.
+const props = defineProps<{ layout: Layout; defaultCwd: string | null; presets: CwdPreset[] }>();
 
 const cellCount = computed(() => dims(props.layout).cellCount);
 // Render only the visible cells; the persisted arrays are kept at MAX_CELLS so a
 // session/cwd survives switching to a smaller layout and back.
 const cells = computed(() => Array.from({ length: cellCount.value }, (_, i) => i));
-
-// The active workspace dir, shown in each cell header (server global for now;
-// per-cell dirs are a follow-up).
-const cwd = ref<string | null>(null);
-onMounted(async () => {
-  try {
-    const res = await fetch("/api/config");
-    if (res.ok) cwd.value = (await res.json()).cwd ?? null;
-  } catch {
-    // header just omits the dir if config can't be fetched
-  }
-});
 
 // Persisted so a page reload restores the open terminals and the zoom state.
 const STORE_KEY = "grid_state_v1";
@@ -95,7 +85,8 @@ const gridStyle = computed(() => trackStyle(props.layout, expanded.value));
       :expanded="expanded === i"
       :initial-session-id="cellSessions[i]"
       :initial-cwd="cellCwds[i]"
-      :default-cwd="cwd"
+      :default-cwd="defaultCwd"
+      :presets="presets"
       @toggle-expand="toggleExpand(i)"
       @session="(id) => setSession(i, id)"
       @cwd="(c) => (cellCwds[i] = c)"

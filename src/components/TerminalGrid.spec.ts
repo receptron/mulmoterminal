@@ -9,14 +9,14 @@ import type { Layout } from "./gridLayout";
 vi.mock("./TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
-    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd"],
+    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets"],
     emits: ["toggle-expand", "session", "cwd", "close"],
     template: '<div class="stub-cell" />',
   },
 }));
 
 const STORE_KEY = "grid_state_v1";
-const mountGrid = (layout: Layout = "2x2") => mount(TerminalGrid, { props: { layout } });
+const mountGrid = (layout: Layout = "2x2") => mount(TerminalGrid, { props: { layout, defaultCwd: "/work/proj", presets: [] } });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const saved = () => JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
 
@@ -62,7 +62,7 @@ describe("TerminalGrid", () => {
     expect(cells[2].props("expanded")).toBe(true);
   });
 
-  it("passes the fetched cwd to cells as defaultCwd", async () => {
+  it("forwards defaultCwd to cells", async () => {
     const w = mountGrid();
     await flushPromises();
     expect(cellsOf(w)[0].props("defaultCwd")).toBe("/work/proj");

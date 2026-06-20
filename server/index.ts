@@ -15,6 +15,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
+import { loadPresets, savePresets, sanitizePresets, type CwdPreset } from "./cwd-presets.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -102,6 +103,11 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the
 // workspace dir, so it stays valid regardless of which directory is active.
 const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
+
+// User config (currently just directory presets the launch form offers),
+// persisted at ~/.mulmoterminal/config.json. Logic lives in ./cwd-presets.
+const CONFIG_FILE = path.join(MULMOTERMINAL_HOME, "config.json");
+let cwdPresets: CwdPreset[] = loadPresets(CONFIG_FILE);
 
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
@@ -734,9 +740,22 @@ app.get("/api/tool-calls/:sessionId", async (req, res) => {
   res.json({ sessionId, toolCalls: await toolCallsStore.get(sessionId) });
 });
 
-// Server-wide config the UI shows (currently just the active workspace dir).
+// Server-wide config the UI shows: the default workspace dir + the user's saved
+// directory presets (offered in the cell launch form).
 app.get("/api/config", (_req, res) => {
-  res.json({ cwd: CLAUDE_CWD });
+  res.json({ cwd: CLAUDE_CWD, cwdPresets });
+});
+
+// Update the directory presets (from the settings screen) and persist them.
+app.post("/api/config", (req, res) => {
+  const body = req.body || {};
+  if (!Array.isArray(body.cwdPresets)) return res.status(400).json({ error: "cwdPresets must be an array" });
+  // Stage, persist, then commit in-memory only on success — a failed write must
+  // not leave GET exposing presets that won't survive a restart.
+  const next = sanitizePresets(body.cwdPresets);
+  if (!savePresets(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist presets" });
+  cwdPresets = next;
+  res.json({ cwd: CLAUDE_CWD, cwdPresets });
 });
 
 // Initial per-session status + last prompt, so a cell can render its header

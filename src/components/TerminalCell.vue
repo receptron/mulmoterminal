@@ -2,14 +2,15 @@
 import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vue";
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
+import type { CwdPreset } from "./presets";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns
 // the state). `initialSessionId` resumes a session on mount (reload restore).
 // `initialCwd` is this cell's persisted working dir; `defaultCwd` is the server
-// default used to prefill the launch form for a fresh cell.
-const props = defineProps<{ expanded: boolean; initialSessionId: string | null; initialCwd: string | null; defaultCwd: string | null }>();
+// default used to prefill the launch form; `presets` are quick-pick dirs.
+const props = defineProps<{ expanded: boolean; initialSessionId: string | null; initialCwd: string | null; defaultCwd: string | null; presets: CwdPreset[] }>();
 const emit = defineEmits<{ (e: "toggle-expand" | "close"): void; (e: "session" | "cwd", value: string): void }>();
 
 // A cell with a persisted session relaunches (resumes) on mount; otherwise it
@@ -83,6 +84,12 @@ function launch() {
   sessionId.value = null; // new session — the server generates the id
   connectKey.value++;
   launched.value = true;
+}
+
+// Quick-pick a preset directory: fill the field and launch in one click.
+function launchPreset(p: CwdPreset) {
+  dirInput.value = p.path;
+  launch();
 }
 
 // The server reports where the PTY actually runs (it may have rejected the
@@ -160,6 +167,9 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
       <TerminalView ref="termRef" class="cell-term" :session-id="sessionId" :connect-key="connectKey" :cwd="cwd" @session="onSession" @cwd="onServerCwd" />
     </template>
     <div v-else class="cell-launch">
+      <div v-if="presets.length" class="cell-presets">
+        <button v-for="p in presets" :key="p.label + p.path" class="cell-preset" :title="p.path" @click="launchPreset(p)">{{ p.label }}</button>
+      </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
         <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
@@ -280,6 +290,27 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   justify-content: center;
   gap: 8px;
   padding: 16px;
+}
+.cell-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 360px;
+}
+.cell-preset {
+  border: 1px solid #2a2a4e;
+  background: #20203a;
+  color: #c7cdf0;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 14px;
+}
+.cell-preset:hover {
+  background: #2a3b66;
+  color: #fff;
 }
 .cell-launch-label {
   display: flex;
