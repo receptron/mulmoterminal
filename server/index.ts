@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -15,6 +15,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
+import { loadPresets, savePresets, sanitizePresets, type CwdPreset } from "./cwd-presets.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -104,38 +105,9 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
 
 // User config (currently just directory presets the launch form offers),
-// persisted at ~/.mulmoterminal/config.json.
-interface CwdPreset {
-  label: string;
-  path: string;
-}
+// persisted at ~/.mulmoterminal/config.json. Logic lives in ./cwd-presets.
 const CONFIG_FILE = path.join(MULMOTERMINAL_HOME, "config.json");
-const MAX_PRESETS = 50;
-
-const isPreset = (v: unknown): v is CwdPreset => isRecord(v) && typeof v.label === "string" && typeof v.path === "string";
-
-function loadCwdPresets(): CwdPreset[] {
-  try {
-    const parsed = JSON.parse(readFileSync(CONFIG_FILE, "utf8"));
-    if (Array.isArray(parsed?.cwdPresets)) return parsed.cwdPresets.filter(isPreset);
-  } catch {
-    // no/invalid config — none
-  }
-  return [];
-}
-
-let cwdPresets: CwdPreset[] = loadCwdPresets();
-
-function saveCwdPresets(): boolean {
-  try {
-    mkdirSync(MULMOTERMINAL_HOME, { recursive: true });
-    writeFileSync(CONFIG_FILE, JSON.stringify({ cwdPresets }, null, 2));
-    return true;
-  } catch (e) {
-    console.error(`[config] failed to save: ${messageOf(e)}`);
-    return false;
-  }
-}
+let cwdPresets: CwdPreset[] = loadPresets(CONFIG_FILE);
 
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
@@ -778,14 +750,11 @@ app.get("/api/config", (_req, res) => {
 app.post("/api/config", (req, res) => {
   const body = req.body || {};
   if (!Array.isArray(body.cwdPresets)) return res.status(400).json({ error: "cwdPresets must be an array" });
-  cwdPresets = body.cwdPresets
-    .filter(isPreset)
-    .map((p: CwdPreset) => ({ label: p.label.trim(), path: p.path.trim() }))
-    .filter((p: CwdPreset) => p.label && p.path)
-    .slice(0, MAX_PRESETS);
-  // Surface a persistence failure so the client doesn't report false success
-  // (the presets would otherwise be lost on restart).
-  if (!saveCwdPresets()) return res.status(500).json({ error: "failed to persist presets" });
+  // Stage, persist, then commit in-memory only on success — a failed write must
+  // not leave GET exposing presets that won't survive a restart.
+  const next = sanitizePresets(body.cwdPresets);
+  if (!savePresets(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist presets" });
+  cwdPresets = next;
   res.json({ cwd: CLAUDE_CWD, cwdPresets });
 });
 
