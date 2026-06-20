@@ -743,7 +743,7 @@ app.get("/api/tool-calls/:sessionId", async (req, res) => {
 // Server-wide config the UI shows: the default workspace dir + the user's saved
 // directory presets (offered in the cell launch form).
 app.get("/api/config", (_req, res) => {
-  res.json({ cwd: CLAUDE_CWD, cwdPresets });
+  res.json({ cwd: CLAUDE_CWD, cwdPresets, home: os.homedir() });
 });
 
 // Update the directory presets (from the settings screen) and persist them.

@@ -36,7 +36,7 @@ beforeEach(() => {
 
 function mountCell(
   initialSessionId: string | null,
-  opts: { initialCwd?: string | null; defaultCwd?: string | null; presets?: { label: string; path: string }[] } = {},
+  opts: { initialCwd?: string | null; defaultCwd?: string | null; presets?: { label: string; path: string }[]; home?: string | null } = {},
 ) {
   return mount(TerminalCell, {
     props: {
@@ -45,21 +45,22 @@ function mountCell(
       initialCwd: opts.initialCwd ?? null,
       defaultCwd: opts.defaultCwd ?? "/home/me/my-project",
       presets: opts.presets ?? [],
+      home: opts.home ?? "/home/me",
     },
   });
 }
 
 describe("TerminalCell", () => {
-  it("shows the workspace dir basename in the header", async () => {
-    const w = mountCell("11111111-1111-1111-1111-111111111111");
+  it("shows the ~-anchored workspace path in the header", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/ss/my-project" });
     await flushPromises();
-    expect(w.find(".cell-dir").text()).toBe("my-project");
+    expect(w.find(".cell-dir").text()).toBe("~/ss/my-project");
   });
 
-  it("derives the basename from a Windows-style path too", async () => {
-    const w = mountCell("55555555-5555-5555-5555-555555555555", { initialCwd: "C:\\work\\proj" });
+  it("shows a non-home path in full", async () => {
+    const w = mountCell("55555555-5555-5555-5555-555555555555", { initialCwd: "/var/data/proj" });
     await flushPromises();
-    expect(w.find(".cell-dir").text()).toBe("proj");
+    expect(w.find(".cell-dir").text()).toBe("/var/data/proj");
   });
 
   it("launches in the dir typed in the form and sends it to the terminal", async () => {
@@ -105,7 +106,7 @@ describe("TerminalCell", () => {
     await nextTick();
     // The cell persists + displays the effective cwd, not the typed one.
     expect(w.emitted("cwd")?.at(-1)).toEqual(["/home/me/default"]);
-    expect(w.find(".cell-dir").text()).toBe("default");
+    expect(w.find(".cell-dir").text()).toBe("~/default");
   });
 
   it("reflects working/waiting/lastPrompt pushed for its own session", async () => {

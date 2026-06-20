@@ -8,8 +8,9 @@ import type { CwdPreset } from "./presets";
 // the area and shrinks the others to zero — animated by transitioning the grid
 // track sizes (Mac-like zoom). All cells stay MOUNTED while zoomed, so their
 // terminals keep running. The layout (cell arrangement) is chosen in the toolbar.
-// `defaultCwd` prefills the launch form; `presets` are the quick-pick dirs.
-const props = defineProps<{ layout: Layout; defaultCwd: string | null; presets: CwdPreset[] }>();
+// `defaultCwd` prefills the launch form; `presets` are the quick-pick dirs;
+// `home` anchors the cell header path on ~.
+const props = defineProps<{ layout: Layout; defaultCwd: string | null; presets: CwdPreset[]; home: string | null }>();
 
 const cellCount = computed(() => dims(props.layout).cellCount);
 // Render only the visible cells; the persisted arrays are kept at MAX_CELLS so a
@@ -87,6 +88,7 @@ const gridStyle = computed(() => trackStyle(props.layout, expanded.value));
       :initial-cwd="cellCwds[i]"
       :default-cwd="defaultCwd"
       :presets="presets"
+      :home="home"
       @toggle-expand="toggleExpand(i)"
       @session="(id) => setSession(i, id)"
       @cwd="(c) => (cellCwds[i] = c)"

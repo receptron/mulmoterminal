@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vue";
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
+import { formatCwd } from "./cwdDisplay";
 import type { CwdPreset } from "./presets";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
@@ -9,8 +10,16 @@ const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns
 // the state). `initialSessionId` resumes a session on mount (reload restore).
 // `initialCwd` is this cell's persisted working dir; `defaultCwd` is the server
-// default used to prefill the launch form; `presets` are quick-pick dirs.
-const props = defineProps<{ expanded: boolean; initialSessionId: string | null; initialCwd: string | null; defaultCwd: string | null; presets: CwdPreset[] }>();
+// default used to prefill the launch form; `presets` are quick-pick dirs; `home`
+// is the server home dir (to anchor the header path on ~).
+const props = defineProps<{
+  expanded: boolean;
+  initialSessionId: string | null;
+  initialCwd: string | null;
+  defaultCwd: string | null;
+  presets: CwdPreset[];
+  home: string | null;
+}>();
 const emit = defineEmits<{ (e: "toggle-expand" | "close"): void; (e: "session" | "cwd", value: string): void }>();
 
 // A cell with a persisted session relaunches (resumes) on mount; otherwise it
@@ -123,13 +132,8 @@ function onSession(id: string) {
   loadInitial(id);
 }
 
-const dirBase = computed(() => {
-  const c = cwd.value;
-  if (!c) return "";
-  // Split on both separators so a Windows path (C:\work\proj) yields the basename.
-  const parts = c.split(/[/\\]/).filter(Boolean);
-  return parts[parts.length - 1] || c;
-});
+// ~-anchored, front-truncated path for the header (keeps the tail).
+const dirDisplay = computed(() => formatCwd(cwd.value, props.home));
 
 // Attention (waiting) wins over working wins over idle.
 const status = computed<"waiting" | "working" | "idle">(() => {
@@ -150,7 +154,7 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
     <template v-if="launched">
       <div class="cell-header">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
-        <span v-if="dirBase" class="cell-dir" :title="cwd ?? ''">{{ dirBase }}</span>
+        <span v-if="dirDisplay" class="cell-dir" :title="cwd ?? ''">{{ dirDisplay }}</span>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
         <span class="cell-actions">
           <button
@@ -228,8 +232,8 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 }
 
 .cell-dir {
-  flex: 0 0 auto;
-  max-width: 40%;
+  flex: 0 1 auto;
+  max-width: 60%;
   font-family: ui-monospace, "JetBrains Mono", monospace;
   font-size: 11px;
   color: #7f88ad;

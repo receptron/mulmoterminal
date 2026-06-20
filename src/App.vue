@@ -12,6 +12,7 @@ watch(layout, (v) => localStorage.setItem("grid_layout", v));
 
 // Server config: the default workspace dir + the user's directory presets.
 const defaultCwd = ref<string | null>(null);
+const home = ref<string | null>(null);
 const presets = ref<CwdPreset[]>([]);
 const showSettings = ref(false);
 const savingSettings = ref(false);
@@ -23,6 +24,7 @@ async function loadConfig() {
     if (!res.ok) return;
     const c = await res.json();
     defaultCwd.value = c.cwd ?? null;
+    home.value = c.home ?? null;
     presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
   } catch {
     // grid still works; presets just unavailable
@@ -66,7 +68,7 @@ function closeSettings() {
       </span>
       <button class="settings-btn" title="Settings" aria-label="Settings" @click="showSettings = true">⚙</button>
     </header>
-    <TerminalGrid class="main" :layout="layout" :default-cwd="defaultCwd" :presets="presets" />
+    <TerminalGrid class="main" :layout="layout" :default-cwd="defaultCwd" :presets="presets" :home="home" />
     <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
   </div>
 </template>

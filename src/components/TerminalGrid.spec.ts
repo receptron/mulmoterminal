@@ -9,14 +9,14 @@ import type { Layout } from "./gridLayout";
 vi.mock("./TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
-    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets"],
+    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home"],
     emits: ["toggle-expand", "session", "cwd", "close"],
     template: '<div class="stub-cell" />',
   },
 }));
 
 const STORE_KEY = "grid_state_v1";
-const mountGrid = (layout: Layout = "2x2") => mount(TerminalGrid, { props: { layout, defaultCwd: "/work/proj", presets: [] } });
+const mountGrid = (layout: Layout = "2x2") => mount(TerminalGrid, { props: { layout, defaultCwd: "/work/proj", presets: [], home: "/work" } });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const saved = () => JSON.parse(localStorage.getItem(STORE_KEY) || "{}");
 
