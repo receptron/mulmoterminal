@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Session, Filter } from "../composables/useSessions";
+import { isUnread, type Session, type Filter } from "../composables/useSessions";
 import FilterChip from "./FilterChip.vue";
 
 // Presentational: the session list + filter are owned by App.vue (a single
@@ -19,11 +19,11 @@ const emit = defineEmits<{
   (e: "update:filter", f: Filter): void;
 }>();
 
-// A background session that is `waiting` for the user's attention is what
-// mulmoclaude calls "unread" — render it bold and let the user filter to just
-// those rows.
-const unreadCount = computed(() => props.sessions.filter((s) => s.waiting).length);
-const visibleSessions = computed(() => (props.filter === "unread" ? props.sessions.filter((s) => s.waiting) : props.sessions));
+// A session that is `waiting` for the user's attention is what mulmoclaude calls
+// "unread" — render it bold and let the user filter to just those rows. Hidden
+// background workers are excluded (see isUnread).
+const unreadCount = computed(() => props.sessions.filter(isUnread).length);
+const visibleSessions = computed(() => (props.filter === "unread" ? props.sessions.filter(isUnread) : props.sessions));
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -66,7 +66,7 @@ function relativeTime(ms: number): string {
       <li
         v-for="s in visibleSessions"
         :key="s.id"
-        :class="['item', { active: s.id === props.activeId, waiting: s.waiting }]"
+        :class="['item', { active: s.id === props.activeId, waiting: isUnread(s) }]"
         :title="s.title"
         @click="emit('select', s.id)"
       >
