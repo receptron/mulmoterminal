@@ -4,11 +4,16 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
+import { buildTerminalWsUrl } from "./wsUrl";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
 // session (or starting another fresh one) still forces a reconnect.
-const props = defineProps<{ sessionId: string | null; connectKey: number; cwd?: string | null }>();
+// `devTerminal` runs claude as a plain dev terminal (the grid): NO GUI plugin MCP
+// and NO --strict-mcp-config, so the user's (~/.claude.json) + project's (.mcp.json)
+// MCP servers load normally. Default (false, the single view) keeps main's behavior:
+// the in-process GUI MCP attached and isolated with --strict-mcp-config.
+const props = defineProps<{ sessionId: string | null; connectKey: number; cwd?: string | null; devTerminal?: boolean }>();
 const emit = defineEmits<{ (e: "session" | "cwd", value: string): void }>();
 
 const terminalRef = ref<HTMLDivElement>();
@@ -54,16 +59,18 @@ function connect() {
   sawExit = false;
   status.value = "connecting";
 
-  const proto = location.protocol === "https:" ? "wss:" : "ws:";
   // Resume the known id (learned from the server, or the prop) so a reconnect
   // re-attaches the same session instead of spawning a fresh one each retry.
   const resumeId = knownSessionId ?? props.sessionId;
-  const params = new URLSearchParams();
-  if (resumeId) params.set("session", resumeId);
-  if (props.cwd) params.set("cwd", props.cwd); // launch this terminal in the chosen dir
-  const qs = params.toString();
-  const suffix = qs ? `?${qs}` : "";
-  const sock = new WebSocket(`${proto}//${location.host}/ws${suffix}`);
+  const sock = new WebSocket(
+    buildTerminalWsUrl({
+      host: location.host,
+      secure: location.protocol === "https:",
+      sessionId: resumeId,
+      cwd: props.cwd,
+      devTerminal: props.devTerminal,
+    }),
+  );
   ws = sock;
 
   sock.onopen = () => {

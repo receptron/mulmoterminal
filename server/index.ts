@@ -16,6 +16,7 @@ import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes } from "./config-routes.js";
+import { buildClaudeArgs } from "./claude-args.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
@@ -781,10 +782,13 @@ app.get("/api/tool-calls/:sessionId", async (req, res) => {
 });
 
 // GET/POST /api/config (workspace dir + directory presets) — in its own module.
+// GRID-ONLY (dev_tool): backs the grid launcher's default dir + the settings
+// modal's directory presets. The single view never calls it.
 mountConfigRoutes(app, CLAUDE_CWD);
 
-// Initial per-session status + last prompt, so a cell can render its header
-// immediately (the live updates then arrive via the "sessions" pub/sub channel).
+// GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
+// can render its header immediately (live updates then arrive via the "sessions"
+// pub/sub channel). The single view reads activity straight from that channel.
 app.get("/api/session/:id", (req, res) => {
   const { id } = req.params;
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
@@ -936,27 +940,32 @@ function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntr
 // a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
 // reattaches. `initialPrompt`, when given, is passed to claude as the first turn
 // so the session starts working immediately, before anyone opens it.
-function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket | null, initialPrompt?: string, cwd: string = CLAUDE_CWD): PtyEntry {
-  const settings = hookSettingsJson();
-  // Register the GUI MCP server and auto-allow its tools so the plugin tools run
-  // without a permission prompt. We deliberately do NOT pass --strict-mcp-config:
-  // --mcp-config is additive, so the user's (~/.claude.json) and the project's
-  // (<cwd>/.mcp.json) MCP servers load alongside the GUI MCP — MulmoTerminal is a
-  // real Claude Code dev terminal, not just the GUI layer. (skills are already
-  // honored: claude reads ~/.claude/skills + <cwd>/.claude/skills by cwd.)
-  const mcp = mcpConfigJson(sessionId);
-  const guiArgs = ["--permission-mode", CLAUDE_PERMISSION_MODE, "--mcp-config", mcp, "--allowedTools", GUI_MCP_TOOLS];
-  // Only `--resume` when the session actually exists on disk. claude doesn't write
-  // a session's .jsonl until its first prompt, so a started-but-unused session has
-  // no record — resuming it would fail ("[session ended]"). In that case (no live
-  // pty either, since reattach already happened upstream) restart fresh, reusing
-  // the same id via --session-id, so a reload of an idle cell just reopens it.
+function spawnClaudePty(
+  sessionId: string,
+  resume: string | null,
+  ws: WebSocket | null,
+  initialPrompt?: string,
+  cwd: string = CLAUDE_CWD,
+  attachGuiMcp: boolean = true,
+): PtyEntry {
+  // attachGuiMcp picks the MCP mode (see buildClaudeArgs): the single view (default)
+  // attaches the GUI MCP + --strict-mcp-config (main's classic behavior); the grid's
+  // dev terminals attach neither, so the user's + project's MCP servers load normally.
+  // Only --resume when the session has an on-disk transcript — claude doesn't write
+  // a session's .jsonl until its first prompt, so a started-but-unused session can't
+  // be resumed; we restart fresh (reusing the id via --session-id) instead.
   const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
-  const baseArgs = canResume ? ["--resume", resume, "--settings", settings, ...guiArgs] : ["--session-id", sessionId, "--settings", settings, ...guiArgs];
-  // The initial prompt goes last as a positional arg (claude's initial-prompt
-  // form). "--" ends option parsing so a prompt that happens to start with "-"
-  // can't be reinterpreted as a flag.
-  const args = initialPrompt ? [...baseArgs, "--", initialPrompt] : baseArgs;
+  const args = buildClaudeArgs({
+    sessionId,
+    resume,
+    canResume,
+    settings: hookSettingsJson(),
+    permissionMode: CLAUDE_PERMISSION_MODE,
+    attachGuiMcp,
+    mcpConfig: mcpConfigJson(sessionId),
+    guiMcpTools: GUI_MCP_TOOLS,
+    initialPrompt,
+  });
 
   console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
 
@@ -1076,6 +1085,11 @@ wss.on("connection", (ws, req) => {
   // falls back to CLAUDE_CWD.
   const cwd = resolveWorkspace(url.searchParams.get("cwd"));
 
+  // ?gui=0 (the grid's dev terminals) spawns claude WITHOUT the GUI plugin MCP /
+  // --strict-mcp-config, so the user's + project's MCP servers load normally. Absent
+  // (the single view) keeps main's behavior: GUI MCP attached + strict.
+  const attachGuiMcp = url.searchParams.get("gui") !== "0";
+
   // Decide the effective session id BEFORE telling the browser. A requested id
   // is honored only if it can actually be served: a live pty (reattach) or an
   // on-disk transcript (`--resume`). A requested id that's neither — e.g. a cell
@@ -1097,7 +1111,7 @@ wss.on("connection", (ws, req) => {
 
   let entry: PtyEntry;
   try {
-    entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd);
+    entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
   } catch (err) {
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
     // must close just this connection — never crash the whole server.

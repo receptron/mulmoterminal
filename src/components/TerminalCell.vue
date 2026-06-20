@@ -235,7 +235,16 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
           <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
         </span>
       </div>
-      <TerminalView ref="termRef" class="cell-term" :session-id="sessionId" :connect-key="connectKey" :cwd="cwd" @session="onSession" @cwd="onServerCwd" />
+      <TerminalView
+        ref="termRef"
+        class="cell-term"
+        :session-id="sessionId"
+        :connect-key="connectKey"
+        :cwd="cwd"
+        dev-terminal
+        @session="onSession"
+        @cwd="onServerCwd"
+      />
     </template>
     <div v-else class="cell-launch">
       <div v-if="presets.length" class="cell-presets">
