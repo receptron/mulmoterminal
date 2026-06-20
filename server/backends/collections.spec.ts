@@ -23,6 +23,8 @@ const SCHEMA = {
     name: { type: "string", label: "Name" },
   },
   views: [{ id: "v1", file: "views/v1.html", label: "Custom", capabilities: ["read"] }],
+  actions: [{ id: "enrich", label: "Enrich", kind: "chat", role: "general", template: "templates/enrich.md" }],
+  collectionActions: [{ id: "audit", label: "Audit", kind: "chat", role: "general", template: "templates/audit.md" }],
 };
 
 let server: Server;
@@ -32,6 +34,10 @@ beforeAll(async () => {
   const ws = mkdtempSync(path.join(tmpdir(), "mt-col-"));
   mkdirSync(path.join(ws, ".claude", "skills", "testcol"), { recursive: true });
   writeFileSync(path.join(ws, ".claude", "skills", "testcol", "schema.json"), JSON.stringify(SCHEMA));
+  // Action templates live under the skill dir's templates/ (readSkillTemplate).
+  mkdirSync(path.join(ws, ".claude", "skills", "testcol", "templates"), { recursive: true });
+  writeFileSync(path.join(ws, ".claude", "skills", "testcol", "templates", "enrich.md"), "ENRICH_TEMPLATE: complete this record.");
+  writeFileSync(path.join(ws, ".claude", "skills", "testcol", "templates", "audit.md"), "AUDIT_TEMPLATE: review all records.");
   mkdirSync(path.join(ws, "data", "testcol", "items"), { recursive: true });
   writeFileSync(path.join(ws, "data", "testcol", "items", "item1.json"), JSON.stringify({ id: "item1", name: "Foo" }));
   mkdirSync(path.join(ws, "data", "skills", "testcol", "views"), { recursive: true });
@@ -182,5 +188,34 @@ describe("record CRUD", () => {
     });
     expect(put.status).toBe(404);
     expect((await fetch(`${base}/api/collections/nope/items/x`, { method: "DELETE" })).status).toBe(404);
+  });
+});
+
+describe("action routes (seed prompts)", () => {
+  const post = (url: string) => fetch(`${base}${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
+
+  it("returns a per-record action's seed prompt + role", async () => {
+    const res = await post("/api/collections/testcol/items/item1/actions/enrich");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { prompt: string; role: string };
+    expect(body.role).toBe("general");
+    expect(body.prompt).toContain("ENRICH_TEMPLATE");
+  });
+
+  it("returns a collection-level action's seed prompt + role", async () => {
+    const res = await post("/api/collections/testcol/actions/audit");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { prompt: string; role: string };
+    expect(body.role).toBe("general");
+    expect(body.prompt).toContain("AUDIT_TEMPLATE");
+  });
+
+  it("404s an unknown action id", async () => {
+    expect((await post("/api/collections/testcol/items/item1/actions/nope")).status).toBe(404);
+    expect((await post("/api/collections/testcol/actions/nope")).status).toBe(404);
+  });
+
+  it("404s a per-record action on a missing item", async () => {
+    expect((await post("/api/collections/testcol/items/ghost/actions/enrich")).status).toBe(404);
   });
 });

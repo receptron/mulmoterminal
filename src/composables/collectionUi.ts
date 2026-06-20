@@ -1,16 +1,15 @@
 // Wire @mulmoclaude/collection-plugin/vue to MulmoTerminal. Imported for its side
 // effect from main.ts so the package's View layer can resolve data before any
 // presentCollection card mounts. MulmoTerminal's counterpart to MulmoClaude's
-// src/composables/collections/uiHost.ts — but a much leaner host (no router, no
-// vue-i18n host instance, no confirm/shortcut/notifier stores), so most write/chat/
-// favorite capabilities are stubs for this read-side increment.
+// src/composables/collections/uiHost.ts — a leaner host (no router, no vue-i18n host
+// instance, no confirm/notifier stores).
 //
-// What's REAL here: fetchCollectionDetail + listCollections, the read-only custom
-// view surface (mintViewToken / fetchViewHtml / buildViewSrcdoc), localeTag, confirm.
-// Write / feeds / favorites / chat are typed failures / no-ops until the interactive
-// (Tier 1) and toolbar (Tier 2) work lands.
+// Wired: data fetch (detail/list), record CRUD, read-only custom views, actions
+// (seed prompt → startChat → a visible chat), favorites (useShortcuts), and
+// state-based navigation (useCollectionBrowse — the toolbar + browse overlay).
+// Still stubbed: feeds, collection/view deletion, feed refresh, and the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionApiResult, CollectionViewToken } from "@mulmoclaude/collection-plugin/vue";
+import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/collection-plugin";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { useShortcuts } from "./useShortcuts";
@@ -141,8 +140,15 @@ configureCollectionUi({
   // ── collection/feed delete, actions, feeds, view-delete: deferred. ──
   deleteCollection: () => Promise.resolve(mutationFail),
   deleteFeed: () => Promise.resolve(mutationFail),
-  runItemAction: () => Promise.resolve(apiFail),
-  runCollectionAction: () => Promise.resolve(apiFail),
+  // ── actions (kind: "chat"): fetch the seed prompt + role; CollectionView feeds it
+  //    to startChat (→ a visible chat). ──
+  runItemAction: (slug, itemId, actionId) =>
+    apiPost<CollectionActionResult>(
+      `/api/collections/${encodeURIComponent(slug)}/items/${encodeURIComponent(itemId)}/actions/${encodeURIComponent(actionId)}`,
+      {},
+    ),
+  runCollectionAction: (slug, actionId) =>
+    apiPost<CollectionActionResult>(`/api/collections/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}`, {}),
   refreshCollection: () => Promise.resolve(apiFail),
   deleteView: () => Promise.resolve(mutationFail),
   listFeeds: () => Promise.resolve(apiFail),
