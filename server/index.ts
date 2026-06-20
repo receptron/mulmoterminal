@@ -17,6 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes } from "./config-routes.js";
 import { buildClaudeArgs } from "./claude-args.js";
+import { isRecord, parseJsonl, userPromptText, latestUserPromptFromJsonl } from "./transcript.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
@@ -91,8 +92,6 @@ const hasErrnoCode = (e: unknown): e is { code?: string } => typeof e === "objec
 
 // Error message extracted defensively from an unknown thrown value.
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -497,30 +496,16 @@ function resolveWorkspace(cwd: string | null): string {
   return CLAUDE_CWD;
 }
 
-// A real user prompt from a JSONL "user" line's content, or null if it's a
-// slash-/local-command wrapper rather than a typed prompt. Content may be a
-// plain string or an array of blocks (guard against null elements).
-function userPromptText(content: unknown): string | null {
-  const text = Array.isArray(content) ? content.map((x) => (isRecord(x) ? String(x.text ?? "") : String(x ?? ""))).join(" ") : content;
-  if (typeof text === "string" && text.trim() && !/^\s*<(local-command|command-|bash-)/.test(text)) {
-    return text.trim();
+// The most recent user prompt from a resumed session's on-disk transcript, so a
+// freshly-resumed cell can show its last prompt instead of just the id. null if
+// there's no transcript yet (a never-prompted session) or it can't be read.
+async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
+  try {
+    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
+    return latestUserPromptFromJsonl(raw);
+  } catch {
+    return null;
   }
-  return null;
-}
-
-// Parse a JSONL file into the objects on each non-blank, valid line.
-function parseJsonl(raw: string): Record<string, unknown>[] {
-  const out: Record<string, unknown>[] = [];
-  for (const line of raw.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      const o: unknown = JSON.parse(line);
-      if (isRecord(o)) out.push(o);
-    } catch {
-      // Skip malformed lines.
-    }
-  }
-  return out;
 }
 
 // Scan a session JSONL for a human-friendly title and last activity.
@@ -789,16 +774,20 @@ mountConfigRoutes(app, CLAUDE_CWD);
 // GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
 // can render its header immediately (live updates then arrive via the "sessions"
 // pub/sub channel). The single view reads activity straight from that channel.
-app.get("/api/session/:id", (req, res) => {
+// ?cwd= locates the transcript so a freshly-resumed session shows its most recent
+// prompt; the live in-memory prompt (this process run) takes precedence.
+app.get("/api/session/:id", async (req, res) => {
   const { id } = req.params;
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const a = activity.get(id) || {};
+  const lastPrompt = lastPrompts.get(id) ?? (await latestUserPrompt(cwd, id));
   res.json({
     id,
-    cwd: CLAUDE_CWD,
+    cwd,
     working: a.working ?? false,
     waiting: a.waiting ?? false,
-    lastPrompt: lastPrompts.get(id) ?? null,
+    lastPrompt,
   });
 });
 

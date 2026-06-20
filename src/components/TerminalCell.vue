@@ -67,7 +67,10 @@ function applyActivity(d: ActivityMsg) {
 
 async function loadInitial(id: string) {
   try {
-    const res = await fetch(`/api/session/${id}`);
+    // Pass the cell's dir so the server can read the transcript and report the
+    // session's most recent prompt (not just the bare id) after a resume.
+    const q = cwd.value ? `?cwd=${encodeURIComponent(cwd.value)}` : "";
+    const res = await fetch(`/api/session/${id}${q}`);
     if (!res.ok) return;
     const data = await res.json();
     // Guard against a stale response: the cell may have closed / switched session
