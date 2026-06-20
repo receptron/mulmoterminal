@@ -11,6 +11,12 @@ function clickBtn(w: ReturnType<typeof mount>, match: (text: string) => boolean)
 }
 
 describe("SettingsModal", () => {
+  it("gives each preset input an accessible name", () => {
+    const w = mountModal([{ label: "a", path: "/a" }]);
+    expect(w.find(".label-field").attributes("aria-label")).toBe("Preset label");
+    expect(w.find(".path-field").attributes("aria-label")).toBe("Preset directory path");
+  });
+
   it("shows a row per preset", () => {
     const w = mountModal([
       { label: "a", path: "/a" },

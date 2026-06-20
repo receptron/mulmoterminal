@@ -69,8 +69,8 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
       <div class="rows">
         <div v-for="(row, i) in rows" :key="i" class="row">
-          <input v-model="row.label" class="field label-field" type="text" placeholder="Label" spellcheck="false" />
-          <input v-model="row.path" class="field path-field" type="text" placeholder="/absolute/path" spellcheck="false" />
+          <input v-model="row.label" class="field label-field" type="text" placeholder="Label" aria-label="Preset label" spellcheck="false" />
+          <input v-model="row.path" class="field path-field" type="text" placeholder="/absolute/path" aria-label="Preset directory path" spellcheck="false" />
           <button class="icon-btn" title="Remove" aria-label="Remove preset" @click="removeRow(i)">✕</button>
         </div>
         <p v-if="rows.length === 0" class="empty">No presets yet.</p>
