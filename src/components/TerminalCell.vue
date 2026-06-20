@@ -83,8 +83,12 @@ onMounted(() => {
     if (isActivityMsg(d) && d.id === sessionId.value) applyActivity(d);
   });
   if (sessionId.value) loadInitial(sessionId.value);
+  else loadResumable();
 });
-onUnmounted(() => unsubscribe?.());
+onUnmounted(() => {
+  unsubscribe?.();
+  if (resumableTimer) clearTimeout(resumableTimer);
+});
 
 function launch() {
   // Optimistic display only; the persisted/displayed truth is the EFFECTIVE cwd
@@ -95,10 +99,72 @@ function launch() {
   launched.value = true;
 }
 
-// Quick-pick a preset directory: fill the field and launch in one click.
-function launchPreset(p: CwdPreset) {
+// Pick a preset directory: fill the field and refresh the resume list for it, so
+// the user can then start fresh OR resume one of that dir's sessions.
+function selectPreset(p: CwdPreset) {
   dirInput.value = p.path;
-  launch();
+  loadResumable();
+}
+
+// Existing sessions for the dir in the form, so an empty cell can resume one
+// instead of starting fresh.
+interface ResumableSession {
+  id: string;
+  title: string;
+  mtime: number;
+}
+const resumable = ref<ResumableSession[]>([]);
+// The resolved cwd the listed sessions belong to (the server may resolve/fallback
+// the requested dir). resume() uses THIS — not the live input — so the session id
+// and cwd always match the row that was clicked.
+const resumableCwd = ref<string | null>(null);
+let resumableTimer: ReturnType<typeof setTimeout> | null = null;
+let resumableReq = 0; // request token: drop out-of-order responses
+
+async function loadResumable() {
+  const dir = dirInput.value.trim() || props.defaultCwd;
+  const reqId = ++resumableReq;
+  if (launched.value || !dir) {
+    resumable.value = [];
+    resumableCwd.value = null;
+    return;
+  }
+  try {
+    const res = await fetch(`/api/sessions?cwd=${encodeURIComponent(dir)}`);
+    if (reqId !== resumableReq) return; // a newer request superseded this one
+    const data = res.ok ? await res.json() : { sessions: [], cwd: dir };
+    if (reqId !== resumableReq) return; // re-check after awaiting the body
+    resumable.value = data.sessions ?? [];
+    resumableCwd.value = data.cwd ?? dir;
+  } catch {
+    if (reqId === resumableReq) {
+      resumable.value = [];
+      resumableCwd.value = null;
+    }
+  }
+}
+
+// Refresh the resume list when the target dir changes (debounced).
+watch([dirInput, () => props.defaultCwd], () => {
+  if (resumableTimer) clearTimeout(resumableTimer);
+  resumableTimer = setTimeout(loadResumable, 300);
+});
+
+function resume(s: ResumableSession) {
+  // Use the cwd those rows were fetched for, not the (possibly-changed) input.
+  cwd.value = resumableCwd.value ?? (dirInput.value.trim() || props.defaultCwd);
+  sessionId.value = s.id;
+  connectKey.value++;
+  launched.value = true;
+}
+
+function relativeTime(ms: number): string {
+  const min = Math.floor((Date.now() - ms) / 60000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr}h ago`;
+  return `${Math.floor(hr / 24)}d ago`;
 }
 
 // The server reports where the PTY actually runs (it may have rejected the
@@ -122,6 +188,7 @@ function close() {
   cwd.value = props.defaultCwd;
   dirInput.value = props.defaultCwd ?? "";
   emit("close");
+  loadResumable();
 }
 
 // Adopt the server-assigned id (esp. for new sessions), bubble it up for
@@ -172,13 +239,24 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
     </template>
     <div v-else class="cell-launch">
       <div v-if="presets.length" class="cell-presets">
-        <button v-for="p in presets" :key="p.label + p.path" class="cell-preset" :title="p.path" @click="launchPreset(p)">{{ p.label }}</button>
+        <button v-for="p in presets" :key="p.label + p.path" :class="['cell-preset', { active: dirInput === p.path }]" :title="p.path" @click="selectPreset(p)">
+          {{ p.label }}
+        </button>
       </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
         <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
       </label>
       <button class="cell-start" @click="launch">＋ New terminal</button>
+      <div v-if="resumable.length" class="cell-resume">
+        <span class="cell-launch-caption">or resume here</span>
+        <div class="cell-resume-list">
+          <button v-for="s in resumable" :key="s.id" class="cell-resume-item" :title="s.title" @click="resume(s)">
+            <span class="ri-title">{{ s.title }}</span>
+            <span class="ri-time">{{ relativeTime(s.mtime) }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -316,6 +394,11 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   background: #2a3b66;
   color: #fff;
 }
+.cell-preset.active {
+  background: #2a3b66;
+  color: #fff;
+  border-color: #4a8cff;
+}
 .cell-launch-label {
   display: flex;
   flex-direction: column;
@@ -360,5 +443,52 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 .cell-start:hover {
   background: #2a3b66;
   color: #fff;
+}
+
+.cell-resume {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  max-width: 360px;
+  min-height: 0;
+}
+.cell-resume-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.cell-resume-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid #2a2a4e;
+  background: #14142a;
+  color: #c7cdf0;
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  text-align: left;
+  padding: 5px 10px;
+  border-radius: 6px;
+}
+.cell-resume-item:hover {
+  background: #20203a;
+  border-color: #4a8cff;
+}
+.ri-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ri-time {
+  flex: 0 0 auto;
+  color: #6b7394;
+  font-size: 11px;
 }
 </style>

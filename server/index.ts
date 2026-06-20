@@ -800,9 +800,15 @@ app.get("/api/session/:id", (req, res) => {
 
 // List the chat sessions for the current project (CLAUDE_CWD), including
 // newly-created sessions that aren't persisted to disk yet.
-app.get("/api/sessions", async (_req, res) => {
+app.get("/api/sessions", async (req, res) => {
   try {
-    const dir = projectSessionsDir(CLAUDE_CWD);
+    // Optional ?cwd= scopes the list to that project's on-disk sessions (the grid
+    // cell's resume picker). Without it, the classic single view's behavior is
+    // unchanged: CLAUDE_CWD + in-memory pending sessions.
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
+    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
+    const includePending = !cwdParam;
+    const dir = projectSessionsDir(cwd);
     let files: string[] = [];
     try {
       files = (await fs.readdir(dir)).filter((f) => f.endsWith(".jsonl"));
@@ -827,9 +833,10 @@ app.get("/api/sessions", async (_req, res) => {
     const onDisk = new Set(onDiskStats.map((s) => s.id));
 
     // In-memory sessions not yet written to disk. Prune any that have since
-    // been persisted — the on-disk record (with its real title) wins.
+    // been persisted — the on-disk record (with its real title) wins. Skipped for
+    // a cwd-scoped query (pending sessions aren't tracked per directory).
     const pending: PendingSession[] = [];
-    for (const [id, meta] of knownSessions) {
+    for (const [id, meta] of includePending ? knownSessions : []) {
       if (onDisk.has(id)) {
         knownSessions.delete(id);
         continue;
@@ -860,7 +867,7 @@ app.get("/api/sessions", async (_req, res) => {
       .filter((s): s is SessionMeta => s !== null)
       .sort((a, b) => b.mtime - a.mtime);
 
-    res.json({ cwd: CLAUDE_CWD, sessions });
+    res.json({ cwd, sessions });
   } catch (err) {
     console.error("[api] /api/sessions failed:", err);
     res.status(500).json({ error: String(err) });
