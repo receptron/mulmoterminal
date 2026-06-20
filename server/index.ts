@@ -12,6 +12,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
 import { buildGuiMcpServer } from "./mcp/broker.js";
+import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
@@ -103,6 +104,12 @@ const CLAUDE_CWD = process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaud
 // CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
 // session state, so it must exist before we spawn anything into it.
 await fs.mkdir(CLAUDE_CWD, { recursive: true });
+
+// Seed the bundled help docs + preset skills into the shared workspace so a
+// MulmoTerminal-alone run still gets a populated workspace (shared with
+// MulmoClaude via @mulmoclaude/workspace-setup). Idempotent — safe to run on
+// every boot. Done right after the workspace dir is guaranteed to exist.
+initWorkspaceSetup({ workspace: CLAUDE_CWD });
 
 // MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the

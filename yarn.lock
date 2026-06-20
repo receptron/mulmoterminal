@@ -579,6 +579,11 @@
     js-yaml "^4.2.0"
     marked "^18.0.5"
 
+"@mulmoclaude/workspace-setup@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/workspace-setup/-/workspace-setup-0.1.1.tgz#49db392b08b7c3bd7db668fcc387508685cef3c9"
+  integrity sha512-FgMDrMM6cUhezRxCJ+CMfe/McRZMySHueXFxYXanUGcdHKPez0qp6EYVsZiUQ/+rjVHGaJ6kvOhw1feEmKDevw==
+
 "@mulmoclaude/x-plugin@^0.1.1":
   version "0.1.1"
   resolved "https://registry.npmjs.org/@mulmoclaude/x-plugin/-/x-plugin-0.1.1.tgz#9923ac1b981b88af5be297f2fd4372f127ca2781"
