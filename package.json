@@ -53,6 +53,7 @@
     "@mulmochat-plugin/ui-image": "^0.4.0",
     "@mulmoclaude/chart-plugin": "^0.1.1",
     "@mulmoclaude/collection-plugin": "^0.5.1",
+    "@mulmoclaude/file-change-publisher": "^0.1.1",
     "@mulmoclaude/form-plugin": "^0.1.1",
     "@mulmoclaude/html-plugin": "^0.2.2",
     "@mulmoclaude/markdown-plugin": "^0.1.4",

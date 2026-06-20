@@ -12,6 +12,7 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import { createPubSub } from "./pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
 import { buildGuiMcpServer } from "./mcp/broker.js";
+import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
@@ -532,7 +533,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
 // catch-all (which handles the tool-call); a request without `kind` falls through.
-mountHtmlDispatchRoute(app, { getPubsub: () => pubsub });
+mountHtmlDispatchRoute(app);
 
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
@@ -788,10 +789,14 @@ app.get("/api/sessions", async (_req, res) => {
 const server = http.createServer(app);
 pubsub = createPubSub(server, isAllowedOrigin);
 
-// Give the markdown host app its workspace (for artifacts/documents storage) +
-// pubsub (to forward file-change events to the plugin-scoped channel so the
-// presentDocument view live-refreshes). Done after pubsub exists (task #6).
-initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
+// Configure the shared workspace file-change publisher (forwards post-write
+// events to the plugin-scoped channels open Views subscribe to). Done right
+// after pubsub exists, before the write backends below route through it.
+initFileChangePublisher({ workspace: CLAUDE_CWD, pubsub });
+
+// Give the markdown host app its workspace (for artifacts/documents storage).
+// File-change live-refresh now flows through the shared publisher above.
+initMarkdownBackend({ workspace: CLAUDE_CWD });
 
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.

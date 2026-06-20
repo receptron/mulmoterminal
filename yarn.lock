@@ -560,6 +560,11 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
+"@mulmoclaude/file-change-publisher@^0.1.1":
+  version "0.1.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/file-change-publisher/-/file-change-publisher-0.1.1.tgz#9dfa0359c9ba74016f7512e614bef751660fb0e7"
+  integrity sha512-tuiG1XcDh9u3DnJUvluqHkARVKvgZ/JSvcdlCE1e5XG6niEZUy42ON9kdFxBgrYI6xchtST6MP+RFJSq52rd1g==
+
 "@mulmoclaude/form-plugin@^0.1.1":
   version "0.1.1"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.1.tgz#54825cc7ecb3eded0d9d6d7bc0c04214bf7c78da"

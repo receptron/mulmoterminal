@@ -21,7 +21,9 @@ beforeAll(async () => {
 
   const app = express();
   app.use(express.json());
-  mountHtmlDispatchRoute(app, { getPubsub: () => null });
+  // File-change live-refresh now flows through the shared publisher (a no-op
+  // until configured), so the dispatch route no longer takes a pubsub thunk.
+  mountHtmlDispatchRoute(app);
   mountHtmlPreviewRoute(app, { workspace: ws });
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());
