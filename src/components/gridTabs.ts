@@ -79,33 +79,31 @@ export function switchPage(state: GridState, page: number): GridState {
 }
 
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
-// uid must be a non-negative safe integer: localStorage is untrusted, and a bad or
-// duplicate uid would collide v-for keys and make uid-targeted mutators hit more
-// than one cell.
+// A cell entry is kept if its session/cwd are well-formed; uid is validated only to
+// match the persisted `expanded` (it is renumbered below regardless).
 const isCell = (c: unknown): c is Cell => {
   const o = c as Cell | null;
-  return !!o && Number.isSafeInteger(o.uid) && o.uid >= 0 && (o.session === null || isUuid(o.session)) && (o.cwd === null || typeof o.cwd === "string");
-};
-
-const dedupeByUid = (cells: Cell[]): Cell[] => {
-  const seen = new Set<number>();
-  return cells.filter((c) => {
-    if (seen.has(c.uid)) return false;
-    seen.add(c.uid);
-    return true;
-  });
+  return !!o && (o.session === null || isUuid(o.session)) && (o.cwd === null || typeof o.cwd === "string");
 };
 
 export function parseGridState(raw: string | null): GridState | null {
   try {
     const parsed = JSON.parse(raw ?? "");
     if (!Array.isArray(parsed?.cells)) return null;
-    const cells: Cell[] = dedupeByUid(parsed.cells.filter(isCell)).slice(0, MAX_TERMINALS);
-    const maxUid = cells.reduce((m: number, c: Cell) => Math.max(m, c.uid), -1);
-    const nextUid = Number.isSafeInteger(parsed.nextUid) && parsed.nextUid > maxUid ? parsed.nextUid : maxUid + 1;
-    const expanded = typeof parsed.expanded === "number" && cells.some((c) => c.uid === parsed.expanded && c.session !== null) ? parsed.expanded : null;
+    // Keep only running cells (the trailing launch cell is ephemeral) and renumber
+    // uids from position. Persisted uids are untrusted: duplicates would collide
+    // v-for keys, and a near-MAX_SAFE_INTEGER value would overflow the nextUid
+    // counter. uid is internal identity only, so a clean 0..n-1 space (nextUid =
+    // count) is always safe and in range.
+    const running = parsed.cells
+      .filter(isCell)
+      .filter((c: Cell) => c.session !== null)
+      .slice(0, MAX_TERMINALS);
+    const cells: Cell[] = running.map((c: Cell, i: number) => ({ uid: i, session: c.session, cwd: c.cwd }));
+    const expandedIdx = running.findIndex((c: Cell) => c.uid === parsed.expanded);
+    const expanded = typeof parsed.expanded === "number" && expandedIdx >= 0 ? expandedIdx : null;
     const page = Number.isSafeInteger(parsed.page) && parsed.page >= 0 ? parsed.page : 0;
-    return clampPage(ensureEntry({ cells, expanded, page, nextUid }));
+    return clampPage(ensureEntry({ cells, expanded, page, nextUid: cells.length }));
   } catch {
     return null;
   }

@@ -113,12 +113,13 @@ describe("switchPage", () => {
 });
 
 describe("parseGridState / migrateLegacy / initialState", () => {
-  it("round-trips a valid state and drops bad cells", () => {
-    const raw = JSON.stringify({ cells: [cell(0, U(0)), { uid: 1, session: "bad", cwd: null }, cell(2)], expanded: 0, page: 0, nextUid: 3 });
+  it("keeps running cells, renumbers uids, and drops malformed entries", () => {
+    const raw = JSON.stringify({ cells: [cell(0, U(0)), { uid: 1, session: "bad", cwd: null }, cell(2, U(2))], expanded: 2, page: 0, nextUid: 3 });
     const s = parseGridState(raw);
     if (!s) throw new Error("expected parsed state");
-    expect(s.cells.map((c) => c.uid)).toEqual([0, 2]); // "bad" session dropped
-    expect(s.expanded).toBe(0);
+    expect(s.cells.map((c) => c.session)).toEqual([U(0), U(2)]); // "bad" session dropped
+    expect(s.cells.map((c) => c.uid)).toEqual([0, 1]); // renumbered from position
+    expect(s.expanded).toBe(1); // old uid 2 -> new index 1
   });
   it("returns null for missing/corrupt input", () => {
     expect(parseGridState(null)).toBeNull();
@@ -131,14 +132,13 @@ describe("parseGridState / migrateLegacy / initialState", () => {
     expect(Number.isInteger(s.page)).toBe(true);
     expect(s.page).toBe(0);
   });
-  it("drops cells with invalid uids and dedupes duplicate uids (keeping the first)", () => {
+  it("renumbers duplicate/oversized persisted uids and keeps nextUid safe", () => {
     const raw = JSON.stringify({
       cells: [
         cell(0, U(0)),
-        { uid: -1, session: null, cwd: null }, // negative
-        { uid: 1.5, session: null, cwd: null }, // fractional
         cell(0, U(1)), // duplicate uid 0
-        cell(2, U(2)),
+        { uid: 5, session: null, cwd: null }, // empty launch cell — dropped
+        { uid: Number.MAX_SAFE_INTEGER, session: U(2), cwd: null }, // oversized uid
       ],
       expanded: null,
       page: 0,
@@ -146,9 +146,10 @@ describe("parseGridState / migrateLegacy / initialState", () => {
     });
     const s = parseGridState(raw);
     if (!s) throw new Error("expected parsed state");
-    expect(s.cells.map((c) => c.uid)).toEqual([0, 2]);
-    expect(s.cells[0].session).toBe(U(0)); // first uid 0 kept
-    expect(s.nextUid).toBe(3); // > max uid even though stored nextUid was 1
+    expect(s.cells.map((c) => c.session)).toEqual([U(0), U(1), U(2)]); // empty dropped, all running kept
+    expect(s.cells.map((c) => c.uid)).toEqual([0, 1, 2]); // renumbered — no collision
+    expect(s.nextUid).toBe(3);
+    expect(Number.isSafeInteger(s.nextUid)).toBe(true);
   });
   it("migrates the legacy single-grid shape into the flat list", () => {
     const legacy = JSON.stringify({ sessions: [U(0), null, U(2), null], cwds: ["/a", null, "/c", null], expanded: 1 });
