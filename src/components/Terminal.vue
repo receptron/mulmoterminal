@@ -5,6 +5,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl } from "./wsUrl";
+import { dropTextFromUriList, toInsertText } from "./dropPaths";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
@@ -18,6 +19,7 @@ const emit = defineEmits<{ (e: "session" | "cwd", value: string): void }>();
 
 const terminalRef = ref<HTMLDivElement>();
 const status = ref<"connecting" | "connected" | "disconnected">("connecting");
+const dragOver = ref(false);
 
 let term: Terminal;
 let fitAddon: FitAddon;
@@ -215,6 +217,52 @@ function terminate() {
 }
 defineExpose({ submitText, terminate });
 
+// Insert text (a path, or space-joined paths) at the terminal cursor via the
+// normal input channel — no trailing CR, so the user reviews and submits.
+function insertText(text: string) {
+  if (!text) return;
+  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "input", data: text }));
+  term.focus();
+}
+
+// Drop a file onto the terminal to insert its absolute path, like a native
+// terminal. Browsers expose the real path only via the drag's file:// URIs
+// (text/uri-list); the File object hides it. Browsers that withhold the path
+// (e.g. Chrome) yield no URIs, so we insert nothing rather than a wrong string —
+// the file-picker button is the path-in-Chrome route.
+function onDrop(e: DragEvent) {
+  dragOver.value = false;
+  const dt = e.dataTransfer;
+  if (!dt || dt.files.length === 0) return; // not a file drop — leave text drags alone
+  e.preventDefault();
+  insertText(dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain")));
+}
+
+function onDragOver(e: DragEvent) {
+  if (!e.dataTransfer?.types.includes("Files")) return;
+  e.preventDefault(); // required for the drop event to fire
+  dragOver.value = true;
+}
+
+// The file-icon button: the browser can't reveal a real path, so the local
+// server opens the OS file dialog and returns the chosen absolute path(s). Works
+// in every browser (the cross-browser path route, unlike file:// drag/drop).
+async function pickFile() {
+  try {
+    const res = await fetch("/api/pick-file", { method: "POST", headers: { "content-type": "application/json" } });
+    if (!res.ok) return;
+    const data: unknown = await res.json();
+    const paths = isRecord(data) && Array.isArray(data.paths) ? data.paths.filter((p): p is string => typeof p === "string") : [];
+    insertText(toInsertText(paths));
+  } catch {
+    // best-effort — the native dialog is unavailable or the user canceled
+  }
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
 onUnmounted(() => {
   disposed = true;
   if (reconnectTimer) clearTimeout(reconnectTimer);
@@ -229,8 +277,11 @@ onUnmounted(() => {
     <div class="header">
       <span class="title">Terminal</span>
       <span :class="['status', status]">{{ status }}</span>
+      <button type="button" class="pick-file" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
+        <span class="material-symbols-outlined">attach_file</span>
+      </button>
     </div>
-    <div ref="terminalRef" class="terminal-container" />
+    <div ref="terminalRef" :class="['terminal-container', { 'drag-over': dragOver }]" @dragover="onDragOver" @dragleave="dragOver = false" @drop="onDrop" />
   </div>
 </template>
 
@@ -259,6 +310,27 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
+.pick-file {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: #9aa7d0;
+  cursor: pointer;
+}
+
+.pick-file:hover {
+  background: #25325a;
+  color: #e0e0e0;
+}
+
+.pick-file .material-symbols-outlined {
+  font-size: 18px;
+}
+
 .status {
   font-size: 12px;
   padding: 2px 8px;
@@ -283,5 +355,10 @@ onUnmounted(() => {
 .terminal-container {
   flex: 1;
   padding: 4px;
+}
+
+.terminal-container.drag-over {
+  outline: 2px dashed #7e8ce0;
+  outline-offset: -2px;
 }
 </style>

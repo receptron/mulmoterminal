@@ -19,6 +19,7 @@ import { mountConfigRoutes } from "./config-routes.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { isRecord, parseJsonl, userPromptText, latestUserPromptFromJsonl } from "./transcript.js";
 import { mountOpenDirRoute } from "./open-dir.js";
+import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
@@ -775,6 +776,11 @@ mountConfigRoutes(app, CLAUDE_CWD);
 // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
 // OS file manager (a browser tab can't, but this local server can).
 mountOpenDirRoute(app, { isAllowedOrigin });
+
+// POST /api/pick-file opens the OS file dialog and returns the chosen absolute
+// path(s) — how a browser tab inserts a real filesystem path into the terminal
+// (the browser hides paths from drag/drop and <input type=file>).
+mountPickFileRoute(app, { isAllowedOrigin });
 
 // GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
 // can render its header immediately (live updates then arrive via the "sessions"

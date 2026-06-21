@@ -10,6 +10,13 @@ WebSocket. A sidebar lists every Claude session for the project and reflects, in
 real time, which sessions are **working** (Claude is thinking) and which **need
 attention** (waiting for input, or finished with output you haven't seen).
 
+**Inserting a file path** — like a native terminal, you can put a file's absolute
+path into the prompt: **drag a file** onto the terminal (works where the browser
+exposes the path via `file://` — Firefox/Safari), or click the **📎 file button**
+in the terminal header, which asks the local server to open the OS file dialog and
+inserts the chosen path (works in every browser, including Chrome). The path is
+inserted at the cursor — it is not submitted, so you can review it first.
+
 ---
 
 ## Install & run
