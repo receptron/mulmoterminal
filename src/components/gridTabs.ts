@@ -77,18 +77,30 @@ export function switchPage(state: GridState, page: number): GridState {
 }
 
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
+// uid must be a non-negative safe integer: localStorage is untrusted, and a bad or
+// duplicate uid would collide v-for keys and make uid-targeted mutators hit more
+// than one cell.
 const isCell = (c: unknown): c is Cell => {
   const o = c as Cell | null;
-  return !!o && typeof o.uid === "number" && (o.session === null || isUuid(o.session)) && (o.cwd === null || typeof o.cwd === "string");
+  return !!o && Number.isSafeInteger(o.uid) && o.uid >= 0 && (o.session === null || isUuid(o.session)) && (o.cwd === null || typeof o.cwd === "string");
+};
+
+const dedupeByUid = (cells: Cell[]): Cell[] => {
+  const seen = new Set<number>();
+  return cells.filter((c) => {
+    if (seen.has(c.uid)) return false;
+    seen.add(c.uid);
+    return true;
+  });
 };
 
 export function parseGridState(raw: string | null): GridState | null {
   try {
     const parsed = JSON.parse(raw ?? "");
     if (!Array.isArray(parsed?.cells)) return null;
-    const cells: Cell[] = parsed.cells.filter(isCell).slice(0, MAX_TERMINALS);
+    const cells: Cell[] = dedupeByUid(parsed.cells.filter(isCell)).slice(0, MAX_TERMINALS);
     const maxUid = cells.reduce((m: number, c: Cell) => Math.max(m, c.uid), -1);
-    const nextUid = typeof parsed.nextUid === "number" && parsed.nextUid > maxUid ? parsed.nextUid : maxUid + 1;
+    const nextUid = Number.isSafeInteger(parsed.nextUid) && parsed.nextUid > maxUid ? parsed.nextUid : maxUid + 1;
     const expanded = typeof parsed.expanded === "number" && cells.some((c) => c.uid === parsed.expanded && c.session !== null) ? parsed.expanded : null;
     return clampPage(ensureEntry({ cells, expanded, page: typeof parsed.page === "number" ? parsed.page : 0, nextUid }));
   } catch {

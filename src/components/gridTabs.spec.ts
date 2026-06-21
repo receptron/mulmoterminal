@@ -120,6 +120,25 @@ describe("parseGridState / migrateLegacy / initialState", () => {
     expect(parseGridState(null)).toBeNull();
     expect(parseGridState("not json{")).toBeNull();
   });
+  it("drops cells with invalid uids and dedupes duplicate uids (keeping the first)", () => {
+    const raw = JSON.stringify({
+      cells: [
+        cell(0, U(0)),
+        { uid: -1, session: null, cwd: null }, // negative
+        { uid: 1.5, session: null, cwd: null }, // fractional
+        cell(0, U(1)), // duplicate uid 0
+        cell(2, U(2)),
+      ],
+      expanded: null,
+      page: 0,
+      nextUid: 1,
+    });
+    const s = parseGridState(raw);
+    if (!s) throw new Error("expected parsed state");
+    expect(s.cells.map((c) => c.uid)).toEqual([0, 2]);
+    expect(s.cells[0].session).toBe(U(0)); // first uid 0 kept
+    expect(s.nextUid).toBe(3); // > max uid even though stored nextUid was 1
+  });
   it("migrates the legacy single-grid shape into the flat list", () => {
     const legacy = JSON.stringify({ sessions: [U(0), null, U(2), null], cwds: ["/a", null, "/c", null], expanded: 1 });
     const s = migrateLegacy(legacy);
