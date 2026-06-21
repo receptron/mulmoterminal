@@ -46,7 +46,7 @@ function toggle(): void {
       border: 'none',
       background: 'transparent',
       cursor: 'pointer',
-      color: pinned ? '#f59e0b' : '#94a3b8',
+      color: pinned ? 'var(--amber, #f59e0b)' : 'var(--text-dim, #94a3b8)',
     }"
     @click.stop="toggle"
     @keydown.enter.stop

@@ -69,6 +69,6 @@ onMounted(() => window.addEventListener("keydown", onKeydown));
   right: 0;
   bottom: 0;
   z-index: 50;
-  background: #0b1020;
+  background: var(--bg-deep);
 }
 </style>

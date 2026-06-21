@@ -4,6 +4,7 @@ import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import { LAYOUTS, isLayout, type Layout } from "./gridLayout";
 import type { CwdPreset } from "./presets";
+import { useAppConfig } from "../composables/useAppConfig";
 
 // The multi-terminal grid view. Toggled with the classic single view from App.vue.
 const emit = defineEmits<{ (e: "exit"): void }>();
@@ -14,44 +15,12 @@ const layout = ref<Layout>(isLayout(stored) ? stored : "2x2");
 watch(layout, (v) => localStorage.setItem("grid_layout", v));
 
 // Server config: the default workspace dir + the user's directory presets.
-const defaultCwd = ref<string | null>(null);
-const home = ref<string | null>(null);
-const presets = ref<CwdPreset[]>([]);
+const { defaultCwd, home, presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets } = useAppConfig();
 const showSettings = ref(false);
-const savingSettings = ref(false);
-const settingsError = ref<string | null>(null);
-
-async function loadConfig() {
-  try {
-    const res = await fetch("/api/config");
-    if (!res.ok) return;
-    const c = await res.json();
-    defaultCwd.value = c.cwd ?? null;
-    home.value = c.home ?? null;
-    presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
-  } catch {
-    // grid still works; presets just unavailable
-  }
-}
 onMounted(loadConfig);
 
 async function savePresets(next: CwdPreset[]) {
-  savingSettings.value = true;
-  settingsError.value = null;
-  try {
-    const res = await fetch("/api/config", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwdPresets: next }),
-    });
-    if (!res.ok) throw new Error(`save failed (${res.status})`);
-    presets.value = (await res.json()).cwdPresets ?? [];
-    showSettings.value = false; // close only on success — keep edits otherwise
-  } catch {
-    settingsError.value = "Couldn't save presets. Check the server and try again.";
-  } finally {
-    savingSettings.value = false;
-  }
+  if (await persistPresets(next)) showSettings.value = false; // close only on success — keep edits otherwise
 }
 
 function closeSettings() {
@@ -93,14 +62,14 @@ function closeSettings() {
   gap: 16px;
   height: 40px;
   padding: 0 16px;
-  background: #16213e;
-  border-bottom: 1px solid #2a2a4e;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
 }
 .toolbar-title {
   font-family: system-ui, sans-serif;
   font-weight: 600;
   font-size: 14px;
-  color: #e6e6f0;
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
@@ -110,9 +79,9 @@ function closeSettings() {
   gap: 4px;
 }
 .layout-btn {
-  border: 1px solid #2a2a4e;
-  background: #1a1a2e;
-  color: #9aa3c0;
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-muted);
   font-family: ui-monospace, monospace;
   font-size: 12px;
   padding: 3px 8px;
@@ -120,19 +89,19 @@ function closeSettings() {
   cursor: pointer;
 }
 .layout-btn:hover {
-  background: #2a3b66;
-  color: #e6e6f0;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .layout-btn.active {
-  background: #2a3b66;
-  color: #fff;
-  border-color: #4a8cff;
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .tb-btn {
-  border: 1px solid #2a2a4e;
-  background: #1a1a2e;
-  color: #c7cdf0;
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-secondary);
   font-family: system-ui, sans-serif;
   font-size: 12px;
   line-height: 1;
@@ -141,8 +110,8 @@ function closeSettings() {
   cursor: pointer;
 }
 .tb-btn:hover {
-  background: #2a3b66;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .main {

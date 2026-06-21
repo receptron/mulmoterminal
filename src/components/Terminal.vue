@@ -6,6 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl } from "./wsUrl";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
+import { useTheme, currentTermTheme } from "../composables/useTheme";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
@@ -20,6 +21,7 @@ const emit = defineEmits<{ (e: "session" | "cwd", value: string): void }>();
 const terminalRef = ref<HTMLDivElement>();
 const status = ref<"connecting" | "connected" | "disconnected">("connecting");
 const dragOver = ref(false);
+const { themeId } = useTheme();
 
 let term: Terminal;
 let fitAddon: FitAddon;
@@ -138,12 +140,7 @@ onMounted(() => {
     cursorBlink: true,
     fontSize: 14,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', monospace",
-    theme: {
-      background: "#1a1a2e",
-      foreground: "#e0e0e0",
-      cursor: "#e0e0e0",
-      selectionBackground: "#3a3a5e",
-    },
+    theme: currentTermTheme(),
   });
 
   fitAddon = new FitAddon();
@@ -190,6 +187,12 @@ watch(
     term.focus();
   },
 );
+
+// xterm can't read CSS variables, so repaint its canvas palette when the theme
+// changes (keeps an already-open terminal in sync with the rest of the app).
+watch(themeId, () => {
+  if (term) term.options.theme = currentTermTheme();
+});
 
 // Submit a GUI-originated message into the PTY (same channel as keyboard input).
 // This is the GUI->LLM feedback path. We type the text, then send a SEPARATE
@@ -296,13 +299,13 @@ onUnmounted(() => {
   min-width: 0;
   min-height: 0;
   height: 100%;
-  background: #1a1a2e;
+  background: var(--bg-base);
 }
 
 .header {
   padding: 8px 16px;
-  background: #16213e;
-  color: #e0e0e0;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: system-ui, sans-serif;
   font-size: 14px;
   display: flex;
@@ -322,13 +325,13 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   border-radius: 4px;
-  color: #9aa7d0;
+  color: var(--text-muted);
   cursor: pointer;
 }
 
 .pick-file:hover {
-  background: #25325a;
-  color: #e0e0e0;
+  background: var(--bg-selected);
+  color: var(--text);
 }
 
 .pick-file .material-symbols-outlined {
@@ -342,18 +345,18 @@ onUnmounted(() => {
 }
 
 .status.connected {
-  background: #1b5e20;
-  color: #a5d6a7;
+  background: var(--ok-bg);
+  color: var(--ok);
 }
 
 .status.connecting {
-  background: #e65100;
-  color: #ffcc80;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
 .status.disconnected {
-  background: #b71c1c;
-  color: #ef9a9a;
+  background: var(--err-deep);
+  color: var(--err);
 }
 
 /* min-height:0 is load-bearing: a flex item's default min-height is `auto`
@@ -369,7 +372,7 @@ onUnmounted(() => {
 }
 
 .terminal-container.drag-over {
-  outline: 2px dashed #7e8ce0;
+  outline: 2px dashed var(--accent);
   outline-offset: -2px;
 }
 </style>

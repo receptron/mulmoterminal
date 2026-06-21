@@ -7,11 +7,14 @@ import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
 import GridView from "./components/GridView.vue";
+import SettingsModal from "./components/SettingsModal.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
 import { registerChatOpener } from "./composables/useChatLauncher";
+import { useAppConfig } from "./composables/useAppConfig";
 import type { Shortcut } from "./types/shortcuts";
+import type { CwdPreset } from "./components/presets";
 
 // View mode: the classic single-terminal view (default) or the multi-terminal
 // grid. Persisted so a reload keeps the chosen view.
@@ -104,6 +107,19 @@ function onViewportResize() {
   terminalWidth.value = clampWidth(terminalWidth.value);
 }
 onMounted(() => window.addEventListener("resize", onViewportResize));
+
+// Settings (directory presets + theme), shared with the grid view via useAppConfig
+// and opened from the toolbar's gear button.
+const { presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets } = useAppConfig();
+const showSettings = ref(false);
+onMounted(loadConfig);
+async function savePresets(next: CwdPreset[]) {
+  if (await persistPresets(next)) showSettings.value = false;
+}
+function closeSettings() {
+  showSettings.value = false;
+  settingsError.value = null;
+}
 onUnmounted(() => {
   stopDrag?.();
   window.removeEventListener("resize", onViewportResize);
@@ -196,6 +212,9 @@ function onSession(id: string) {
           <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
         </button>
       </nav>
+      <button type="button" class="launcher-btn settings-btn" title="Settings" aria-label="Settings" @click="showSettings = true">
+        <span class="material-symbols-outlined">settings</span>
+      </button>
     </header>
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
@@ -249,6 +268,7 @@ function onSession(id: string) {
     <!-- Full-screen collection browser; shown when the launcher / an index card / a
          ref hop opens it (driven by useCollectionBrowse). -->
     <CollectionsBrowseOverlay />
+    <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
   </div>
 </template>
 
@@ -268,14 +288,14 @@ function onSession(id: string) {
   align-items: center;
   height: 40px;
   padding: 0 16px;
-  background: #16213e;
-  border-bottom: 1px solid #2a2a4e;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
 }
 .toolbar-title {
   font-family: system-ui, sans-serif;
   font-weight: 600;
   font-size: 14px;
-  color: #e6e6f0;
+  color: var(--text);
   letter-spacing: 0.02em;
 }
 
@@ -298,21 +318,25 @@ function onSession(id: string) {
   padding: 0;
   border: none;
   background: transparent;
-  color: #9aa6cc;
+  color: var(--text-muted);
   border-radius: 6px;
   cursor: pointer;
 }
 .launcher-btn:hover {
-  background: #26375f;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .launcher-btn.active {
-  background: #2f59c0;
-  color: #fff;
+  background: var(--accent-bg);
+  color: var(--on-accent);
 }
 .launcher-btn .material-symbols-outlined {
   font-size: 19px;
   line-height: 1;
+}
+/* Pin the gear to the far right of the toolbar. */
+.settings-btn {
+  margin-left: auto;
 }
 
 .app {
@@ -354,15 +378,15 @@ function onSession(id: string) {
 .splitter {
   flex: 0 0 5px;
   cursor: col-resize;
-  background: #16213e;
-  border-left: 1px solid #2a2a4e;
-  border-right: 1px solid #2a2a4e;
+  background: var(--bg-panel);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
 }
 .splitter:hover {
-  background: #2a3b66;
+  background: var(--bg-hover);
 }
 .splitter:focus-visible {
   outline: none;
-  background: #4a8cff;
+  background: var(--accent);
 }
 </style>

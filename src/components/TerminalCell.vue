@@ -294,8 +294,8 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4e;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -307,8 +307,8 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   gap: 8px;
   height: 34px;
   padding: 0 8px;
-  background: #16213e;
-  border-bottom: 1px solid #2a2a4e;
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
 }
 
 /* Status dot: idle / working (pulsing) / waiting (attention). */
@@ -317,14 +317,14 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: #4a5070;
+  background: var(--text-dim);
 }
 .cell-dot.is-working {
-  background: #4a8cff;
+  background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
 }
 .cell-dot.is-waiting {
-  background: #ffb454;
+  background: var(--amber);
 }
 @keyframes pulse {
   0%,
@@ -346,13 +346,13 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   cursor: pointer;
   font-family: ui-monospace, "JetBrains Mono", monospace;
   font-size: 11px;
-  color: #7f88ad;
+  color: var(--text-dim);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .cell-dir:hover {
-  color: #aeb6dd;
+  color: var(--text-muted);
   text-decoration: underline;
 }
 .cell-prompt {
@@ -360,7 +360,7 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   min-width: 0;
   font-family: system-ui, sans-serif;
   font-size: 12px;
-  color: #c7cdf0;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -379,19 +379,19 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   height: 26px;
   border: none;
   background: transparent;
-  color: #c7cdf0;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
   border-radius: 6px;
 }
 .cell-btn:hover {
-  background: #2a3b66;
-  color: #e6e6f0;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .cell-close:hover {
-  background: #3a2030;
-  color: #ff6b6b;
+  background: var(--err-hover-bg);
+  color: var(--err-text);
 }
 
 .cell-term {
@@ -422,9 +422,9 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   max-width: 360px;
 }
 .cell-preset {
-  border: 1px solid #2a2a4e;
-  background: #20203a;
-  color: #c7cdf0;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: system-ui, sans-serif;
   font-size: 12px;
@@ -432,13 +432,13 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   border-radius: 14px;
 }
 .cell-preset:hover {
-  background: #2a3b66;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .cell-preset.active {
-  background: #2a3b66;
-  color: #fff;
-  border-color: #4a8cff;
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--accent);
 }
 .cell-launch-label {
   display: flex;
@@ -451,7 +451,7 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 .cell-launch-caption {
   font-family: system-ui, sans-serif;
   font-size: 11px;
-  color: #6b7394;
+  color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -459,21 +459,21 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   width: 100%;
   box-sizing: border-box;
   padding: 7px 10px;
-  background: #11111f;
-  border: 1px solid #2a2a4e;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #e6e6f0;
+  color: var(--text);
   font-family: ui-monospace, "JetBrains Mono", monospace;
   font-size: 12px;
 }
 .cell-dir-input:focus {
   outline: none;
-  border-color: #4a8cff;
+  border-color: var(--accent);
 }
 .cell-start {
-  border: 1px solid #2a2a4e;
-  background: #20203a;
-  color: #c7cdf0;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: system-ui, sans-serif;
   font-size: 14px;
@@ -482,8 +482,8 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   border-radius: 6px;
 }
 .cell-start:hover {
-  background: #2a3b66;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 
 .cell-resume {
@@ -506,9 +506,9 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
-  border: 1px solid #2a2a4e;
-  background: #14142a;
-  color: #c7cdf0;
+  border: 1px solid var(--border);
+  background: var(--bg-deep);
+  color: var(--text-secondary);
   cursor: pointer;
   font-family: system-ui, sans-serif;
   font-size: 12px;
@@ -517,8 +517,8 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   border-radius: 6px;
 }
 .cell-resume-item:hover {
-  background: #20203a;
-  border-color: #4a8cff;
+  background: var(--bg-elevated);
+  border-color: var(--accent);
 }
 .ri-title {
   overflow: hidden;
@@ -527,7 +527,7 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 }
 .ri-time {
   flex: 0 0 auto;
-  color: #6b7394;
+  color: var(--text-dim);
   font-size: 11px;
 }
 </style>

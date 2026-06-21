@@ -76,10 +76,10 @@ const visibleSessions = computed(() => {
   height: 40px;
   flex-shrink: 0;
   padding: 0 10px;
-  background: #16213e;
-  color: #e0e0e0;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: system-ui, sans-serif;
-  border-bottom: 1px solid #2a2a4e;
+  border-bottom: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -87,8 +87,8 @@ const visibleSessions = computed(() => {
   flex-shrink: 0;
   width: 26px;
   height: 26px;
-  background: #1b3a6b;
-  color: #cfe0ff;
+  background: var(--bg-selected);
+  color: var(--text-secondary);
   border: none;
   border-radius: 6px;
   font-size: 16px;
@@ -96,7 +96,7 @@ const visibleSessions = computed(() => {
   cursor: pointer;
 }
 .new-btn:hover {
-  background: #224a86;
+  background: var(--bg-selected-hover);
 }
 
 .filters {
@@ -131,17 +131,17 @@ const visibleSessions = computed(() => {
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
-  color: #cdd5ee;
+  color: var(--text-secondary);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.12s;
 }
 .tab:hover {
-  background: #1d2b4e;
+  background: var(--bg-subtle);
 }
 .tab.active {
-  background: #1d2b4e;
-  border-color: #4a8cff;
+  background: var(--bg-subtle);
+  border-color: var(--accent);
 }
 
 .tab-title {
@@ -153,7 +153,7 @@ const visibleSessions = computed(() => {
 /* Background session waiting for input (unread): bold, like the sidebar. */
 .tab.waiting .tab-title {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
 }
 
 .unread-dot {
@@ -161,8 +161,8 @@ const visibleSessions = computed(() => {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #ef4444;
-  box-shadow: 0 0 0 2px #16213e;
+  background: var(--err-strong);
+  box-shadow: 0 0 0 2px var(--bg-panel);
 }
 
 /* Spinning "thinking" ring — mirrors the vertical sidebar's spinner. */
@@ -170,8 +170,8 @@ const visibleSessions = computed(() => {
   flex-shrink: 0;
   width: 10px;
   height: 10px;
-  border: 2px solid rgba(74, 140, 255, 0.3);
-  border-top-color: #4a8cff;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
   border-radius: 50%;
   animation: tabbar-spin 0.9s linear infinite;
 }
@@ -192,12 +192,12 @@ const visibleSessions = computed(() => {
 .icon-btn {
   background: none;
   border: none;
-  color: #9aa5c4;
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   line-height: 1;
 }
 .icon-btn:hover {
-  color: #e0e0e0;
+  color: var(--text);
 }
 </style>

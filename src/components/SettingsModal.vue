@@ -1,9 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import type { CwdPreset } from "./presets";
+import { useTheme } from "../composables/useTheme";
 
 const props = defineProps<{ presets: CwdPreset[]; saving?: boolean; error?: string | null }>();
 const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "close"): void }>();
+
+// Theme is applied immediately on click (independent of the Save button, which
+// only commits the directory presets).
+const { themeId, themes, setTheme } = useTheme();
 
 // Edit a local copy; commit on Save.
 const rows = ref<CwdPreset[]>(props.presets.map((p) => ({ ...p })));
@@ -66,9 +71,32 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   <div class="overlay" @click.self="emit('close')">
     <div ref="modalEl" class="modal" role="dialog" aria-modal="true" aria-label="Settings">
       <div class="modal-head">
-        <h2 class="modal-title">Directory presets</h2>
+        <h2 class="modal-title">Settings</h2>
         <button class="icon-btn" title="Close" aria-label="Close settings" @click="emit('close')">✕</button>
       </div>
+
+      <h3 class="section-title">Theme</h3>
+      <div class="themes" role="radiogroup" aria-label="Theme">
+        <button
+          v-for="t in themes"
+          :key="t.id"
+          type="button"
+          class="theme-card"
+          :class="{ active: themeId === t.id }"
+          role="radio"
+          :aria-checked="themeId === t.id"
+          :title="t.label"
+          @click="setTheme(t.id)"
+        >
+          <span class="swatch" :style="{ background: t.swatch.base }">
+            <span class="swatch-dot" :style="{ background: t.swatch.panel }" />
+            <span class="swatch-dot" :style="{ background: t.swatch.accent }" />
+          </span>
+          <span class="theme-label">{{ t.label }}</span>
+        </button>
+      </div>
+
+      <h3 class="section-title">Directory presets</h3>
       <p class="hint">Quick-pick directories offered when launching a terminal.</p>
 
       <div class="rows">
@@ -123,11 +151,11 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   max-height: 80vh;
   display: flex;
   flex-direction: column;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4e;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 16px;
-  color: #e6e6f0;
+  color: var(--text);
   font-family: system-ui, sans-serif;
 }
 .modal-head {
@@ -140,10 +168,68 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 15px;
   font-weight: 600;
 }
+.section-title {
+  margin: 14px 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.theme-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 84px;
+  padding: 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.theme-card:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.theme-card.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+.swatch {
+  position: relative;
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.swatch-dot {
+  position: absolute;
+  bottom: 6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+.swatch-dot:nth-child(1) {
+  left: 8px;
+}
+.swatch-dot:nth-child(2) {
+  left: 24px;
+}
+.theme-label {
+  font-size: 12px;
+}
 .hint {
   margin: 6px 0 12px;
   font-size: 12px;
-  color: #8b93b8;
+  color: var(--text-dim);
 }
 .rows {
   overflow-y: auto;
@@ -159,15 +245,15 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .field {
   box-sizing: border-box;
   padding: 7px 10px;
-  background: #11111f;
-  border: 1px solid #2a2a4e;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
   border-radius: 6px;
-  color: #e6e6f0;
+  color: var(--text);
   font-size: 12px;
 }
 .field:focus {
   outline: none;
-  border-color: #4a8cff;
+  border-color: var(--accent);
 }
 .label-field {
   flex: 0 0 30%;
@@ -178,12 +264,12 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 .empty {
   font-size: 12px;
-  color: #6b7394;
+  color: var(--text-dim);
 }
 .error {
   margin: 12px 0 0;
   font-size: 12px;
-  color: #ff8080;
+  color: var(--err-text);
 }
 .modal-foot {
   display: flex;
@@ -201,35 +287,35 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .icon-btn {
   border: none;
   background: transparent;
-  color: #9aa3c0;
+  color: var(--text-muted);
   cursor: pointer;
   font-size: 14px;
   padding: 4px 6px;
   border-radius: 6px;
 }
 .icon-btn:hover {
-  background: #3a2030;
-  color: #ff6b6b;
+  background: var(--err-hover-bg);
+  color: var(--err-text);
 }
 .btn {
-  border: 1px solid #2a2a4e;
-  background: #20203a;
-  color: #c7cdf0;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 13px;
   padding: 6px 14px;
   border-radius: 6px;
 }
 .btn:hover {
-  background: #2a3b66;
-  color: #fff;
+  background: var(--bg-hover);
+  color: var(--text);
 }
 .btn-primary {
-  background: #2f5bd0;
-  border-color: #4a8cff;
-  color: #fff;
+  background: var(--accent-bg);
+  border-color: var(--accent);
+  color: var(--on-accent);
 }
 .btn-primary:hover {
-  background: #3a6be0;
+  background: var(--accent-bg-hover);
 }
 </style>

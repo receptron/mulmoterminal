@@ -86,10 +86,10 @@ function relativeTime(ms: number): string {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #16213e;
-  color: #e0e0e0;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: system-ui, sans-serif;
-  border-right: 1px solid #2a2a4e;
+  border-right: 1px solid var(--border);
   overflow: hidden;
 }
 
@@ -104,19 +104,19 @@ function relativeTime(ms: number): string {
   font-size: 13px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #9aa5c4;
+  color: var(--text-muted);
 }
 
 .icon-btn {
   background: none;
   border: none;
-  color: #9aa5c4;
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   line-height: 1;
 }
 .icon-btn:hover {
-  color: #e0e0e0;
+  color: var(--text);
 }
 
 .new-btn {
@@ -126,8 +126,8 @@ function relativeTime(ms: number): string {
   gap: 6px;
   margin: 0 12px 8px;
   padding: 8px;
-  background: #1b3a6b;
-  color: #cfe0ff;
+  background: var(--bg-selected);
+  color: var(--text-secondary);
   border: none;
   border-radius: 6px;
   font-size: 13px;
@@ -137,7 +137,7 @@ function relativeTime(ms: number): string {
   font-size: 18px;
 }
 .new-btn:hover {
-  background: #224a86;
+  background: var(--bg-selected-hover);
 }
 
 .filters {
@@ -156,10 +156,10 @@ function relativeTime(ms: number): string {
 .state {
   padding: 12px 14px;
   font-size: 13px;
-  color: #9aa5c4;
+  color: var(--text-muted);
 }
 .state.error {
-  color: #ef9a9a;
+  color: var(--err);
 }
 
 .list {
@@ -179,11 +179,11 @@ function relativeTime(ms: number): string {
   gap: 2px;
 }
 .item:hover {
-  background: #1d2b4e;
+  background: var(--bg-subtle);
 }
 .item.active {
-  background: #1d2b4e;
-  border-left-color: #4a8cff;
+  background: var(--bg-subtle);
+  border-left-color: var(--accent);
 }
 
 .item-title {
@@ -196,7 +196,7 @@ function relativeTime(ms: number): string {
 /* Background session waiting for input (Notification); cleared on foreground. */
 .item.waiting .item-title {
   font-weight: 700;
-  color: #ffffff;
+  color: var(--text);
 }
 
 /* Shown while Claude is working/"thinking" in a session (UserPromptSubmit →
@@ -206,8 +206,8 @@ function relativeTime(ms: number): string {
   width: 10px;
   height: 10px;
   margin-right: 5px;
-  border: 2px solid rgba(74, 140, 255, 0.3);
-  border-top-color: #4a8cff;
+  border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
   border-radius: 50%;
   vertical-align: middle;
   animation: sidebar-spin 0.9s linear infinite;
@@ -221,6 +221,6 @@ function relativeTime(ms: number): string {
 
 .item-time {
   font-size: 11px;
-  color: #7c87a8;
+  color: var(--text-dim);
 }
 </style>

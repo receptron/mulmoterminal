@@ -1,3 +1,144 @@
+/* Theme tokens. The default (:root) palette is "Midnight"; [data-theme] blocks
+   below override it. Components reference these via var(--token), so switching
+   the data-theme attribute on <html> recolors the whole app. The four themes
+   span dark→light and cool→warm so they read as clearly different. */
+:root,
+:root[data-theme="midnight"] {
+  --bg-base: #1a1a2e;
+  --bg-deep: #11162a;
+  --bg-panel: #16213e;
+  --bg-subtle: #1d2b4e;
+  --bg-elevated: #20203a;
+  --bg-input: #11111f;
+  --bg-hover: #2a3b66;
+  --bg-selected: #1b3a6b;
+  --bg-selected-hover: #224a86;
+  --border: #2a2a4e;
+  --accent: #4a8cff;
+  --accent-bg: #2f5bd0;
+  --accent-bg-hover: #3a6be0;
+  --on-accent: #ffffff;
+  --text: #e6e6f0;
+  --text-secondary: #c7cdf0;
+  --text-muted: #9aa5c4;
+  --text-dim: #7c87a8;
+  --term-fg: #e0e0e0;
+  --term-selection: #3a3a5e;
+}
+
+/* Nord — cool slate, frost-cyan accent (medium-dark). */
+:root[data-theme="nord"] {
+  --bg-base: #2e3440;
+  --bg-deep: #272b35;
+  --bg-panel: #3b4252;
+  --bg-subtle: #353c4a;
+  --bg-elevated: #434c5e;
+  --bg-input: #21252e;
+  --bg-hover: #4c566a;
+  --bg-selected: #3b4a63;
+  --bg-selected-hover: #4c5d7d;
+  --border: #434c5e;
+  --accent: #88c0d0;
+  --accent-bg: #5e81ac;
+  --accent-bg-hover: #6b8fbb;
+  --on-accent: #eceff4;
+  --text: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-muted: #abb4c4;
+  --text-dim: #7e879b;
+  --term-fg: #d8dee9;
+  --term-selection: #434c5e;
+}
+
+/* Daylight — bright, cool. White panels on a soft gray base, vivid blue accent. */
+:root[data-theme="daylight"] {
+  --bg-base: #f4f6fb;
+  --bg-deep: #e8edf6;
+  --bg-panel: #ffffff;
+  --bg-subtle: #eef2fa;
+  --bg-elevated: #eef2fb;
+  --bg-input: #ffffff;
+  --bg-hover: #e2e9f6;
+  --bg-selected: #d6e4fb;
+  --bg-selected-hover: #c3d6f7;
+  --border: #d4dbe8;
+  --accent: #2563eb;
+  --accent-bg: #2563eb;
+  --accent-bg-hover: #1d4ed8;
+  --on-accent: #ffffff;
+  --text: #1b2430;
+  --text-secondary: #38445a;
+  --text-muted: #5d6b82;
+  --text-dim: #8492a8;
+  --term-fg: #1b2430;
+  --term-selection: #cfe0ff;
+}
+
+/* Solarized Light — bright, warm. Cream base, classic Solarized blue accent. */
+:root[data-theme="solarized"] {
+  --bg-base: #fdf6e3;
+  --bg-deep: #ece5cf;
+  --bg-panel: #eee8d5;
+  --bg-subtle: #f4eed9;
+  --bg-elevated: #f4eed9;
+  --bg-input: #fffbf0;
+  --bg-hover: #e3dcc4;
+  --bg-selected: #d6e4ec;
+  --bg-selected-hover: #c4d8e4;
+  --border: #ded7c0;
+  --accent: #268bd2;
+  --accent-bg: #268bd2;
+  --accent-bg-hover: #1f78ba;
+  --on-accent: #ffffff;
+  --text: #34474d;
+  --text-secondary: #49595d;
+  --text-muted: #657b83;
+  --text-dim: #93a1a1;
+  --term-fg: #586e75;
+  --term-selection: #eee8d5;
+}
+
+/* Status colors carry meaning (success / warning / error). They don't follow the
+   palette hue, but they DO flip with background lightness: dark themes get
+   dark-filled pills with light text (below); light themes get light-tinted pills
+   with dark text (further down). */
+:root {
+  --ok: #a5d6a7;
+  --ok-bg: #1b5e20;
+  --ok-bg-subtle: #14361c;
+  --ok-border: #1c3a24;
+  --warn: #ffcc80;
+  --warn-bg: #e65100;
+  --warn-bg-subtle: #4a3a10;
+  --amber: #f5a623;
+  --err: #ef9a9a;
+  --err-text: #ff7b7b;
+  --err-strong: #ef4444;
+  --err-deep: #b71c1c;
+  --err-bg: #4a1414;
+  --err-hover-bg: #3a2030;
+}
+
+/* Light themes: status pills become light-tinted with dark, saturated text so
+   they stay legible on a bright background. */
+:root[data-theme="daylight"],
+:root[data-theme="solarized"] {
+  --ok: #1b7a2e;
+  --ok-bg: #d7f0db;
+  --ok-bg-subtle: #e6f4ea;
+  --ok-border: #b7e0bf;
+  --warn: #8a4b00;
+  --warn-bg: #ffe0b2;
+  --warn-bg-subtle: #fff0db;
+  --amber: #b8860b;
+  --err: #c0392b;
+  --err-text: #c0392b;
+  --err-strong: #d32f2f;
+  --err-deep: #fadbd8;
+  --err-bg: #fadbd8;
+  --err-hover-bg: #f6d4d7;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -5,7 +146,7 @@
 }
 
 body {
-  background: #1a1a2e;
+  background: var(--bg-base);
   overflow: hidden;
 }
 

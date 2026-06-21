@@ -23,9 +23,9 @@ defineEmits<{ (e: "click"): void }>();
   font-size: 11px;
   line-height: 16px;
   border-radius: 9999px;
-  border: 1px solid #2a2a4e;
-  background: #1b2647;
-  color: #9aa5c4;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
   cursor: pointer;
   transition:
     background 0.12s,
@@ -33,12 +33,12 @@ defineEmits<{ (e: "click"): void }>();
     border-color 0.12s;
 }
 .chip:hover {
-  background: #224a86;
-  color: #cfe0ff;
+  background: var(--bg-selected-hover);
+  color: var(--text-secondary);
 }
 .chip.active {
-  background: #2563eb;
-  border-color: #2563eb;
-  color: #ffffff;
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  color: var(--on-accent);
 }
 </style>

@@ -141,14 +141,14 @@ const hasContent = computed(() => results.value.length > 0);
   flex: 1;
   min-width: 0;
   height: 100%;
-  background: #11162a;
-  border-left: 1px solid #2a2a4e;
+  background: var(--bg-deep);
+  border-left: 1px solid var(--border);
 }
 
 .header {
   padding: 8px 16px;
-  background: #16213e;
-  color: #e0e0e0;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: system-ui, sans-serif;
   font-size: 14px;
   display: flex;
@@ -161,7 +161,7 @@ const hasContent = computed(() => results.value.length > 0);
 .gear {
   background: none;
   border: none;
-  color: #7c87a8;
+  color: var(--text-dim);
   font-size: 15px;
   line-height: 1;
   padding: 2px 4px;
@@ -169,25 +169,25 @@ const hasContent = computed(() => results.value.length > 0);
   border-radius: 4px;
 }
 .gear:hover {
-  color: #e0e0e0;
+  color: var(--text);
 }
 
 .content {
   flex: 1;
   overflow-y: auto;
   padding: 12px 16px;
-  color: #e0e0e0;
+  color: var(--text);
   font-family: system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
 }
 
 .empty {
-  color: #7c87a8;
+  color: var(--text-dim);
   font-size: 13px;
 }
 .empty code {
-  background: #1d2b4e;
+  background: var(--bg-subtle);
   padding: 1px 5px;
   border-radius: 4px;
 }
@@ -195,6 +195,6 @@ const hasContent = computed(() => results.value.length > 0);
 .frame + .frame {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #2a2a4e;
+  border-top: 1px solid var(--border);
 }
 </style>

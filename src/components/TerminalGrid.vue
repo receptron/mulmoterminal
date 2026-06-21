@@ -173,7 +173,7 @@ const stripOrder = (slot: Slot) => (zoomed.value && slot.uid !== expandedUid.val
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: #0f0f1e;
+  background: var(--bg-deep);
 }
 
 .grid {

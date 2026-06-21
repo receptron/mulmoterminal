@@ -218,14 +218,14 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   width: 340px;
   flex-shrink: 0;
   height: 100%;
-  background: #0d1124;
-  border-left: 1px solid #2a2a4e;
+  background: var(--bg-deep);
+  border-left: 1px solid var(--border);
 }
 
 .header {
   padding: 8px 16px;
-  background: #16213e;
-  color: #e0e0e0;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: system-ui, sans-serif;
   font-size: 14px;
   display: flex;
@@ -238,7 +238,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 .close-btn {
   background: none;
   border: none;
-  color: #7c87a8;
+  color: var(--text-dim);
   font-size: 15px;
   line-height: 1;
   padding: 2px 4px;
@@ -246,19 +246,19 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   border-radius: 4px;
 }
 .close-btn:hover {
-  color: #e0e0e0;
+  color: var(--text);
 }
 
 .content {
   flex: 1;
   overflow-y: auto;
-  color: #e0e0e0;
+  color: var(--text);
   font-family: system-ui, sans-serif;
   font-size: 13px;
 }
 
 .section {
-  border-bottom: 1px solid #2a2a4e;
+  border-bottom: 1px solid var(--border);
   padding: 10px 12px;
 }
 .section-title {
@@ -266,7 +266,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #7c87a8;
+  color: var(--text-dim);
   margin-bottom: 8px;
 }
 .section-title--with-action {
@@ -283,9 +283,9 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   font-weight: 600;
   text-transform: none;
   letter-spacing: 0.02em;
-  color: #9aa5c4;
-  background: #1d2b4e;
-  border: 1px solid #2a2a4e;
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 2px 8px;
   cursor: pointer;
@@ -297,8 +297,8 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
     background 0.15s;
 }
 .copy-history:hover:not(:disabled) {
-  color: #cfe0ff;
-  background: #243763;
+  color: var(--text-secondary);
+  background: var(--bg-selected-hover);
 }
 .copy-history:disabled {
   opacity: 0.4;
@@ -306,7 +306,7 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 }
 
 .muted {
-  color: #7c87a8;
+  color: var(--text-dim);
   font-size: 12px;
 }
 .italic {
@@ -333,8 +333,8 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 }
 .tool-name,
 .call-name {
-  background: #1d2b4e;
-  color: #cfe0ff;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
   padding: 2px 6px;
   border-radius: 4px;
   font-family: "JetBrains Mono", monospace;
@@ -342,11 +342,11 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   word-break: break-all;
 }
 .caret {
-  color: #7c87a8;
+  color: var(--text-dim);
   font-size: 18px;
 }
 .tool-desc {
-  color: #9aa5c4;
+  color: var(--text-muted);
   font-size: 12px;
   margin: 2px 0 6px;
   white-space: pre-wrap;
@@ -354,11 +354,11 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 
 /* Tool call history */
 .call {
-  border: 1px solid #2a2a4e;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 8px;
   margin-top: 6px;
-  background: #11162a;
+  background: var(--bg-deep);
 }
 .call-meta {
   display: flex;
@@ -372,19 +372,19 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   border-radius: 999px;
 }
 .badge.running {
-  background: #4a3a10;
-  color: #ffcc80;
+  background: var(--warn-bg-subtle);
+  color: var(--warn);
 }
 .badge.done {
-  background: #14361c;
-  color: #a5d6a7;
+  background: var(--ok-bg-subtle);
+  color: var(--ok);
 }
 .badge.failed {
-  background: #4a1414;
-  color: #ef9a9a;
+  background: var(--err-bg);
+  color: var(--err);
 }
 .time {
-  color: #6b769a;
+  color: var(--text-dim);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -395,12 +395,12 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #7c87a8;
+  color: var(--text-dim);
   margin: 6px 0 2px;
 }
 .block {
-  background: #0a0e1f;
-  border: 1px solid #20284a;
+  background: var(--bg-deep);
+  border: 1px solid var(--border);
   border-radius: 4px;
   padding: 6px 8px;
   margin: 0;
@@ -412,10 +412,10 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   word-break: break-word;
 }
 .block.result {
-  border-color: #1c3a24;
+  border-color: var(--ok-border);
 }
 .block.error {
-  border-color: #4a1414;
-  color: #ef9a9a;
+  border-color: var(--err-bg);
+  color: var(--err);
 }
 </style>
