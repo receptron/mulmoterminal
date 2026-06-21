@@ -97,8 +97,19 @@ watch(cellCount, () => {
 });
 
 function toggleExpand(uid: number) {
-  expandedUid.value = expandedUid.value === uid ? null : uid;
+  const next = expandedUid.value === uid ? null : uid;
+  expandedUid.value = next;
+  // Restoring → pack the grid so the running terminals are top-left and easy to
+  // find. We compact on RESTORE (grid mode), not on zoom: reordering cells while
+  // they're teleported into the filmstrip is unreliable, so the strip is sorted
+  // purely with CSS `order` (stripOrder) instead — no DOM move.
+  if (next === null) compact();
 }
+
+// While zoomed, push empty cells to the end of the filmstrip strip so the open
+// terminals line up on the left. Pure CSS order — never reorders the DOM (which
+// would fight the <Teleport>).
+const stripOrder = (slot: Slot) => (zoomed.value && slot.uid !== expandedUid.value && slot.session === null ? { order: 1 } : undefined);
 
 function setSession(uid: number, id: string | null) {
   const s = slotByUid(uid);
@@ -146,6 +157,7 @@ const cellTarget = (slot: Slot) => (expandedUid.value === slot.uid ? zoomMain.va
     <div class="grid" :style="gridStyle">
       <Teleport v-for="slot in visibleSlots" :key="slot.uid" :to="cellTarget(slot)" :disabled="!zoomed">
         <TerminalCell
+          :style="stripOrder(slot)"
           :expanded="slot.uid === expandedUid"
           :initial-session-id="slot.session"
           :initial-cwd="slot.cwd"
