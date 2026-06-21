@@ -27,6 +27,14 @@ describe("parseFileUris", () => {
     expect(parseFileUris("file:///C:/Users/me/a.txt")).toEqual(["C:/Users/me/a.txt"]);
   });
 
+  it("preserves the host for a UNC share (does not drop the authority)", () => {
+    expect(parseFileUris("file://server/share/a.txt")).toEqual(["\\\\server\\share\\a.txt"]);
+  });
+
+  it("treats a localhost authority as a local path", () => {
+    expect(parseFileUris("file://localhost/Users/me/a.txt")).toEqual(["/Users/me/a.txt"]);
+  });
+
   it("returns empty for empty or path-less input", () => {
     expect(parseFileUris("")).toEqual([]);
     expect(parseFileUris("# only a comment")).toEqual([]);

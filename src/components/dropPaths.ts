@@ -9,9 +9,12 @@ function fileUriToPath(uri: string): string | null {
   try {
     const url = new URL(uri);
     if (url.protocol !== "file:") return null;
-    const decoded = decodeURIComponent(url.pathname);
+    const pathname = decodeURIComponent(url.pathname);
+    // A UNC share (Windows) arrives as file://server/share/x — preserve the host,
+    // or the inserted path silently loses it. → \\server\share\x
+    if (url.hostname && url.hostname !== "localhost") return `\\\\${url.hostname}${pathname}`.replace(/\//g, "\\");
     // A Windows drive path arrives as "/C:/dir"; drop the leading slash.
-    return /^\/[A-Za-z]:/.test(decoded) ? decoded.slice(1) : decoded;
+    return /^\/[A-Za-z]:/.test(pathname) ? pathname.slice(1) : pathname;
   } catch {
     return null;
   }
