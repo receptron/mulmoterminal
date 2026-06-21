@@ -12,35 +12,73 @@
 // skillsCatalogPreset,claudeSkills}.)
 
 import path from "node:path";
+import { homedir } from "node:os";
 import { seedHelps, syncPresetSkills, syncActivePresetSkills, presetSkillsAssetDir } from "@mulmoclaude/workspace-setup";
+
+/** True only for the MANAGED mulmoclaude workspace — the server default
+ *  (~/mulmoclaude) or an explicit MULMOCLAUDE_WORKSPACE_PATH. We seed only there.
+ *
+ *  The launcher resolves CLAUDE_CWD to the directory `npx mulmoterminal` was run
+ *  from when no --cwd is given (bin/mulmoterminal.js resolveCwd), so seeding
+ *  unconditionally would write mulmoclaude presets/helps — and refresh entries
+ *  under `.claude/skills`, which many dev repos already have — into whatever
+ *  project the user happened to launch from. Gating to the managed workspace
+ *  keeps the terminal usable in any dir without polluting it. */
+export function isManagedWorkspace(workspace: string): boolean {
+  const resolved = path.resolve(workspace);
+  const candidates = [path.join(homedir(), "mulmoclaude")];
+  if (process.env.MULMOCLAUDE_WORKSPACE_PATH) candidates.push(process.env.MULMOCLAUDE_WORKSPACE_PATH);
+  return candidates.some((candidate) => path.resolve(candidate) === resolved);
+}
+
+// Each seeding step is fault-isolated: a filesystem edge case (EACCES, ENOSPC, a
+// path collision) in one step must neither abort server boot nor block the other
+// steps. The package's sync paths are already best-effort internally; this guards
+// the rest (seedHelps) and the call site so the whole thing can never throw.
+function safeStep(label: string, run: () => void): void {
+  try {
+    run();
+  } catch (err) {
+    console.warn(`[workspace-setup] ${label} failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
 
 export function initWorkspaceSetup(deps: { workspace: string }): void {
   const { workspace } = deps;
+  // Never seed an arbitrary launcher cwd — only the managed mulmoclaude workspace.
+  if (!isManagedWorkspace(workspace)) {
+    console.log(`[workspace-setup] skipping seed for non-managed workspace: ${workspace}`);
+    return;
+  }
   const onInfo = (message: string, data?: Record<string, unknown>) => console.log(`[workspace-setup] ${message}`, data ?? "");
   const onWarn = (message: string, data?: Record<string, unknown>) => console.warn(`[workspace-setup] ${message}`, data ?? "");
 
   // Always refresh the bundled help docs (idempotent).
-  seedHelps({ destDir: path.join(workspace, "config", "helps") });
+  safeStep("seed helps", () => seedHelps({ destDir: path.join(workspace, "config", "helps") }));
 
   // Seed/refresh preset skills into the catalog. Catalog entries are visible to
   // UI / tooling but NOT discovered by Claude Code's slash-command resolver, so
   // they don't enter the system prompt unless explicitly starred into the
   // active layer.
-  syncPresetSkills({
-    sourceDir: presetSkillsAssetDir(),
-    destDir: path.join(workspace, "data", "skills", "catalog", "preset"),
-    onInfo,
-    onWarn,
-  });
+  safeStep("sync preset catalog", () =>
+    syncPresetSkills({
+      sourceDir: presetSkillsAssetDir(),
+      destDir: path.join(workspace, "data", "skills", "catalog", "preset"),
+      onInfo,
+      onWarn,
+    }),
+  );
 
   // Refresh the ACTIVE copy of any already-starred mc-* preset so a user who
   // starred one earlier doesn't stay pinned to a stale (buggy) version. Only
   // mc-* slugs are touched; user-authored skills are never modified, and slugs
   // that aren't starred yet are left alone (never auto-starred).
-  syncActivePresetSkills({
-    sourceDir: presetSkillsAssetDir(),
-    activeDir: path.join(workspace, ".claude", "skills"),
-    onInfo,
-    onWarn,
-  });
+  safeStep("refresh active presets", () =>
+    syncActivePresetSkills({
+      sourceDir: presetSkillsAssetDir(),
+      activeDir: path.join(workspace, ".claude", "skills"),
+      onInfo,
+      onWarn,
+    }),
+  );
 }
