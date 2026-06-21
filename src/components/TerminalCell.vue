@@ -4,6 +4,7 @@ import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
 import { formatCwd } from "./cwdDisplay";
 import type { CwdPreset } from "./presets";
+import { dbg } from "./debugLog"; // TEMP
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
@@ -82,6 +83,7 @@ async function loadInitial(id: string) {
 }
 
 onMounted(() => {
+  dbg(`CELL mount init=${props.initialSessionId} launched=${launched.value} expanded=${props.expanded}`); // TEMP
   unsubscribe = subscribe("sessions", (d) => {
     if (isActivityMsg(d) && d.id === sessionId.value) applyActivity(d);
   });
@@ -89,9 +91,12 @@ onMounted(() => {
   else loadResumable();
 });
 onUnmounted(() => {
+  dbg(`CELL UNMOUNT sess=${sessionId.value} init=${props.initialSessionId} launched=${launched.value}`); // TEMP
   unsubscribe?.();
   if (resumableTimer) clearTimeout(resumableTimer);
 });
+// TEMP debug — catch launched flipping back to the launch form.
+watch(launched, (v) => dbg(`CELL launched sess=${sessionId.value} => ${v}`));
 
 function launch() {
   // Optimistic display only; the persisted/displayed truth is the EFFECTIVE cwd

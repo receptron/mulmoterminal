@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, appendFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -633,6 +633,19 @@ app.delete("/mcp/:sessionId", mcpReject);
 
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));
+
+// TEMP debug sink — remove after diagnosing the grid zoom vanish.
+const DEBUG_LOG = path.join(os.tmpdir(), "mulmoterminal-debug.log");
+app.post("/api/_debug", (req, res) => {
+  try {
+    const line = isRecord(req.body) && typeof req.body.line === "string" ? req.body.line : "";
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- temp debug, fixed tmp path
+    appendFileSync(DEBUG_LOG, `${line}\n`);
+  } catch {
+    // ignore
+  }
+  res.json({ ok: true });
+});
 
 // Activity hooks update a session's working / needs-attention flags.
 // `foreground` (a ws is attached => being viewed) suppresses the attention flag.

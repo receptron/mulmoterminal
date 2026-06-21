@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import { MAX_CELLS, dims, trackStyle, type Layout } from "./gridLayout";
 import type { CwdPreset } from "./presets";
+import { dbg } from "./debugLog"; // TEMP
 
 // Zooming interface: the grid is the base view; expanding a cell switches to a
 // filmstrip — the zoomed cell fills the top, the others line up in a
@@ -136,6 +137,22 @@ const mounted = ref(false);
 onMounted(() => (mounted.value = true));
 
 const zoomed = computed(() => expandedUid.value !== null && mounted.value);
+
+// TEMP debug — snapshot grid/DOM state after every zoom or slot change.
+watch(
+  [slots, expandedUid, cellCount],
+  async () => {
+    const order = slots.value.map((s) => `${s.uid}:${s.session ? s.session.slice(0, 4) : "-"}`).join(" ");
+    dbg(`state expanded=${expandedUid.value} count=${cellCount.value} order=[${order}]`);
+    await nextTick();
+    const cells = document.querySelectorAll(".cell");
+    const headers = [...cells].filter((c) => c.querySelector(".cell-header")).length;
+    const main = zoomMain.value?.childElementCount ?? 0;
+    const grid = document.querySelector(".grid")?.childElementCount ?? 0;
+    dbg(`  dom cells=${cells.length} headers=${headers} zoomMain=${main} gridChildren=${grid}`);
+  },
+  { deep: true, immediate: true },
+);
 
 // While zoomed, push empty cells to the end of the strip so the open terminals line
 // up on the left. Pure CSS order — never reorders the DOM.
