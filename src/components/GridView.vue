@@ -27,9 +27,15 @@ const emit = defineEmits<{ (e: "exit"): void }>();
 // page is mounted — other pages' terminals live on as background PTYs and
 // reconnect when their page is shown again.
 const init = initialState(localStorage.getItem(STATE_KEY), localStorage.getItem(LEGACY_KEY));
-if (init.migrated) localStorage.removeItem(LEGACY_KEY);
 const state = ref<GridState>(init.state);
-watch(state, () => localStorage.setItem(STATE_KEY, JSON.stringify(state.value)), { deep: true });
+const persist = () => localStorage.setItem(STATE_KEY, JSON.stringify(state.value));
+// Write the migrated state before dropping the legacy key, so a reload between
+// migration and the first change can't lose the sessions.
+if (init.migrated) {
+  persist();
+  localStorage.removeItem(LEGACY_KEY);
+}
+watch(state, persist, { deep: true });
 
 const pages = computed(() => pageCount(state.value.cells.length));
 const pageCells = computed(() => pageSlice(state.value.cells, state.value.page));
