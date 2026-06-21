@@ -168,18 +168,4 @@ describe("TerminalGrid", () => {
     expect(cells.map((c) => c.props("initialSessionId")).slice(0, 3)).toEqual([A, C, E]);
     expect(cells[1].props("initialCwd")).toBe("/c");
   });
-
-  it("collapses the filmstrip strip (full-height zoom) when the zoomed cell is the only running terminal", async () => {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: [A, null, null, null], cwds: [], expanded: 0 }));
-    const w = mountGrid("2x2");
-    await flushPromises();
-    expect(w.find(".stage").classes()).toContain("solo");
-  });
-
-  it("keeps the strip when another terminal is running while zoomed", async () => {
-    localStorage.setItem(STORE_KEY, JSON.stringify({ sessions: [A, B, null, null], cwds: [], expanded: 0 }));
-    const w = mountGrid("2x2");
-    await flushPromises();
-    expect(w.find(".stage").classes()).not.toContain("solo");
-  });
 });

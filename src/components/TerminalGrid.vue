@@ -137,18 +137,13 @@ onMounted(() => (mounted.value = true));
 
 const zoomed = computed(() => expandedUid.value !== null && mounted.value);
 
-// When the zoomed cell is the only RUNNING terminal, there's nothing useful to put
-// in the strip (just empty launch forms), so collapse it and let the zoom fill the
-// full height — matching the pre-filmstrip full-height zoom.
-const soloZoom = computed(() => zoomed.value && !visibleSlots.value.some((s) => s.uid !== expandedUid.value && s.session !== null));
-
 // While zoomed, push empty cells to the end of the strip so the open terminals line
 // up on the left. Pure CSS order — never reorders the DOM.
 const stripOrder = (slot: Slot) => (zoomed.value && slot.uid !== expandedUid.value && slot.session === null ? { order: 1 } : undefined);
 </script>
 
 <template>
-  <div class="stage" :class="{ zoomed, solo: soloZoom }">
+  <div class="stage" :class="{ zoomed }">
     <div ref="zoomMain" class="zoom-main" />
     <div class="grid" :style="gridStyle">
       <Teleport v-for="slot in visibleSlots" :key="slot.uid" :to="zoomMain" :disabled="!(zoomed && slot.uid === expandedUid)">
@@ -221,10 +216,5 @@ const stripOrder = (slot: Slot) => (zoomed.value && slot.uid !== expandedUid.val
   flex: 0 0 260px;
   height: 100%;
   min-width: 0;
-}
-
-/* No other running terminal — hide the strip so the zoom uses the full height. */
-.stage.zoomed.solo .grid {
-  display: none;
 }
 </style>
