@@ -69,8 +69,10 @@ export function toggleExpand(state: GridState, uid: number): GridState {
 }
 
 // Switch page: drop an abandoned trailing launch cell first and clear the zoom
-// (zoom is scoped to a page).
+// (zoom is scoped to a page). Selecting the already-active page is a no-op so it
+// doesn't discard the open launch cell or zoom.
 export function switchPage(state: GridState, page: number): GridState {
+  if (page === state.page) return state;
   const last = state.cells[state.cells.length - 1];
   const cells = last && last.session === null && state.cells.length > 1 ? state.cells.slice(0, -1) : state.cells;
   return clampPage({ ...state, cells, expanded: null, page });

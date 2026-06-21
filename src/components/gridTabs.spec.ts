@@ -99,6 +99,10 @@ describe("setSession / setCwd / toggleExpand", () => {
 });
 
 describe("switchPage", () => {
+  it("is a no-op when selecting the already-active page (keeps zoom + launch cell)", () => {
+    const s = make([...running(9), cell(9)], { page: 1, expanded: 3 });
+    expect(switchPage(s, 1)).toBe(s);
+  });
   it("drops an abandoned trailing launch cell and clears zoom", () => {
     const s = make([...running(9), cell(9)], { page: 1, expanded: 0 });
     const after = switchPage(s, 0);
