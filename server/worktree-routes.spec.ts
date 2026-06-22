@@ -170,6 +170,20 @@ describe("worktree routes: create → list → remove lifecycle", () => {
     expect(res.payload).toEqual({ ok: false, reason: "not-managed" });
   });
 
+  it.skipIf(!hasGit)("treats a non-boolean force as false (no accidental force-delete of a dirty worktree)", async () => {
+    const r = routes(allow);
+    const created = makeRes();
+    await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "wip" } }, created);
+    const wt = created.payload as { path: string };
+    writeFileSync(path.join(wt.path, "dirty.txt"), "x"); // make it dirty
+
+    // the string "false" is truthy in JS — strict validation must NOT force-remove
+    const res = makeRes();
+    await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path, force: "false", deleteBranch: "false" } }, res);
+    expect(res.statusCode).toBe(409);
+    expect(res.payload).toEqual({ ok: false, reason: "dirty" });
+  });
+
   it.skipIf(!hasGit)("500s an internal git failure (managed path, but not a registered worktree)", async () => {
     await createWorktree(repo, "real"); // makes the managed root dir exist
     const ghost = path.join(worktreesRoot(repo), "ghost"); // under the root, but no worktree there

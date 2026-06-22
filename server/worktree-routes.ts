@@ -42,7 +42,10 @@ export function mountWorktreeRoutes(app: Express, { isAllowedOrigin }: WorktreeR
     if (typeof repoDir !== "string" || typeof worktreePath !== "string") {
       return res.status(400).json({ error: "repoDir and path are required" });
     }
-    const result = await removeWorktree(repoDir, worktreePath, { deleteBranch: !!deleteBranch, force: !!force });
+    // Strict `=== true` (not `!!`) for the destructive flags: a mistyped truthy
+    // payload (e.g. the string "false") must fall back to the SAFE default — never
+    // force-remove a dirty worktree or delete a branch on a malformed request.
+    const result = await removeWorktree(repoDir, worktreePath, { deleteBranch: deleteBranch === true, force: force === true });
     if (result.ok) return res.json(result);
     res.status(result.reason === "failed" ? 500 : 409).json(result);
   });
