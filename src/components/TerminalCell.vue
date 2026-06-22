@@ -301,6 +301,7 @@ function resume(s: ResumableSession) {
   sessionId.value = s.id;
   connectKey.value++;
   launched.value = true;
+  loadDiff(); // an already-idle worktree session shows its badge right away
 }
 
 function relativeTime(ms: number): string {
@@ -477,6 +478,11 @@ function openDiff() {
 watch(working, (now, prev) => {
   if (prev && !now) loadDiff();
 });
+
+// Re-read (or clear) the diff when the effective cwd changes — e.g. the server
+// confirmed a fallback dir. loadDiff() clears it synchronously for a non-worktree
+// dir, so the badge never lingers with a previous worktree's counts.
+watch(cwd, () => loadDiff());
 </script>
 
 <template>
