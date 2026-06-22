@@ -6,11 +6,12 @@ import { trackStyle, layoutForCount } from "./gridLayout";
 import type { Cell } from "./gridTabs";
 import type { CwdPreset } from "./presets";
 
-// Renders ONE page of the grid (≤9 cells), auto-sized to the cell count. The page
-// is fully controlled by GridView: `cells` is the page's slice and `expandedUid`
-// the zoomed cell (if it is on this page); every change is emitted up by uid.
+// Renders the grid, auto-sized to the cell count, fully controlled by GridView:
+// `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
+// the zoomed cell; every change is emitted up by uid.
 // Expanding a cell switches to a filmstrip — the zoomed cell (teleported to the
-// overlay) fills the top, the rest line up in a scrollable strip below.
+// overlay) fills the top, the rest line up in a scrollable strip below. While
+// zoomed, GridView passes EVERY cell (all tabs), so the strip shows them all live.
 // A cell carrying a `command` renders as a CommandCell (a running script.json
 // command) instead of the Claude launcher/terminal.
 const props = defineProps<{ cells: Cell[]; expandedUid: number | null; defaultCwd: string | null; presets: CwdPreset[]; home: string | null }>();

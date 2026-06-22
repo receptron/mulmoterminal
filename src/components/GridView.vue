@@ -12,7 +12,8 @@ import {
   switchPage,
   runCommand,
   pageCount,
-  pageSlice,
+  zoomedUid,
+  visibleCells,
   runningCount,
   STATE_KEY,
   LEGACY_KEY,
@@ -44,10 +45,11 @@ if (init.migrated) {
 watch(state, persist, { deep: true });
 
 const pages = computed(() => pageCount(state.value.cells.length));
-const pageCells = computed(() => pageSlice(state.value.cells, state.value.page));
-const pageExpanded = computed(() =>
-  state.value.expanded !== null && pageCells.value.some((c) => c.uid === state.value.expanded) ? state.value.expanded : null,
-);
+// While a cell is zoomed, render EVERY cell so the filmstrip lines up all tabs'
+// terminals (live); otherwise just the active page. The flat cells array makes
+// this a single source swap (see visibleCells/zoomedUid).
+const displayCells = computed(() => visibleCells(state.value));
+const expandedUid = computed(() => zoomedUid(state.value));
 // A launch cell is open beyond the sole entry cell (so "+ Terminal" cancels it). A
 // trailing command cell is occupied, not an open launcher.
 const launchOpen = computed(() => {
@@ -105,15 +107,15 @@ function closeSettings() {
       <button class="tb-btn" title="Single view" aria-label="Switch to single view" @click="emit('exit')">▢ Single</button>
       <button class="tb-btn" title="Settings" aria-label="Settings" @click="showSettings = true">⚙</button>
     </header>
-    <nav v-if="pages > 1" class="tabbar" aria-label="Grid tabs">
+    <nav v-if="pages > 1 && expandedUid === null" class="tabbar" aria-label="Grid tabs">
       <button v-for="p in pages" :key="p" :class="['tab', { active: p - 1 === state.page }]" :aria-pressed="p - 1 === state.page" @click="switchTo(p - 1)">
         {{ p }}
       </button>
     </nav>
     <TerminalGrid
       class="main"
-      :cells="pageCells"
-      :expanded-uid="pageExpanded"
+      :cells="displayCells"
+      :expanded-uid="expandedUid"
       :default-cwd="defaultCwd"
       :presets="presets"
       :home="home"

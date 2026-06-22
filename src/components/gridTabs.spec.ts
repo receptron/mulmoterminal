@@ -10,6 +10,8 @@ import {
   toggleExpand,
   switchPage,
   runCommand,
+  zoomedUid,
+  visibleCells,
   parseGridState,
   migrateLegacy,
   initialState,
@@ -134,6 +136,29 @@ describe("runCommand (script command cells)", () => {
   it("switchPage keeps a trailing command cell (only abandons an empty launcher)", () => {
     const after = switchPage(make([...running(9), cmdCell(9)], { page: 1 }), 0);
     expect(after.cells).toHaveLength(10);
+  });
+});
+
+describe("zoomedUid / visibleCells", () => {
+  it("zoomedUid returns the expanded uid, or null when nothing is zoomed", () => {
+    expect(zoomedUid(make(running(3)))).toBeNull();
+    expect(zoomedUid(make(running(3), { expanded: 1 }))).toBe(1);
+  });
+  it("zoomedUid is null when expanded points at a missing cell", () => {
+    expect(zoomedUid(make(running(2), { expanded: 99 }))).toBeNull();
+  });
+  it("visibleCells is the active page's slice when nothing is zoomed", () => {
+    const s = make(running(12)); // 2 pages
+    expect(visibleCells(s).map((c) => c.uid)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(visibleCells({ ...s, page: 1 }).map((c) => c.uid)).toEqual([9, 10, 11]);
+  });
+  it("visibleCells is the WHOLE list while a cell is zoomed (all tabs in the strip)", () => {
+    const s = make(running(12), { page: 1, expanded: 10 });
+    expect(visibleCells(s)).toHaveLength(12);
+  });
+  it("visibleCells falls back to the page slice when expanded is stale", () => {
+    const s = make(running(12), { page: 1, expanded: 99 });
+    expect(visibleCells(s).map((c) => c.uid)).toEqual([9, 10, 11]);
   });
 });
 

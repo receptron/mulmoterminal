@@ -510,7 +510,7 @@ src/
     Terminal.vue      xterm.js terminal; /ws (or /ws/run) connection, reconnect
     GridView.vue      Grid toolbar (auto-layout, ＋ Terminal)
     TerminalCell.vue  A cell: Claude launcher (dir picker + resume + run-a-script)
-    TerminalGrid.vue  Grid of cells; auto-sizes by occupied count
+    TerminalGrid.vue  Grid of cells; auto-sizes by count; zoom lines up every tab
     CommandCell.vue   A grid cell that runs a script.json command (ephemeral)
   composables/
     usePubSub.ts      socket.io-client pub/sub composable (subscribe/unsubscribe)

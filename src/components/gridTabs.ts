@@ -81,6 +81,15 @@ export function toggleExpand(state: GridState, uid: number): GridState {
   return { ...state, expanded: state.expanded === uid ? null : uid };
 }
 
+// The zoomed cell's uid, or null when nothing is zoomed (or `expanded` is stale —
+// points at a cell no longer in the list).
+export const zoomedUid = (state: GridState): number | null =>
+  state.expanded !== null && state.cells.some((c) => c.uid === state.expanded) ? state.expanded : null;
+
+// Cells to render: while a cell is zoomed, the WHOLE list (so the filmstrip lines
+// up every tab's terminal, live), otherwise just the active page's slice.
+export const visibleCells = (state: GridState): Cell[] => (zoomedUid(state) !== null ? state.cells : pageSlice(state.cells, state.page));
+
 // Switch page: drop an abandoned trailing launch cell first and clear the zoom
 // (zoom is scoped to a page). Selecting the already-active page is a no-op so it
 // doesn't discard the open launch cell or zoom.
