@@ -680,6 +680,21 @@ async function handleToolHook(sessionId: string, event: string, p: HookToolPaylo
   }
 }
 
+// Track the prompt the cell header shows for a session, from a UserPromptSubmit
+// hook. On the FIRST live prompt after a (re)start/resume the in-memory baseline is
+// empty, so seed it from the transcript's meaningful prompt — otherwise a trivial
+// ack ("ok") would overwrite the restored task. (Brand-new sessions have no
+// transcript yet => null => the new prompt becomes the first shown.) Then keep the
+// last MEANINGFUL prompt (preferredHeaderPrompt) while still tracking the latest for
+// an all-trivial session.
+async function trackPromptForHeader(sessionId: string, prompt: string, cwd: string | undefined) {
+  if (!lastPrompts.has(sessionId)) {
+    const seeded = cwd ? await latestUserPrompt(cwd, sessionId) : null;
+    if (seeded) lastPrompts.set(sessionId, seeded);
+  }
+  lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
+}
+
 // Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
@@ -689,13 +704,11 @@ app.post("/api/hook", async (req, res) => {
   if (sessionId) {
     const entry = ptys.get(sessionId);
     const foreground = !!(entry && entry.ws);
-    // Capture the prompt BEFORE handleActivityHook so the activity publish it
-    // triggers already carries the new lastPrompt. preferredHeaderPrompt keeps the
-    // last MEANINGFUL prompt (a trivial ack like "ok"/"merge" doesn't hide the task)
-    // while still tracking the latest for an all-trivial session.
+    // Update the displayed prompt BEFORE handleActivityHook so the activity publish
+    // it triggers already carries the new lastPrompt.
     if (event === "UserPromptSubmit" && typeof body.prompt === "string" && body.prompt.trim()) {
-      const prompt = body.prompt.trim().slice(0, LAST_PROMPT_CAP);
-      lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
+      const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
+      await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
