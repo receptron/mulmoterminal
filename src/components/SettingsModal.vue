@@ -2,9 +2,46 @@
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
 import type { CwdPreset } from "./presets";
 import { useTheme } from "../composables/useTheme";
+import { previewAttention } from "../composables/useAttentionSound";
 
-const props = defineProps<{ presets: CwdPreset[]; saving?: boolean; error?: string | null }>();
-const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "close"): void }>();
+const props = defineProps<{ presets: CwdPreset[]; soundFile?: string | null; saving?: boolean; error?: string | null }>();
+const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "update-sound", file: string | null): void; (e: "close"): void }>();
+
+// Custom attention sound, applied immediately (like the theme) — empty => the
+// built-in chime. The text box mirrors the saved value; Browse / typing apply it.
+const soundPath = ref(props.soundFile ?? "");
+watch(
+  () => props.soundFile,
+  (f) => (soundPath.value = f ?? ""),
+);
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+
+function applySound() {
+  emit("update-sound", soundPath.value.trim() || null);
+}
+function clearSound() {
+  soundPath.value = "";
+  emit("update-sound", null);
+}
+async function browseSound() {
+  try {
+    const res = await fetch("/api/pick-file", { method: "POST", headers: { "content-type": "application/json" } });
+    if (!res.ok) return;
+    const data: unknown = await res.json();
+    const picked = isRecord(data) && Array.isArray(data.paths) && typeof data.paths[0] === "string" ? data.paths[0] : "";
+    if (picked) {
+      soundPath.value = picked;
+      applySound();
+    }
+  } catch {
+    // native dialog unavailable / canceled — leave the field as-is
+  }
+}
+// Preview the SAVED sound (apply first via Browse / blur), so it plays the file the
+// server actually serves at /api/sound; null plays the chime.
+function testSound() {
+  previewAttention(props.soundFile ?? null);
+}
 
 // Theme is applied immediately on click (independent of the Save button, which
 // only commits the directory presets).
@@ -110,6 +147,25 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
           </span>
           <span class="theme-label">{{ t.label }}</span>
         </button>
+      </div>
+
+      <h3 class="section-title">Notification sound</h3>
+      <p class="hint">Played when a session needs attention. Leave empty for the built-in chime, or point to your own audio file.</p>
+      <div class="sound-row">
+        <input
+          v-model="soundPath"
+          class="field sound-field"
+          type="text"
+          placeholder="/absolute/path/to/sound.wav"
+          aria-label="Custom notification sound file"
+          spellcheck="false"
+          @change="applySound"
+        />
+        <button class="btn" type="button" @click="browseSound">Browse…</button>
+      </div>
+      <div class="sound-actions">
+        <button class="btn" type="button" title="Play the current sound" @click="testSound">▶ Test</button>
+        <button class="btn" type="button" :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</button>
       </div>
 
       <h3 class="section-title">Directory presets</h3>
@@ -281,6 +337,20 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .empty {
   font-size: 12px;
   color: var(--text-dim);
+}
+.sound-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sound-field {
+  flex: 1 1 auto;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+}
+.sound-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 .error {
   margin: 12px 0 0;

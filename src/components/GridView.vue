@@ -68,8 +68,18 @@ const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value,
 const onRun = (uid: number, command: { index: number; label: string; cwd: string | null }) => (state.value = runCommand(state.value, uid, command));
 const switchTo = (page: number) => (state.value = switchPage(state.value, page));
 
-// Server config: the default workspace dir + the user's directory presets.
-const { defaultCwd, home, presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets } = useAppConfig();
+// Server config: the default workspace dir + the user's directory presets + sound.
+const {
+  defaultCwd,
+  home,
+  presets,
+  soundFile,
+  saving: savingSettings,
+  error: settingsError,
+  loadConfig,
+  savePresets: persistPresets,
+  saveSound,
+} = useAppConfig();
 const showSettings = ref(false);
 onMounted(loadConfig);
 
@@ -125,7 +135,16 @@ function closeSettings() {
       @toggle-expand="onToggleExpand"
       @run="onRun"
     />
-    <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
+    <SettingsModal
+      v-if="showSettings"
+      :presets="presets"
+      :sound-file="soundFile"
+      :saving="savingSettings"
+      :error="settingsError"
+      @save="savePresets"
+      @update-sound="saveSound"
+      @close="closeSettings"
+    />
   </div>
 </template>
 

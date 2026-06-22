@@ -149,6 +149,23 @@ Example `.env` (gitignored):
 CLAUDE_CWD=/Users/you/my-project
 ```
 
+### UI settings (`~/.mulmoterminal/config.json`)
+
+The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/config.json`
+(read/written via `GET`/`POST /api/config`):
+
+| Field        | Meaning |
+| ------------ | ------- |
+| `cwdPresets` | Quick-pick directories offered when launching a terminal. |
+| `soundFile`  | Absolute path to a custom **attention sound** (played when a session needs attention). Empty/unset uses the built-in synthesized chime. |
+
+**Attention sound.** The default chime is generated with the Web Audio API — **no
+audio file is bundled**, so the npm package stays light and has no media-licensing
+concerns. To use your own sound, set `soundFile` in Settings (Browse / Test / Use
+chime) or in the config file; the server streams that file at `GET /api/sound` and
+the client decodes it (falling back to the chime if it's missing or not audio). It's
+your own local file referenced by absolute path — nothing is added to the package.
+
 ---
 
 ## Running

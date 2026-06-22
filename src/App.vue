@@ -49,7 +49,10 @@ const filter = ref<Filter>("all");
 // activity stream directly (same source as the cell status), independent of the
 // fetched list above.
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
-useAttentionSound(soundEnabled);
+// soundFile is a shared singleton in useAppConfig, so the player here sees changes
+// made from either view's settings modal (and loadConfig below hydrates it).
+const { soundFile } = useAppConfig();
+useAttentionSound(soundEnabled, soundFile);
 
 // Terminal column width (px), set by dragging the splitter between the terminal
 // and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
@@ -119,7 +122,7 @@ onMounted(() => window.addEventListener("resize", onViewportResize));
 
 // Settings (directory presets + theme), shared with the grid view via useAppConfig
 // and opened from the toolbar's gear button.
-const { presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets } = useAppConfig();
+const { presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets, saveSound } = useAppConfig();
 const showSettings = ref(false);
 onMounted(loadConfig);
 async function savePresets(next: CwdPreset[]) {
@@ -288,7 +291,16 @@ function onSession(id: string) {
     <!-- Full-screen collection browser; shown when the launcher / an index card / a
          ref hop opens it (driven by useCollectionBrowse). -->
     <CollectionsBrowseOverlay />
-    <SettingsModal v-if="showSettings" :presets="presets" :saving="savingSettings" :error="settingsError" @save="savePresets" @close="closeSettings" />
+    <SettingsModal
+      v-if="showSettings"
+      :presets="presets"
+      :sound-file="soundFile"
+      :saving="savingSettings"
+      :error="settingsError"
+      @save="savePresets"
+      @update-sound="saveSound"
+      @close="closeSettings"
+    />
   </div>
 </template>
 
