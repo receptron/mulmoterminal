@@ -62,13 +62,15 @@ describe("latestUserPromptFromJsonl", () => {
 });
 
 describe("isTrivialPrompt", () => {
-  it("treats empty / one-word acks / bare commands as trivial", () => {
-    for (const t of ["", "  ", "ok", "OK", " ok. ", "yes", "はい", "マージ", "merge", "okay", "sure", "続けて", "お願いします", "fix"]) {
+  it("treats empty / ack words / bare commands / a lone char as trivial", () => {
+    for (const t of ["", "  ", "ok", "OK", " ok. ", "yes", "はい", "うん", "マージ", "merge", "okay", "sure", "続けて", "お願いします", "y", "k", "👍"]) {
       expect(isTrivialPrompt(t)).toBe(true);
     }
   });
-  it("treats a substantial prompt as meaningful (incl. short Japanese)", () => {
-    for (const t of ["Fix the parser bug", "deploy to prod", "バグ直して", "テスト追加", "リファクタして"]) {
+  it("treats a substantial prompt as meaningful — including short, non-ack terms", () => {
+    // Regression for the i18n / terse-prompt false-positive: length alone must not
+    // mark short-but-meaningful prompts trivial.
+    for (const t of ["Fix the parser bug", "deploy to prod", "バグ直して", "UI", "DB", "修正", "対応", "fix", "api"]) {
       expect(isTrivialPrompt(t)).toBe(false);
     }
   });

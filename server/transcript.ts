@@ -52,25 +52,38 @@ export function latestUserPromptFromJsonl(raw: string): string | null {
   return prompts[prompts.length - 1] ?? lastPromptRecord;
 }
 
-// A trivial prompt is an empty/one-word ack or a bare command ("ok", "merge", "はい")
-// that doesn't describe what a session is about. The cell header skips these so a
-// short follow-up doesn't hide the task. Matched case-insensitively after trimming
-// surrounding punctuation/whitespace.
-const TRIVIAL_PROMPT_MIN_LEN = 4; // < this many code points => trivial (catches ok / はい / マージ / yes)
+// A trivial prompt is an empty ack or a bare command ("ok", "merge", "はい") that
+// doesn't describe what a session is about. The cell header skips these so a short
+// follow-up doesn't hide the task. The explicit ack list is the primary signal —
+// NOT prompt length, since terse but meaningful prompts exist ("UI", "DB", "修正",
+// "対応"). Only a stray single character is treated as noise by length. Matched
+// case-insensitively after trimming surrounding punctuation/whitespace.
+const TRIVIAL_PROMPT_MIN_LEN = 2; // < 2 code points => a lone char, treated as noise
 const TRIVIAL_PROMPT_WORDS = new Set([
-  // English acks / one-word commands (length >= MIN_LEN, so listed explicitly)
+  // English acks / one-word commands
+  "ok",
   "okay",
+  "k",
+  "kk",
+  "yes",
   "yep",
   "yeah",
-  "sure",
+  "ya",
+  "no",
   "nope",
+  "nah",
+  "sure",
+  "go",
+  "run",
   "next",
   "done",
   "stop",
   "wait",
+  "skip",
   "merge",
   "commit",
   "push",
+  "pr",
   "continue",
   "proceed",
   "retry",
@@ -78,8 +91,19 @@ const TRIVIAL_PROMPT_WORDS = new Set([
   "good",
   "nice",
   "thanks",
+  "thx",
+  "lgtm",
   // Japanese acks / one-word commands
+  "はい",
+  "うん",
+  "ええ",
   "いいえ",
+  "よし",
+  "了解",
+  "りょ",
+  "りょうかい",
+  "おk",
+  "おけ",
   "マージ",
   "コミット",
   "プッシュ",
@@ -93,6 +117,7 @@ const TRIVIAL_PROMPT_WORDS = new Set([
   "お願いします",
   "それで",
   "よろしく",
+  "どうぞ",
 ]);
 
 // Punctuation stripped from a prompt's edges before ack matching, so "ok." / "はい、"
