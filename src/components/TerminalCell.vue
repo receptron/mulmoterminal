@@ -95,6 +95,7 @@ onMounted(() => {
   else {
     loadResumable();
     loadScripts();
+    loadWorktrees();
   }
 });
 onUnmounted(() => {
@@ -102,13 +103,16 @@ onUnmounted(() => {
   if (resumableTimer) clearTimeout(resumableTimer);
 });
 
-function launch() {
-  // Optimistic display only; the persisted/displayed truth is the EFFECTIVE cwd
-  // the server confirms (onServerCwd), since it may fall back from a bad path.
-  cwd.value = dirInput.value.trim() || props.defaultCwd;
+// Start a fresh session in `dir`. Optimistic display only; the persisted/displayed
+// truth is the EFFECTIVE cwd the server confirms (onServerCwd), which may fall back.
+function launchIn(dir: string | null) {
+  cwd.value = dir;
   sessionId.value = null; // new session — the server generates the id
   connectKey.value++;
   launched.value = true;
+}
+function launch() {
+  launchIn(dirInput.value.trim() || props.defaultCwd);
 }
 
 // Pick a preset directory: fill the field and refresh the resume list for it, so
@@ -117,6 +121,7 @@ function selectPreset(p: CwdPreset) {
   dirInput.value = p.path;
   loadResumable();
   loadScripts();
+  loadWorktrees();
 }
 
 // Existing sessions for the dir in the form, so an empty cell can resume one
@@ -199,12 +204,91 @@ function runScript(s: RunnableScript) {
   emit("run", { index: s.index, label: s.label, cwd: scriptsCwd.value ?? (dirInput.value.trim() || props.defaultCwd) });
 }
 
+// Per-agent isolation: when the dir is a git repo, the launcher can start claude in
+// its own throwaway worktree (separate working tree, shared .git) so several agents
+// work the repo without clobbering each other. Managed by the server (/api/worktrees).
+interface Worktree {
+  path: string;
+  branch: string | null;
+  task: string;
+  dirty: boolean;
+}
+const isGitRepo = ref(false);
+const worktrees = ref<Worktree[]>([]);
+const worktreeTask = ref("");
+let worktreesReq = 0;
+
+async function loadWorktrees() {
+  const dir = dirInput.value.trim() || props.defaultCwd;
+  const reqId = ++worktreesReq;
+  if (launched.value || !dir) {
+    isGitRepo.value = false;
+    worktrees.value = [];
+    return;
+  }
+  try {
+    const res = await fetch(`/api/worktrees?cwd=${encodeURIComponent(dir)}`);
+    if (reqId !== worktreesReq) return;
+    const data = res.ok ? await res.json() : { isGit: false, worktrees: [] };
+    if (reqId !== worktreesReq) return;
+    isGitRepo.value = !!data.isGit;
+    worktrees.value = Array.isArray(data.worktrees) ? data.worktrees : [];
+  } catch {
+    if (reqId === worktreesReq) {
+      isGitRepo.value = false;
+      worktrees.value = [];
+    }
+  }
+}
+
+// Create a fresh worktree for the typed task and launch claude in it.
+async function createWorktreeAndLaunch() {
+  const repoDir = dirInput.value.trim() || props.defaultCwd;
+  const task = worktreeTask.value.trim();
+  if (!repoDir || !task) return;
+  try {
+    const res = await fetch("/api/worktrees/create", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repoDir, task }),
+    });
+    if (!res.ok) return;
+    const wt = await res.json();
+    if (typeof wt.path === "string") {
+      worktreeTask.value = "";
+      launchIn(wt.path);
+    }
+  } catch {
+    // best-effort — the launcher stays open so the user can retry
+  }
+}
+
+const reuseWorktree = (w: Worktree) => launchIn(w.path);
+
+// Remove a managed worktree (＋ its branch). A dirty one is confirmed first so work
+// is never discarded silently.
+async function removeWorktree(w: Worktree) {
+  const repoDir = dirInput.value.trim() || props.defaultCwd;
+  if (w.dirty && !window.confirm(`"${w.task}" has uncommitted changes. Discard and remove it?`)) return;
+  try {
+    await fetch("/api/worktrees/remove", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repoDir, path: w.path, deleteBranch: true, force: w.dirty }),
+    });
+    loadWorktrees();
+  } catch {
+    // best-effort
+  }
+}
+
 // Refresh the resume list and the runnable scripts when the target dir changes.
 watch([dirInput, () => props.defaultCwd], () => {
   if (resumableTimer) clearTimeout(resumableTimer);
   resumableTimer = setTimeout(() => {
     loadResumable();
     loadScripts();
+    loadWorktrees();
   }, 300);
 });
 
@@ -311,6 +395,7 @@ function close() {
   emit("close");
   loadResumable();
   loadScripts();
+  loadWorktrees();
 }
 
 // Adopt the server-assigned id (esp. for new sessions), bubble it up for
@@ -406,6 +491,27 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
         <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
       </label>
       <button class="cell-start" @click="launch">＋ New terminal</button>
+      <div v-if="isGitRepo" class="cell-worktrees">
+        <span class="cell-launch-caption">or isolate in a worktree (git repo)</span>
+        <div class="wt-new">
+          <input
+            v-model="worktreeTask"
+            class="cell-dir-input wt-task"
+            type="text"
+            placeholder="task name (e.g. fix-login)"
+            aria-label="Worktree task name"
+            spellcheck="false"
+            @keydown.enter="createWorktreeAndLaunch"
+          />
+          <button class="cell-start wt-start" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">＋ New worktree</button>
+        </div>
+        <div v-for="w in worktrees" :key="w.path" class="wt-row">
+          <button class="wt-reuse" :title="w.branch ?? w.path" @click="reuseWorktree(w)">
+            ⎇ {{ w.task }}<span v-if="w.dirty" class="wt-dirty" title="uncommitted changes">●</span>
+          </button>
+          <button class="wt-del" title="Remove worktree" aria-label="Remove worktree" @click="removeWorktree(w)">🗑</button>
+        </div>
+      </div>
       <div v-if="scripts.length" class="cell-scripts">
         <span class="cell-launch-caption">or run a script</span>
         <div class="cell-script-list">
@@ -707,6 +813,69 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 .cell-start:hover {
   background: var(--bg-hover);
   color: var(--text);
+}
+
+.cell-worktrees {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+  max-width: 360px;
+}
+.wt-new {
+  display: flex;
+  gap: 6px;
+}
+.wt-task {
+  flex: 1 1 auto;
+  min-width: 0; /* let the input shrink so the button keeps its width */
+  width: auto;
+}
+.wt-start {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+.wt-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.wt-reuse {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wt-reuse:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.wt-dirty {
+  margin-left: 6px;
+  color: var(--warn-text, #e0a030);
+}
+.wt-del {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.wt-del:hover {
+  background: var(--err-hover-bg);
 }
 
 .cell-scripts {

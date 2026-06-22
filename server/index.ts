@@ -21,6 +21,7 @@ import { buildClaudeArgs } from "./claude-args.js";
 import { isRecord, parseJsonl, userPromptText, latestMeaningfulUserPromptFromJsonl, preferredHeaderPrompt } from "./transcript.js";
 import { mountOpenDirRoute } from "./open-dir.js";
 import { mountGitRemoteRoute } from "./gitRemote.js";
+import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountFilesRoutes } from "./backends/files.js";
@@ -810,6 +811,11 @@ mountOpenDirRoute(app, { isAllowedOrigin });
 // GRID-ONLY (dev_tool): POST /api/git-remote reports a cell dir's GitHub repository
 // URL (null if it isn't a GitHub repo), so the header can offer an "open on GitHub" link.
 mountGitRemoteRoute(app, { isAllowedOrigin });
+
+// GRID-ONLY (dev_tool): /api/worktrees — detect a git repo, list/create/remove the
+// per-agent worktrees a cell launches into, so several agents work one repo in
+// isolated working trees.
+mountWorktreeRoutes(app, { isAllowedOrigin });
 
 // POST /api/pick-file opens the OS file dialog and returns the chosen absolute
 // path(s) — how a browser tab inserts a real filesystem path into the terminal

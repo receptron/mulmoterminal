@@ -372,4 +372,106 @@ describe("TerminalCell", () => {
     expect(openSpy.mock.calls.at(-1)?.[0]).toBe("https://github.com/owner/repoB");
     openSpy.mockRestore();
   });
+
+  // Per-agent worktree isolation: when the launcher's dir is a git repo, the cell
+  // can start claude in its own managed worktree (create / reuse / remove).
+  interface Wt {
+    path: string;
+    branch: string | null;
+    task: string;
+    dirty: boolean;
+  }
+  function mockFetchWithWorktrees(worktrees: Wt[] = [], created: { path: string; branch: string } = { path: "/wt/fix-login", branch: "agent/fix-login" }) {
+    const posts: { url: string; body: string }[] = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      const u = String(url);
+      if (init?.method === "POST") posts.push({ url: u, body: String(init.body ?? "") });
+      if (u.includes("/api/worktrees/create")) return { ok: true, json: async () => created };
+      if (u.includes("/api/worktrees/remove")) return { ok: true, json: async () => ({ ok: true }) };
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: true, base: "main", worktrees }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+    return posts;
+  }
+
+  it("shows the worktree section and lists existing worktrees when the dir is a git repo", async () => {
+    mockFetchWithWorktrees([{ path: "/wt/fix-login", branch: "agent/fix-login", task: "fix-login", dirty: false }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    expect(w.find(".cell-worktrees").exists()).toBe(true);
+    const rows = w.findAll(".wt-reuse");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].text()).toContain("fix-login");
+  });
+
+  it("hides the worktree section for a non-git dir", async () => {
+    mockFetch(); // default mock reports no isGit
+    const w = mountCell(null, { defaultCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find(".cell-worktrees").exists()).toBe(false);
+  });
+
+  it("creates a worktree for the typed task and launches claude in it", async () => {
+    const posts = mockFetchWithWorktrees([], { path: "/wt/fix-login", branch: "agent/fix-login" });
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    await w.find(".wt-task").setValue("fix login");
+    await w.find(".wt-start").trigger("click");
+    await flushPromises();
+    const create = posts.find((p) => p.url.includes("/api/worktrees/create"));
+    if (!create) throw new Error("create not called");
+    expect(JSON.parse(create.body)).toEqual({ repoDir: "/home/me/repo", task: "fix login" });
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("cwd")).toBe("/wt/fix-login");
+  });
+
+  it("reuses an existing worktree by launching claude in its path", async () => {
+    mockFetchWithWorktrees([{ path: "/wt/old-task", branch: "agent/old-task", task: "old-task", dirty: false }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    await w.find(".wt-reuse").trigger("click");
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("cwd")).toBe("/wt/old-task");
+  });
+
+  it("removes a clean worktree (deleteBranch, no force) without confirming", async () => {
+    const posts = mockFetchWithWorktrees([{ path: "/wt/done", branch: "agent/done", task: "done", dirty: false }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    await w.find(".wt-del").trigger("click");
+    await flushPromises();
+    const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
+    if (!remove) throw new Error("remove not called");
+    expect(JSON.parse(remove.body)).toEqual({ repoDir: "/home/me/repo", path: "/wt/done", deleteBranch: true, force: false });
+  });
+
+  it("confirms before removing a DIRTY worktree, and forces when confirmed", async () => {
+    const posts = mockFetchWithWorktrees([{ path: "/wt/wip", branch: "agent/wip", task: "wip", dirty: true }]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    expect(w.find(".wt-dirty").exists()).toBe(true); // the ● uncommitted-changes marker
+    await w.find(".wt-del").trigger("click");
+    await flushPromises();
+    expect(confirmSpy).toHaveBeenCalled();
+    const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
+    if (!remove) throw new Error("remove not called");
+    expect(JSON.parse(remove.body).force).toBe(true);
+    confirmSpy.mockRestore();
+  });
+
+  it("does NOT remove a dirty worktree when the user cancels the confirm", async () => {
+    const posts = mockFetchWithWorktrees([{ path: "/wt/wip", branch: "agent/wip", task: "wip", dirty: true }]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    await w.find(".wt-del").trigger("click");
+    await flushPromises();
+    expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
+    confirmSpy.mockRestore();
+  });
 });
