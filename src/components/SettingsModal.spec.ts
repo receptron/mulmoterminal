@@ -90,6 +90,28 @@ describe("SettingsModal", () => {
     expect(presets).toHaveLength(1); // edits are on a local copy
   });
 
+  it("shows the configured custom sound and emits update-sound on edit / clear", async () => {
+    const w = mount(SettingsModal, { props: { presets: [], soundFile: "/snd/alert.wav" } });
+    const field = w.find(".sound-field");
+    expect((field.element as HTMLInputElement).value).toBe("/snd/alert.wav");
+
+    await field.setValue("  /snd/new.mp3  ");
+    await field.trigger("change");
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBe("/snd/new.mp3"); // trimmed
+
+    await clickBtn(w, (t) => t.includes("chime"));
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBeNull(); // back to the chime
+  });
+
+  it("Browse fills the sound path from the OS file picker and applies it", async () => {
+    globalThis.fetch = (async () => ({ ok: true, json: async () => ({ paths: ["/picked/sound.ogg"] }) })) as unknown as typeof fetch;
+    const w = mount(SettingsModal, { props: { presets: [], soundFile: null } });
+    await clickBtn(w, (t) => t.includes("Browse"));
+    await Promise.resolve();
+    expect((w.find(".sound-field").element as HTMLInputElement).value).toBe("/picked/sound.ogg");
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBe("/picked/sound.ogg");
+  });
+
   it("theme picker honors the radiogroup keyboard contract (arrows + roving tabindex)", async () => {
     const w = mountModal();
     const cards = () => w.findAll(".theme-card");
