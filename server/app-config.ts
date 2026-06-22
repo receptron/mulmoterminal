@@ -13,9 +13,13 @@ export interface AppConfig {
   soundFile: string | null;
 }
 
-// Keep only a non-empty string path; anything else clears the custom sound.
+// Keep only a non-empty ABSOLUTE path; anything else (relative, blank, non-string)
+// clears the custom sound. Absolute-only matches the documented contract and stops
+// /api/sound from resolving a relative value against the server's cwd.
 export function sanitizeSoundFile(input: unknown): string | null {
-  return typeof input === "string" && input.trim() ? input.trim() : null;
+  if (typeof input !== "string") return null;
+  const trimmed = input.trim();
+  return trimmed && path.isAbsolute(trimmed) ? trimmed : null;
 }
 
 export function loadAppConfig(file: string): AppConfig {

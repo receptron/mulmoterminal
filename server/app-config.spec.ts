@@ -7,12 +7,18 @@ import { sanitizeSoundFile, loadAppConfig, saveAppConfig } from "./app-config";
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-appcfg-"));
 
 describe("sanitizeSoundFile", () => {
-  it("keeps a non-empty trimmed string, else null", () => {
+  it("keeps a non-empty trimmed ABSOLUTE path, else null", () => {
     expect(sanitizeSoundFile("  /a/b.wav ")).toBe("/a/b.wav");
     expect(sanitizeSoundFile("")).toBeNull();
     expect(sanitizeSoundFile("   ")).toBeNull();
     expect(sanitizeSoundFile(null)).toBeNull();
     expect(sanitizeSoundFile(42)).toBeNull();
+  });
+  it("rejects relative paths (absolute-only contract)", () => {
+    expect(sanitizeSoundFile("sound.wav")).toBeNull();
+    expect(sanitizeSoundFile("relative/path.wav")).toBeNull();
+    expect(sanitizeSoundFile("./a.wav")).toBeNull();
+    expect(sanitizeSoundFile("../a.wav")).toBeNull();
   });
 });
 

@@ -94,13 +94,16 @@ function loadCustomSound(soundFile: string): Promise<void> {
   customLoading = (async () => {
     const ctx = getCtx();
     if (!ctx) return;
+    let decoded: AudioBuffer | null = null;
     try {
       const res = await fetch(`/api/sound?v=${encodeURIComponent(soundFile)}`);
-      if (!res.ok) return;
-      customBuffer = await ctx.decodeAudioData(await res.arrayBuffer());
+      if (res.ok) decoded = await ctx.decodeAudioData(await res.arrayBuffer());
     } catch {
-      customBuffer = null; // unreadable / not audio — fall back to the chime
+      decoded = null; // unreadable / not audio — fall back to the chime
     }
+    // Only assign if this is still the selected sound: a slower load for a now-stale
+    // path (A→B switch) must not overwrite B's buffer.
+    if (customLoadedFor === soundFile) customBuffer = decoded;
   })();
   return customLoading;
 }
