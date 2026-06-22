@@ -252,9 +252,11 @@ function onServerCwd(c: string) {
 const githubUrl = ref<string | null>(null);
 const ghMenuOpen = ref(false);
 const ghWrap = useTemplateRef<HTMLElement>("ghWrap");
+let githubReq = 0; // request token: drop out-of-order responses (cwd can change fast)
 
 async function refreshGithubUrl() {
   ghMenuOpen.value = false;
+  const reqId = ++githubReq;
   if (!cwd.value) {
     githubUrl.value = null;
     return;
@@ -265,10 +267,12 @@ async function refreshGithubUrl() {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ path: cwd.value }),
     });
+    if (reqId !== githubReq) return; // a newer cwd superseded this lookup
     const data = res.ok ? await res.json() : null;
+    if (reqId !== githubReq) return; // re-check after awaiting the body
     githubUrl.value = data && typeof data.githubUrl === "string" ? data.githubUrl : null;
   } catch {
-    githubUrl.value = null; // best-effort — the link just won't appear
+    if (reqId === githubReq) githubUrl.value = null; // best-effort — the link just won't appear
   }
 }
 watch(cwd, refreshGithubUrl, { immediate: true });
