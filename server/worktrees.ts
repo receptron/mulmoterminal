@@ -101,7 +101,7 @@ export function parseWorktreeList(porcelain: string): { path: string; head: stri
 
 // Run git with argv (no shell) in `cwd`; resolve { ok, stdout } — never reject, so
 // a missing git / non-repo dir is just `ok:false` and the caller falls back.
-function git(args: string[], cwd?: string): Promise<{ ok: boolean; stdout: string }> {
+export function git(args: string[], cwd?: string): Promise<{ ok: boolean; stdout: string }> {
   return new Promise((resolve) => {
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' is a standard tool from PATH in this local dev server; all inputs go through argv (no shell)
     const child = spawn("git", cwd ? ["-C", cwd, ...args] : args, { stdio: ["ignore", "pipe", "pipe"] });

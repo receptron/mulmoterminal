@@ -4,6 +4,7 @@
 // uses POST (not DELETE) so a request body survives every proxy.
 import type { Express } from "express";
 import { repoRoot, defaultBaseBranch, listWorktrees, createWorktree, removeWorktree, isDirty } from "./worktrees.js";
+import { worktreeDiff } from "./worktree-diff.js";
 
 interface WorktreeRouteOptions {
   isAllowedOrigin: (origin?: string) => boolean;
@@ -20,6 +21,14 @@ export function mountWorktreeRoutes(app: Express, { isAllowedOrigin }: WorktreeR
     const list = await listWorktrees(repo);
     const worktrees = await Promise.all(list.map(async (w) => ({ ...w, dirty: await isDirty(w.path) })));
     res.json({ isGit: true, base: await defaultBaseBranch(repo), worktrees });
+  });
+
+  // Read-only diff of a worktree vs its base branch (ahead/dirty counts + changed
+  // files + patch), so a cell can show what the agent changed. A non-worktree dir
+  // is `isWorktree:false`, not an error.
+  app.get("/api/worktrees/diff", async (req, res) => {
+    const cwd = typeof req.query.cwd === "string" ? req.query.cwd : "";
+    res.json(cwd ? await worktreeDiff(cwd) : { isWorktree: false, base: null, ahead: 0, dirty: 0, files: [], patch: "", truncated: false });
   });
 
   app.post("/api/worktrees/create", async (req, res) => {

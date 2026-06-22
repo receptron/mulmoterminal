@@ -91,6 +91,16 @@ describe("worktree routes: origin guard + validation", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it("GET /api/worktrees/diff returns isWorktree:false for a missing/non-worktree cwd", async () => {
+    const r = routes(allow);
+    const a = makeRes();
+    await r["GET /api/worktrees/diff"]({ headers: {}, query: {} }, a); // no cwd
+    expect(a.payload).toMatchObject({ isWorktree: false, files: [], patch: "" });
+    const b = makeRes();
+    await r["GET /api/worktrees/diff"]({ headers: {}, query: { cwd: "/no/such/dir" } }, b);
+    expect(b.payload).toMatchObject({ isWorktree: false });
+  });
 });
 
 // Drive the real create → list → remove lifecycle through the HTTP handlers,

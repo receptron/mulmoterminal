@@ -91,8 +91,10 @@ onMounted(() => {
   unsubscribe = subscribe("sessions", (d) => {
     if (isActivityMsg(d) && d.id === sessionId.value) applyActivity(d);
   });
-  if (sessionId.value) loadInitial(sessionId.value);
-  else {
+  if (sessionId.value) {
+    loadInitial(sessionId.value);
+    loadDiff(); // a resumed worktree cell shows its diff on restore
+  } else {
     loadResumable();
     loadScripts();
     loadWorktrees();
@@ -110,6 +112,7 @@ function launchIn(dir: string | null) {
   sessionId.value = null; // new session — the server generates the id
   connectKey.value++;
   launched.value = true;
+  loadDiff(); // no-op for a non-worktree dir
 }
 function launch() {
   launchIn(dirInput.value.trim() || props.defaultCwd);
@@ -392,6 +395,8 @@ function close() {
   // the empty launch form would still show the closed session's directory.
   cwd.value = props.defaultCwd;
   dirInput.value = props.defaultCwd ?? "";
+  diff.value = null;
+  diffOpen.value = false;
   emit("close");
   loadResumable();
   loadScripts();
@@ -426,6 +431,52 @@ const statusClass = computed(() => STATUS_CLASS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 
 const headerText = computed(() => lastPrompt.value || (sessionId.value ? sessionId.value.slice(0, 8) : "starting…"));
+
+// Worktree diff (read-only): for a launched worktree cell, show how much the agent
+// changed vs the base branch — a header badge (ahead/dirty) and a panel (changed
+// files + patch). Refreshed when the agent pauses (the change set is then stable).
+interface WorktreeDiffData {
+  isWorktree: boolean;
+  base: string | null;
+  ahead: number;
+  dirty: number;
+  files: { path: string; additions: number; deletions: number; status: "changed" | "untracked" }[];
+  patch: string;
+  truncated: boolean;
+}
+const diff = ref<WorktreeDiffData | null>(null);
+const diffOpen = ref(false);
+const isWorktreeCell = computed(() => worktreeLabel(cwd.value) !== null);
+const showDiffBadge = computed(() => !!diff.value?.isWorktree && (diff.value.ahead > 0 || diff.value.dirty > 0));
+let diffReq = 0;
+
+async function loadDiff() {
+  if (!launched.value || !isWorktreeCell.value || !cwd.value) {
+    diff.value = null;
+    return;
+  }
+  const reqId = ++diffReq;
+  try {
+    const res = await fetch(`/api/worktrees/diff?cwd=${encodeURIComponent(cwd.value)}`);
+    if (reqId !== diffReq) return;
+    const data = res.ok ? await res.json() : null;
+    if (reqId !== diffReq) return;
+    diff.value = data && data.isWorktree ? data : null;
+  } catch {
+    if (reqId === diffReq) diff.value = null;
+  }
+}
+
+function openDiff() {
+  diffOpen.value = true;
+  loadDiff(); // refresh on open
+}
+
+// Refresh when the agent transitions from working → settled: that's when the diff
+// is stable and worth re-reading (avoids churn while it's actively editing).
+watch(working, (now, prev) => {
+  if (prev && !now) loadDiff();
+});
 </script>
 
 <template>
@@ -435,6 +486,10 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
         <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
+        </button>
+        <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+          <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+          <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
         </button>
         <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
           <button
@@ -484,6 +539,26 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
         @cwd="onServerCwd"
         @run="(cmd) => emit('runSpare', cmd)"
       />
+      <div v-if="diffOpen" class="cell-diff" tabindex="-1" @keydown.escape="diffOpen = false">
+        <div class="cell-diff-head">
+          <span class="cell-diff-title">Changes vs {{ diff?.base ?? "base" }}</span>
+          <span class="cell-diff-sum">{{ diff?.ahead ?? 0 }} ahead · {{ diff?.dirty ?? 0 }} uncommitted</span>
+          <button class="cell-btn" title="Close diff" aria-label="Close diff" @click="diffOpen = false">✕</button>
+        </div>
+        <div v-if="diff && diff.files.length" class="cell-diff-files">
+          <div v-for="f in diff.files" :key="f.path" class="cell-diff-file">
+            <span class="df-path">{{ f.path }}</span>
+            <span v-if="f.status === 'untracked'" class="df-new">new</span>
+            <span v-else class="df-nums">
+              <span class="df-add">+{{ f.additions < 0 ? "bin" : f.additions }}</span>
+              <span class="df-del">−{{ f.deletions < 0 ? "bin" : f.deletions }}</span>
+            </span>
+          </div>
+        </div>
+        <pre v-if="diff && diff.patch" class="cell-diff-patch">{{ diff.patch }}</pre>
+        <p v-if="diff && diff.truncated" class="cell-diff-note">Diff truncated — open the worktree to see the rest.</p>
+        <p v-if="diff && !diff.files.length" class="cell-diff-empty">No changes yet.</p>
+      </div>
     </template>
     <div v-else class="cell-launch">
       <div v-if="presets.length" class="cell-presets">
@@ -538,6 +613,7 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
 
 <style scoped>
 .cell {
+  position: relative; /* anchors the diff overlay */
   display: flex;
   flex-direction: column;
   min-width: 0;
@@ -957,5 +1033,119 @@ const headerText = computed(() => lastPrompt.value || (sessionId.value ? session
   flex: 0 0 auto;
   color: var(--text-dim);
   font-size: 11px;
+}
+
+/* Worktree diff badge in the header (ahead / uncommitted), opens the diff panel. */
+.cell-wt-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 7px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  cursor: pointer;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+}
+.cell-wt-badge:hover {
+  background: var(--bg-hover);
+}
+.wt-ahead {
+  color: var(--accent);
+}
+.wt-dirty-count {
+  color: var(--warn-text, #e0a030);
+}
+
+/* Read-only diff panel: overlays the terminal area of the cell. */
+.cell-diff {
+  position: absolute;
+  inset: 34px 0 0 0; /* below the 34px header */
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-base);
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+}
+.cell-diff-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+.cell-diff-title {
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cell-diff-sum {
+  flex: 1 1 auto;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.cell-diff-files {
+  flex: 0 0 auto;
+  max-height: 35%;
+  overflow-y: auto;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.cell-diff-file {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  padding: 1px 0;
+}
+.df-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  color: var(--text-secondary);
+}
+.df-nums {
+  flex: 0 0 auto;
+}
+.df-add {
+  color: #3fae6b;
+}
+.df-del {
+  color: var(--err-text, #e0556b);
+}
+.df-new {
+  flex: 0 0 auto;
+  color: #3fae6b;
+}
+.cell-diff-patch {
+  flex: 1 1 auto;
+  margin: 0;
+  overflow: auto;
+  padding: 8px;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  white-space: pre;
+  tab-size: 2;
+}
+.cell-diff-note,
+.cell-diff-empty {
+  margin: 0;
+  padding: 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  color: var(--text-dim);
 }
 </style>

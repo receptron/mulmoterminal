@@ -480,4 +480,63 @@ describe("TerminalCell", () => {
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
     confirmSpy.mockRestore();
   });
+
+  // Read-only worktree diff: a launched worktree cell shows an ahead/dirty badge
+  // and opens a panel with the changed files + patch.
+  const WT_CWD = "/home/me/.mulmoterminal/worktrees/repo-1a2b3c4d/fix";
+  function mockFetchWithDiff(diff: Record<string, unknown>) {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/worktrees/diff")) return { ok: true, json: async () => diff };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+  }
+
+  it("shows the ahead/dirty badge for a worktree cell and opens the diff panel", async () => {
+    mockFetchWithDiff({
+      isWorktree: true,
+      base: "main",
+      ahead: 3,
+      dirty: 2,
+      truncated: false,
+      files: [
+        { path: "src/a.ts", additions: 10, deletions: 2, status: "changed" },
+        { path: "new.txt", additions: 0, deletions: 0, status: "untracked" },
+      ],
+      patch: "diff --git a/src/a.ts b/src/a.ts\n+hello\n",
+    });
+    const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
+    await flushPromises();
+
+    const badge = w.find(".cell-wt-badge");
+    expect(badge.exists()).toBe(true);
+    expect(badge.find(".wt-ahead").text()).toBe("+3");
+    expect(badge.find(".wt-dirty-count").text()).toBe("●2");
+
+    expect(w.find(".cell-diff").exists()).toBe(false); // panel closed initially
+    await badge.trigger("click");
+    await flushPromises();
+    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.findAll(".cell-diff-file")).toHaveLength(2);
+    expect(w.find(".df-new").exists()).toBe(true); // the untracked file
+    expect(w.find(".cell-diff-patch").text()).toContain("hello");
+
+    await w.find(".cell-diff .cell-btn").trigger("click"); // ✕ closes it
+    expect(w.find(".cell-diff").exists()).toBe(false);
+  });
+
+  it("shows no diff badge for a clean worktree (0 ahead / 0 dirty)", async () => {
+    mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 0, dirty: 0, files: [], patch: "", truncated: false });
+    const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
+    await flushPromises();
+    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+  });
+
+  it("never shows the diff badge for a non-worktree cell", async () => {
+    mockFetchWithDiff({ isWorktree: false, base: null, ahead: 9, dirty: 9, files: [], patch: "", truncated: false });
+    const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: "/home/me/regular-proj" });
+    await flushPromises();
+    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+  });
 });
