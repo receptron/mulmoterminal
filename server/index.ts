@@ -18,7 +18,7 @@ import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes } from "./config-routes.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
-import { isRecord, parseJsonl, userPromptText, latestUserPromptFromJsonl } from "./transcript.js";
+import { isRecord, parseJsonl, userPromptText, latestMeaningfulUserPromptFromJsonl, preferredHeaderPrompt } from "./transcript.js";
 import { mountOpenDirRoute } from "./open-dir.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
@@ -303,8 +303,10 @@ const SESSION_LIST_LIMIT = 50;
 // UserPromptSubmit => Claude started thinking; Stop => it finished.
 const activity = new Map<string, Activity>(); // id -> { working, event, at }
 
-// Latest user prompt per session (from the UserPromptSubmit hook), shown on the
-// grid cell header so you can tell at a glance what each terminal is doing.
+// Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
+// on the grid cell header so you can tell at a glance what each terminal is about. A
+// trivial ack ("ok", "merge") doesn't replace it (see the hook handler), so a short
+// follow-up can't hide the task.
 const lastPrompts = new Map<string, string>(); // id -> prompt text
 const LAST_PROMPT_CAP = 200;
 
@@ -505,7 +507,7 @@ function resolveWorkspace(cwd: string | null): string {
 async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
   try {
     const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    return latestUserPromptFromJsonl(raw);
+    return latestMeaningfulUserPromptFromJsonl(raw);
   } catch {
     return null;
   }
@@ -678,6 +680,21 @@ async function handleToolHook(sessionId: string, event: string, p: HookToolPaylo
   }
 }
 
+// Track the prompt the cell header shows for a session, from a UserPromptSubmit
+// hook. On the FIRST live prompt after a (re)start/resume the in-memory baseline is
+// empty, so seed it from the transcript's meaningful prompt — otherwise a trivial
+// ack ("ok") would overwrite the restored task. (Brand-new sessions have no
+// transcript yet => null => the new prompt becomes the first shown.) Then keep the
+// last MEANINGFUL prompt (preferredHeaderPrompt) while still tracking the latest for
+// an all-trivial session.
+async function trackPromptForHeader(sessionId: string, prompt: string, cwd: string | undefined) {
+  if (!lastPrompts.has(sessionId)) {
+    const seeded = cwd ? await latestUserPrompt(cwd, sessionId) : null;
+    if (seeded) lastPrompts.set(sessionId, seeded);
+  }
+  lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
+}
+
 // Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
@@ -687,10 +704,11 @@ app.post("/api/hook", async (req, res) => {
   if (sessionId) {
     const entry = ptys.get(sessionId);
     const foreground = !!(entry && entry.ws);
-    // Capture the prompt BEFORE handleActivityHook so the activity publish it
-    // triggers already carries the new lastPrompt.
+    // Update the displayed prompt BEFORE handleActivityHook so the activity publish
+    // it triggers already carries the new lastPrompt.
     if (event === "UserPromptSubmit" && typeof body.prompt === "string" && body.prompt.trim()) {
-      lastPrompts.set(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP));
+      const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
+      await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
