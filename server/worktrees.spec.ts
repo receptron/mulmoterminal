@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync, symlinkSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { symlinkSync } from "node:fs";
 import { slugify, parseWorktreeList, worktreesRoot, isManagedWorktree, gitTopLevel, createWorktree, listWorktrees, isDirty, removeWorktree } from "./worktrees";
 
 describe("slugify", () => {
@@ -102,6 +101,16 @@ describe("git worktree lifecycle", () => {
     if (!a || !b) throw new Error("expected two worktrees");
     expect(a.branch).toBe("agent/task");
     expect(b.branch).toBe("agent/task-2");
+  });
+
+  it.skipIf(!hasGit)("allocates distinct branches for CONCURRENT creates of the same task (no TOCTOU collision)", async () => {
+    const isWt = (r: { path: string; branch: string } | null): r is { path: string; branch: string } => r !== null;
+    const results = (
+      await Promise.all([createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race")])
+    ).filter(isWt);
+    expect(results).toHaveLength(4); // none failed with a branch-already-exists 500
+    expect(new Set(results.map((r) => r.branch)).size).toBe(4); // all distinct
+    expect(new Set(results.map((r) => r.path)).size).toBe(4);
   });
 
   it.skipIf(!hasGit)("refuses to remove a path outside the managed root", async () => {

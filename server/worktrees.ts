@@ -158,12 +158,27 @@ export async function isDirty(worktreePath: string): Promise<boolean> {
 }
 
 // A branch name for `task` that isn't already taken (agent/<slug>, then -2, -3…).
+const MAX_BRANCH_SUFFIX = 99;
 async function uniqueBranch(repo: string, slug: string): Promise<string> {
-  for (let n = 1; n <= 99; n++) {
+  for (let n = 1; n <= MAX_BRANCH_SUFFIX; n++) {
     const name = n === 1 ? `agent/${slug}` : `agent/${slug}-${n}`;
     if (!(await git(["rev-parse", "--verify", "--quiet", name], repo)).ok) return name;
   }
   return `agent/${slug}-${Date.now()}`;
+}
+
+// Serialize worktree creation process-wide so the uniqueBranch → `worktree add`
+// sequence is atomic. Otherwise two concurrent creates for the same task can both
+// pick `agent/<slug>` (TOCTOU) and one add fails, and our parallel adds would also
+// contend on git's index lock. Runs each task after the prior settles (ok or not).
+let createQueue: Promise<unknown> = Promise.resolve();
+function serializeCreate<T>(task: () => Promise<T>): Promise<T> {
+  const run = createQueue.then(task, task);
+  createQueue = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }
 
 // Create a fresh worktree + branch for `task`, forked from the repo's base branch.
@@ -173,11 +188,13 @@ export async function createWorktree(repoDir: string, task: string): Promise<{ p
   const repo = await repoRoot(repoDir);
   if (!repo) return null;
   const slug = slugify(task);
-  const branch = await uniqueBranch(repo, slug);
-  const dir = path.join(worktreesRoot(repo), branch.replace(/^agent\//, ""));
   const base = await defaultBaseBranch(repo);
-  const res = await git(["worktree", "add", "-b", branch, dir, base], repo);
-  return res.ok ? { path: dir, branch } : null;
+  return serializeCreate(async () => {
+    const branch = await uniqueBranch(repo, slug);
+    const dir = path.join(worktreesRoot(repo), branch.replace(/^agent\//, ""));
+    const res = await git(["worktree", "add", "-b", branch, dir, base], repo);
+    return res.ok ? { path: dir, branch } : null;
+  });
 }
 
 // Remove a managed worktree (and prune), optionally deleting its branch. Refuses a
