@@ -558,3 +558,5 @@ yarn test
 session list, the working dot, the `waiting` bold state, refetching on a pub/sub
 push, and emitting `select` on click. The pub/sub composable and `fetch` are
 mocked so the tests run without a server.
+
+<!-- Test line added for verification purposes. -->
