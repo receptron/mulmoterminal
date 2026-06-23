@@ -1,6 +1,6 @@
 {
   "name": "mulmoterminal",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "MulmoTerminal — browser terminal + GUI panel for Claude Code. One command to start.",
   "type": "module",
   "license": "MIT",
