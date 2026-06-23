@@ -243,6 +243,23 @@ command, so the file is the allowlist of what can run.
 
 ---
 
+## Files (📁 browser)
+
+Every running terminal's header has a **📁 Files** dropdown (next to ▶ Run) that
+browses the **open project's** files — the directory that terminal's session runs in.
+Click a folder to descend (↑ to go up); click a file to **open it in a new browser
+tab**, read-only:
+
+- **Markdown** (`.md` / `.markdown`) → rendered to HTML (`marked`)
+- **Images / PDF / text / code** → served raw (images inline, text as `text/plain`)
+
+There's no in-app editing — it's for quick reference. The button is hidden until the
+terminal's project directory is known. Paths are contained within that project root,
+and bytes/markdown are served under a sandbox CSP. See
+[`GET /api/files/browse/*`](#http-get-apifilesbrowse).
+
+---
+
 ## Server API specification
 
 Base URL: `http://localhost:$PORT` (default `http://localhost:3456`).
@@ -300,6 +317,32 @@ position the client sends back to `/ws/run`).
 
 A missing or invalid `script.json` is **not** an error — it yields an empty
 `scripts` array.
+
+### HTTP: `GET /api/files/browse/*`
+
+Project-scoped file browsing for the [📁 Files](#files--browser) menu. All take
+`?cwd=<project dir>` (absolute, existing; falls back to `CLAUDE_CWD`) and a
+`?path=<rel>` contained within it (`..` / absolute escapes → `403`).
+
+- **`GET /api/files/browse/list?cwd=&path=`** → directory listing. `path` empty =
+  project root.
+
+  ```jsonc
+  { "cwd": "/Users/me/proj", "path": "src", "entries": [
+    { "name": "components", "dir": true,  "size": 0 },
+    { "name": "App.vue",    "dir": false, "size": 4096 }
+  ] }
+  ```
+
+  Entries are sorted directories-first, then by name. `404` if `path` isn't a
+  directory.
+
+- **`GET /api/files/browse/raw?cwd=&path=`** → the file's bytes (MIME by extension,
+  `Content-Security-Policy: sandbox`, `nosniff`, Range support). Shares the serving
+  logic with `/api/files/raw`.
+
+- **`GET /api/files/browse/md?cwd=&path=`** → the file rendered from Markdown to an
+  HTML document (`marked`), served under a sandbox CSP.
 
 ### HTTP: `POST /api/hook`
 
@@ -533,9 +576,10 @@ src/
   components/
     Sidebar.vue       Session list; working dot + waiting bold; pub/sub driven
     Sidebar.spec.ts   Vitest component tests
-    Terminal.vue      xterm.js terminal; /ws (or /ws/run); single-view ▶ Run menu
+    Terminal.vue      xterm.js terminal; /ws (or /ws/run); header ▶ Run + 📁 Files
     GridView.vue      Grid toolbar (auto-layout, ＋ Terminal); runs handed-off scripts
     RunMenu.vue       ▶ Run dropdown: lists a dir's script.json, emits the pick
+    FileBrowser.vue   📁 dropdown: browse the project's files, open in a new tab
     TerminalCell.vue  A cell: Claude launcher (dir picker + resume + run-a-script)
     TerminalGrid.vue  Grid of cells; auto-sizes by count; zoom lines up every tab
     CommandCell.vue   A grid cell that runs a script.json command (ephemeral)
