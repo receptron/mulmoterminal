@@ -408,6 +408,8 @@ function teardown() {
 // Closing a WORKTREE cell offers to keep or remove the room first (never silently
 // discards uncommitted/unpushed work); other cells just tear down.
 const closeConfirm = ref(false);
+const closeChecking = ref(false); // refreshing dirty/ahead — the destructive action is held until it's accurate
+const closeError = ref<string | null>(null);
 const hasUnsaved = computed(() => (diff.value?.dirty ?? 0) > 0 || (diff.value?.ahead ?? 0) > 0);
 const unsavedSummary = computed(() => {
   const ahead = diff.value?.ahead ?? 0;
@@ -418,32 +420,56 @@ const unsavedSummary = computed(() => {
   return parts.join(" + ");
 });
 
-function close() {
-  if (isWorktreeCell.value) {
-    closeConfirm.value = true;
-    loadDiff(); // refresh dirty/ahead so the warning is accurate
-  } else {
+async function close() {
+  if (!isWorktreeCell.value) {
     teardown();
+    return;
   }
+  closeError.value = null;
+  closeConfirm.value = true;
+  // Refresh dirty/ahead before the Remove button is enabled, so a fast click can't
+  // discard work that became newly dirty/ahead since the last refresh.
+  closeChecking.value = true;
+  await loadDiff();
+  closeChecking.value = false;
 }
-const cancelClose = () => (closeConfirm.value = false);
+function cancelClose() {
+  closeConfirm.value = false;
+  closeChecking.value = false;
+  closeError.value = null;
+}
 
 async function removeAndClose() {
   const dir = cwd.value;
-  termRef.value?.terminate(); // free the worktree dir before removing (Windows locks a process's cwd)
-  if (dir) {
-    try {
-      await fetch("/api/worktrees/remove", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ repoDir: dir, path: dir, deleteBranch: true, force: true }),
-      });
-    } catch {
-      // best-effort — an orphaned worktree is pruned on the next list
-    }
+  if (!dir) {
+    teardown();
+    return;
   }
-  teardown();
+  closeError.value = null;
+  termRef.value?.terminate(); // free the worktree dir first (Windows locks a process's cwd)
+  try {
+    const res = await fetch("/api/worktrees/remove", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ repoDir: dir, path: dir, deleteBranch: true, force: true }),
+    });
+    if (res.ok) return teardown();
+    closeError.value = "Couldn't remove the worktree — it may need manual cleanup.";
+  } catch {
+    closeError.value = "Couldn't reach the server to remove the worktree.";
+  }
 }
+
+// Esc dismisses the close confirmation (document-scoped: focus may be on the
+// terminal, not the overlay), matching the diff panel's Escape handling.
+function onCloseKey(e: KeyboardEvent) {
+  if (e.key === "Escape") cancelClose();
+}
+watch(closeConfirm, (open) => {
+  if (open) document.addEventListener("keydown", onCloseKey);
+  else document.removeEventListener("keydown", onCloseKey);
+});
+onUnmounted(() => document.removeEventListener("keydown", onCloseKey));
 
 // Adopt the server-assigned id (esp. for new sessions), bubble it up for
 // persistence, and load its initial activity.
@@ -710,16 +736,27 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <span v-if="prMsg" class="cell-diff-msg">{{ prMsg }}</span>
         </div>
       </div>
-      <div v-if="closeConfirm" class="cell-close-confirm">
+      <div v-if="closeConfirm" class="cell-close-confirm" role="dialog" aria-modal="true" :aria-label="`Close worktree ${headerDir}`">
         <div class="ccx-box">
           <p class="ccx-title">Close {{ headerDir }}</p>
-          <p v-if="hasUnsaved" class="ccx-warn">{{ unsavedSummary }} will be discarded if you remove the worktree.</p>
-          <p v-else class="ccx-sub">Keep the worktree to reuse it later, or remove it.</p>
-          <div class="ccx-actions">
-            <button class="ccx-btn ccx-keep" @click="teardown">Keep worktree</button>
-            <button class="ccx-btn ccx-remove" @click="removeAndClose">{{ hasUnsaved ? "Discard &amp; remove" : "Remove worktree" }}</button>
-            <button class="ccx-btn ccx-cancel" @click="cancelClose">Cancel</button>
-          </div>
+          <template v-if="!closeError">
+            <p v-if="hasUnsaved" class="ccx-warn">{{ unsavedSummary }} will be discarded if you remove the worktree.</p>
+            <p v-else class="ccx-sub">Keep the worktree to reuse it later, or remove it.</p>
+            <div class="ccx-actions">
+              <button class="ccx-btn ccx-keep" @click="teardown">Keep worktree</button>
+              <button class="ccx-btn ccx-remove" :disabled="closeChecking" @click="removeAndClose">
+                {{ closeChecking ? "Checking…" : hasUnsaved ? "Discard &amp; remove" : "Remove worktree" }}
+              </button>
+              <button class="ccx-btn ccx-cancel" @click="cancelClose">Cancel</button>
+            </div>
+          </template>
+          <template v-else>
+            <p class="ccx-warn">{{ closeError }}</p>
+            <div class="ccx-actions">
+              <button class="ccx-btn ccx-remove" @click="removeAndClose">Retry</button>
+              <button class="ccx-btn" @click="teardown">Close cell</button>
+            </div>
+          </template>
         </div>
       </div>
     </template>
