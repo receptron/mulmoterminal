@@ -99,7 +99,9 @@ export function buildUserTaskDefinitions(tasks: readonly unknown[], spawnChat: (
       log.warn("skipping task: not an object");
       continue;
     }
-    if (!entry.enabled) continue;
+    // `enabled` is optional — only an explicit `false` disables a task; an omitted
+    // field means enabled (so a hand-authored task without the flag still runs).
+    if (entry.enabled === false) continue;
     const id = entry.id;
     if (typeof id !== "string" || id.length === 0) {
       log.warn("skipping task: missing id");

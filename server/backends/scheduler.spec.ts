@@ -50,6 +50,17 @@ describe("buildUserTaskDefinitions", () => {
     expect(definitions[0].schedule).toEqual({ type: "daily", time: "11:00" });
   });
 
+  it("treats an omitted enabled field as enabled (only explicit false disables)", () => {
+    const tasks = [
+      { id: "noflag", schedule: { type: "daily", time: "07:00" }, prompt: "go" },
+      { id: "off", schedule: { type: "daily", time: "07:00" }, enabled: false, prompt: "x" },
+    ];
+
+    const definitions = buildUserTaskDefinitions(tasks, spawnChat);
+
+    expect(definitions.map((definition) => definition.id)).toEqual(["user.noflag"]);
+  });
+
   it("skips non-object array elements without throwing (non-fatal)", () => {
     const tasks = [null, 42, "nope", { id: "ok", schedule: { type: "daily", time: "08:00" }, enabled: true, prompt: "go" }];
 
