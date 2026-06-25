@@ -65,7 +65,7 @@ function loadConfig() {
 async function loadPackage(name: string) {
   const mod = await import(name);
   const definition = mod.TOOL_DEFINITION ?? mod.pluginCore?.toolDefinition;
-  // Some packages (e.g. @mulmoclaude/collection-plugin) export their executor under
+  // Some packages (e.g. @mulmoclaude/core/collection) export their executor under
   // a descriptive name like `executePresentCollection` rather than a bare `execute`,
   // and ship no `pluginCore` on the core entry (their origin host registers the tool
   // as a built-in). Fall back to a sole `execute*` function export so such packages

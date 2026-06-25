@@ -4,7 +4,7 @@
     "@mulmoclaude/form-plugin",
     "@mulmochat-plugin/generate-image",
     "@mulmoclaude/chart-plugin",
-    "@mulmoclaude/collection-plugin",
+    "@mulmoclaude/core/collection",
     "@mulmoclaude/html-plugin"
   ],
   "servers": ["@mulmoclaude/x-plugin"],
