@@ -25,6 +25,7 @@ import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
+import { initFileChangePublisher } from "./backends/fileChange.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
@@ -590,7 +591,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
 // catch-all (which handles the tool-call); a request without `kind` falls through.
-mountHtmlDispatchRoute(app, { getPubsub: () => pubsub });
+mountHtmlDispatchRoute(app);
 
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
@@ -927,10 +928,14 @@ app.get("/api/sessions", async (req, res) => {
 const server = http.createServer(app);
 pubsub = createPubSub(server, isAllowedOrigin);
 
-// Give the markdown host app its workspace (for artifacts/documents storage) +
-// pubsub (to forward file-change events to the plugin-scoped channel so the
-// presentDocument view live-refreshes). Done after pubsub exists (task #6).
-initMarkdownBackend({ workspace: CLAUDE_CWD, pubsub });
+// Wire the shared file-change publisher (markdown + html live-refresh) against
+// pubsub + the workspace. Must run before any write route fires (publishFileChange
+// is a no-op until configured).
+initFileChangePublisher({ workspace: CLAUDE_CWD, pubsub });
+
+// Give the markdown host app its workspace (for artifacts/documents storage).
+// File-change live-refresh is handled by the shared publisher above.
+initMarkdownBackend({ workspace: CLAUDE_CWD });
 
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.

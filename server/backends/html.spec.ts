@@ -21,7 +21,7 @@ beforeAll(async () => {
 
   const app = express();
   app.use(express.json());
-  mountHtmlDispatchRoute(app, { getPubsub: () => null });
+  mountHtmlDispatchRoute(app);
   mountHtmlPreviewRoute(app, { workspace: ws });
   await new Promise<void>((resolve) => {
     server = app.listen(0, () => resolve());

@@ -18,21 +18,17 @@ import { randomUUID } from "node:crypto";
 import { marked } from "marked";
 import { renderMarpDeck, fillImagePlaceholders } from "@mulmoclaude/markdown-plugin";
 import type { MarkdownHostApp, ExportPdfOptions } from "@mulmoclaude/markdown-plugin";
-import type { createPubSub } from "../pubsub.js";
+import { publishFileChange } from "./fileChange.js";
 import { generateImage } from "./image-gen.js";
-
-type PubSub = ReturnType<typeof createPubSub>;
 
 const DOCS_DIR = "artifacts/documents";
 
-// Set once at boot (server/index.ts) — workspace = CLAUDE_CWD, pubsub for
-// live-refresh forwarding to the plugin-scoped channel.
+// Set once at boot (server/index.ts) — workspace = CLAUDE_CWD. File-change
+// live-refresh is forwarded by the shared publisher (see fileChange.ts).
 let workspace: string | null = null;
-let pubsub: PubSub | null = null;
 
-export function initMarkdownBackend(deps: { workspace: string; pubsub: PubSub | null }): void {
+export function initMarkdownBackend(deps: { workspace: string }): void {
   workspace = deps.workspace;
-  pubsub = deps.pubsub ?? null;
 }
 
 // Strict gate (matches the package's isFilePath + MulmoClaude's isMarkdownPath):
@@ -67,12 +63,6 @@ function buildNewDocPath(prefix: string): string {
   return `${DOCS_DIR}/${yyyy}/${mm}/${sanitizePrefix(prefix)}-${rand}.md`;
 }
 
-function publishFileChange(rel: string): void {
-  // The package View subscribes via runtime.pubsub "file:<path>" →
-  // "plugin:markdown:file:<path>". Forward self-saves so other tabs refresh.
-  pubsub?.publish(`plugin:markdown:file:${rel}`, { path: rel, mtimeMs: Date.now() });
-}
-
 const MARKDOWN_PDF_CSS = `
   body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; font-size: 13px; line-height: 1.6; color: #1f2937; max-width: 800px; margin: 0 auto; padding: 32px 48px; }
   h1 { font-size: 1.75rem; } h2 { font-size: 1.25rem; border-bottom: 1px solid #e5e7eb; padding-bottom: .25rem; } h3 { font-size: 1rem; }
@@ -90,7 +80,7 @@ export const markdownHostApp: MarkdownHostApp = {
   async saveDoc(rel, markdown) {
     if (!isDocPath(rel)) throw new Error(`invalid document path: ${rel}`);
     await fs.promises.writeFile(absFor(rel), markdown);
-    publishFileChange(rel);
+    await publishFileChange(rel);
     return { path: rel };
   },
 
@@ -99,6 +89,9 @@ export const markdownHostApp: MarkdownHostApp = {
     const abs = absFor(rel);
     await fs.promises.mkdir(path.dirname(abs), { recursive: true });
     await fs.promises.writeFile(abs, markdown);
+    // Publish the create too (previously an unpublished gap) so a View already
+    // open on this path live-refreshes instead of going stale.
+    await publishFileChange(rel);
     return { path: rel };
   },
 

@@ -19,9 +19,7 @@ import { createReadStream } from "node:fs";
 import type { Express, Request, Response, NextFunction } from "express";
 import { executeHtmlDispatch } from "@mulmoclaude/html-plugin";
 import { artifactsFileOps } from "./artifacts.js";
-import type { createPubSub } from "../pubsub.js";
-
-type PubSub = ReturnType<typeof createPubSub>;
+import { publishFileChange } from "./fileChange.js";
 
 // Curated CDN allowlist (matches the collection custom-view policy) for an
 // LLM-authored page that may pull a charting/util lib or font from a CDN.
@@ -55,9 +53,8 @@ const HTML_PREVIEW_CSP = [
 
 /** Intercept the View's dispatch (loadHtml/saveHtml) on /api/plugin/presentHtml,
  *  before the generic plugin catch-all (which handles the tool-call). MUST be
- *  registered BEFORE mountAllRoutes. `getPubsub` is a thunk because pubsub is
- *  created after routes are mounted; the handler reads it live at request time. */
-export function mountHtmlDispatchRoute(app: Express, deps: { getPubsub: () => PubSub | null }): void {
+ *  registered BEFORE mountAllRoutes. */
+export function mountHtmlDispatchRoute(app: Express): void {
   app.post("/api/plugin/presentHtml", async (req: Request, res: Response, next: NextFunction) => {
     const args = (req.body ?? {}) as { kind?: unknown; path?: unknown };
     // A tool-call (no `kind`) is left to the package execute via the catch-all.
@@ -65,24 +62,15 @@ export function mountHtmlDispatchRoute(app: Express, deps: { getPubsub: () => Pu
     try {
       const result = await executeHtmlDispatch({ files: { artifacts: artifactsFileOps } }, args as never);
       if (args.kind === "saveHtml" && typeof args.path === "string") {
-        // Live-refresh: bump any open View watching this file (channel matches the
-        // frontend runtime scope "html" → plugin:html:file:<path>).
-        try {
-          const stat = await artifactsFileOps.stat(toArtifactsRel(args.path));
-          deps.getPubsub()?.publish(`plugin:html:file:${args.path}`, { mtimeMs: stat.mtimeMs });
-        } catch {
-          // Best-effort; the saver already updated its local state.
-        }
+        // Live-refresh via the shared publisher: the "html" scope forwards to
+        // plugin:html:file:<path>, the channel the open View subscribes to.
+        await publishFileChange(args.path);
       }
       res.json(result);
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
     }
   });
-}
-
-function toArtifactsRel(workspaceRel: string): string {
-  return workspaceRel.startsWith("artifacts/") ? workspaceRel.slice("artifacts/".length) : workspaceRel;
 }
 
 /** Serve `GET /artifacts/html/<rest>` — the iframe preview source — from the
