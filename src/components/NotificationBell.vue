@@ -3,9 +3,11 @@ import { ref, onUnmounted, useTemplateRef } from "vue";
 import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../composables/useNotifications";
 
 // Toolbar bell: a severity-coloured unread badge + a dropdown listing the active
-// notifications. A row click navigates to the entry's target (a completion bell's
-// pending record) WITHOUT clearing it — the watcher clears it when the record is
-// done; the ✕ dismisses it explicitly. Mirrors MulmoClaude's bell.
+// notifications. Mirrors MulmoClaude's bell structure (severity-coloured bell icon
+// per row, title + lifecycle tag, a "relative-time · source" meta line, an
+// "Active (N)" header) in MulmoTerminal's dark palette. A row click navigates to the
+// entry's target (a completion bell's pending record) WITHOUT clearing it — the
+// watcher clears it when the record is done; the ✕ dismisses it explicitly.
 const { count, topSeverity, sorted, dismiss, activate } = useNotifications();
 
 const open = ref(false);
@@ -42,6 +44,26 @@ function severityClass(severity: NotifierSeverity): string {
   return `sev-${severity}`;
 }
 
+// Strip a leading `@scope/` from a package name for the meta line (matches
+// MulmoClaude's shortPkg) — unscoped legacy pluginPkgs pass through unchanged.
+function shortPkg(pluginPkg: string): string {
+  return pluginPkg.startsWith("@") ? pluginPkg.split("/").slice(1).join("/") || pluginPkg : pluginPkg;
+}
+
+// Compact relative time ("just now", "5m", "3h", "2d") from an ISO timestamp.
+function relativeTime(iso: string): string {
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return "";
+  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
+  if (seconds < 45) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.round(hours / 24);
+  return `${days}d`;
+}
+
 onUnmounted(close);
 </script>
 
@@ -63,13 +85,26 @@ onUnmounted(close);
 
     <div v-if="open" class="notif-pop" role="menu">
       <div class="notif-head">Notifications</div>
+      <div class="notif-subhead">Active ({{ sorted.length }})</div>
       <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
       <ul v-else class="notif-list">
-        <li v-for="entry in sorted" :key="entry.id" class="notif-row" :class="{ clickable: !!entry.navigateTarget }" role="menuitem" @click="onRowClick(entry)">
-          <span class="dot" :class="severityClass(entry.severity)" aria-hidden="true"></span>
+        <li
+          v-for="entry in sorted"
+          :key="entry.id"
+          class="notif-row"
+          :class="{ clickable: !!entry.navigateTarget }"
+          role="menuitem"
+          :title="entry.body || undefined"
+          @click="onRowClick(entry)"
+        >
+          <span class="material-symbols-outlined bell-icon" :class="severityClass(entry.severity)" aria-hidden="true">notifications</span>
           <span class="notif-text">
-            <span class="notif-title">{{ entry.title }}</span>
+            <span class="notif-title-row">
+              <span class="notif-title">{{ entry.title }}</span>
+              <span v-if="entry.lifecycle" class="notif-lifecycle">{{ entry.lifecycle }}</span>
+            </span>
             <span v-if="entry.body" class="notif-body">{{ entry.body }}</span>
+            <span class="notif-meta">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
           </span>
           <button type="button" class="notif-dismiss" title="Dismiss" aria-label="Dismiss notification" @click.stop="dismiss(entry.id)">
             <span class="material-symbols-outlined">close</span>
@@ -102,10 +137,7 @@ onUnmounted(close);
   border-radius: 6px;
   cursor: pointer;
 }
-.bell-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
+.bell-btn:hover,
 .bell-btn.active {
   background: var(--bg-hover);
   color: var(--text);
@@ -149,8 +181,8 @@ onUnmounted(close);
   /* Above the collections browse overlay (z-index 50, fills below the toolbar) so
      the dropdown stays visible when a navigation has opened it. */
   z-index: 60;
-  width: 320px;
-  max-height: 420px;
+  width: 340px;
+  max-height: 460px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -166,7 +198,15 @@ onUnmounted(close);
   font-family: system-ui, sans-serif;
   font-size: 12px;
   font-weight: 600;
+  color: var(--text);
+}
+.notif-subhead {
+  padding: 4px 8px;
+  font-family: system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
   color: var(--text-muted);
+  border-top: 1px solid var(--border);
 }
 
 .notif-empty {
@@ -199,22 +239,23 @@ onUnmounted(close);
   background: var(--bg-hover);
 }
 
-.dot {
+/* Per-row severity-coloured bell icon — MulmoClaude's "this is a notification"
+   at-a-glance signal (replaces a generic coloured dot). */
+.bell-icon {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: #9aa6cc;
+  margin-top: 1px;
+  font-size: 18px;
+  line-height: 1;
+  color: #9aa6cc;
 }
-.dot.sev-info {
-  background: #9aa6cc;
+.bell-icon.sev-info {
+  color: #9aa6cc;
 }
-.dot.sev-nudge {
-  background: #e0a526;
+.bell-icon.sev-nudge {
+  color: #e0a526;
 }
-.dot.sev-urgent {
-  background: #e0533d;
+.bell-icon.sev-urgent {
+  color: #e0533d;
 }
 
 .notif-text {
@@ -224,16 +265,38 @@ onUnmounted(close);
   flex-direction: column;
   gap: 2px;
 }
+.notif-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
 .notif-title {
   font-family: system-ui, sans-serif;
   font-size: 13px;
   color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notif-lifecycle {
+  flex: 0 0 auto;
+  font-family: system-ui, sans-serif;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 .notif-body {
   font-family: system-ui, sans-serif;
   font-size: 12px;
   color: var(--text-muted);
   overflow-wrap: anywhere;
+}
+.notif-meta {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 10px;
+  color: var(--text-muted);
 }
 
 .notif-dismiss {

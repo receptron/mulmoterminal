@@ -1,51 +1,72 @@
 // Collection completion bells, shared with MulmoClaude via @mulmoclaude/core. The
-// watcher fs.watches each collection's data dir; when a record that the schema marks
-// as "pending completion" lands (or its file/done-state changes), the reconciler
-// drives the notifier: publish an "action" bell while pending, clear it when done.
+// watcher fs.watches each collection's data dir; when a record the schema marks as
+// "pending completion" lands (or its file/done-state changes), the reconciler drives
+// the notifier: publish an "action" bell while pending, clear it when done.
 //
-// The reconciler owns an internal `legacyId` (slug+itemId) round-tripped through the
-// entry's pluginData. This adapter is the MulmoTerminal-specific delivery sink: it
-// chooses the bell's plugin namespace, severity mapping, deep-link target, and the
-// pluginData shape that lets the reconciler recognise its own entries on a rescan.
+// CROSS-APP PARITY: MulmoTerminal and MulmoClaude share ONE notifier file
+// (<ws>/data/notifier/active.json) and never run simultaneously. For a record to
+// carry exactly ONE bell regardless of which app published it, this adapter MUST be
+// byte-identical to MulmoClaude's (server/workspace/collections/notifications.ts):
+// the same pluginPkg, the same `LegacyNotifierPluginData` shape, and a `readEntry`
+// that recognises ANY legacy entry by its marker. Then MulmoTerminal's reconciler
+// recognises a bell MulmoClaude already published (same legacyId) and won't add a
+// duplicate — and vice-versa. Diverging here is what produced double bells.
+//
+// The legacy types live in MulmoClaude's app source (not the published package), so
+// the small shape is mirrored locally rather than imported.
 import { configureCollectionWatchers, startCollectionWatchers } from "@mulmoclaude/core/collection-watchers";
 import type { CollectionNotificationAdapter, CompletionPriority } from "@mulmoclaude/core/collection-watchers";
 
 const log = {
   info: (message: string, data?: Record<string, unknown>) => console.log(`[collection-watchers] ${message}`, data ?? ""),
   warn: (message: string, data?: Record<string, unknown>) => console.warn(`[collection-watchers] ${message}`, data ?? ""),
-  error: (message: string, data?: Record<string, unknown>) => console.error(`[collection-watchers] ${message}`, data ?? ""),
 };
 
-// The pluginData this reconciler stores on each completion bell. `kind` lets readEntry
-// recognise our entries on a listAll() scan and skip foreign ones.
-interface CompletionPluginData {
-  kind: "collection-completion";
+// Mirror of MulmoClaude's LegacyNotifierPluginData (the subset collection bells use).
+// `legacy: true` + a string `legacyId` + a string `kind` is the marker both apps'
+// readEntry recognise; the navigate `action` preserves the bell's icon/routing.
+interface LegacyNotifierPluginData {
+  legacy: true;
   legacyId: string;
-  slug: string;
-  itemId: string;
-  priority: CompletionPriority;
-  navigateTarget: string;
+  kind: "todo";
+  priority: "normal" | "high";
+  action: { type: "navigate"; target: { view: "collections"; slug: string; itemId: string } };
 }
 
-/** Deep-link the bell row navigates to: the collections browse overlay focused on the
- *  pending record. The frontend parses this back to (slug, itemId). */
+function isLegacyNotifierPluginData(value: unknown): value is LegacyNotifierPluginData {
+  if (value === null || typeof value !== "object") return false;
+  const rec = value as Record<string, unknown>;
+  return rec.legacy === true && typeof rec.legacyId === "string" && typeof rec.kind === "string";
+}
+
+/** Deep-link the bell row navigates to: `/collections/<slug>?selected=<itemId>` (the
+ *  documented record permalink). Dot-segment slugs would normalise out of the route,
+ *  so fall back to the index — matches MulmoClaude's builder. */
 function buildNavigateTarget(slug: string, itemId: string): string {
-  return `/collections/${encodeURIComponent(slug)}?selected=${encodeURIComponent(itemId)}`;
+  if (slug === "." || slug === "..") return "/collections";
+  const base = `/collections/${encodeURIComponent(slug)}`;
+  return itemId ? `${base}?selected=${encodeURIComponent(itemId)}` : base;
 }
 
 const adapter: CollectionNotificationAdapter = {
-  pluginPkg: "collections",
-  // A high-priority pending record is a real obligation (red); anything else nudges
-  // (amber). Never "info" — the engine forbids info-severity action entries.
+  // MulmoClaude's collection bells publish under its legacy namespace; match it so
+  // the shared notifier treats both apps' bells as the same entry.
+  pluginPkg: "todo",
+  // high → urgent (red), normal → nudge (amber). Never "info" — the engine forbids
+  // info-severity action entries.
   priorityToSeverity: (priority) => (priority === "high" ? "urgent" : "nudge"),
   buildNavigateTarget,
-  buildPluginData: ({ legacyId, slug, itemId, priority, navigateTarget }) =>
-    ({ kind: "collection-completion", legacyId, slug, itemId, priority, navigateTarget }) satisfies CompletionPluginData,
+  buildPluginData: ({ legacyId, slug, itemId, priority }): LegacyNotifierPluginData => ({
+    legacy: true,
+    legacyId,
+    kind: "todo",
+    priority: priority === "high" ? "high" : "normal",
+    action: { type: "navigate", target: { view: "collections", slug, itemId } },
+  }),
   readEntry: (pluginData) => {
-    if (typeof pluginData !== "object" || pluginData === null) return null;
-    const data = pluginData as Partial<CompletionPluginData>;
-    if (data.kind !== "collection-completion" || typeof data.legacyId !== "string") return null;
-    return { legacyId: data.legacyId, priority: data.priority === "high" ? "high" : "normal" };
+    if (!isLegacyNotifierPluginData(pluginData)) return null;
+    const priority: CompletionPriority = pluginData.priority === "high" ? "high" : "normal";
+    return { legacyId: pluginData.legacyId, priority };
   },
 };
 
