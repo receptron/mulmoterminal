@@ -10,7 +10,7 @@
 // Still stubbed: feeds, collection/view deletion, feed refresh, and the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/collection-plugin";
+import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { useShortcuts } from "./useShortcuts";
 import {
@@ -161,6 +161,11 @@ configureCollectionUi({
   //    collection/record action buttons (Repair, etc.). MulmoTerminal has no roles,
   //    so `role` is ignored. ──
   startChat: (prompt) => void startCollectionChat(prompt, { hidden: false }),
+  // Custom views call this to open a chat with the prompt prefilled as an editable
+  // DRAFT (not auto-sent). MulmoTerminal terminals are PTYs with no editable composer
+  // draft, so we degrade to the same visible seeded chat as startChat; `role` is
+  // ignored (MulmoTerminal has no roles).
+  startNewChatDraft: (prompt) => void startCollectionChat(prompt, { hidden: false }),
   // No notifier in MulmoTerminal.
   notifiedSeverities: () => new Map<string, CollectionNotifySeverity>(),
 

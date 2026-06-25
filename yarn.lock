@@ -521,12 +521,19 @@
   resolved "https://registry.npmjs.org/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.1.tgz#bef604d53e82a1d406a65ddde3e6c3cdff9cc6e3"
   integrity sha512-Hv+FyTSiPWsF+eaxmBQ0Le8tu4FLnFMvmMQ+c6/MmM1gvHe49SrHvBcEYvSQb9bkNghJRsgSV0tADVjPFPwZMA==
 
-"@mulmoclaude/collection-plugin@^0.5.1":
-  version "0.5.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.5.1.tgz#848fa5639dcba569e8570833dee85484106e3cb0"
-  integrity sha512-krK2hHe1GLaVPoKr6MzyZNRGeWVuLT8DrJklGdNpiLzhk8UfwTgS/OE8kd938B1g5yqqANNpkF2G2vaoZ//Lwg==
+"@mulmoclaude/collection-plugin@^0.5.9":
+  version "0.5.9"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.5.9.tgz#59bfbf72aac4e0ce8f1ddcf657fd352d1292db78"
+  integrity sha512-nFFUD6qFb7fWTZliaK1RReww9R+gJFxe2LW0HBFDqMMu+D8PYiPXRVRVQaQXy2OUxz1fbLmSckYWq2qUp+sVhg==
   dependencies:
     vuedraggable "^4.1.0"
+    zod "^4.4.3"
+
+"@mulmoclaude/core@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.2.0.tgz#81bc7e040e84d797873fd1587150c7360a75babf"
+  integrity sha512-w034RWFPyL6Qo0vRbyxPYV6Eh8jTI3bQ9rfPtGmUWPVitb0XVSXBqcMgxI/rOOlkNn30W2xTByK7AQSbyyNirQ==
+  dependencies:
     zod "^4.4.3"
 
 "@mulmoclaude/form-plugin@^0.1.1":

@@ -34,9 +34,9 @@ import {
   toDetail,
   validateCollectionRecords,
   type RecordIssue,
-} from "@mulmoclaude/collection-plugin/server";
+} from "@mulmoclaude/core/collection/server";
 // CollectionItem + actionVisible live in the isomorphic core entry.
-import { actionVisible, type CollectionItem } from "@mulmoclaude/collection-plugin";
+import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape

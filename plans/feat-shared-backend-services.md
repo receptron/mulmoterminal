@@ -2,11 +2,22 @@
 
 ## Goal
 
-MulmoClaude extracted its **headless backend behavior** into six reusable
-`packages/services/*` packages (MulmoClaude PR #1733, published to npm). This plan wires
-them into MulmoTerminal so a **MulmoTerminal-alone run** (the user never boots MulmoClaude)
-still gets the full workspace experience — seeded helps/presets, live-refresh on writes,
-notifications, completion bells — instead of an empty, inert workspace.
+MulmoClaude extracted its **headless backend behavior** into reusable packages, then
+**consolidated them into a single package `@mulmoclaude/core`** (MulmoClaude PRs
+#1793 / #1794 / #1795, published to npm as `@mulmoclaude/core@0.2.0`). Each former
+`packages/services/*` package is now a **subpath export** of `@mulmoclaude/core`
+(e.g. `@mulmoclaude/core/notifier`); the collection engine also moved out of
+`@mulmoclaude/collection-plugin` into `@mulmoclaude/core/collection`(+`/server`), leaving
+`@mulmoclaude/collection-plugin` as **Vue-only** (`./vue`). This plan wires those
+subsystems into MulmoTerminal so a **MulmoTerminal-alone run** (the user never boots
+MulmoClaude) still gets the full workspace experience — seeded helps/presets, live-refresh
+on writes, notifications, completion bells — instead of an empty, inert workspace.
+
+> **Migration note (2026-06-25):** this plan originally targeted six separate
+> `@mulmoclaude/{workspace-setup,file-change-publisher,notifier,collection-watchers,scheduler,skill-bridge}`
+> packages. They no longer exist as standalone packages — add **one** dependency
+> `@mulmoclaude/core@^0.2.0` and import each subsystem from its subpath (table below).
+> The APIs are unchanged; only the import specifiers changed.
 
 Both apps share one workspace (`CLAUDE_CWD`, default `~/mulmoclaude`) and never run
 simultaneously, so the services are safe to share with **no locking**. Each service is
@@ -16,19 +27,31 @@ MulmoTerminal's specifics (pubsub, workspace root, logger, routes, navigation).
 This is a **restart**: a first pass shipped as PRs #63/#64/#65 (now closed) and gathered
 review feedback. That feedback is folded into this plan up-front so the redo lands clean.
 
-## The six shared packages (published on npm)
+## The shared subsystems — all subpaths of `@mulmoclaude/core@^0.2.0`
 
-| Package | Version | Role | Key API |
-|---|---|---|---|
-| `@mulmoclaude/workspace-setup` | `^0.1.1` | seed helps + preset skills at boot | `seedHelps({destDir})`, `syncPresetSkills({sourceDir,destDir,onInfo,onWarn})`, `syncActivePresetSkills({sourceDir,activeDir,...})`, `presetSkillsAssetDir()`, `helpsAssetDir()`, `isPresetSlug()` |
-| `@mulmoclaude/file-change-publisher` | `^0.1.1` | broadcast "workspace file changed" to pubsub | `configureFileChangePublisher({publish,workspaceRoot,toPosix,primaryChannel?,pluginScopes?,onPublished?,warn?})`, `publishFileChange(rel)`, `pluginFileChannel(scope,posix)` |
-| `@mulmoclaude/notifier` | `^0.1.0` | active+history notification engine | `configureNotifier({writeJson,publishEvent,log?})`, `setNotifierFilePaths({active,history})`, `publish`/`clear`/`cancel`/`listAll`/`listHistory`/`listFor`/`updateForPlugin`/`onEvent`, `NotifierEvent` |
-| `@mulmoclaude/collection-watchers` | `^0.1.0` | fs.watch per collection → completion bells via the notifier | `configureCollectionWatchers({adapter,log})`, `startCollectionWatchers(opts)`, `CollectionNotificationAdapter`, `CompletionPriority` |
-| `@mulmoclaude/scheduler` | `^0.1.0` | cron tick engine + persistence adapter | `createTaskManager({log})`, `configureScheduler({workspaceRoot,writeFileAtomic,log})`, `initScheduler(taskManager,systemTasks)` |
-| `@mulmoclaude/skill-bridge` | `^0.1.0` | mirror `data/skills/<slug>/` → `.claude/skills/` (PostToolUse rule) | `bridgeTargetFromDataPath`, `slugFromRmCommand`, `mirrorSkillWrite`, `mirrorSkillDelete` |
+One dependency: `@mulmoclaude/core@^0.2.0`. Import each subsystem from its subpath:
 
-All are **server-only** (node `fs`/`crypto`); their value types are mirrored locally on
-the frontend rather than imported (so a server package never enters the browser bundle).
+| Import (subpath of `@mulmoclaude/core`) | Role | Key API |
+|---|---|---|
+| `@mulmoclaude/core/workspace-setup` | seed helps + preset skills at boot | `seedHelps({destDir})`, `syncPresetSkills({sourceDir,destDir,onInfo,onWarn})`, `syncActivePresetSkills({sourceDir,activeDir,...})`, `presetSkillsAssetDir()`, `helpsAssetDir()`, `isPresetSlug()` |
+| `@mulmoclaude/core/file-change` | broadcast "workspace file changed" to pubsub | `configureFileChangePublisher({publish,workspaceRoot,toPosix,primaryChannel?,pluginScopes?,onPublished?,warn?})`, `publishFileChange(rel)`, `pluginFileChannel(scope,posix)` |
+| `@mulmoclaude/core/notifier` | active+history notification engine | `configureNotifier({writeJson,publishEvent,log?})`, `setNotifierFilePaths({active,history})`, `publish`/`clear`/`cancel`/`listAll`/`listHistory`/`listFor`/`updateForPlugin`/`onEvent`, `NotifierEvent` |
+| `@mulmoclaude/core/collection-watchers` | fs.watch per collection → completion bells via the notifier | `configureCollectionWatchers({adapter,log})`, `startCollectionWatchers(opts)`, `CollectionNotificationAdapter`, `CompletionPriority` |
+| `@mulmoclaude/core/scheduler` | cron tick engine + persistence adapter | `createTaskManager({log})`, `configureScheduler({workspaceRoot,writeFileAtomic,log})`, `initScheduler(taskManager,systemTasks)` |
+| `@mulmoclaude/core/skill-bridge` | mirror `data/skills/<slug>/` → `.claude/skills/` (PostToolUse rule) | `bridgeTargetFromDataPath`, `slugFromRmCommand`, `mirrorSkillWrite`, `mirrorSkillDelete` |
+| `@mulmoclaude/core/collection` + `@mulmoclaude/core/collection/server` | isomorphic + node collection engine (moved out of `@mulmoclaude/collection-plugin`) | `discoverCollections`, `loadCollection`, `configureCollectionHost`, `whenMatches`, types; `@mulmoclaude/core/collection/paths` → `isSafeActionTemplatePath` |
+
+These subpaths are **server-only** (node `fs`/`crypto`) EXCEPT the browser-safe
+`@mulmoclaude/core/whisper/client` and `@mulmoclaude/core/workspace-setup/slug` (not used by
+this plan). The isomorphic `@mulmoclaude/core/collection` entry is also browser-safe. As
+before, mirror the server subsystems' value types locally on the frontend rather than
+importing them (so a server subpath never enters the browser bundle).
+
+> If MulmoTerminal already imports `configureCollectionHost` /
+> `discoverCollections` / `isSafeActionTemplatePath` from
+> `@mulmoclaude/collection-plugin` or `@mulmoclaude/collection-plugin/server` (see the
+> "Collection host" seam below), repoint those to `@mulmoclaude/core/collection`(+`/server`,
+> +`/paths`) as part of this migration — `@mulmoclaude/collection-plugin` is now Vue-only.
 
 ## MulmoTerminal integration seams
 
@@ -57,7 +80,11 @@ re-grep before editing since `main` has advanced):
   `browseNavigateToRecord(slug, recordId?)` opens a collection record.
 - **Collection host** — already configured: `initCollectionsBackend({workspace})` in
   `server/backends/collections.ts` calls `configureCollectionHost(...)` with the
-  MulmoClaude-matching path layout. (The watchers depend on this.)
+  MulmoClaude-matching path layout. (The watchers depend on this.) **Repoint its import**
+  (and any `discoverCollections` / `loadCollection` / `isSafeActionTemplatePath`) from
+  `@mulmoclaude/collection-plugin/server` → `@mulmoclaude/core/collection/server`
+  (`isSafeActionTemplatePath` is at `@mulmoclaude/core/collection/paths`); the engine moved
+  there and `@mulmoclaude/collection-plugin` is now Vue-only.
 - **Toolbar** — `src/App.vue` `<header class="toolbar">` with a `.launcher` nav of
   `material-symbols-outlined` icon buttons (dark palette: bg `#16213e`, text `#e6e6f0`,
   muted `#9aa6cc`, hover `#26375f`, active `#2f59c0`).
@@ -94,8 +121,58 @@ re-grep before editing since `main` has advanced):
 
 ## Implementation plan (risk-ordered, one PR each)
 
+### PR 0 — ⚠️ BREAKING: repoint existing collection-engine imports (do FIRST)
+MulmoTerminal **already** imports the collection engine from `@mulmoclaude/collection-plugin`,
+which `@mulmoclaude/collection-plugin@0.5.9` REMOVED (it is now Vue-only). The moment install
+resolves `0.5.9` (its `^0.5.1` range allows it), these imports throw
+`ERR_PACKAGE_PATH_NOT_EXPORTED`. This is independent of the new-feature PRs below and must land
+first.
+
+**package.json:** ADD `@mulmoclaude/core@^0.2.0`, and **BUMP**
+`@mulmoclaude/collection-plugin` `^0.5.1` → `^0.5.9`. The bump is REQUIRED, not optional:
+`0.5.9`'s `/vue` host takes its response/schema types from a `@mulmoclaude/core: '*'`
+**peerDependency** (so `/vue` and `@mulmoclaude/core/collection` agree on types), whereas
+`0.5.1` ships its OWN embedded copy of those types, which has since diverged from
+`core@0.2.0` (e.g. `CollectionEvery` → `CollectionSpawnEvery`). Pinning `0.5.1` while
+importing `core@0.2.0` types into `collectionUi.ts` produces `TS2322` schema-mismatch
+errors. The lockfile also holds `0.5.1` until the range is bumped — a plain `yarn install`
+will NOT pull `0.5.9` on its own, so the "latent break" is really "breaks the moment the
+range is raised or the lock is regenerated." Run `yarn install` after editing (switching
+branches prunes the shared `node_modules`).
+
+**Published-version context (as of 2026-06-25):** `@mulmoclaude/core@0.2.0` carries the engine
++ all former services as subpaths; `@mulmoclaude/collection-plugin@0.5.9` is Vue-only. The old
+standalone service packages (`@mulmoclaude/{notifier,scheduler,whisper,workspace-setup,
+file-change-publisher,skill-bridge,collection-watchers}`) remain published at their last
+versions but are FROZEN — do not add them; use the `core` subpaths.
+
+**Imports to repoint** — `server/backends/collections.ts`:
+  - `@mulmoclaude/collection-plugin/server` → `@mulmoclaude/core/collection/server`
+    (`configureCollectionHost`, `discoverCollections`, `loadCollection`, …).
+  - `@mulmoclaude/collection-plugin` (`.`, e.g. `actionVisible`, `type CollectionItem`) →
+    `@mulmoclaude/core/collection`.
+  - any `isSafeActionTemplatePath` → `@mulmoclaude/core/collection/paths` (none today).
+- **Also repoint a FRONTEND bare-root import** the original scope missed —
+  `src/composables/collectionUi.ts` imports `CollectionDetailResponse`,
+  `CollectionsListResponse`, `CollectionNotifySeverity`, `ItemMutationResponse` from the
+  bare `@mulmoclaude/collection-plugin` (`.`) root, which `0.5.9` also removed → repoint to
+  `@mulmoclaude/core/collection`.
+- **Implement the new `CollectionUi.startNewChatDraft` method** — `0.5.9`'s `/vue` host
+  interface adds a required `startNewChatDraft(prompt, role?)` (open a chat with the prompt
+  prefilled as an editable draft). MulmoTerminal terminals are PTYs with no editable
+  composer draft, so degrade it to the same visible seeded chat as `startChat`
+  (`startCollectionChat(prompt, { hidden: false })`); without it `yarn typecheck` fails.
+- **Keep** the Vue/style imports on `@mulmoclaude/collection-plugin`: `…/vue`
+  (`src/plugins-registry.ts`, `src/composables/collectionUi.ts`,
+  `src/components/CollectionCardView.vue`, `src/components/CollectionsBrowseOverlay.vue`) and
+  `…/style.css?inline` (`src/collectionShadowCss.ts`) — those still exist in 0.5.9.
+- Re-grep `@mulmoclaude/collection-plugin` to confirm zero non-`/vue`, non-`/style.css`
+  `from`-imports remain (the `"@mulmoclaude/collection-plugin"` plugin-registry KEY in
+  `src/plugins-registry.ts` is a name, not an import — leave it). Verify `yarn typecheck`,
+  `yarn lint`, `yarn test`, `yarn build`, + boot.
+
 ### PR 1 — workspace-setup (seed helps + preset skills)
-- Add dep `@mulmoclaude/workspace-setup@^0.1.1`.
+- Add dep `@mulmoclaude/core@^0.2.0` (one dep, shared by every PR below); import from `@mulmoclaude/core/workspace-setup`.
 - `server/backends/workspaceSetup.ts`:
   - `isManagedWorkspace(workspace)` — true only for `~/mulmoclaude` or
     `MULMOCLAUDE_WORKSPACE_PATH` (resolved compare).
@@ -112,7 +189,7 @@ re-grep before editing since `main` has advanced):
   `data/skills/catalog/preset`, `.claude/skills`.
 
 ### PR 2 — file-change-publisher (close the markdown/html live-refresh path)
-- Add dep `@mulmoclaude/file-change-publisher@^0.1.1`.
+- Dep `@mulmoclaude/core@^0.2.0` (already added in PR 1); import from `@mulmoclaude/core/file-change`.
 - `server/backends/fileChange.ts`: `initFileChangePublisher({workspace, pubsub})` →
   `configureFileChangePublisher` with `publish: pubsub.publish`, `workspaceRoot`,
   `toPosix` (split on `path.sep` → `/`), and `pluginScopes`:
@@ -127,12 +204,12 @@ re-grep before editing since `main` has advanced):
   shared `publishFileChange`.
 - Tests: scope/channel correctness for md + html, no-publish for an unmatched path,
   out-of-workspace path dropped (the package contains the path).
-- **Out of scope:** collection live-refresh. `@mulmoclaude/collection-plugin`'s View has
+- **Out of scope:** collection live-refresh. `@mulmoclaude/collection-plugin/vue`'s View has
   no file-change subscriber, so publishing on `writeItem`/`deleteItem` wouldn't refresh
   anything. Closing it needs a subscriber in the collection plugin (separate effort).
 
 ### PR 3 — notifier + collection-watchers + bell UI
-- Add deps `@mulmoclaude/notifier@^0.1.0`, `@mulmoclaude/collection-watchers@^0.1.0`.
+- Dep `@mulmoclaude/core@^0.2.0` (already added); import from `@mulmoclaude/core/notifier` and `@mulmoclaude/core/collection-watchers`.
 - **Server / notifier** (`server/backends/notifier.ts`): `configureNotifier` with
   `publishEvent → pubsub.publish(NOTIFIER_CHANNEL, event)`, a small atomic `writeJson`, and
   a `[notifier]` logger; `setNotifierFilePaths` to the **shared** `<ws>/data/notifier/{active,history}.json`
@@ -180,7 +257,7 @@ against a temp workspace). CI gates: `lint-and-build`, `package-smoke`, `codex-r
 
 ## Open questions / deferred
 
-- **Collection live-refresh** — gated on the collection-plugin View gaining a file-change
+- **Collection live-refresh** — gated on the `collection-plugin/vue` View gaining a file-change
   subscriber; out of scope here.
 - **Scheduler system tasks** — which tasks (feeds/journal/user-cron) are meaningful in
   MulmoTerminal, and the run-job binding shape (`spawnBackgroundChat`).
