@@ -146,7 +146,9 @@ onUnmounted(close);
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  z-index: 30;
+  /* Above the collections browse overlay (z-index 50, fills below the toolbar) so
+     the dropdown stays visible when a navigation has opened it. */
+  z-index: 60;
   width: 320px;
   max-height: 420px;
   overflow-y: auto;
