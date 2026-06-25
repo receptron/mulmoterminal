@@ -80,7 +80,13 @@ const PACKAGES: Record<string, Registration> = {
     viewComponent: chartPlugin.viewComponent as Component,
     css: chartCss,
   },
-  "@mulmoclaude/collection-plugin": {
+  // Keyed by the plugins.json `packages` entry (the cfg.packages loop below looks up
+  // PACKAGES[name]). The collection engine + presentCollection tool moved to
+  // @mulmoclaude/core/collection, so the server loads it from there and plugins.json
+  // names it there — this key MUST match, or the loop skips it and the browser has no
+  // renderer for presentCollection. The Vue `plugin` itself still ships in
+  // @mulmoclaude/collection-plugin/vue (imported above).
+  "@mulmoclaude/core/collection": {
     toolName: collectionPlugin.toolDefinition.name,
     // CollectionCardView wraps the package's chat View so it can register its shadow
     // root as the record modal's teleport target (see the component + collectionUi).
