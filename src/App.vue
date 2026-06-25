@@ -8,6 +8,7 @@ import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
 import GridView from "./components/GridView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
+import NotificationBell from "./components/NotificationBell.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
@@ -233,6 +234,7 @@ function onSession(id: string) {
           <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
         </button>
       </nav>
+      <NotificationBell class="toolbar-bell" />
       <button
         type="button"
         class="launcher-btn sound-toggle"
@@ -373,8 +375,8 @@ function onSession(id: string) {
   background: var(--accent-bg);
   color: var(--on-accent);
 }
-/* Push the action buttons (sound, settings) to the far right as a group. */
-.sound-toggle {
+/* Push the action buttons (bell, sound, settings) to the far right as a group. */
+.toolbar-bell {
   margin-left: auto;
 }
 .launcher-btn .material-symbols-outlined {

@@ -26,6 +26,8 @@ import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
+import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
+import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
@@ -603,6 +605,10 @@ mountAllRoutes(app);
 // once CLAUDE_CWD is the confirmed workspace.
 mountCollectionRoutes(app);
 
+// Notification REST surface (list active / history, dismiss one) — backs the toolbar
+// bell. The engine is configured below once pubsub + the workspace exist.
+mountNotificationRoutes(app);
+
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
@@ -933,6 +939,10 @@ pubsub = createPubSub(server, isAllowedOrigin);
 // is a no-op until configured).
 initFileChangePublisher({ workspace: CLAUDE_CWD, pubsub });
 
+// Wire the notification engine against pubsub + the shared workspace files. Must run
+// before any publish/clear and before the collection watchers start.
+await initNotifier({ workspace: CLAUDE_CWD, pubsub });
+
 // Give the markdown host app its workspace (for artifacts/documents storage).
 // File-change live-refresh is handled by the shared publisher above.
 initMarkdownBackend({ workspace: CLAUDE_CWD });
@@ -944,6 +954,13 @@ initArtifactsBackend({ workspace: CLAUDE_CWD });
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
 initCollectionsBackend({ workspace: CLAUDE_CWD });
+
+// Mount per-collection fs.watchers → completion bells via the notifier. After the
+// engine host + notifier are configured. Fire-and-forget + non-fatal: a watcher
+// failure must never abort startup.
+startCollectionCompletionWatchers().catch((err) => {
+  console.error("[collection-watchers] failed to start — completion bells disabled", err);
+});
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
