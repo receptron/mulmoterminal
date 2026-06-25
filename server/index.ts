@@ -24,6 +24,7 @@ import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
@@ -111,6 +112,11 @@ const CLAUDE_CWD = process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaud
 // CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
 // session state, so it must exist before we spawn anything into it.
 await fs.mkdir(CLAUDE_CWD, { recursive: true });
+
+// Seed help docs + preset skills so a MulmoTerminal-alone run gets the full
+// workspace experience. Gated to the managed mulmoclaude workspace and
+// fault-isolated per step, so it never aborts boot (see workspaceSetup.ts).
+initWorkspaceSetup({ workspace: CLAUDE_CWD });
 
 // MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the
