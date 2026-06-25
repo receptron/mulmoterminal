@@ -28,6 +28,11 @@ describe("parseCollectionTarget", () => {
     expect(parseCollectionTarget("/collections/todo?foo=bar")).toEqual({ slug: "todo", itemId: undefined });
   });
 
+  it("returns null for a slug with malformed percent-encoding (non-actionable, no throw)", () => {
+    expect(parseCollectionTarget("/collections/%E0%A4%A")).toBeNull();
+    expect(parseCollectionTarget("/collections/%E0%A4%A?selected=x")).toBeNull();
+  });
+
   it("returns null for a non-collection target", () => {
     expect(parseCollectionTarget("/documents/abc")).toBeNull();
   });

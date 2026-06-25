@@ -59,7 +59,14 @@ export function parseCollectionTarget(target: string | undefined): { slug: strin
     if (selected) itemId = selected;
   }
   // The slug was string-sliced (not via URLSearchParams), so it is still encoded.
-  return { slug: decodeURIComponent(rawSlug), itemId };
+  // A malformed escape (e.g. "%E0%A4%A") makes decodeURIComponent throw; since this
+  // runs from the row-click handler, treat a bad slug as non-actionable (return null)
+  // rather than letting it crash activation.
+  try {
+    return { slug: decodeURIComponent(rawSlug), itemId };
+  } catch {
+    return null;
+  }
 }
 
 function upsert(entry: NotifierEntry): void {

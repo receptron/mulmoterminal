@@ -74,7 +74,7 @@ onUnmounted(close);
       class="bell-btn"
       :class="{ active: open }"
       :aria-expanded="open"
-      aria-haspopup="menu"
+      aria-haspopup="true"
       :title="count ? `${count} notification${count === 1 ? '' : 's'}` : 'Notifications'"
       aria-label="Notifications"
       @click="toggle"
@@ -83,7 +83,7 @@ onUnmounted(close);
       <span v-if="count" class="badge" :class="topSeverity ? severityClass(topSeverity) : ''">{{ count > 99 ? "99+" : count }}</span>
     </button>
 
-    <div v-if="open" class="notif-pop" role="menu">
+    <div v-if="open" class="notif-pop" role="group" aria-label="Notifications">
       <div class="notif-head">Notifications</div>
       <div class="notif-subhead">Active ({{ sorted.length }})</div>
       <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
