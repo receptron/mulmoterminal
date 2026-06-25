@@ -18,6 +18,12 @@ describe("parseCollectionTarget", () => {
     expect(parseCollectionTarget("/collections/todo?selected=x&notificationId=y")).toEqual({ slug: "todo", itemId: "x" });
   });
 
+  it("does not double-decode a selected id containing a literal percent", () => {
+    // URLSearchParams already decodes %25%20 → "% ". A second decodeURIComponent
+    // would throw "URI malformed" on the resulting "100% done".
+    expect(parseCollectionTarget("/collections/annual?selected=100%25%20done")).toEqual({ slug: "annual", itemId: "100% done" });
+  });
+
   it("returns itemId undefined when there is a query but no selected", () => {
     expect(parseCollectionTarget("/collections/todo?foo=bar")).toEqual({ slug: "todo", itemId: undefined });
   });

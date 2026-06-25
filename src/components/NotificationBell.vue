@@ -93,9 +93,13 @@ onUnmounted(close);
           :key="entry.id"
           class="notif-row"
           :class="{ clickable: !!entry.navigateTarget }"
-          role="menuitem"
+          :role="entry.navigateTarget ? 'button' : undefined"
+          :tabindex="entry.navigateTarget ? 0 : undefined"
+          :aria-label="entry.navigateTarget ? entry.title : undefined"
           :title="entry.body || undefined"
           @click="onRowClick(entry)"
+          @keydown.enter.prevent.self="entry.navigateTarget && onRowClick(entry)"
+          @keydown.space.prevent.self="entry.navigateTarget && onRowClick(entry)"
         >
           <span class="material-symbols-outlined bell-icon" :class="severityClass(entry.severity)" aria-hidden="true">notifications</span>
           <span class="notif-text">
@@ -237,6 +241,10 @@ onUnmounted(close);
 }
 .notif-row.clickable:hover {
   background: var(--bg-hover);
+}
+.notif-row:focus-visible {
+  outline: 2px solid var(--accent-bg);
+  outline-offset: -2px;
 }
 
 /* Per-row severity-coloured bell icon — MulmoClaude's "this is a notification"

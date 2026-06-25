@@ -53,9 +53,12 @@ export function parseCollectionTarget(target: string | undefined): { slug: strin
   if (!rawSlug) return null;
   let itemId: string | undefined;
   if (queryAt !== -1) {
+    // URLSearchParams.get() returns an already-decoded value — decoding again would
+    // throw "URI malformed" on a valid id containing a literal "%" (e.g. "100% done").
     const selected = new URLSearchParams(rest.slice(queryAt + 1)).get("selected");
-    if (selected) itemId = decodeURIComponent(selected);
+    if (selected) itemId = selected;
   }
+  // The slug was string-sliced (not via URLSearchParams), so it is still encoded.
   return { slug: decodeURIComponent(rawSlug), itemId };
 }
 
@@ -100,7 +103,11 @@ async function fetchActive(): Promise<void> {
 function ensureInit(): void {
   if (initialized) return;
   initialized = true;
-  usePubSub().subscribe(NOTIFIER_CHANNEL, (data) => applyEvent(data as NotifierEvent));
+  const pubsub = usePubSub();
+  pubsub.subscribe(NOTIFIER_CHANNEL, (data) => applyEvent(data as NotifierEvent));
+  // pubsub only replays room membership on reconnect, not the events missed while
+  // disconnected — re-fetch the authoritative list so the bell can't go stale.
+  pubsub.onReconnect(() => void fetchActive());
   void fetchActive();
 }
 
