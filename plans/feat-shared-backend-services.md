@@ -261,10 +261,11 @@ two task families differ in portability:
   read `data/workout-log/items/` and nudge. The collection schema has NOTHING to do with it
   — the only link is the prompt text. **This half is portable**: the run-binding is exactly
   MulmoTerminal's `spawnBackgroundChat` (`spawnClaudePty`).
-- **System tasks** (journal / chat-index / feed-refresh) — `run` calls MulmoClaude-only
-  functions (`maybeRunJournal`, `backfillAllSessions`, `refreshDueFeeds`) NOT in the shared
-  package. Deferred to **PR 4b** (needs the feed-refresh engine extracted into core, plus a
-  decision on which system tasks map to MulmoTerminal).
+- **System tasks** (feed-refresh / journal / chat-index) — `run` calls MulmoClaude-only
+  functions (`refreshDueFeeds`, `maybeRunJournal`, `backfillAllSessions`) NOT in the shared
+  package. Split out: **PR 4b** = RSS/JSON feed-refresh (needs the feed engine extracted into
+  `@mulmoclaude/core/feeds` first); **PR 4c** = journal + chat-index (tied to MulmoClaude's
+  chat-session model — needs a mapping decision).
 
 **PR 4a scope (this PR):**
 - Add dep `@receptron/task-scheduler@^0.1.0` (a `*` peerDependency of `@mulmoclaude/core`,
@@ -279,7 +280,7 @@ two task families differ in portability:
     tasks don't go through `initScheduler`/`SystemTaskDef`, so no system-task persistence/catch-up;
     they fire forward on schedule).
   - `mountSchedulerRoutes(app, {workspace})` → `GET /api/scheduler/tasks` (read-only list from
-    tasks.json). CRUD + a tasks UI is **PR 4c** (not needed to make existing tasks run).
+    tasks.json). CRUD + a tasks UI is **PR 4d** (not needed to make existing tasks run).
 - `server/index.ts`: define `spawnScheduledChat(message)` (= `randomUUID()` + `spawnClaudePty(id,
   null, null, message)`, VISIBLE so the user sees the nudge) and pass it as `spawnChat`; call
   `initUserTaskScheduler` + `mountSchedulerRoutes` near boot, fire-and-forget + non-fatal.
@@ -288,10 +289,73 @@ two task families differ in portability:
 - **Out of scope (4a):** system tasks (4b), task CRUD + UI (4c), missed-run catch-up across
   restarts (user tasks fire forward only, matching MulmoClaude).
 
-### PR 4b — scheduler system tasks (deferred; needs core extraction)
-Feed-refresh (RSS/JSON → collections) + journal/chat-index. Needs `refreshDueFeeds` extracted
-into `@mulmoclaude/core` (so both apps share it) and a decision on which system tasks map to
-MulmoTerminal. Until then a MulmoTerminal-alone run does not refresh feeds.
+### PR 4b — scheduler system task: RSS/JSON feed-refresh
+Add ONE `system:feed-refresh` task so a MulmoTerminal-alone run keeps feed-backed
+collections fresh (RSS / JSON data-sources fetched into their collections, hourly).
+
+**Hard prerequisite — a MulmoClaude-side extraction (separate change, lands + PUBLISHES
+FIRST; cannot be built or verified from a MulmoTerminal branch).** Decided approach
+(2026-06-25): **extract into `@mulmoclaude/core/feeds`** (share, don't reimplement), matching
+how the other five subsystems were shared.
+
+#### Step 1 — MulmoClaude: extract `server/workspace/feeds/` → `packages/core/src/feeds/`
+The engine is ~1.3k LOC across: `engine.ts` (`refreshDue`/`refreshOne`/`RefreshResult`),
+`retrievers/` (`rss`, `httpJson`, `index`, `registerAll`), `fetch/` (`httpClient`,
+`rssParser`), `ingestTypes.ts`, `registry.ts` (`listFeeds`/`removeFeed`), `state.ts`
+(`readFeedState`/`writeFeedState`), `paths.ts`, `pathResolver.ts`, `projectItem.ts`, `index.ts`.
+
+Dependency audit (what blocks a clean move):
+- **Already shareable, keep as-is:** `@mulmoclaude/core/collection`(+`/server`) — the engine
+  already imports `deleteItem`/`listItems`/`writeItem`/types from there (post-consolidation),
+  plus `fast-xml-parser` and node builtins (`crypto`/`dns/promises`/`net`/`fs/promises`/`path`).
+- **Replace with injected host bindings** via a `configureFeeds({...})` seam (mirrors
+  `configureCollectionHost` / `configureNotifier` / `configureScheduler`):
+  - `../../workspace/workspace.js` `workspacePath` → `cfg.workspaceRoot` (the feeds + state
+    paths in `paths.ts`/`pathResolver.ts` hang off it).
+  - `../../system/logger` `log` → `cfg.log` (the `SchedulerLogger`-style `{info,warn,error}`).
+  - `../../utils/files/atomic.js` (atomic write, used by `state.ts`) → `cfg.writeFileAtomic`.
+  - `../../utils/time.js` `ONE_HOUR_MS`/`ONE_DAY_MS` → inline consts in core (trivial; or a
+    `core/util/time`).
+  - `../../utils/types.js` (`isRecord` etc.) → inline in core (trivial).
+- Add the `./feeds` + (if needed) `./feeds/server` subpath exports to
+  `@mulmoclaude/core/package.json` `exports`; declare `fast-xml-parser` a dependency of core.
+  Re-export the public surface (`refreshDue`, `refreshOne`, `RefreshResult`, `listFeeds`,
+  `removeFeed`, `feedsRoot`/`feedDir`/`feedStatePath`/`FEEDS_DIR`, `readFeedState`/`FeedState`,
+  `INGEST_KINDS`/`FEED_SCHEDULES`/`isFeedSchedule`/`IngestSpec`/`IngestKind`/`FeedSchedule`).
+- **Repoint MulmoClaude's `server/workspace/feeds/index.ts`** to a thin re-export of
+  `@mulmoclaude/core/feeds` + a module-load `configureFeeds({workspaceRoot: workspacePath,
+  writeFileAtomic, log})` (same shim pattern MulmoClaude uses for collections/notifier/scheduler).
+  All existing feed routes/tests keep importing from `./workspace/feeds/index.js` unchanged and
+  stay green. The `system:feed-refresh` task in MulmoClaude's `server/index.ts` is unaffected.
+- CI gotchas (reuse from the prior service extractions): `build:packages` must build the new
+  `feeds` entry; the dist-cache key must include it; publish-smoke does a real `npm install`, so
+  `fast-xml-parser` must be a declared dep of core. **Publish a new `@mulmoclaude/core`.**
+
+#### Step 2 — MulmoTerminal (the actual PR 4b, AFTER step 1 ships): wire the task
+  - bump `@mulmoclaude/core`, add `fast-xml-parser` if not transitive,
+     `server/backends/feeds.ts`: `configureFeeds({...})` at boot (workspaceRoot=CLAUDE_CWD, the
+     same atomic-write + console-logger bindings the other backends use). Register a
+     `SystemTaskDef` `{id:"system:feed-refresh", schedule:{interval, ONE_HOUR_MS},
+     missedRunPolicy:"runOnce", run: () => refreshDue().then(()=>{})}` via `initScheduler`
+     (system tasks DO get persistence/catch-up, unlike the 4a user tasks). Wire the existing
+     feed collections' write-side (`listFeeds`/`refreshCollection` in `collectionUi.ts`, today
+     stubbed) to the live refresh.
+- Tests: a `refreshDue` smoke against a temp workspace with a fixture feed; the system-task
+  registration; tolerate a no-feeds workspace (no-op).
+- **Blocked on step 1** (a MulmoClaude change + a core publish) — cannot be built/verified in a
+  MulmoTerminal branch alone.
+
+### PR 4c — scheduler system tasks: journal + chat-index (deferred)
+`maybeRunJournal` (summarize chat sessions → daily/topic files) + `backfillAllSessions` (AI
+titles/summaries for un-indexed sessions). Both `run` MulmoClaude-app-specific logic tied to
+its chat-session model; whether they map to MulmoTerminal's PTY-session model needs a decision.
+Lower value than feed-refresh for a MulmoTerminal-alone run; defer until wanted.
+
+### PR 4d — scheduler task CRUD + tasks UI (deferred)
+Create / edit / delete / run-now of `config/scheduler/tasks.json` entries from the UI (today
+they must be hand-authored or written by the agent), plus a tasks pane. Mirrors MulmoClaude's
+`/api/scheduler/tasks` CRUD + the automations view. Existing tasks already RUN without this
+(PR 4a); this is the authoring surface.
 
 ### PR 5 — skill-bridge (deferred)
 - Needs a `data/skills` convention + a `/api/hook` PostToolUse handler that calls
