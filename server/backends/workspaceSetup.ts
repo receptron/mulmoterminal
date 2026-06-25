@@ -59,7 +59,6 @@ export function initWorkspaceSetup(deps: { workspace: string }): void {
     return;
   }
 
-  const source = presetSkillsAssetDir();
   const onInfo = (message: string, data?: Record<string, unknown>) => log.info(message, data);
   const onWarn = (message: string, data?: Record<string, unknown>) => log.warn(message, data);
 
@@ -69,17 +68,21 @@ export function initWorkspaceSetup(deps: { workspace: string }): void {
     log.info("seeded help docs", { dest });
   });
 
+  // Resolve the bundled preset source INSIDE each step that needs it, not once
+  // up front: presetSkillsAssetDir() can throw if core's assets are missing /
+  // mispackaged, and that must log + continue like any other step rather than
+  // abort boot before fault isolation engages.
   safeStep("syncPresetSkills", () => {
     const dest = path.join(workspace, "data", "skills", "catalog", "preset");
     mkdirSync(dest, { recursive: true });
-    const result = syncPresetSkills({ sourceDir: source, destDir: dest, onInfo, onWarn });
+    const result = syncPresetSkills({ sourceDir: presetSkillsAssetDir(), destDir: dest, onInfo, onWarn });
     log.info("synced preset skills catalog", { copied: result.copied.length, removed: result.removed.length, skipped: result.skipped.length });
   });
 
   safeStep("syncActivePresetSkills", () => {
     const active = path.join(workspace, ".claude", "skills");
     mkdirSync(active, { recursive: true });
-    const result = syncActivePresetSkills({ sourceDir: source, activeDir: active, onInfo, onWarn });
+    const result = syncActivePresetSkills({ sourceDir: presetSkillsAssetDir(), activeDir: active, onInfo, onWarn });
     log.info("refreshed active preset skills", { updated: result.updated.length, removed: result.removed.length, skipped: result.skipped.length });
   });
 }
