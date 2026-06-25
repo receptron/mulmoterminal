@@ -152,6 +152,17 @@ versions but are FROZEN — do not add them; use the `core` subpaths.
   - `@mulmoclaude/collection-plugin` (`.`, e.g. `actionVisible`, `type CollectionItem`) →
     `@mulmoclaude/core/collection`.
   - any `isSafeActionTemplatePath` → `@mulmoclaude/core/collection/paths` (none today).
+- **Repoint the DYNAMIC import in `plugins/plugins.json`** the original scope missed —
+  the `presentCollection` server tool is loaded by `server/plugins-registry.ts`'s
+  `loadPackage` via `await import(name)`, where `name` is the `"@mulmoclaude/collection-plugin"`
+  string in the `packages` array. A bare `import()` of a string is NOT caught by a `from
+  "..."` grep, so it survives a static-import-only sweep and then throws
+  `ERR_PACKAGE_PATH_NOT_EXPORTED` **at server boot** (not at typecheck/build). Change that
+  array entry to `"@mulmoclaude/core/collection"`, where `TOOL_DEFINITION` (name
+  `presentCollection`) + the sole `executePresentCollection` now live; `loadPackage` resolves
+  the execute via its `soleExecuteStar` fallback. **Lesson: grep package-name STRINGS, not
+  just `from`-imports** — `plugins.json`, dynamic `import()`, and `require()` all bypass a
+  `from`-only sweep. Boot the server as part of PR-0 verification, not just typecheck/build.
 - **Also repoint a FRONTEND bare-root import** the original scope missed —
   `src/composables/collectionUi.ts` imports `CollectionDetailResponse`,
   `CollectionsListResponse`, `CollectionNotifySeverity`, `ItemMutationResponse` from the
