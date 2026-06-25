@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, type PersistedUserTask } from "./scheduler.js";
+import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes } from "./scheduler.js";
 
 const tempDirs: string[] = [];
 
@@ -42,7 +42,7 @@ describe("buildUserTaskDefinitions", () => {
       { id: "f", schedule: { type: "interval", intervalMs: 0 }, enabled: true, prompt: "bad interval" },
       { id: "", schedule: { type: "daily", time: "10:00" }, enabled: true, prompt: "no id" },
       { id: "g", schedule: { type: "daily", time: "10:00" }, enabled: true, prompt: "   " },
-    ] as PersistedUserTask[];
+    ];
 
     const definitions = buildUserTaskDefinitions(tasks, spawnChat);
 
@@ -50,8 +50,16 @@ describe("buildUserTaskDefinitions", () => {
     expect(definitions[0].schedule).toEqual({ type: "daily", time: "11:00" });
   });
 
+  it("skips non-object array elements without throwing (non-fatal)", () => {
+    const tasks = [null, 42, "nope", { id: "ok", schedule: { type: "daily", time: "08:00" }, enabled: true, prompt: "go" }];
+
+    const definitions = buildUserTaskDefinitions(tasks, spawnChat);
+
+    expect(definitions.map((definition) => definition.id)).toEqual(["user.ok"]);
+  });
+
   it("a task's run spawns a chat seeded with the trimmed prompt", async () => {
-    const tasks = [{ id: "a", schedule: { type: "daily", time: "11:00" }, enabled: true, prompt: "  nudge me  " }] as PersistedUserTask[];
+    const tasks = [{ id: "a", schedule: { type: "daily", time: "11:00" }, enabled: true, prompt: "  nudge me  " }];
 
     const definitions = buildUserTaskDefinitions(tasks, spawnChat);
     await definitions[0].run({ taskId: "user.a", now: new Date(0) });

@@ -88,31 +88,40 @@ export function loadUserTasks(workspace: string): PersistedUserTask[] {
 }
 
 /** Map persisted user tasks to task-manager definitions. Pure + exported for tests:
- *  drops disabled tasks and ones missing a valid id / prompt / schedule, and binds
- *  each surviving task's run to a fresh chat seeded with its prompt. */
-export function buildUserTaskDefinitions(tasks: PersistedUserTask[], spawnChat: (message: string) => void): TaskDefinition[] {
+ *  drops non-object / disabled entries and ones missing a valid id / prompt /
+ *  schedule, and binds each surviving task's run to a fresh chat seeded with its
+ *  prompt. Takes `unknown[]` because the array comes straight from JSON.parse — a
+ *  bad element (`null`, a primitive) must be skipped, not throw (non-fatal). */
+export function buildUserTaskDefinitions(tasks: readonly unknown[], spawnChat: (message: string) => void): TaskDefinition[] {
   const definitions: TaskDefinition[] = [];
-  for (const task of tasks) {
-    if (!task.enabled) continue;
-    if (typeof task.id !== "string" || task.id.length === 0) {
+  for (const entry of tasks) {
+    if (!isRecord(entry)) {
+      log.warn("skipping task: not an object");
+      continue;
+    }
+    if (!entry.enabled) continue;
+    const id = entry.id;
+    if (typeof id !== "string" || id.length === 0) {
       log.warn("skipping task: missing id");
       continue;
     }
-    if (typeof task.prompt !== "string" || task.prompt.trim().length === 0) {
-      log.warn("skipping task: empty prompt", { id: task.id });
+    const rawPrompt = entry.prompt;
+    if (typeof rawPrompt !== "string" || rawPrompt.trim().length === 0) {
+      log.warn("skipping task: empty prompt", { id });
       continue;
     }
-    if (!isValidSchedule(task.schedule)) {
-      log.warn("skipping task: invalid schedule", { id: task.id });
+    if (!isValidSchedule(entry.schedule)) {
+      log.warn("skipping task: invalid schedule", { id });
       continue;
     }
-    const prompt = task.prompt.trim();
+    const prompt = rawPrompt.trim();
+    const name = typeof entry.name === "string" ? entry.name : id;
     definitions.push({
-      id: `user.${task.id}`,
-      description: `User task: ${task.name ?? task.id}`,
-      schedule: task.schedule,
+      id: `user.${id}`,
+      description: `User task: ${name}`,
+      schedule: entry.schedule,
       run: async () => {
-        log.info("running user task", { id: task.id, name: task.name });
+        log.info("running user task", { id, name });
         spawnChat(prompt);
       },
     });
