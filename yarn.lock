@@ -642,6 +642,11 @@
     modern-tar "^0.7.6"
     yargs "^17.7.2"
 
+"@receptron/task-scheduler@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@receptron/task-scheduler/-/task-scheduler-0.1.0.tgz#10f06daee16954cdd0660f3de3d8512c9fd9ab30"
+  integrity sha512-OmK0eBoIVZK+WqyV7F7BLE3T8VuS6OiwgoS9HDpG9C9UqEeUtt/kngKlh00Wan/8tQkJMdlrXnWxDZcxjdYe1A==
+
 "@rolldown/binding-android-arm64@1.0.3":
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/@rolldown/binding-android-arm64/-/binding-android-arm64-1.0.3.tgz#54ce8f8382213f4a314a0c2f7ba83f81ffeae592"

@@ -249,11 +249,49 @@ versions but are FROZEN — do not add them; use the `core` subpaths.
 - Tests: `parseCollectionTarget` unit tests; an end-to-end notifier smoke (publish → list →
   pubsub event → `active.json` written).
 
-### PR 4 — scheduler (deferred; needs decisions)
-- Engine + adapter are ready; wiring needs (a) a **run-job binding** — MulmoTerminal's
-  analog is `spawnBackgroundChat` (`POST /api/plugin/spawnBackgroundChat`) — and (b) a
-  decision on **which system tasks** make sense in MulmoTerminal (feeds refresh? journal?
-  none yet?). Defer until 1–3 land and the task set is decided.
+### PR 4a — scheduler: user-tasks → spawn chat (the portable half)
+The scheduler splits cleanly: the **engine** (tick loop, daily/interval scheduling) is the
+shared `@mulmoclaude/core/scheduler`; the task **run** logic is app-specific. MulmoClaude's
+two task families differ in portability:
+- **User tasks** (`config/scheduler/tasks.json`) — a record `{id,name,description,schedule,
+  missedRunPolicy,enabled,roleId,prompt}`. MulmoClaude's `registerUserTasks` registers each
+  enabled one on the task-manager with `run = startChat({message: prompt, roleId})`, i.e.
+  the schedule fires and **spawns a new chat seeded with the prompt**. This is how the
+  workout-log "週3回リマインダー" works: a daily 11:00 task whose prompt tells the agent to
+  read `data/workout-log/items/` and nudge. The collection schema has NOTHING to do with it
+  — the only link is the prompt text. **This half is portable**: the run-binding is exactly
+  MulmoTerminal's `spawnBackgroundChat` (`spawnClaudePty`).
+- **System tasks** (journal / chat-index / feed-refresh) — `run` calls MulmoClaude-only
+  functions (`maybeRunJournal`, `backfillAllSessions`, `refreshDueFeeds`) NOT in the shared
+  package. Deferred to **PR 4b** (needs the feed-refresh engine extracted into core, plus a
+  decision on which system tasks map to MulmoTerminal).
+
+**PR 4a scope (this PR):**
+- Add dep `@receptron/task-scheduler@^0.1.0` (a `*` peerDependency of `@mulmoclaude/core`,
+  used by `@mulmoclaude/core/scheduler` — not auto-installed). `@mulmoclaude/core` already present.
+- `server/backends/scheduler.ts`:
+  - Load + validate user tasks from `<ws>/config/scheduler/tasks.json` (mirror MulmoClaude's
+    validation: `schedule` is `{type:"interval",intervalMs>0}` or `{type:"daily",time:"HH:MM"}`
+    — validate HH:MM with **string ops, no regex**; `prompt` non-empty; skip `enabled:false`).
+  - `initUserTaskScheduler({workspace, spawnChat, log?})` → `createTaskManager`, register each
+    enabled task as `{id:"user.<id>", description, schedule, run: async () => spawnChat(prompt)}`,
+    `taskManager.start()`. Registered DIRECTLY on the task-manager (matches MulmoClaude — user
+    tasks don't go through `initScheduler`/`SystemTaskDef`, so no system-task persistence/catch-up;
+    they fire forward on schedule).
+  - `mountSchedulerRoutes(app, {workspace})` → `GET /api/scheduler/tasks` (read-only list from
+    tasks.json). CRUD + a tasks UI is **PR 4c** (not needed to make existing tasks run).
+- `server/index.ts`: define `spawnScheduledChat(message)` (= `randomUUID()` + `spawnClaudePty(id,
+  null, null, message)`, VISIBLE so the user sees the nudge) and pass it as `spawnChat`; call
+  `initUserTaskScheduler` + `mountSchedulerRoutes` near boot, fire-and-forget + non-fatal.
+- Tests: schedule/prompt/enabled validation; registration count; `run` invokes `spawnChat`;
+  malformed/missing `tasks.json` tolerated (no throw); list route shape.
+- **Out of scope (4a):** system tasks (4b), task CRUD + UI (4c), missed-run catch-up across
+  restarts (user tasks fire forward only, matching MulmoClaude).
+
+### PR 4b — scheduler system tasks (deferred; needs core extraction)
+Feed-refresh (RSS/JSON → collections) + journal/chat-index. Needs `refreshDueFeeds` extracted
+into `@mulmoclaude/core` (so both apps share it) and a decision on which system tasks map to
+MulmoTerminal. Until then a MulmoTerminal-alone run does not refresh feeds.
 
 ### PR 5 — skill-bridge (deferred)
 - Needs a `data/skills` convention + a `/api/hook` PostToolUse handler that calls

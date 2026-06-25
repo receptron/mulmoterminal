@@ -28,6 +28,7 @@ import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
+import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
@@ -609,6 +610,10 @@ mountCollectionRoutes(app);
 // bell. The engine is configured below once pubsub + the workspace exist.
 mountNotificationRoutes(app);
 
+// Scheduler REST surface (read-only list of user cron tasks) — backs a future tasks
+// UI. The tasks themselves are loaded + started below, once the spawn infra exists.
+mountSchedulerRoutes(app, { workspace: CLAUDE_CWD });
+
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
@@ -961,6 +966,24 @@ initCollectionsBackend({ workspace: CLAUDE_CWD });
 startCollectionCompletionWatchers().catch((err) => {
   console.error("[collection-watchers] failed to start — completion bells disabled", err);
 });
+
+// User-task scheduler: cron tasks from config/scheduler/tasks.json fire on schedule
+// and spawn a NEW chat seeded with the task's prompt (e.g. the workout-log weekly
+// nudge). The run-binding spawns a VISIBLE session so the user sees the result.
+// Non-fatal: a scheduler failure must never abort startup.
+function spawnScheduledChat(message: string): void {
+  const sessionId = randomUUID();
+  try {
+    spawnClaudePty(sessionId, null, null, message);
+  } catch (err) {
+    console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);
+  }
+}
+try {
+  initUserTaskScheduler({ workspace: CLAUDE_CWD, spawnChat: spawnScheduledChat });
+} catch (err) {
+  console.error("[scheduler] init failed (non-fatal)", err);
+}
 
 // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
 // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
