@@ -5,9 +5,11 @@
 // instance, no confirm/notifier stores).
 //
 // Wired: data fetch (detail/list), record CRUD, read-only custom views, actions
-// (seed prompt → startChat → a visible chat), favorites (useShortcuts), and
-// state-based navigation (useCollectionBrowse — the toolbar + browse overlay).
-// Still stubbed: feeds, collection/view deletion, feed refresh, and the notifier.
+// (seed prompt → startChat → a visible chat), favorites (useShortcuts), feed/agent
+// refresh (POST /api/collections/:slug/refresh via @mulmoclaude/core/feeds — see
+// server/backends/feeds.ts), and state-based navigation (useCollectionBrowse — the
+// toolbar + browse overlay).
+// Still stubbed: feed listing (listFeeds), collection/view deletion, and the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
@@ -149,7 +151,7 @@ configureCollectionUi({
     ),
   runCollectionAction: (slug, actionId) =>
     apiPost<CollectionActionResult>(`/api/collections/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}`, {}),
-  refreshCollection: () => Promise.resolve(apiFail),
+  refreshCollection: (slug) => apiPost(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
   deleteView: () => Promise.resolve(mutationFail),
   listFeeds: () => Promise.resolve(apiFail),
 

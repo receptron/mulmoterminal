@@ -25,6 +25,8 @@ import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
+import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
+import type { AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
@@ -640,6 +642,11 @@ mountCollectionRoutes(app);
 // further down, once CLAUDE_CWD + pubsub exist.
 mountAccountingRoutes(app);
 
+// Collection Refresh route (POST /api/collections/:slug/refresh) from
+// @mulmoclaude/core/feeds — fetches declarative feeds or dispatches an agent-ingest
+// worker. Backs the collection-view Refresh button. The engine is configured below.
+mountFeedsRoutes(app);
+
 // Notification REST surface (list active / history, dismiss one) — backs the toolbar
 // bell. The engine is configured below once pubsub + the workspace exist.
 mountNotificationRoutes(app);
@@ -998,6 +1005,24 @@ initCollectionsBackend({ workspace: CLAUDE_CWD });
 // under <workspace>/data/accounting; the publisher drives the View's live-refresh.
 // Single pinned workspace root — exactly what the focused freelance product wants.
 initAccountingBackend({ workspace: CLAUDE_CWD, pubsub });
+
+// Configure the feeds engine (collection Refresh). The agent-ingest worker launcher is
+// MulmoTerminal's own session spawn — adapted to @mulmoclaude/core/feeds' AgentWorkerRunner
+// shape here (where spawnClaudePty lives) and injected, so the feeds backend never imports
+// the session layer. A MANUAL refresh spawns a VISIBLE session (hidden:false) the user can
+// watch; `onComplete` is honoured only for hidden (scheduled) workers, which MulmoTerminal
+// doesn't register yet, so it's unused for now. `roleId` is ignored (no role system).
+const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden }) => {
+  try {
+    const sessionId = randomUUID();
+    if (hidden) hiddenSessions.add(sessionId);
+    spawnClaudePty(sessionId, null, null, message);
+    return { ok: true, chatId: sessionId };
+  } catch (err) {
+    return { ok: false, error: messageOf(err) };
+  }
+};
+initFeedsBackend({ workspace: CLAUDE_CWD, spawnWorker: feedsSpawnWorker });
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
 // engine host + notifier are configured. Fire-and-forget + non-fatal: a watcher
