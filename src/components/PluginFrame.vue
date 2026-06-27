@@ -11,6 +11,36 @@
 // in the shadow. `@property` is a global, inert registration (it sets no styles,
 // only custom-property defaults), so we hoist these rules to the document head once.
 // Harmless to MulmoTerminal: its own elements never reference --tw-* properties.
+// Plugin Views render their icons with the legacy `material-icons` class (the
+// accounting/collection/chart/html packages were authored for MulmoClaude, which
+// loads the classic Material Icons font). MulmoTerminal's convention is Material
+// Symbols (see main.ts `material-symbols/outlined.css`), and that font's @font-face
+// is registered document-globally — but @font-face only delivers the FONT across the
+// shadow boundary; the `.material-icons` CLASS rule (font-family + ligature settings)
+// does NOT pierce the shadow root, so the spans render their ligature text verbatim
+// ("account_balance", "list_alt", …). Inject the class rule into every plugin shadow
+// root, aliased to the already-loaded Material Symbols font (the ligature names the
+// packages use — account_balance/list/settings/… — all exist in Symbols). Covers
+// `.material-symbols-outlined` too for any package already on the new convention.
+const MATERIAL_ICONS_SHADOW_CSS = `
+.material-icons,
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}`;
+
 const injectedProps = new Set<string>();
 function hoistAtPropertyRules(css: string | undefined): void {
   if (!css) return;
@@ -57,6 +87,11 @@ onMounted(() => {
   const host = hostEl.value;
   if (!host) return;
   const shadow = host.attachShadow({ mode: "open" });
+  // Icon-font alias FIRST, so the plugin's own CSS (Tailwind size/color utilities on
+  // the icon spans) still wins on the properties it sets.
+  const iconStyle = document.createElement("style");
+  iconStyle.textContent = MATERIAL_ICONS_SHADOW_CSS;
+  shadow.appendChild(iconStyle);
   if (props.css) {
     const style = document.createElement("style");
     style.textContent = props.css;

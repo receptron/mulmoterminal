@@ -24,6 +24,7 @@ import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
@@ -596,6 +597,33 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
 // catch-all (which handles the tool-call); a request without `kind` falls through.
 mountHtmlDispatchRoute(app);
 
+// Host tool: manageAccounting. The accounting package exposes no gui-chat-protocol
+// `.` core (just the Vue View + the /api/accounting router), so — like MulmoClaude's
+// host-side passthrough execute — this route bridges the GUI MCP tool to that router.
+// The router's envelope ({ action, ...data, message }) flows straight back to the
+// broker: `data` (set for PREVIEW actions) gates the GUI publish, `message` narrates
+// to claude. Registered BEFORE mountAllRoutes so it wins over /api/plugin/:toolName.
+app.post("/api/plugin/manageAccounting", async (req, res) => {
+  try {
+    const upstream = await fetch(`http://127.0.0.1:${PORT}/api/accounting`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(isRecord(req.body) ? req.body : {}),
+    });
+    const body: unknown = await upstream.json().catch(() => ({}));
+    // The router 4xx's domain errors as { error }. Surface that as narration so claude
+    // can read + retry, rather than a thrown tool call (broker's postJson rejects non-2xx).
+    if (!upstream.ok) {
+      const errMsg = isRecord(body) && typeof body.error === "string" ? body.error : `accounting request failed (HTTP ${upstream.status})`;
+      return res.json({ message: errMsg });
+    }
+    return res.json(body);
+  } catch (err) {
+    console.error(`[manageAccounting] dispatch failed: ${messageOf(err)}`);
+    return res.json({ message: `accounting dispatch failed: ${messageOf(err)}` });
+  }
+});
+
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
 mountAllRoutes(app);
@@ -605,6 +633,12 @@ mountAllRoutes(app);
 // card and (later) the collections toolbar. The engine itself is configured below
 // once CLAUDE_CWD is the confirmed workspace.
 mountCollectionRoutes(app);
+
+// Accounting dispatch route (POST /api/accounting) from @mulmoclaude/accounting-plugin.
+// Drives BOTH the AccountingView (configureAccountingHost.apiCall) and the
+// manageAccounting host tool below. The engine is configured (workspace + pub/sub)
+// further down, once CLAUDE_CWD + pubsub exist.
+mountAccountingRoutes(app);
 
 // Notification REST surface (list active / history, dismiss one) — backs the toolbar
 // bell. The engine is configured below once pubsub + the workspace exist.
@@ -959,6 +993,11 @@ initArtifactsBackend({ workspace: CLAUDE_CWD });
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
 initCollectionsBackend({ workspace: CLAUDE_CWD });
+
+// Configure the accounting engine against the shared workspace + pub/sub. Books live
+// under <workspace>/data/accounting; the publisher drives the View's live-refresh.
+// Single pinned workspace root — exactly what the focused freelance product wants.
+initAccountingBackend({ workspace: CLAUDE_CWD, pubsub });
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
 // engine host + notifier are configured. Fire-and-forget + non-fatal: a watcher

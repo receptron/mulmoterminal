@@ -12,6 +12,7 @@ import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
 import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
+import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
@@ -23,6 +24,10 @@ import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
 import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
 import { collectionShadowCss } from "./collectionShadowCss";
+// The accounting package ships its own self-contained Tailwind in style.css (its
+// content scan can't reach node_modules), imported as a STRING for shadow-DOM
+// injection — same treatment as chart/markdown.
+import accountingCss from "@mulmoclaude/accounting-plugin/style.css?inline";
 // The @mulmochat-plugin family (generate-image + its peer ui-image) ships incomplete
 // CSS — it assumes a Tailwind host. This is MulmoTerminal's Tailwind layer compiled
 // against those packages' dists (see src/plugin-tailwind.css), supplying the
@@ -122,6 +127,21 @@ for (const [modulePath, mod] of Object.entries(localModules)) {
   if (!localEnabled.has(name)) continue;
   registry[mod.REGISTRATION.toolName] = mod.REGISTRATION;
 }
+
+// Accounting is a HOST TOOL, not a plugins.json package: the package exposes only the
+// Vue View + the /api/accounting router (no gui-chat-protocol `.` core to load), and
+// the server always registers manageAccounting (see server/host-tools.ts). So its View
+// registers unconditionally here rather than through the cfg.packages gate above. The
+// View needs no runtime wrap — it reads selectedResult.data directly and reaches the
+// host via its own configureAccountingHost DI (see composables/accountingUi.ts).
+registry["manageAccounting"] = {
+  toolName: "manageAccounting",
+  viewComponent: AccountingView as Component,
+  css: accountingCss,
+  // Full canvas app with an internal h-full layout — give it a fixed frame height
+  // (like the collection/html cards) so that chain resolves.
+  height: "80vh",
+};
 
 export function getPlugin(toolName: string): Registration | undefined {
   return registry[toolName];

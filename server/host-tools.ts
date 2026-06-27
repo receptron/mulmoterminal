@@ -5,6 +5,7 @@
 // auto-allowed (allowedToolNames); index.ts mounts their dispatch route itself,
 // before plugins-registry's catch-all /api/plugin/:toolName.
 import type { ToolDefinition } from "gui-chat-protocol";
+import { MANAGE_ACCOUNTING } from "./accounting-tool.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
 // tool is a drop-in from the model's point of view — but the implementation is
@@ -44,4 +45,7 @@ export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
   },
 };
 
-export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [SPAWN_BACKGROUND_CHAT];
+// manageAccounting is a host tool (not a plugins.json package): the accounting
+// package ships only the Vue View + the Express router, so the tool definition lives
+// here and its dispatch route (server/index.ts) passes through to POST /api/accounting.
+export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [SPAWN_BACKGROUND_CHAT, MANAGE_ACCOUNTING];

@@ -8,6 +8,21 @@ export default defineConfig({
   // DOM. MulmoTerminal's own UI is not Tailwind; nothing here imports the sheet as
   // a global side-effect, so the app's styles are untouched.
   plugins: [vue(), tailwindcss()],
+  // vue-i18n (pulled in by accounting/collection plugin Views) breaks Vite's esbuild
+  // dep pre-bundling: the optimized vue-i18n chunk calls Vue runtime init wrappers
+  // (init_runtime_dom_esm_bundler / init_shared_esm_bundler) it never imports across
+  // the chunk boundary -> "ReferenceError: init_runtime_dom_esm_bundler is not
+  // defined" at runtime. Exclude it from pre-bundling so it's served as ESM source
+  // (no esbuild split), and define the @intlify compile-time feature flags the
+  // esm-bundler build expects (Vite's vue plugin only defines the __VUE_*__ flags).
+  optimizeDeps: { exclude: ["vue-i18n"] },
+  define: {
+    __VUE_I18N_FULL_INSTALL__: "true",
+    __VUE_I18N_LEGACY_API__: "false",
+    __INTLIFY_JIT_COMPILATION__: "false",
+    __INTLIFY_DROP_MESSAGE_COMPILER__: "false",
+    __INTLIFY_PROD_DEVTOOLS__: "false",
+  },
   server: {
     // Disable Vite's dev CORS middleware. The app is same-origin in dev (the page
     // and the proxied `/api` both live on :5173), so it needs no CORS headers from
