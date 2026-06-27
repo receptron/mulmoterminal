@@ -43,4 +43,23 @@ describe("buildCustomViewSrcdoc", () => {
     expect(out).not.toContain("</script><script>alert(1)");
     expect(out).toContain("\\u003c/script>\\u003cscript>alert(1)");
   });
+
+  // Regression: the view↔host bridge (onChange/openItem/startChat) must be defined, or
+  // LLM-authored custom views throw "__MC_VIEW.openItem is not a function" when an item
+  // is opened. The earlier MT port shipped only { slug, token, dataUrl } and crashed.
+  it("defines the view↔host bridge functions on __MC_VIEW", () => {
+    const out = buildCustomViewSrcdoc("<head></head>", boot);
+    expect(out).toContain("v.onChange=function");
+    expect(out).toContain("v.openItem=function");
+    expect(out).toContain("v.startChat=function");
+  });
+
+  it("includes origin so openItem/startChat can postMessage the known parent", () => {
+    const out = buildCustomViewSrcdoc("<head></head>", boot);
+    expect(out).toContain('"origin":"http://localhost:5173"');
+    // openItem/startChat target v.origin (not "*").
+    expect(out).toContain("'mc-open-item'");
+    expect(out).toContain("'mc-start-chat'");
+    expect(out).toContain("},v.origin)");
+  });
 });
