@@ -504,61 +504,66 @@
     zod "^3.25 || ^4.0"
     zod-to-json-schema "^3.25.1"
 
-"@mulmochat-plugin/generate-image@^0.4.1":
-  version "0.4.1"
-  resolved "https://registry.yarnpkg.com/@mulmochat-plugin/generate-image/-/generate-image-0.4.1.tgz#4eb531ec0b42f4e9b453206238189914dc5e791a"
-  integrity sha512-s+3fBUJYq/QhqExxQ4jj7rGnbaszduS6v5HmqpO4SGDtubsP7BrxkcGK/9KFF8+rWtPpXl1a1gtQkui+JAgjFg==
+"@mulmochat-plugin/generate-image@^0.5.0":
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/@mulmochat-plugin/generate-image/-/generate-image-0.5.0.tgz#520ab5342c4c71d6c4adc7bceabf9a19829f0c92"
+  integrity sha512-4E2+plnf+uCipTTLnMoJmYjGhKU6ngmbNB90O+YyUCeEY7vqpTRBaKRyQ28X2t1MowJApCvDX4yTFDv0lIvjqg==
   dependencies:
-    gui-chat-protocol "^0.3.3"
+    gui-chat-protocol "^0.4.0"
 
 "@mulmochat-plugin/ui-image@^0.4.0":
   version "0.4.0"
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.0.tgz#97f60be5541ea464077a54fe061b91e6dd27c97b"
   integrity sha512-mmUm/tJEeyyz0qDhMZL+GSdKXFwOi+pffEJVm6bBUHM+KPVrUiyKIBBi68eQ2S5PKmkJdp/1I/iYXhrU5zcr2Q==
 
-"@mulmoclaude/chart-plugin@^0.1.1":
-  version "0.1.1"
-  resolved "https://registry.npmjs.org/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.1.tgz#bef604d53e82a1d406a65ddde3e6c3cdff9cc6e3"
-  integrity sha512-Hv+FyTSiPWsF+eaxmBQ0Le8tu4FLnFMvmMQ+c6/MmM1gvHe49SrHvBcEYvSQb9bkNghJRsgSV0tADVjPFPwZMA==
+"@mulmoclaude/accounting-plugin@^0.2.0":
+  version "0.2.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/accounting-plugin/-/accounting-plugin-0.2.0.tgz#637a9b729494f1f31da8aeaf98cf2747fff66aab"
+  integrity sha512-G1ITl4Jdz/gQXbwvU0F9PbxMm0QfcnvfJWucNVmojbvYEJegyblFETd05YkzO10TQJyHXE/6OH/CHByGRXN1dA==
 
-"@mulmoclaude/collection-plugin@^0.5.9":
-  version "0.5.9"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.5.9.tgz#59bfbf72aac4e0ce8f1ddcf657fd352d1292db78"
-  integrity sha512-nFFUD6qFb7fWTZliaK1RReww9R+gJFxe2LW0HBFDqMMu+D8PYiPXRVRVQaQXy2OUxz1fbLmSckYWq2qUp+sVhg==
+"@mulmoclaude/chart-plugin@^0.1.3":
+  version "0.1.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.3.tgz#933121a1720b2b68c62082048fe9df278466445e"
+  integrity sha512-13oTtFLQgS7uiM/K6bxOKH7nKSs7Muhcg+PIsfl0ThyaINuu57LuktLf09XoRLDWouhUlL0gBZXDFSwuw+k6qA==
+
+"@mulmoclaude/collection-plugin@^0.5.11":
+  version "0.5.11"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.5.11.tgz#ad2ef5808c1ceacb24070c4b602ab66f5517c4bb"
+  integrity sha512-wjr7EPOYlnBWCdkEUEC3ll+oZd3/jKD3WlL9cAEw7G3RkDW7MkKHH4E+X7JdShKyOeI7rJ+bbnSbilBYnyEmjQ==
   dependencies:
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.2.0.tgz#81bc7e040e84d797873fd1587150c7360a75babf"
-  integrity sha512-w034RWFPyL6Qo0vRbyxPYV6Eh8jTI3bQ9rfPtGmUWPVitb0XVSXBqcMgxI/rOOlkNn30W2xTByK7AQSbyyNirQ==
+"@mulmoclaude/core@^0.2.2":
+  version "0.2.2"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.2.2.tgz#f3f7d8d12703128651f5696fa4625f50065e0fe9"
+  integrity sha512-QFt8rqHOdNxaSxGn2FlDzb/wc45HkiN3i/2XX+OIBUDkHlBbsFG8izJ1n8WrHdvaT8YXqJgB6dJkwnq34U9lOg==
   dependencies:
     zod "^4.4.3"
 
-"@mulmoclaude/form-plugin@^0.1.1":
-  version "0.1.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.1.tgz#54825cc7ecb3eded0d9d6d7bc0c04214bf7c78da"
-  integrity sha512-gTXROs5Qs98GVPb5f8MM6EtlDXHFcLeeNMfiUnG/A05rMQobmiTw9QoEGVROIJlFBbFsD7s6DAsrBBx1KDvFBA==
+"@mulmoclaude/form-plugin@^0.1.3":
+  version "0.1.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/form-plugin/-/form-plugin-0.1.3.tgz#4c6b3151a3c3789b30463528b2431ff382c44461"
+  integrity sha512-OhGZg0xHzOVIz0Kwjs1NCRHDGeGKrtnZtcLPrRNF/nfmnNqf1mvZgAnen0qyihZl9Bagw2DExs71tSGO/bbh0A==
 
-"@mulmoclaude/html-plugin@^0.2.2":
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/html-plugin/-/html-plugin-0.2.2.tgz#5cf97960ab31d4a0f9551a1e8d3bb7d3633cc599"
-  integrity sha512-Tp3451o/3uQQxoFcYRQLOfom4sG+AC4XERVyV/CdNJFYj1tgagSkhwVqKdQJnc/Xt1oirrAV5E6qyE4CgTOwlA==
+"@mulmoclaude/html-plugin@^0.2.5":
+  version "0.2.5"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/html-plugin/-/html-plugin-0.2.5.tgz#7351c522e4d727e30732230cd182fe7a0b7063ad"
+  integrity sha512-YnCeLahrvxgU5+8WbgsKRqu8gxITV5rOOLVDRFaVojDhXYXkqzPM93pRknuz2FgCz9AkB3LOw7XlqfjL5rS+jQ==
 
-"@mulmoclaude/markdown-plugin@^0.1.4":
-  version "0.1.4"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-0.1.4.tgz#767684c558686248691148837e0a6107e8d580e6"
-  integrity sha512-b1yYn8GMLBAi/U37WsK8/M/dznLEu9g5+1Y45KZ09bC4HVVln2MHja9/4k+YjxoJVb19w5pbbYzLUu3cxdPRsA==
+"@mulmoclaude/markdown-plugin@^0.1.7":
+  version "0.1.7"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-0.1.7.tgz#b4d29debcc03b84220ec9baab57a7a86baa9ae6e"
+  integrity sha512-4eoLXXsZUr7do6nYlrjWXMPKfpuglbzPgRflp9rJApkQjXtz39H8JMPhCin2btZRc7kvbGG8Sx40dOo/U9uxxw==
   dependencies:
     "@marp-team/marp-core" "^4.3.0"
     js-yaml "^4.2.0"
     marked "^18.0.5"
 
-"@mulmoclaude/x-plugin@^0.1.1":
-  version "0.1.1"
-  resolved "https://registry.npmjs.org/@mulmoclaude/x-plugin/-/x-plugin-0.1.1.tgz#9923ac1b981b88af5be297f2fd4372f127ca2781"
-  integrity sha512-+CSxdPUmsJuDBT1M+L5i255ZQN2ewkEBihgxIH1yJ92VPtGtZkX6ANUZRwM6jjXGQRECDxIz3wcTwTE/Ii3hLw==
+"@mulmoclaude/x-plugin@^0.1.2":
+  version "0.1.2"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/x-plugin/-/x-plugin-0.1.2.tgz#c865484fbe3d16ffb677fc580d56bfac6b224a5e"
+  integrity sha512-0lp5y7BwiSe6wRFjQPLTYve8PNq2CMGKMOP25Uoj7QyXU2v3mbsQGzCLEXFEb2qbURlzyoe3EXaSh0wXw1eNcA==
 
 "@napi-rs/wasm-runtime@^1.1.4":
   version "1.1.5"
@@ -2338,11 +2343,6 @@ graceful-fs@^4.2.4:
   version "4.2.11"
   resolved "https://registry.yarnpkg.com/graceful-fs/-/graceful-fs-4.2.11.tgz#4183e4e8bf08bb6e05bbb2f7d2e0c8f712ca40e3"
   integrity sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==
-
-gui-chat-protocol@^0.3.3:
-  version "0.3.3"
-  resolved "https://registry.yarnpkg.com/gui-chat-protocol/-/gui-chat-protocol-0.3.3.tgz#6a0f5a887a94c4a75e32fadffc4f762630eba1d5"
-  integrity sha512-4OKU8zzb5ZO66ffMQDiIMUp9jFPLeaMImVzJRJ/K6fREqQHiS2dJBnGx16IzTtsUcy1bZR34qUCCfP9qvxyrbA==
 
 gui-chat-protocol@^0.4.0:
   version "0.4.0"
