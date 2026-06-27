@@ -6,12 +6,14 @@ import TerminalView from "./components/Terminal.vue";
 import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
+import AccountingOverlay from "./components/AccountingOverlay.vue";
 import GridView from "./components/GridView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import NotificationBell from "./components/NotificationBell.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { useShortcuts } from "./composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
+import { useAccountingView, accountingViewOpen, accountingViewClose } from "./composables/useAccountingView";
 import { registerChatOpener } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { usePendingScript, type PendingCommand } from "./composables/usePendingScript";
@@ -41,6 +43,27 @@ const { shortcuts } = useShortcuts();
 const { view: browseView, isOpen: browseOpen } = useCollectionBrowse();
 function favActive(s: Shortcut): boolean {
   return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
+}
+
+// The accounting overlay (toolbar account_balance) and the collection browse overlay
+// both fill the page below the toolbar, so they're mutually exclusive — each toolbar
+// action closes the other. Chat is the "neither open" state.
+const { isOpen: accountingOpen } = useAccountingView();
+function showChat(): void {
+  browseClose();
+  accountingViewClose();
+}
+function showCollections(): void {
+  accountingViewClose();
+  browseGotoIndex("collection");
+}
+function showFavorite(s: Shortcut): void {
+  accountingViewClose();
+  browseGotoDetail(s.kind, s.slug);
+}
+function showAccounting(): void {
+  browseClose();
+  accountingViewOpen();
 }
 
 const activeId = ref<string | null>(null);
@@ -205,7 +228,7 @@ function onSession(id: string) {
     <header class="toolbar">
       <span class="toolbar-title">MulmoTerminal</span>
       <nav class="launcher" aria-label="Views">
-        <button type="button" class="launcher-btn" :class="{ active: !browseOpen }" title="Chat" aria-label="Chat" @click="browseClose">
+        <button type="button" class="launcher-btn" :class="{ active: !browseOpen && !accountingOpen }" title="Chat" aria-label="Chat" @click="showChat">
           <span class="material-symbols-outlined">chat</span>
         </button>
         <button type="button" class="launcher-btn" title="Grid (multiple terminals)" aria-label="Grid view" @click="viewMode = 'grid'">
@@ -217,9 +240,12 @@ function onSession(id: string) {
           :class="{ active: browseView.mode === 'index' }"
           title="Collections"
           aria-label="Collections"
-          @click="browseGotoIndex('collection')"
+          @click="showCollections"
         >
           <span class="material-symbols-outlined">apps</span>
+        </button>
+        <button type="button" class="launcher-btn" :class="{ active: accountingOpen }" title="Accounting" aria-label="Accounting" @click="showAccounting">
+          <span class="material-symbols-outlined">account_balance</span>
         </button>
         <button
           v-for="s in shortcuts"
@@ -229,7 +255,7 @@ function onSession(id: string) {
           :class="{ active: favActive(s) }"
           :title="s.title"
           :aria-label="s.title"
-          @click="browseGotoDetail(s.kind, s.slug)"
+          @click="showFavorite(s)"
         >
           <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
         </button>
@@ -304,6 +330,9 @@ function onSession(id: string) {
     <!-- Full-screen collection browser; shown when the launcher / an index card / a
          ref hop opens it (driven by useCollectionBrowse). -->
     <CollectionsBrowseOverlay />
+    <!-- Full-screen accounting view; opened by the toolbar's account_balance button
+         (driven by useAccountingView). Mutually exclusive with the browser above. -->
+    <AccountingOverlay />
     <SettingsModal
       v-if="showSettings"
       :presets="presets"
