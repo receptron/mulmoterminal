@@ -7,6 +7,7 @@ import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl, buildRunWsUrl } from "./wsUrl";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme } from "../composables/useTheme";
+import { useVoiceInput } from "../composables/useVoiceInput";
 import RunMenu from "./RunMenu.vue";
 
 // `null` => start a fresh session; otherwise resume the given session id.
@@ -42,6 +43,23 @@ const status = ref<"connecting" | "connected" | "disconnected">("connecting");
 const serverCwd = ref<string | null>(props.cwd ?? null);
 const dragOver = ref(false);
 const { themeId } = useTheme();
+
+// Voice input: a mic in the header transcribes speech (locally, via whisper.cpp)
+// and inserts it at the prompt for the user to review and submit — same channel as
+// a typed path. `insertText` is hoisted (function declaration), so referencing it
+// here before its definition is fine; it only runs at transcript time.
+const voice = useVoiceInput({ onTranscript: (text) => insertText(text) });
+function voiceTitle(): string {
+  if (voice.listening.value) return "Stop voice input";
+  if (voice.downloading.value) return "Downloading speech model…";
+  if (!voice.available.value) return "Enable voice input (downloads the speech model)";
+  return "Start voice input";
+}
+function voiceIcon(): string {
+  if (voice.listening.value) return "stop";
+  if (voice.downloading.value || voice.transcribing.value) return "progress_activity";
+  return "mic";
+}
 
 let term: Terminal;
 let fitAddon: FitAddon;
@@ -169,6 +187,9 @@ function connect() {
 }
 
 onMounted(() => {
+  // Probe voice-input capability so the mic button shows only where supported.
+  voice.refreshAvailability().catch(() => {});
+
   term = new Terminal({
     cursorBlink: true,
     fontSize: 14,
@@ -317,9 +338,21 @@ onUnmounted(() => {
       <span class="title">Terminal</span>
       <span :class="['status', status]">{{ status }}</span>
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
-      <button type="button" class="pick-file" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
-        <span class="material-symbols-outlined">attach_file</span>
-      </button>
+      <div class="header-actions">
+        <button
+          v-if="voice.capable.value"
+          type="button"
+          :class="['icon-btn', 'voice', { listening: voice.listening.value, busy: voice.downloading.value || voice.transcribing.value }]"
+          :title="voiceTitle()"
+          :aria-label="voiceTitle()"
+          @click="voice.toggle()"
+        >
+          <span class="material-symbols-outlined">{{ voiceIcon() }}</span>
+        </button>
+        <button type="button" class="icon-btn" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
+          <span class="material-symbols-outlined">attach_file</span>
+        </button>
+      </div>
     </div>
     <div ref="terminalRef" :class="['terminal-container', { 'drag-over': dragOver }]" @dragover="onDragOver" @dragleave="dragOver = false" @drop="onDrop" />
   </div>
@@ -351,8 +384,14 @@ onUnmounted(() => {
   font-weight: 600;
 }
 
-.pick-file {
+.header-actions {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.icon-btn {
   display: inline-flex;
   align-items: center;
   padding: 2px;
@@ -363,13 +402,40 @@ onUnmounted(() => {
   cursor: pointer;
 }
 
-.pick-file:hover {
+.icon-btn:hover {
   background: var(--bg-selected);
   color: var(--text);
 }
 
-.pick-file .material-symbols-outlined {
+.icon-btn .material-symbols-outlined {
   font-size: 18px;
+}
+
+/* Recording: solid red, gently pulsing. Busy (download/transcribe): the spinner
+   icon rotates. */
+.icon-btn.voice.listening {
+  color: #e5484d;
+  animation: voice-pulse 1.2s ease-in-out infinite;
+}
+
+.icon-btn.voice.busy .material-symbols-outlined {
+  animation: voice-spin 1s linear infinite;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes voice-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .status {

@@ -30,6 +30,7 @@ import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/fe
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
+import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
 import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
 import { mountFilesRoutes } from "./backends/files.js";
@@ -666,6 +667,11 @@ mountHtmlPreviewRoute(app, { workspace: CLAUDE_CWD });
 // Shared launcher favorites (GET/PUT /api/shortcuts) over the same
 // <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
 mountShortcutsRoutes(app, { workspace: CLAUDE_CWD });
+
+// Local voice input (POST /api/transcribe + model status/download) — macOS only,
+// whisper.cpp via @mulmoclaude/core/whisper. Models live in the shared
+// <workspace>/models dir, so a download by either app is reused.
+mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
 
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
@@ -1412,3 +1418,14 @@ server.on("error", (err) => {
 server.listen(PORT, () => {
   console.log(`mulmoterminal running at http://localhost:${PORT}`);
 });
+
+// The whisper sidecar is a spawned child that won't die with the parent on a
+// signal. Adding a signal listener suppresses Node's default termination, so we
+// kill the sidecar and exit explicitly. `exit` covers the normal-return path.
+process.once("exit", stopWhisperSidecar);
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    stopWhisperSidecar();
+    process.exit(0);
+  });
+}
