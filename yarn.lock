@@ -534,10 +534,10 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.2.6":
-  version "0.2.6"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.2.6.tgz#f2bce5dbb891ea3f79c833c821162708116c34b5"
-  integrity sha512-zVHWtjkgM/5ZjpVrW4Knr3dYIiCFeBmFIxcvr5eVRW1FCv7fZ0mxnqSaKNWFUJ5oznkmgdr6a9idPuDycmZS1A==
+"@mulmoclaude/core@^0.2.10":
+  version "0.2.10"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.2.10.tgz#201d83fca725d897bfa4974aa87037d7944a5326"
+  integrity sha512-Za+vzA73s7Ue/az0qqaSkqzUBUdBhAyzpAO7+1oy0Yd4e0RS4BDHybMy/3WjffaEoM9IIObfWJ/HJ+hwk4/Q1w==
   dependencies:
     fast-xml-parser "^5.9.3"
     zod "^4.4.3"

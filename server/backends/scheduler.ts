@@ -10,8 +10,11 @@
 // Tasks are registered directly on the task-manager (matching MulmoClaude's user
 // tasks) — they fire forward on schedule, with no system-task persistence/catch-up.
 //
-// System tasks (journal / chat-index / feed-refresh) are NOT wired here: their run
-// logic is MulmoClaude-app-specific and not in the shared package (see plan PR 4b).
+// System tasks may be passed in via `systemTasks` and are registered alongside the
+// user tasks on the same task-manager (one tick loop). feed-refresh now IS wired this
+// way — its def comes from the shared @mulmoclaude/core/feeds (`feedRefreshTaskDef`),
+// supplied by server/index.ts. journal / chat-index stay MulmoClaude-only (their run
+// logic isn't in the shared package).
 import path from "node:path";
 import { readFileSync } from "node:fs";
 import type { Express, Request, Response } from "express";
@@ -131,16 +134,19 @@ export function buildUserTaskDefinitions(tasks: readonly unknown[], spawnChat: (
   return definitions;
 }
 
-/** Wire the user-task scheduler: load tasks, register the enabled+valid ones on a
- *  task-manager, and start the tick loop. `spawnChat` is the run-binding (spawns a
- *  visible chat seeded with the prompt). Returns the number registered. */
-export function initUserTaskScheduler(deps: { workspace: string; spawnChat: (message: string) => void }): number {
-  const definitions = buildUserTaskDefinitions(loadUserTasks(deps.workspace), deps.spawnChat);
+/** Wire the scheduler: load user tasks, register the enabled+valid ones plus any
+ *  host `systemTasks` (e.g. feed-refresh) on one task-manager, and start the tick loop.
+ *  `spawnChat` is the user-task run-binding (spawns a visible chat seeded with the
+ *  prompt). The tick loop starts whenever ANY task is registered — so a system task
+ *  alone (no user tasks) still drives its schedule. Returns the user-task count. */
+export function initUserTaskScheduler(deps: { workspace: string; spawnChat: (message: string) => void; systemTasks?: TaskDefinition[] }): number {
+  const userDefs = buildUserTaskDefinitions(loadUserTasks(deps.workspace), deps.spawnChat);
+  const systemTasks = deps.systemTasks ?? [];
   const taskManager = createTaskManager({ log });
-  for (const definition of definitions) taskManager.registerTask(definition);
-  if (definitions.length > 0) taskManager.start();
-  log.info("user-task scheduler started", { registered: definitions.length });
-  return definitions.length;
+  for (const definition of [...systemTasks, ...userDefs]) taskManager.registerTask(definition);
+  if (systemTasks.length + userDefs.length > 0) taskManager.start();
+  log.info("scheduler started", { userTasks: userDefs.length, systemTasks: systemTasks.length });
+  return userDefs.length;
 }
 
 /** Read-only REST surface: list the user tasks (backs a future tasks UI). CRUD is a

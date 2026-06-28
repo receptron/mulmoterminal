@@ -1,11 +1,20 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import express from "express";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { SCHEDULE_TYPES } from "@receptron/task-scheduler";
 import type { Server } from "node:http";
-import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes } from "./scheduler.js";
+import type { TaskDefinition } from "@mulmoclaude/core/scheduler";
+import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "./scheduler.js";
+
+// Mock the shared task-manager so initUserTaskScheduler's registration + start calls
+// are observable without starting real interval timers.
+const { registerTaskMock, startMock } = vi.hoisted(() => ({ registerTaskMock: vi.fn(), startMock: vi.fn() }));
+vi.mock("@mulmoclaude/core/scheduler", () => ({
+  createTaskManager: () => ({ registerTask: registerTaskMock, start: startMock }),
+}));
 
 const tempDirs: string[] = [];
 
@@ -118,5 +127,49 @@ describe("mountSchedulerRoutes", () => {
     const res = await fetch(`${base}/api/scheduler/tasks`);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ tasks });
+  });
+});
+
+describe("initUserTaskScheduler", () => {
+  const sysTask = (id: string): TaskDefinition => ({
+    id,
+    schedule: { type: SCHEDULE_TYPES.interval, intervalMs: 60 * 60 * 1000 },
+    run: async () => {},
+  });
+
+  beforeEach(() => {
+    registerTaskMock.mockClear();
+    startMock.mockClear();
+  });
+
+  it("registers system tasks and starts the tick loop even with zero user tasks", () => {
+    // makeWorkspace() with no tasks.json → zero user tasks (the standalone feed-refresh case).
+    const count = initUserTaskScheduler({
+      workspace: makeWorkspace(),
+      spawnChat: () => {},
+      systemTasks: [sysTask("system:feed-refresh")],
+    });
+    expect(count).toBe(0); // zero USER tasks
+    expect(registerTaskMock).toHaveBeenCalledTimes(1);
+    expect(registerTaskMock).toHaveBeenCalledWith(expect.objectContaining({ id: "system:feed-refresh" }));
+    expect(startMock).toHaveBeenCalledTimes(1); // started despite zero user tasks
+  });
+
+  it("does not start the tick loop when there are no tasks at all", () => {
+    initUserTaskScheduler({ workspace: makeWorkspace(), spawnChat: () => {} });
+    expect(registerTaskMock).not.toHaveBeenCalled();
+    expect(startMock).not.toHaveBeenCalled();
+  });
+
+  it("registers both system and user tasks on the one manager", () => {
+    const count = initUserTaskScheduler({
+      workspace: makeWorkspace([{ id: "a", schedule: { type: "daily", time: "11:00" }, enabled: true, prompt: "go" }]),
+      spawnChat: () => {},
+      systemTasks: [sysTask("system:feed-refresh")],
+    });
+    expect(count).toBe(1); // one user task
+    const ids = registerTaskMock.mock.calls.map((call) => (call[0] as TaskDefinition).id);
+    expect(ids).toEqual(expect.arrayContaining(["system:feed-refresh", "user.a"]));
+    expect(startMock).toHaveBeenCalledTimes(1);
   });
 });
