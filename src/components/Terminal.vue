@@ -48,7 +48,9 @@ const { themeId } = useTheme();
 // and inserts it at the prompt for the user to review and submit — same channel as
 // a typed path. `insertText` is hoisted (function declaration), so referencing it
 // here before its definition is fine; it only runs at transcript time.
-const voice = useVoiceInput({ onTranscript: (text) => insertText(text) });
+// Append a trailing space so consecutive VAD segments stay separated ("hello
+// world", not "helloworld") when dictating multiple phrases into the prompt.
+const voice = useVoiceInput({ onTranscript: (text) => insertText(`${text} `) });
 function voiceTitle(): string {
   if (voice.listening.value) return "Stop voice input";
   if (voice.downloading.value) return "Downloading speech model…";

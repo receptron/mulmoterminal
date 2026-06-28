@@ -75,11 +75,14 @@ export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
     // Also keeps `capable`/`downloading` in sync — this is the controller's poll
     // loop, so it doubles as our status refresh.
     async getStatus() {
+      // `status` is null on a transient fetch/non-OK; `model` may be absent on a
+      // partial response. Optional-chain throughout so a status blip degrades to
+      // "not ready" instead of throwing and wedging the controller's poll loop.
       const status = await fetchModelStatus();
       capable.value = status?.capable ?? false;
-      downloading.value = status?.model.state === "downloading";
+      downloading.value = status?.model?.state === "downloading";
       return {
-        ready: status?.capable === true && status.model.state === "ready",
+        ready: status?.capable === true && status?.model?.state === "ready",
         downloading: downloading.value,
       };
     },
