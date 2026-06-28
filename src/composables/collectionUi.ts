@@ -86,6 +86,21 @@ function rawFileUrl(value: unknown): string {
   return `/api/files/raw?path=${encodeURIComponent(String(value))}`;
 }
 
+// A `file` field holding an `artifacts/html/*.html` path points at an
+// LLM-authored page. The raw-file route serves it as octet-stream (no `.html`
+// in its MIME map) so the browser downloads it; the dedicated preview route
+// (server/backends/html.ts → mountHtmlPreviewRoute) serves it as text/html
+// with the sandboxed preview CSP, so it renders in a new tab. Detect that
+// shape and return the preview URL; everything else falls back to rawFileUrl.
+const HTML_PREVIEW_DIR_PREFIX = "artifacts/html/";
+function htmlPreviewUrl(value: string): string | null {
+  if (!value.toLowerCase().endsWith(".html")) return null;
+  if (!value.startsWith(HTML_PREVIEW_DIR_PREFIX)) return null;
+  const rest = value.slice(HTML_PREVIEW_DIR_PREFIX.length);
+  if (rest.length === 0) return null;
+  return `/artifacts/html/${rest.split("/").map(encodeURIComponent).join("/")}`;
+}
+
 // Shared "not supported yet" results for the write/feeds/view capabilities.
 const UNSUPPORTED = "not supported in MulmoTerminal yet";
 const apiFail = { ok: false as const, error: UNSUPPORTED, status: 501 };
@@ -108,7 +123,7 @@ configureCollectionUi({
   //    else resolves to /api/files/raw?path=<workspace-relative>. fileRoutePath
   //    (in-app File Explorer nav) stays null — MulmoTerminal has no file explorer. ──
   imageSrc: (imageData) => (typeof imageData === "string" && imageData.startsWith("data:") ? imageData : rawFileUrl(imageData)),
-  fileAssetUrl: (value) => (typeof value === "string" && value.length > 0 ? rawFileUrl(value) : null),
+  fileAssetUrl: (value) => (typeof value === "string" && value.length > 0 ? (htmlPreviewUrl(value) ?? rawFileUrl(value)) : null),
   fileRoutePath: () => null,
 
   // ── navigation: no router — map onto useCollectionBrowse's view-state, which
