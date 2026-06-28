@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { mountFilesRoutes } from "./files.js";
+import { mountFilesRoutes, isProbablyTextSample } from "./files.js";
 
 let server: Server;
 let base: string;
@@ -63,5 +63,15 @@ describe("GET /api/files/raw", () => {
     expect(res.status).toBe(206);
     expect(res.headers.get("content-range")).toBe("bytes 0-1/4");
     expect((await res.arrayBuffer()).byteLength).toBe(2);
+  });
+});
+
+describe("isProbablyTextSample", () => {
+  it("treats NUL-free bytes as text", () => {
+    expect(isProbablyTextSample(Buffer.from("const x = 1;\nexport {};", "utf8"))).toBe(true);
+    expect(isProbablyTextSample(Buffer.from(""))).toBe(true);
+  });
+  it("treats a NUL byte as binary", () => {
+    expect(isProbablyTextSample(Buffer.from([0x89, 0x50, 0x00, 0x47]))).toBe(false);
   });
 });

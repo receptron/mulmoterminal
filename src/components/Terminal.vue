@@ -8,6 +8,7 @@ import { buildTerminalWsUrl, buildRunWsUrl } from "./wsUrl";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme } from "../composables/useTheme";
 import RunMenu from "./RunMenu.vue";
+import FileBrowser from "./FileBrowser.vue";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
@@ -317,6 +318,7 @@ onUnmounted(() => {
       <span class="title">Terminal</span>
       <span :class="['status', status]">{{ status }}</span>
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
+      <FileBrowser v-if="runMenu" :cwd="serverCwd" />
       <button type="button" class="pick-file" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
         <span class="material-symbols-outlined">attach_file</span>
       </button>

@@ -33,6 +33,7 @@ import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
 import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
 import { mountFilesRoutes } from "./backends/files.js";
+import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
 
@@ -658,6 +659,11 @@ mountSchedulerRoutes(app, { workspace: CLAUDE_CWD });
 // Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
 // fields and custom-view <img> URLs. Rooted at the shared workspace.
 mountFilesRoutes(app, { workspace: CLAUDE_CWD });
+
+// Project-scoped file browsing for the terminal header's 📁 Files menu
+// (GET /api/files/browse/{list,raw,md}?cwd=&path=). Each terminal browses its own
+// session's project dir; falls back to CLAUDE_CWD for an unresolved cwd.
+mountFilesBrowseRoutes(app, { defaultCwd: CLAUDE_CWD });
 
 // Serve presentHtml pages for the View's iframe (GET /artifacts/html/<rest>) with an
 // HTML preview CSP. The View navigates the iframe to this URL (htmlArtifactPreviewUrl).
