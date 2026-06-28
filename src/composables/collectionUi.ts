@@ -9,7 +9,8 @@
 // refresh (POST /api/collections/:slug/refresh via @mulmoclaude/core/feeds — see
 // server/backends/feeds.ts), and state-based navigation (useCollectionBrowse — the
 // toolbar + browse overlay).
-// Still stubbed: feed listing (listFeeds), collection/view deletion, and the notifier.
+// Still stubbed: feed listing (listFeeds), collection/view deletion, the Discover
+// registry tab (listRegistry/importRegistry), and the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
@@ -133,6 +134,10 @@ configureCollectionUi({
     }
   },
   buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
+  // MulmoTerminal serves no per-view translations — return the documented
+  // "no i18n" shape ({ locale: "", dict: {} }) so the iframe's __MC_VIEW.t(key)
+  // echoes keys instead of failing.
+  fetchViewI18n: () => Promise.resolve({ ok: true as const, data: { locale: "", dict: {} } }),
 
   // ── record CRUD: create / update (e.g. checking a to-do item) / delete. ──
   createItem: (slug, record) => apiPost<ItemMutationResponse>(`/api/collections/${encodeURIComponent(slug)}/items`, record),
@@ -154,6 +159,9 @@ configureCollectionUi({
   refreshCollection: (slug) => apiPost(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
   deleteView: () => Promise.resolve(mutationFail),
   listFeeds: () => Promise.resolve(apiFail),
+  // ── Discover/registry tab: no curated-registry backend in MulmoTerminal. ──
+  listRegistry: () => Promise.resolve(apiFail),
+  importRegistry: () => Promise.resolve(apiFail),
 
   // ── favorites: the shared useShortcuts store over /api/shortcuts. ──
   reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
