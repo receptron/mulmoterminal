@@ -26,7 +26,7 @@ import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
-import type { AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
+import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
@@ -1044,7 +1044,16 @@ function spawnScheduledChat(message: string): void {
   }
 }
 try {
-  initUserTaskScheduler({ workspace: CLAUDE_CWD, spawnChat: spawnScheduledChat });
+  // Register the shared hourly feed-refresh system task so a STANDALONE MulmoTerminal
+  // (no MulmoClaude running) still refreshes due feed/agent-ingest collections. The feeds
+  // host is already configured above (initFeedsBackend), so refreshDue can run. When both
+  // apps run on the shared workspace, the engine's shared `lastFetchedAt` soft-dedups —
+  // whoever refreshes first stamps it, the other's isFeedDue skips (plan: soft-dedup v1).
+  initUserTaskScheduler({
+    workspace: CLAUDE_CWD,
+    spawnChat: spawnScheduledChat,
+    systemTasks: [feedRefreshTaskDef({ workspaceRoot: CLAUDE_CWD })],
+  });
 } catch (err) {
   console.error("[scheduler] init failed (non-fatal)", err);
 }
