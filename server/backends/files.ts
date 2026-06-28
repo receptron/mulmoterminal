@@ -49,6 +49,27 @@ function isMedia(mime: string): boolean {
   return mime.startsWith("audio/") || mime.startsWith("video/");
 }
 
+// Heuristic: a sample with no NUL byte is treated as text (git uses the same test).
+// Lets unknown source/config files (.ts, .vue, .env, no-extension) display inline as
+// text instead of downloading as octet-stream.
+export function isProbablyTextSample(buf: Buffer): boolean {
+  return !buf.includes(0);
+}
+
+function looksLikeText(abs: string): boolean {
+  let fd: number | null = null;
+  try {
+    fd = fs.openSync(abs, "r");
+    const buf = Buffer.alloc(4096);
+    const read = fs.readSync(fd, buf, 0, buf.length, 0);
+    return isProbablyTextSample(buf.subarray(0, read));
+  } catch {
+    return false;
+  } finally {
+    if (fd !== null) fs.closeSync(fd);
+  }
+}
+
 function parseRange(header: string, size: number): { start: number; end: number } | null {
   const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
   if (!match) return null;
@@ -64,7 +85,9 @@ function parseRange(header: string, size: number): { start: number; end: number 
 // Serve an already-contained absolute file path: MIME by extension, size caps,
 // sandbox/nosniff headers, and Range support (for <video>/<audio> seeking). The
 // CALLER is responsible for path containment — this only touches `abs`.
-export function sendRawFile(req: Request, res: Response, abs: string): void {
+// `textFallback` makes an unknown extension that sniffs as text serve as text/plain
+// (so source/config files display inline) instead of downloading as octet-stream.
+export function sendRawFile(req: Request, res: Response, abs: string, opts: { textFallback?: boolean } = {}): void {
   let stat: fs.Stats;
   try {
     stat = fs.statSync(abs);
@@ -78,7 +101,8 @@ export function sendRawFile(req: Request, res: Response, abs: string): void {
   }
 
   const ext = path.extname(abs).toLowerCase();
-  const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
+  const unknownMime = opts.textFallback && looksLikeText(abs) ? "text/plain; charset=utf-8" : "application/octet-stream";
+  const mime = MIME_BY_EXT[ext] ?? unknownMime;
   const cap = isMedia(mime) ? MAX_MEDIA_BYTES : MAX_RAW_BYTES;
   if (stat.size > cap) {
     res.status(413).json({ error: `file too large (${stat.size} bytes, limit ${cap})` });

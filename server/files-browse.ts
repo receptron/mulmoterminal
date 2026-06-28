@@ -107,7 +107,9 @@ export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string 
       res.status(403).json({ error: "path escapes the project root" });
       return;
     }
-    sendRawFile(req, res, abs);
+    // Unknown-extension files that sniff as text display inline (source/config), not
+    // download — the whole point of browsing a project's files.
+    sendRawFile(req, res, abs, { textFallback: true });
   });
 
   app.get("/api/files/browse/md", async (req: Request, res: Response) => {

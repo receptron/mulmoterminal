@@ -339,7 +339,9 @@ Project-scoped file browsing for the [📁 Files](#files--browser) menu. All tak
 
 - **`GET /api/files/browse/raw?cwd=&path=`** → the file's bytes (MIME by extension,
   `Content-Security-Policy: sandbox`, `nosniff`, Range support). Shares the serving
-  logic with `/api/files/raw`.
+  logic with `/api/files/raw`. An unknown extension that sniffs as text (no NUL byte)
+  is served as `text/plain` so source/config files display inline instead of
+  downloading.
 
 - **`GET /api/files/browse/md?cwd=&path=`** → the file rendered from Markdown to an
   HTML document (`marked`), served under a sandbox CSP.
