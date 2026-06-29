@@ -407,19 +407,24 @@ function cancelReap(id: string) {
   }
 }
 
+// Node's setTimeout delay is a signed 32-bit int; a larger value overflows and
+// fires at ~1ms. Clamp to the max so a big grace doesn't become an instant reap.
+const MAX_TIMER_MS = 2_147_483_647;
+
 function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
   // Non-positive or non-finite (e.g. a bad env value yielding NaN) => never
   // auto-reap; the session stays until reattached or explicitly terminated.
   // Guarding here matters because setTimeout(..., NaN) would fire ~immediately.
   if (!Number.isFinite(delayMs) || delayMs <= 0) return;
   if (reapTimers.has(id)) return;
+  const delay = Math.min(delayMs, MAX_TIMER_MS);
   reapTimers.set(
     id,
     setTimeout(() => {
       reapTimers.delete(id);
       const entry = ptys.get(id);
       if (entry && !entry.ws) reap(id); // still detached after the grace window
-    }, delayMs),
+    }, delay),
   );
 }
 
