@@ -25,8 +25,19 @@ describe("startCollectionChat", () => {
     const [url, init] = fetchFn.mock.calls[0];
     expect(url).toBe("/api/plugin/spawnBackgroundChat");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records" });
-    expect(opener).toHaveBeenCalledWith("sess-1");
+    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false });
+    expect(opener).toHaveBeenCalledWith("sess-1", { draft: false });
+  });
+
+  it("sends draft:true so the prompt is prefilled but not auto-sent", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-3" } }) }));
+    const opener = vi.fn();
+    registerChatOpener(opener);
+
+    await startCollectionChat("track my tasks", { hidden: false, draft: true });
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "track my tasks", draft: true });
+    expect(opener).toHaveBeenCalledWith("sess-3", { draft: true }); // surfaced + flagged for the preparing hint
   });
 
   it("does NOT select when hidden=true (stays in the sidebar)", async () => {
