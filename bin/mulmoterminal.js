@@ -204,7 +204,7 @@ function runServer(port, noOpen, cwd, onChild) {
       if (noOpen) return;
       try {
         // The command is a hardcoded literal; url is http://localhost:<numeric port>.
-        // eslint-disable-next-line sonarjs/os-command
+
         execSync(`${pickOpenCommand()} ${url}`, { stdio: "pipe" });
       } catch {
         log(`Open your browser: ${url}`);

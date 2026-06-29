@@ -30,10 +30,7 @@ export interface NotifierEntry {
 
 // Discriminated union mirroring the server's NotifierEvent.
 type NotifierEvent =
-  | { type: "published"; entry: NotifierEntry }
-  | { type: "updated"; entry: NotifierEntry }
-  | { type: "cleared"; id: string }
-  | { type: "cancelled"; id: string };
+  { type: "published"; entry: NotifierEntry } | { type: "updated"; entry: NotifierEntry } | { type: "cleared"; id: string } | { type: "cancelled"; id: string };
 
 const SEVERITY_RANK: Record<NotifierSeverity, number> = { info: 0, nudge: 1, urgent: 2 };
 

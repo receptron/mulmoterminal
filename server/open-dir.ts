@@ -34,7 +34,6 @@ export function mountOpenDirRoute(app: Express, { isAllowedOrigin }: OpenDirOpti
     }
 
     try {
-      // eslint-disable-next-line security/detect-child-process -- fixed command allowlist (open/explorer/xdg-open); dir is a validated existing directory passed as argv, no shell
       const child = spawn(openCommand(process.platform), [dir], { detached: true, stdio: "ignore" });
       child.on("error", (e) => console.error(`[open-dir] failed to open ${dir}: ${e.message}`));
       child.unref();
