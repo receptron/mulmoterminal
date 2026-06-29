@@ -1183,25 +1183,17 @@ function cleanupTranslationWorker(sessionId: string): void {
   fs.rm(path.join(projectSessionsDir(CLAUDE_CWD), `${sessionId}.jsonl`), { force: true }).catch(() => {});
 }
 
-// The injected LLM step for /api/translation. Drives MulmoTerminal's EXISTING hidden
-// background chat (spawnClaudePty) — explicitly NOT `claude -p`, which is banned in
-// MulmoTerminal. It seeds a headless worker that translates the strings and reports
-// them by calling the worker-only `submitTranslation` GUI tool, which resolves the
-// promise below (via POST /api/translation/submit). Runs in CLAUDE_CWD (the trusted
-// workspace, else claude blocks on its trust dialog); the worker's session id is
-// filtered from /api/sessions so it never shows in the sidebar.
-async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
+// Most a worker request retries before failing. The model occasionally answers in
+// text instead of calling submitTranslation (caught fast by the Stop hook); a fresh
+// worker almost always succeeds. Misses are cached, so retries are rare in practice.
+const TRANSLATION_MAX_ATTEMPTS = 3;
+
+// Run ONE hidden translation worker: spawn it, wait for it to call submitTranslation
+// (or fail via the Stop hook / timeout), validate, and tear it down.
+async function runTranslationWorkerOnce(prompt: string, expected: number): Promise<string[]> {
   const sessionId = randomUUID();
-  const expected = sentences.length;
   hiddenSessions.add(sessionId);
   translationWorkerIds.add(sessionId);
-  const prompt =
-    `You are a translation service. Translate each of the ${expected} English strings in the JSON ` +
-    `array below into the target language (BCP-47 code: ${targetLanguage}). Preserve placeholders ` +
-    `like {name}, {count}, %s and any HTML tags verbatim. Then report your result by calling the ` +
-    `submitTranslation tool EXACTLY ONCE with a "translations" array of the ${expected} translated ` +
-    `strings, in the same order. Do not call any other tool and do not print the translations as ` +
-    `text.\n\nInput: ${JSON.stringify(sentences)}`;
 
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   const submitted = new Promise<string[]>((resolve, reject) => {
@@ -1226,6 +1218,33 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
     if (timeoutId) clearTimeout(timeoutId);
     cleanupTranslationWorker(sessionId);
   }
+}
+
+// The injected LLM step for /api/translation. Drives MulmoTerminal's EXISTING hidden
+// background chat (spawnClaudePty) — explicitly NOT `claude -p`, which is banned in
+// MulmoTerminal. It seeds a headless worker that translates the strings and reports
+// them by calling the worker-only `submitTranslation` GUI tool (POST
+// /api/translation/submit). Retries a fresh worker if one answers without submitting.
+async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
+  const expected = sentences.length;
+  const prompt =
+    `You are an automated translation service. Translate each of the ${expected} English strings in ` +
+    `the JSON array below into the target language (BCP-47 code: ${targetLanguage}), preserving ` +
+    `placeholders like {name}, {count}, %s and any HTML tags verbatim. You MUST deliver the result by ` +
+    `calling the submitTranslation tool with a "translations" array of exactly ${expected} strings in ` +
+    `the same order — that tool call is the ONLY way to return the result; a text reply is discarded. ` +
+    `Do not call any other tool.\n\nInput: ${JSON.stringify(sentences)}`;
+
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= TRANSLATION_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await runTranslationWorkerOnce(prompt, expected);
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[translation] attempt ${attempt}/${TRANSLATION_MAX_ATTEMPTS} failed: ${messageOf(err)}`);
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
 }
 
 // Spawn a fresh claude PTY for this session, register it, and wire its output /

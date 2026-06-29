@@ -88,15 +88,18 @@ const SUBMIT_TRANSLATION_TOOL = {
 export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { submitTranslationTool?: boolean } = {}): Server {
   const server = new Server({ name: "mulmoterminal-gui", version: "0.0.0" }, { capabilities: { tools: {} } });
 
+  // A hidden translation worker processes UNTRUSTED sentence content with its tools
+  // auto-allowed, so a prompt-injected string must not be able to reach the regular
+  // GUI/plugin tools. Such sessions are therefore exposed ONLY submitTranslation —
+  // every other tool is hidden AND refused below (defense in depth).
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      ...toolDefinitions.map((def) => ({
-        name: def.name,
-        description: describe(def),
-        inputSchema: def.parameters ?? { type: "object", properties: {} },
-      })),
-      ...(opts.submitTranslationTool ? [SUBMIT_TRANSLATION_TOOL] : []),
-    ],
+    tools: opts.submitTranslationTool
+      ? [SUBMIT_TRANSLATION_TOOL]
+      : toolDefinitions.map((def) => ({
+          name: def.name,
+          description: describe(def),
+          inputSchema: def.parameters ?? { type: "object", properties: {} },
+        })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -107,6 +110,12 @@ export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { su
     if (name === SUBMIT_TRANSLATION_TOOL.name) {
       await postJson(`${baseUrl}/api/translation/submit`, { sessionId, translations: isRecord(args) ? args.translations : undefined });
       return { content: [{ type: "text", text: "Translation received. You are done." }] };
+    }
+
+    // Translation workers may call NOTHING else — refuse any other tool even if the
+    // model is steered toward it by injected sentence content.
+    if (opts.submitTranslationTool) {
+      return { content: [{ type: "text", text: `Tool "${name}" is not available; call submitTranslation with the translations.` }], isError: true };
     }
 
     // 1. Dispatch to the plugin's server-side handler.
