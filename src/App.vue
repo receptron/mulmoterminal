@@ -363,7 +363,9 @@ function onSession(id: string) {
   position: relative; /* anchor the draft hint overlay */
 }
 
-/* Transient "preparing your draft…" hint, overlaid at the top of the terminal area. */
+/* Transient "preparing your draft…" hint, overlaid at the top of the terminal area.
+   Bright yellow + bold border so it clearly stands out over the dark terminal; uses
+   the app's system UI font (not the inherited default) to match the rest of the UI. */
 .draft-hint {
   position: absolute;
   top: 12px;
@@ -374,13 +376,15 @@ function onSession(id: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 14px;
+  padding: 10px 16px;
   border-radius: 8px;
-  background: rgba(30, 30, 30, 0.92);
-  color: #eee;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  background: #ffd54a;
+  color: #1a1a2e;
+  border: 2px solid #c98a00;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  font-family: system-ui, sans-serif;
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
   pointer-events: none; /* never intercept clicks meant for the terminal */
 }
