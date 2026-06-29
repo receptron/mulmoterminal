@@ -207,11 +207,11 @@ configureCollectionUi({
   //    collection/record action buttons (Repair, etc.). MulmoTerminal has no roles,
   //    so `role` is ignored. ──
   startChat: (prompt) => void startCollectionChat(prompt, { hidden: false }),
-  // Custom views call this to open a chat with the prompt prefilled as an editable
-  // DRAFT (not auto-sent). MulmoTerminal terminals are PTYs with no editable composer
-  // draft, so we degrade to the same visible seeded chat as startChat; `role` is
-  // ignored (MulmoTerminal has no roles).
-  startNewChatDraft: (prompt) => void startCollectionChat(prompt, { hidden: false }),
+  // Open a chat with the prompt prefilled as an editable DRAFT (not auto-sent) — the
+  // new-collection template cards + custom views. The text is typed into claude's PTY
+  // input box without an Enter (server: spawnBackgroundChat draft:true), so the user
+  // reviews / edits / sends. `role` is ignored (MulmoTerminal has no roles).
+  startNewChatDraft: (prompt) => void startCollectionChat(prompt, { hidden: false, draft: true }),
   // No notifier in MulmoTerminal.
   notifiedSeverities: () => new Map<string, CollectionNotifySeverity>(),
 

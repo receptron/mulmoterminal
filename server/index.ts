@@ -593,27 +593,34 @@ app.use(express.json({ limit: "25mb" }));
 // terminal session, seeded with `message`, that the user can open from the sidebar.
 // `role` is ignored (MulmoTerminal has no roles). `hidden:true` marks it a background
 // worker: it still lists in the sidebar but never renders bold/unread when it
-// finishes. Registered BEFORE mountAllRoutes so this specific route wins over
-// /api/plugin/:toolName.
+// finishes. `draft:true` makes `message` an editable DRAFT — typed into the input box
+// but NOT auto-submitted (the collection-plugin's startNewChatDraft / template cards),
+// so the user reviews and presses Enter. Registered BEFORE mountAllRoutes so this
+// specific route wins over /api/plugin/:toolName.
 app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   const body = isRecord(req.body) ? req.body : {};
   const message = typeof body.message === "string" ? body.message.trim() : "";
   if (!message) {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
+  const draft = body.draft === true;
   const sessionId = randomUUID();
   if (body.hidden === true) hiddenSessions.add(sessionId);
   // ws is null: the session runs headless until the user opens it (reattach
   // replays the buffered output). The "created" pubsub event in spawnClaudePty
-  // surfaces it in the sidebar right away.
+  // surfaces it in the sidebar right away. A draft spawns with NO initial prompt
+  // (so claude doesn't auto-run) and gets the text typed into its input box instead.
   try {
-    spawnClaudePty(sessionId, null, null, message);
+    if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
+    else spawnClaudePty(sessionId, null, null, message);
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
     return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
   }
   return res.json({
-    message: `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
+    message: draft
+      ? `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`
+      : `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
     jsonData: { chatId: sessionId },
   });
 });
@@ -1276,11 +1283,22 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
   throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
 }
 
+// Claude must have its input box + bracketed-paste mode up before it will capture a
+// typed `draft`; too early and the bytes are echoed into the scrollback instead. We
+// wait for its status line to paint (the "shift+tab to cycle" mode hint), settle
+// briefly, then type. A fallback fires if that marker never shows (UI string drift).
+const DRAFT_READY_MARKER = /shift\+tab to cycle/;
+const DRAFT_SETTLE_MS = 500;
+const DRAFT_FALLBACK_MS = 6000;
+
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
 // exit back to the browser socket. `ws` may be null for a session spawned without
 // a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
 // reattaches. `initialPrompt`, when given, is passed to claude as the first turn
-// so the session starts working immediately, before anyone opens it.
+// so the session starts working immediately, before anyone opens it. `draft` is the
+// opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
+// into the input box (no Enter) so the user can review / edit / send it. Pass one or
+// the other, never both.
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -1288,6 +1306,7 @@ function spawnClaudePty(
   initialPrompt?: string,
   cwd: string = CLAUDE_CWD,
   attachGuiMcp: boolean = true,
+  draft?: string,
 ): PtyEntry {
   // attachGuiMcp picks the MCP mode (see buildClaudeArgs): the single view (default)
   // attaches the GUI MCP + --strict-mcp-config (main's classic behavior); the grid's
@@ -1324,18 +1343,47 @@ function spawnClaudePty(
 
   if (!canResume) {
     // Brand-new (or restarted-idle) session: surface it in the sidebar before
-    // it's persisted. A spawned session (initialPrompt) gets a title from its
-    // first message so it's recognizable in the sidebar before anyone opens it.
-    const title = initialPrompt ? initialPrompt.replace(/\s+/g, " ").trim().slice(0, 60) || "New session" : "New session";
+    // it's persisted. A spawned session (initialPrompt or a draft) gets a title from
+    // that text so it's recognizable in the sidebar before anyone opens it.
+    const seed = initialPrompt ?? draft;
+    const title = seed ? seed.replace(/\s+/g, " ").trim().slice(0, 60) || "New session" : "New session";
     knownSessions.set(sessionId, { createdAt: Date.now(), title });
     pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
   }
+
+  // A draft is typed into the input box once claude is ready for input. Newlines are
+  // flattened to spaces and NO trailing Enter is sent, so it can never auto-submit —
+  // the user reviews and presses Enter. Bracketed paste (\e[200~…\e[201~) makes claude
+  // treat it as a single pasted block.
+  const draftText = draft ? draft.replace(/[\r\n]+/g, " ").trim() : "";
+  let draftDone = !draftText;
+  let draftScan = "";
+  const typeDraft = () => {
+    if (draftDone) return;
+    draftDone = true;
+    try {
+      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
+    } catch {
+      // pty already gone — nothing to draft into
+    }
+  };
+  // Fallback: type even if the readiness marker never appears (UI string drift).
+  if (draftText) setTimeout(typeDraft, DRAFT_FALLBACK_MS);
 
   // PTY -> browser (buffering a bounded tail for reattach).
   term.onData((data) => {
     entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
+    }
+    // Type the draft once claude's input box has painted (its mode-hint status line),
+    // then settle briefly so the paste lands in the input rather than the scrollback.
+    if (!draftDone) {
+      draftScan = (draftScan + data).slice(-4096);
+      if (DRAFT_READY_MARKER.test(draftScan)) {
+        draftScan = "";
+        setTimeout(typeDraft, DRAFT_SETTLE_MS);
+      }
     }
   });
 
