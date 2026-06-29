@@ -349,6 +349,7 @@ function resume(s: ResumableSession) {
   sessionId.value = s.id;
   connectKey.value++;
   launched.value = true;
+  recordNextCwd = false; // resuming isn't a fresh launch — don't record its cwd
   loadDiff(); // an already-idle worktree session shows its badge right away
 }
 
@@ -443,6 +444,7 @@ onUnmounted(() => document.removeEventListener("mousedown", onGhOutside));
 function teardown() {
   termRef.value?.terminate();
   launched.value = false;
+  recordNextCwd = false; // drop any pending fresh-launch record from a torn-down session
   sessionId.value = null;
   working.value = false;
   waiting.value = false;

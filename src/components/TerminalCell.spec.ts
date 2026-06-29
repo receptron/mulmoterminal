@@ -367,6 +367,22 @@ describe("TerminalCell", () => {
     expect(useRecentDirs().recentDirs.value).toEqual([]);
   });
 
+  it("clears the pending-record flag when a fresh launch is torn down before its cwd arrives", async () => {
+    // Race: launch sets the record-next flag, but the user closes before the server
+    // reports a cwd; a subsequent resume must NOT inherit that pending record.
+    mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "t", mtime: Date.now() }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj" });
+    await flushPromises();
+    await w.find(".cell-dir-input").setValue("/home/me/fresh");
+    await w.find(".cell-dir-input").trigger("keydown.enter"); // flag = true, no cwd yet
+    await w.find(".cell-close").trigger("click"); // teardown must clear the flag
+    await flushPromises();
+    await w.find(".cell-resume-item").trigger("click"); // resume an existing session
+    w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
+    await flushPromises();
+    expect(useRecentDirs().recentDirs.value).toEqual([]);
+  });
+
   it("prefills the launch field with the most recent location (not the server default)", async () => {
     useRecentDirs().recordDir("/home/me/last-used");
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
