@@ -1291,6 +1291,16 @@ const DRAFT_READY_MARKER = /shift\+tab to cycle/;
 const DRAFT_SETTLE_MS = 500;
 const DRAFT_FALLBACK_MS = 6000;
 
+// Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —
+// ESC, Ctrl-C, CR/LF, and an embedded bracketed-paste terminator) so untrusted draft
+// content can't inject terminal control sequences that break out of the paste and
+// submit/interrupt. Only printable text survives, with whitespace collapsed.
+// eslint-disable-next-line no-control-regex -- intentional: match terminal control bytes (C0/C1) to strip them
+const DRAFT_CONTROL_BYTES_RE = /[\u0000-\u001F\u007F-\u009F]+/g;
+function sanitizeDraftText(text: string): string {
+  return text.replace(DRAFT_CONTROL_BYTES_RE, " ").replace(/\s+/g, " ").trim();
+}
+
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
 // exit back to the browser socket. `ws` may be null for a session spawned without
 // a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
@@ -1351,11 +1361,15 @@ function spawnClaudePty(
     pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
   }
 
-  // A draft is typed into the input box once claude is ready for input. Newlines are
-  // flattened to spaces and NO trailing Enter is sent, so it can never auto-submit —
-  // the user reviews and presses Enter. Bracketed paste (\e[200~…\e[201~) makes claude
-  // treat it as a single pasted block.
-  const draftText = draft ? draft.replace(/[\r\n]+/g, " ").trim() : "";
+  // A draft is typed into the input box once claude is ready for input. ALL control
+  // bytes are stripped first — C0/C1, including ESC, Ctrl-C, CR/LF and an embedded
+  // bracketed-paste terminator (\e[201~) — so untrusted draft content (collection /
+  // custom-view text) can't inject terminal control sequences that break out of the
+  // paste and submit/interrupt. Only printable text is typed, wrapped in bracketed
+  // paste (\e[200~…\e[201~), with NO trailing Enter, so it can never auto-submit — the
+  // user reviews and presses Enter.
+
+  const draftText = draft ? sanitizeDraftText(draft) : "";
   let draftDone = !draftText;
   let draftScan = "";
   const typeDraft = () => {
