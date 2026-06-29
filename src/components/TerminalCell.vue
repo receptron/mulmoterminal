@@ -20,6 +20,9 @@ const props = defineProps<{
   defaultCwd: string | null;
   presets: CwdPreset[];
   home: string | null;
+  // Session ids open in other grid cells. Resuming one of them would detach that
+  // cell, so the launcher flags such rows and confirms before opening.
+  openSessionIds?: string[];
   // An added (not the sole entry) launcher: show a ✕ to dismiss it before launching.
   cancellable?: boolean;
   // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
@@ -304,7 +307,13 @@ watch([dirInput, () => props.defaultCwd], () => {
   }, 300);
 });
 
+// A session already live in another grid cell. Resuming it here detaches that
+// cell (the server supersedes the prior socket), so we warn before doing so.
+const sessionOpenElsewhere = (id: string): boolean => id !== sessionId.value && (props.openSessionIds ?? []).includes(id);
+
 function resume(s: ResumableSession) {
+  if (sessionOpenElsewhere(s.id) && !window.confirm(`"${s.title}" is already open in another terminal. Opening it here will detach that one. Continue?`))
+    return;
   // Use the cwd those rows were fetched for, not the (possibly-changed) input.
   cwd.value = resumableCwd.value ?? (dirInput.value.trim() || props.defaultCwd);
   sessionId.value = s.id;
@@ -816,8 +825,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       <div v-if="resumable.length" class="cell-resume">
         <span class="cell-launch-caption">or resume here</span>
         <div class="cell-resume-list">
-          <button v-for="s in resumable" :key="s.id" class="cell-resume-item" :title="s.title" @click="resume(s)">
+          <button
+            v-for="s in resumable"
+            :key="s.id"
+            :class="['cell-resume-item', { 'is-open': sessionOpenElsewhere(s.id) }]"
+            :title="sessionOpenElsewhere(s.id) ? `${s.title} — already open in another terminal` : s.title"
+            @click="resume(s)"
+          >
             <span class="ri-title">{{ s.title }}</span>
+            <span v-if="sessionOpenElsewhere(s.id)" class="ri-open" title="Already open in another terminal">● open</span>
             <span class="ri-time">{{ relativeTime(s.mtime) }}</span>
           </button>
         </div>
@@ -1271,6 +1287,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   flex: 0 0 auto;
   color: var(--text-dim);
   font-size: 11px;
+}
+.cell-resume-item.is-open {
+  border-color: var(--amber);
+}
+.ri-open {
+  flex: 0 0 auto;
+  color: var(--amber);
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 /* Worktree diff badge in the header (ahead / uncommitted), opens the diff panel. */

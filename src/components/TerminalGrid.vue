@@ -23,6 +23,7 @@ const props = defineProps<{
   home: string | null;
   // Manual sort mode: each cell shows ◀▶ to reorder.
   reorderable?: boolean;
+  openSessionIds: string[];
 }>();
 const emit = defineEmits<{
   (e: "session" | "cwd", uid: number, value: string): void;
@@ -67,6 +68,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           :default-cwd="defaultCwd"
           :presets="presets"
           :home="home"
+          :open-session-ids="openSessionIds"
           :cancellable="cell.uid === cancelUid"
           :reorderable="reorderable"
           @toggle-expand="emit('toggle-expand', cell.uid)"

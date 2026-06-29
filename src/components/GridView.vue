@@ -88,6 +88,10 @@ const expandedUid = computed(() => zoomedUid(state.value));
 // drives both the toolbar's cancel state and the launcher's in-cell ✕.
 const cancelUid = computed(() => cancelableLaunchUid(state.value));
 const launchOpen = computed(() => cancelUid.value !== null);
+// Session ids currently held by cells (across all pages — off-page cells stay
+// live as background PTYs). A launcher uses this to warn before resuming a
+// session that's already open, since attaching would detach the other cell.
+const openSessionIds = computed(() => state.value.cells.map((c) => c.session).filter((s): s is string => s !== null));
 
 function onAddTerminal() {
   if (runningCount(state.value.cells) >= 81 && !launchOpen.value) return; // surfaced by the disabled button
@@ -162,6 +166,7 @@ function closeSettings() {
       :presets="presets"
       :home="home"
       :reorderable="reorderable"
+      :open-session-ids="openSessionIds"
       @session="onSession"
       @cwd="onCwd"
       @close="onClose"
