@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
@@ -13,15 +13,19 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  setSortMode,
+  moveCell,
+  visibleOrdered,
   cancelableLaunchUid,
   pageCount,
   zoomedUid,
-  visibleCells,
   runningCount,
   STATE_KEY,
   LEGACY_KEY,
   type GridState,
+  type CellStatus,
 } from "./gridTabs";
+import { useSessions } from "../composables/useSessions";
 import { usePendingScript } from "../composables/usePendingScript";
 import type { CwdPreset } from "./presets";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -45,10 +49,40 @@ if (init.migrated) {
 watch(state, persist, { deep: true });
 
 const pages = computed(() => pageCount(state.value.cells.length));
-// While a cell is zoomed, render EVERY cell so the filmstrip lines up all tabs'
-// terminals (live); otherwise just the active page. The flat cells array makes
-// this a single source swap (see visibleCells/zoomedUid).
-const displayCells = computed(() => visibleCells(state.value));
+
+// The "auto" order needs every cell's status, including cells on pages that aren't
+// mounted. The server's session list is the authority for that (it covers all
+// sessions regardless of which page is on screen), so it drives the sort by session
+// id. The per-cell `statusByUid` (reported up while a cell is mounted) is the
+// fallback for cells the session list can't key: command cells (no session id) and a
+// just-launched cell before its id arrives.
+const { sessions } = useSessions();
+const statusByUid = reactive<Record<number, CellStatus>>({});
+const onStatus = (uid: number, s: CellStatus) => (statusByUid[uid] = s);
+// Attention (waiting) wins over working wins over idle — mirrors TerminalCell's dot.
+const toStatus = (working: boolean, waiting: boolean): CellStatus => {
+  if (waiting) return "waiting";
+  if (working) return "working";
+  return "idle";
+};
+const sessionStatus = computed(() => {
+  const m = new Map<string, CellStatus>();
+  for (const s of sessions.value) m.set(s.id, toStatus(s.working, s.waiting));
+  return m;
+});
+const statusForSort = computed<Record<number, CellStatus>>(() => {
+  const out: Record<number, CellStatus> = {};
+  for (const c of state.value.cells) {
+    const fromSession = c.session ? sessionStatus.value.get(c.session) : undefined;
+    out[c.uid] = fromSession ?? statusByUid[c.uid] ?? "idle";
+  }
+  return out;
+});
+const reorderable = computed(() => state.value.sortMode === "manual");
+// In "auto" mode the whole list is attention-sorted then paged (a waiting cell from
+// any page floats to the front); "manual" keeps the hand-arranged order. While a cell
+// is zoomed, render EVERY cell so the filmstrip lines up all tabs' terminals (live).
+const displayCells = computed(() => visibleOrdered(state.value, statusForSort.value));
 const expandedUid = computed(() => zoomedUid(state.value));
 // The cancelable trailing launch cell's uid (null when there's nothing to cancel):
 // drives both the toolbar's cancel state and the launcher's in-cell ✕.
@@ -70,6 +104,8 @@ const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value,
 const onRun = (uid: number, command: { index: number; label: string; cwd: string | null }) => (state.value = runCommand(state.value, uid, command));
 // A running cell's header Run menu: launch in a spare cell so the session survives.
 const onRunSpare = (command: { index: number; label: string; cwd: string | null }) => (state.value = runScriptInNewCell(state.value, command));
+const onMove = (uid: number, dir: -1 | 1) => (state.value = moveCell(state.value, uid, dir));
+const toggleSortMode = () => (state.value = setSortMode(state.value, state.value.sortMode === "auto" ? "manual" : "auto"));
 const switchTo = (page: number) => (state.value = switchPage(state.value, page));
 
 // A script the single view's terminal-header Run menu handed off: run it in a spare
@@ -107,7 +143,15 @@ function closeSettings() {
 
 <template>
   <div class="shell">
-    <AppToolbar view-mode="grid" :add-terminal-active="launchOpen" @go-single="emit('exit')" @add-terminal="onAddTerminal" @settings="showSettings = true" />
+    <AppToolbar
+      view-mode="grid"
+      :add-terminal-active="launchOpen"
+      :auto-sort="state.sortMode === 'auto'"
+      @go-single="emit('exit')"
+      @add-terminal="onAddTerminal"
+      @toggle-sort="toggleSortMode"
+      @settings="showSettings = true"
+    />
     <nav v-if="pages > 1 && expandedUid === null" class="tabbar" aria-label="Grid tabs">
       <button v-for="p in pages" :key="p" :class="['tab', { active: p - 1 === state.page }]" :aria-pressed="p - 1 === state.page" @click="switchTo(p - 1)">
         {{ p }}
@@ -121,6 +165,7 @@ function closeSettings() {
       :default-cwd="defaultCwd"
       :presets="presets"
       :home="home"
+      :reorderable="reorderable"
       :open-session-ids="openSessionIds"
       @session="onSession"
       @cwd="onCwd"
@@ -128,6 +173,8 @@ function closeSettings() {
       @toggle-expand="onToggleExpand"
       @run="onRun"
       @run-spare="onRunSpare"
+      @move="onMove"
+      @status="onStatus"
     />
     <SettingsModal
       v-if="showSettings"

@@ -8,24 +8,24 @@ import type { Cell } from "./gridTabs";
 vi.mock("./TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
-    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home", "openSessionIds", "cancellable"],
-    emits: ["toggle-expand", "session", "cwd", "run", "close"],
+    props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home", "openSessionIds", "cancellable", "reorderable"],
+    emits: ["toggle-expand", "session", "cwd", "run", "close", "move", "status"],
     template: '<div class="stub-cell" />',
   },
 }));
 vi.mock("./CommandCell.vue", () => ({
   default: {
     name: "CommandCell",
-    props: ["expanded", "command", "home"],
-    emits: ["toggle-expand", "close"],
+    props: ["expanded", "command", "home", "reorderable"],
+    emits: ["toggle-expand", "close", "move", "status"],
     template: '<div class="stub-command-cell" />',
   },
 }));
 
 const cell = (uid: number, session: string | null = null, cwd: string | null = null): Cell => ({ uid, session, cwd });
 const cmdCell = (uid: number, command: NonNullable<Cell["command"]>): Cell => ({ uid, session: null, cwd: null, command });
-const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: number | null = null) =>
-  mount(TerminalGrid, { props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], home: "/work", openSessionIds: [] } });
+const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: number | null = null, reorderable = false) =>
+  mount(TerminalGrid, { props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], home: "/work", openSessionIds: [], reorderable } });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const commandCellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "CommandCell" });
 
@@ -57,6 +57,15 @@ describe("TerminalGrid (page renderer)", () => {
     const cs = cellsOf(mountGrid([cell(0, "s0"), cell(1)], null, 1));
     expect(cs[0].props("cancellable")).toBe(false);
     expect(cs[1].props("cancellable")).toBe(true);
+  });
+
+  it("passes reorderable through and re-emits move/status tagged with uid", () => {
+    const w = mountGrid([cell(7, "s")], null, null, true);
+    expect(cellsOf(w)[0].props("reorderable")).toBe(true);
+    cellsOf(w)[0].vm.$emit("move", 1);
+    cellsOf(w)[0].vm.$emit("status", "waiting");
+    expect(w.emitted("move")?.[0]).toEqual([7, 1]);
+    expect(w.emitted("status")?.[0]).toEqual([7, "waiting"]);
   });
 
   it("adds the zoomed class only when a cell is expanded", async () => {

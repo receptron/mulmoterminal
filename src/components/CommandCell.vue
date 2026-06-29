@@ -1,20 +1,36 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
+import type { CellStatus } from "./gridTabs";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
 // a Claude session. Ephemeral: it has no session id and isn't persisted — a reload
 // drops it. `command.index` is the script's position in `<command.cwd>/script.json`
 // (the server resolves it); the command runs in `command.cwd`.
-const props = defineProps<{ expanded: boolean; command: { index: number; label: string; cwd: string | null }; home: string | null }>();
-const emit = defineEmits<{ (e: "toggle-expand" | "close"): void }>();
+const props = defineProps<{
+  expanded: boolean;
+  command: { index: number; label: string; cwd: string | null };
+  home: string | null;
+  // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
+  reorderable?: boolean;
+}>();
+const emit = defineEmits<{
+  (e: "toggle-expand" | "close"): void;
+  // Swap this cell left (-1) or right (+1) in manual sort mode.
+  (e: "move", dir: -1 | 1): void;
+  // Report activity up so the grid can attention-sort in auto mode.
+  (e: "status", value: CellStatus): void;
+}>();
 
 // connectKey forces Terminal.vue to (re)connect — bumped to re-run after exit.
 const connectKey = ref(0);
 const finished = ref(false);
 
 const dirDisplay = computed(() => formatCwd(props.command.cwd, props.home));
+
+// A running command counts as "working"; once it exits it's idle (never "waiting").
+watch(finished, (done) => emit("status", done ? "idle" : "working"), { immediate: true });
 
 function onExit() {
   finished.value = true;
@@ -35,6 +51,8 @@ function rerun() {
       >
       <span class="cell-cmd">▶ {{ command.label }}</span>
       <span class="cell-actions">
+        <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move command left" @click="emit('move', -1)">◀</button>
+        <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move command right" @click="emit('move', 1)">▶</button>
         <button v-if="finished" class="cell-btn" title="Re-run" aria-label="Re-run command" @click="rerun">↻</button>
         <button
           class="cell-btn"

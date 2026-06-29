@@ -11,11 +11,12 @@ import type { Shortcut } from "../types/shortcuts";
 // both show one identical toolbar. The launcher targets single-view surfaces (the
 // collection browser / accounting overlay live in App.vue), so from the grid view those
 // buttons set the global browse/accounting state and emit `go-single` to switch back —
-// the overlay is then already open. Grid-only state (`addTerminalActive`) is passed in.
+// the overlay is then already open. Grid-only state (`addTerminalActive`, `autoSort`)
+// is passed in.
 type ViewMode = "single" | "grid";
 
-const props = defineProps<{ viewMode: ViewMode; addTerminalActive?: boolean }>();
-const emit = defineEmits<{ (e: "go-single" | "go-grid" | "add-terminal" | "settings"): void }>();
+const props = defineProps<{ viewMode: ViewMode; addTerminalActive?: boolean; autoSort?: boolean }>();
+const emit = defineEmits<{ (e: "go-single" | "go-grid" | "add-terminal" | "toggle-sort" | "settings"): void }>();
 
 const { shortcuts } = useShortcuts();
 const { view: browseView } = useCollectionBrowse();
@@ -99,6 +100,22 @@ function showAccounting(): void {
         @click="emit('add-terminal')"
       >
         <span class="material-symbols-outlined">add</span>
+      </button>
+      <button
+        v-if="viewMode === 'grid'"
+        type="button"
+        class="launcher-btn"
+        :class="{ active: autoSort }"
+        :title="
+          autoSort
+            ? 'Auto order: attention-first — needs-attention cells float up (click for manual ◀▶ ordering)'
+            : 'Manual order: reorder cells with ◀▶ (click for auto attention-sort)'
+        "
+        aria-label="Toggle grid cell ordering"
+        :aria-pressed="autoSort"
+        @click="emit('toggle-sort')"
+      >
+        <span class="material-symbols-outlined">{{ autoSort ? "sort" : "swap_horiz" }}</span>
       </button>
     </nav>
     <NotificationBell class="toolbar-bell" />

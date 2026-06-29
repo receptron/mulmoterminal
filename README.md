@@ -544,9 +544,10 @@ src/
     Sidebar.vue       Session list; working dot + waiting bold; pub/sub driven
     Sidebar.spec.ts   Vitest component tests
     Terminal.vue      xterm.js terminal; /ws (or /ws/run); single-view ▶ Run menu
-    GridView.vue      Grid toolbar (auto-layout, ＋ Terminal); runs handed-off scripts
+    AppToolbar.vue    Shared header (single + grid); grid-only ＋ Terminal + ⇅/↔ cell-order toggle
+    GridView.vue      Grid view: auto-layout, pages, manual/auto cell order; runs handed-off scripts
     RunMenu.vue       ▶ Run dropdown: lists a dir's script.json, emits the pick
-    TerminalCell.vue  A cell: Claude launcher (dir picker + resume + run-a-script)
+    TerminalCell.vue  A cell: Claude launcher (dir picker + resume + run-a-script); ◀▶ to reorder
     TerminalGrid.vue  Grid of cells; auto-sizes by count; zoom lines up every tab
     CommandCell.vue   A grid cell that runs a script.json command (ephemeral)
   composables/

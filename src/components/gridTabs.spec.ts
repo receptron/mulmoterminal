@@ -11,12 +11,17 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  setSortMode,
+  moveCell,
+  orderCells,
+  visibleOrdered,
   cancelableLaunchUid,
   zoomedUid,
   visibleCells,
   parseGridState,
   migrateLegacy,
   initialState,
+  type CellStatus,
   type GridState,
   type Cell,
 } from "./gridTabs";
@@ -24,7 +29,14 @@ import {
 const U = (n: number) => `${String(n % 10).repeat(8)}-aaaa-aaaa-aaaa-aaaaaaaaaaaa`;
 const cell = (uid: number, session: string | null = null, cwd: string | null = null): Cell => ({ uid, session, cwd });
 const running = (count: number): Cell[] => Array.from({ length: count }, (_, i) => cell(i, U(i)));
-const make = (cells: Cell[], extra: Partial<GridState> = {}): GridState => ({ cells, expanded: null, page: 0, nextUid: cells.length, ...extra });
+const make = (cells: Cell[], extra: Partial<GridState> = {}): GridState => ({
+  cells,
+  expanded: null,
+  page: 0,
+  nextUid: cells.length,
+  sortMode: "manual",
+  ...extra,
+});
 
 describe("pagination helpers", () => {
   it("pageCount is 1..n in chunks of 9", () => {
@@ -185,6 +197,72 @@ describe("runScriptInNewCell (toolbar Run menu)", () => {
   });
 });
 
+describe("setSortMode / moveCell (manual reorder)", () => {
+  it("setSortMode flips between manual and auto", () => {
+    expect(setSortMode(make(running(2)), "auto").sortMode).toBe("auto");
+    expect(setSortMode(make(running(2), { sortMode: "auto" }), "manual").sortMode).toBe("manual");
+  });
+  it("moveCell swaps a cell with its right/left neighbour", () => {
+    const s = make(running(3));
+    expect(moveCell(s, 0, 1).cells.map((c) => c.uid)).toEqual([1, 0, 2]); // 0 right
+    expect(moveCell(s, 2, -1).cells.map((c) => c.uid)).toEqual([0, 2, 1]); // 2 left
+  });
+  it("moveCell is a no-op past either end", () => {
+    const s = make(running(3));
+    expect(moveCell(s, 0, -1)).toBe(s); // already leftmost
+    expect(moveCell(s, 2, 1)).toBe(s); // already rightmost
+    expect(moveCell(s, 99, 1)).toBe(s); // unknown uid
+  });
+  it("moveCell won't push a cell past the trailing launch cell (it stays last)", () => {
+    const s = make([...running(2), cell(2)]); // cell 2 is the trailing launcher
+    expect(moveCell(s, 1, 1)).toBe(s);
+  });
+});
+
+describe("orderCells (auto attention sort)", () => {
+  const status = (m: Record<number, CellStatus>) => m;
+  it("manual mode returns the list unchanged", () => {
+    const cells = running(3);
+    expect(orderCells(cells, status({ 0: "working", 1: "waiting", 2: "idle" }), "manual")).toBe(cells);
+  });
+  it("auto sorts waiting -> idle -> working, launch cells last", () => {
+    const cells = [...running(3), cell(3)]; // uid 3 is an empty launch cell
+    const ordered = orderCells(cells, status({ 0: "working", 1: "waiting", 2: "idle" }), "auto");
+    expect(ordered.map((c) => c.uid)).toEqual([1, 2, 0, 3]);
+  });
+  it("is stable within a bucket (equal status keeps manual order)", () => {
+    const cells = running(4);
+    const ordered = orderCells(cells, status({ 0: "working", 1: "working", 2: "working", 3: "working" }), "auto");
+    expect(ordered.map((c) => c.uid)).toEqual([0, 1, 2, 3]);
+  });
+  it("treats an unreported uid as idle", () => {
+    const cells = running(2);
+    const ordered = orderCells(cells, status({ 0: "working" }), "auto");
+    expect(ordered.map((c) => c.uid)).toEqual([1, 0]); // uid 1 (idle) before uid 0 (working)
+  });
+});
+
+describe("visibleOrdered (attention-sort the whole list, then page)", () => {
+  it("floats a waiting cell from any page onto the first page", () => {
+    // 12 cells over 2 pages. uid 10 starts on page 2; once waiting it sorts to the
+    // front and lands on page 1, while the working uid 0 sinks off page 1.
+    const s = make(running(12), { page: 0, sortMode: "auto" });
+    const statusByUid: Record<number, CellStatus> = { 0: "working", 1: "waiting", 10: "waiting" };
+    const page1 = visibleOrdered(s, statusByUid).map((c) => c.uid);
+    expect(page1.slice(0, 2)).toEqual([1, 10]); // both waiting cells, base order, up front
+    expect(page1).not.toContain(0); // working uid 0 sank to page 2
+    expect(page1).toHaveLength(9);
+  });
+  it("manual mode leaves the on-screen order untouched", () => {
+    const s = make(running(4), { sortMode: "manual" });
+    expect(visibleOrdered(s, { 0: "working", 3: "waiting" }).map((c) => c.uid)).toEqual([0, 1, 2, 3]);
+  });
+  it("orders the whole list (the filmstrip) while zoomed", () => {
+    const s = make(running(12), { page: 0, expanded: 11, sortMode: "auto" });
+    expect(visibleOrdered(s, { 11: "waiting" }).map((c) => c.uid)[0]).toBe(11);
+  });
+});
+
 describe("zoomedUid / visibleCells", () => {
   it("zoomedUid returns the expanded uid, or null when nothing is zoomed", () => {
     expect(zoomedUid(make(running(3)))).toBeNull();
@@ -220,6 +298,12 @@ describe("parseGridState / migrateLegacy / initialState", () => {
   it("returns null for missing/corrupt input", () => {
     expect(parseGridState(null)).toBeNull();
     expect(parseGridState("not json{")).toBeNull();
+  });
+  it("round-trips a persisted sortMode and defaults to manual", () => {
+    const cells = [cell(0, U(0))];
+    expect(parseGridState(JSON.stringify({ cells, sortMode: "auto" }))?.sortMode).toBe("auto");
+    expect(parseGridState(JSON.stringify({ cells }))?.sortMode).toBe("manual"); // absent -> manual
+    expect(parseGridState(JSON.stringify({ cells, sortMode: "bogus" }))?.sortMode).toBe("manual"); // invalid -> manual
   });
   it("constrains a malformed persisted page to a valid integer", () => {
     const cells = Array.from({ length: 18 }, (_, i) => cell(i, U(i))); // 2 pages

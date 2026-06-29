@@ -13,11 +13,19 @@ export interface Cell {
   // the directory it runs in. Ephemeral — command cells are never persisted.
   command?: { index: number; label: string; cwd: string | null } | null;
 }
+// How the grid orders its cells. "manual": the user's hand-arranged order (◀▶);
+// "auto": attention-first, recomputed from each cell's live status.
+export type SortMode = "manual" | "auto";
+// A cell's live activity, reported up from the cell (the server's working/waiting
+// flags). Drives the "auto" order; absent uids are treated as idle.
+export type CellStatus = "waiting" | "working" | "idle";
+
 export interface GridState {
   cells: Cell[];
   expanded: number | null; // uid of the zoomed cell, or null
   page: number;
   nextUid: number;
+  sortMode: SortMode;
 }
 
 export const PAGE_SIZE = 9;
@@ -103,14 +111,59 @@ export function toggleExpand(state: GridState, uid: number): GridState {
   return { ...state, expanded: state.expanded === uid ? null : uid };
 }
 
+export function setSortMode(state: GridState, sortMode: SortMode): GridState {
+  return { ...state, sortMode };
+}
+
+// Manual reorder: swap a cell with its neighbour (dir -1 = left, +1 = right) in the
+// flat list. No-op at the ends, and never swaps a cell past the trailing launch
+// cell (it stays last so "+ Terminal"/cancel keep working on it).
+export function moveCell(state: GridState, uid: number, dir: -1 | 1): GridState {
+  const i = state.cells.findIndex((c) => c.uid === uid);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= state.cells.length) return state;
+  if (isLaunchCell(state.cells[j]) && j === state.cells.length - 1) return state;
+  const cells = state.cells.slice();
+  [cells[i], cells[j]] = [cells[j], cells[i]];
+  return { ...state, cells };
+}
+
 // The zoomed cell's uid, or null when nothing is zoomed (or `expanded` is stale —
 // points at a cell no longer in the list).
 export const zoomedUid = (state: GridState): number | null =>
   state.expanded !== null && state.cells.some((c) => c.uid === state.expanded) ? state.expanded : null;
 
-// Cells to render: while a cell is zoomed, the WHOLE list (so the filmstrip lines
-// up every tab's terminal, live), otherwise just the active page's slice.
+// Attention-first rank for the "auto" order: cells needing the user (waiting) come
+// first, then idle, then working, with empty launch cells last. Lower sorts earlier.
+const RANK: Record<CellStatus, number> = { waiting: 0, idle: 1, working: 2 };
+const LAUNCH_RANK = 3;
+const cellRank = (c: Cell, statusByUid: Record<number, CellStatus>): number => (isLaunchCell(c) ? LAUNCH_RANK : RANK[statusByUid[c.uid] ?? "idle"]);
+
+// Display order. "manual": the hand-arranged list as-is. "auto": a STABLE sort by
+// attention rank — equal-rank cells keep their manual order, so a status change
+// only floats that one cell to its bucket and doesn't reshuffle the rest.
+export function orderCells(cells: Cell[], statusByUid: Record<number, CellStatus>, mode: SortMode): Cell[] {
+  if (mode !== "auto") return cells;
+  return cells
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => cellRank(a.c, statusByUid) - cellRank(b.c, statusByUid) || a.i - b.i)
+    .map((x) => x.c);
+}
+
+// Cells in the on-screen view, in manual (base) order: while a cell is zoomed, the
+// WHOLE list (so the filmstrip lines up every tab's terminal, live), otherwise just
+// the active page's slice.
 export const visibleCells = (state: GridState): Cell[] => (zoomedUid(state) !== null ? state.cells : pageSlice(state.cells, state.page));
+
+// The cells to render. "auto" attention-sorts the WHOLE list first, then pages — so a
+// waiting cell from any page floats onto the first page. This needs a status map that
+// covers EVERY cell (incl. unmounted pages), or a status change on an off-screen page
+// would (mis)read as idle; GridView feeds it the server's full session status. While
+// zoomed the whole ordered list is shown (the filmstrip).
+export const visibleOrdered = (state: GridState, statusByUid: Record<number, CellStatus>): Cell[] => {
+  const ordered = orderCells(state.cells, statusByUid, state.sortMode);
+  return zoomedUid(state) !== null ? ordered : pageSlice(ordered, state.page);
+};
 
 // Switch page: drop an abandoned trailing launch cell first and clear the zoom
 // (zoom is scoped to a page). Selecting the already-active page is a no-op so it
@@ -123,6 +176,7 @@ export function switchPage(state: GridState, page: number): GridState {
 }
 
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
+const asSortMode = (v: unknown): SortMode => (v === "auto" ? "auto" : "manual");
 // A cell entry is kept if its session/cwd are well-formed; uid is validated only to
 // match the persisted `expanded` (it is renumbered below regardless).
 const isCell = (c: unknown): c is Cell => {
@@ -147,7 +201,7 @@ export function parseGridState(raw: string | null): GridState | null {
     const expandedIdx = running.findIndex((c: Cell) => c.uid === parsed.expanded);
     const expanded = typeof parsed.expanded === "number" && expandedIdx >= 0 ? expandedIdx : null;
     const page = Number.isSafeInteger(parsed.page) && parsed.page >= 0 ? parsed.page : 0;
-    return clampPage(ensureEntry({ cells, expanded, page, nextUid: cells.length }));
+    return clampPage(ensureEntry({ cells, expanded, page, nextUid: cells.length, sortMode: asSortMode(parsed.sortMode) }));
   } catch {
     return null;
   }
@@ -163,7 +217,7 @@ export function migrateLegacy(raw: string | null): GridState | null {
       if (isUuid(s)) cells.push({ uid: cells.length, session: s, cwd: typeof parsed.cwds?.[i] === "string" ? parsed.cwds[i] : null });
     });
     const expanded = typeof parsed.expanded === "number" && parsed.expanded >= 0 && parsed.expanded < cells.length ? cells[parsed.expanded].uid : null;
-    return clampPage(ensureEntry({ cells, expanded, page: 0, nextUid: cells.length }));
+    return clampPage(ensureEntry({ cells, expanded, page: 0, nextUid: cells.length, sortMode: "manual" }));
   } catch {
     return null;
   }
@@ -174,5 +228,5 @@ export function initialState(curRaw: string | null, legacyRaw: string | null): {
   if (cur) return { state: cur, migrated: false };
   const migrated = migrateLegacy(legacyRaw);
   if (migrated) return { state: migrated, migrated: true };
-  return { state: ensureEntry({ cells: [], expanded: null, page: 0, nextUid: 0 }), migrated: false };
+  return { state: ensureEntry({ cells: [], expanded: null, page: 0, nextUid: 0, sortMode: "manual" }), migrated: false };
 }
