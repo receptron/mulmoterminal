@@ -9,17 +9,14 @@ import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue"
 import AccountingOverlay from "./components/AccountingOverlay.vue";
 import GridView from "./components/GridView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
-import NotificationBell from "./components/NotificationBell.vue";
+import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
-import { useShortcuts } from "./composables/useShortcuts";
-import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "./composables/useCollectionBrowse";
-import { useAccountingView, accountingViewOpen, accountingViewClose } from "./composables/useAccountingView";
+import { browseClose } from "./composables/useCollectionBrowse";
 import { registerChatOpener } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { usePendingScript, type PendingCommand } from "./composables/usePendingScript";
 import { useSoundEnabled } from "./composables/useSoundEnabled";
 import { useAttentionSound } from "./composables/useAttentionSound";
-import type { Shortcut } from "./types/shortcuts";
 import type { CwdPreset } from "./components/presets";
 
 // View mode: the classic single-terminal view (default) or the multi-terminal
@@ -34,36 +31,6 @@ const { requestRun } = usePendingScript();
 function onRunScript(command: PendingCommand) {
   requestRun(command);
   viewMode.value = "grid";
-}
-
-// Shared launcher favorites (pinned collections / feeds), backing the toolbar.
-const { shortcuts } = useShortcuts();
-// Toolbar tabs reflect the browse view-state: Chat (overlay closed) | Collections
-// (index open) | a favorite (its detail open).
-const { view: browseView, isOpen: browseOpen } = useCollectionBrowse();
-function favActive(s: Shortcut): boolean {
-  return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
-}
-
-// The accounting overlay (toolbar account_balance) and the collection browse overlay
-// both fill the page below the toolbar, so they're mutually exclusive — each toolbar
-// action closes the other. Chat is the "neither open" state.
-const { isOpen: accountingOpen } = useAccountingView();
-function showChat(): void {
-  browseClose();
-  accountingViewClose();
-}
-function showCollections(): void {
-  accountingViewClose();
-  browseGotoIndex("collection");
-}
-function showFavorite(s: Shortcut): void {
-  accountingViewClose();
-  browseGotoDetail(s.kind, s.slug);
-}
-function showAccounting(): void {
-  browseClose();
-  accountingViewOpen();
 }
 
 const activeId = ref<string | null>(null);
@@ -81,7 +48,7 @@ const filter = ref<Filter>("all");
 // views, including terminals on background grid pages. Listens to the "sessions"
 // activity stream directly (same source as the cell status), independent of the
 // fetched list above.
-const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
+const { enabled: soundEnabled } = useSoundEnabled();
 // soundFile is a shared singleton in useAppConfig, so the player here sees changes
 // made from either view's settings modal (and loadConfig below hydrates it).
 const { soundFile } = useAppConfig();
@@ -225,57 +192,7 @@ function onSession(id: string) {
 <template>
   <GridView v-if="viewMode === 'grid'" @exit="viewMode = 'single'" />
   <div v-else class="shell">
-    <header class="toolbar">
-      <span class="toolbar-title">MulmoTerminal</span>
-      <nav class="launcher" aria-label="Views">
-        <button type="button" class="launcher-btn" :class="{ active: !browseOpen && !accountingOpen }" title="Chat" aria-label="Chat" @click="showChat">
-          <span class="material-symbols-outlined">chat</span>
-        </button>
-        <button type="button" class="launcher-btn" title="Grid (multiple terminals)" aria-label="Grid view" @click="viewMode = 'grid'">
-          <span class="material-symbols-outlined">grid_view</span>
-        </button>
-        <button
-          type="button"
-          class="launcher-btn"
-          :class="{ active: browseView.mode === 'index' }"
-          title="Collections"
-          aria-label="Collections"
-          @click="showCollections"
-        >
-          <span class="material-symbols-outlined">apps</span>
-        </button>
-        <button type="button" class="launcher-btn" :class="{ active: accountingOpen }" title="Accounting" aria-label="Accounting" @click="showAccounting">
-          <span class="material-symbols-outlined">account_balance</span>
-        </button>
-        <button
-          v-for="s in shortcuts"
-          :key="`${s.kind}:${s.slug}`"
-          type="button"
-          class="launcher-btn"
-          :class="{ active: favActive(s) }"
-          :title="s.title"
-          :aria-label="s.title"
-          @click="showFavorite(s)"
-        >
-          <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
-        </button>
-      </nav>
-      <NotificationBell class="toolbar-bell" />
-      <button
-        type="button"
-        class="launcher-btn sound-toggle"
-        :class="{ active: soundEnabled }"
-        :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
-        :aria-label="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
-        :aria-pressed="soundEnabled"
-        @click="toggleSound"
-      >
-        <span class="material-symbols-outlined">{{ soundEnabled ? "notifications_active" : "notifications_off" }}</span>
-      </button>
-      <button type="button" class="launcher-btn settings-btn" title="Settings" aria-label="Settings" @click="showSettings = true">
-        <span class="material-symbols-outlined">settings</span>
-      </button>
-    </header>
+    <AppToolbar :view-mode="viewMode" @go-grid="viewMode = 'grid'" @settings="showSettings = true" />
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
         v-if="layout === 'vertical'"
@@ -353,64 +270,6 @@ function onSession(id: string) {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-}
-
-/* Top toolbar with the app title. */
-.toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-}
-.toolbar-title {
-  font-family: system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text);
-  letter-spacing: 0.02em;
-}
-
-/* Toolbar tabs: Chat + Collections + one per pinned favorite. Icon-only. */
-.launcher {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 16px;
-  min-width: 0;
-  overflow-x: auto;
-}
-.launcher-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: 30px;
-  width: 30px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.launcher-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.launcher-btn.active {
-  background: var(--accent-bg);
-  color: var(--on-accent);
-}
-/* Push the action buttons (bell, sound, settings) to the far right as a group. */
-.toolbar-bell {
-  margin-left: auto;
-}
-.launcher-btn .material-symbols-outlined {
-  font-size: 19px;
-  line-height: 1;
 }
 
 .app {

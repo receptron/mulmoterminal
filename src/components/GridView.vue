@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
+import AppToolbar from "./AppToolbar.vue";
 import {
   initialState,
   addCell,
@@ -20,16 +21,12 @@ import {
   LEGACY_KEY,
   type GridState,
 } from "./gridTabs";
-import { useSoundEnabled } from "../composables/useSoundEnabled";
 import { usePendingScript } from "../composables/usePendingScript";
 import type { CwdPreset } from "./presets";
 import { useAppConfig } from "../composables/useAppConfig";
 
 // The multi-terminal grid view. Toggled with the classic single view from App.vue.
 const emit = defineEmits<{ (e: "exit"): void }>();
-
-// Attention-sound toggle (shared singleton with the single view's toolbar).
-const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
 
 // One flat list of terminal cells; tabs are just pages (9 each) over it. Closing a
 // cell reflows the list so terminals flow across page boundaries. Only the active
@@ -107,28 +104,7 @@ function closeSettings() {
 
 <template>
   <div class="shell">
-    <header class="toolbar">
-      <span class="toolbar-title">MulmoTerminal</span>
-      <button
-        class="tb-btn tb-add"
-        :class="{ active: launchOpen }"
-        :title="launchOpen ? 'Cancel adding a terminal' : 'New terminal (overflows to a new tab when full)'"
-        @click="onAddTerminal"
-      >
-        ＋ Terminal
-      </button>
-      <button
-        class="tb-btn"
-        :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
-        :aria-label="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
-        :aria-pressed="soundEnabled"
-        @click="toggleSound"
-      >
-        {{ soundEnabled ? "🔔" : "🔕" }}
-      </button>
-      <button class="tb-btn" title="Single view" aria-label="Switch to single view" @click="emit('exit')">▢ Single</button>
-      <button class="tb-btn" title="Settings" aria-label="Settings" @click="showSettings = true">⚙</button>
-    </header>
+    <AppToolbar view-mode="grid" :add-terminal-active="launchOpen" @go-single="emit('exit')" @add-terminal="onAddTerminal" @settings="showSettings = true" />
     <nav v-if="pages > 1 && expandedUid === null" class="tabbar" aria-label="Grid tabs">
       <button v-for="p in pages" :key="p" :class="['tab', { active: p - 1 === state.page }]" :aria-pressed="p - 1 === state.page" @click="switchTo(p - 1)">
         {{ p }}
@@ -168,49 +144,6 @@ function closeSettings() {
   height: 100vh;
   width: 100vw;
   overflow: hidden;
-}
-
-.toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  height: 40px;
-  padding: 0 16px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-}
-.toolbar-title {
-  font-family: system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text);
-  letter-spacing: 0.02em;
-}
-
-.tb-add {
-  margin-left: auto;
-}
-.tb-add.active {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.tb-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.tb-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 
 .tabbar {
