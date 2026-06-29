@@ -381,6 +381,12 @@ let pubsub: ReturnType<typeof createPubSub> | null = null;
 // reattach within it cancels the reap, so a reload just re-attaches to the same
 // running terminal. Only after the window with no reattach do we reap.
 const REAP_GRACE_MS = 30_000;
+// A detached session that still needs the user — mid-turn output the user hasn't
+// seen, or blocked on a permission/question prompt (the `waiting` flag) — is an
+// unfinished task: reaping it loses work. So it gets a much longer grace than an
+// idle one, long enough that you can switch away, do other things, and come back
+// to answer it. Override with WAIT_REAP_GRACE_MS=0 to never auto-close these.
+const WAIT_REAP_GRACE_MS = process.env.WAIT_REAP_GRACE_MS !== undefined ? Number(process.env.WAIT_REAP_GRACE_MS) : 30 * 60_000;
 const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function cancelReap(id: string) {
@@ -391,7 +397,10 @@ function cancelReap(id: string) {
   }
 }
 
-function scheduleReap(id: string) {
+function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
+  // 0 (or non-positive) => never auto-reap; the session stays until reattached or
+  // explicitly terminated.
+  if (delayMs <= 0) return;
   if (reapTimers.has(id)) return;
   reapTimers.set(
     id,
@@ -399,8 +408,28 @@ function scheduleReap(id: string) {
       reapTimers.delete(id);
       const entry = ptys.get(id);
       if (entry && !entry.ws) reap(id); // still detached after the grace window
-    }, REAP_GRACE_MS),
+    }, delayMs),
   );
+}
+
+// Decide whether/when to reap a detached session based on its activity. A session
+// that's actively thinking (`working`) is never reaped — that's "clearly working,
+// don't close it". One that needs the user (`waiting`) gets the long grace. A
+// genuinely idle session (finished AND already viewed, so neither flag) gets the
+// short grace — that's the "auto-close inactive ones" behaviour.
+function armReapForDetached(id: string) {
+  const entry = ptys.get(id);
+  if (!entry || entry.ws) return; // still attached: nothing to reap
+  const a = activity.get(id);
+  if (a?.working) {
+    console.log(`[pty] keeping working session ${id} alive (detached)`);
+    return;
+  }
+  if (a?.waiting) {
+    scheduleReap(id, WAIT_REAP_GRACE_MS);
+    return;
+  }
+  scheduleReap(id, REAP_GRACE_MS);
 }
 
 function reap(id: string) {
@@ -451,14 +480,11 @@ function setWorking(id: string, working: boolean, event?: string) {
   activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
 
-  // A background session (no attached client) that just went idle is reaped.
-  if (!working) {
-    const entry = ptys.get(id);
-    if (entry && !entry.ws) {
-      console.log(`[pty] reaping idle background session ${id}`);
-      reap(id);
-    }
-  }
+  // A background session (no attached client) that just finished a turn is no
+  // longer `working`. Don't kill it outright — if it ended its turn to ask the
+  // user something (it'll be flagged `waiting`), reaping now would lose the task
+  // before the user can answer. Arm a reap whose grace matches its state.
+  if (!working) armReapForDetached(id);
 }
 
 // A background session needs the user's attention: it is waiting for input
@@ -1505,20 +1531,17 @@ function handleCommandFrame(term: IPty, raw: RawData) {
   }
 }
 
-// Socket closed: detach it; keep the PTY alive if Claude is mid-turn (reaped on
-// the Stop hook), otherwise reap now.
+// Socket closed: detach it and decide the PTY's fate by activity — working stays
+// alive, needs-the-user gets a long grace, idle gets the short grace.
 function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
   // Ignore if a newer client already reattached to this session.
   if (entry.ws !== ws) return;
   entry.ws = null;
-  if (activity.get(sessionId)?.working) {
-    console.log(`[ws] disconnected; keeping working session ${sessionId} alive`);
-  } else {
-    // Don't reap now — a reload reconnects in a moment and should re-attach to
-    // this same live terminal. Reap only if nothing reattaches within the window.
-    console.log(`[ws] disconnected; idle session ${sessionId} reaped in ${REAP_GRACE_MS / 1000}s unless reattached`);
-    scheduleReap(sessionId);
-  }
+  // Keep a working session alive indefinitely, give a session that needs the user
+  // the long grace, and reap a genuinely idle one after the short grace. A reload
+  // reconnects in a moment and re-attaches (cancelling the reap) regardless.
+  console.log(`[ws] disconnected ${sessionId}`);
+  armReapForDetached(sessionId);
 }
 
 wss.on("connection", (ws, req) => {
