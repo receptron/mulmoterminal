@@ -1,9 +1,12 @@
-// Drives the favicon off the authoritative session list (useSessions): it's seeded
-// from /api/sessions on mount, refetched on every "sessions" pub-sub push, and
-// resynced on reconnect — so the icon mirrors current truth and is never left stale
-// by a missed event. Hidden background workers are excluded (they don't demand the
-// user's attention, matching the sidebar's unread semantics).
-import { computed, type Ref } from "vue";
+// Drives the favicon off LIVE activity across EVERY session — the global "sessions"
+// pub-sub stream the attention beep uses — so it never diverges from the beep and
+// covers other-directory grid sessions too. The stream only carries transitions, so
+// it's reconciled against the authoritative session list (useSessions: seeded on
+// mount, refetched on each push, resynced on reconnect): that list's truth is adopted
+// and any default-project session it stops reporting is pruned — the safety net that
+// lets a missed "closed" (e.g. one that happened while the socket was down) recover.
+import { computed, onUnmounted, ref, watch, type Ref } from "vue";
+import { usePubSub } from "./usePubSub";
 import { useDynamicFavicon } from "./useDynamicFavicon";
 import type { Session } from "./useSessions";
 
@@ -13,6 +16,14 @@ interface Activity {
   working: boolean;
   waiting: boolean;
 }
+interface ActivityMsg {
+  id: string;
+  working?: boolean;
+  waiting?: boolean;
+  event?: string | null;
+}
+const isRecord = (d: unknown): d is Record<string, unknown> => typeof d === "object" && d !== null;
+const isActivityMsg = (d: unknown): d is ActivityMsg => isRecord(d) && "id" in d;
 
 // attention(waiting) wins over working wins over idle — matching the grid cell's own
 // status priority, so the tab icon agrees with the cell border.
@@ -32,6 +43,38 @@ const STATE_COLOR: Record<FaviconState, string> = {
 };
 
 export function useFaviconState(sessions: Ref<Session[]>): void {
-  const color = computed(() => STATE_COLOR[deriveFaviconState(sessions.value.filter((s) => !s.hidden))]);
+  const live = ref(new Map<string, Activity>());
+
+  const { subscribe } = usePubSub();
+  const unsubscribe = subscribe("sessions", (d) => {
+    if (!isActivityMsg(d)) return;
+    const next = new Map(live.value);
+    if (d.event === "closed") next.delete(d.id);
+    else next.set(d.id, { working: d.working ?? false, waiting: d.waiting ?? false });
+    live.value = next;
+  });
+  onUnmounted(unsubscribe);
+
+  // Reconcile with the authoritative list: adopt its truth and drop default-project
+  // ids it no longer reports (cross-dir grid ids never appear here, so they stay,
+  // pruned instead by their own "closed" event above).
+  let prevAuthIds = new Set<string>();
+  watch(
+    sessions,
+    (list) => {
+      const next = new Map(live.value);
+      const authIds = new Set<string>();
+      for (const s of list) {
+        authIds.add(s.id);
+        next.set(s.id, { working: s.working, waiting: s.waiting });
+      }
+      for (const id of prevAuthIds) if (!authIds.has(id)) next.delete(id);
+      prevAuthIds = authIds;
+      live.value = next;
+    },
+    { immediate: true },
+  );
+
+  const color = computed(() => STATE_COLOR[deriveFaviconState(live.value.values())]);
   useDynamicFavicon(color);
 }
