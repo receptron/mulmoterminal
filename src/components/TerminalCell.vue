@@ -130,6 +130,12 @@ onUnmounted(() => {
   if (resumableTimer) clearTimeout(resumableTimer);
 });
 
+// Set when the user starts a FRESH session from the launcher, so the next server
+// cwd report is recorded as a recent dir — but a reconnect/restore of an existing
+// session (which also reports a cwd) is not, or recents would be rewritten in mount
+// order on reload instead of reflecting what the user actually launched last.
+let recordNextCwd = false;
+
 // Start a fresh session in `dir`. Optimistic display only; the persisted/displayed
 // truth is the EFFECTIVE cwd the server confirms (onServerCwd), which may fall back.
 function launchIn(dir: string | null) {
@@ -137,6 +143,7 @@ function launchIn(dir: string | null) {
   sessionId.value = null; // new session — the server generates the id
   connectKey.value++;
   launched.value = true;
+  recordNextCwd = true;
   loadDiff(); // no-op for a non-worktree dir
 }
 function launch() {
@@ -373,7 +380,12 @@ async function openDir() {
 // requested dir). Adopt it as the truth — display and persist the effective cwd.
 function onServerCwd(c: string) {
   cwd.value = c;
-  recordDir(c); // remember this dir for the launcher's recent-locations chips
+  // Only a user-initiated fresh launch updates the recent-locations chips — not a
+  // reconnect/restore of an already-running session (see recordNextCwd).
+  if (recordNextCwd) {
+    recordNextCwd = false;
+    recordDir(c);
+  }
   emit("cwd", c);
 }
 
@@ -814,8 +826,14 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       </button>
       <div v-if="presets.length" class="cell-presets">
         <span v-for="p in presets" :key="p.label + p.path" class="cell-chip">
-          <button class="cell-chip-main" :title="p.path" @click="selectPreset(p)">{{ p.label }}</button>
-          <button class="cell-chip-fill" :title="`Use ${p.path} without launching (browse / resume here)`" @click="fillDir(p.path)">
+          <button type="button" class="cell-chip-main" :title="p.path" @click="selectPreset(p)">{{ p.label }}</button>
+          <button
+            type="button"
+            class="cell-chip-fill"
+            :title="`Use ${p.path} without launching (browse / resume here)`"
+            :aria-label="`Use ${p.path} without launching`"
+            @click="fillDir(p.path)"
+          >
             <span class="material-symbols-outlined">edit</span>
           </button>
         </span>
@@ -825,6 +843,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <span class="cell-dir-row">
           <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
           <button
+            type="button"
             class="cell-dir-go"
             :disabled="!dirInput.trim()"
             title="Start a new terminal here (or press Enter)"
@@ -839,8 +858,14 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <span class="cell-launch-caption">recent</span>
         <div class="cell-recent-list">
           <span v-for="r in recentDirs" :key="r" class="cell-chip">
-            <button class="cell-chip-main" :title="r" @click="selectRecent(r)">{{ formatCwd(r, home, 28) }}</button>
-            <button class="cell-chip-fill" :title="`Use ${r} without launching (browse / resume here)`" @click="fillDir(r)">
+            <button type="button" class="cell-chip-main" :title="r" @click="selectRecent(r)">{{ formatCwd(r, home, 28) }}</button>
+            <button
+              type="button"
+              class="cell-chip-fill"
+              :title="`Use ${r} without launching (browse / resume here)`"
+              :aria-label="`Use ${r} without launching`"
+              @click="fillDir(r)"
+            >
               <span class="material-symbols-outlined">edit</span>
             </button>
           </span>

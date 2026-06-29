@@ -347,6 +347,26 @@ describe("TerminalCell", () => {
     expect(w2.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/home/me/alpha");
   });
 
+  it("does NOT record a recent when a restored session reports its cwd (only fresh launches)", async () => {
+    // A cell restoring a persisted session also gets a server cwd report on connect;
+    // that must not rewrite the recents (else reload reorders them by mount order).
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/restored" });
+    await flushPromises();
+    w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/restored");
+    await flushPromises();
+    expect(useRecentDirs().recentDirs.value).toEqual([]);
+  });
+
+  it("does NOT record a recent when resuming an existing session from the resume list", async () => {
+    mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj" });
+    await flushPromises();
+    await w.find(".cell-resume-item").trigger("click");
+    w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
+    await flushPromises();
+    expect(useRecentDirs().recentDirs.value).toEqual([]);
+  });
+
   it("prefills the launch field with the most recent location (not the server default)", async () => {
     useRecentDirs().recordDir("/home/me/last-used");
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
