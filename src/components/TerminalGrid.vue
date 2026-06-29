@@ -21,6 +21,7 @@ const props = defineProps<{
   defaultCwd: string | null;
   presets: CwdPreset[];
   home: string | null;
+  openSessionIds: string[];
 }>();
 const emit = defineEmits<{
   (e: "session" | "cwd", uid: number, value: string): void;
@@ -60,6 +61,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           :default-cwd="defaultCwd"
           :presets="presets"
           :home="home"
+          :open-session-ids="openSessionIds"
           :cancellable="cell.uid === cancelUid"
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @session="(id) => emit('session', cell.uid, id)"

@@ -472,6 +472,12 @@ Key rules:
 - **Reattach over respawn**: selecting a session that still has a live background
   PTY reattaches to it (replaying a ≤ 64 KB output tail) instead of spawning a
   duplicate `claude`.
+- **One live viewer per session**: a session is bound to a single socket. Opening
+  it in a second place (another tab, or another grid cell pointed at the same dir)
+  reattaches there and **supersedes** the first, which detaches. To avoid doing
+  this by accident, a grid launcher's resume list **flags rows already open in
+  another terminal** (`● open`) and **asks for confirmation** before taking one
+  over.
 - Brand-new sessions appear in the sidebar **immediately** (before their `.jsonl`
   exists) via the in-memory `knownSessions` registry + a `created` push; an
   unused one disappears when its PTY is reaped.

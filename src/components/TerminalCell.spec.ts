@@ -64,6 +64,7 @@ function mountCell(
     presets?: { label: string; path: string }[];
     home?: string | null;
     cancellable?: boolean;
+    openSessionIds?: string[];
   } = {},
 ) {
   return mount(TerminalCell, {
@@ -75,6 +76,7 @@ function mountCell(
       presets: opts.presets ?? [],
       home: opts.home ?? "/home/me",
       cancellable: opts.cancellable ?? false,
+      openSessionIds: opts.openSessionIds ?? [],
     },
   });
 }
@@ -150,6 +152,57 @@ describe("TerminalCell", () => {
     expect(term.exists()).toBe(true);
     expect(term.props("sessionId")).toBe("77777777-7777-7777-7777-777777777777");
     expect(term.props("cwd")).toBe("/home/me/proj");
+  });
+
+  it("flags a resumable row that's already open in another terminal", async () => {
+    const openId = "88888888-8888-8888-8888-888888888888";
+    mockFetch([
+      { id: openId, title: "running over there", mtime: Date.now() },
+      { id: "99999999-9999-9999-9999-999999999999", title: "idle elsewhere", mtime: Date.now() },
+    ]);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
+    await flushPromises();
+    const items = w.findAll(".cell-resume-item");
+    expect(items[0].classes()).toContain("is-open");
+    expect(items[0].find(".ri-open").exists()).toBe(true);
+    expect(items[1].classes()).not.toContain("is-open");
+    expect(items[1].find(".ri-open").exists()).toBe(false);
+  });
+
+  it("confirms before resuming a session open elsewhere, and bails on cancel", async () => {
+    const openId = "88888888-8888-8888-8888-888888888888";
+    mockFetch([{ id: openId, title: "running over there", mtime: Date.now() }]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
+    await flushPromises();
+    await w.find(".cell-resume-item").trigger("click");
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+    confirmSpy.mockRestore();
+  });
+
+  it("resumes a session open elsewhere once the confirm is accepted", async () => {
+    const openId = "88888888-8888-8888-8888-888888888888";
+    mockFetch([{ id: openId, title: "running over there", mtime: Date.now() }]);
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
+    await flushPromises();
+    await w.find(".cell-resume-item").trigger("click");
+    expect(confirmSpy).toHaveBeenCalledOnce();
+    expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(openId);
+    confirmSpy.mockRestore();
+  });
+
+  it("resumes a not-open-elsewhere session without any confirm", async () => {
+    const id = "77777777-7777-7777-7777-777777777777";
+    mockFetch([{ id, title: "fix the parser", mtime: Date.now() }]);
+    const confirmSpy = vi.spyOn(window, "confirm");
+    const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: ["other-id"] });
+    await flushPromises();
+    await w.find(".cell-resume-item").trigger("click");
+    expect(confirmSpy).not.toHaveBeenCalled();
+    expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(id);
+    confirmSpy.mockRestore();
   });
 
   it("lists script.json scripts for the dir and emits run with the resolved cwd", async () => {
