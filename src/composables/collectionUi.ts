@@ -14,6 +14,7 @@
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
+import type { TranslateRequest, TranslateResponse } from "@mulmoclaude/core/translation/client";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { useShortcuts } from "./useShortcuts";
 import {
@@ -76,6 +77,26 @@ async function apiDelete(url: string): Promise<{ ok: true } | { ok: false; error
     return res.ok ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Runtime UI-string translation transport for the collection plugin (e.g. the
+// new-collection starter modal's card titles/descriptions/prompts). POSTs to
+// MulmoTerminal's OWN /api/translation (server/backends/translation.ts → hidden-chat
+// LLM); the request/response contract is the host-agnostic
+// @mulmoclaude/core/translation/client. Resolves null on any failure so the plugin
+// falls back to the English source. English is short-circuited server-side.
+async function postTranslation(req: TranslateRequest): Promise<TranslateResponse | null> {
+  try {
+    const res = await fetch("/api/translation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) return null;
+    return (await res.json()) as TranslateResponse;
+  } catch {
+    return null;
   }
 }
 
@@ -193,6 +214,10 @@ configureCollectionUi({
   startNewChatDraft: (prompt) => void startCollectionChat(prompt, { hidden: false }),
   // No notifier in MulmoTerminal.
   notifiedSeverities: () => new Map<string, CollectionNotifySeverity>(),
+
+  // ── runtime translation: POST /api/translation (hidden-chat LLM). Enables the
+  //    new-collection starter modal's localized cards; omitted ⇒ English fallback. ──
+  translate: postTranslation,
 
   // ── Shadow-DOM modal target ── ShadowRoot is a valid Teleport target at runtime
   //    though the declared type is string | HTMLElement.
