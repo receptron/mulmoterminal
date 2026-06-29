@@ -180,12 +180,35 @@ function selectSession(id: string) {
 // A transient "preparing your draft…" hint, shown over the terminal while a draft
 // chat boots and its text is typed into claude's input box (a few seconds), so the
 // brief delay doesn't look like nothing happened. Auto-dismisses.
+const DRAFT_HINT_EN = "Preparing your draft — it'll appear in the input box in a moment. Review it, then press Enter to send.";
 const draftHint = ref(false);
+const draftHintText = ref(DRAFT_HINT_EN);
 let draftHintTimer: ReturnType<typeof setTimeout> | undefined;
+// Localize the hint via the same runtime translation route the collection UX uses
+// (English fallback while it resolves / on failure). The host has no static i18n, so
+// this keeps the one new user-facing string from being English-only. Translated once
+// per session; the server cache makes it instant thereafter.
+async function localizeDraftHint() {
+  const locale = (navigator.language || "en").split("-")[0];
+  if (locale === "en" || draftHintText.value !== DRAFT_HINT_EN) return;
+  try {
+    const res = await fetch("/api/translation", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ namespace: "mulmoterminal-ui", targetLanguage: locale, sentences: [DRAFT_HINT_EN] }),
+    });
+    if (!res.ok) return;
+    const data = (await res.json()) as { translations?: string[] };
+    if (typeof data.translations?.[0] === "string") draftHintText.value = data.translations[0];
+  } catch {
+    // leave the English fallback
+  }
+}
 function showDraftHint() {
   draftHint.value = true;
   clearTimeout(draftHintTimer);
   draftHintTimer = setTimeout(() => (draftHint.value = false), 6000);
+  localizeDraftHint();
 }
 function clearDraftHint() {
   clearTimeout(draftHintTimer);
@@ -247,7 +270,7 @@ function onSession(id: string) {
         <Transition name="draft-hint-fade">
           <div v-if="draftHint" class="draft-hint" role="status">
             <span class="material-symbols-outlined">edit_note</span>
-            <span>Preparing your draft — it'll appear in the input box in a moment. Review it, then press Enter to send.</span>
+            <span>{{ draftHintText }}</span>
           </div>
         </Transition>
         <TerminalView
