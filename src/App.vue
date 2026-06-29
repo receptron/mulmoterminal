@@ -15,6 +15,7 @@ import { browseClose } from "./composables/useCollectionBrowse";
 import { registerChatOpener } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { useDirConfig } from "./composables/useDirConfig";
+import { useFaviconState } from "./composables/useFaviconState";
 import { usePendingScript, type PendingCommand } from "./composables/usePendingScript";
 import { useSoundEnabled } from "./composables/useSoundEnabled";
 import { useAttentionSound } from "./composables/useAttentionSound";
@@ -54,6 +55,9 @@ const { enabled: soundEnabled } = useSoundEnabled();
 // made from either view's settings modal (and loadConfig below hydrates it).
 const { soundFile } = useAppConfig();
 useAttentionSound(soundEnabled, soundFile);
+
+// Reflect global session activity in the tab's favicon (idle / working / attention).
+useFaviconState();
 
 // Terminal column width (px), set by dragging the splitter between the terminal
 // and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
