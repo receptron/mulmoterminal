@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vu
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
 import { useDirConfig } from "../composables/useDirConfig";
+import { useRecentDirs } from "../composables/useRecentDirs";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import type { CwdPreset } from "./presets";
@@ -54,8 +55,14 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 // palette and shows a project badge. Re-fetched when the effective cwd changes.
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
-// The launch form's editable dir; prefilled with the default once it's fetched.
-const dirInput = ref(props.initialCwd ?? props.defaultCwd ?? "");
+// The last few dirs the user launched in, offered as one-click chips. Shown as-is
+// (not filtered against presets) so the user always sees their true recent four —
+// even when those happen to also be preset folders.
+const { recentDirs, recordDir } = useRecentDirs();
+// The launch form's editable dir. Prefer this cell's persisted dir, then the most
+// recent location the user launched in, then the server default (fetched async, so
+// the watch below fills it in if we had nothing yet).
+const dirInput = ref(props.initialCwd ?? recentDirs.value[0] ?? props.defaultCwd ?? "");
 watch(
   () => props.defaultCwd,
   (d) => {
@@ -136,10 +143,20 @@ function launch() {
   launchIn(dirInput.value.trim() || props.defaultCwd);
 }
 
-// Pick a preset directory: fill the field and refresh the resume list for it, so
-// the user can then start fresh OR resume one of that dir's sessions.
+// A preset or recent-locations chip is a one-click action: fill the field and jump
+// straight into a fresh session in that dir.
+function selectRecent(path: string) {
+  dirInput.value = path;
+  launchIn(path);
+}
 function selectPreset(p: CwdPreset) {
-  dirInput.value = p.path;
+  selectRecent(p.path);
+}
+
+// The chip's tiny end button: fill the field WITHOUT launching, and refresh the
+// resume / script / worktree lists for that dir so the user can resume there.
+function fillDir(path: string) {
+  dirInput.value = path;
   loadResumable();
   loadScripts();
   loadWorktrees();
@@ -356,6 +373,7 @@ async function openDir() {
 // requested dir). Adopt it as the truth — display and persist the effective cwd.
 function onServerCwd(c: string) {
   cwd.value = c;
+  recordDir(c); // remember this dir for the launcher's recent-locations chips
   emit("cwd", c);
 }
 
@@ -795,15 +813,28 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         ✕
       </button>
       <div v-if="presets.length" class="cell-presets">
-        <button v-for="p in presets" :key="p.label + p.path" :class="['cell-preset', { active: dirInput === p.path }]" :title="p.path" @click="selectPreset(p)">
-          {{ p.label }}
-        </button>
+        <span v-for="p in presets" :key="p.label + p.path" class="cell-chip">
+          <button class="cell-chip-main" :title="p.path" @click="selectPreset(p)">{{ p.label }}</button>
+          <button class="cell-chip-fill" :title="`Use ${p.path} without launching (browse / resume here)`" @click="fillDir(p.path)">
+            <span class="material-symbols-outlined">edit</span>
+          </button>
+        </span>
       </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
         <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
       </label>
-      <button class="cell-start" @click="launch">＋ New terminal</button>
+      <div v-if="recentDirs.length" class="cell-recents">
+        <span class="cell-launch-caption">recent</span>
+        <div class="cell-recent-list">
+          <span v-for="r in recentDirs" :key="r" class="cell-chip">
+            <button class="cell-chip-main" :title="r" @click="selectRecent(r)">{{ formatCwd(r, home, 28) }}</button>
+            <button class="cell-chip-fill" :title="`Use ${r} without launching (browse / resume here)`" @click="fillDir(r)">
+              <span class="material-symbols-outlined">edit</span>
+            </button>
+          </span>
+        </div>
+      </div>
       <div v-if="isGitRepo" class="cell-worktrees">
         <span class="cell-launch-caption">or isolate in a worktree (git repo)</span>
         <div class="wt-new">
@@ -1069,10 +1100,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* `safe` centers when it fits but falls back to top-aligned (so nothing is
-     clipped past the scroll origin) when the form is taller than a short cell —
-     e.g. a 3x3 cell with a long resume list. overflow-y makes it reachable. */
-  justify-content: safe center;
+  /* Top-aligned: the form anchors to the top of the cell rather than floating in
+     the vertical middle (which looks adrift when there are few/no resume rows). */
+  justify-content: flex-start;
   gap: 8px;
   padding: 16px;
   overflow-y: auto;
@@ -1107,24 +1137,55 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   gap: 6px;
   max-width: 360px;
 }
-.cell-preset {
+/* A chip is a segmented pill: the main button launches; the tiny end button just
+   fills the working-directory field (so the user can resume a session there). */
+.cell-chip {
+  display: inline-flex;
+  align-items: stretch;
   border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
   background: var(--bg-elevated);
+}
+.cell-chip-main {
+  border: none;
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
   font-family: system-ui, sans-serif;
   font-size: 12px;
   padding: 4px 10px;
-  border-radius: 14px;
 }
-.cell-preset:hover {
+.cell-chip-fill {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0 5px;
+}
+.cell-chip-fill .material-symbols-outlined {
+  font-size: 14px;
+}
+.cell-chip-main:hover,
+.cell-chip-fill:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
-.cell-preset.active {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: var(--accent);
+.cell-recents {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.cell-recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 360px;
 }
 .cell-launch-label {
   display: flex;

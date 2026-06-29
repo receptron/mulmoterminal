@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
+import { useRecentDirs } from "../composables/useRecentDirs";
 
 // Capture the "sessions" pub/sub callback so tests can push activity directly.
 let captured: ((data: unknown) => void) | null = null;
@@ -53,6 +54,10 @@ function deferred<T>() {
 
 beforeEach(() => {
   captured = null;
+  // Recent dirs live in a module-level singleton backed by localStorage; reset both
+  // so a server cwd recorded by one test doesn't prefill the launcher in the next.
+  localStorage.clear();
+  useRecentDirs().recentDirs.value = [];
   mockFetch();
 });
 
@@ -123,7 +128,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     expect(w.find(".cell-launch").exists()).toBe(true);
     await w.find(".cell-dir-input").setValue("/home/me/picked");
-    await w.find(".cell-start").trigger("click");
+    await w.find(".cell-dir-input").trigger("keydown.enter");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/home/me/picked");
@@ -255,9 +260,9 @@ describe("TerminalCell", () => {
 
     const w = mountCell(null, { defaultCwd: "/A", presets: [{ label: "B", path: "/B" }] });
     await nextTick(); // mount → fetch #1 (dir A) in flight
-    const presetB = w.findAll(".cell-preset").find((b) => b.text() === "B");
-    if (!presetB) throw new Error("preset B not found");
-    await presetB.trigger("click"); // selectPreset → fetch #2 (dir B)
+    const chipB = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "B");
+    if (!chipB) throw new Error("preset B not found");
+    await chipB.find(".cell-chip-fill").trigger("click"); // fillDir → fetch #2 (dir B)
 
     second.resolve({ ok: true, json: async () => ({ cwd: "/B", sessions: [{ id: "b-id", title: "B-sess", mtime: 1 }] }) });
     await flushPromises();
@@ -280,28 +285,67 @@ describe("TerminalCell", () => {
     expect(w.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/resolved");
   });
 
-  it("selecting a preset sets the dir (doesn't launch); New then launches in it", async () => {
+  it("clicking a preset chip launches a fresh session in its dir", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const btn = w.findAll(".cell-preset").find((b) => b.text() === "proj");
-    if (!btn) throw new Error("preset button not found");
-    await btn.trigger("click");
-    // No terminal yet — the preset only selects the directory.
-    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
-    expect(btn.classes()).toContain("active");
-    // New terminal launches in the selected dir.
-    await w.find(".cell-start").trigger("click");
+    const main = w.findAll(".cell-chip-main").find((b) => b.text() === "proj");
+    if (!main) throw new Error("preset chip not found");
+    await main.trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/work/proj");
+  });
+
+  it("a chip's fill button sets the dir WITHOUT launching (so the user can resume)", async () => {
+    const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
+    await flushPromises();
+    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    if (!chip) throw new Error("preset chip not found");
+    await chip.find(".cell-chip-fill").trigger("click");
+    // No terminal — the fill button only selects the directory.
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+  });
+
+  it("records the server-confirmed cwd and offers it as a recent chip that launches on click", async () => {
+    // Launch + let the server confirm the effective cwd: that records a recent.
+    const w1 = mountCell(null, { defaultCwd: "/home/me/default" });
+    await flushPromises();
+    await w1.find(".cell-dir-input").setValue("/home/me/alpha");
+    await w1.find(".cell-dir-input").trigger("keydown.enter");
+    w1.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/alpha");
+    await flushPromises();
+
+    // A fresh cell now shows /home/me/alpha as a recent chip (path label).
+    const w2 = mountCell(null, { defaultCwd: "/home/me/default" });
+    await flushPromises();
+    const recent = w2.find(".cell-recents");
+    expect(recent.exists()).toBe(true);
+    const main = recent.find(".cell-chip-main");
+    expect(main.text()).toBe("~/alpha");
+    // Clicking the chip launches a new session there.
+    await main.trigger("click");
+    expect(w2.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/home/me/alpha");
+  });
+
+  it("prefills the launch field with the most recent location (not the server default)", async () => {
+    useRecentDirs().recordDir("/home/me/last-used");
+    const w = mountCell(null, { defaultCwd: "/home/me/default" });
+    await flushPromises();
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/last-used");
+  });
+
+  it("keeps only the most recent four locations", async () => {
+    const { recordDir, recentDirs } = useRecentDirs();
+    for (const d of ["/a", "/b", "/c", "/d", "/e"]) recordDir(d);
+    expect(recentDirs.value).toEqual(["/e", "/d", "/c", "/b"]);
   });
 
   it("resets the launch form to the default dir after close", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
     await w.find(".cell-dir-input").setValue("/home/me/picked");
-    await w.find(".cell-start").trigger("click");
+    await w.find(".cell-dir-input").trigger("keydown.enter");
     await w.find(".cell-close").trigger("click");
     await nextTick();
     expect(w.find(".cell-launch").exists()).toBe(true);
@@ -312,7 +356,7 @@ describe("TerminalCell", () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
     await w.find(".cell-dir-input").setValue("relative/bad/path");
-    await w.find(".cell-start").trigger("click");
+    await w.find(".cell-dir-input").trigger("keydown.enter");
     // Server rejected the bad path and fell back; it reports the real cwd.
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/default");
     await nextTick();
