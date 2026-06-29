@@ -172,15 +172,34 @@ function sendTextMessage(text: string): boolean {
 }
 
 function selectSession(id: string) {
+  if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
   activeId.value = id;
   connectKey.value++;
 }
 
-// A collection action (startChat) spawned a new chat and wants it shown: close the
-// browse overlay (if open) and select the session so the terminal displays it.
-registerChatOpener((id: string) => {
+// A transient "preparing your draft…" hint, shown over the terminal while a draft
+// chat boots and its text is typed into claude's input box (a few seconds), so the
+// brief delay doesn't look like nothing happened. Auto-dismisses.
+const draftHint = ref(false);
+let draftHintTimer: ReturnType<typeof setTimeout> | undefined;
+function showDraftHint() {
+  draftHint.value = true;
+  clearTimeout(draftHintTimer);
+  draftHintTimer = setTimeout(() => (draftHint.value = false), 6000);
+}
+function clearDraftHint() {
+  clearTimeout(draftHintTimer);
+  draftHint.value = false;
+}
+onUnmounted(() => clearTimeout(draftHintTimer));
+
+// A collection action spawned a new chat and wants it shown: close the browse overlay
+// (if open) and select the session so the terminal displays it. A draft also shows the
+// preparing hint until claude is ready for the prefilled text.
+registerChatOpener((id: string, opts?: { draft?: boolean }) => {
   browseClose();
   selectSession(id);
+  if (opts?.draft) showDraftHint();
 });
 
 function newSession() {
@@ -225,6 +244,12 @@ function onSession(id: string) {
         @refresh="refresh"
       />
       <div class="main">
+        <Transition name="draft-hint-fade">
+          <div v-if="draftHint" class="draft-hint" role="status">
+            <span class="material-symbols-outlined">edit_note</span>
+            <span>Preparing your draft — it'll appear in the input box in a moment. Review it, then press Enter to send.</span>
+          </div>
+        </Transition>
         <TerminalView
           ref="terminalRef"
           class="terminal-pane"
@@ -312,6 +337,41 @@ function onSession(id: string) {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  position: relative; /* anchor the draft hint overlay */
+}
+
+/* Transient "preparing your draft…" hint, overlaid at the top of the terminal area. */
+.draft-hint {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  max-width: min(90%, 640px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(30, 30, 30, 0.92);
+  color: #eee;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  line-height: 1.4;
+  pointer-events: none; /* never intercept clicks meant for the terminal */
+}
+.draft-hint .material-symbols-outlined {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.draft-hint-fade-enter-active,
+.draft-hint-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.draft-hint-fade-enter-from,
+.draft-hint-fade-leave-to {
+  opacity: 0;
 }
 
 /* Terminal pane: fixed flex-basis (set inline from terminalWidth); the GUI

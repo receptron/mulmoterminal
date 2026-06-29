@@ -1288,7 +1288,7 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
 // wait for its status line to paint (the "shift+tab to cycle" mode hint), settle
 // briefly, then type. A fallback fires if that marker never shows (UI string drift).
 const DRAFT_READY_MARKER = /shift\+tab to cycle/;
-const DRAFT_SETTLE_MS = 500;
+const DRAFT_SETTLE_MS = 250;
 const DRAFT_FALLBACK_MS = 6000;
 
 // Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —

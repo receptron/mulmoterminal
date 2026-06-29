@@ -12,10 +12,13 @@
 // submitting, so the user can review / edit before pressing Enter; without it the
 // prompt is auto-sent as claude's first turn (startChat / actions).
 
-let openSessionFn: ((sessionId: string) => void) | null = null;
+type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean }) => void;
+let openSessionFn: OpenSessionFn | null = null;
 
-/** App.vue registers how to make a session visible (close the overlay + select it). */
-export function registerChatOpener(fn: (sessionId: string) => void): void {
+/** App.vue registers how to make a session visible (close the overlay + select it).
+ *  `opts.draft` lets it show a "preparing draft…" hint while claude boots + the text
+ *  is typed into the input box. */
+export function registerChatOpener(fn: OpenSessionFn): void {
   openSessionFn = fn;
 }
 
@@ -42,5 +45,5 @@ export async function startCollectionChat(prompt: string, opts: { hidden?: boole
     return;
   }
   // hidden=false → bring the new terminal session into view for the user.
-  if (chatId && !opts.hidden) openSessionFn?.(chatId);
+  if (chatId && !opts.hidden) openSessionFn?.(chatId, { draft: opts.draft === true });
 }

@@ -26,7 +26,7 @@ describe("startCollectionChat", () => {
     expect(url).toBe("/api/plugin/spawnBackgroundChat");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false });
-    expect(opener).toHaveBeenCalledWith("sess-1");
+    expect(opener).toHaveBeenCalledWith("sess-1", { draft: false });
   });
 
   it("sends draft:true so the prompt is prefilled but not auto-sent", async () => {
@@ -37,7 +37,7 @@ describe("startCollectionChat", () => {
     await startCollectionChat("track my tasks", { hidden: false, draft: true });
 
     expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "track my tasks", draft: true });
-    expect(opener).toHaveBeenCalledWith("sess-3"); // still surfaced for the user to review/send
+    expect(opener).toHaveBeenCalledWith("sess-3", { draft: true }); // surfaced + flagged for the preparing hint
   });
 
   it("does NOT select when hidden=true (stays in the sidebar)", async () => {
