@@ -2,6 +2,12 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import tailwindcss from "@tailwindcss/vite";
 
+// Dev ports. The backend (Express) listens on PORT (default 34567, see
+// server/index.ts); Vite's own dev server uses CLIENT_PORT — a SEPARATE port, since
+// both run at once under `yarn dev` and can't share one. Both are env-overridable.
+const BACKEND_PORT = process.env.PORT || "34567";
+const CLIENT_PORT = Number(process.env.CLIENT_PORT) || 6856;
+
 export default defineConfig({
   // Tailwind is used ONLY to compile the plugin-utilities sheet
   // (src/plugin-tailwind.css), which GuiPanel injects into the per-plugin Shadow
@@ -24,8 +30,9 @@ export default defineConfig({
     __INTLIFY_PROD_DEVTOOLS__: "false",
   },
   server: {
+    port: CLIENT_PORT,
     // Disable Vite's dev CORS middleware. The app is same-origin in dev (the page
-    // and the proxied `/api` both live on :5173), so it needs no CORS headers from
+    // and the proxied `/api` both live on the Vite dev port), so it needs no CORS headers from
     // Vite. The one cross-origin consumer is a custom collection view: it renders in
     // a sandboxed (opaque-origin) iframe whose fetch to
     // `/api/collections/:slug/view-data` is cross-origin and preflighted. With Vite's
@@ -39,21 +46,21 @@ export default defineConfig({
     proxy: {
       // socket.io pub/sub (sidebar activity). Must precede the "/ws" rule.
       "/ws/pubsub": {
-        target: "ws://localhost:34567",
+        target: `ws://localhost:${BACKEND_PORT}`,
         ws: true,
       },
       "/ws": {
-        target: "ws://localhost:34567",
+        target: `ws://localhost:${BACKEND_PORT}`,
         ws: true,
       },
       "/api": {
-        target: "http://localhost:34567",
+        target: `http://localhost:${BACKEND_PORT}`,
         changeOrigin: true,
       },
       // presentHtml page serving (the View's iframe src). Without this, the dev
       // Vite catch-all returns index.html instead of the HTML artifact.
       "/artifacts": {
-        target: "http://localhost:34567",
+        target: `http://localhost:${BACKEND_PORT}`,
         changeOrigin: true,
       },
     },

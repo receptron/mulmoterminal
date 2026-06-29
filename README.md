@@ -96,8 +96,11 @@ server, and opens the browser. For local development from a clone, see
 - **Script commands** (`yarn dev`, tests, …), launched from a cell's directory
   picker, run in their own ephemeral PTY over a separate WebSocket (`/ws/run`);
   they are not Claude sessions. See [Scripts (Run menu)](#scripts-run-menu).
-- The Vite dev server proxies `/ws` (covers `/ws/run`), `/ws/pubsub`, and `/api` to
-  the backend; in production the backend serves the built client from `dist/`.
+- In dev (`yarn dev`) the Vite dev server runs on its own port (`CLIENT_PORT`,
+  default `6856`) and proxies `/ws` (covers `/ws/run`), `/ws/pubsub`, and `/api` to
+  the backend (`PORT`, default `34567`) — so you open the Vite port (e.g.
+  `http://localhost:6856`). In production the backend serves the built client from
+  `dist/` on `PORT`, and you open that.
 
 ---
 
@@ -139,7 +142,8 @@ the server runs without one.
 
 | Variable     | Default        | Description |
 | ------------ | -------------- | ----------- |
-| `PORT`       | `34567`        | HTTP/WebSocket port. |
+| `PORT`        | `34567`        | Backend HTTP/WebSocket port (prod: the URL you open). |
+| `CLIENT_PORT` | `6856`         | Vite dev-server port (dev only: the URL you open with `yarn dev`). |
 | `CLAUDE_BIN` | `claude`       | The Claude Code binary to spawn. |
 | `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions the sidebar lists. Via `npx mulmoterminal` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). |
 
@@ -173,7 +177,7 @@ your own local file referenced by absolute path — nothing is added to the pack
 ```bash
 yarn install            # postinstall fixes node-pty prebuilt binary perms
 
-yarn dev                # server (:34567) + Vite dev server, concurrently
+yarn dev                # backend (:34567) + Vite UI (:6856), concurrently — open http://localhost:6856
 # or individually:
 yarn dev:server         # backend only  (node --import tsx --env-file-if-exists=.env server/index.ts)
 yarn dev:client         # Vite dev server only
