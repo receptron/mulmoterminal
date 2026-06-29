@@ -269,7 +269,7 @@ function onSession(id: string) {
       <div class="main">
         <Transition name="draft-hint-fade">
           <div v-if="draftHint" class="draft-hint" role="status">
-            <span class="material-symbols-outlined">edit_note</span>
+            <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
             <span>{{ draftHintText }}</span>
           </div>
         </Transition>
