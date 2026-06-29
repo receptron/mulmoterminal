@@ -420,16 +420,16 @@ function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
 function armReapForDetached(id: string) {
   const entry = ptys.get(id);
   if (!entry || entry.ws) return; // still attached: nothing to reap
+  // Recompute from scratch: state may have escalated (idle -> waiting) since the
+  // last arm, and a stale short timer must not survive to reap a session that now
+  // needs the user. cancelReap clears it so scheduleReap re-arms with the right grace.
+  cancelReap(id);
   const a = activity.get(id);
   if (a?.working) {
     console.log(`[pty] keeping working session ${id} alive (detached)`);
     return;
   }
-  if (a?.waiting) {
-    scheduleReap(id, WAIT_REAP_GRACE_MS);
-    return;
-  }
-  scheduleReap(id, REAP_GRACE_MS);
+  scheduleReap(id, a?.waiting ? WAIT_REAP_GRACE_MS : REAP_GRACE_MS);
 }
 
 function reap(id: string) {
@@ -496,6 +496,10 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   if ((prev.waiting ?? false) === waiting) return;
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
+
+  // A detached session that just started needing the user escalates from the short
+  // idle grace to the long one — re-arm so it isn't reaped before they can return.
+  if (waiting) armReapForDetached(id);
 }
 
 // Hook config injected via `claude --settings <json>`. Each event POSTs the full
