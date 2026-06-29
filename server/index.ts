@@ -386,7 +386,17 @@ const REAP_GRACE_MS = 30_000;
 // unfinished task: reaping it loses work. So it gets a much longer grace than an
 // idle one, long enough that you can switch away, do other things, and come back
 // to answer it. Override with WAIT_REAP_GRACE_MS=0 to never auto-close these.
-const WAIT_REAP_GRACE_MS = process.env.WAIT_REAP_GRACE_MS !== undefined ? Number(process.env.WAIT_REAP_GRACE_MS) : 30 * 60_000;
+const WAIT_REAP_GRACE_MS = (() => {
+  const def = 30 * 60_000;
+  const raw = process.env.WAIT_REAP_GRACE_MS;
+  if (raw === undefined) return def;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) {
+    console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${def}ms`);
+    return def;
+  }
+  return n; // a non-positive value means "never auto-reap waiting sessions" (see scheduleReap)
+})();
 const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function cancelReap(id: string) {
@@ -398,9 +408,10 @@ function cancelReap(id: string) {
 }
 
 function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
-  // 0 (or non-positive) => never auto-reap; the session stays until reattached or
-  // explicitly terminated.
-  if (delayMs <= 0) return;
+  // Non-positive or non-finite (e.g. a bad env value yielding NaN) => never
+  // auto-reap; the session stays until reattached or explicitly terminated.
+  // Guarding here matters because setTimeout(..., NaN) would fire ~immediately.
+  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
   if (reapTimers.has(id)) return;
   reapTimers.set(
     id,
