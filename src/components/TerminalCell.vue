@@ -822,7 +822,18 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
-        <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
+        <span class="cell-dir-row">
+          <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
+          <button
+            class="cell-dir-go"
+            :disabled="!dirInput.trim()"
+            title="Start a new terminal here (or press Enter)"
+            aria-label="Start a new terminal here"
+            @click="launch"
+          >
+            <span class="material-symbols-outlined">play_arrow</span>
+          </button>
+        </span>
       </label>
       <div v-if="recentDirs.length" class="cell-recents">
         <span class="cell-launch-caption">recent</span>
@@ -1216,6 +1227,40 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 .cell-dir-input:focus {
   outline: none;
   border-color: var(--accent);
+}
+.cell-dir-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  width: 100%;
+}
+.cell-dir-row .cell-dir-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cell-dir-go {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.cell-dir-go:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--accent);
+}
+.cell-dir-go:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.cell-dir-go .material-symbols-outlined {
+  font-size: 18px;
 }
 .cell-start {
   border: 1px solid var(--border);

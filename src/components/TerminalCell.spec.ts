@@ -134,6 +134,25 @@ describe("TerminalCell", () => {
     expect(term.props("cwd")).toBe("/home/me/picked");
   });
 
+  it("launches via the go button next to the field (alternative to Enter)", async () => {
+    const w = mountCell(null, { defaultCwd: "/home/me/default" });
+    await flushPromises();
+    await w.find(".cell-dir-input").setValue("/home/me/picked");
+    await w.find(".cell-dir-go").trigger("click");
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("cwd")).toBe("/home/me/picked");
+  });
+
+  it("disables the go button when the field is empty", async () => {
+    const w = mountCell(null, { defaultCwd: null });
+    await flushPromises();
+    await w.find(".cell-dir-input").setValue("   ");
+    expect((w.find(".cell-dir-go").element as HTMLButtonElement).disabled).toBe(true);
+    await w.find(".cell-dir-input").setValue("/home/me/picked");
+    expect((w.find(".cell-dir-go").element as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("shows a cancel ✕ on a cancellable launcher that emits close, but not otherwise", async () => {
     const plain = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
