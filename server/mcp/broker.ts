@@ -57,6 +57,24 @@ function describe(def: { description?: string; prompt?: string }) {
   return [def.description, def.prompt].filter(Boolean).join("\n\n");
 }
 
+// The worker-only result tool used by the hidden translation chat (see
+// translateViaHiddenChat in server/index.ts). It is NOT a plugin: the worker calls it
+// to hand its structured answer straight back, so the broker special-cases it (POST
+// to /api/translation/submit WITH the session id) instead of the /api/plugin path.
+// Advertised only when `submitTranslationTool` is set, so normal chats never see it.
+const SUBMIT_TRANSLATION_TOOL = {
+  name: "submitTranslation",
+  description:
+    "Report the finished translation. Call this EXACTLY ONCE with a `translations` array of the " +
+    "translated strings, in the same order and length as the input. This is the only way to return " +
+    "the result — do not print it as text.",
+  inputSchema: {
+    type: "object",
+    properties: { translations: { type: "array", items: { type: "string" } } },
+    required: ["translations"],
+  },
+} as const;
+
 /**
  * Build a fresh GUI MCP server bound to one chat session. Stateless: create one
  * per request (Streamable HTTP in stateless mode forbids reusing a transport, and
@@ -64,20 +82,32 @@ function describe(def: { description?: string; prompt?: string }) {
  *
  * @param sessionId  the chat session whose GUI panel should render tool results
  * @param baseUrl    the mulmoterminal host origin to POST plugin dispatch + results to
+ * @param opts.submitTranslationTool  expose the worker-only `submitTranslation` tool
+ *                                    (set only for hidden translation-worker sessions)
  */
-export function buildGuiMcpServer(sessionId: string, baseUrl: string): Server {
+export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { submitTranslationTool?: boolean } = {}): Server {
   const server = new Server({ name: "mulmoterminal-gui", version: "0.0.0" }, { capabilities: { tools: {} } });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: toolDefinitions.map((def) => ({
-      name: def.name,
-      description: describe(def),
-      inputSchema: def.parameters ?? { type: "object", properties: {} },
-    })),
+    tools: [
+      ...toolDefinitions.map((def) => ({
+        name: def.name,
+        description: describe(def),
+        inputSchema: def.parameters ?? { type: "object", properties: {} },
+      })),
+      ...(opts.submitTranslationTool ? [SUBMIT_TRANSLATION_TOOL] : []),
+    ],
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
+
+    // Worker-only result tool: deliver the structured translations back to the
+    // waiting request (keyed by session id), bypassing the plugin dispatch path.
+    if (name === SUBMIT_TRANSLATION_TOOL.name) {
+      await postJson(`${baseUrl}/api/translation/submit`, { sessionId, translations: isRecord(args) ? args.translations : undefined });
+      return { content: [{ type: "text", text: "Translation received. You are done." }] };
+    }
 
     // 1. Dispatch to the plugin's server-side handler.
     const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();

@@ -35,6 +35,7 @@ import { startCollectionCompletionWatchers } from "./backends/collectionWatchers
 import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
+import { mountTranslationRoutes } from "./backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
@@ -131,6 +132,20 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // workspace dir, so it stays valid regardless of which directory is active.
 const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
 
+// Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
+// already trusted — because claude blocks on its workspace-trust dialog in any
+// untrusted dir (no input ever comes, so the worker would hang). Their session ids
+// are tracked here so they're FILTERED OUT of /api/sessions: a translation worker is
+// a transient internal helper, not a chat the user should see in the sidebar.
+const translationWorkerIds = new Set<string>();
+
+// sessionId → settlers for a hidden translation worker's in-flight request.
+// `resolve` is called from POST /api/translation/submit when the worker reports its
+// answer (via the submitTranslation GUI tool); `reject` from the Stop hook if the
+// worker ends its turn WITHOUT submitting (a misbehaved turn), so we fail fast
+// instead of waiting out the full timeout.
+const pendingTranslations = new Map<string, { resolve: (translations: string[]) => void; reject: (err: Error) => void }>();
+
 // A session id is always a UUID (server-generated, or a .jsonl basename). Reject
 // anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
 // a value that claude re-parses as a flag) into the spawned process.
@@ -166,7 +181,10 @@ const sessionChannel = (id: string) => `session:${id}`;
 // MCP tool names claude uses, in the mcp__<server>__<tool> form, one per enabled
 // plugin. Auto-allowed via --allowedTools so the spike doesn't trip the permission
 // prompt (permissions stay terminal-native). Comma-joined into one --allowedTools.
-const GUI_MCP_TOOLS = allowedToolNames().join(",");
+// The worker-only `submitTranslation` tool is allowed for every session (harmless —
+// only hidden translation workers are actually shown it, see the /mcp route) so the
+// worker can call it without a permission prompt.
+const GUI_MCP_TOOLS = [...allowedToolNames(), "mcp__mulmoterminal-gui__submitTranslation"].join(",");
 
 // A per-session list store mirrored to disk so it survives a server reboot — one
 // JSON file per session under <workspace>/<dirName>/<sessionId>.json
@@ -673,6 +691,32 @@ mountShortcutsRoutes(app, { workspace: CLAUDE_CWD });
 // <workspace>/models dir, so a download by either app is reused.
 mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
 
+// Runtime UI-string translation (POST /api/translation), backing the shared
+// @mulmoclaude/core/translation/client. The HTTP contract + on-disk cache schema
+// match MulmoClaude (so the <workspace>/data/translation cache is shared between the
+// apps), but the LLM step is MulmoTerminal's own: translateViaHiddenChat spawns a
+// hidden background claude session (NEVER `claude -p`) and is filtered from the
+// sidebar. translateViaHiddenChat is a hoisted function declaration defined alongside
+// spawnClaudePty below.
+mountTranslationRoutes(app, { workspace: CLAUDE_CWD, translateBatch: translateViaHiddenChat });
+
+// The hidden translation worker reports its answer here, via the broker's worker-only
+// submitTranslation GUI tool (which POSTs { sessionId, translations }). We hand the
+// array to the waiting request and let translateViaHiddenChat validate it.
+app.post("/api/translation/submit", (req, res) => {
+  const { sessionId, translations } = isRecord(req.body) ? req.body : {};
+  if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) {
+    return res.status(400).json({ error: "invalid sessionId" });
+  }
+  const pending = pendingTranslations.get(sessionId);
+  if (!pending) {
+    // No in-flight request for this id (already settled / timed out / not a worker).
+    return res.status(404).json({ error: "no pending translation for this session" });
+  }
+  pending.resolve(Array.isArray(translations) ? (translations as string[]) : []);
+  return res.json({ ok: true });
+});
+
 // In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
 // mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
 // STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
@@ -684,7 +728,9 @@ app.post("/mcp/:sessionId", async (req, res) => {
   if (!SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
   }
-  const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`);
+  // Hidden translation workers (and only they) get the worker-only submitTranslation
+  // tool, so a normal chat's tool list stays clean.
+  const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`, { submitTranslationTool: translationWorkerIds.has(sessionId) });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close();
@@ -779,6 +825,10 @@ app.post("/api/hook", async (req, res) => {
     }
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
+    // A hidden translation worker that ends its turn while still pending never called
+    // submitTranslation — fail it now rather than hang until the timeout. (When it DID
+    // submit, the entry is already resolved and this reject is a no-op.)
+    if (event === "Stop") pendingTranslations.get(sessionId)?.reject(new Error("[translation] worker ended its turn without calling submitTranslation"));
     console.log(`[hook] ${event} for ${sessionId}`);
   }
   res.json({ ok: true });
@@ -962,8 +1012,12 @@ app.get("/api/sessions", async (req, res) => {
     }
 
     // Keep only the most-recent N, then read & parse contents for just those
-    // on-disk files (a deleted/corrupt file is dropped, not fatal).
-    const top = [...onDiskStats, ...pending].sort((a, b) => b.mtime - a.mtime).slice(0, SESSION_LIST_LIMIT);
+    // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation
+    // workers are dropped first — they're transient internal helpers, not user chats.
+    const top = [...onDiskStats, ...pending]
+      .filter((s) => !translationWorkerIds.has(s.id))
+      .sort((a, b) => b.mtime - a.mtime)
+      .slice(0, SESSION_LIST_LIMIT);
     const sessions = (
       await Promise.all(
         top.map((s) =>
@@ -1110,6 +1164,68 @@ function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntr
     ws.send(JSON.stringify({ type: "output", data: entry.buffer }));
   }
   return entry;
+}
+
+// How long to wait for a hidden translation worker to call submitTranslation before
+// giving up (cold claude startup + one short turn). Generous; the result is cached.
+const TRANSLATION_TIMEOUT_MS = 120_000;
+
+// Tear down a finished/failed translation worker: kill any lingering pty and drop its
+// bookkeeping + transcript so the activity maps and the workspace don't accumulate
+// throwaway translation sessions.
+function cleanupTranslationWorker(sessionId: string): void {
+  reap(sessionId); // idempotent — already reaped if Stop fired
+  activity.delete(sessionId);
+  hiddenSessions.delete(sessionId);
+  translationWorkerIds.delete(sessionId);
+  lastPrompts.delete(sessionId);
+  pendingTranslations.delete(sessionId);
+  fs.rm(path.join(projectSessionsDir(CLAUDE_CWD), `${sessionId}.jsonl`), { force: true }).catch(() => {});
+}
+
+// The injected LLM step for /api/translation. Drives MulmoTerminal's EXISTING hidden
+// background chat (spawnClaudePty) — explicitly NOT `claude -p`, which is banned in
+// MulmoTerminal. It seeds a headless worker that translates the strings and reports
+// them by calling the worker-only `submitTranslation` GUI tool, which resolves the
+// promise below (via POST /api/translation/submit). Runs in CLAUDE_CWD (the trusted
+// workspace, else claude blocks on its trust dialog); the worker's session id is
+// filtered from /api/sessions so it never shows in the sidebar.
+async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
+  const sessionId = randomUUID();
+  const expected = sentences.length;
+  hiddenSessions.add(sessionId);
+  translationWorkerIds.add(sessionId);
+  const prompt =
+    `You are a translation service. Translate each of the ${expected} English strings in the JSON ` +
+    `array below into the target language (BCP-47 code: ${targetLanguage}). Preserve placeholders ` +
+    `like {name}, {count}, %s and any HTML tags verbatim. Then report your result by calling the ` +
+    `submitTranslation tool EXACTLY ONCE with a "translations" array of the ${expected} translated ` +
+    `strings, in the same order. Do not call any other tool and do not print the translations as ` +
+    `text.\n\nInput: ${JSON.stringify(sentences)}`;
+
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const submitted = new Promise<string[]>((resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(`[translation] hidden chat timed out after ${TRANSLATION_TIMEOUT_MS}ms`)), TRANSLATION_TIMEOUT_MS);
+    pendingTranslations.set(sessionId, { resolve, reject });
+  });
+
+  try {
+    // ws=null → headless; the worker buffers output nobody reads. Default cwd =
+    // CLAUDE_CWD (trusted). submitTranslation (or the Stop hook) settles `submitted`.
+    spawnClaudePty(sessionId, null, null, prompt);
+    // spawnClaudePty registers a pending session + emits a "created" event; drop the
+    // pending entry now so this internal worker never surfaces as a sidebar row (the
+    // /api/sessions filter on translationWorkerIds covers its on-disk transcript).
+    knownSessions.delete(sessionId);
+    const translations = await submitted;
+    if (translations.length !== expected || !translations.every((s) => typeof s === "string")) {
+      throw new Error(`[translation] submitTranslation returned ${translations.length} strings for ${expected} inputs`);
+    }
+    return translations;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    cleanupTranslationWorker(sessionId);
+  }
 }
 
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
