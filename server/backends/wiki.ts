@@ -31,9 +31,11 @@ export function mountWikiRoutes(app: Express, deps: { workspace: string }): void
   app.get("/api/wiki", async (req: Request, res: Response) => {
     const slug = req.query.slug;
     if (slug !== undefined) {
-      // A crafted slug must never escape `data/wiki/pages` — guard before the read.
-      // Containment is also enforced inside the core engine, but reject early here.
-      if (!isSafeWikiSlug(slug)) {
+      // Reject non-string query shapes (`?slug[a]=x` → object, `?slug=a&slug=b` →
+      // array) with a deterministic 400 before any other handling, then guard the
+      // value so a crafted slug can never escape `data/wiki/pages` (containment is also
+      // enforced inside the core engine, but reject early here).
+      if (typeof slug !== "string" || !isSafeWikiSlug(slug)) {
         res.status(400).json({ error: `invalid wiki slug: ${String(slug)}` });
         return;
       }

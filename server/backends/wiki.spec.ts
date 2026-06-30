@@ -65,6 +65,12 @@ describe("GET /api/wiki?slug=", () => {
   it("400s an unsafe slug", async () => {
     expect((await fetch(`${base}/api/wiki?slug=${encodeURIComponent("../../etc/passwd")}`)).status).toBe(400);
   });
+
+  it("400s a repeated (array) slug query rather than 500ing", async () => {
+    // `?slug=a&slug=b` parses to a string[], which the typeof guard must reject before
+    // it ever reaches readWikiPage.
+    expect((await fetch(`${base}/api/wiki?slug=a&slug=b`)).status).toBe(400);
+  });
 });
 
 describe("GET /api/wiki/graph", () => {

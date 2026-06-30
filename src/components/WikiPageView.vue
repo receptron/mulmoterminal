@@ -13,25 +13,42 @@ const props = defineProps<{ slug: string; page: WikiPage; graph: WikiGraph | nul
 
 const html = computed(() => (props.page.exists ? renderWikiHtml(props.page.content) : ""));
 
-// Title→slug map (lowercased keys) lets resolveLinkTarget map non-ASCII `[[titles]]`
-// back to their ASCII file slug, exactly as the server engine does.
+// Title→slug map keyed by the EXACT graph title: core's resolveLinkTarget looks up
+// `slugByTitle.get(target.trim())` with the raw (non-lowercased) target after slug
+// matching, so the keys must match the server graph's titles verbatim — otherwise a
+// mixed-case title whose slug differs from its slugified form (e.g. "Foo Bar" →
+// meeting-notes-2026) would fail to resolve on click.
 const fileSlugs = computed(() => new Set((props.graph?.nodes ?? []).map((n) => n.slug)));
-const slugByTitle = computed(() => new Map((props.graph?.nodes ?? []).map((n) => [n.title.toLowerCase(), n.slug])));
+const slugByTitle = computed(() => new Map((props.graph?.nodes ?? []).map((n) => [n.title, n.slug])));
 const backlinks = computed(() => (props.graph ? incomingLinks(props.graph, props.slug) : []));
 
-// Event-delegated `[[link]]` clicks: resolve the raw target to a file slug (graph
-// first, then a plain slugify fallback) and navigate.
-function onBodyClick(e: MouseEvent): void {
-  const el = (e.target as HTMLElement).closest<HTMLElement>(".wiki-link");
+// Resolve a `[[link]]` span's raw target to a file slug (graph first, then a plain
+// slugify fallback) and navigate.
+function activateLink(el: HTMLElement | null): void {
   const target = el?.getAttribute("data-page");
   if (!target) return;
-  e.preventDefault();
   let slug = props.graph ? resolveLinkTarget(target, fileSlugs.value, slugByTitle.value) : null;
   if (!slug) {
     const fallback = wikiSlugify(target);
     slug = isSafeWikiSlug(fallback) ? fallback : null;
   }
   if (slug) wikiGotoPage(slug);
+}
+
+// Mouse + keyboard activation, both event-delegated over the rendered body. The spans
+// carry role="link" + tabindex="0" (added in renderWikiHtml) so they're focusable.
+function onBodyClick(e: MouseEvent): void {
+  const el = (e.target as HTMLElement).closest<HTMLElement>(".wiki-link");
+  if (!el) return;
+  e.preventDefault();
+  activateLink(el);
+}
+function onBodyKeydown(e: KeyboardEvent): void {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const el = (e.target as HTMLElement).closest<HTMLElement>(".wiki-link");
+  if (!el) return;
+  e.preventDefault();
+  activateLink(el);
 }
 </script>
 
@@ -40,7 +57,7 @@ function onBodyClick(e: MouseEvent): void {
     <template v-if="page.exists">
       <h1 class="wiki-page-title">{{ page.resolvedTitle }}</h1>
       <!-- eslint-disable-next-line vue/no-v-html -- LLM-authored, sanitized in renderWikiHtml -->
-      <div class="wiki-body" @click="onBodyClick" v-html="html"></div>
+      <div class="wiki-body" @click="onBodyClick" @keydown="onBodyKeydown" v-html="html"></div>
       <section v-if="backlinks.length" class="wiki-backlinks">
         <h2>Linked references</h2>
         <ul>
