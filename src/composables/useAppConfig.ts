@@ -7,6 +7,21 @@ import { presetLabel, type CwdPreset } from "../components/presets";
 // other (each useAppConfig() otherwise has its own local refs).
 const soundFile = ref<string | null>(null);
 
+// Pre-#163 recent dirs lived in localStorage (the removed useRecentDirs). They are
+// imported once into the server-side preset list on load — see migrateLegacyRecents.
+const LEGACY_RECENTS_KEY = "recent_dirs_v1";
+
+function readLegacyRecents(): string[] {
+  try {
+    const raw = localStorage.getItem(LEGACY_RECENTS_KEY);
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((d): d is string => typeof d === "string" && d.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
 // Server config (default workspace dir, home, directory presets, custom sound)
 // shared by both the single view and the grid view so each can open the settings
 // modal without duplicating the fetch/save logic.
@@ -26,6 +41,7 @@ export function useAppConfig() {
       home.value = c.home ?? null;
       presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
       soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
+      await migrateLegacyRecents();
     } catch {
       // the app still works; presets are just unavailable
     }
@@ -91,6 +107,29 @@ export function useAppConfig() {
       if (!presets.value.some((p) => p.path === path)) return;
       await savePresets(presets.value.filter((p) => p.path !== path));
     });
+  }
+
+  // One-time import of the pre-#163 localStorage recents so upgrading users keep
+  // their recent dirs as chips. New paths are appended after the existing presets
+  // (their basename as label); the legacy key is cleared on success so a chip the
+  // user later deletes can't reappear. Dedup keeps it harmless if it runs twice.
+  async function migrateLegacyRecents(): Promise<void> {
+    const legacy = readLegacyRecents();
+    if (!legacy.length) return;
+    const known = new Set(presets.value.map((p) => p.path));
+    const additions = legacy.filter((path) => !known.has(path)).map((path) => ({ label: presetLabel(path), path }));
+    let saved = true;
+    if (additions.length) {
+      await serializePresetWrite(async () => {
+        saved = await savePresets([...presets.value, ...additions]);
+      });
+    }
+    if (!saved) return; // keep the key so the import retries on the next load
+    try {
+      localStorage.removeItem(LEGACY_RECENTS_KEY);
+    } catch {
+      // storage blocked — dedup makes a retry harmless
+    }
   }
 
   // Persist just the custom attention sound (a file path, or null to use the chime).

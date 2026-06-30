@@ -48,4 +48,5 @@ main には既に2系統が併存:
 - `typecheck`(vue-tsc) / `lint` / `build` / Playwright で起動→自動チップ追加→✕削除→Settingsにpresets無しを実機確認。
 
 ## 後方互換
-- 既存 `cwdPresets`(手動ラベル付き)はそのまま動作・✕付与。サーバAPIは無変更。データ移行不要。
+- 既存 `cwdPresets`(手動ラベル付き)はそのまま動作・✕付与。サーバAPIは無変更。
+- **localStorage 移行**: 旧 `useRecentDirs` の localStorage(`recent_dirs_v1`) を、`loadConfig` 時に一度だけ `cwdPresets` へ取り込む（既存と重複しない分を末尾に append、basename ラベル）。取り込み後にキーを削除（削除したチップが復活しないため）。dedup により二重実行しても無害。アップグレードしても recents がチップとして残る。

@@ -11,7 +11,10 @@ function mockConfigFetch() {
   }) as unknown as typeof fetch;
 }
 
-beforeEach(mockConfigFetch);
+beforeEach(() => {
+  localStorage.clear();
+  mockConfigFetch();
+});
 
 describe("useAppConfig — auto preset recording", () => {
   it("recordPreset prepends a new dir with a basename label", async () => {
@@ -70,6 +73,36 @@ describe("useAppConfig — auto preset recording", () => {
     await recordPreset("/b");
     await removePreset("/a");
     expect(presets.value.map((p) => p.path)).toEqual(["/b"]);
+  });
+
+  it("imports legacy localStorage recents (recent_dirs_v1) into presets on load, then clears the key", async () => {
+    localStorage.setItem("recent_dirs_v1", JSON.stringify(["/r/one", "/r/two"]));
+    globalThis.fetch = vi.fn(async (_url: string, init?: { body?: string }) => {
+      if (!init) return { ok: true, json: async () => ({ cwd: "/w", home: "/h", cwdPresets: [{ label: "kept", path: "/p/kept" }], soundFile: null }) };
+      const body = init.body ? JSON.parse(init.body) : {};
+      return { ok: true, json: async () => ({ cwdPresets: body.cwdPresets ?? [] }) };
+    }) as unknown as typeof fetch;
+    const { presets, loadConfig } = useAppConfig();
+    await loadConfig();
+    expect(presets.value).toEqual([
+      { label: "kept", path: "/p/kept" },
+      { label: "one", path: "/r/one" },
+      { label: "two", path: "/r/two" },
+    ]);
+    expect(localStorage.getItem("recent_dirs_v1")).toBeNull();
+  });
+
+  it("does not duplicate a legacy recent already present, but still clears the key", async () => {
+    localStorage.setItem("recent_dirs_v1", JSON.stringify(["/p/kept", "/r/new"]));
+    globalThis.fetch = vi.fn(async (_url: string, init?: { body?: string }) => {
+      if (!init) return { ok: true, json: async () => ({ cwd: "/w", home: "/h", cwdPresets: [{ label: "kept", path: "/p/kept" }], soundFile: null }) };
+      const body = init.body ? JSON.parse(init.body) : {};
+      return { ok: true, json: async () => ({ cwdPresets: body.cwdPresets ?? [] }) };
+    }) as unknown as typeof fetch;
+    const { presets, loadConfig } = useAppConfig();
+    await loadConfig();
+    expect(presets.value.map((p) => p.path)).toEqual(["/p/kept", "/r/new"]);
+    expect(localStorage.getItem("recent_dirs_v1")).toBeNull();
   });
 
   it("serializes concurrent records so neither write clobbers the other (#163 review)", async () => {
