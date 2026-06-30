@@ -38,6 +38,7 @@ import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountTranslationRoutes } from "./backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
+import { SPA_FALLBACK_RE } from "./spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {
@@ -808,6 +809,13 @@ app.delete("/api/mcp/:sessionId", mcpReject);
 
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));
+
+// SPA fallback for vue-router history mode: a hard reload / deep-link of a client
+// route (e.g. /terminals, /collections/foo) must serve index.html. Mounted AFTER
+// express.static so real asset files win, and after the /artifacts/html preview
+// route (registered above) so it wins too. SPA_FALLBACK_RE reserves the single /api
+// prefix — see server/spa-fallback.ts for why that's sufficient.
+app.get(SPA_FALLBACK_RE, (_req, res) => res.sendFile(path.join(__dirname, "../dist/index.html")));
 
 // Activity hooks update a session's working / needs-attention flags.
 // `foreground` (a ws is attached => being viewed) suppresses the attention flag.
