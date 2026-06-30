@@ -3,7 +3,6 @@ import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vu
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
 import { useDirConfig } from "../composables/useDirConfig";
-import { useRecentDirs } from "../composables/useRecentDirs";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import type { CwdPreset } from "./presets";
@@ -36,7 +35,9 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "toggle-expand" | "close"): void;
-  (e: "session" | "cwd", value: string): void;
+  // `record-cwd`: auto-record a fresh launch's server-confirmed cwd as a preset.
+  // `remove-preset`: drop a preset (its ✕) from the shared list — value is the path.
+  (e: "session" | "cwd" | "record-cwd" | "remove-preset", value: string): void;
   // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
   // terminal's header menu, which must NOT replace the session — it runs in a new cell.
   (e: "run" | "runSpare", value: { index: number; label: string; cwd: string | null }): void;
@@ -58,14 +59,10 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 // palette and shows a project badge. Re-fetched when the effective cwd changes.
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
-// The last few dirs the user launched in, offered as one-click chips. Shown as-is
-// (not filtered against presets) so the user always sees their true recent four —
-// even when those happen to also be preset folders.
-const { recentDirs, recordDir } = useRecentDirs();
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
-// recent location the user launched in, then the server default (fetched async, so
-// the watch below fills it in if we had nothing yet).
-const dirInput = ref(props.initialCwd ?? recentDirs.value[0] ?? props.defaultCwd ?? "");
+// recent preset (auto-recorded on launch), then the server default (fetched async,
+// so the watch below fills it in if we had nothing yet).
+const dirInput = ref(props.initialCwd ?? props.presets[0]?.path ?? props.defaultCwd ?? "");
 watch(
   () => props.defaultCwd,
   (d) => {
@@ -153,14 +150,11 @@ function launch() {
   launchIn(dirInput.value.trim() || props.defaultCwd);
 }
 
-// A preset or recent-locations chip is a one-click action: fill the field and jump
-// straight into a fresh session in that dir.
-function selectRecent(path: string) {
-  dirInput.value = path;
-  launchIn(path);
-}
+// A preset chip is a one-click action: fill the field and jump straight into a
+// fresh session in that dir.
 function selectPreset(p: CwdPreset) {
-  selectRecent(p.path);
+  dirInput.value = p.path;
+  launchIn(p.path);
 }
 
 // The chip's tiny end button: fill the field WITHOUT launching, and refresh the
@@ -384,11 +378,11 @@ async function openDir() {
 // requested dir). Adopt it as the truth — display and persist the effective cwd.
 function onServerCwd(c: string) {
   cwd.value = c;
-  // Only a user-initiated fresh launch updates the recent-locations chips — not a
+  // Only a user-initiated fresh launch records the dir as a preset chip — not a
   // reconnect/restore of an already-running session (see recordNextCwd).
   if (recordNextCwd) {
     recordNextCwd = false;
-    recordDir(c);
+    emit("record-cwd", c);
   }
   emit("cwd", c);
 }
@@ -842,6 +836,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             <span class="material-symbols-outlined">edit</span>
           </button>
+          <button
+            type="button"
+            class="cell-chip-del"
+            :title="`Remove ${p.path} from the list`"
+            :aria-label="`Remove ${p.path} from the list`"
+            @click="emit('remove-preset', p.path)"
+          >
+            ✕
+          </button>
         </span>
       </div>
       <label class="cell-launch-label">
@@ -860,23 +863,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
         </span>
       </label>
-      <div v-if="recentDirs.length" class="cell-recents">
-        <span class="cell-launch-caption">recent</span>
-        <div class="cell-recent-list">
-          <span v-for="r in recentDirs" :key="r" class="cell-chip">
-            <button type="button" class="cell-chip-main" :title="r" @click="selectRecent(r)">{{ formatCwd(r, home, 28) }}</button>
-            <button
-              type="button"
-              class="cell-chip-fill"
-              :title="`Use ${r} without launching (browse / resume here)`"
-              :aria-label="`Use ${r} without launching`"
-              @click="fillDir(r)"
-            >
-              <span class="material-symbols-outlined">edit</span>
-            </button>
-          </span>
-        </div>
-      </div>
       <div v-if="isGitRepo" class="cell-worktrees">
         <span class="cell-launch-caption">or isolate in a worktree (git repo)</span>
         <div class="wt-new">
@@ -1211,23 +1197,23 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 .cell-chip-fill .material-symbols-outlined {
   font-size: 14px;
 }
+.cell-chip-del {
+  border: none;
+  border-left: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0 7px;
+}
 .cell-chip-main:hover,
 .cell-chip-fill:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
-.cell-recents {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-}
-.cell-recent-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  max-width: 360px;
+.cell-chip-del:hover {
+  background: var(--bg-hover);
+  color: var(--danger, #e5484d);
 }
 .cell-launch-label {
   display: flex;

@@ -32,6 +32,8 @@ const emit = defineEmits<{
   (e: "runSpare", command: { index: number; label: string; cwd: string | null }): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
+  // Shared preset list events — uid-less since they mutate the one config list.
+  (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
 
 const gridStyle = computed(() => trackStyle(layoutForCount(props.cells.length), null));
@@ -75,6 +77,8 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @session="(id) => emit('session', cell.uid, id)"
           @cwd="(c) => emit('cwd', cell.uid, c)"
+          @record-cwd="(c) => emit('record-cwd', c)"
+          @remove-preset="(path) => emit('remove-preset', path)"
           @run="(cmd) => emit('run', cell.uid, cmd)"
           @run-spare="(cmd) => emit('runSpare', cmd)"
           @close="emit('close', cell.uid)"

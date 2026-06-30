@@ -22,7 +22,6 @@ import { usePendingScript, type PendingCommand } from "./composables/usePendingS
 import { useSoundEnabled } from "./composables/useSoundEnabled";
 import { useAttentionSound } from "./composables/useAttentionSound";
 import { useUnloadGuard, reportActiveTerminals } from "./composables/useUnloadGuard";
-import type { CwdPreset } from "./components/presets";
 
 // View mode is now the URL: the multi-terminal grid is /terminals, everything else
 // (chat + the collection/accounting overlays) lives under the single-view shell.
@@ -143,9 +142,9 @@ function onViewportResize() {
 }
 onMounted(() => window.addEventListener("resize", onViewportResize));
 
-// Settings (directory presets + theme), shared with the grid view via useAppConfig
+// Settings (theme + notification sound), shared with the grid view via useAppConfig
 // and opened from the toolbar's gear button.
-const { defaultCwd, presets, saving: savingSettings, error: settingsError, loadConfig, savePresets: persistPresets, saveSound } = useAppConfig();
+const { defaultCwd, loadConfig, saveSound } = useAppConfig();
 // Drive the single view's dir overrides off the dir the terminal ACTUALLY runs in
 // (reported by the server, which may resolve/fall back), not the static default — so
 // the badge/theme/colors always track the active session. Falls back to the default
@@ -155,12 +154,8 @@ const effectiveCwd = computed(() => activeCwd.value ?? defaultCwd.value);
 const { config: singleDirConfig } = useDirConfig(effectiveCwd);
 const showSettings = ref(false);
 onMounted(loadConfig);
-async function savePresets(next: CwdPreset[]) {
-  if (await persistPresets(next)) showSettings.value = false;
-}
 function closeSettings() {
   showSettings.value = false;
-  settingsError.value = null;
 }
 onUnmounted(() => {
   stopDrag?.();
@@ -334,16 +329,7 @@ function onSession(id: string) {
     <!-- Full-screen accounting view; opened by the toolbar's account_balance button
          (driven by useAccountingView). Mutually exclusive with the browser above. -->
     <AccountingOverlay />
-    <SettingsModal
-      v-if="showSettings"
-      :presets="presets"
-      :sound-file="soundFile"
-      :saving="savingSettings"
-      :error="settingsError"
-      @save="savePresets"
-      @update-sound="saveSound"
-      @close="closeSettings"
-    />
+    <SettingsModal v-if="showSettings" :sound-file="soundFile" @update-sound="saveSound" @close="closeSettings" />
   </div>
 </template>
 

@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, nextTick } from "vue";
-import type { CwdPreset } from "./presets";
 import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
 
-const props = defineProps<{ presets: CwdPreset[]; soundFile?: string | null; saving?: boolean; error?: string | null }>();
-const emit = defineEmits<{ (e: "save", presets: CwdPreset[]): void; (e: "update-sound", file: string | null): void; (e: "close"): void }>();
+const props = defineProps<{ soundFile?: string | null }>();
+const emit = defineEmits<{ (e: "update-sound", file: string | null): void; (e: "close"): void }>();
 
 // Custom attention sound, applied immediately (like the theme) — empty => the
 // built-in chime. The text box mirrors the saved value; Browse / typing apply it.
@@ -43,8 +42,7 @@ function testSound() {
   previewAttention(props.soundFile ?? null);
 }
 
-// Theme is applied immediately on click (independent of the Save button, which
-// only commits the directory presets).
+// Theme is applied immediately on click.
 const { themeId, themes, setTheme } = useTheme();
 const themesEl = ref<HTMLElement>();
 
@@ -61,33 +59,7 @@ function onThemeKey(e: KeyboardEvent, index: number) {
   themesEl.value?.querySelectorAll<HTMLElement>(".theme-card")[next]?.focus();
 }
 
-// Edit a local copy; commit on Save.
-const rows = ref<CwdPreset[]>(props.presets.map((p) => ({ ...p })));
-// Becomes true once the user edits, so a late prop sync can't clobber their work.
-const dirty = ref(false);
-// Resync if the presets arrive/change after mount — e.g. the modal opened before
-// /api/config resolved (would otherwise edit empty data and Save could wipe the
-// real presets). Only while the form is pristine, to preserve in-progress edits.
-watch(
-  () => props.presets,
-  (next) => {
-    if (!dirty.value) rows.value = next.map((p) => ({ ...p }));
-  },
-);
 const modalEl = ref<HTMLElement>();
-
-function addRow() {
-  dirty.value = true;
-  rows.value.push({ label: "", path: "" });
-}
-function removeRow(i: number) {
-  dirty.value = true;
-  rows.value.splice(i, 1);
-}
-function save() {
-  const cleaned = rows.value.map((r) => ({ label: r.label.trim(), path: r.path.trim() })).filter((r) => r.label && r.path);
-  emit("save", cleaned);
-}
 
 // Modal keyboard behavior: Escape closes; Tab is trapped within the dialog.
 function onKeydown(e: KeyboardEvent) {
@@ -168,41 +140,9 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         <button class="btn" type="button" :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</button>
       </div>
 
-      <h3 class="section-title">Directory presets</h3>
-      <p class="hint">Quick-pick directories offered when launching a terminal.</p>
-
-      <div class="rows">
-        <div v-for="(row, i) in rows" :key="i" class="row">
-          <input
-            v-model="row.label"
-            class="field label-field"
-            type="text"
-            placeholder="Label"
-            aria-label="Preset label"
-            spellcheck="false"
-            @input="dirty = true"
-          />
-          <input
-            v-model="row.path"
-            class="field path-field"
-            type="text"
-            placeholder="/absolute/path"
-            aria-label="Preset directory path"
-            spellcheck="false"
-            @input="dirty = true"
-          />
-          <button class="icon-btn" title="Remove" aria-label="Remove preset" @click="removeRow(i)">✕</button>
-        </div>
-        <p v-if="rows.length === 0" class="empty">No presets yet.</p>
-      </div>
-
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-
       <div class="modal-foot">
-        <button class="btn" @click="addRow">＋ Add preset</button>
         <span class="spacer" />
-        <button class="btn" @click="emit('close')">Cancel</button>
-        <button class="btn btn-primary" :disabled="saving" @click="save">{{ saving ? "Saving…" : "Save" }}</button>
+        <button class="btn btn-primary" @click="emit('close')">Close</button>
       </div>
     </div>
   </div>
@@ -303,17 +243,6 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-size: 12px;
   color: var(--text-dim);
 }
-.rows {
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
 .field {
   box-sizing: border-box;
   padding: 7px 10px;
@@ -326,17 +255,6 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .field:focus {
   outline: none;
   border-color: var(--accent);
-}
-.label-field {
-  flex: 0 0 30%;
-}
-.path-field {
-  flex: 1 1 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-}
-.empty {
-  font-size: 12px;
-  color: var(--text-dim);
 }
 .sound-row {
   display: flex;
@@ -351,11 +269,6 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   display: flex;
   gap: 8px;
   margin-top: 8px;
-}
-.error {
-  margin: 12px 0 0;
-  font-size: 12px;
-  color: var(--err-text);
 }
 .modal-foot {
   display: flex;

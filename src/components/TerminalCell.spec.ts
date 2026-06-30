@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
-import { useRecentDirs } from "../composables/useRecentDirs";
 
 // Capture the "sessions" pub/sub callback so tests can push activity directly.
 let captured: ((data: unknown) => void) | null = null;
@@ -54,10 +53,6 @@ function deferred<T>() {
 
 beforeEach(() => {
   captured = null;
-  // Recent dirs live in a module-level singleton backed by localStorage; reset both
-  // so a server cwd recorded by one test doesn't prefill the launcher in the next.
-  localStorage.clear();
-  useRecentDirs().recentDirs.value = [];
   mockFetch();
 });
 
@@ -327,45 +322,46 @@ describe("TerminalCell", () => {
     expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
   });
 
-  it("records the server-confirmed cwd and offers it as a recent chip that launches on click", async () => {
-    // Launch + let the server confirm the effective cwd: that records a recent.
-    const w1 = mountCell(null, { defaultCwd: "/home/me/default" });
+  it("emits record-cwd with the server-confirmed cwd of a fresh launch", async () => {
+    // A fresh launch + the server confirming the effective cwd asks the parent to
+    // auto-record that dir as a preset (the parent persists it to config).
+    const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w1.find(".cell-dir-input").setValue("/home/me/alpha");
-    await w1.find(".cell-dir-input").trigger("keydown.enter");
-    w1.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/alpha");
+    await w.find(".cell-dir-input").setValue("/home/me/alpha");
+    await w.find(".cell-dir-input").trigger("keydown.enter");
+    w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/alpha");
     await flushPromises();
-
-    // A fresh cell now shows /home/me/alpha as a recent chip (path label).
-    const w2 = mountCell(null, { defaultCwd: "/home/me/default" });
-    await flushPromises();
-    const recent = w2.find(".cell-recents");
-    expect(recent.exists()).toBe(true);
-    const main = recent.find(".cell-chip-main");
-    expect(main.text()).toBe("~/alpha");
-    // Clicking the chip launches a new session there.
-    await main.trigger("click");
-    expect(w2.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/home/me/alpha");
+    expect(w.emitted("record-cwd")?.at(-1)).toEqual(["/home/me/alpha"]);
   });
 
-  it("does NOT record a recent when a restored session reports its cwd (only fresh launches)", async () => {
+  it("emits remove-preset (and does NOT launch) when a chip's ✕ is clicked", async () => {
+    const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
+    await flushPromises();
+    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    if (!chip) throw new Error("preset chip not found");
+    await chip.find(".cell-chip-del").trigger("click");
+    expect(w.emitted("remove-preset")?.at(-1)).toEqual(["/work/proj"]);
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+  });
+
+  it("does NOT emit record-cwd when a restored session reports its cwd (only fresh launches)", async () => {
     // A cell restoring a persisted session also gets a server cwd report on connect;
-    // that must not rewrite the recents (else reload reorders them by mount order).
+    // that must not record a preset (else reload would re-add dirs by mount order).
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/restored" });
     await flushPromises();
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/restored");
     await flushPromises();
-    expect(useRecentDirs().recentDirs.value).toEqual([]);
+    expect(w.emitted("record-cwd")).toBeUndefined();
   });
 
-  it("does NOT record a recent when resuming an existing session from the resume list", async () => {
+  it("does NOT emit record-cwd when resuming an existing session from the resume list", async () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
     await w.find(".cell-resume-item").trigger("click");
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
-    expect(useRecentDirs().recentDirs.value).toEqual([]);
+    expect(w.emitted("record-cwd")).toBeUndefined();
   });
 
   it("clears the pending-record flag when a fresh launch is torn down before its cwd arrives", async () => {
@@ -381,20 +377,13 @@ describe("TerminalCell", () => {
     await w.find(".cell-resume-item").trigger("click"); // resume an existing session
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
-    expect(useRecentDirs().recentDirs.value).toEqual([]);
+    expect(w.emitted("record-cwd")).toBeUndefined();
   });
 
-  it("prefills the launch field with the most recent location (not the server default)", async () => {
-    useRecentDirs().recordDir("/home/me/last-used");
-    const w = mountCell(null, { defaultCwd: "/home/me/default" });
+  it("prefills the launch field with the most recent preset (not the server default)", async () => {
+    const w = mountCell(null, { presets: [{ label: "last", path: "/home/me/last-used" }], defaultCwd: "/home/me/default" });
     await flushPromises();
     expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/last-used");
-  });
-
-  it("keeps only the most recent four locations", async () => {
-    const { recordDir, recentDirs } = useRecentDirs();
-    for (const d of ["/a", "/b", "/c", "/d", "/e"]) recordDir(d);
-    expect(recentDirs.value).toEqual(["/e", "/d", "/c", "/b"]);
   });
 
   it("resets the launch form to the default dir after close", async () => {

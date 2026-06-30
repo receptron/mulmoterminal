@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import type { CwdPreset } from "../components/presets";
+import { presetLabel, type CwdPreset } from "../components/presets";
 
 // The custom attention-sound file is a SINGLETON ref shared across every
 // useAppConfig() caller — the beep player lives in the single view while the
@@ -31,9 +31,9 @@ export function useAppConfig() {
     }
   }
 
-  // Returns whether the save succeeded so the caller can close the modal only on
-  // success (and keep the user's edits otherwise). Posts only cwdPresets — the
-  // server keeps the other fields (the sound), so this never clobbers it.
+  // Persist the directory presets. Posts only cwdPresets — the server keeps the
+  // other fields (the sound), so this never clobbers it. Returns whether the save
+  // succeeded.
   async function savePresets(next: CwdPreset[]): Promise<boolean> {
     saving.value = true;
     error.value = null;
@@ -54,6 +54,22 @@ export function useAppConfig() {
     }
   }
 
+  // Auto-add the dir the user just launched in, so it becomes a one-click chip.
+  // Dedup by path (an existing entry keeps its position — no reshuffle on reuse);
+  // a new dir is prepended. No cap: the user prunes the list with the chip's ✕.
+  // Called with the server-confirmed (effective) cwd so we only remember dirs that
+  // actually ran.
+  async function recordPreset(path: string | null): Promise<void> {
+    if (!path || presets.value.some((p) => p.path === path)) return;
+    await savePresets([{ label: presetLabel(path), path }, ...presets.value]);
+  }
+
+  // Drop one preset (the chip's ✕). No-op when the path isn't present.
+  async function removePreset(path: string): Promise<void> {
+    if (!presets.value.some((p) => p.path === path)) return;
+    await savePresets(presets.value.filter((p) => p.path !== path));
+  }
+
   // Persist just the custom attention sound (a file path, or null to use the chime).
   // Applied immediately (like the theme), independent of the presets Save button.
   async function saveSound(file: string | null): Promise<boolean> {
@@ -72,5 +88,5 @@ export function useAppConfig() {
     }
   }
 
-  return { defaultCwd, home, presets, soundFile, saving, error, loadConfig, savePresets, saveSound };
+  return { defaultCwd, home, presets, soundFile, saving, error, loadConfig, savePresets, recordPreset, removePreset, saveSound };
 }
