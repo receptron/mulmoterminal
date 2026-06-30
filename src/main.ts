@@ -15,4 +15,10 @@ import App from "./App.vue";
 // default palette.
 initTheme();
 
-createApp(App).use(router).mount("#app");
+// Mount only AFTER the router's initial (async) navigation resolves. On a hard
+// reload / deep-link to /terminals, mounting eagerly would first render the single
+// shell (route still at the start location) — and TerminalView.onMounted would
+// attach the durable "single" PTY — before the route flips to the grid, leaking a
+// hidden Claude session. router.isReady() guarantees the initial URL is honored first.
+const app = createApp(App).use(router);
+router.isReady().then(() => app.mount("#app"));

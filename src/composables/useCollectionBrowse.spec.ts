@@ -94,6 +94,21 @@ describe("useCollectionBrowse over the router", () => {
     expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", kind: "collection", slug: "bar", selectedId: "rec-2" });
   });
 
+  it("navigateToRecord without a recordId on the current page closes any open record", async () => {
+    browseGotoDetail("collection", "foo");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+
+    // Re-target the SAME page with no record id — the path doesn't change (so the
+    // watcher never fires), but the stale modal must still close, not be reused.
+    browseNavigateToRecord("foo");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/collections/foo");
+    expect(browseRouteSelectedId()).toBeUndefined();
+    expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", slug: "foo", selectedId: null });
+  });
+
   it("does not leak a record across kinds when slugs overlap (collection foo → feed foo)", async () => {
     browseGotoDetail("collection", "foo");
     await flushPromises();

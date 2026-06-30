@@ -61,13 +61,13 @@ export function browseGotoDetail(kind: ShortcutKind, slug: string): void {
 /** A ref/embed hop into another collection, optionally deep-linking a record. */
 export function browseNavigateToRecord(targetSlug: string, recordId?: string): void {
   // Ref hops are collection→collection. The sync path watcher clears the record
-  // during the push, so re-apply it AFTER navigation settles on the target path.
+  // during the push, so (re)apply the record AFTER navigation settles on the target
+  // path. Always assign — a hop to the CURRENT page (no path change → no watcher
+  // fire) with no recordId must still close any stale modal, not reuse it.
   const targetPath = pathFor("collection", targetSlug);
   router.push(targetPath).then(() => {
-    if (recordId) {
-      state.recordPath = targetPath;
-      state.selectedId = recordId;
-    }
+    state.recordPath = recordId ? targetPath : null;
+    state.selectedId = recordId ?? null;
   });
 }
 
