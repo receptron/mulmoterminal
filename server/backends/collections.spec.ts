@@ -1,11 +1,19 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import express from "express";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
 import { initCollectionsBackend, mountCollectionRoutes } from "./collections.js";
+import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
+
+// The registry engine fetches remote index.json / bundles — mock it so the route
+// tests run offline and we can assert the host glue (status passthrough, args).
+vi.mock("@mulmoclaude/core/collection/registry/server", () => ({
+  listRegistry: vi.fn(),
+  importRegistry: vi.fn(),
+}));
 
 // A minimal project-scope collection skill + one record + one read-only custom
 // view, laid out exactly where the engine's discovery looks (matching the shared
@@ -217,5 +225,60 @@ describe("action routes (seed prompts)", () => {
 
   it("404s a per-record action on a missing item", async () => {
     expect((await post("/api/collections/testcol/items/ghost/actions/enrich")).status).toBe(404);
+  });
+});
+
+describe("collection registry routes (Discover tab)", () => {
+  beforeEach(() => {
+    vi.mocked(listRegistry).mockReset();
+    vi.mocked(importRegistry).mockReset();
+  });
+
+  it("GET /registry/list returns the engine's merged catalog", async () => {
+    const payload = {
+      registries: [{ name: "official", status: "ok" as const, generatedAt: null, error: null, entryCount: 1 }],
+      stale: false,
+      collections: [{ id: "a/b", author: "a", slug: "b", title: "B", registryName: "official" }],
+    };
+    vi.mocked(listRegistry).mockResolvedValue(payload as never);
+    const res = await fetch(`${base}/api/collections/registry/list`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(payload);
+  });
+
+  it("POST /registry/import installs and returns the engine response", async () => {
+    vi.mocked(importRegistry).mockResolvedValue({
+      ok: true,
+      response: { localSlug: "b", updated: false, seedWritten: 3, seedSkipped: false },
+    } as never);
+    const res = await fetch(`${base}/api/collections/registry/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ author: "a", slug: "b", registry: "official" }),
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ localSlug: "b", updated: false, seedWritten: 3, seedSkipped: false });
+    expect(vi.mocked(importRegistry)).toHaveBeenCalledWith("a", "b", expect.any(String), "official");
+  });
+
+  it("POST /registry/import passes the engine's failure status straight through", async () => {
+    vi.mocked(importRegistry).mockResolvedValue({ ok: false, status: 404, error: "not found" } as never);
+    const res = await fetch(`${base}/api/collections/registry/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ author: "a", slug: "missing" }),
+    });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not found" });
+  });
+
+  it("POST /registry/import 400s without author/slug and never calls the engine", async () => {
+    const res = await fetch(`${base}/api/collections/registry/import`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ slug: "b" }),
+    });
+    expect(res.status).toBe(400);
+    expect(vi.mocked(importRegistry)).not.toHaveBeenCalled();
   });
 });

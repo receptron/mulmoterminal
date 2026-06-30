@@ -14,6 +14,7 @@
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
+import type { RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/core/collection/registry";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { useShortcuts } from "./useShortcuts";
 import {
@@ -174,9 +175,10 @@ configureCollectionUi({
   refreshCollection: (slug) => apiPost(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
   deleteView: () => Promise.resolve(mutationFail),
   listFeeds: () => Promise.resolve(apiFail),
-  // ── Discover/registry tab: no curated-registry backend in MulmoTerminal. ──
-  listRegistry: () => Promise.resolve(apiFail),
-  importRegistry: () => Promise.resolve(apiFail),
+  // ── Discover/registry tab: the shared @mulmoclaude/core registry engine, wired
+  //    over /api/collections/registry/* (server/backends/collections.ts). ──
+  listRegistry: () => apiGet<RegistryListResponse>("/api/collections/registry/list"),
+  importRegistry: (author, slug, registry) => apiPost<RegistryImportResponse>("/api/collections/registry/import", { author, slug, registry }),
 
   // ── favorites: the shared useShortcuts store over /api/shortcuts. ──
   reconcileShortcuts: (kind, live) => useShortcuts().reconcile(kind, live),
