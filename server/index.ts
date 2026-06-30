@@ -174,7 +174,7 @@ const SESSIONS_CHANNEL = "sessions";
 // publishes it here (mirrors MulmoClaude's sessionChannel; see the spike doc).
 const sessionChannel = (id: string) => `session:${id}`;
 
-// The GUI MCP server is served in-process over Streamable HTTP at /mcp/:sessionId
+// The GUI MCP server is served in-process over Streamable HTTP at /api/mcp/:sessionId
 // (see the route below) and wired into each spawned claude via --mcp-config. It
 // exposes one GUI-protocol tool per enabled plugin (driven by plugins/plugins.json)
 // and drives the GUI panel via the toolResult route.
@@ -553,7 +553,7 @@ function mcpConfigJson(sessionId: string) {
     mcpServers: {
       "mulmoterminal-gui": {
         type: "http",
-        url: `http://127.0.0.1:${PORT}/mcp/${sessionId}`,
+        url: `http://127.0.0.1:${PORT}/api/mcp/${sessionId}`,
       },
     },
   });
@@ -781,7 +781,7 @@ app.post("/api/translation/submit", (req, res) => {
 // request, no session header / no initialize handshake required across requests.
 // The SDK forbids reusing a stateless transport, so we never cache it.
 const mcpReject = (_req: express.Request, res: express.Response) => res.status(405).set("Allow", "POST").json({ error: "method not allowed" });
-app.post("/mcp/:sessionId", async (req, res) => {
+app.post("/api/mcp/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
   if (!SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
@@ -803,8 +803,8 @@ app.post("/mcp/:sessionId", async (req, res) => {
   }
 });
 // No SSE stream / session teardown in stateless mode — reject the rest.
-app.get("/mcp/:sessionId", mcpReject);
-app.delete("/mcp/:sessionId", mcpReject);
+app.get("/api/mcp/:sessionId", mcpReject);
+app.delete("/api/mcp/:sessionId", mcpReject);
 
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));

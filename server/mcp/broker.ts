@@ -1,5 +1,5 @@
 // GUI chat-protocol MCP server, built per session and served over HTTP from the
-// main mulmoterminal process (see the `/mcp/:sessionId` route in server/index.ts).
+// main mulmoterminal process (see the `/api/mcp/:sessionId` route in server/index.ts).
 // Registers one MCP tool per enabled plugin (from server/plugins-registry.js,
 // driven by plugins/plugins.json) and acts as a thin bridge to the host routes:
 //
