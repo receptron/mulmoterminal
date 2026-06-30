@@ -399,8 +399,8 @@ export function mountCollectionRoutes(app: Express): void {
 
   // ── Custom views (sandboxed-iframe HTML views, e.g. a poster gallery) ──
   // A custom view is LLM-authored HTML rendered in a sandboxed iframe that fetches
-  // its records from view-data with a scoped token. Read-only here: the GET data
-  // route is wired; write (PUT) is deferred to the interactive tier.
+  // its records from view-data with a scoped token. Both tiers are wired: a GET
+  // read route and a PUT write route (the latter gated by a `write`-capable token).
 
   // The custom view's raw HTML, read from the staging path via the package's
   // path-safe reader. The frontend renders it sandboxed (token injected).
@@ -459,10 +459,10 @@ export function mountCollectionRoutes(app: Express): void {
         res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
         return;
       }
-      // Read-only for now: MulmoTerminal has no view-data write route yet, so never
-      // grant `write` even if the view declares it (clamp the request to ["read"]).
-      // Drop the `write` clamp here once the interactive tier wires PUT /view-data.
-      const granted = clampCapabilities(view.capabilities as ViewCapability[] | undefined, ["read"]);
+      // The write tier is wired below (PUT /view-data), so grant exactly what the
+      // view declared. `clampCapabilities` defaults the requested set to the declared
+      // set, so a `["read"]` view still can never obtain a `write` token.
+      const granted = clampCapabilities(view.capabilities as ViewCapability[] | undefined, undefined);
       const minted = mintViewToken(slug, granted);
       res.json({ token: minted.token, exp: minted.exp, dataUrl: `/api/collections/${encodeURIComponent(slug)}/view-data`, capabilities: granted });
     } catch (err) {
@@ -478,7 +478,7 @@ export function mountCollectionRoutes(app: Express): void {
   const viewDataCors = (_req: Request, res: Response, next: NextFunction): void => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
     next();
   };
   app.options("/api/collections/:slug/view-data", viewDataCors, (_req: Request, res: Response) => {
@@ -498,6 +498,60 @@ export function mountCollectionRoutes(app: Express): void {
       res.json({ items });
     } catch (err) {
       log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Scoped write: apply per-record updates from a custom view (e.g. the vocabulary
+  // flashcard's grade buttons). Requires a `write`-capable token. The body is
+  // `{ items: [...], mode?: "merge" | "replace" }`; in `merge` mode (the default a
+  // view sends when it only carries the changed fields) each item is layered onto the
+  // existing record so untouched fields survive — a bare writeItem of the partial
+  // would clobber them. Responds `{ items, rejected }`: `rejected` carries a
+  // `{ id, problem }` per item that couldn't be written, the contract views check.
+  app.put("/api/collections/:slug/view-data", viewDataCors, requireViewToken("write"), async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const collection = await loadCollection(req.params.slug);
+      if (!collection) {
+        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+        return;
+      }
+      const body = (req.body ?? {}) as { items?: unknown; mode?: unknown };
+      if (!Array.isArray(body.items)) {
+        res.status(400).json({ error: "`items` must be an array" });
+        return;
+      }
+      const merge = body.mode !== "replace";
+      const primaryKey = collection.schema.primaryKey;
+      const written: CollectionItem[] = [];
+      const rejected: Array<{ id: string; problem: string }> = [];
+      for (const raw of body.items) {
+        const record = extractRecord(raw);
+        if (!record) {
+          rejected.push({ id: "", problem: "item must be a JSON object" });
+          continue;
+        }
+        const itemId = typeof record[primaryKey] === "string" ? (record[primaryKey] as string) : "";
+        if (!itemId) {
+          rejected.push({ id: "", problem: `missing primary key '${primaryKey}'` });
+          continue;
+        }
+        const base = merge ? ((await readItem(collection.dataDir, itemId)) ?? {}) : {};
+        const recordWithId: CollectionItem = { ...base, ...record, [primaryKey]: itemId };
+        const result = await writeItem(collection.dataDir, itemId, recordWithId, { slug: collection.slug });
+        if (result.kind === "ok") {
+          written.push(result.item);
+        } else if (result.kind === "invalid-id") {
+          rejected.push({ id: itemId, problem: `invalid item id: ${itemId}` });
+        } else if (result.kind === "path-escape") {
+          rejected.push({ id: itemId, problem: "data directory escapes the workspace" });
+        } else {
+          rejected.push({ id: itemId, problem: `write failed (${result.kind})` });
+        }
+      }
+      res.json({ items: written, rejected });
+    } catch (err) {
+      log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

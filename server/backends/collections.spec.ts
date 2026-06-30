@@ -40,7 +40,10 @@ const SCHEMA = {
     id: { type: "string", label: "ID", primary: true, required: true },
     name: { type: "string", label: "Name" },
   },
-  views: [{ id: "v1", file: "views/v1.html", label: "Custom", capabilities: ["read"] }],
+  views: [
+    { id: "v1", file: "views/v1.html", label: "Custom", capabilities: ["read"] },
+    { id: "v2", file: "views/v2.html", label: "Editable", capabilities: ["read", "write"] },
+  ],
   actions: [{ id: "enrich", label: "Enrich", kind: "chat", role: "general", template: "templates/enrich.md" }],
   collectionActions: [{ id: "audit", label: "Audit", kind: "chat", role: "general", template: "templates/audit.md" }],
 };
@@ -60,6 +63,7 @@ beforeAll(async () => {
   writeFileSync(path.join(ws, "data", "testcol", "items", "item1.json"), JSON.stringify({ id: "item1", name: "Foo" }));
   mkdirSync(path.join(ws, "data", "skills", "testcol", "views"), { recursive: true });
   writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v1.html"), "<head></head><body>view</body>");
+  writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v2.html"), "<head></head><body>editable</body>");
 
   // Point the (singleton) collection host at the fixture. vitest isolates modules
   // per test file, so this configure is fresh for this worker.
@@ -153,6 +157,77 @@ describe("custom view routes", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: Array<{ id: string }> };
     expect(body.items.map((i) => i.id)).toEqual(["item1"]);
+  });
+
+  it("grants a write token to a view that declares write", async () => {
+    const res = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { capabilities: string[] };
+    expect(body.capabilities).toEqual(["read", "write"]);
+  });
+
+  it("advertises PUT in the view-data CORS preflight", async () => {
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, { method: "OPTIONS" });
+    expect(res.status).toBe(204);
+    expect(res.headers.get("access-control-allow-methods")).toContain("PUT");
+  });
+
+  it("401s a PUT made with a read-only token", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v1" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "item1", name: "Hacked" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("merge-writes a partial record without clobbering untouched fields", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    // item1 starts as { id: "item1", name: "Foo" }. Merge a new field only.
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "item1", note: "graded" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ id: string; name?: string; note?: string }>; rejected: unknown[] };
+    expect(body.rejected).toEqual([]);
+    // name survived the partial write; note was added.
+    expect(body.items[0]).toMatchObject({ id: "item1", name: "Foo", note: "graded" });
+  });
+
+  it("rejects an item missing its primary key", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ name: "no id" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ problem: string }> };
+    expect(body.items).toEqual([]);
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0].problem).toContain("primary key");
   });
 });
 
