@@ -93,4 +93,33 @@ describe("useCollectionBrowse over the router", () => {
     expect(browseRouteSelectedId()).toBe("rec-2");
     expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", kind: "collection", slug: "bar", selectedId: "rec-2" });
   });
+
+  it("does not leak a record across kinds when slugs overlap (collection foo → feed foo)", async () => {
+    browseGotoDetail("collection", "foo");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+
+    // Same slug, different kind → the collection's record must NOT bleed into the feed page.
+    browseGotoDetail("feed", "foo");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/feeds/foo");
+    expect(browseRouteSelectedId()).toBeUndefined();
+    expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", kind: "feed", slug: "foo", selectedId: null });
+  });
+
+  it("returning to a page via normal navigation does not revive a stale record modal", async () => {
+    browseGotoDetail("collection", "foo");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+
+    // Leave, then come back to the SAME page by a normal (non-record) navigation.
+    browseGotoDetail("collection", "bar");
+    await flushPromises();
+    browseGotoDetail("collection", "foo");
+    await flushPromises();
+    expect(browseRouteSelectedId()).toBeUndefined();
+    expect(useCollectionBrowse().view.value).toMatchObject({ slug: "foo", selectedId: null });
+  });
 });

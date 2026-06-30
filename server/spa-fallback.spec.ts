@@ -16,5 +16,12 @@ describe("SPA fallback matcher", () => {
     expect(isClientRoute("/api/mcp/abc-123")).toBe(false);
     expect(isClientRoute("/api/collections/foo/detail")).toBe(false);
     expect(isClientRoute("/api/this-route-does-not-exist")).toBe(false);
+    // The bare /api path is reserved too — it must 404, not serve the SPA shell.
+    expect(isClientRoute("/api")).toBe(false);
+  });
+
+  it("does not over-reserve paths that merely start with the letters 'api'", () => {
+    // /apidocs is a client route — only the /api segment itself is reserved.
+    expect(isClientRoute("/apidocs")).toBe(true);
   });
 });

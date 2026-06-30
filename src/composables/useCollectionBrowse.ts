@@ -12,17 +12,25 @@ import { router } from "../router";
 
 type BrowseView = { mode: "closed" } | { mode: "index"; kind: ShortcutKind } | { mode: "detail"; kind: ShortcutKind; slug: string; selectedId: string | null };
 
-// The only retained state: which record's modal is open, KEYED by the slug it
-// belongs to. Records are intentionally not addressable (opening one never touches
-// the URL), so the open record is honored only while the route slug still matches —
-// leaving the page (or any slug change) implicitly drops the modal, with no watcher
-// to race against navigation. browseNavigateToRecord sets the key up front (before
-// the push), so it survives the navigation it triggers.
-const state = reactive<{ recordSlug: string | null; selectedId: string | null }>({ recordSlug: null, selectedId: null });
+// The only retained state: which record's modal is open, KEYED by the exact detail
+// PATH it belongs to (so /collections/foo and /feeds/foo never share a record, even
+// with overlapping slugs). Records are intentionally not addressable — opening one
+// never touches the URL — so the record is honored only while the current path still
+// matches its key. Every programmatic navigation that isn't itself a record hop
+// clears it (clearRecord below), which both restores the original "leaving the page
+// drops the modal" behavior and keeps a later return to the same page from reviving
+// a stale modal. browseNavigateToRecord sets the key up front (before the push), so
+// it survives the navigation it triggers.
+const state = reactive<{ recordPath: string | null; selectedId: string | null }>({ recordPath: null, selectedId: null });
 
-// The open record for the page currently on screen (null once the slug no longer matches).
+function clearRecord(): void {
+  state.recordPath = null;
+  state.selectedId = null;
+}
+
+// The open record for the page currently on screen (null once the path no longer matches).
 function recordOnCurrentPage(): string | null {
-  return state.recordSlug !== null && state.recordSlug === browseRouteSlug() ? state.selectedId : null;
+  return state.recordPath !== null && state.recordPath === router.currentRoute.value.path ? state.selectedId : null;
 }
 
 function pathFor(kind: ShortcutKind, slug?: string): string {
@@ -32,21 +40,24 @@ function pathFor(kind: ShortcutKind, slug?: string): string {
 
 /** Open the index for a kind (collections / feeds). */
 export function browseGotoIndex(kind: ShortcutKind): void {
+  clearRecord();
   router.push(pathFor(kind));
 }
 
 /** Open one collection / feed's detail page. */
 export function browseGotoDetail(kind: ShortcutKind, slug: string): void {
+  clearRecord();
   router.push(pathFor(kind, slug));
 }
 
 /** A ref/embed hop into another collection, optionally deep-linking a record. */
 export function browseNavigateToRecord(targetSlug: string, recordId?: string): void {
-  // Ref hops are collection→collection. Key the record to the target slug BEFORE
-  // pushing, so once navigation settles on that slug the modal is honored.
-  state.recordSlug = targetSlug;
+  // Ref hops are collection→collection. Key the record to the TARGET path BEFORE
+  // pushing, so once navigation settles on that path the modal is honored.
+  const targetPath = pathFor("collection", targetSlug);
+  state.recordPath = recordId ? targetPath : null;
   state.selectedId = recordId ?? null;
-  router.push(pathFor("collection", targetSlug));
+  router.push(targetPath);
 }
 
 /** Current detail slug (CollectionView reads this in standalone mode), or undefined. */
@@ -68,12 +79,13 @@ export function browseIsFeedRoute(): boolean {
 
 /** Set/clear the open record (the modal deep-link) on the current page, no history. */
 export function browseSetSelectedId(itemId: string | null): void {
-  state.recordSlug = browseRouteSlug() ?? null;
+  state.recordPath = itemId ? router.currentRoute.value.path : null;
   state.selectedId = itemId;
 }
 
 /** Close the browser overlay → back to chat. */
 export function browseClose(): void {
+  clearRecord();
   router.push("/");
 }
 

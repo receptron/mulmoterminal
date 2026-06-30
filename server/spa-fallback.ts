@@ -7,7 +7,9 @@
 // (never the SPA shell), so a mistyped API path fails loudly instead of returning HTML.
 //
 // Express 5 / path-to-regexp v8: app.get("*") is invalid — a RegExp route is used.
-export const SPA_FALLBACK_RE = /^\/(?!api\/).*/;
+// The lookahead reserves the WHOLE /api prefix — both /api/... and the bare /api —
+// so even a mistyped bare /api 404s rather than returning the SPA shell.
+export const SPA_FALLBACK_RE = /^\/(?!api(?:\/|$)).*/;
 
 /** True when `pathname` should serve the SPA shell rather than hit a server route. */
 export function isClientRoute(pathname: string): boolean {
