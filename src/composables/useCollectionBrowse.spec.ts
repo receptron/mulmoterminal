@@ -1,0 +1,96 @@
+import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { createApp, defineComponent } from "vue";
+import { flushPromises } from "@vue/test-utils";
+import { router } from "../router";
+import {
+  useCollectionBrowse,
+  browseGotoIndex,
+  browseGotoDetail,
+  browseNavigateToRecord,
+  browseSetSelectedId,
+  browseRouteSlug,
+  browseRouteSelectedId,
+  browseIsFeedRoute,
+  browseClose,
+} from "./useCollectionBrowse";
+
+// Install the singleton router into a throwaway app so currentRoute tracks pushes.
+beforeAll(async () => {
+  createApp(defineComponent({ render: () => null })).use(router);
+  await router.isReady();
+});
+
+beforeEach(async () => {
+  await router.replace("/");
+  await flushPromises();
+  browseSetSelectedId(null);
+});
+
+describe("useCollectionBrowse over the router", () => {
+  it("browseGotoIndex / browseGotoDetail push the right paths", async () => {
+    browseGotoIndex("collection");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/collections");
+
+    browseGotoIndex("feed");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/feeds");
+    expect(browseIsFeedRoute()).toBe(true);
+
+    browseGotoDetail("collection", "todos");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/collections/todos");
+    expect(browseRouteSlug()).toBe("todos");
+  });
+
+  it("view computed reflects currentRoute", async () => {
+    const { view, isOpen } = useCollectionBrowse();
+    expect(view.value).toEqual({ mode: "closed" });
+    expect(isOpen.value).toBe(false);
+
+    browseGotoIndex("feed");
+    await flushPromises();
+    expect(view.value).toEqual({ mode: "index", kind: "feed" });
+    expect(isOpen.value).toBe(true);
+
+    browseGotoDetail("collection", "todos");
+    await flushPromises();
+    expect(view.value).toEqual({ mode: "detail", kind: "collection", slug: "todos", selectedId: null });
+  });
+
+  it("selectedId is modal-only state and never enters the URL", async () => {
+    browseGotoDetail("collection", "todos");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+    expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", selectedId: "rec-1" });
+    // The record is NOT in the URL — opening it added no history / query.
+    expect(router.currentRoute.value.fullPath).toBe("/collections/todos");
+  });
+
+  it("a slug change drops the open record (records are not history)", async () => {
+    browseGotoDetail("collection", "todos");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+
+    // Navigating to another collection page leaves the rec-1 modal behind.
+    browseGotoDetail("collection", "other");
+    await flushPromises();
+    expect(browseRouteSelectedId()).toBeUndefined();
+    expect(useCollectionBrowse().view.value).toMatchObject({ slug: "other", selectedId: null });
+
+    browseClose();
+    await flushPromises();
+    expect(useCollectionBrowse().view.value).toEqual({ mode: "closed" });
+    expect(browseRouteSelectedId()).toBeUndefined();
+  });
+
+  it("navigateToRecord lands on the detail page with the record deep-linked", async () => {
+    browseNavigateToRecord("bar", "rec-2");
+    await flushPromises();
+    expect(router.currentRoute.value.path).toBe("/collections/bar");
+    expect(browseRouteSelectedId()).toBe("rec-2");
+    expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", kind: "collection", slug: "bar", selectedId: "rec-2" });
+  });
+});

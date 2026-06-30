@@ -31,8 +31,9 @@ import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import type { CwdPreset } from "./presets";
 import { useAppConfig } from "../composables/useAppConfig";
 
-// The multi-terminal grid view. Toggled with the classic single view from App.vue.
-const emit = defineEmits<{ (e: "exit"): void }>();
+// The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
+// route push from the shared toolbar (Chat / Collections / a favorite), so there's
+// no exit emit — App.vue renders this only while route.name === "terminals".
 
 // One flat list of terminal cells; tabs are just pages (9 each) over it. Closing a
 // cell reflows the list so terminals flow across page boundaries. Only the active
@@ -153,10 +154,8 @@ function closeSettings() {
 <template>
   <div class="shell">
     <AppToolbar
-      view-mode="grid"
       :add-terminal-active="launchOpen"
       :auto-sort="state.sortMode === 'auto'"
-      @go-single="emit('exit')"
       @add-terminal="onAddTerminal"
       @toggle-sort="toggleSortMode"
       @settings="showSettings = true"

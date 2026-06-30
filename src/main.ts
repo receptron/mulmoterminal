@@ -8,10 +8,11 @@ import "./composables/collectionUi";
 // locale) once, before any manageAccounting card mounts.
 import "./composables/accountingUi";
 import { initTheme } from "./composables/useTheme";
+import { router } from "./router";
 import App from "./App.vue";
 
 // Apply the persisted theme to <html> before mount so there's no flash of the
 // default palette.
 initTheme();
 
-createApp(App).mount("#app");
+createApp(App).use(router).mount("#app");
