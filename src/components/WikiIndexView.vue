@@ -11,11 +11,35 @@ const props = defineProps<{ entries: WikiPageEntry[] }>();
 
 const selected = ref<Set<string>>(new Set());
 
-// All tags with their page counts, most-used first (stable for display).
-const allTags = computed(() => {
+// Full per-tag page counts.
+const tagCounts = computed(() => {
   const counts = new Map<string, number>();
   for (const e of props.entries) for (const t of e.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([tag, count]) => ({ tag, count }));
+  return counts;
+});
+
+// Filter-bar chips, mirroring MulmoClaude's wiki View: drop singletons (a tag on one
+// page adds no filtering value, just visual noise — it stays clickable from the card),
+// sort by count desc then name asc, and raise the cutoff adaptively so the row stays
+// around TARGET_FILTER_CHIPS even on big wikis. The cutoff is the count at the target
+// position, so equally-popular tags are kept together rather than sliced arbitrarily.
+const TARGET_FILTER_CHIPS = 20;
+const meaningfulTags = computed(() => [...tagCounts.value.entries()].filter(([, c]) => c > 1).sort(([ta, ca], [tb, cb]) => cb - ca || ta.localeCompare(tb)));
+const cutoffTags = computed<[string, number][]>(() => {
+  const m = meaningfulTags.value;
+  if (m.length <= TARGET_FILTER_CHIPS) return m;
+  const cutoff = m[TARGET_FILTER_CHIPS - 1][1];
+  return m.filter(([, c]) => c >= cutoff);
+});
+// Keep any selected tag the cutoff hides (e.g. a singleton picked from a card) visible
+// in the bar so it stays removable.
+const visibleTags = computed<[string, number][]>(() => {
+  const shown = new Set(cutoffTags.value.map(([t]) => t));
+  const extra = [...selected.value]
+    .filter((t) => !shown.has(t))
+    .sort((a, b) => a.localeCompare(b))
+    .map((t): [string, number] => [t, tagCounts.value.get(t) ?? 1]);
+  return [...cutoffTags.value, ...extra];
 });
 
 const filtered = computed(() => {
@@ -36,19 +60,29 @@ function toggleTag(tag: string): void {
 
 <template>
   <div class="wiki-index">
-    <div v-if="allTags.length" class="tag-filter">
-      <FilterChip v-for="{ tag, count } in allTags" :key="tag" :label="`#${tag}`" :count="count" :active="selected.has(tag)" @click="toggleTag(tag)" />
+    <div v-if="visibleTags.length" class="tag-filter">
+      <FilterChip v-for="[tag, count] in visibleTags" :key="tag" :label="`#${tag}`" :count="count" :active="selected.has(tag)" @click="toggleTag(tag)" />
     </div>
     <p v-if="!entries.length" class="wiki-empty">The wiki is empty.</p>
     <ul v-else class="card-grid">
       <li v-for="entry in filtered" :key="entry.slug">
-        <button type="button" class="page-card" @click="wikiGotoPage(entry.slug)">
+        <!-- A div (not button) so the per-tag filter chips can be real buttons. -->
+        <div
+          class="page-card"
+          role="button"
+          tabindex="0"
+          @click="wikiGotoPage(entry.slug)"
+          @keydown.enter="wikiGotoPage(entry.slug)"
+          @keydown.space.prevent="wikiGotoPage(entry.slug)"
+        >
           <span class="card-title">{{ entry.title }}</span>
           <span v-if="entry.description" class="card-desc">{{ entry.description }}</span>
           <span v-if="entry.tags.length" class="card-tags">
-            <span v-for="t in entry.tags" :key="t" class="card-tag">#{{ t }}</span>
+            <button v-for="t in entry.tags" :key="t" type="button" class="card-tag" :class="{ active: selected.has(t) }" @click.stop="toggleTag(t)">
+              #{{ t }}
+            </button>
           </span>
-        </button>
+        </div>
       </li>
     </ul>
   </div>
@@ -108,7 +142,18 @@ function toggleTag(tag: string): void {
 }
 .card-tag {
   font-size: 11px;
+  padding: 0;
+  border: none;
+  background: none;
   color: var(--text-muted);
+  cursor: pointer;
+}
+.card-tag:hover {
+  color: var(--accent);
+}
+.card-tag.active {
+  color: var(--accent);
+  font-weight: 600;
 }
 .wiki-empty {
   padding: 48px 28px;

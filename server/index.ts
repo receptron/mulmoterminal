@@ -25,6 +25,7 @@ import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
@@ -713,6 +714,12 @@ mountAllRoutes(app);
 // card and (later) the collections toolbar. The engine itself is configured below
 // once CLAUDE_CWD is the confirmed workspace.
 mountCollectionRoutes(app);
+
+// Read-only wiki routes (GET /api/wiki[?slug=] + /graph + /lint) over the shared
+// workspace, thin consumers of @mulmoclaude/core/wiki/server. Claude authors the wiki
+// via the real CLI in the terminal; MT's overlay only browses. Mounted before the /api
+// SPA fallback.
+mountWikiRoutes(app, { workspace: CLAUDE_CWD });
 
 // Accounting dispatch route (POST /api/accounting) from @mulmoclaude/accounting-plugin.
 // Drives BOTH the AccountingView (configureAccountingHost.apiCall) and the

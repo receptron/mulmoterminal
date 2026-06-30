@@ -20,6 +20,12 @@ export const routes: RouteRecordRaw[] = [
   { path: "/feeds", name: "feeds", component: Stub },
   { path: "/feeds/:slug", name: "feedDetail", component: Stub },
   { path: "/accounting", name: "accounting", component: Stub },
+  // Read-only wiki browser (Phase 3 of plans/feat-wiki.md). The open PAGE is the URL;
+  // graph + lint are their own sub-routes, mirroring MulmoClaude's /wiki paths.
+  { path: "/wiki", name: "wiki", component: Stub },
+  { path: "/wiki/pages/:slug", name: "wikiPage", component: Stub },
+  { path: "/wiki/graph", name: "wikiGraph", component: Stub },
+  { path: "/wiki/lint", name: "wikiLint", component: Stub },
   // Unknown URLs land on chat.
   { path: "/:pathMatch(.*)*", redirect: "/" },
 ];

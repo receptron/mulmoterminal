@@ -6,6 +6,7 @@ import NotificationBell from "./NotificationBell.vue";
 import { useShortcuts } from "../composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
+import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import type { Shortcut } from "../types/shortcuts";
 
@@ -23,13 +24,15 @@ const route = useRoute();
 const { shortcuts } = useShortcuts();
 const { view: browseView } = useCollectionBrowse();
 const { isOpen: accountingOpen } = useAccountingView();
+const { isOpen: wikiOpen } = useWikiBrowse();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
 
 const inGrid = computed(() => route.name === "terminals");
 const inSingle = computed(() => !inGrid.value);
-const chatActive = computed(() => inSingle.value && browseView.value.mode === "closed" && !accountingOpen.value);
+const chatActive = computed(() => inSingle.value && browseView.value.mode === "closed" && !accountingOpen.value && !wikiOpen.value);
 const collectionsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "collection");
 const accountingActive = computed(() => accountingOpen.value);
+const wikiActive = computed(() => wikiOpen.value);
 function favActive(s: Shortcut): boolean {
   return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
 }
@@ -49,6 +52,9 @@ function showFavorite(s: Shortcut): void {
 function showAccounting(): void {
   accountingViewOpen();
 }
+function showWiki(): void {
+  wikiGotoIndex();
+}
 </script>
 
 <template>
@@ -66,6 +72,9 @@ function showAccounting(): void {
       </button>
       <button type="button" class="launcher-btn" :class="{ active: accountingActive }" title="Accounting" aria-label="Accounting" @click="showAccounting">
         <span class="material-symbols-outlined">account_balance</span>
+      </button>
+      <button type="button" class="launcher-btn" :class="{ active: wikiActive }" title="Wiki" aria-label="Wiki" @click="showWiki">
+        <span class="material-symbols-outlined">menu_book</span>
       </button>
       <button
         v-for="s in shortcuts"

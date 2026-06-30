@@ -9,6 +9,7 @@ import GuiPanel from "./components/GuiPanel.vue";
 import ToolsPane from "./components/ToolsPane.vue";
 import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue";
 import AccountingOverlay from "./components/AccountingOverlay.vue";
+import WikiBrowseOverlay from "./components/WikiBrowseOverlay.vue";
 import GridView from "./components/GridView.vue";
 import SettingsModal from "./components/SettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
@@ -334,6 +335,9 @@ function onSession(id: string) {
     <!-- Full-screen accounting view; opened by the toolbar's account_balance button
          (driven by useAccountingView). Mutually exclusive with the browser above. -->
     <AccountingOverlay />
+    <!-- Full-screen read-only wiki browser; opened by the toolbar's menu_book button
+         (driven by useWikiBrowse). Mutually exclusive with the overlays above. -->
+    <WikiBrowseOverlay />
     <SettingsModal
       v-if="showSettings"
       :presets="presets"
