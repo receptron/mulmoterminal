@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
-import { useUnloadGuard, reportActiveTerminals } from "./useUnloadGuard";
+import { useUnloadGuard, reportActiveTerminals, suppressNextUnloadGuard } from "./useUnloadGuard";
 
 // Mount a bare host so the composable's onMounted/onUnmounted run (and the
 // beforeunload listener is registered/removed) on a real lifecycle.
@@ -68,6 +68,25 @@ describe("useUnloadGuard", () => {
     expect(fireBeforeUnload()).toBe(true); // single still live
     reportActiveTerminals("single", 0);
     expect(fireBeforeUnload()).toBe(false);
+  });
+
+  // A reload we initiate (Vite HMR full-reload on a source change) must not prompt,
+  // even with a terminal live — otherwise every save during dev pops the dialog.
+  it("skips the prompt for one initiated reload while a terminal is live", () => {
+    wrapper = mount(Host);
+    reportActiveTerminals("grid", 1);
+    suppressNextUnloadGuard();
+    expect(fireBeforeUnload()).toBe(false);
+  });
+
+  // The suppression is one-shot: it covers only the reload we asked for, so a later
+  // genuine close while still live is guarded again.
+  it("guards again on the next unload after one initiated reload is consumed", () => {
+    wrapper = mount(Host);
+    reportActiveTerminals("grid", 1);
+    suppressNextUnloadGuard();
+    expect(fireBeforeUnload()).toBe(false);
+    expect(fireBeforeUnload()).toBe(true);
   });
 
   it("removes the listener on unmount (no lingering guard)", () => {

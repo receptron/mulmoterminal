@@ -21,6 +21,24 @@ function totalActive(): number {
   return total;
 }
 
+// Suppress the guard for the NEXT unload only — for reloads WE initiate, where the
+// session isn't being lost by accident. The flag is one-shot: the handler consumes
+// it, so it can never linger and silence a later genuine close.
+let skipNextUnload = false;
+export function suppressNextUnloadGuard(): void {
+  skipNextUnload = true;
+}
+
+// Vite does a full page reload when source it can't hot-swap changes. That fires
+// beforeunload like any close would, so without this the guard would prompt on every
+// save during development. Vite emits `vite:beforeFullReload` just before it reloads,
+// so we suppress the imminent prompt for that one unload. `import.meta.hot` is
+// undefined in production, so this branch tree-shakes away — prod prompts on every
+// real close as before.
+if (import.meta.hot) {
+  import.meta.hot.on("vite:beforeFullReload", suppressNextUnloadGuard);
+}
+
 // Warn before the tab closes / reloads / navigates away while a terminal is live,
 // so an accidental close doesn't drop sessions (an idle PTY is reaped shortly after
 // the socket closes; a working one keeps going, but either way the live view is
@@ -29,6 +47,10 @@ function totalActive(): number {
 // fixed by the browser and can't be customised.
 export function useUnloadGuard(): void {
   const onBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (skipNextUnload) {
+      skipNextUnload = false; // one-shot: consume so it never silences a later close
+      return; // a reload we initiated (e.g. Vite HMR) — see suppressNextUnloadGuard
+    }
     if (totalActive() <= 0) return;
     e.preventDefault();
     e.returnValue = ""; // legacy Chrome/Edge still need returnValue assigned to prompt
