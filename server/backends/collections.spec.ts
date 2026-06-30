@@ -15,6 +15,16 @@ vi.mock("@mulmoclaude/core/collection/registry/server", () => ({
   importRegistry: vi.fn(),
 }));
 
+// Keep the real collection engine (loadCollection, discovery, CRUD) but stub the two
+// filesystem-destructive deletes so route tests don't archive/remove the shared
+// fixture — we assert the route glue (status mapping + refusal passthrough).
+import { deleteCollection, deleteCustomView } from "@mulmoclaude/core/collection/server";
+vi.mock("@mulmoclaude/core/collection/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mulmoclaude/core/collection/server")>()),
+  deleteCollection: vi.fn(),
+  deleteCustomView: vi.fn(),
+}));
+
 // A minimal project-scope collection skill + one record + one read-only custom
 // view, laid out exactly where the engine's discovery looks (matching the shared
 // path layout initCollectionsBackend configures):
@@ -280,5 +290,41 @@ describe("collection registry routes (Discover tab)", () => {
     });
     expect(res.status).toBe(400);
     expect(vi.mocked(importRegistry)).not.toHaveBeenCalled();
+  });
+});
+
+describe("collection / view delete routes", () => {
+  beforeEach(() => {
+    vi.mocked(deleteCollection).mockReset();
+    vi.mocked(deleteCustomView).mockReset();
+  });
+
+  it("DELETE /:slug archives + removes a deletable collection", async () => {
+    vi.mocked(deleteCollection).mockResolvedValue({ kind: "ok", slug: "testcol", archivePath: "archive/2026-x" } as never);
+    const res = await fetch(`${base}/api/collections/testcol`, { method: "DELETE" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ deleted: true, slug: "testcol" });
+  });
+
+  it("DELETE /:slug returns 403 with the refusal reason for a non-ok result", async () => {
+    vi.mocked(deleteCollection).mockResolvedValue({ kind: "preset", slug: "testcol" } as never);
+    const res = await fetch(`${base}/api/collections/testcol`, { method: "DELETE" });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: string }).error).toBeTruthy();
+  });
+
+  it("DELETE /:slug 404s an unknown collection without calling the engine", async () => {
+    const res = await fetch(`${base}/api/collections/nope`, { method: "DELETE" });
+    expect(res.status).toBe(404);
+    expect(vi.mocked(deleteCollection)).not.toHaveBeenCalled();
+  });
+
+  it("DELETE /:slug/views/:viewId removes a view, refuses non-ok, 404s not-found", async () => {
+    vi.mocked(deleteCustomView).mockResolvedValueOnce({ kind: "ok", viewId: "v1" } as never);
+    expect((await fetch(`${base}/api/collections/testcol/views/v1`, { method: "DELETE" })).status).toBe(200);
+    vi.mocked(deleteCustomView).mockResolvedValueOnce({ kind: "preset" } as never);
+    expect((await fetch(`${base}/api/collections/testcol/views/v1`, { method: "DELETE" })).status).toBe(403);
+    vi.mocked(deleteCustomView).mockResolvedValueOnce({ kind: "not-found", viewId: "v1" } as never);
+    expect((await fetch(`${base}/api/collections/testcol/views/v1`, { method: "DELETE" })).status).toBe(404);
   });
 });

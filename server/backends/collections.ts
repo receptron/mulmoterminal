@@ -33,6 +33,9 @@ import {
   toSummary,
   toDetail,
   validateCollectionRecords,
+  deleteCollection,
+  deleteCollectionRefusalMessage,
+  deleteCustomView,
   type RecordIssue,
 } from "@mulmoclaude/core/collection/server";
 // CollectionItem + actionVisible live in the isomorphic core entry.
@@ -129,6 +132,49 @@ export function mountCollectionRoutes(app: Express): void {
       res.json(result.response);
     } catch (err) {
       log.warn("collections", "registry import failed", { error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Delete one custom view: drop it from the schema + unlink its HTML. Refuses
+  // user-scope / preset collections (read-only), like collection delete.
+  app.delete("/api/collections/:slug/views/:viewId", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    try {
+      const result = await deleteCustomView(collection, req.params.viewId);
+      if (result.kind !== "ok") {
+        res.status(result.kind === "not-found" ? 404 : 403).json({ error: `view delete refused (${result.kind})` });
+        return;
+      }
+      res.json({ deleted: true, viewId: result.viewId });
+    } catch (err) {
+      log.warn("collections", "view delete failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Delete an entire collection (skill + records) after archiving a restorable
+  // copy. Only project-scope, non-preset collections are deletable; a refusal
+  // (preset / user-scope / unsafe path) comes back as 403 with the reason.
+  app.delete("/api/collections/:slug", async (req: Request<{ slug: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    try {
+      const result = await deleteCollection(collection);
+      if (result.kind !== "ok") {
+        res.status(403).json({ error: deleteCollectionRefusalMessage(result) });
+        return;
+      }
+      res.json({ deleted: true, slug: result.slug, archivePath: result.archivePath });
+    } catch (err) {
+      log.warn("collections", "collection delete failed", { slug: req.params.slug, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

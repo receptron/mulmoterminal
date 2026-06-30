@@ -6,14 +6,20 @@
 //
 // Wired: data fetch (detail/list), record CRUD, read-only custom views, actions
 // (seed prompt → startChat → a visible chat), favorites (useShortcuts), feed/agent
-// refresh (POST /api/collections/:slug/refresh via @mulmoclaude/core/feeds — see
-// server/backends/feeds.ts), the Discover registry tab (listRegistry/importRegistry
-// via @mulmoclaude/core/collection/registry — see server/backends/collections.ts),
-// and state-based navigation (useCollectionBrowse — the toolbar + browse overlay).
-// Still stubbed: feed listing (listFeeds), collection/view deletion, and the notifier.
+// refresh + feed listing (via @mulmoclaude/core/feeds — see server/backends/feeds.ts),
+// collection/feed/view deletion and the Discover registry tab (listRegistry/importRegistry
+// via @mulmoclaude/core/collection — see server/backends/collections.ts), and state-based
+// navigation (useCollectionBrowse — the toolbar + browse overlay).
+// Still stubbed: the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
 import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionDetailResponse, CollectionsListResponse, CollectionNotifySeverity, ItemMutationResponse } from "@mulmoclaude/core/collection";
+import type {
+  CollectionDetailResponse,
+  CollectionsListResponse,
+  CollectionNotifySeverity,
+  ItemMutationResponse,
+  FeedsListResponse,
+} from "@mulmoclaude/core/collection";
 import type { RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/core/collection/registry";
 import type { TranslateRequest, TranslateResponse } from "@mulmoclaude/core/translation/client";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
@@ -72,10 +78,15 @@ const apiPost = <T>(url: string, body: unknown) => apiSend<T>("POST", url, body)
 const apiPut = <T>(url: string, body: unknown) => apiSend<T>("PUT", url, body);
 
 // Delete → the view layer's CollectionMutationResult ({ ok } | { ok:false, error }).
+// On failure, surface the server's `{ error }` body (e.g. a delete-refusal reason
+// like "preset collections can't be deleted") instead of a bare status code.
 async function apiDelete(url: string): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const res = await fetch(url, { method: "DELETE" });
-    return res.ok ? { ok: true } : { ok: false, error: `HTTP ${res.status}` };
+    if (res.ok) return { ok: true };
+    const body = await res.json().catch(() => null);
+    const error = body && typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
+    return { ok: false, error };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -122,11 +133,6 @@ function htmlPreviewUrl(value: string): string | null {
   if (rest.length === 0) return null;
   return `/artifacts/html/${rest.split("/").map(encodeURIComponent).join("/")}`;
 }
-
-// Shared "not supported yet" results for the write/feeds/view capabilities.
-const UNSUPPORTED = "not supported in MulmoTerminal yet";
-const apiFail = { ok: false as const, error: UNSUPPORTED, status: 501 };
-const mutationFail = { ok: false as const, error: UNSUPPORTED };
 
 configureCollectionUi({
   // ── real (read side) ──
@@ -181,9 +187,10 @@ configureCollectionUi({
   updateItem: (slug, itemId, record) => apiPut<ItemMutationResponse>(itemUrl(slug, itemId), record),
   deleteItem: (slug, itemId) => apiDelete(itemUrl(slug, itemId)),
 
-  // ── collection/feed delete, actions, feeds, view-delete: deferred. ──
-  deleteCollection: () => Promise.resolve(mutationFail),
-  deleteFeed: () => Promise.resolve(mutationFail),
+  // ── collection / feed delete (shared @mulmoclaude/core engines): archive-and-remove
+  //    a collection, or drop a feed's registry entry. ──
+  deleteCollection: (slug) => apiDelete(`/api/collections/${encodeURIComponent(slug)}`),
+  deleteFeed: (slug) => apiDelete(`/api/feeds/${encodeURIComponent(slug)}`),
   // ── actions (kind: "chat"): fetch the seed prompt + role; CollectionView feeds it
   //    to startChat (→ a visible chat). ──
   runItemAction: (slug, itemId, actionId) =>
@@ -194,8 +201,8 @@ configureCollectionUi({
   runCollectionAction: (slug, actionId) =>
     apiPost<CollectionActionResult>(`/api/collections/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}`, {}),
   refreshCollection: (slug) => apiPost(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
-  deleteView: () => Promise.resolve(mutationFail),
-  listFeeds: () => Promise.resolve(apiFail),
+  deleteView: (slug, viewId) => apiDelete(`/api/collections/${encodeURIComponent(slug)}/views/${encodeURIComponent(viewId)}`),
+  listFeeds: () => apiGet<FeedsListResponse>("/api/feeds"),
   // ── Discover/registry tab: the shared @mulmoclaude/core registry engine, wired
   //    over /api/collections/registry/* (server/backends/collections.ts). ──
   listRegistry: () => apiGet<RegistryListResponse>("/api/collections/registry/list"),
