@@ -295,6 +295,7 @@ function onSession(id: string) {
           ref="terminalRef"
           class="terminal-pane"
           :style="{ flex: `0 0 ${terminalWidth}px` }"
+          persist-key="single"
           :session-id="activeId"
           :connect-key="connectKey"
           :dir-theme="singleDirConfig.theme"

@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from "vue";
-import { Terminal, type ITheme } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import { WebLinksAddon } from "@xterm/addon-web-links";
-import "@xterm/xterm/css/xterm.css";
-import { buildTerminalWsUrl, buildRunWsUrl } from "./wsUrl";
+import { type ITheme } from "@xterm/xterm";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
 import { useVoiceInput } from "../composables/useVoiceInput";
+import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
 
 // `null` => start a fresh session; otherwise resume the given session id.
@@ -23,6 +20,10 @@ import RunMenu from "./RunMenu.vue";
 // session, and never auto-reconnects (the ephemeral process can't be resumed).
 // `runMenu` adds a ▶ Run dropdown to the header (the single view) that lists the
 // open project's script.json and emits the picked command for the parent to run.
+// `persistKey` opts this terminal into a durable connection (kept alive across
+// unmount via useTerminalConnections, keyed by this stable slot id — the grid cell's
+// uid or the single view). Absent => an ephemeral slot torn down on unmount (command
+// cells, whose Run process can't be resumed anyway).
 const props = defineProps<{
   sessionId: string | null;
   connectKey: number;
@@ -30,6 +31,7 @@ const props = defineProps<{
   devTerminal?: boolean;
   command?: { index: number } | null;
   runMenu?: boolean;
+  persistKey?: string | null;
   // Per-directory overrides from <cwd>/.mulmoterminal.json. `dirTheme` pins this
   // terminal's xterm palette (overriding the app-wide theme for this cell only);
   // `dirColors` overrides individual palette keys on top of that; `dirName` /
@@ -45,11 +47,20 @@ const emit = defineEmits<{
   (e: "run", command: { index: number; label: string; cwd: string | null }): void;
 }>();
 
+// The durable runtime (socket + xterm) lives in the manager, keyed by a stable slot
+// id. A persisted slot survives this component's unmount; an ephemeral one is torn
+// down. Captured once — the key is stable for the component's life.
+const slotKey = props.persistKey ?? `ephemeral-${crypto.randomUUID()}`;
+function currentTarget(): conn.ConnTarget {
+  return { sessionId: props.sessionId, cwd: props.cwd ?? null, devTerminal: !!props.devTerminal, command: props.command ?? null };
+}
+
 const terminalRef = ref<HTMLDivElement>();
-const status = ref<"connecting" | "connected" | "disconnected">("connecting");
+// Connection status + server-resolved cwd are projected reactively from the manager.
+const status = computed(() => conn.connView.get(slotKey)?.status ?? "connecting");
 // The server-resolved cwd of the connected session (the open project), used by the
 // Run menu so it lists THAT directory's scripts. Falls back to the requested cwd.
-const serverCwd = ref<string | null>(props.cwd ?? null);
+const serverCwd = computed(() => conn.connView.get(slotKey)?.serverCwd ?? props.cwd ?? null);
 const dragOver = ref(false);
 const { themeId } = useTheme();
 
@@ -81,184 +92,42 @@ function voiceIcon(): string {
   return "mic";
 }
 
-let term: Terminal;
-let fitAddon: FitAddon;
-let ws: WebSocket | null = null;
 let resizeObserver: ResizeObserver;
-
-// Auto-reconnect state. A dropped/failed socket retries with backoff, resuming
-// the KNOWN session id (so we never spawn a duplicate new session per retry).
-// Reconnect is suppressed after an intentional end: the server's `exit` message
-// (claude exited) or the component unmounting.
-let knownSessionId: string | null = props.sessionId;
-let sawExit = false;
-let disposed = false;
-let reconnectAttempts = 0;
-let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-const RECONNECT_BASE_MS = 500;
-const RECONNECT_MAX_MS = 5000;
-
-function scheduleReconnect() {
-  // A command terminal's process is unique and unresumable — never reconnect it.
-  if (disposed || sawExit || reconnectTimer || props.command) return;
-  const delay = Math.min(RECONNECT_BASE_MS * 2 ** reconnectAttempts, RECONNECT_MAX_MS);
-  reconnectAttempts++;
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null;
-    if (!disposed) connect();
-  }, delay);
-}
-
-function connect() {
-  // Tear down any existing connection. Its handlers are neutralised below by the
-  // `sock !== ws` guards once `ws` is reassigned, so a late event from the old
-  // socket can't flip the status or leak output into the new session.
-  if (reconnectTimer) {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
-  if (ws) ws.close();
-  term.reset();
-  sawExit = false;
-  status.value = "connecting";
-  // Drop the previous session's resolved cwd so the Run menu can't list/launch the
-  // prior project's scripts in the window before the new `session` message arrives.
-  serverCwd.value = props.cwd ?? null;
-
-  // Resume the known id (learned from the server, or the prop) so a reconnect
-  // re-attaches the same session instead of spawning a fresh one each retry.
-  const resumeId = knownSessionId ?? props.sessionId;
-  const url = props.command
-    ? buildRunWsUrl({ host: location.host, secure: location.protocol === "https:", index: props.command.index, cwd: props.cwd })
-    : buildTerminalWsUrl({
-        host: location.host,
-        secure: location.protocol === "https:",
-        sessionId: resumeId,
-        cwd: props.cwd,
-        devTerminal: props.devTerminal,
-      });
-  const sock = new WebSocket(url);
-  ws = sock;
-
-  sock.onopen = () => {
-    if (sock !== ws) return;
-    reconnectAttempts = 0;
-    status.value = "connected";
-    sock.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-  };
-
-  sock.onmessage = (event) => {
-    if (sock !== ws) return;
-    const msg = JSON.parse(event.data);
-    if (msg.type === "output") {
-      term.write(msg.data);
-    } else if (msg.type === "session") {
-      // Server reports the live session id — remember it so a later reconnect
-      // resumes THIS session (esp. for brand-new sessions that had no id yet) —
-      // and the EFFECTIVE cwd, which the cell adopts (the server may have fallen
-      // back from the requested dir).
-      knownSessionId = msg.id;
-      emit("session", msg.id);
-      if (typeof msg.cwd === "string") {
-        serverCwd.value = msg.cwd;
-        emit("cwd", msg.cwd);
-      }
-    } else if (msg.type === "exit") {
-      // The process exited (claude, or a Run-menu command) — an intentional end;
-      // don't auto-reconnect. The cell uses `exit` to offer a re-run.
-      sawExit = true;
-      term.write(props.command ? "\r\n\x1b[33m[finished]\x1b[0m\r\n" : "\r\n\x1b[33m[session ended]\x1b[0m\r\n");
-      status.value = "disconnected";
-      emit("exit");
-    } else if (msg.type === "superseded") {
-      // Another client (e.g. this session open in another tab/window) took over.
-      // Stop — reconnecting would kick the other one off and ping-pong forever.
-      sawExit = true;
-      term.write("\r\n\x1b[33m[detached — this session is open in another window]\x1b[0m\r\n");
-      status.value = "disconnected";
-    } else if (msg.type === "error") {
-      // Server-declared terminal failure (e.g. the `claude` CLI isn't installed, or
-      // a Run command couldn't be resolved). Not transient — reconnecting would just
-      // re-trigger the failed spawn, so stop and surface a stable error instead of
-      // looping. Emit `exit` too: it's a terminal-end, so a CommandCell can offer a
-      // re-run instead of staying stuck in a non-rerunnable "running" state.
-      sawExit = true;
-      const detail = typeof msg.message === "string" ? msg.message : "failed to start";
-      term.write(`\r\n\x1b[31m[${detail}]\x1b[0m\r\n`);
-      status.value = "disconnected";
-      emit("exit");
-    }
-  };
-
-  sock.onclose = () => {
-    // A newer socket has superseded this one — ignore its close.
-    if (sock !== ws) return;
-    status.value = "disconnected";
-    // Unexpected drop (server restart, transient network) — retry with backoff.
-    scheduleReconnect();
-  };
-
-  sock.onerror = () => {
-    if (sock !== ws) return;
-    // onclose fires after onerror and drives the reconnect; nothing to do here
-    // beyond surfacing the state.
-    status.value = "disconnected";
-  };
-}
 
 onMounted(() => {
   // Probe voice-input capability so the mic button shows only where supported.
   voice.refreshAvailability().catch(() => {});
 
-  term = new Terminal({
-    cursorBlink: true,
-    fontSize: 14,
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', monospace",
-    theme: effectiveTermTheme(),
-  });
-
-  fitAddon = new FitAddon();
-  term.loadAddon(fitAddon);
-  term.loadAddon(new WebLinksAddon());
-
   const container = terminalRef.value;
   if (!container) return;
-  term.open(container);
-  fitAddon.fit();
+  // Attach this view to its durable slot: creates + connects the runtime on first
+  // mount, or re-parents the already-live xterm here on a remount (no cold resume).
+  // session/cwd/exit are forwarded so the parent's existing wiring is unchanged.
+  conn.attach(
+    slotKey,
+    currentTarget(),
+    {
+      onSession: (id) => emit("session", id),
+      onCwd: (c) => emit("cwd", c),
+      onExit: () => emit("exit"),
+    },
+    container,
+    effectiveTermTheme(),
+  );
 
-  // Terminal input -> server
-  term.onData((data) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "input", data }));
-    }
-  });
-
-  // Auto-resize
-  resizeObserver = new ResizeObserver(() => {
-    fitAddon.fit();
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
-    }
-    // Reflow after a resize (e.g. restoring a cell from zoom) can leave the
-    // viewport scrolled up; stick to the bottom so the prompt stays in view.
-    term.scrollToBottom();
-  });
+  // Auto-resize: fit the slot's xterm to this container and push the size to the PTY.
+  resizeObserver = new ResizeObserver(() => conn.fit(slotKey));
   resizeObserver.observe(container);
-
-  connect();
-  term.focus();
 });
 
 // Reconnect (resume a different session / start fresh) on every user action.
-// A user action picks a new target, so reset the reconnect bookkeeping and adopt
-// the new selection as the session to (re)connect to.
+// A user action picks a new target, so point the slot at the new session/cwd and
+// reconnect (closing the previous socket, which falls back to the server's grace).
 watch(
   () => props.connectKey,
   () => {
-    knownSessionId = props.sessionId;
-    reconnectAttempts = 0;
-    connect();
-    term.focus();
+    conn.retarget(slotKey, currentTarget());
+    conn.focus(slotKey);
   },
 );
 
@@ -266,44 +135,23 @@ watch(
 // changes (keeps an already-open terminal in sync with the rest of the app). A
 // dir-pinned theme ignores the app-wide change; a change to the pin itself repaints.
 watch([themeId, () => props.dirTheme, () => props.dirColors], () => {
-  if (term) term.options.theme = effectiveTermTheme();
+  conn.setTheme(slotKey, effectiveTermTheme());
 });
 
-// Submit a GUI-originated message into the PTY (same channel as keyboard input).
-// This is the GUI->LLM feedback path. We type the text, then send a SEPARATE
-// delayed carriage return — a same-burst text+CR is treated as a paste by Claude
-// Code's TUI, so the CR becomes a newline instead of submitting.
-//
-// Both writes are pinned to the socket captured *now*: if the session switches or
-// reconnects before the CR fires, that socket is no longer `ws`, so we skip the CR
-// rather than submit a stray turn in whatever session is current. Returns whether
-// the text was delivered, so the caller (e.g. a form) only locks on success.
+// Submit a GUI-originated message into the PTY (the GUI->LLM feedback path) and the
+// explicit ✕ close. Both delegate to the slot's durable runtime.
 function submitText(text: string): boolean {
-  const sock = ws;
-  if (!sock || sock.readyState !== WebSocket.OPEN) return false;
-  sock.send(JSON.stringify({ type: "input", data: text }));
-  setTimeout(() => {
-    if (sock === ws && sock.readyState === WebSocket.OPEN) {
-      sock.send(JSON.stringify({ type: "input", data: "\r" }));
-    }
-  }, 60);
-  return true;
+  return conn.submitText(slotKey, text);
 }
-// Explicit close (the cell's ✕): tell the server to reap this session now
-// instead of holding it through the disconnect grace window. Suppress reconnect
-// since the imminent unmount closes the socket.
 function terminate() {
-  sawExit = true;
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "terminate" }));
+  conn.terminate(slotKey);
 }
 defineExpose({ submitText, terminate });
 
 // Insert text (a path, or space-joined paths) at the terminal cursor via the
 // normal input channel — no trailing CR, so the user reviews and submits.
 function insertText(text: string) {
-  if (!text) return;
-  if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "input", data: text }));
-  term.focus();
+  conn.insertText(slotKey, text);
 }
 
 // Drop a file onto the terminal to insert its absolute path, like a native
@@ -345,11 +193,12 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 onUnmounted(() => {
-  disposed = true;
-  if (reconnectTimer) clearTimeout(reconnectTimer);
   resizeObserver?.disconnect();
-  ws?.close();
-  term?.dispose();
+  // Persisted slot: detach the view but KEEP the connection alive (the whole point —
+  // navigating away / off-page paging doesn't reap the PTY). Ephemeral slot (command
+  // cells, whose process is unresumable): tear it down as before.
+  if (props.persistKey) conn.detach(slotKey, terminalRef.value ?? null);
+  else conn.release(slotKey);
 });
 </script>
 
