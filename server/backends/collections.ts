@@ -33,10 +33,15 @@ import {
   toSummary,
   toDetail,
   validateCollectionRecords,
+  deleteCollection,
+  deleteCollectionRefusalMessage,
+  deleteCustomView,
   type RecordIssue,
 } from "@mulmoclaude/core/collection/server";
 // CollectionItem + actionVisible live in the isomorphic core entry.
 import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
+// Curated-registry engine (Discover tab): merged catalog fetch + bundle import.
+import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -48,9 +53,14 @@ const log = {
   debug: (prefix: string, message: string, data?: Record<string, unknown>) => console.debug(`[${prefix}] ${message}`, data ?? ""),
 };
 
+// The shared workspace root, captured at init so the registry import route can pass
+// it to the engine (importRegistry takes it explicitly; the read side reads the host).
+let workspaceRoot: string | null = null;
+
 /** Wire the collection engine to the shared workspace. Call once at boot, before
  *  any collection route is hit. The path layout mirrors MulmoClaude verbatim. */
 export function initCollectionsBackend(deps: { workspace: string }): void {
+  workspaceRoot = deps.workspace;
   configureCollectionHost({
     workspaceRoot: deps.workspace,
     log,
@@ -65,6 +75,9 @@ export function initCollectionsBackend(deps: { workspace: string }): void {
       skillsStagingDir: (root) => path.join(root, "data", "skills"),
       // Workspace-relative archive dir (removed collections move here).
       archiveDir: "archive",
+      // <root>/config/collections-registries.json — extra Discover registries
+      // (absent → official receptron/mulmoclaude-collections only).
+      collectionsRegistriesConfig: (root) => path.join(root, "config", "collections-registries.json"),
     },
     // MulmoClaude's launcher preset namespace.
     isPresetSlug: (slug) => slug.startsWith("mc-") && slug.length > "mc-".length,
@@ -85,6 +98,87 @@ function extractRecord(body: unknown): CollectionItem | null {
  *  GET /api/collections + GET /api/collections/:slug response shapes, which is what
  *  the package's UI binding (fetchCollectionDetail / listCollections) expects. */
 export function mountCollectionRoutes(app: Express): void {
+  // Discover tab: the merged curated-registry catalog (every configured registry's
+  // index.json, fetched + cached server-side). Registered before the ":slug" routes
+  // so "registry" is never captured as a slug.
+  app.get("/api/collections/registry/list", async (_req: Request, res: Response) => {
+    try {
+      res.json(await listRegistry());
+    } catch (err) {
+      log.warn("collections", "registry list failed", { error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Discover tab: install a registry collection into the shared workspace.
+  app.post("/api/collections/registry/import", async (req: Request, res: Response) => {
+    if (!workspaceRoot) {
+      res.status(503).json({ error: "collections backend not initialized" });
+      return;
+    }
+    const author = typeof req.body?.author === "string" ? req.body.author : "";
+    const slug = typeof req.body?.slug === "string" ? req.body.slug : "";
+    const registry = typeof req.body?.registry === "string" && req.body.registry ? req.body.registry : null;
+    if (!author || !slug) {
+      res.status(400).json({ error: "author and slug are required" });
+      return;
+    }
+    try {
+      const result = await importRegistry(author, slug, workspaceRoot, registry);
+      if (!result.ok) {
+        res.status(result.status).json({ error: result.error });
+        return;
+      }
+      res.json(result.response);
+    } catch (err) {
+      log.warn("collections", "registry import failed", { error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Delete one custom view: drop it from the schema + unlink its HTML. Refuses
+  // user-scope / preset collections (read-only), like collection delete.
+  app.delete("/api/collections/:slug/views/:viewId", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    try {
+      const result = await deleteCustomView(collection, req.params.viewId);
+      if (result.kind !== "ok") {
+        res.status(result.kind === "not-found" ? 404 : 403).json({ error: `view delete refused (${result.kind})` });
+        return;
+      }
+      res.json({ deleted: true, viewId: result.viewId });
+    } catch (err) {
+      log.warn("collections", "view delete failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Delete an entire collection (skill + records) after archiving a restorable
+  // copy. Only project-scope, non-preset collections are deletable; a refusal
+  // (preset / user-scope / unsafe path) comes back as 403 with the reason.
+  app.delete("/api/collections/:slug", async (req: Request<{ slug: string }>, res: Response) => {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    try {
+      const result = await deleteCollection(collection);
+      if (result.kind !== "ok") {
+        res.status(403).json({ error: deleteCollectionRefusalMessage(result) });
+        return;
+      }
+      res.json({ deleted: true, slug: result.slug, archivePath: result.archivePath });
+    } catch (err) {
+      log.warn("collections", "collection delete failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
   // List skill-backed collections for the index + toolbar.
   app.get("/api/collections/list", async (_req: Request, res: Response) => {
     try {

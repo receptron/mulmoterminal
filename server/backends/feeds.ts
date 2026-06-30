@@ -15,8 +15,9 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
-import { configureFeedsHost, refreshOne, type AgentWorkerRunner, type FeedsLogger } from "@mulmoclaude/core/feeds/server";
+import { configureFeedsHost, refreshOne, listFeeds, readFeedState, removeFeed, type AgentWorkerRunner, type FeedsLogger } from "@mulmoclaude/core/feeds/server";
 import { loadCollection } from "@mulmoclaude/core/collection/server";
+import type { FeedSummary } from "@mulmoclaude/core/collection";
 
 const log: FeedsLogger = {
   error: (prefix, msg, data) => console.error(`[${prefix}] ${msg}`, data ?? ""),
@@ -48,11 +49,48 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+// One feeds-index row: the registered feed's schema + its last-fetch state.
+async function toFeedSummary(feed: Awaited<ReturnType<typeof listFeeds>>[number]): Promise<FeedSummary> {
+  const state = await readFeedState(workspaceRoot, feed);
+  const ingest = feed.schema.ingest;
+  return {
+    slug: feed.slug,
+    title: feed.schema.title,
+    icon: feed.schema.icon,
+    kind: ingest?.kind ?? "rss",
+    schedule: ingest?.schedule ?? "on-demand",
+    lastFetchedAt: state.lastFetchedAt,
+  };
+}
+
 /** Mount POST /api/collections/:slug/refresh — generic over ingest.kind (the engine
  *  dispatches declarative vs agent). Ports MulmoClaude's collections-route refresh
  *  handler; `hidden:false` so an agent-ingest refresh runs as a visible, watchable
  *  session. Backs the collection-view Refresh button (collectionUi.refreshCollection). */
 export function mountFeedsRoutes(app: Express): void {
+  // The feeds index (data-source collections in the workspace's feeds/ registry),
+  // each enriched with its last-fetch state. Backs collectionUi.listFeeds.
+  app.get("/api/feeds", async (_req: Request, res: Response) => {
+    try {
+      const feeds = await listFeeds(workspaceRoot);
+      res.json({ feeds: await Promise.all(feeds.map(toFeedSummary)) });
+    } catch (err) {
+      log.warn("feeds", "list failed", { error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Remove a feed's registry entry (its records under dataPath are kept).
+  app.delete("/api/feeds/:slug", async (req: Request<{ slug: string }>, res: Response) => {
+    try {
+      const removed = await removeFeed(workspaceRoot, req.params.slug);
+      res.json({ removed });
+    } catch (err) {
+      log.warn("feeds", "delete failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
   app.post("/api/collections/:slug/refresh", async (req: Request<{ slug: string }>, res: Response) => {
     const collection = await loadCollection(req.params.slug);
     if (!collection) {
