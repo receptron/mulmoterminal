@@ -94,6 +94,43 @@ function extractRecord(body: unknown): CollectionItem | null {
   return body as CollectionItem;
 }
 
+// A loaded collection, sans the null that `loadCollection` returns on a miss —
+// derived here so the view-write helper doesn't need a fresh type import.
+type ResolvedCollection = NonNullable<Awaited<ReturnType<typeof loadCollection>>>;
+
+// Apply ONE per-record update for PUT /view-data. Returns the written item or a
+// `{ rejected }` reason; kept out of the route handler so its loop stays flat
+// (lint caps cognitive complexity). Enforces the same singleton invariant as
+// PUT /items/:itemId — a singleton collection accepts only its one fixed id, so
+// a write-capable custom view can't smuggle in arbitrary-id records. In `merge`
+// mode the partial is layered onto the existing record so untouched fields
+// survive; otherwise it replaces.
+type ViewItemWriteResult = { item: CollectionItem } | { rejected: { id: string; problem: string } };
+
+async function writeViewItem(collection: ResolvedCollection, raw: unknown, merge: boolean): Promise<ViewItemWriteResult> {
+  const record = extractRecord(raw);
+  if (!record) return { rejected: { id: "", problem: "item must be a JSON object" } };
+  const { singleton, primaryKey } = collection.schema;
+  const itemId = typeof record[primaryKey] === "string" ? (record[primaryKey] as string) : "";
+  if (!itemId) return { rejected: { id: "", problem: `missing primary key '${primaryKey}'` } };
+  if (singleton && itemId !== singleton) {
+    return { rejected: { id: itemId, problem: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` } };
+  }
+  const base = merge ? ((await readItem(collection.dataDir, itemId)) ?? {}) : {};
+  const recordWithId: CollectionItem = { ...base, ...record, [primaryKey]: itemId };
+  const result = await writeItem(collection.dataDir, itemId, recordWithId, { slug: collection.slug });
+  switch (result.kind) {
+    case "ok":
+      return { item: result.item };
+    case "invalid-id":
+      return { rejected: { id: itemId, problem: `invalid item id: ${itemId}` } };
+    case "path-escape":
+      return { rejected: { id: itemId, problem: "data directory escapes the workspace" } };
+    default:
+      return { rejected: { id: itemId, problem: `write failed (${result.kind})` } };
+  }
+}
+
 /** Mount the read-side REST surface. Mirrors MulmoClaude's
  *  GET /api/collections + GET /api/collections/:slug response shapes, which is what
  *  the package's UI binding (fetchCollectionDetail / listCollections) expects. */
@@ -522,32 +559,12 @@ export function mountCollectionRoutes(app: Express): void {
         return;
       }
       const merge = body.mode !== "replace";
-      const primaryKey = collection.schema.primaryKey;
       const written: CollectionItem[] = [];
       const rejected: Array<{ id: string; problem: string }> = [];
       for (const raw of body.items) {
-        const record = extractRecord(raw);
-        if (!record) {
-          rejected.push({ id: "", problem: "item must be a JSON object" });
-          continue;
-        }
-        const itemId = typeof record[primaryKey] === "string" ? (record[primaryKey] as string) : "";
-        if (!itemId) {
-          rejected.push({ id: "", problem: `missing primary key '${primaryKey}'` });
-          continue;
-        }
-        const base = merge ? ((await readItem(collection.dataDir, itemId)) ?? {}) : {};
-        const recordWithId: CollectionItem = { ...base, ...record, [primaryKey]: itemId };
-        const result = await writeItem(collection.dataDir, itemId, recordWithId, { slug: collection.slug });
-        if (result.kind === "ok") {
-          written.push(result.item);
-        } else if (result.kind === "invalid-id") {
-          rejected.push({ id: itemId, problem: `invalid item id: ${itemId}` });
-        } else if (result.kind === "path-escape") {
-          rejected.push({ id: itemId, problem: "data directory escapes the workspace" });
-        } else {
-          rejected.push({ id: itemId, problem: `write failed (${result.kind})` });
-        }
+        const outcome = await writeViewItem(collection, raw, merge);
+        if ("item" in outcome) written.push(outcome.item);
+        else rejected.push(outcome.rejected);
       }
       res.json({ items: written, rejected });
     } catch (err) {

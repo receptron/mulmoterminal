@@ -65,6 +65,24 @@ beforeAll(async () => {
   writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v1.html"), "<head></head><body>view</body>");
   writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v2.html"), "<head></head><body>editable</body>");
 
+  // A singleton collection with a write-capable view, to prove PUT /view-data
+  // enforces the singleton invariant (only the fixed id is writable).
+  const SINGLETON_SCHEMA = {
+    title: "Singleton",
+    icon: "person",
+    dataPath: "data/singletoncol/items",
+    primaryKey: "id",
+    singleton: "me",
+    fields: { id: { type: "string", label: "ID", primary: true, required: true }, name: { type: "string", label: "Name" } },
+    views: [{ id: "sv", file: "views/sv.html", label: "Editable", capabilities: ["read", "write"] }],
+  };
+  mkdirSync(path.join(ws, ".claude", "skills", "singletoncol"), { recursive: true });
+  writeFileSync(path.join(ws, ".claude", "skills", "singletoncol", "schema.json"), JSON.stringify(SINGLETON_SCHEMA));
+  mkdirSync(path.join(ws, "data", "singletoncol", "items"), { recursive: true });
+  writeFileSync(path.join(ws, "data", "singletoncol", "items", "me.json"), JSON.stringify({ id: "me", name: "Owner" }));
+  mkdirSync(path.join(ws, "data", "skills", "singletoncol", "views"), { recursive: true });
+  writeFileSync(path.join(ws, "data", "skills", "singletoncol", "views", "sv.html"), "<head></head><body>editable</body>");
+
   // Point the (singleton) collection host at the fixture. vitest isolates modules
   // per test file, so this configure is fresh for this worker.
   initCollectionsBackend({ workspace: ws });
@@ -228,6 +246,43 @@ describe("custom view routes", () => {
     expect(body.items).toEqual([]);
     expect(body.rejected).toHaveLength(1);
     expect(body.rejected[0].problem).toContain("primary key");
+  });
+
+  it("rejects a non-singleton id on a singleton collection", async () => {
+    const mint = await fetch(`${base}/api/collections/singletoncol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "sv" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/singletoncol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "intruder", name: "Evil" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ id: string; problem: string }> };
+    expect(body.items).toEqual([]);
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0].problem).toContain("singleton");
+  });
+
+  it("allows the fixed id on a singleton collection", async () => {
+    const mint = await fetch(`${base}/api/collections/singletoncol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "sv" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/singletoncol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "me", note: "ok" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: Array<{ id: string; name?: string; note?: string }>; rejected: unknown[] };
+    expect(body.rejected).toEqual([]);
+    expect(body.items[0]).toMatchObject({ id: "me", name: "Owner", note: "ok" });
   });
 });
 
