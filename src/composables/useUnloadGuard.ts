@@ -1,13 +1,24 @@
 import { onMounted, onUnmounted, ref } from "vue";
 
-// How many live terminals the mounted view reports: the single view reports its
-// active session (0 or 1), the grid reports its running-cell count. Module-level so
-// the guard reads it without prop threading; the two views are mutually exclusive
-// (only one is mounted), so whichever is on screen owns the value.
-const activeTerminals = ref(0);
+// How many live terminals each view reports, keyed by source ("single", "grid").
+// Keyed — not a single shared counter — because persistent connections mean the
+// single view's PTY and the grid's PTYs can be alive AT THE SAME TIME: switching
+// from the single view to the grid no longer closes the single socket. A single
+// overwritten ref would let whichever view mounted last hide the other's live
+// terminals from the close warning. Each source keeps its last reported count until
+// its own view updates it, which mirrors the connections actually staying alive.
+const counts = ref(new Map<string, number>());
 
-export function reportActiveTerminals(count: number): void {
-  activeTerminals.value = count;
+export function reportActiveTerminals(source: string, count: number): void {
+  counts.value.set(source, count);
+  // Reassign to trip reactivity (Map mutation alone isn't tracked by a plain ref).
+  counts.value = new Map(counts.value);
+}
+
+function totalActive(): number {
+  let total = 0;
+  for (const n of counts.value.values()) total += n;
+  return total;
 }
 
 // Warn before the tab closes / reloads / navigates away while a terminal is live,
@@ -18,7 +29,7 @@ export function reportActiveTerminals(count: number): void {
 // fixed by the browser and can't be customised.
 export function useUnloadGuard(): void {
   const onBeforeUnload = (e: BeforeUnloadEvent) => {
-    if (activeTerminals.value <= 0) return;
+    if (totalActive() <= 0) return;
     e.preventDefault();
     e.returnValue = ""; // legacy Chrome/Edge still need returnValue assigned to prompt
   };

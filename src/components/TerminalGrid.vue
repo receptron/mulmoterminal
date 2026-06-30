@@ -62,6 +62,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
         />
         <TerminalCell
           v-else
+          :uid="cell.uid"
           :expanded="cell.uid === expandedUid"
           :initial-session-id="cell.session"
           :initial-cwd="cell.cwd"

@@ -1,57 +1,53 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { useRoute } from "vue-router";
+import { router } from "../router";
 import NotificationBell from "./NotificationBell.vue";
 import { useShortcuts } from "../composables/useShortcuts";
-import { useCollectionBrowse, browseGotoIndex, browseGotoDetail, browseClose } from "../composables/useCollectionBrowse";
-import { useAccountingView, accountingViewOpen, accountingViewClose } from "../composables/useAccountingView";
+import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
+import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import type { Shortcut } from "../types/shortcuts";
 
 // The standard header, shared by the single (App.vue) and grid (GridView.vue) views so
-// both show one identical toolbar. The launcher targets single-view surfaces (the
-// collection browser / accounting overlay live in App.vue), so from the grid view those
-// buttons set the global browse/accounting state and emit `go-single` to switch back —
-// the overlay is then already open. Grid-only state (`addTerminalActive`, `autoSort`)
-// is passed in.
-type ViewMode = "single" | "grid";
+// both show one identical toolbar. Every launcher button now just pushes a route — the
+// surface (single shell vs grid, which overlay) is derived from the URL — so navigating
+// to a single-view surface (collections / accounting) inherently leaves the grid. The
+// active states re-derive from route.name (via the route-backed browse/accounting
+// stores). Grid-only state (`addTerminalActive`, `autoSort`) is still passed in, and
+// the grid-only actions (add-terminal / toggle-sort) and settings stay emits.
+defineProps<{ addTerminalActive?: boolean; autoSort?: boolean }>();
+const emit = defineEmits<{ (e: "add-terminal" | "toggle-sort" | "settings"): void }>();
 
-const props = defineProps<{ viewMode: ViewMode; addTerminalActive?: boolean; autoSort?: boolean }>();
-const emit = defineEmits<{ (e: "go-single" | "go-grid" | "add-terminal" | "toggle-sort" | "settings"): void }>();
-
+const route = useRoute();
 const { shortcuts } = useShortcuts();
 const { view: browseView } = useCollectionBrowse();
 const { isOpen: accountingOpen } = useAccountingView();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
 
-// Highlight reflects the single-view surfaces, so in the grid view only the Grid button
-// reads as active.
-const inSingle = computed(() => props.viewMode === "single");
+const inGrid = computed(() => route.name === "terminals");
+const inSingle = computed(() => !inGrid.value);
 const chatActive = computed(() => inSingle.value && browseView.value.mode === "closed" && !accountingOpen.value);
-const collectionsActive = computed(() => inSingle.value && browseView.value.mode === "index");
-const accountingActive = computed(() => inSingle.value && accountingOpen.value);
+const collectionsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "collection");
+const accountingActive = computed(() => accountingOpen.value);
 function favActive(s: Shortcut): boolean {
-  return inSingle.value && browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
+  return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
 }
 
 function showChat(): void {
-  browseClose();
-  accountingViewClose();
-  emit("go-single");
+  router.push("/");
+}
+function showGrid(): void {
+  router.push("/terminals");
 }
 function showCollections(): void {
-  accountingViewClose();
   browseGotoIndex("collection");
-  emit("go-single");
 }
 function showFavorite(s: Shortcut): void {
-  accountingViewClose();
   browseGotoDetail(s.kind, s.slug);
-  emit("go-single");
 }
 function showAccounting(): void {
-  browseClose();
   accountingViewOpen();
-  emit("go-single");
 }
 </script>
 
@@ -62,14 +58,7 @@ function showAccounting(): void {
       <button type="button" class="launcher-btn" :class="{ active: chatActive }" title="Chat" aria-label="Chat" @click="showChat">
         <span class="material-symbols-outlined">chat</span>
       </button>
-      <button
-        type="button"
-        class="launcher-btn"
-        :class="{ active: viewMode === 'grid' }"
-        title="Grid (multiple terminals)"
-        aria-label="Grid view"
-        @click="emit('go-grid')"
-      >
+      <button type="button" class="launcher-btn" :class="{ active: inGrid }" title="Grid (multiple terminals)" aria-label="Grid view" @click="showGrid">
         <span class="material-symbols-outlined">grid_view</span>
       </button>
       <button type="button" class="launcher-btn" :class="{ active: collectionsActive }" title="Collections" aria-label="Collections" @click="showCollections">
@@ -91,7 +80,7 @@ function showAccounting(): void {
         <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
       </button>
       <button
-        v-if="viewMode === 'grid'"
+        v-if="inGrid"
         type="button"
         class="launcher-btn"
         :class="{ active: addTerminalActive }"
@@ -102,7 +91,7 @@ function showAccounting(): void {
         <span class="material-symbols-outlined">add</span>
       </button>
       <button
-        v-if="viewMode === 'grid'"
+        v-if="inGrid"
         type="button"
         class="launcher-btn"
         :class="{ active: autoSort }"

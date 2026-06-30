@@ -1,4 +1,34 @@
-# Plan: Product Profiles + `freelance-books` (focused accounting product)
+# Plan: Product Profiles + MulmoBooks (focused accounting product)
+
+## Status & decisions (updated 2026-06-27)
+
+These OVERRIDE older phrasing below — the body predates them and still says
+`freelance-books` / "scaffolded cwd folder as default cwd-preset".
+
+- **Name = MulmoBooks** (working title `freelance-books` retired; npm
+  `mulmobooks` is free). `npx mulmobooks` = a thin launcher that boots the
+  unchanged MulmoTerminal with the freelance profile.
+- **Stage 0 = DONE & merged (PR #128)** — live + e2e verified. Accounting runs
+  in MulmoTerminal as a **HOST TOOL** (`manageAccounting`), a mounted
+  `/api/accounting` router (single-root DI), `AccountingView` registered, and a
+  toolbar `account_balance` button that opens the View standalone. NB: the
+  published `@mulmoclaude/accounting-plugin@0.2.0` ships only `/vue` + `/server`
+  (no gui-chat-protocol `.` core), so it became a host tool, not a package
+  plugin — Stage 0's "give it a plugin surface" was resolved that way.
+- **Workspace = the SHARED `~/mulmoclaude`** — NOT a dedicated dir, NOT a
+  per-profile cwd-preset. MulmoTerminal already defaults `CLAUDE_CWD` there and
+  shares it with MulmoClaude; the accounting/collection backends pin to it. All
+  three apps see the same books/collections. The profile seeds schemas/skills
+  **additively + idempotently** into that shared workspace; it does NOT create a
+  separate one. (Corrects every "scaffolded cwd folder / default cwd-preset"
+  mention below.)
+- **MulmoBooks is an adoption funnel** into the Mulmo ecosystem, so **feature
+  leakage into MulmoTerminal/MulmoClaude is acceptable (even useful)** — do NOT
+  build skill/focus isolation. The #1 goal is first-run "this is useful!" delight.
+- **Agent focus = launch flags, not workspace files.** Use
+  `--append-system-prompt` (verified flag; per-launch, so it never leaks) for the
+  bookkeeping voice; optionally `--plugin-dir` / `--add-dir` to bundle
+  skills/guidance. Do NOT overwrite the shared root `CLAUDE.md`.
 
 ## Motivation
 
@@ -83,9 +113,10 @@ Two consequences that reshape the seam vs. the MulmoClaude-centric sketch:
 - **No `defaultRoleId`.** The agent is real Claude Code; "focus" = the
   GUI-MCP tool set (`plugins.json`) + a seeded **CLAUDE.md** in the
   workspace dir, not a role object.
-- **The workspace is a directory.** "workspaceTemplate" = a *scaffolded
-  cwd folder* (CLAUDE.md + schemas + skills + samples) surfaced as a
-  default cwd-preset — not a fixed single workspace.
+- **The workspace is the SHARED `~/mulmoclaude`** (decided 2026-06-27 — see
+  Status). NOT a per-profile dir / cwd-preset. "workspaceTemplate" = schemas +
+  `mc-*` skills seeded **additively + idempotently** into that shared workspace,
+  not a separate scaffolded folder.
 
 ## Target shape
 
@@ -93,10 +124,10 @@ Two consequences that reshape the seam vs. the MulmoClaude-centric sketch:
 
 ```ts
 interface ProductProfile {
-  id: string;                    // "freelance-books" | "mulmoterminal"
+  id: string;                    // "mulmobooks" | "mulmoterminal"
   branding: { appName: string; theme?: ThemeTokens; logo?: string };
   plugins: PluginsManifest;      // == plugins.json shape ({packages, servers, local})
-  workspaceTemplate: string;     // ref to a scaffolded cwd folder (CLAUDE.md + schemas + skills + samples)
+  workspaceTemplate: string;     // schemas + mc-* skills seeded ADDITIVELY into the shared ~/mulmoclaude (not a separate cwd folder)
   defaultLanding?: PanelLayout;  // which GUI panels open by default around the terminal
   onboarding?: OnboardingStep[]; // first-run: pick / scaffold the business workspace
 }
@@ -106,7 +137,7 @@ Touchpoints (read from the profile instead of literals):
 - **plugins** → swap `plugins/plugins.json` (the manifest already exists — the cleanest knob).
 - **branding** → parameterize the hardcoded `"MulmoTerminal"` strings (one source).
 - **agent focus** → seed `CLAUDE.md` into the workspace dir; the GUI-MCP set follows from `plugins`.
-- **workspace** → register the scaffolded folder as a default cwd-preset; seed on first run.
+- **workspace** → nothing to register: profiles share `~/mulmoclaude`. Seed schemas + skills additively/idempotently on first run (no separate cwd-preset).
 - **landing** → default panel layout in `App.vue`.
 
 Dogfood: express MulmoTerminal's own default as a profile so the seam has ≥2 consumers.
@@ -183,7 +214,8 @@ document/PDF) → AR entry → payment → cash receipt → live P&L / AR-aging
    `configureAccountingServer` pinned to the session's `cwd`. ✅ gate:
    from the MulmoTerminal terminal, Claude can create a book + post an
    entry and the View renders it. (This is the "just integrate it" step —
-   necessary but, alone, not a product.)
+   necessary but, alone, not a product.) **DONE — PR #128** (shipped as a host
+   tool + mounted router + toolbar button; see Status.)
 1. **Validate focus as a flag (no abstraction yet).** Add `--profile` /
    `MULMO_PROFILE=freelance` to MulmoTerminal: ship the curated
    `plugins.json` (accounting/chart/markdown/collection), a seeded
@@ -276,18 +308,24 @@ a thin adapter module under `plugins/` `local`.
    ✅ gate: from the terminal, Claude creates a book + posts an entry and
    the View renders it.
 
-**Stage 1 — focus as a flag (no abstraction).**
+**Stage 1 — focus as a flag (no abstraction).** Workspace = the SHARED
+`~/mulmoclaude` (see Status — no dedicated dir / cwd-preset).
 - Add `--profile` / `MULMO_PROFILE=freelance` parsing to
   `bin/mulmoterminal.js` (`main()` arg parse ~263) and thread it to the
   server env (alongside `CLAUDE_CWD` at `runServer()` ~196).
+- Branding: present as **MulmoBooks** (the 4 user-facing literals).
 - Ship a curated `plugins.json` (accounting/chart/markdown/collection).
-- Scaffold a workspace dir (CLAUDE.md focused on bookkeeping + 3
-  collection `schema.json`s + `mc-*` skills + samples) and register it as
-  the default `cwd-preset` (seed into `~/.mulmoterminal/config.json`
-  `cwdPresets` on first run if absent).
-- Default panel layout via the `App.vue` `localStorage` defaults (or a
-  query/env seed so a fresh profile opens GUI panels, not just terminal).
-  ✅ gate: a freelancer goes worklog → invoice → "who owes me?" unaided.
+- **Seed into the shared `~/mulmoclaude` additively + idempotently**: the 3
+  collection `schema.json`s (clients / worklogs / invoices) + `mc-*` skills +
+  samples — only if absent. NO separate workspace dir / cwd-preset. Leakage of
+  these into plain MulmoTerminal is fine (funnel) — don't isolate.
+- **Agent focus via launch flags, not workspace files**: pass
+  `--append-system-prompt` (bookkeeping voice; per-launch, never leaks) when the
+  freelance profile is active; bundle skills via `--plugin-dir` if wanted. Do
+  NOT overwrite the shared `CLAUDE.md`.
+- Default panel layout so a fresh MulmoBooks opens the accounting canvas.
+  ✅ gate: first-run "this is useful!" — a freelancer goes worklog → invoice →
+  "who owes me?" unaided.
 
 **Stage 2 — factor the Profile seam.**
 - `ProductProfile` **schema** ships from *this* repo as a shared package;
@@ -337,10 +375,20 @@ it is the only piece with real design risk; everything in 0–2 is plumbing.
 - **Base shell = MulmoTerminal (terminal emulator)**, not the headless
   `-p` shell — the audience is terminal-native and live transparency
   reinforces trust.
+- **Product name = MulmoBooks** (npm `mulmobooks` free). `npx mulmobooks` =
+  thin launcher → unchanged MulmoTerminal + freelance profile.
+- **Shared workspace `~/mulmoclaude`** across MulmoBooks / MulmoTerminal /
+  MulmoClaude — one set of books/collections. Seed additively; no dedicated dir.
+- **MulmoBooks is an adoption funnel; feature leakage into the other shells is
+  acceptable.** Don't build isolation. Optimize for first-run delight.
+- **Agent focus via `--append-system-prompt` (per-launch)**, not by editing the
+  shared `CLAUDE.md`.
+- **Stage 0 shipped (PR #128)**: accounting host tool + router + AccountingView +
+  toolbar button.
 
 ## Open decisions
 
-1. **Product name** (working title `freelance-books`).
+1. ~~Product name~~ — **RESOLVED → MulmoBooks** (see Locked decisions).
 2. **Profile-runtime location** — beside MulmoTerminal (recommended:
    tracks the terminal shell for free) vs a separate repo. Profile
    *schema* + workspace-template ship as shared packages from this repo

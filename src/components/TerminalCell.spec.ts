@@ -74,6 +74,7 @@ function mountCell(
 ) {
   return mount(TerminalCell, {
     props: {
+      uid: 1,
       expanded: false,
       initialSessionId,
       initialCwd: opts.initialCwd ?? null,

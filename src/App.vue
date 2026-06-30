@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { useRoute } from "vue-router";
+import { router } from "./router";
 import Sidebar from "./components/Sidebar.vue";
 import SessionTabBar from "./components/SessionTabBar.vue";
 import TerminalView from "./components/Terminal.vue";
@@ -22,18 +24,17 @@ import { useAttentionSound } from "./composables/useAttentionSound";
 import { useUnloadGuard, reportActiveTerminals } from "./composables/useUnloadGuard";
 import type { CwdPreset } from "./components/presets";
 
-// View mode: the classic single-terminal view (default) or the multi-terminal
-// grid. Persisted so a reload keeps the chosen view.
-type ViewMode = "single" | "grid";
-const viewMode = ref<ViewMode>(localStorage.getItem("view_mode") === "grid" ? "grid" : "single");
-watch(viewMode, (v) => localStorage.setItem("view_mode", v));
+// View mode is now the URL: the multi-terminal grid is /terminals, everything else
+// (chat + the collection/accounting overlays) lives under the single-view shell.
+const route = useRoute();
+const isGrid = computed(() => route.name === "terminals");
 
 // A script picked from the terminal header's Run menu runs in the grid (command
 // cells live only there): stash it and switch to the grid, which picks it up.
 const { requestRun } = usePendingScript();
 function onRunScript(command: PendingCommand) {
   requestRun(command);
-  viewMode.value = "grid";
+  router.push("/terminals");
 }
 
 const activeId = ref<string | null>(null);
@@ -41,14 +42,17 @@ const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
 
 // Confirm before an accidental tab close / reload while a terminal is live. The
-// single view has one live session (when activeId is set); the grid reports its own
-// count. Only act for the single view here — when the grid is mounted it owns the
-// count (App renders one or the other).
+// single view reports its own session (0 or 1) under the "single" key; the grid
+// reports its running-cell count under "grid". They're summed, not overwritten,
+// because persistent connections keep the single PTY alive even after switching to
+// the grid — so a hidden-but-live single terminal must still count toward the guard.
 useUnloadGuard();
 watch(
-  [viewMode, activeId],
+  [isGrid, activeId],
   () => {
-    if (viewMode.value === "single") reportActiveTerminals(activeId.value ? 1 : 0);
+    // Only the single view owns the "single" count; in the grid, the single PTY may
+    // still be live (persistent connections) so its last reported count stands.
+    if (!isGrid.value) reportActiveTerminals("single", activeId.value ? 1 : 0);
   },
   { immediate: true },
 );
@@ -258,9 +262,9 @@ function onSession(id: string) {
 </script>
 
 <template>
-  <GridView v-if="viewMode === 'grid'" @exit="viewMode = 'single'" />
+  <GridView v-if="isGrid" />
   <div v-else class="shell">
-    <AppToolbar :view-mode="viewMode" @go-grid="viewMode = 'grid'" @settings="showSettings = true" />
+    <AppToolbar @settings="showSettings = true" />
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
         v-if="layout === 'vertical'"
@@ -295,6 +299,7 @@ function onSession(id: string) {
           ref="terminalRef"
           class="terminal-pane"
           :style="{ flex: `0 0 ${terminalWidth}px` }"
+          persist-key="single"
           :session-id="activeId"
           :connect-key="connectKey"
           :dir-theme="singleDirConfig.theme"

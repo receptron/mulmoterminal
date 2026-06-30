@@ -17,6 +17,9 @@ const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 // default used to prefill the launch form; `presets` are quick-pick dirs; `home`
 // is the server home dir (to anchor the header path on ~).
 const props = defineProps<{
+  // The grid cell's stable uid — the durable-connection slot key for this cell's
+  // terminal, so flipping to an off-page tab detaches the view without reaping the PTY.
+  uid: number;
   expanded: boolean;
   initialSessionId: string | null;
   initialCwd: string | null;
@@ -740,6 +743,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       <TerminalView
         ref="termRef"
         class="cell-term"
+        :persist-key="`cell-${uid}`"
         :session-id="sessionId"
         :connect-key="connectKey"
         :cwd="cwd"
