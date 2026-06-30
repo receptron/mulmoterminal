@@ -6,7 +6,7 @@
 //
 // The open collection/feed PAGE is the URL; only the open RECORD (a modal) stays
 // in-memory — records are intentionally not addressable (no history entry).
-import { computed, reactive, type ComputedRef } from "vue";
+import { computed, reactive, watch, type ComputedRef } from "vue";
 import type { ShortcutKind } from "../types/shortcuts";
 import { router } from "../router";
 
@@ -15,18 +15,26 @@ type BrowseView = { mode: "closed" } | { mode: "index"; kind: ShortcutKind } | {
 // The only retained state: which record's modal is open, KEYED by the exact detail
 // PATH it belongs to (so /collections/foo and /feeds/foo never share a record, even
 // with overlapping slugs). Records are intentionally not addressable — opening one
-// never touches the URL — so the record is honored only while the current path still
-// matches its key. Every programmatic navigation that isn't itself a record hop
-// clears it (clearRecord below), which both restores the original "leaving the page
-// drops the modal" behavior and keeps a later return to the same page from reviving
-// a stale modal. browseNavigateToRecord sets the key up front (before the push), so
-// it survives the navigation it triggers.
+// never touches the URL.
 const state = reactive<{ recordPath: string | null; selectedId: string | null }>({ recordPath: null, selectedId: null });
 
 function clearRecord(): void {
   state.recordPath = null;
   state.selectedId = null;
 }
+
+// Leaving a detail page — by ANY means: a toolbar push, browser Back/Forward, or a
+// hand-typed URL — drops the open record, honoring the "records are not history"
+// contract (a later return to the same URL must not revive a stale modal). A single
+// SYNC watcher on the path is the one place this happens, so individual nav callers
+// (showChat / showGrid / showAccounting / …) don't each have to remember to clear.
+// flush:"sync" fires the clear during navigation, strictly before router.push's
+// promise resolves — so browseNavigateToRecord's post-push .then re-set always wins.
+watch(
+  () => router.currentRoute.value.path,
+  () => clearRecord(),
+  { flush: "sync" },
+);
 
 // The open record for the page currently on screen (null once the path no longer matches).
 function recordOnCurrentPage(): string | null {
@@ -52,12 +60,15 @@ export function browseGotoDetail(kind: ShortcutKind, slug: string): void {
 
 /** A ref/embed hop into another collection, optionally deep-linking a record. */
 export function browseNavigateToRecord(targetSlug: string, recordId?: string): void {
-  // Ref hops are collection→collection. Key the record to the TARGET path BEFORE
-  // pushing, so once navigation settles on that path the modal is honored.
+  // Ref hops are collection→collection. The sync path watcher clears the record
+  // during the push, so re-apply it AFTER navigation settles on the target path.
   const targetPath = pathFor("collection", targetSlug);
-  state.recordPath = recordId ? targetPath : null;
-  state.selectedId = recordId ?? null;
-  router.push(targetPath);
+  router.push(targetPath).then(() => {
+    if (recordId) {
+      state.recordPath = targetPath;
+      state.selectedId = recordId;
+    }
+  });
 }
 
 /** Current detail slug (CollectionView reads this in standalone mode), or undefined. */

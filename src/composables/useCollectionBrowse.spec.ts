@@ -108,6 +108,26 @@ describe("useCollectionBrowse over the router", () => {
     expect(useCollectionBrowse().view.value).toMatchObject({ mode: "detail", kind: "feed", slug: "foo", selectedId: null });
   });
 
+  it("a bare route push (toolbar Chat/Grid) drops the record, so returning can't revive it", async () => {
+    browseGotoDetail("collection", "foo");
+    await flushPromises();
+    browseSetSelectedId("rec-1");
+    expect(browseRouteSelectedId()).toBe("rec-1");
+
+    // Toolbar Chat / Grid push a bare route WITHOUT calling any browse setter — the
+    // sync path watcher must still drop the record on the way out.
+    router.push("/");
+    await flushPromises();
+    expect(browseRouteSelectedId()).toBeUndefined();
+
+    // Returning to the detail URL by any means (browser Back, a retyped URL) lands
+    // here — the record was dropped on leave, so the modal must NOT revive.
+    router.push("/collections/foo");
+    await flushPromises();
+    expect(browseRouteSelectedId()).toBeUndefined();
+    expect(useCollectionBrowse().view.value).toMatchObject({ slug: "foo", selectedId: null });
+  });
+
   it("returning to a page via normal navigation does not revive a stale record modal", async () => {
     browseGotoDetail("collection", "foo");
     await flushPromises();
