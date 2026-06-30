@@ -51,7 +51,11 @@ watch(state, persist, { deep: true });
 
 // Feed the tab-close guard: warn on close/reload while any cell runs a session or
 // command (counts every page, not just the mounted one).
-watch(() => runningCount(state.value.cells), reportActiveTerminals, { immediate: true });
+watch(
+  () => runningCount(state.value.cells),
+  (n) => reportActiveTerminals("grid", n),
+  { immediate: true },
+);
 
 const pages = computed(() => pageCount(state.value.cells.length));
 

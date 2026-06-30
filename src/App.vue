@@ -41,14 +41,15 @@ const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
 
 // Confirm before an accidental tab close / reload while a terminal is live. The
-// single view has one live session (when activeId is set); the grid reports its own
-// count. Only act for the single view here — when the grid is mounted it owns the
-// count (App renders one or the other).
+// single view reports its own session (0 or 1) under the "single" key; the grid
+// reports its running-cell count under "grid". They're summed, not overwritten,
+// because persistent connections keep the single PTY alive even after switching to
+// the grid — so a hidden-but-live single terminal must still count toward the guard.
 useUnloadGuard();
 watch(
   [viewMode, activeId],
   () => {
-    if (viewMode.value === "single") reportActiveTerminals(activeId.value ? 1 : 0);
+    if (viewMode.value === "single") reportActiveTerminals("single", activeId.value ? 1 : 0);
   },
   { immediate: true },
 );
