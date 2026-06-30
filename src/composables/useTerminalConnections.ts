@@ -49,6 +49,7 @@ interface Conn {
   host: HTMLDivElement; // term.open()'d into this ONCE; re-parented on attach/detach
   ws: WebSocket | null;
   knownSessionId: string | null;
+  knownCwd: string | null; // server-resolved cwd, replayed on (re)attach
   target: ConnTarget;
   handlers: ConnHandlers;
   sawExit: boolean; // an intentional end (exit/superseded/error) — suppress reconnect
@@ -99,6 +100,7 @@ function ensure(key: string, target: ConnTarget): Conn {
     host,
     ws: null,
     knownSessionId: target.sessionId,
+    knownCwd: null,
     target,
     handlers: {},
     sawExit: false,
@@ -189,6 +191,7 @@ function handleMessage(c: Conn, event: MessageEvent) {
     c.knownSessionId = msg.id;
     c.handlers.onSession?.(msg.id);
     if (typeof msg.cwd === "string") {
+      c.knownCwd = msg.cwd;
       const v = connView.get(c.key);
       if (v) v.serverCwd = msg.cwd;
       c.handlers.onCwd?.(msg.cwd);
@@ -227,6 +230,13 @@ export function attach(key: string, target: ConnTarget, handlers: ConnHandlers, 
   c.released = false;
   c.handlers = handlers;
   c.attachedEl = el;
+  // Replay server-learned session/cwd to the freshly-bound handlers. Without this,
+  // a slot that learned its id/cwd WHILE DETACHED (handlers were cleared) would
+  // never forward them, leaving the parent persisted as `session: null` and the
+  // session unrestorable on reload. Only the new-vs-known case actually fires a
+  // useful update; the parent's setters are idempotent for already-known values.
+  if (c.knownSessionId) handlers.onSession?.(c.knownSessionId);
+  if (c.knownCwd) handlers.onCwd?.(c.knownCwd);
   el.appendChild(c.host);
   if (theme) c.term.options.theme = theme;
   if (created) connect(c);
@@ -260,6 +270,7 @@ export function retarget(key: string, target: ConnTarget) {
   if (!c) return;
   c.target = target;
   c.knownSessionId = target.sessionId;
+  c.knownCwd = null;
   c.reconnectAttempts = 0;
   c.sawExit = false;
   c.released = false;
