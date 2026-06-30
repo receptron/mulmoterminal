@@ -386,6 +386,25 @@ describe("TerminalCell", () => {
     expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/last-used");
   });
 
+  it("syncs a late-arriving preset into the pristine launch field (open-before-config-load)", async () => {
+    // Cold load: the cell mounts before /api/config resolves, so presets start empty
+    // and the field falls back to the server default.
+    const w = mountCell(null, { presets: [], defaultCwd: "/home/me/default" });
+    await flushPromises();
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/default");
+    // /api/config resolves, delivering the most-recent preset — the pristine field upgrades.
+    await w.setProps({ presets: [{ label: "alpha", path: "/home/me/alpha" }] });
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/alpha");
+  });
+
+  it("does NOT override a user-edited launch field when presets arrive late", async () => {
+    const w = mountCell(null, { presets: [], defaultCwd: "/home/me/default" });
+    await flushPromises();
+    await w.find(".cell-dir-input").setValue("/home/me/typed");
+    await w.setProps({ presets: [{ label: "alpha", path: "/home/me/alpha" }] });
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/typed");
+  });
+
   it("resets the launch form to the default dir after close", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();

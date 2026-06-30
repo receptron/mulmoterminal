@@ -60,17 +60,17 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
-// recent preset (auto-recorded on launch), then the server default (fetched async,
-// so the watch below fills it in if we had nothing yet).
+// recent preset, then the server default. Both `presets` and `defaultCwd` arrive
+// async from /api/config, so the watcher upgrades a still-pristine field once they
+// load (cold-load / open-before-config) — it never clobbers the user's own edit.
 const dirInput = ref(props.initialCwd ?? props.presets[0]?.path ?? props.defaultCwd ?? "");
-watch(
-  () => props.defaultCwd,
-  (d) => {
-    if (!d) return;
-    if (!dirInput.value) dirInput.value = d;
-    if (cwd.value === null) cwd.value = d;
-  },
-);
+const dirTouched = ref(false); // true once the user types in / picks a dir
+watch([() => props.presets, () => props.defaultCwd], () => {
+  if (cwd.value === null && props.defaultCwd) cwd.value = props.defaultCwd;
+  if (props.initialCwd || dirTouched.value || launched.value) return;
+  const preferred = props.presets[0]?.path ?? props.defaultCwd;
+  if (preferred && dirInput.value !== preferred) dirInput.value = preferred;
+});
 
 // Live activity for this session, from the "sessions" pub/sub channel.
 const working = ref(false);
@@ -131,9 +131,9 @@ onUnmounted(() => {
 });
 
 // Set when the user starts a FRESH session from the launcher, so the next server
-// cwd report is recorded as a recent dir — but a reconnect/restore of an existing
-// session (which also reports a cwd) is not, or recents would be rewritten in mount
-// order on reload instead of reflecting what the user actually launched last.
+// cwd report is recorded as a preset — but a reconnect/restore of an existing
+// session (which also reports a cwd) is not, or the preset list would be rewritten
+// in mount order on reload instead of reflecting what the user actually launched.
 let recordNextCwd = false;
 
 // Start a fresh session in `dir`. Optimistic display only; the persisted/displayed
@@ -160,6 +160,7 @@ function selectPreset(p: CwdPreset) {
 // The chip's tiny end button: fill the field WITHOUT launching, and refresh the
 // resume / script / worktree lists for that dir so the user can resume there.
 function fillDir(path: string) {
+  dirTouched.value = true;
   dirInput.value = path;
   loadResumable();
   loadScripts();
@@ -448,6 +449,7 @@ function teardown() {
   lastPrompt.value = null;
   cwd.value = props.defaultCwd;
   dirInput.value = props.defaultCwd ?? "";
+  dirTouched.value = false; // fresh launcher again — let a late preset sync re-prefill
   diff.value = null;
   diffOpen.value = false;
   closeConfirm.value = false;
@@ -850,7 +852,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
         <span class="cell-dir-row">
-          <input v-model="dirInput" class="cell-dir-input" type="text" placeholder="/path/to/project" spellcheck="false" @keydown.enter="launch" />
+          <input
+            v-model="dirInput"
+            class="cell-dir-input"
+            type="text"
+            placeholder="/path/to/project"
+            spellcheck="false"
+            @input="dirTouched = true"
+            @keydown.enter="launch"
+          />
           <button
             type="button"
             class="cell-dir-go"
