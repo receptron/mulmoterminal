@@ -14,7 +14,7 @@ import type { ToolDefinition } from "gui-chat-protocol";
 import {
   ACCOUNTING_ACTIONS,
   SUPPORTED_COUNTRY_CODES,
-  FISCAL_YEAR_ENDS,
+  FISCAL_YEAR_END_MONTHS,
   TIME_SERIES_GRANULARITIES,
   TIME_SERIES_METRICS,
 } from "@mulmoclaude/accounting-plugin/shared";
@@ -53,10 +53,11 @@ export const MANAGE_ACCOUNTING: ToolDefinition = {
           "For 'createBook' / 'updateBook': ISO 3166-1 alpha-2 country code identifying the tax jurisdiction. Drives country-aware advice — e.g. when set to 'JP', strongly suggest the supplier's T-number (適格請求書発行事業者登録番号) on tax-related lines under インボイス制度. Only the codes listed in the enum are accepted; pass an empty string to 'updateBook' to clear the field.",
       },
       fiscalYearEnd: {
-        type: "string",
-        enum: [...FISCAL_YEAR_ENDS],
+        type: "integer",
+        minimum: FISCAL_YEAR_END_MONTHS[0],
+        maximum: FISCAL_YEAR_END_MONTHS[FISCAL_YEAR_END_MONTHS.length - 1],
         description:
-          "For 'createBook' / 'updateBook': which calendar-quarter end is this book's fiscal year end — Q1 = March 31, Q2 = June 30, Q3 = September 30, Q4 = December 31 (calendar year, the default). Drives the date-range shortcuts in the UI ('current quarter', 'current year', etc.). Pure metadata: changing it does not move existing entries.",
+          "For 'createBook' / 'updateBook': the calendar month (1-12) on whose LAST DAY this book's fiscal year closes — e.g. 3 = March 31, 8 = August 31, 12 = December 31 (calendar year, the default). Any month is allowed. Drives the date-range shortcuts in the UI ('current quarter', 'current year', etc.). Pure metadata: changing it does not move existing entries.",
       },
       initialTab: { type: "string", description: "For 'openBook': initial tab to show (e.g. 'journal', 'opening', 'balanceSheet')." },
       confirm: { type: "boolean", description: "For 'deleteBook': must be true to actually delete (guard against accidental deletion)." },
@@ -164,7 +165,7 @@ export const MANAGE_ACCOUNTING: ToolDefinition = {
         type: "string",
         enum: [...TIME_SERIES_GRANULARITIES],
         description:
-          "For 'getTimeSeries': bucket size. 'month' uses calendar months (label format YYYY-MM). 'quarter' and 'year' honour the book's fiscalYearEnd — for a Q4 book they coincide with calendar quarters / years; Q1/Q2/Q3 books shift accordingly. Quarter labels are 'FY{endYear}-Q{1..4}', year labels are 'FY{endYear}'; the FY is named by its END calendar year (e.g. an FY running Apr 2025 – Mar 2026 is FY2026).",
+          "For 'getTimeSeries': bucket size. 'month' uses calendar months (label format YYYY-MM). 'quarter' and 'year' honour the book's fiscalYearEnd — for a December year-end book (12) they coincide with calendar quarters / years; any other closing month shifts them accordingly. Quarter labels are 'FY{endYear}-Q{1..4}', year labels are 'FY{endYear}'; the FY is named by its END calendar year (e.g. an FY running Apr 2025 – Mar 2026 is FY2026).",
       },
       // opening
       asOfDate: {
