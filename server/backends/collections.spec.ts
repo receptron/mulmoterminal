@@ -39,6 +39,7 @@ const SCHEMA = {
   fields: {
     id: { type: "string", label: "ID", primary: true, required: true },
     name: { type: "string", label: "Name" },
+    status: { type: "enum", label: "Status", values: ["open", "closed"] },
   },
   views: [
     { id: "v1", file: "views/v1.html", label: "Custom", capabilities: ["read"] },
@@ -223,10 +224,13 @@ describe("custom view routes", () => {
       body: JSON.stringify({ items: [{ id: "item1", note: "graded" }], mode: "merge" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: Array<{ id: string; name?: string; note?: string }>; rejected: unknown[] };
+    const body = (await res.json()) as { written: string[]; rejected: unknown[] };
     expect(body.rejected).toEqual([]);
+    expect(body.written).toEqual(["item1"]);
     // name survived the partial write; note was added.
-    expect(body.items[0]).toMatchObject({ id: "item1", name: "Foo", note: "graded" });
+    const detail = await fetch(`${base}/api/collections/testcol/detail`);
+    const item1 = ((await detail.json()) as { items: Array<{ id: string; name?: string; note?: string }> }).items.find((i) => i.id === "item1");
+    expect(item1).toMatchObject({ id: "item1", name: "Foo", note: "graded" });
   });
 
   it("rejects an item missing its primary key", async () => {
@@ -242,8 +246,8 @@ describe("custom view routes", () => {
       body: JSON.stringify({ items: [{ name: "no id" }], mode: "merge" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ problem: string }> };
-    expect(body.items).toEqual([]);
+    const body = (await res.json()) as { written: string[]; rejected: Array<{ problem: string }> };
+    expect(body.written).toEqual([]);
     expect(body.rejected).toHaveLength(1);
     expect(body.rejected[0].problem).toContain("primary key");
   });
@@ -261,8 +265,8 @@ describe("custom view routes", () => {
       body: JSON.stringify({ items: [{ id: "ghost", note: "should not exist" }], mode: "merge" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ id: string; problem: string }> };
-    expect(body.items).toEqual([]);
+    const body = (await res.json()) as { written: string[]; rejected: Array<{ id: string; problem: string }> };
+    expect(body.written).toEqual([]);
     expect(body.rejected).toHaveLength(1);
     expect(body.rejected[0].problem).toContain("not found");
     // and no record file was created for the ghost id
@@ -284,8 +288,8 @@ describe("custom view routes", () => {
       body: JSON.stringify({ items: [{ id: "intruder", name: "Evil" }], mode: "merge" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ id: string; problem: string }> };
-    expect(body.items).toEqual([]);
+    const body = (await res.json()) as { written: string[]; rejected: Array<{ id: string; problem: string }> };
+    expect(body.written).toEqual([]);
     expect(body.rejected).toHaveLength(1);
     expect(body.rejected[0].problem).toContain("singleton");
   });
@@ -303,9 +307,79 @@ describe("custom view routes", () => {
       body: JSON.stringify({ items: [{ id: "me", note: "ok" }], mode: "merge" }),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { items: Array<{ id: string; name?: string; note?: string }>; rejected: unknown[] };
+    const body = (await res.json()) as { written: string[]; rejected: unknown[] };
     expect(body.rejected).toEqual([]);
-    expect(body.items[0]).toMatchObject({ id: "me", name: "Owner", note: "ok" });
+    expect(body.written).toEqual(["me"]);
+  });
+
+  it('mode "create" rejects an id that already exists', async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "item1", name: "Dupe" }], mode: "create" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { written: string[]; rejected: Array<{ problem: string }> };
+    expect(body.written).toEqual([]);
+    expect(body.rejected[0].problem).toContain("already exists");
+  });
+
+  it("defaults to upsert (full replace) when mode is omitted", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    // A complete record with no mode → written; it replaces whatever was there.
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "upserted", name: "Fresh" }] }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { written: string[]; rejected: unknown[] };
+    expect(body.written).toEqual(["upserted"]);
+    expect(body.rejected).toEqual([]);
+  });
+
+  it("400s an unknown mode", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "item1" }], mode: "replace" }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a row that fails schema validation (bad enum value)", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "item1", status: "bogus" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { written: string[]; rejected: Array<{ problem: string }> };
+    expect(body.written).toEqual([]);
+    expect(body.rejected[0].problem).toContain("not one of");
   });
 });
 

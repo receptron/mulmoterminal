@@ -25,6 +25,7 @@ import {
   writeItem,
   deleteItem,
   readItem,
+  validateRecordObject,
   generateItemId,
   resolveCreateItemId,
   readSkillTemplate,
@@ -98,18 +99,24 @@ function extractRecord(body: unknown): CollectionItem | null {
 // derived here so the view-write helper doesn't need a fresh type import.
 type ResolvedCollection = NonNullable<Awaited<ReturnType<typeof loadCollection>>>;
 
-// Apply ONE per-record update for PUT /view-data. Returns the written item or a
-// `{ rejected }` reason; kept out of the route handler so its loop stays flat
-// (lint caps cognitive complexity). Enforces the same singleton invariant as
-// PUT /items/:itemId — a singleton collection accepts only its one fixed id, so
-// a write-capable custom view can't smuggle in arbitrary-id records. `merge` mode
-// is update-only: the partial is layered onto the EXISTING record so untouched
-// fields survive, and a missing id is rejected rather than upserted into a
-// half-populated new record. `replace` mode writes the record as given (create or
-// overwrite).
-type ViewItemWriteResult = { item: CollectionItem } | { rejected: { id: string; problem: string } };
+// The write modes a custom view's PUT may request, matching the documented
+// __MC_VIEW contract (@mulmoclaude/core help: custom-view.md).
+type ViewWriteMode = "merge" | "upsert" | "create";
+const VIEW_WRITE_MODES: readonly ViewWriteMode[] = ["merge", "upsert", "create"];
 
-async function writeViewItem(collection: ResolvedCollection, raw: unknown, merge: boolean): Promise<ViewItemWriteResult> {
+// Apply ONE per-record write for PUT /view-data. Returns the written id or a
+// `{ rejected }` reason; kept out of the route handler so its loop stays flat
+// (lint caps cognitive complexity). Behavior mirrors manageCollection's putItems:
+//  - `merge`  — layer the partial onto the EXISTING record (update-only; a missing
+//               id is rejected, never upserted into a half-populated record).
+//  - `create` — insert-only; an existing id collides.
+//  - `upsert` — write the record as given (create or overwrite); the default.
+// Also enforces the singleton invariant (only the fixed id is writable) and gates
+// every row on the schema (required fields, enum values, id↔primaryKey) so a bad
+// row comes back in `rejected` with an actionable `problem` instead of persisting.
+type ViewItemWriteResult = { writtenId: string } | { rejected: { id: string; problem: string } };
+
+async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode: ViewWriteMode): Promise<ViewItemWriteResult> {
   const record = extractRecord(raw);
   if (!record) return { rejected: { id: "", problem: "item must be a JSON object" } };
   const { singleton, primaryKey } = collection.schema;
@@ -118,20 +125,24 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, merge
   if (singleton && itemId !== singleton) {
     return { rejected: { id: itemId, problem: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` } };
   }
-  let base: CollectionItem = {};
-  if (merge) {
+  let toWrite: CollectionItem;
+  if (mode === "merge") {
     const existing = await readItem(collection.dataDir, itemId);
-    // Merge is update-only: don't upsert a missing id into a half-populated record.
-    if (!existing) return { rejected: { id: itemId, problem: `item '${itemId}' not found (merge is update-only)` } };
-    base = existing;
+    if (!existing) return { rejected: { id: itemId, problem: `item '${itemId}' not found — use "upsert" or "create" to add it` } };
+    toWrite = { ...existing, ...record, [primaryKey]: itemId };
+  } else {
+    toWrite = { ...record, [primaryKey]: itemId };
   }
-  const recordWithId: CollectionItem = { ...base, ...record, [primaryKey]: itemId };
-  const result = await writeItem(collection.dataDir, itemId, recordWithId, { slug: collection.slug });
+  const problem = validateRecordObject(toWrite, itemId, collection.schema);
+  if (problem) return { rejected: { id: itemId, problem } };
+  const result = await writeItem(collection.dataDir, itemId, toWrite, { slug: collection.slug, refuseOverwrite: mode === "create" });
   switch (result.kind) {
     case "ok":
-      return { item: result.item };
+      return { writtenId: result.itemId };
     case "invalid-id":
       return { rejected: { id: itemId, problem: `invalid item id: ${itemId}` } };
+    case "conflict":
+      return { rejected: { id: itemId, problem: `item '${itemId}' already exists` } };
     case "path-escape":
       return { rejected: { id: itemId, problem: "data directory escapes the workspace" } };
     default:
@@ -548,12 +559,11 @@ export function mountCollectionRoutes(app: Express): void {
   });
 
   // Scoped write: apply per-record updates from a custom view (e.g. the vocabulary
-  // flashcard's grade buttons). Requires a `write`-capable token. The body is
-  // `{ items: [...], mode?: "merge" | "replace" }`; in `merge` mode (the default a
-  // view sends when it only carries the changed fields) each item is layered onto the
-  // existing record so untouched fields survive — a bare writeItem of the partial
-  // would clobber them. Responds `{ items, rejected }`: `rejected` carries a
-  // `{ id, problem }` per item that couldn't be written, the contract views check.
+  // flashcard's grade buttons). Requires a `write`-capable token. Body is
+  // `{ items: [...], mode?: "merge" | "upsert" | "create" }`, matching the documented
+  // __MC_VIEW contract; `mode` defaults to `upsert` (write the record as given). The
+  // response envelope is `{ written, rejected }` — `written` is the id of each stored
+  // record, `rejected` a `{ id, problem }` per row that failed — the shape views read.
   app.put("/api/collections/:slug/view-data", viewDataCors, requireViewToken("write"), async (req: Request<{ slug: string }>, res: Response) => {
     try {
       const collection = await loadCollection(req.params.slug);
@@ -566,15 +576,20 @@ export function mountCollectionRoutes(app: Express): void {
         res.status(400).json({ error: "`items` must be an array" });
         return;
       }
-      const merge = body.mode !== "replace";
-      const written: CollectionItem[] = [];
+      const mode: ViewWriteMode = body.mode === undefined ? "upsert" : (body.mode as ViewWriteMode);
+      if (!VIEW_WRITE_MODES.includes(mode)) {
+        const modeList = VIEW_WRITE_MODES.map((m) => `"${m}"`).join(", ");
+        res.status(400).json({ error: `\`mode\` must be one of ${modeList}` });
+        return;
+      }
+      const written: string[] = [];
       const rejected: Array<{ id: string; problem: string }> = [];
       for (const raw of body.items) {
-        const outcome = await writeViewItem(collection, raw, merge);
-        if ("item" in outcome) written.push(outcome.item);
+        const outcome = await writeViewItem(collection, raw, mode);
+        if ("writtenId" in outcome) written.push(outcome.writtenId);
         else rejected.push(outcome.rejected);
       }
-      res.json({ items: written, rejected });
+      res.json({ written, rejected });
     } catch (err) {
       log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
