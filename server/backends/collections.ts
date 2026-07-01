@@ -136,18 +136,14 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode:
   const problem = validateRecordObject(toWrite, itemId, collection.schema);
   if (problem) return { rejected: { id: itemId, problem } };
   const result = await writeItem(collection.dataDir, itemId, toWrite, { slug: collection.slug, refuseOverwrite: mode === "create" });
-  switch (result.kind) {
-    case "ok":
-      return { writtenId: result.itemId };
-    case "invalid-id":
-      return { rejected: { id: itemId, problem: `invalid item id: ${itemId}` } };
-    case "conflict":
-      return { rejected: { id: itemId, problem: `item '${itemId}' already exists` } };
-    case "path-escape":
-      return { rejected: { id: itemId, problem: "data directory escapes the workspace" } };
-    default:
-      return { rejected: { id: itemId, problem: `write failed (${result.kind})` } };
-  }
+  // Handle each WriteItemResult kind; the final case (`path-escape`) is the
+  // fallthrough return so `result` narrows cleanly instead of hitting a `never`
+  // default (mirrors manageCollection.putOneItem in MulmoClaude).
+  if (result.kind === "ok") return { writtenId: result.itemId };
+  if (result.kind === "invalid-id") return { rejected: { id: itemId, problem: `'${itemId}' is not a valid record id` } };
+  if (result.kind === "conflict")
+    return { rejected: { id: itemId, problem: `'${itemId}' already exists — mode "create" refuses overwrite; use "upsert" to update it` } };
+  return { rejected: { id: itemId, problem: "write refused: the collection's data dir escapes the workspace" } };
 }
 
 /** Mount the read-side REST surface. Mirrors MulmoClaude's
