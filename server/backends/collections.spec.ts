@@ -248,6 +248,29 @@ describe("custom view routes", () => {
     expect(body.rejected[0].problem).toContain("primary key");
   });
 
+  it("rejects (does not upsert) a merge write to a missing id", async () => {
+    const mint = await fetch(`${base}/api/collections/testcol/view-token`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ viewId: "v2" }),
+    });
+    const { token } = (await mint.json()) as { token: string };
+    const res = await fetch(`${base}/api/collections/testcol/view-data`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ items: [{ id: "ghost", note: "should not exist" }], mode: "merge" }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[]; rejected: Array<{ id: string; problem: string }> };
+    expect(body.items).toEqual([]);
+    expect(body.rejected).toHaveLength(1);
+    expect(body.rejected[0].problem).toContain("not found");
+    // and no record file was created for the ghost id
+    const detail = await fetch(`${base}/api/collections/testcol/detail`);
+    const ids = ((await detail.json()) as { items: Array<{ id: string }> }).items.map((i) => i.id);
+    expect(ids).not.toContain("ghost");
+  });
+
   it("rejects a non-singleton id on a singleton collection", async () => {
     const mint = await fetch(`${base}/api/collections/singletoncol/view-token`, {
       method: "POST",

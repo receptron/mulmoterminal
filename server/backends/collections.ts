@@ -102,9 +102,11 @@ type ResolvedCollection = NonNullable<Awaited<ReturnType<typeof loadCollection>>
 // `{ rejected }` reason; kept out of the route handler so its loop stays flat
 // (lint caps cognitive complexity). Enforces the same singleton invariant as
 // PUT /items/:itemId — a singleton collection accepts only its one fixed id, so
-// a write-capable custom view can't smuggle in arbitrary-id records. In `merge`
-// mode the partial is layered onto the existing record so untouched fields
-// survive; otherwise it replaces.
+// a write-capable custom view can't smuggle in arbitrary-id records. `merge` mode
+// is update-only: the partial is layered onto the EXISTING record so untouched
+// fields survive, and a missing id is rejected rather than upserted into a
+// half-populated new record. `replace` mode writes the record as given (create or
+// overwrite).
 type ViewItemWriteResult = { item: CollectionItem } | { rejected: { id: string; problem: string } };
 
 async function writeViewItem(collection: ResolvedCollection, raw: unknown, merge: boolean): Promise<ViewItemWriteResult> {
@@ -116,7 +118,13 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, merge
   if (singleton && itemId !== singleton) {
     return { rejected: { id: itemId, problem: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` } };
   }
-  const base = merge ? ((await readItem(collection.dataDir, itemId)) ?? {}) : {};
+  let base: CollectionItem = {};
+  if (merge) {
+    const existing = await readItem(collection.dataDir, itemId);
+    // Merge is update-only: don't upsert a missing id into a half-populated record.
+    if (!existing) return { rejected: { id: itemId, problem: `item '${itemId}' not found (merge is update-only)` } };
+    base = existing;
+  }
   const recordWithId: CollectionItem = { ...base, ...record, [primaryKey]: itemId };
   const result = await writeItem(collection.dataDir, itemId, recordWithId, { slug: collection.slug });
   switch (result.kind) {
