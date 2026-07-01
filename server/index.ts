@@ -154,6 +154,55 @@ const pendingTranslations = new Map<string, { resolve: (translations: string[]) 
 // a value that claude re-parses as a flag) into the spawned process.
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Session ids that belong to the multi-terminal GRID — dev terminals, spawned with
+// gui=0 (no GUI MCP; see the ?gui handling in the WS connection handler). They're
+// FILTERED OUT of the chat sidebar's /api/sessions so a grid terminal never surfaces
+// as a clickable chat row: selecting it in chat would reattach its live PTY and
+// SUPERSEDE the grid cell (the "chat hijacked my multi-terminal session" bug). The
+// set is persisted so the exclusion survives a reboot and outlives the live PTY — a
+// reaped grid session's on-disk transcript still shouldn't reappear as a chat. NOTE:
+// the exclusion applies ONLY to the unscoped (chat) query; the grid's OWN cwd-scoped
+// resume picker (/api/sessions?cwd=…) must keep listing these so they stay resumable.
+const devTerminalSessions = new Set<string>();
+const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-sessions.json");
+
+// Hydrate the set once at boot (best-effort — absent on first run / unreadable =>
+// empty). Exposed as a promise so readers/writers can wait for it: a request served
+// (or a mark persisted) before this resolves would otherwise see an empty set and
+// either leak hidden grid transcripts into chat or clobber the file with a snapshot
+// missing the on-disk ids.
+const devTerminalSessionsHydrated: Promise<void> = (async () => {
+  try {
+    const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
+    if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
+  } catch {
+    // no file yet or unreadable => start empty
+  }
+})();
+
+// Serialize every persist into ONE chain so concurrent marks can't run overlapping
+// writeFile()s that interleave and leave an older snapshot on disk (dropping ids).
+// Each link waits for hydration first (so it never persists a set missing the on-disk
+// ids) and stringifies the CURRENT set at write time, so the last link always writes
+// the complete, up-to-date set. A failed write is logged and the chain continues.
+let devTerminalPersist: Promise<void> = Promise.resolve();
+function persistDevTerminalSessions(): void {
+  devTerminalPersist = devTerminalPersist
+    .then(() => devTerminalSessionsHydrated)
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
+    .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
+}
+
+// Record a grid/dev-terminal session id, then persist. A no-op once the id is known,
+// so repeated reattaches of the same cell — or a reconnect after a reboot — don't
+// rewrite the file.
+function markDevTerminalSession(id: string): void {
+  if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
+  devTerminalSessions.add(id);
+  persistDevTerminalSessions();
+}
+
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
 // a malicious website the user visits can't drive the local Claude PTY (a
 // cross-site WebSocket hijack). A missing Origin (non-browser local client) is
@@ -1064,6 +1113,9 @@ app.get("/api/sessions", async (req, res) => {
     const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
     const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
     const includePending = !cwdParam;
+    // Wait for the persisted grid-session set before filtering (below), so a chat
+    // request racing server boot can't leak previously-hidden grid transcripts.
+    if (includePending) await devTerminalSessionsHydrated;
     const dir = projectSessionsDir(cwd);
     let files: string[] = [];
     try {
@@ -1113,6 +1165,10 @@ app.get("/api/sessions", async (req, res) => {
     // workers are dropped first — they're transient internal helpers, not user chats.
     const top = [...onDiskStats, ...pending]
       .filter((s) => !translationWorkerIds.has(s.id))
+      // Hide multi-terminal GRID sessions from the CHAT sidebar (the unscoped query
+      // only). The grid's own resume picker passes ?cwd= (includePending=false) and
+      // must keep listing them, so gate the exclusion on includePending.
+      .filter((s) => !includePending || !devTerminalSessions.has(s.id))
       .sort((a, b) => b.mtime - a.mtime)
       .slice(0, SESSION_LIST_LIMIT);
     const sessions = (
@@ -1614,6 +1670,12 @@ wss.on("connection", (ws, req) => {
   const resume = !reattachId && requested && sessionExistsOnDisk(requested, cwd) ? requested : null;
   const sessionId = reattachId ?? resume ?? randomUUID();
   const live = reattachId ? ptys.get(reattachId) : undefined;
+
+  // A dev terminal (gui=0) is a multi-terminal GRID cell: remember its session id so
+  // it's excluded from the chat sidebar (see devTerminalSessions). This is the single
+  // choke point for every grid attach — new, resumed, or reattached — so the mark is
+  // recorded (and re-recorded after a reboot when the cell reconnects) exactly once.
+  if (!attachGuiMcp) markDevTerminalSession(sessionId);
 
   // Tell the browser which session this is (it learns the id of new sessions) and
   // the EFFECTIVE cwd — where claude really runs. On reattach that's the live
