@@ -28,7 +28,6 @@ import {
 import { useSessions } from "../composables/useSessions";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
-import type { CwdPreset } from "./presets";
 import { useAppConfig } from "../composables/useAppConfig";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
@@ -126,28 +125,13 @@ onMounted(() => {
   if (command) state.value = runScriptInNewCell(state.value, command);
 });
 
-// Server config: the default workspace dir + the user's directory presets + sound.
-const {
-  defaultCwd,
-  home,
-  presets,
-  soundFile,
-  saving: savingSettings,
-  error: settingsError,
-  loadConfig,
-  savePresets: persistPresets,
-  saveSound,
-} = useAppConfig();
+// Server config: the default workspace dir + the auto-recorded dir presets + sound.
+const { defaultCwd, home, presets, soundFile, loadConfig, recordPreset, removePreset, saveSound } = useAppConfig();
 const showSettings = ref(false);
 onMounted(loadConfig);
 
-async function savePresets(next: CwdPreset[]) {
-  if (await persistPresets(next)) showSettings.value = false; // close only on success — keep edits otherwise
-}
-
 function closeSettings() {
   showSettings.value = false;
-  settingsError.value = null;
 }
 </script>
 
@@ -177,6 +161,8 @@ function closeSettings() {
       :open-session-ids="openSessionIds"
       @session="onSession"
       @cwd="onCwd"
+      @record-cwd="recordPreset"
+      @remove-preset="removePreset"
       @close="onClose"
       @toggle-expand="onToggleExpand"
       @run="onRun"
@@ -184,16 +170,7 @@ function closeSettings() {
       @move="onMove"
       @status="onStatus"
     />
-    <SettingsModal
-      v-if="showSettings"
-      :presets="presets"
-      :sound-file="soundFile"
-      :saving="savingSettings"
-      :error="settingsError"
-      @save="savePresets"
-      @update-sound="saveSound"
-      @close="closeSettings"
-    />
+    <SettingsModal v-if="showSettings" :sound-file="soundFile" @update-sound="saveSound" @close="closeSettings" />
   </div>
 </template>
 
