@@ -166,8 +166,12 @@ const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 const devTerminalSessions = new Set<string>();
 const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-sessions.json");
 
-// Hydrate the set once at boot (best-effort — absent on first run / unreadable => empty).
-void (async () => {
+// Hydrate the set once at boot (best-effort — absent on first run / unreadable =>
+// empty). Exposed as a promise so readers/writers can wait for it: a request served
+// (or a mark persisted) before this resolves would otherwise see an empty set and
+// either leak hidden grid transcripts into chat or clobber the file with a snapshot
+// missing the on-disk ids.
+const devTerminalSessionsHydrated: Promise<void> = (async () => {
   try {
     const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
     if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
@@ -176,15 +180,27 @@ void (async () => {
   }
 })();
 
-// Record a grid/dev-terminal session id and persist the set (best-effort, fire-and-
-// forget). A no-op once the id is known, so repeated reattaches of the same cell —
-// or a reconnect after a reboot — don't rewrite the file.
+// Serialize every persist into ONE chain so concurrent marks can't run overlapping
+// writeFile()s that interleave and leave an older snapshot on disk (dropping ids).
+// Each link waits for hydration first (so it never persists a set missing the on-disk
+// ids) and stringifies the CURRENT set at write time, so the last link always writes
+// the complete, up-to-date set. A failed write is logged and the chain continues.
+let devTerminalPersist: Promise<void> = Promise.resolve();
+function persistDevTerminalSessions(): void {
+  devTerminalPersist = devTerminalPersist
+    .then(() => devTerminalSessionsHydrated)
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
+    .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
+}
+
+// Record a grid/dev-terminal session id, then persist. A no-op once the id is known,
+// so repeated reattaches of the same cell — or a reconnect after a reboot — don't
+// rewrite the file.
 function markDevTerminalSession(id: string): void {
   if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
   devTerminalSessions.add(id);
-  fs.mkdir(MULMOTERMINAL_HOME, { recursive: true })
-    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
-    .catch((e) => console.error(`[dev-terminal-sessions] failed to persist ${id}: ${messageOf(e)}`));
+  persistDevTerminalSessions();
 }
 
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
@@ -1097,6 +1113,9 @@ app.get("/api/sessions", async (req, res) => {
     const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
     const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
     const includePending = !cwdParam;
+    // Wait for the persisted grid-session set before filtering (below), so a chat
+    // request racing server boot can't leak previously-hidden grid transcripts.
+    if (includePending) await devTerminalSessionsHydrated;
     const dir = projectSessionsDir(cwd);
     let files: string[] = [];
     try {
