@@ -16,9 +16,20 @@ export interface Cell {
 // How the grid orders its cells. "manual": the user's hand-arranged order (◀▶);
 // "auto": attention-first, recomputed from each cell's live status.
 export type SortMode = "manual" | "auto";
-// A cell's live activity, reported up from the cell (the server's working/waiting
-// flags). Drives the "auto" order; absent uids are treated as idle.
-export type CellStatus = "waiting" | "working" | "idle";
+// A cell's live activity, reported up from the cell. Drives the "auto" order and the
+// cell's color/label. `blocked` (needs input/permission) and `done` (finished a turn,
+// output unreviewed) both come from the server's `waiting` flag, split by which hook
+// set it. Absent uids are treated as idle.
+export type CellStatus = "blocked" | "done" | "working" | "idle";
+
+// Map the server's raw activity to a CellStatus. `waiting` means "needs the user";
+// the `event` that set it distinguishes a permission/question pause ("Notification"
+// → blocked, most urgent) from a finished-but-unreviewed turn ("Stop" → done).
+export function activityStatus(working: boolean, waiting: boolean, event: string | null | undefined): CellStatus {
+  if (waiting) return event === "Notification" ? "blocked" : "done";
+  if (working) return "working";
+  return "idle";
+}
 
 export interface GridState {
   cells: Cell[];
@@ -133,10 +144,11 @@ export function moveCell(state: GridState, uid: number, dir: -1 | 1): GridState 
 export const zoomedUid = (state: GridState): number | null =>
   state.expanded !== null && state.cells.some((c) => c.uid === state.expanded) ? state.expanded : null;
 
-// Attention-first rank for the "auto" order: cells needing the user (waiting) come
-// first, then idle, then working, with empty launch cells last. Lower sorts earlier.
-const RANK: Record<CellStatus, number> = { waiting: 0, idle: 1, working: 2 };
-const LAUNCH_RANK = 3;
+// Attention-first rank for the "auto" order: blocked (needs input now) first, then
+// done (finished, review it), then idle, then working, with empty launch cells last.
+// Lower sorts earlier.
+const RANK: Record<CellStatus, number> = { blocked: 0, done: 1, idle: 2, working: 3 };
+const LAUNCH_RANK = 4;
 const cellRank = (c: Cell, statusByUid: Record<number, CellStatus>): number => (isLaunchCell(c) ? LAUNCH_RANK : RANK[statusByUid[c.uid] ?? "idle"]);
 
 // Display order. "manual": the hand-arranged list as-is. "auto": a STABLE sort by

@@ -7,6 +7,9 @@ export interface Session {
   mtime: number;
   working: boolean;
   waiting: boolean;
+  /** The hook that set the current state ("Stop" | "Notification" | …), or null —
+   *  splits `waiting` into done (Stop) vs blocked (Notification). */
+  event?: string | null;
   /** A hidden background worker (spawnBackgroundChat hidden:true) — listed, but
    *  never treated as unread/bold. */
   hidden?: boolean;

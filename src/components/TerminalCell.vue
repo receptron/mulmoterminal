@@ -6,7 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import type { CwdPreset } from "./presets";
-import type { CellStatus } from "./gridTabs";
+import { activityStatus, type CellStatus } from "./gridTabs";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
@@ -75,6 +75,9 @@ watch([() => props.presets, () => props.defaultCwd], () => {
 // Live activity for this session, from the "sessions" pub/sub channel.
 const working = ref(false);
 const waiting = ref(false);
+// The hook that set the current state ("Stop" | "Notification" | …). Splits `waiting`
+// into done (Stop) vs blocked (Notification) — see activityStatus.
+const activityEvent = ref<string | null>(null);
 const lastPrompt = ref<string | null>(null);
 
 const { subscribe } = usePubSub();
@@ -84,6 +87,7 @@ interface ActivityMsg {
   id: string;
   working?: boolean;
   waiting?: boolean;
+  event?: string | null;
   lastPrompt?: string | null;
 }
 const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" && d !== null && "id" in d;
@@ -91,6 +95,7 @@ const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" &&
 function applyActivity(d: ActivityMsg) {
   working.value = d.working ?? false;
   waiting.value = d.waiting ?? false;
+  if (d.event !== undefined) activityEvent.value = d.event;
   // Apply lastPrompt whenever the field is present — including an explicit null,
   // so a cleared/new session doesn't keep showing the previous prompt.
   if (d.lastPrompt !== undefined) lastPrompt.value = d.lastPrompt;
@@ -446,6 +451,7 @@ function teardown() {
   sessionId.value = null;
   working.value = false;
   waiting.value = false;
+  activityEvent.value = null;
   lastPrompt.value = null;
   cwd.value = props.defaultCwd;
   dirInput.value = props.defaultCwd ?? "";
@@ -542,14 +548,11 @@ const headerDir = computed(() => {
   return wt ? `⎇ ${wt.repo} (${wt.task})` : dirDisplay.value;
 });
 
-// Attention (waiting) wins over working wins over idle.
-const status = computed<"waiting" | "working" | "idle">(() => {
-  if (waiting.value) return "waiting";
-  if (working.value) return "working";
-  return "idle";
-});
-const STATUS_CLASS = { waiting: "is-waiting", working: "is-working", idle: "is-idle" } as const;
-const STATUS_LABEL = { waiting: "Needs attention", working: "Working…", idle: "Idle" } as const;
+// blocked (needs input) / done (finished, unreviewed) / working / idle — split from
+// the server's working+waiting+event (see activityStatus).
+const status = computed<CellStatus>(() => activityStatus(working.value, waiting.value, activityEvent.value));
+const STATUS_CLASS = { blocked: "is-blocked", done: "is-done", working: "is-working", idle: "is-idle" } as const;
+const STATUS_LABEL = { blocked: "Needs input", done: "Done — review", working: "Working…", idle: "Idle" } as const;
 const statusClass = computed(() => STATUS_CLASS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
@@ -932,12 +935,16 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   border-radius: 6px;
   overflow: hidden;
 }
-/* Frame the whole cell by status so it's obvious at a glance which terminal is
-   busy (blue) or needs you (amber glow). */
+/* Frame the whole cell by status: blocked = amber glow (needs you NOW), done = blue
+   glow (finished a turn, review it), working = blue border (busy). */
 .cell.is-working {
   border-color: var(--accent);
 }
-.cell.is-waiting {
+.cell.is-done {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
+}
+.cell.is-blocked {
   border-color: var(--amber);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 55%, transparent);
 }
@@ -952,18 +959,19 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
 }
-/* The header also tints by status (working = blue, waiting = amber). */
-.cell-header.is-working {
+/* The header also tints by status (working/done = blue, blocked = amber). */
+.cell-header.is-working,
+.cell-header.is-done {
   background: var(--bg-selected);
   border-bottom-color: var(--accent);
 }
-.cell-header.is-waiting {
+.cell-header.is-blocked {
   background: var(--warn-bg-subtle);
   color: var(--warn);
   border-bottom-color: var(--amber);
 }
 
-/* Status dot: idle / working (pulsing) / waiting (attention). */
+/* Status dot: idle / working (pulsing blue) / done (static blue) / blocked (amber). */
 .cell-dot {
   flex: 0 0 auto;
   width: 9px;
@@ -975,7 +983,10 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   background: var(--accent);
   animation: pulse 1.2s ease-in-out infinite;
 }
-.cell-dot.is-waiting {
+.cell-dot.is-done {
+  background: var(--accent);
+}
+.cell-dot.is-blocked {
   background: var(--amber);
 }
 @keyframes pulse {

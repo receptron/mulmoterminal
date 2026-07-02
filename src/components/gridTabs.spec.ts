@@ -15,6 +15,7 @@ import {
   moveCell,
   orderCells,
   visibleOrdered,
+  activityStatus,
   cancelableLaunchUid,
   zoomedUid,
   visibleCells,
@@ -219,16 +220,31 @@ describe("setSortMode / moveCell (manual reorder)", () => {
   });
 });
 
+describe("activityStatus", () => {
+  it("splits waiting into blocked (Notification) vs done (Stop)", () => {
+    expect(activityStatus(false, true, "Notification")).toBe("blocked");
+    expect(activityStatus(false, true, "Stop")).toBe("done");
+    expect(activityStatus(false, true, null)).toBe("done"); // any non-Notification waiting -> done
+  });
+  it("is working when only working, idle when neither", () => {
+    expect(activityStatus(true, false, "UserPromptSubmit")).toBe("working");
+    expect(activityStatus(false, false, null)).toBe("idle");
+  });
+  it("waiting wins over working (a permission pause mid-turn is blocked)", () => {
+    expect(activityStatus(true, true, "Notification")).toBe("blocked");
+  });
+});
+
 describe("orderCells (auto attention sort)", () => {
   const status = (m: Record<number, CellStatus>) => m;
   it("manual mode returns the list unchanged", () => {
     const cells = running(3);
-    expect(orderCells(cells, status({ 0: "working", 1: "waiting", 2: "idle" }), "manual")).toBe(cells);
+    expect(orderCells(cells, status({ 0: "working", 1: "blocked", 2: "idle" }), "manual")).toBe(cells);
   });
-  it("auto sorts waiting -> idle -> working, launch cells last", () => {
-    const cells = [...running(3), cell(3)]; // uid 3 is an empty launch cell
-    const ordered = orderCells(cells, status({ 0: "working", 1: "waiting", 2: "idle" }), "auto");
-    expect(ordered.map((c) => c.uid)).toEqual([1, 2, 0, 3]);
+  it("auto sorts blocked -> done -> idle -> working, launch cells last", () => {
+    const cells = [...running(4), cell(4)]; // uid 4 is an empty launch cell
+    const ordered = orderCells(cells, status({ 0: "working", 1: "blocked", 2: "done", 3: "idle" }), "auto");
+    expect(ordered.map((c) => c.uid)).toEqual([1, 2, 3, 0, 4]);
   });
   it("is stable within a bucket (equal status keeps manual order)", () => {
     const cells = running(4);
@@ -243,23 +259,23 @@ describe("orderCells (auto attention sort)", () => {
 });
 
 describe("visibleOrdered (attention-sort the whole list, then page)", () => {
-  it("floats a waiting cell from any page onto the first page", () => {
-    // 12 cells over 2 pages. uid 10 starts on page 2; once waiting it sorts to the
+  it("floats a blocked cell from any page onto the first page", () => {
+    // 12 cells over 2 pages. uid 10 starts on page 2; once blocked it sorts to the
     // front and lands on page 1, while the working uid 0 sinks off page 1.
     const s = make(running(12), { page: 0, sortMode: "auto" });
-    const statusByUid: Record<number, CellStatus> = { 0: "working", 1: "waiting", 10: "waiting" };
+    const statusByUid: Record<number, CellStatus> = { 0: "working", 1: "blocked", 10: "blocked" };
     const page1 = visibleOrdered(s, statusByUid).map((c) => c.uid);
-    expect(page1.slice(0, 2)).toEqual([1, 10]); // both waiting cells, base order, up front
+    expect(page1.slice(0, 2)).toEqual([1, 10]); // both blocked cells, base order, up front
     expect(page1).not.toContain(0); // working uid 0 sank to page 2
     expect(page1).toHaveLength(9);
   });
   it("manual mode leaves the on-screen order untouched", () => {
     const s = make(running(4), { sortMode: "manual" });
-    expect(visibleOrdered(s, { 0: "working", 3: "waiting" }).map((c) => c.uid)).toEqual([0, 1, 2, 3]);
+    expect(visibleOrdered(s, { 0: "working", 3: "blocked" }).map((c) => c.uid)).toEqual([0, 1, 2, 3]);
   });
   it("orders the whole list (the filmstrip) while zoomed", () => {
     const s = make(running(12), { page: 0, expanded: 11, sortMode: "auto" });
-    expect(visibleOrdered(s, { 11: "waiting" }).map((c) => c.uid)[0]).toBe(11);
+    expect(visibleOrdered(s, { 11: "blocked" }).map((c) => c.uid)[0]).toBe(11);
   });
 });
 

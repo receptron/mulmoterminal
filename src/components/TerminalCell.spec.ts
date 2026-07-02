@@ -429,7 +429,7 @@ describe("TerminalCell", () => {
     expect(w.find(".cell-dir").text()).toBe("~/default");
   });
 
-  it("reflects working/waiting/lastPrompt pushed for its own session", async () => {
+  it("reflects working / blocked / done pushed for its own session", async () => {
     const id = "22222222-2222-2222-2222-222222222222";
     const w = mountCell(id);
     await flushPromises();
@@ -438,9 +438,14 @@ describe("TerminalCell", () => {
     expect(promptText(w)).toBe("refactor the parser");
     expect(dotClass(w)).toContain("is-working");
 
-    captured?.({ id, working: false, waiting: true, lastPrompt: "refactor the parser" });
+    // waiting + Notification => blocked (needs input); + Stop => done (unreviewed).
+    captured?.({ id, working: false, waiting: true, event: "Notification", lastPrompt: "refactor the parser" });
     await nextTick();
-    expect(dotClass(w)).toContain("is-waiting");
+    expect(dotClass(w)).toContain("is-blocked");
+
+    captured?.({ id, working: false, waiting: true, event: "Stop", lastPrompt: "refactor the parser" });
+    await nextTick();
+    expect(dotClass(w)).toContain("is-done");
   });
 
   it("clears a stale prompt when the server sends lastPrompt: null", async () => {

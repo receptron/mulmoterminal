@@ -86,6 +86,10 @@ interface SessionMeta {
   mtime: number;
   working: boolean;
   waiting: boolean;
+  /** The hook that set the current state (e.g. "Stop" | "Notification"), or null.
+   *  Lets the client split `waiting` into "done, unreviewed" (Stop) vs "blocked on
+   *  input" (Notification). */
+  event: string | null;
   /** Spawned as a hidden background worker (spawnBackgroundChat hidden:true). The
    *  tab still lists, but it never renders bold/unread — a background helper
    *  finishing shouldn't pull the user's attention. */
@@ -675,6 +679,7 @@ async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> 
     mtime: stat.mtimeMs,
     working: a?.working ?? false,
     waiting: a?.waiting ?? false,
+    event: a?.event ?? null,
     hidden: hiddenSessions.has(id),
   };
 }
@@ -1075,6 +1080,7 @@ app.get("/api/session/:id", async (req, res) => {
     cwd,
     working: a.working ?? false,
     waiting: a.waiting ?? false,
+    event: a.event ?? null,
     lastPrompt,
   });
 });
@@ -1156,6 +1162,7 @@ app.get("/api/sessions", async (req, res) => {
         mtime: meta.createdAt,
         working: activity.get(id)?.working ?? false,
         waiting: activity.get(id)?.waiting ?? false,
+        event: activity.get(id)?.event ?? null,
         hidden: hiddenSessions.has(id),
       });
     }
@@ -1175,7 +1182,7 @@ app.get("/api/sessions", async (req, res) => {
       await Promise.all(
         top.map((s) =>
           s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, hidden: s.hidden }
+            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, event: s.event, hidden: s.hidden }
             : readSessionMeta(dir, s.file).catch(() => null),
         ),
       )

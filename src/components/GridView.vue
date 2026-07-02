@@ -16,6 +16,7 @@ import {
   setSortMode,
   moveCell,
   visibleOrdered,
+  activityStatus,
   cancelableLaunchUid,
   pageCount,
   zoomedUid,
@@ -68,15 +69,9 @@ const pages = computed(() => pageCount(state.value.cells.length));
 const { sessions } = useSessions();
 const statusByUid = reactive<Record<number, CellStatus>>({});
 const onStatus = (uid: number, s: CellStatus) => (statusByUid[uid] = s);
-// Attention (waiting) wins over working wins over idle — mirrors TerminalCell's dot.
-const toStatus = (working: boolean, waiting: boolean): CellStatus => {
-  if (waiting) return "waiting";
-  if (working) return "working";
-  return "idle";
-};
 const sessionStatus = computed(() => {
   const m = new Map<string, CellStatus>();
-  for (const s of sessions.value) m.set(s.id, toStatus(s.working, s.waiting));
+  for (const s of sessions.value) m.set(s.id, activityStatus(s.working, s.waiting, s.event));
   return m;
 });
 const statusForSort = computed<Record<number, CellStatus>>(() => {
