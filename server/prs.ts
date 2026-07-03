@@ -2,7 +2,7 @@
 // login is the auth). One `gh pr list` per repo, run in parallel; a repo that errors
 // (missing, no access, gh not installed) yields a per-repo error instead of failing
 // the whole view. The pure normalize/rollup helpers are unit-tested without gh.
-import { spawn } from "node:child_process";
+import { runGh } from "./gh";
 
 export type CiState = "passing" | "failing" | "pending" | "none";
 
@@ -69,27 +69,12 @@ export function normalizePr(raw: unknown): PrItem | null {
 
 const GH_FIELDS = "number,title,author,updatedAt,isDraft,url,reviewDecision,statusCheckRollup";
 
-// The binary ("gh") is a fixed local dev tool spawned from PATH — like git/open
-// elsewhere in the server — with args as argv only (no shell). Passed as a parameter
-// (mirroring worktree-pr.ts) so it isn't a spawn-of-a-string-literal.
-function run(bin: string, args: string[]): Promise<{ ok: boolean; stdout: string; stderr: string }> {
-  return new Promise((resolve) => {
-    const child = spawn(bin, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (c) => (stdout += c.toString()));
-    child.stderr.on("data", (c) => (stderr += c.toString()));
-    child.on("error", () => resolve({ ok: false, stdout: "", stderr: "gh not found (install the GitHub CLI and run `gh auth login`)" }));
-    child.on("close", (code) => resolve({ ok: code === 0, stdout, stderr }));
-  });
-}
-
 export async function listPrsAcrossRepos(repos: string[]): Promise<RepoPrs[]> {
   return Promise.all(
     repos.map(async (repo): Promise<RepoPrs> => {
       // Fetch one MORE than we display so "there are more" is a real observation
       // (rows > PR_LIMIT), never a false positive at exactly PR_LIMIT.
-      const res = await run("gh", ["pr", "list", "--repo", repo, "--state", "open", "--limit", String(PR_LIMIT + 1), "--json", GH_FIELDS]);
+      const res = await runGh(["pr", "list", "--repo", repo, "--state", "open", "--limit", String(PR_LIMIT + 1), "--json", GH_FIELDS]);
       if (!res.ok) return { repo, error: (res.stderr.trim() || "gh pr list failed").slice(0, 300) };
       try {
         const parsed: unknown = JSON.parse(res.stdout);

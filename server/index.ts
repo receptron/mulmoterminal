@@ -17,6 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos } from "./config-routes.js";
 import { listPrsAcrossRepos } from "./prs.js";
+import { listIssuesAcrossRepos } from "./issues.js";
 import { publicDirConfig, dirSoundFile } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
@@ -1062,6 +1063,15 @@ mountConfigRoutes(app, CLAUDE_CWD);
 app.get("/api/prs", async (_req, res) => {
   try {
     res.json({ repos: await listPrsAcrossRepos(getPrRepos()) });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
+// Sibling of /api/prs: the same configured repos' open issues (capped per repo).
+app.get("/api/issues", async (_req, res) => {
+  try {
+    res.json({ repos: await listIssuesAcrossRepos(getPrRepos()) });
   } catch (err) {
     res.status(500).json({ error: String(err) });
   }
