@@ -56,6 +56,11 @@ describe("PrsOverlay", () => {
     expect(w.text()).toContain("approved");
     expect(w.text()).toContain("more open PRs"); // truncation note
     expect(w.text()).toContain("No open PRs"); // octo/empty
+    // Rows are real links (right-click / new-tab / ⌘-click work), not JS buttons.
+    const row = w.get("a.prs-row");
+    expect(row.attributes("href")).toBe("u3");
+    expect(row.attributes("target")).toBe("_blank");
+    expect(row.attributes("rel")).toContain("noopener");
   });
 
   it("lists open issues below the PRs and links to GitHub when truncated", async () => {
@@ -77,6 +82,7 @@ describe("PrsOverlay", () => {
     expect(w.text()).toContain("#42");
     expect(w.text()).toContain("flaky test");
     expect(w.text()).toContain("No open issues"); // octo/quiet
+    expect(w.get("a.prs-row").attributes("href")).toBe("https://github.com/octo/hello/issues/42"); // issue row is a real link
     const seeAll = w.get("a.prs-link");
     expect(seeAll.attributes("href")).toBe("https://github.com/octo/hello/issues");
     expect(seeAll.text()).toContain("see all open issues");

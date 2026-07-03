@@ -90,9 +90,6 @@ function relativeTime(iso: string): string {
 const CI_TITLE: Record<CiState, string> = { passing: "Checks passing", failing: "Checks failing", pending: "Checks running", none: "No checks" };
 const REVIEW_LABEL: Record<string, string> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
 
-function openUrl(url: string): void {
-  window.open(url, "_blank", "noopener,noreferrer");
-}
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === "Escape" && isOpen.value) close();
 }
@@ -123,14 +120,14 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p v-else-if="r.prs && r.prs.length === 0" class="prs-msg prs-empty">No open PRs</p>
           <ul v-else-if="r.prs" class="prs-list">
             <li v-for="pr in r.prs" :key="pr.number">
-              <button type="button" class="prs-row" @click="openUrl(pr.url)">
+              <a class="prs-row" :href="pr.url" target="_blank" rel="noopener noreferrer">
                 <span class="prs-ci" :class="`ci-${pr.ci}`" role="img" :aria-label="CI_TITLE[pr.ci]" :title="CI_TITLE[pr.ci]" />
                 <span class="prs-num">#{{ pr.number }}</span>
                 <span class="prs-name">{{ pr.title }}</span>
                 <span v-if="pr.isDraft" class="prs-tag prs-draft">draft</span>
                 <span v-if="pr.review" class="prs-tag" :class="`rev-${pr.review}`">{{ REVIEW_LABEL[pr.review] ?? pr.review.toLowerCase() }}</span>
                 <span class="prs-meta">{{ pr.author }} · {{ relativeTime(pr.updatedAt) }}</span>
-              </button>
+              </a>
             </li>
           </ul>
           <p v-if="r.truncated" class="prs-msg prs-empty">Showing the first {{ r.prs?.length ?? 0 }} — this repo has more open PRs.</p>
@@ -147,11 +144,11 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
           <p v-else-if="r.issues && r.issues.length === 0" class="prs-msg prs-empty">No open issues</p>
           <ul v-else-if="r.issues" class="prs-list">
             <li v-for="iss in r.issues" :key="iss.number">
-              <button type="button" class="prs-row" @click="openUrl(iss.url)">
+              <a class="prs-row" :href="iss.url" target="_blank" rel="noopener noreferrer">
                 <span class="prs-num">#{{ iss.number }}</span>
                 <span class="prs-name">{{ iss.title }}</span>
                 <span class="prs-meta">{{ iss.author }} · {{ relativeTime(iss.updatedAt) }}</span>
-              </button>
+              </a>
             </li>
           </ul>
           <p v-if="r.truncated" class="prs-msg prs-empty">
@@ -276,9 +273,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   gap: 10px;
   width: 100%;
   text-align: left;
-  border: none;
-  background: transparent;
   color: var(--text-secondary);
+  text-decoration: none;
   cursor: pointer;
   padding: 7px 8px;
   border-radius: 6px;
