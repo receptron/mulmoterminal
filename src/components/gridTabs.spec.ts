@@ -11,6 +11,7 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  launchInCell,
   setSortMode,
   moveCell,
   orderCells,
@@ -166,6 +167,33 @@ describe("runCommand (script command cells)", () => {
   it("switchPage keeps a trailing command cell (only abandons an empty launcher)", () => {
     const after = switchPage(make([...running(9), cmdCell(9)], { page: 1 }), 0);
     expect(after.cells).toHaveLength(10);
+  });
+});
+
+describe("launchInCell (persistent launcher cells)", () => {
+  const L = { index: 1, label: "Shell" };
+
+  it("attaches a launcher + cwd to a launch cell", () => {
+    const s = launchInCell(make([cell(0)]), 0, L, "/proj");
+    expect(s.cells[0].launcher).toEqual(L);
+    expect(s.cells[0].cwd).toBe("/proj");
+    expect(s.cells[0].session).toBeNull(); // id arrives later via setSession
+  });
+  it("counts a launcher cell as running, and it's not a cancellable launch cell", () => {
+    const withLauncher = launchInCell(make([cell(0), cell(1)]), 0, L, "/p");
+    expect(runningCount(withLauncher.cells)).toBe(1);
+    // A trailing launcher cell must not read as an empty (cancellable) launch cell.
+    const s = addCell(make([launchInCell(make([cell(0)]), 0, L, "/p").cells[0]]));
+    expect(s.cells).toHaveLength(2);
+  });
+  it("persists a launcher cell (session + launcher) across parseGridState", () => {
+    const withId = setSession(launchInCell(make([cell(0)]), 0, L, "/p"), 0, U(3));
+    const restored = parseGridState(JSON.stringify(withId));
+    expect(restored?.cells[0]).toMatchObject({ session: U(3), cwd: "/p", launcher: L });
+  });
+  it("drops a malformed persisted launcher to null", () => {
+    const raw = JSON.stringify({ cells: [{ session: U(4), cwd: "/p", launcher: { label: "x" } }], page: 0, sortMode: "manual" });
+    expect(parseGridState(raw)?.cells[0].launcher).toBeNull();
   });
 });
 

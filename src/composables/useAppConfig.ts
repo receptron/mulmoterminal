@@ -1,5 +1,6 @@
 import { ref } from "vue";
 import { presetLabel, type CwdPreset } from "../components/presets";
+import type { Launcher } from "../components/launchers";
 
 // The custom attention-sound file is a SINGLETON ref shared across every
 // useAppConfig() caller — the beep player lives in the single view while the
@@ -11,6 +12,10 @@ const soundFile = ref<string | null>(null);
 // either view) and any future reader share one list; a save in one view is seen by the
 // other instead of each useAppConfig() keeping a divergent copy.
 const prRepos = ref<string[]>([]);
+
+// Cell-launcher commands (shell/codex/…) — SINGLETON so the grid's cell launchers and
+// the settings editor (openable from either view) share one list.
+const launchers = ref<Launcher[]>([]);
 
 // Pre-#163 recent dirs lived in localStorage (the removed useRecentDirs). They are
 // imported once into the server-side preset list on load — see migrateLegacyRecents.
@@ -53,6 +58,7 @@ export function useAppConfig() {
       if (presetsVersion === version) presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
       soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
       prRepos.value = Array.isArray(c.prRepos) ? c.prRepos : [];
+      launchers.value = Array.isArray(c.launchers) ? c.launchers : [];
       await migrateLegacyRecents();
     } catch {
       // the app still works; presets are just unavailable
@@ -182,5 +188,38 @@ export function useAppConfig() {
     }
   }
 
-  return { defaultCwd, home, presets, prRepos, soundFile, saving, error, loadConfig, savePresets, recordPreset, removePreset, saveSound, savePrRepos };
+  // Persist the cell-launcher commands. POSTs only launchers so the other fields are
+  // untouched by the server-side partial update.
+  async function saveLaunchers(next: Launcher[]): Promise<boolean> {
+    try {
+      const res = await fetch("/api/config", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ launchers: next }),
+      });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      launchers.value = (await res.json()).launchers ?? [];
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  return {
+    defaultCwd,
+    home,
+    presets,
+    prRepos,
+    launchers,
+    soundFile,
+    saving,
+    error,
+    loadConfig,
+    savePresets,
+    recordPreset,
+    removePreset,
+    saveSound,
+    savePrRepos,
+    saveLaunchers,
+  };
 }

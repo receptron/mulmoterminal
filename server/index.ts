@@ -15,7 +15,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos } from "./config-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers } from "./config-routes.js";
 import { listPrsAcrossRepos } from "./prs.js";
 import { listIssuesAcrossRepos } from "./issues.js";
 import { publicDirConfig, dirSoundFile } from "./dir-config.js";
@@ -1328,9 +1328,14 @@ const wss = new WebSocketServer({ noServer: true });
 // Command terminals (the grid's Run menu) get their own WS so the plain-command
 // PTY relay stays clear of the session/hook/transcript machinery on /ws.
 const runWss = new WebSocketServer({ noServer: true });
+// Launcher terminals (a plain shell / codex / any configured command) get their own WS
+// too. Unlike /ws/run these are PERSISTENT & reattachable (they share the /ws session
+// lifecycle — ptys map, reattach, reap grace) but carry no Claude hooks/transcript.
+const runLaunchWss = new WebSocketServer({ noServer: true });
 function wssForPath(pathname: string): WebSocketServer | null {
   if (pathname === "/ws") return wss;
   if (pathname === "/ws/run") return runWss;
+  if (pathname === "/ws/launch") return runLaunchWss;
   return null; // e.g. /ws/pubsub — left to socket.io's own upgrade handler
 }
 server.on("upgrade", (req, socket, head) => {
@@ -1644,6 +1649,45 @@ function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
   return term;
 }
 
+// Resolve a launcher by its position in the user's configured list — the browser
+// sends only an INDEX (the config is the allowlist), never a raw command.
+function resolveLauncher(index: number): { label: string; command: string } | null {
+  const list = getLaunchers();
+  return Number.isInteger(index) && index >= 0 && index < list.length ? list[index] : null;
+}
+
+// Spawn a configured launcher command as a PERSISTENT, reattachable PTY that shares
+// the Claude session lifecycle (ptys map, reattach, reap grace) but has NO hooks,
+// transcript, or resume. The command is run via the login shell with `exec` so it
+// becomes the single foreground process ($SHELL, codex, etc.) — env vars in the
+// command (e.g. $SHELL) expand, and the process stays interactive in the PTY.
+function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd: string): PtyEntry {
+  const isWindows = process.platform === "win32";
+  const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
+  const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", `exec ${command}`];
+  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: process.env });
+  console.log(`[pty] spawned launcher (pid=${term.pid}) in ${cwd}: ${command}`);
+
+  const entry: PtyEntry = { term, ws, buffer: "", cwd };
+  ptys.set(sessionId, entry);
+
+  term.onData((data) => {
+    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
+      entry.ws.send(JSON.stringify({ type: "output", data }));
+    }
+  });
+  term.onExit(({ exitCode, signal }) => {
+    console.log(`[pty] launcher exited code=${exitCode} signal=${signal}`);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
+      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
+      entry.ws.close();
+    }
+    reap(sessionId);
+  });
+  return entry;
+}
+
 // browser -> command PTY. Like handleClientFrame but for the session-less command
 // terminal: only input/resize (no terminate/session machinery).
 function handleCommandFrame(term: IPty, raw: RawData) {
@@ -1794,6 +1838,57 @@ runWss.on("connection", (ws, req) => {
       // already exited — nothing to kill
     }
   });
+});
+
+// Send a terminal error to the socket and close it (no reconnect on the client side).
+function closeWithError(ws: WebSocket, message: string): void {
+  if (ws.readyState === ws.OPEN) {
+    ws.send(JSON.stringify({ type: "error", message }));
+    ws.close();
+  }
+}
+
+// Fresh spawn or reattach for a launcher session. Exactly one of `launcher`/`live` is
+// set by the caller's guard; the final throw is unreachable and narrows both.
+function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, launcher: { command: string } | null, cwd: string): PtyEntry {
+  if (launcher) return spawnLauncherPty(sessionId, ws, launcher.command, cwd);
+  if (live) return reattachPty(live, ws, sessionId);
+  throw new Error("no launcher or live pty");
+}
+
+// Launcher terminal (?launcher=<index>&cwd=<dir>, ?session=<id> to reattach): run a
+// configured launch command as a persistent, reattachable PTY. Reuses the /ws session
+// lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
+// and is marked a dev-terminal session so it stays out of the chat sidebar.
+runLaunchWss.on("connection", (ws, req) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const raw = url.searchParams.get("session");
+  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
+  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const indexRaw = url.searchParams.get("launcher");
+  const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
+
+  const reattachId = requested && ptys.has(requested) ? requested : null;
+  const live = reattachId ? ptys.get(reattachId) : undefined;
+  // A live PTY reattaches regardless of the index; only a fresh spawn needs the
+  // launcher resolved (the pty already IS the chosen program on reattach).
+  const launcher = live ? null : resolveLauncher(index);
+  if (!live && !launcher) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
+
+  const sessionId = reattachId ?? randomUUID();
+  markDevTerminalSession(sessionId);
+  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
+
+  let entry: PtyEntry;
+  try {
+    entry = startLaunchEntry(sessionId, ws, live, launcher, cwd);
+  } catch (err) {
+    console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
+    return closeWithError(ws, "Failed to start the launch command.");
+  }
+
+  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
+  ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
 
 // Exit code the launcher (bin/mulmoterminal.js) treats as "port was taken at

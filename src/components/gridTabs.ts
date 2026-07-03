@@ -5,6 +5,12 @@
 // owns a single GridState ref and drives it through these pure transforms;
 // TerminalGrid just renders the active page's slice.
 
+// A configured launch command (shell/codex/…) running in a cell. `index` is its
+// position in the user's launcher list (the server's allowlist); `label` is kept for
+// display and to re-launch after a server restart. Unlike a command, a launcher cell
+// IS persisted (it has a session and reconnects).
+export type CellLauncher = { index: number; label: string };
+
 export interface Cell {
   uid: number;
   session: string | null;
@@ -12,6 +18,8 @@ export interface Cell {
   // A running script.json command (from the cell launcher's "run a script"), with
   // the directory it runs in. Ephemeral — command cells are never persisted.
   command?: { index: number; label: string; cwd: string | null } | null;
+  // A running launcher (shell/codex/custom). Persistent & reattachable like a session.
+  launcher?: CellLauncher | null;
 }
 // How the grid orders its cells. "manual": the user's hand-arranged order (◀▶);
 // "auto": attention-first, recomputed from each cell's live status.
@@ -47,10 +55,10 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export const pageCount = (cellCount: number) => Math.max(1, Math.ceil(cellCount / PAGE_SIZE));
 export const pageSlice = <T>(cells: T[], page: number) => cells.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-// A cell occupies a slot when it runs a Claude session OR a command; only those
-// count toward the cap. A launch cell is empty: no session AND no command.
-const isOccupied = (c: Cell) => c.session !== null || c.command != null;
-const isLaunchCell = (c: Cell | undefined) => !!c && c.session === null && c.command == null;
+// A cell occupies a slot when it runs a Claude session, a command, OR a launcher; only
+// those count toward the cap. A launch cell is empty: no session, command, or launcher.
+const isOccupied = (c: Cell) => c.session !== null || c.command != null || c.launcher != null;
+const isLaunchCell = (c: Cell | undefined) => !!c && c.session === null && c.command == null && c.launcher == null;
 export const runningCount = (cells: Cell[]) => cells.filter(isOccupied).length;
 
 const clampPage = (s: GridState): GridState => ({ ...s, page: Math.min(Math.max(0, Math.floor(s.page)), pageCount(s.cells.length) - 1) });
@@ -94,6 +102,13 @@ export function setCwd(state: GridState, uid: number, cwd: string): GridState {
 // into a command terminal. Ephemeral — command cells aren't persisted.
 export function runCommand(state: GridState, uid: number, command: Cell["command"]): GridState {
   return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, command } : c)) };
+}
+
+// A cell launched a configured program (shell/codex/…): attach the launcher and its
+// directory, turning the launch cell into a persistent launcher terminal. Its session
+// id arrives later from the server (setSession), so it persists and reconnects.
+export function launchInCell(state: GridState, uid: number, launcher: CellLauncher, cwd: string | null): GridState {
+  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, launcher, cwd } : c)) };
 }
 
 // The toolbar Run menu ran a script with no target cell: reuse a trailing empty
@@ -202,6 +217,14 @@ export function switchPage(state: GridState, page: number): GridState {
 
 const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.test(s);
 const asSortMode = (v: unknown): SortMode => (v === "auto" ? "auto" : "manual");
+// Keep a persisted launcher only if well-formed; anything else drops to null so a
+// reloaded cell reconnects as a plain (Claude) session instead of a broken launcher.
+const asLauncher = (v: unknown): CellLauncher | null => {
+  const o = v as CellLauncher | null;
+  return o && typeof o.index === "number" && Number.isInteger(o.index) && o.index >= 0 && typeof o.label === "string"
+    ? { index: o.index, label: o.label }
+    : null;
+};
 // A cell entry is kept if its session/cwd are well-formed; uid is validated only to
 // match the persisted `expanded` (it is renumbered below regardless).
 const isCell = (c: unknown): c is Cell => {
@@ -222,7 +245,7 @@ export function parseGridState(raw: string | null): GridState | null {
       .filter(isCell)
       .filter((c: Cell) => c.session !== null)
       .slice(0, MAX_TERMINALS);
-    const cells: Cell[] = running.map((c: Cell, i: number) => ({ uid: i, session: c.session, cwd: c.cwd }));
+    const cells: Cell[] = running.map((c: Cell, i: number) => ({ uid: i, session: c.session, cwd: c.cwd, launcher: asLauncher(c.launcher) }));
     const expandedIdx = running.findIndex((c: Cell) => c.uid === parsed.expanded);
     const expanded = typeof parsed.expanded === "number" && expandedIdx >= 0 ? expandedIdx : null;
     const page = Number.isSafeInteger(parsed.page) && parsed.page >= 0 ? parsed.page : 0;

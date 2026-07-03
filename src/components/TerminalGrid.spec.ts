@@ -21,11 +21,21 @@ vi.mock("./CommandCell.vue", () => ({
     template: '<div class="stub-command-cell" />',
   },
 }));
+vi.mock("./LauncherCell.vue", () => ({
+  default: {
+    name: "LauncherCell",
+    props: ["uid", "expanded", "launcher", "session", "cwd", "home", "reorderable"],
+    emits: ["toggle-expand", "close", "move", "status", "session"],
+    template: '<div class="stub-launcher-cell" />',
+  },
+}));
 
 const cell = (uid: number, session: string | null = null, cwd: string | null = null): Cell => ({ uid, session, cwd });
 const cmdCell = (uid: number, command: NonNullable<Cell["command"]>): Cell => ({ uid, session: null, cwd: null, command });
 const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: number | null = null, reorderable = false) =>
-  mount(TerminalGrid, { props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], home: "/work", openSessionIds: [], reorderable } });
+  mount(TerminalGrid, {
+    props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], launchers: [], home: "/work", openSessionIds: [], reorderable },
+  });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const commandCellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "CommandCell" });
 

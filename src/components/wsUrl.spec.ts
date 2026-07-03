@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl } from "./wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl } from "./wsUrl";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {
@@ -48,5 +48,28 @@ describe("buildRunWsUrl", () => {
     const url = buildRunWsUrl({ host: "h", secure: true, index: 0 });
     expect(url.startsWith("wss://")).toBe(true);
     expect(new URL(url).searchParams.get("index")).toBe("0");
+  });
+});
+
+describe("buildLaunchWsUrl", () => {
+  it("targets /ws/launch with the launcher index + reattach session", () => {
+    const url = buildLaunchWsUrl({ host: "h", secure: false, sessionId: "abc", cwd: "/work/proj", launcher: 2 });
+    const u = new URL(url);
+    expect(u.pathname).toBe("/ws/launch");
+    expect(u.searchParams.get("launcher")).toBe("2");
+    expect(u.searchParams.get("session")).toBe("abc");
+    expect(u.searchParams.get("cwd")).toBe("/work/proj");
+  });
+
+  it("fresh launch (null id): no session param, still sends the launcher index", () => {
+    const url = buildLaunchWsUrl({ host: "h", secure: false, sessionId: null, launcher: 0 });
+    const q = new URL(url).searchParams;
+    expect(q.has("session")).toBe(false);
+    expect(q.get("launcher")).toBe("0");
+  });
+
+  it("uses wss when secure", () => {
+    const url = buildLaunchWsUrl({ host: "h", secure: true, sessionId: null, launcher: 1 });
+    expect(url.startsWith("wss://")).toBe(true);
   });
 });

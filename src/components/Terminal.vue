@@ -30,6 +30,9 @@ const props = defineProps<{
   cwd?: string | null;
   devTerminal?: boolean;
   command?: { index: number } | null;
+  // A configured launcher (shell/codex/command) — persistent & reattachable, connects
+  // to /ws/launch instead of resuming a Claude session.
+  launcher?: { index: number } | null;
   runMenu?: boolean;
   persistKey?: string | null;
   // Per-directory overrides from <cwd>/.mulmoterminal.json. `dirTheme` pins this
@@ -52,7 +55,13 @@ const emit = defineEmits<{
 // down. Captured once — the key is stable for the component's life.
 const slotKey = props.persistKey ?? `ephemeral-${crypto.randomUUID()}`;
 function currentTarget(): conn.ConnTarget {
-  return { sessionId: props.sessionId, cwd: props.cwd ?? null, devTerminal: !!props.devTerminal, command: props.command ?? null };
+  return {
+    sessionId: props.sessionId,
+    cwd: props.cwd ?? null,
+    devTerminal: !!props.devTerminal,
+    command: props.command ?? null,
+    launcher: props.launcher ?? null,
+  };
 }
 
 const terminalRef = ref<HTMLDivElement>();

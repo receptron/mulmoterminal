@@ -13,6 +13,7 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  launchInCell,
   setSortMode,
   moveCell,
   visibleOrdered,
@@ -111,6 +112,10 @@ const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value,
 const onRun = (uid: number, command: { index: number; label: string; cwd: string | null }) => (state.value = runCommand(state.value, uid, command));
 // A running cell's header Run menu: launch in a spare cell so the session survives.
 const onRunSpare = (command: { index: number; label: string; cwd: string | null }) => (state.value = runScriptInNewCell(state.value, command));
+// The empty cell launcher picked a configured program (shell/codex/…): turn it into a
+// persistent launcher cell. Its session id arrives later via onSession.
+const onLaunch = (uid: number, pick: { index: number; label: string; cwd: string | null }) =>
+  (state.value = launchInCell(state.value, uid, { index: pick.index, label: pick.label }, pick.cwd));
 const onMove = (uid: number, dir: -1 | 1) => (state.value = moveCell(state.value, uid, dir));
 const toggleSortMode = () => (state.value = setSortMode(state.value, state.value.sortMode === "auto" ? "manual" : "auto"));
 const switchTo = (page: number) => (state.value = switchPage(state.value, page));
@@ -124,7 +129,8 @@ onMounted(() => {
 });
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
-const { defaultCwd, home, presets, soundFile, prRepos, loadConfig, recordPreset, removePreset, saveSound, savePrRepos } = useAppConfig();
+const { defaultCwd, home, presets, soundFile, prRepos, launchers, loadConfig, recordPreset, removePreset, saveSound, savePrRepos, saveLaunchers } =
+  useAppConfig();
 const showSettings = ref(false);
 onMounted(loadConfig);
 
@@ -155,6 +161,7 @@ function closeSettings() {
       :cancel-uid="cancelUid"
       :default-cwd="defaultCwd"
       :presets="presets"
+      :launchers="launchers"
       :home="home"
       :reorderable="reorderable"
       :open-session-ids="openSessionIds"
@@ -166,6 +173,7 @@ function closeSettings() {
       @toggle-expand="onToggleExpand"
       @run="onRun"
       @run-spare="onRunSpare"
+      @launch="onLaunch"
       @move="onMove"
       @status="onStatus"
     />
@@ -173,8 +181,10 @@ function closeSettings() {
       v-if="showSettings"
       :sound-file="soundFile"
       :pr-repos="prRepos"
+      :launchers="launchers"
       @update-sound="saveSound"
       @update-repos="savePrRepos"
+      @update-launchers="saveLaunchers"
       @close="closeSettings"
     />
   </div>

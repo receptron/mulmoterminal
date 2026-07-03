@@ -57,7 +57,7 @@ class FakeWebSocket {
 
 import * as conn from "./useTerminalConnections";
 
-const target = (sessionId: string | null) => ({ sessionId, cwd: "/typed", devTerminal: false, command: null });
+const target = (sessionId: string | null) => ({ sessionId, cwd: "/typed", devTerminal: false, command: null, launcher: null });
 
 describe("useTerminalConnections — detached-slot state replay", () => {
   beforeEach(() => {

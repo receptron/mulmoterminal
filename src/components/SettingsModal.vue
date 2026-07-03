@@ -2,11 +2,13 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
+import type { Launcher } from "./launchers";
 
-const props = defineProps<{ soundFile?: string | null; prRepos?: string[] }>();
+const props = defineProps<{ soundFile?: string | null; prRepos?: string[]; launchers?: Launcher[] }>();
 const emit = defineEmits<{
   (e: "update-sound", file: string | null): void;
   (e: "update-repos", repos: string[]): void;
+  (e: "update-launchers", launchers: Launcher[]): void;
   (e: "close"): void;
 }>();
 
@@ -33,6 +35,34 @@ function addRepo() {
 function removeRepo(r: string) {
   repos.value = repos.value.filter((x) => x !== r);
   emit("update-repos", repos.value);
+}
+
+// Cell-launcher commands (label + command). Editable list mirroring the saved value;
+// add/remove emits the new list up (App persists it).
+const launcherList = ref<Launcher[]>([...(props.launchers ?? [])]);
+watch(
+  () => props.launchers,
+  (l) => (launcherList.value = [...(l ?? [])]),
+);
+const newLauncherLabel = ref("");
+const newLauncherCommand = ref("");
+const newLauncherValid = computed(() => {
+  const label = newLauncherLabel.value.trim();
+  const command = newLauncherCommand.value.trim();
+  return !!label && !!command && !launcherList.value.some((l) => l.label === label);
+});
+function addLauncher() {
+  const label = newLauncherLabel.value.trim();
+  const command = newLauncherCommand.value.trim();
+  if (!label || !command || launcherList.value.some((l) => l.label === label)) return;
+  launcherList.value = [...launcherList.value, { label, command }];
+  newLauncherLabel.value = "";
+  newLauncherCommand.value = "";
+  emit("update-launchers", launcherList.value);
+}
+function removeLauncher(label: string) {
+  launcherList.value = launcherList.value.filter((l) => l.label !== label);
+  emit("update-launchers", launcherList.value);
 }
 
 // Custom attention sound, applied immediately (like the theme) — empty => the
@@ -192,6 +222,40 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         <button class="btn" type="button" :disabled="!newRepoValid" @click="addRepo">Add</button>
       </div>
 
+      <h3 class="section-title">Launch commands</h3>
+      <p class="hint">
+        Programs a grid cell can launch besides Claude — a plain shell, <code>codex</code>, any interactive command. They run in the cell's directory as a
+        persistent terminal. Example: <code>Shell</code> → <code>$SHELL</code>, <code>Codex</code> → <code>codex</code>.
+      </p>
+      <ul v-if="launcherList.length" class="repo-list">
+        <li v-for="l in launcherList" :key="l.label" class="repo-item">
+          <span class="repo-name">{{ l.label }}</span>
+          <code class="launcher-cmd">{{ l.command }}</code>
+          <button class="icon-btn" type="button" :title="`Remove ${l.label}`" :aria-label="`Remove ${l.label}`" @click="removeLauncher(l.label)">✕</button>
+        </li>
+      </ul>
+      <div class="sound-row launcher-add">
+        <input
+          v-model="newLauncherLabel"
+          class="field launcher-label"
+          type="text"
+          placeholder="Label"
+          aria-label="Launcher label"
+          spellcheck="false"
+          @keydown.enter="addLauncher"
+        />
+        <input
+          v-model="newLauncherCommand"
+          class="field repo-field"
+          type="text"
+          placeholder="command (e.g. $SHELL)"
+          aria-label="Launcher command"
+          spellcheck="false"
+          @keydown.enter="addLauncher"
+        />
+        <button class="btn" type="button" :disabled="!newLauncherValid" @click="addLauncher">Add</button>
+      </div>
+
       <div class="modal-foot">
         <span class="spacer" />
         <button class="btn btn-primary" @click="emit('close')">Close</button>
@@ -320,6 +384,23 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 .repo-field {
   flex: 1 1 auto;
   font-family: ui-monospace, "JetBrains Mono", monospace;
+}
+.launcher-label {
+  flex: 0 0 30%;
+  min-width: 0;
+}
+.launcher-add {
+  flex-wrap: wrap;
+}
+.launcher-cmd {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .repo-list {
   list-style: none;
