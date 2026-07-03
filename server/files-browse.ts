@@ -37,6 +37,33 @@ export function containedPath(base: string, rel: string): string | null {
   return abs;
 }
 
+function realpathOr(p: string): string {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return p; // doesn't exist yet (a new file being written) — use the lexical path
+  }
+}
+
+// Lexical containment (containedPath) can be defeated by a SYMLINK inside the project
+// that points outside it. This resolves symlinks in the path's existing portion (a
+// not-yet-created write target has none) and confirms the real path still lands within
+// `base`. Returns the real absolute path, or null if it escapes.
+export function realContainedWithin(base: string, absLexical: string): string | null {
+  const root = realpathOr(path.resolve(base));
+  const rest: string[] = [];
+  let existing = absLexical;
+  while (!fs.existsSync(existing)) {
+    rest.unshift(path.basename(existing));
+    const parent = path.dirname(existing);
+    if (parent === existing) break; // reached the filesystem root
+    existing = parent;
+  }
+  const real = rest.length ? path.resolve(realpathOr(existing), ...rest) : realpathOr(existing);
+  if (real !== root && !real.startsWith(root + path.sep)) return null;
+  return real;
+}
+
 // Wrap marked's HTML output in a minimal, self-contained document (served sandboxed).
 export function mdToHtmlDoc(bodyHtml: string, title: string): string {
   const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
@@ -80,10 +107,13 @@ export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string 
   const baseOf = (req: Request) => resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, deps.defaultCwd);
   const relOf = (req: Request) => (typeof req.query.path === "string" ? req.query.path : "");
 
-  // Resolve `path` under the request's project base; 403 if it escapes. Centralises the
-  // containment check so every route (read AND write) shares one gate.
+  // Resolve `path` under the request's project base; 403 if it escapes — lexically OR
+  // through a symlink. Centralises the containment check so every route (read AND write)
+  // shares one gate.
   const contained = (req: Request, res: Response): string | null => {
-    const abs = containedPath(baseOf(req), relOf(req));
+    const base = baseOf(req);
+    const lexical = containedPath(base, relOf(req));
+    const abs = lexical ? realContainedWithin(base, lexical) : null;
     if (!abs) {
       res.status(403).json({ error: "path escapes the project root" });
       return null;
@@ -121,6 +151,10 @@ export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string 
     if (!abs) return;
     let text: string;
     try {
+      const stat = fs.statSync(abs);
+      if (stat.isDirectory()) return res.status(400).json({ error: "not a file" });
+      // Same cap as /text and /write, so a huge file can't be read+parsed by marked.
+      if (stat.size > MAX_EDIT_BYTES) return res.status(413).json({ error: "file too large" });
       text = fs.readFileSync(abs, "utf8");
     } catch {
       return res.status(404).json({ error: "not found" });

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { containedPath, resolveBase, listEntries, mdToHtmlDoc } from "./files-browse";
+import { containedPath, realContainedWithin, resolveBase, listEntries, mdToHtmlDoc } from "./files-browse";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-files-"));
 
@@ -19,6 +19,29 @@ describe("containedPath (write/read containment)", () => {
   });
   it("does not treat a sibling with the same prefix as contained", () => {
     expect(containedPath("/proj/root", "../root-evil/x")).toBeNull();
+  });
+});
+
+describe("realContainedWithin (symlink-safe containment)", () => {
+  it("accepts a real path inside the project (existing and new)", () => {
+    const root = realpathSync(tmp());
+    mkdirSync(path.join(root, "docs"));
+    writeFileSync(path.join(root, "docs", "a.md"), "x");
+    expect(realContainedWithin(root, path.join(root, "docs", "a.md"))).toBe(path.join(root, "docs", "a.md")); // existing
+    expect(realContainedWithin(root, path.join(root, "docs", "new.md"))).toBe(path.join(root, "docs", "new.md")); // not-yet-created write target
+    rmSync(root, { recursive: true, force: true });
+  });
+  it("rejects a symlink inside the project that points outside it (read AND write escape)", () => {
+    const root = realpathSync(tmp());
+    const outside = realpathSync(tmp());
+    writeFileSync(path.join(outside, "secret.txt"), "s");
+    symlinkSync(outside, path.join(root, "link")); // link -> outside dir
+    // lexical containment passes (no `..`), but the real path escapes:
+    expect(containedPath(root, "link/secret.txt")).not.toBeNull();
+    expect(realContainedWithin(root, path.join(root, "link", "secret.txt"))).toBeNull(); // read escape blocked
+    expect(realContainedWithin(root, path.join(root, "link", "new.txt"))).toBeNull(); // write escape blocked
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   });
 });
 
