@@ -2,9 +2,11 @@
 import { ref, computed, onMounted } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
+import LauncherCell from "./LauncherCell.vue";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { CwdPreset } from "./presets";
+import type { Launcher, LaunchPick } from "./launchers";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -20,6 +22,7 @@ const props = defineProps<{
   cancelUid: number | null;
   defaultCwd: string | null;
   presets: CwdPreset[];
+  launchers: Launcher[];
   home: string | null;
   // Manual sort mode: each cell shows ◀▶ to reorder.
   reorderable?: boolean;
@@ -30,6 +33,7 @@ const emit = defineEmits<{
   (e: "close" | "toggle-expand", uid: number): void;
   (e: "run", uid: number, command: { index: number; label: string; cwd: string | null }): void;
   (e: "runSpare", command: { index: number; label: string; cwd: string | null }): void;
+  (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
   // Shared preset list events — uid-less since they mutate the one config list.
@@ -62,6 +66,21 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           @move="(dir) => emit('move', cell.uid, dir)"
           @status="(s) => emit('status', cell.uid, s)"
         />
+        <LauncherCell
+          v-else-if="cell.launcher"
+          :uid="cell.uid"
+          :expanded="cell.uid === expandedUid"
+          :launcher="cell.launcher"
+          :session="cell.session"
+          :cwd="cell.cwd"
+          :home="home"
+          :reorderable="reorderable"
+          @toggle-expand="emit('toggle-expand', cell.uid)"
+          @close="emit('close', cell.uid)"
+          @move="(dir) => emit('move', cell.uid, dir)"
+          @status="(s) => emit('status', cell.uid, s)"
+          @session="(id) => emit('session', cell.uid, id)"
+        />
         <TerminalCell
           v-else
           :uid="cell.uid"
@@ -70,6 +89,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           :initial-cwd="cell.cwd"
           :default-cwd="defaultCwd"
           :presets="presets"
+          :launchers="launchers"
           :home="home"
           :open-session-ids="openSessionIds"
           :cancellable="cell.uid === cancelUid"
@@ -81,6 +101,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           @remove-preset="(path) => emit('remove-preset', path)"
           @run="(cmd) => emit('run', cell.uid, cmd)"
           @run-spare="(cmd) => emit('runSpare', cmd)"
+          @launch="(pick) => emit('launch', cell.uid, pick)"
           @close="emit('close', cell.uid)"
           @move="(dir) => emit('move', cell.uid, dir)"
           @status="(s) => emit('status', cell.uid, s)"

@@ -162,6 +162,8 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | ------------ | ------- |
 | `cwdPresets` | Quick-pick directories offered when launching a terminal. |
 | `soundFile`  | Absolute path to a custom **attention sound** (played when a session needs attention). Empty/unset uses the built-in synthesized chime. |
+| `prRepos`    | `owner/repo` entries whose open PRs/issues the cross-repo **PRs & Issues** view aggregates (via your `gh` login). |
+| `launchers`  | `{ label, command }` entries offered in a grid cell's launcher besides Claude — a plain shell, `codex`, any interactive command. |
 
 **Attention sound.** The default chime is generated with the Web Audio API — **no
 audio file is bundled**, so the npm package stays light and has no media-licensing
@@ -237,6 +239,13 @@ the directory the cell is pointed at** — so a whole workflow lives in one wind
 alongside the Claude sessions. Scripts are **per-directory**: the cell reads the
 `script.json` of whatever directory you select, so different cells can offer
 different projects' scripts.
+
+The same launcher also has an **or launch** row for your configured **launch commands**
+— a plain interactive shell, `codex`, any command — set in Settings (⚙) → **Launch
+commands** as `{ label, command }` (e.g. `Shell` → `$SHELL`, `Codex` → `codex`). Unlike
+a one-shot script, a launcher runs as a **persistent terminal in the cell's directory**:
+it survives grid page switches and reconnects, and its dot shows running vs. exited (it
+has no Claude hooks, so no blocked/done states).
 
 Every running terminal's header also has a **▶ Run ▾** dropdown (next to the
 connection status), in both the single view and each grid cell — but **only when the

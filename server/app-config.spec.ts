@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sanitizeSoundFile, sanitizeRepos, loadAppConfig, saveAppConfig } from "./app-config";
+import { sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, loadAppConfig, saveAppConfig } from "./app-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-appcfg-"));
 
@@ -30,28 +30,65 @@ describe("sanitizeRepos", () => {
   });
 });
 
+describe("sanitizeLaunchers", () => {
+  it("keeps trimmed label+command pairs, drops incomplete/dup, caps count", () => {
+    expect(
+      sanitizeLaunchers([
+        { label: "  Shell ", command: " $SHELL " },
+        { label: "Codex", command: "codex" },
+        { label: "Shell", command: "zsh" }, // dup label — dropped
+        { label: "NoCmd", command: "" }, // no command — dropped
+        { label: "", command: "x" }, // no label — dropped
+        "junk",
+      ]),
+    ).toEqual([
+      { label: "Shell", command: "$SHELL" },
+      { label: "Codex", command: "codex" },
+    ]);
+    expect(sanitizeLaunchers("nope")).toEqual([]);
+    expect(sanitizeLaunchers(undefined)).toEqual([]);
+  });
+  it("caps the number of launchers", () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ label: `L${i}`, command: `c${i}` }));
+    expect(sanitizeLaunchers(many).length).toBeLessThanOrEqual(20);
+  });
+});
+
 describe("loadAppConfig / saveAppConfig", () => {
-  it("round-trips presets + soundFile + prRepos through a file", () => {
+  it("round-trips presets + soundFile + prRepos + launchers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
-    const cfg = { cwdPresets: [{ label: "x", path: "/x" }], soundFile: "/s.wav", prRepos: ["o/r"] };
+    const cfg = { cwdPresets: [{ label: "x", path: "/x" }], soundFile: "/s.wav", prRepos: ["o/r"], launchers: [{ label: "Shell", command: "$SHELL" }] };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
     expect(loadAppConfig(file)).toEqual(cfg);
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("defaults to empty presets + null sound + empty repos for a missing file", () => {
+  it("defaults to empty presets + null sound + empty repos/launchers for a missing file", () => {
     const dir = tmp();
-    expect(loadAppConfig(path.join(dir, "none.json"))).toEqual({ cwdPresets: [], soundFile: null, prRepos: [] });
+    expect(loadAppConfig(path.join(dir, "none.json"))).toEqual({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [] });
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("sanitizes junk presets, a non-string sound, and bad repos on load", () => {
+  it("sanitizes junk presets, a non-string sound, bad repos, and bad launchers on load", () => {
     const dir = tmp();
     const file = path.join(dir, "config.json");
-    writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }, "junk"], soundFile: 5, prRepos: ["o/r", "bad"] }));
-    expect(loadAppConfig(file)).toEqual({ cwdPresets: [{ label: "a", path: "/a" }], soundFile: null, prRepos: ["o/r"] });
+    writeFileSync(
+      file,
+      JSON.stringify({
+        cwdPresets: [{ label: "a", path: "/a" }, "junk"],
+        soundFile: 5,
+        prRepos: ["o/r", "bad"],
+        launchers: [{ label: "S", command: "sh" }, "x"],
+      }),
+    );
+    expect(loadAppConfig(file)).toEqual({
+      cwdPresets: [{ label: "a", path: "/a" }],
+      soundFile: null,
+      prRepos: ["o/r"],
+      launchers: [{ label: "S", command: "sh" }],
+    });
     rmSync(dir, { recursive: true, force: true });
   });
 
@@ -59,15 +96,15 @@ describe("loadAppConfig / saveAppConfig", () => {
     const dir = tmp();
     const file = path.join(dir, "bad.json");
     writeFileSync(file, "{ not json");
-    expect(loadAppConfig(file)).toEqual({ cwdPresets: [], soundFile: null, prRepos: [] });
+    expect(loadAppConfig(file)).toEqual({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [] });
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("preserves the legacy presets-only shape (soundFile / prRepos absent => defaults)", () => {
+  it("preserves the legacy presets-only shape (soundFile / prRepos / launchers absent => defaults)", () => {
     const dir = tmp();
     const file = path.join(dir, "config.json");
     writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }] }));
-    expect(loadAppConfig(file)).toEqual({ cwdPresets: [{ label: "a", path: "/a" }], soundFile: null, prRepos: [] });
+    expect(loadAppConfig(file)).toEqual({ cwdPresets: [{ label: "a", path: "/a" }], soundFile: null, prRepos: [], launchers: [] });
     rmSync(dir, { recursive: true, force: true });
   });
 });

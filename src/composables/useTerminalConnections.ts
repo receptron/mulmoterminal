@@ -19,7 +19,7 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import "@xterm/xterm/css/xterm.css";
-import { buildTerminalWsUrl, buildRunWsUrl } from "../components/wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl } from "../components/wsUrl";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -30,6 +30,9 @@ export interface ConnTarget {
   cwd: string | null;
   devTerminal: boolean;
   command: { index: number } | null;
+  // A configured launcher (shell/codex/command). Unlike `command` this is a PERSISTENT
+  // session — it reconnects on drop and reattaches by session id, like a Claude cell.
+  launcher: { index: number } | null;
 }
 
 // Forwarded to whatever component is currently attached, so the parent's existing
@@ -134,6 +137,15 @@ function scheduleReconnect(c: Conn) {
   }, delay);
 }
 
+// Pick the endpoint for a target: a Run command (ephemeral), a launcher (persistent
+// shell/codex), or a Claude session (default). Kept flat to avoid a nested ternary.
+function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): string {
+  const host = location.host;
+  if (target.command) return buildRunWsUrl({ host, secure, index: target.command.index, cwd: target.cwd });
+  if (target.launcher) return buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
+  return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+}
+
 function connect(c: Conn) {
   if (c.released) return;
   if (c.reconnectTimer) {
@@ -154,9 +166,7 @@ function connect(c: Conn) {
   // same session instead of spawning a fresh one each retry.
   const resumeId = c.knownSessionId ?? c.target.sessionId;
   const secure = location.protocol === "https:";
-  const url = c.target.command
-    ? buildRunWsUrl({ host: location.host, secure, index: c.target.command.index, cwd: c.target.cwd })
-    : buildTerminalWsUrl({ host: location.host, secure, sessionId: resumeId, cwd: c.target.cwd, devTerminal: c.target.devTerminal });
+  const url = connUrl(c.target, resumeId, secure);
   const sock = new WebSocket(url);
   c.ws = sock;
 

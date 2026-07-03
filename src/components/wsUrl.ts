@@ -38,3 +38,23 @@ export function buildRunWsUrl({ host, secure, index, cwd }: RunWsUrlInput): stri
   const proto = secure ? "wss:" : "ws:";
   return `${proto}//${host}/ws/run?${params.toString()}`;
 }
+
+export interface LaunchWsUrlInput {
+  host: string;
+  secure: boolean;
+  sessionId: string | null; // reattach this persistent launcher session; null => fresh
+  cwd?: string | null;
+  launcher: number; // position in the configured launcher list (the server resolves it)
+}
+
+// The launcher-terminal endpoint (a configured shell/codex/command). Persistent &
+// reattachable like /ws: the browser sends the launcher INDEX (config is the allowlist)
+// plus the session id to reattach. On a cold spawn the server resolves the index.
+export function buildLaunchWsUrl({ host, secure, sessionId, cwd, launcher }: LaunchWsUrlInput): string {
+  const params = new URLSearchParams();
+  if (sessionId) params.set("session", sessionId);
+  if (cwd) params.set("cwd", cwd);
+  params.set("launcher", String(launcher));
+  const proto = secure ? "wss:" : "ws:";
+  return `${proto}//${host}/ws/launch?${params.toString()}`;
+}

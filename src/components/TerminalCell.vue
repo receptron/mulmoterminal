@@ -6,6 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import type { CwdPreset } from "./presets";
+import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
@@ -24,6 +25,8 @@ const props = defineProps<{
   initialCwd: string | null;
   defaultCwd: string | null;
   presets: CwdPreset[];
+  // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
+  launchers?: Launcher[];
   home: string | null;
   // Session ids open in other grid cells. Resuming one of them would detach that
   // cell, so the launcher flags such rows and confirms before opening.
@@ -41,6 +44,8 @@ const emit = defineEmits<{
   // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
   // terminal's header menu, which must NOT replace the session — it runs in a new cell.
   (e: "run" | "runSpare", value: { index: number; label: string; cwd: string | null }): void;
+  // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
+  (e: "launch", value: LaunchPick): void;
   // Swap this cell left (-1) or right (+1) in manual sort mode.
   (e: "move", dir: -1 | 1): void;
   // Report live activity up so the grid can attention-sort in auto mode.
@@ -183,6 +188,13 @@ function launchIn(dir: string | null) {
 }
 function launch() {
   launchIn(dirInput.value.trim() || props.defaultCwd);
+}
+
+// Launch a configured program (shell/codex/…) in this cell's chosen dir. The parent
+// turns the empty cell into a persistent launcher cell (index is the server allowlist
+// position); this cell is then replaced by a LauncherCell.
+function launchProgram(index: number, l: Launcher) {
+  emit("launch", { index, label: l.label, cwd: dirInput.value.trim() || props.defaultCwd });
 }
 
 // A preset chip is a one-click action: fill the field and jump straight into a
@@ -953,6 +965,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <span class="cell-launch-caption">or run a script</span>
         <div class="cell-script-list">
           <button v-for="s in scripts" :key="s.index" class="cell-script-item" :title="s.command" @click="runScript(s)">▶ {{ s.label }}</button>
+        </div>
+      </div>
+      <div v-if="launchers && launchers.length" class="cell-scripts">
+        <span class="cell-launch-caption">or launch</span>
+        <div class="cell-script-list">
+          <button v-for="(l, i) in launchers" :key="l.label" class="cell-script-item" :title="l.command" @click="launchProgram(i, l)">⌘ {{ l.label }}</button>
         </div>
       </div>
       <div v-if="resumable.length" class="cell-resume">
