@@ -18,6 +18,7 @@ import { reactive } from "vue";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
+import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl } from "../components/wsUrl";
 
@@ -77,6 +78,27 @@ function setStatus(c: Conn, s: ConnStatus) {
   if (v) v.status = s;
 }
 
+// Claude Code emits OSC 52 with an EMPTY selection (`ESC ] 52 ; ; <base64>`), which
+// the addon's default provider silently drops (it only writes for selection "c").
+// Route the empty (and "c") selection to the system clipboard so the auto-copy lands.
+export const isSystemClipboard = (selection: string): boolean => selection === "" || selection === "c";
+const clipboardProvider: IClipboardProvider = {
+  // OSC 52 clipboard READ is disabled: letting a terminal program read the user's
+  // clipboard (`ESC ] 52 ; <sel> ; ?`) is an exfiltration vector, and nothing here
+  // needs it (paste uses the browser's native Cmd+V). This is write-only.
+  readText() {
+    return "";
+  },
+  async writeText(selection, text) {
+    if (!isSystemClipboard(selection)) return;
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // clipboard blocked (no focus / permission) — best effort
+    }
+  },
+};
+
 function ensure(key: string, target: ConnTarget): Conn {
   const existing = conns.get(key);
   if (existing) {
@@ -91,6 +113,9 @@ function ensure(key: string, target: ConnTarget): Conn {
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
+  // OSC 52 clipboard: Claude Code auto-copies the selection via OSC 52 — without this
+  // addon xterm ignores it, so the copy silently never reaches the browser clipboard.
+  term.loadAddon(new ClipboardAddon(undefined, clipboardProvider));
   const host = document.createElement("div");
   host.style.width = "100%";
   host.style.height = "100%";
