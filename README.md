@@ -121,6 +121,21 @@ SDK; we drive the real interactive CLI and relay its TTY over the WebSocket.
 
 ---
 
+## Session persistence (tmux)
+
+If **`tmux` is installed**, MulmoTerminal runs each Claude session and launcher inside
+a tmux session, so **a server crash or restart doesn't kill your terminals** — the
+processes keep running and reattach when the server comes back (like `screen`/`tmux`).
+A long build, a dev server, or a mid-turn Claude session all survive `node --watch`
+reloads and crashes. It uses its **own** tmux server (`-L mulmoterminal`) and config, so
+it never touches your personal tmux sessions or keybindings.
+
+**No tmux? No problem** — terminals fall back to plain (non-persistent) PTYs, exactly as
+before. An explicit close (a cell's ✕) ends the tmux session; a machine reboot does not
+survive (tmux itself is gone). Command-cell scripts are ephemeral and not persisted.
+
+---
+
 ## Tech stack
 
 | Layer    | Technology |

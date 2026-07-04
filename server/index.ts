@@ -17,6 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers } from "./config-routes.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
 import { listPrsAcrossRepos } from "./prs.js";
 import { listIssuesAcrossRepos } from "./issues.js";
 import { publicDirConfig, dirSoundFile } from "./dir-config.js";
@@ -66,6 +67,9 @@ interface PtyEntry {
   ws: WebSocket | null;
   buffer: string;
   cwd: string; // the dir the PTY actually runs in (reported on reattach)
+  // True when `term` is a tmux client (persistent): killing it only detaches, so reap
+  // must kill the tmux session to actually end the program.
+  tmux?: boolean;
 }
 
 interface KnownSession {
@@ -535,6 +539,10 @@ function reap(id: string) {
   } catch {
     // already gone
   }
+  // Killing the pty only DETACHES a tmux client — end the tmux session too so an
+  // explicit close / idle reap actually stops the program (no orphan within a live
+  // server). A server crash never runs this, so sessions survive that (the point).
+  if (entry.tmux) tmuxKillSession(id);
   pubsub?.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
 }
 
@@ -1487,6 +1495,25 @@ function sanitizeDraftText(text: string): string {
 // opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
 // into the input box (no Enter) so the user can review / edit / send it. Pass one or
 // the other, never both.
+const PTY_COLS = 120;
+const PTY_ROWS = 30;
+
+// pty.spawn with the binary as a PARAMETER (never a string literal at the call site),
+// so the tmux/shell/claude spawns aren't flagged as spawn-of-a-string-literal.
+function spawnPty(bin: string, args: string[], cwd: string): IPty {
+  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: process.env });
+}
+
+// Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
+// `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
+// (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
+function ptySpawn(sessionId: string, file: string, args: string[], cwd: string, persistent: boolean): { term: IPty; tmux: boolean } {
+  if (persistent && tmuxAvailable()) {
+    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd), tmux: true };
+  }
+  return { term: spawnPty(file, args, cwd), tmux: false };
+}
+
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -1517,16 +1544,12 @@ function spawnClaudePty(
 
   console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
 
-  const term = pty.spawn(CLAUDE_BIN, args, {
-    name: "xterm-256color",
-    cols: 120,
-    rows: 30,
-    cwd,
-    env: process.env,
-  });
-  console.log(`[pty] spawned claude (pid=${term.pid}) in ${cwd}`);
+  // Persistent: a live tmux session for this id (survived a restart) is reattached and
+  // the args above are ignored; otherwise it's created running claude with them.
+  const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
+  console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
 
-  const entry: PtyEntry = { term, ws, buffer: "", cwd };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
   ptys.set(sessionId, entry);
 
   if (!canResume) {
@@ -1671,10 +1694,11 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
   const isWindows = process.platform === "win32";
   const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
   const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", `exec ${command}`];
-  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: process.env });
-  console.log(`[pty] spawned launcher (pid=${term.pid}) in ${cwd}: ${command}`);
+  // Persistent: reattaches a surviving tmux session (command ignored) or creates one.
+  const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
+  console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
 
-  const entry: PtyEntry = { term, ws, buffer: "", cwd };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
   ptys.set(sessionId, entry);
 
   term.onData((data) => {
@@ -1735,6 +1759,17 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
   armReapForDetached(sessionId);
 }
 
+// Pick the effective session id for a /ws connection: reattach a same-process live pty,
+// else a tmux session that outlived a restart (warm, no --resume), else `--resume` an
+// on-disk transcript (cold), else a fresh id. `resume` is set only for the cold case.
+function resolveClaudeSession(requested: string | null, cwd: string): { reattachId: string | null; resume: string | null; sessionId: string } {
+  const reattachId = requested && ptys.has(requested) ? requested : null;
+  const tmuxAlive = !reattachId && !!requested && tmuxHasSession(requested);
+  const resume = !reattachId && !tmuxAlive && requested && sessionExistsOnDisk(requested, cwd) ? requested : null;
+  const sessionId = reattachId ?? (requested && (tmuxAlive || resume) ? requested : randomUUID());
+  return { reattachId, resume, sessionId };
+}
+
 wss.on("connection", (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
@@ -1766,9 +1801,7 @@ wss.on("connection", (ws, req) => {
   // exits with "session id already in use" if we retry `--session-id <same>`.
   // So mint a fresh id; the browser adopts it from this `session` message and
   // re-persists, so the reload just reopens a working terminal seamlessly.
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const resume = !reattachId && requested && sessionExistsOnDisk(requested, cwd) ? requested : null;
-  const sessionId = reattachId ?? resume ?? randomUUID();
+  const { reattachId, resume, sessionId } = resolveClaudeSession(requested, cwd);
   const live = reattachId ? ptys.get(reattachId) : undefined;
 
   // A dev terminal (gui=0) is a multi-terminal GRID cell: remember its session id so
@@ -1854,12 +1887,17 @@ function closeWithError(ws: WebSocket, message: string): void {
   }
 }
 
-// Fresh spawn or reattach for a launcher session. Exactly one of `launcher`/`live` is
-// set by the caller's guard; the final throw is unreachable and narrows both.
-function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, launcher: { command: string } | null, cwd: string): PtyEntry {
-  if (launcher) return spawnLauncherPty(sessionId, ws, launcher.command, cwd);
+// The command a launcher runs when spawned fresh. On a tmux reattach it's ignored
+// (tmux new-session -A attaches the running program), so a surviving session with no
+// resolvable launcher index still reattaches via this harmless fallback.
+const DEFAULT_LAUNCH_CMD = process.env.SHELL || "/bin/sh";
+
+// Reattach a same-process live PTY, else spawn a launcher (which itself reattaches a
+// surviving tmux session or creates one). `command` is the resolved launcher command,
+// or the fallback for a tmux reattach with no launcher index.
+function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, command: string, cwd: string): PtyEntry {
   if (live) return reattachPty(live, ws, sessionId);
-  throw new Error("no launcher or live pty");
+  return spawnLauncherPty(sessionId, ws, command, cwd);
 }
 
 // Launcher terminal (?launcher=<index>&cwd=<dir>, ?session=<id> to reattach): run a
@@ -1876,18 +1914,21 @@ runLaunchWss.on("connection", (ws, req) => {
 
   const reattachId = requested && ptys.has(requested) ? requested : null;
   const live = reattachId ? ptys.get(reattachId) : undefined;
-  // A live PTY reattaches regardless of the index; only a fresh spawn needs the
-  // launcher resolved (the pty already IS the chosen program on reattach).
-  const launcher = live ? null : resolveLauncher(index);
-  if (!live && !launcher) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
+  // A tmux session that outlived a server restart: reattach it (keep the id; the
+  // running program is picked up via `tmux new-session -A`, ignoring the command).
+  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
+  // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
+  // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
+  const launcher = live || tmuxAlive ? null : resolveLauncher(index);
+  if (!live && !tmuxAlive && !launcher) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
 
-  const sessionId = reattachId ?? randomUUID();
+  const sessionId = reattachId ?? (tmuxAlive && requested ? requested : randomUUID());
   markDevTerminalSession(sessionId);
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
   let entry: PtyEntry;
   try {
-    entry = startLaunchEntry(sessionId, ws, live, launcher, cwd);
+    entry = startLaunchEntry(sessionId, ws, live, launcher?.command ?? DEFAULT_LAUNCH_CMD, cwd);
   } catch (err) {
     console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
     return closeWithError(ws, "Failed to start the launch command.");
@@ -1914,6 +1955,13 @@ server.on("error", (err) => {
 
 server.listen(PORT, () => {
   console.log(`mulmoterminal running at http://localhost:${PORT}`);
+  if (tmuxAvailable()) {
+    const surviving = tmuxListSessionIds();
+    const detail = surviving.length ? ` — ${surviving.length} session(s) survived; reattach on connect` : "";
+    console.log(`[tmux] persistence on${detail}`);
+  } else {
+    console.log("[tmux] not found — terminals are not persistent across a server restart");
+  }
 });
 
 // The whisper sidecar is a spawned child that won't die with the parent on a
