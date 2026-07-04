@@ -27,6 +27,11 @@ vi.mock("@xterm/addon-web-links", () => ({
     activate() {}
   },
 }));
+vi.mock("@xterm/addon-clipboard", () => ({
+  ClipboardAddon: class {
+    activate() {}
+  },
+}));
 vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
 
 // A WebSocket double the test drives by hand (fire onopen / onmessage when it wants).
@@ -107,5 +112,18 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     conn.attach("cell-race", target(null), second, document.createElement("div"));
     expect(second.onSession).not.toHaveBeenCalled();
     expect(second.onCwd).not.toHaveBeenCalled();
+  });
+});
+
+// Claude Code emits OSC 52 with an EMPTY selection; the clipboard addon's default
+// provider only writes for "c", so the empty case must also route to the clipboard.
+describe("isSystemClipboard", () => {
+  it("routes the empty selection (Claude Code's OSC 52) and explicit 'c' to the clipboard", () => {
+    expect(conn.isSystemClipboard("")).toBe(true);
+    expect(conn.isSystemClipboard("c")).toBe(true);
+  });
+
+  it("ignores primary / select / cut-buffer selections", () => {
+    for (const sel of ["p", "s", "0", "7"]) expect(conn.isSystemClipboard(sel)).toBe(false);
   });
 });
