@@ -276,7 +276,10 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 }
 .modal {
   width: min(560px, 92vw);
-  max-height: 80vh;
+  max-height: 85vh;
+  /* Sections (theme, sound, PR repos, launch commands) can exceed the viewport —
+     scroll inside the modal so the top stays reachable instead of overflowing. */
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   background: var(--bg-base);
@@ -386,11 +389,11 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   font-family: ui-monospace, "JetBrains Mono", monospace;
 }
 .launcher-label {
-  flex: 0 0 30%;
+  flex: 1 1 30%;
   min-width: 0;
 }
-.launcher-add {
-  flex-wrap: wrap;
+.launcher-add .repo-field {
+  min-width: 0; /* let the command field shrink instead of overflowing the row */
 }
 .launcher-cmd {
   flex: 1 1 auto;
