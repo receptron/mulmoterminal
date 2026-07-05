@@ -6,11 +6,19 @@ on:
   pull_request:
     branches: [main, dev_tool]
 
+# Least privilege: every job here only reads the checked-out repo
+# (lint / build / test / pack-and-boot). No pushes, no PR/issue writes.
+permissions:
+  contents: read
+
 jobs:
   lint-and-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Read-only CI; don't persist the token in .git/config (zizmor artipacked).
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -42,6 +50,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Read-only CI; don't persist the token in .git/config (zizmor artipacked).
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -57,7 +68,14 @@ jobs:
       - name: Stub Claude Code CLI
         run: |
           mkdir -p "$HOME/.local/bin"
-          printf '#!/usr/bin/env bash\nif [ "$1" = "--version" ]; then echo "claude 0.0.0 (smoke-stub)"; exit 0; fi\necho "smoke-stub claude started"\nexit 0\n' > "$HOME/.local/bin/claude"
+          # Quoted heredoc (<<'STUB') = pure literal: $1 / $HOME are the STUB's
+          # own runtime references and must reach the file unexpanded.
+          cat > "$HOME/.local/bin/claude" <<'STUB'
+          #!/usr/bin/env bash
+          if [ "$1" = "--version" ]; then echo "claude 0.0.0 (smoke-stub)"; exit 0; fi
+          echo "smoke-stub claude started"
+          exit 0
+          STUB
           chmod +x "$HOME/.local/bin/claude"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 

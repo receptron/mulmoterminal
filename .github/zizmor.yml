@@ -1,0 +1,16 @@
+# zizmor configuration. See https://docs.zizmor.sh/configuration/
+#
+# unpinned-uses: this repo deliberately tag-pins the first-party
+# `actions/*` actions (checkout / setup-node / cache / upload-artifact)
+# rather than SHA-pinning them — official actions, low supply-chain
+# risk, and SHA pins force constant Dependabot churn. So allow a plain
+# ref (tag) pin for `actions/*`, but still require a full hash pin for
+# anything else, so a future third-party / community action can't slip
+# in tag-pinned unnoticed. Revisit if non-first-party actions are
+# introduced. (#1423)
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin
+        "*": hash-pin

@@ -1,0 +1,87 @@
+name: workflow-lint
+
+# Static analysis for the GitHub Actions workflows themselves:
+#   - actionlint: YAML / ${{ }} expression syntax + embedded shellcheck
+#                 on `run:` blocks
+#   - zizmor:     workflow security (template injection, excessive
+#                 permissions, artifact poisoning); complements CodeQL
+#
+# Follows the repo's supply-chain posture (see secret-scan.yml): pull a
+# version-pinned CLI binary and SHA256-verify it rather than depending
+# on a third-party GitHub Action. Refresh VERSION + SHA256 together
+# when bumping (checksums: actionlint ships a checksums.txt; zizmor's
+# is computed from the linux x86_64 tarball).
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+
+permissions:
+  # Least privilege: both tools only read the checked-out workflows.
+  contents: read
+
+jobs:
+  workflow-lint:
+    name: workflow-lint (actionlint + zizmor)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # No git pushes from this job; don't leave the token in
+          # .git/config (zizmor artipacked).
+          persist-credentials: false
+
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          # sha256 of actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz
+          # from the release's actionlint_<v>_checksums.txt.
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          set -euo pipefail
+          ARCHIVE="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "$ARCHIVE" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${ARCHIVE}"
+          echo "${ACTIONLINT_SHA256}  ${ARCHIVE}" | sha256sum -c -
+          sudo tar -xz -C /usr/local/bin -f "$ARCHIVE" actionlint
+          rm -f "$ARCHIVE"
+          actionlint --version
+
+      - name: Run actionlint
+        # Lints every workflow under .github/workflows. Embedded
+        # shellcheck (run: blocks) and pyflakes run automatically when
+        # those tools are on PATH — ubuntu-latest ships shellcheck.
+        run: actionlint -color
+
+      - name: Install zizmor
+        env:
+          ZIZMOR_VERSION: 1.25.2
+          # sha256 of zizmor-x86_64-unknown-linux-gnu.tar.gz computed
+          # from the release tarball (zizmor publishes no checksums
+          # file — recompute on every version bump).
+          ZIZMOR_SHA256: aa1facd105f0d83fe5c55b1adcd9d7417de5d83aa27471f91dc0b66cf3803577
+        run: |
+          set -euo pipefail
+          ARCHIVE="zizmor-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sSfL -o "$ARCHIVE" \
+            "https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/${ARCHIVE}"
+          echo "${ZIZMOR_SHA256}  ${ARCHIVE}" | sha256sum -c -
+          sudo tar -xz -C /usr/local/bin -f "$ARCHIVE" zizmor
+          rm -f "$ARCHIVE"
+          zizmor --version
+
+      - name: Run zizmor
+        # Offline, default ("regular") persona — low false-positive.
+        # .github/zizmor.yml relaxes unpinned-uses for first-party
+        # actions/* (tag pins accepted) while still requiring a hash
+        # pin for any future third-party action. GITHUB_TOKEN lets the
+        # few online audits resolve refs; read-only per the job perms.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --persona=regular .github/workflows

@@ -1,0 +1,13 @@
+# gitleaks fingerprints we deliberately allow.
+#
+# Format: <commit-sha>:<file>:<rule>:<line>
+# Each entry silences exactly that one finding — the same file at a
+# different line, or the same line in a NEW commit, gets re-scanned.
+#
+# This file is ALSO scanned by gitleaks. Do NOT paste a literal
+# secret-shaped string into any rationale comment — gitleaks would
+# flag the rationale itself. Describe the shape, don't reproduce it.
+#
+# Empty today: the full-history scan (see .github/workflows/secret-scan.yml)
+# reports no findings. Add a fingerprint here only for a verified
+# false positive (e.g. a test fixture with a fake token shape).
