@@ -10,7 +10,7 @@
 // Verified in Phase 0 (#202): a sandboxed claude authenticates via the mounted ~/.claude
 // and connects to the host GUI MCP over host.docker.internal.
 import { spawnSync } from "node:child_process";
-import { writeFileSync, rmSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, chmodSync, rmSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -63,9 +63,10 @@ export function dockerAvailable(): boolean {
 // host's ~/.claude.json: it records a `native` install at ~/.local/bin (which doesn't
 // exist in the container, so claude warns "missing or broken"), and mounting it
 // read-write would let the container mutate the user's global config. Instead we mount
-// auth via ~/.claude/.credentials.json (the dir) and a minimal generated config that
-// marks onboarding done and pre-trusts the workspace (so no theme / trust prompts).
-// Under the app's own (user-owned) home, not a world-writable temp dir.
+// auth via ~/.claude (the dir) — overlaid with the live Keychain credential (see
+// writeSandboxCredentials) — plus a minimal generated config that marks onboarding done
+// and pre-trusts the workspace (so no theme / trust prompts). Under the app's own
+// (user-owned) home, not a world-writable temp dir.
 const SANDBOX_DIR = path.join(os.homedir(), ".mulmoterminal", "sandbox");
 export function sandboxClaudeConfigPath(sessionId: string): string {
   return path.join(SANDBOX_DIR, `claude-${sessionId}.json`);
@@ -87,12 +88,42 @@ export function writeSandboxClaudeConfig(sessionId: string, cwd: string): string
   return file;
 }
 
+// The macOS Keychain service Claude Code stores its OAuth credential under. On macOS
+// the LIVE token lives here — NOT in ~/.claude/.credentials.json, which is often absent
+// or stale. The container can't read the Keychain, so we export the current credential
+// to a per-session file and overlay it read-only onto the mounted
+// ~/.claude/.credentials.json (see buildDockerRunArgs). The host's own file is never
+// touched. macOS-only: `security` doesn't exist elsewhere, and the sandbox is
+// darwin-gated anyway.
+const KEYCHAIN_CREDENTIAL_SERVICE = "Claude Code-credentials";
+
+export function sandboxCredentialsPath(sessionId: string): string {
+  return path.join(SANDBOX_DIR, `creds-${sessionId}.json`);
+}
+
+// Export the host's live Claude credential from the macOS Keychain to a 0600 per-session
+// file for the container to mount. Returns the path, or null when the Keychain has no
+// entry (never logged in) or on a non-macOS host — the caller then spawns without the
+// overlay, falling back to whatever ~/.claude/.credentials.json holds.
+export function writeSandboxCredentials(sessionId: string): string | null {
+  if (process.platform !== "darwin") return null;
+  const r = runCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
+  const credential = r.status === 0 ? r.stdout.trim() : "";
+  if (!credential) return null;
+  mkdirSync(SANDBOX_DIR, { recursive: true });
+  const file = sandboxCredentialsPath(sessionId);
+  writeFileSync(file, credential, { mode: 0o600 });
+  chmodSync(file, 0o600); // writeFileSync's mode only applies on creation; enforce it if the file pre-existed
+  return file;
+}
+
 // Best-effort teardown: force-remove the container (killing the `docker run` client
-// alone can leave it behind) and delete the throwaway per-session config. Used before a
-// spawn (clear stale) and on reap.
+// alone can leave it behind) and delete the throwaway per-session config + credential.
+// Used before a spawn (clear stale) and on reap.
 export function cleanupSandbox(sessionId: string): void {
   run("docker", ["rm", "-f", sandboxContainerName(sessionId)]);
   rmSync(sandboxClaudeConfigPath(sessionId), { force: true });
+  rmSync(sandboxCredentialsPath(sessionId), { force: true });
 }
 
 // --- Opt-in host credentials for the sandbox ---
@@ -153,10 +184,17 @@ export function resolveSandboxAuthArgs(): string[] {
 // The `docker run` argv that runs interactive `claude` in the sandbox. The workspace is
 // bind-mounted at its SAME absolute path so claude's transcript encodes identically to
 // the host (~/.claude/projects/<encoded-cwd>) — resume interoperates with host sessions.
-// ~/.claude (dir) is mounted for auth + transcripts; `claudeConfigPath` is the generated
-// per-session ~/.claude.json. `claudeArgs` already have their --settings/--mcp-config
-// URLs rewritten to host.docker.internal by the caller.
-export function buildDockerRunArgs(sessionId: string, claudeArgs: string[], cwd: string, claudeConfigPath: string): string[] {
+// ~/.claude (dir) is mounted for auth + transcripts; `credentialsPath` (when set)
+// overlays the live Keychain credential onto ~/.claude/.credentials.json; `claudeConfigPath`
+// is the generated per-session ~/.claude.json. `claudeArgs` already have their
+// --settings/--mcp-config URLs rewritten to host.docker.internal by the caller.
+export function buildDockerRunArgs(
+  sessionId: string,
+  claudeArgs: string[],
+  cwd: string,
+  claudeConfigPath: string,
+  credentialsPath: string | null = null,
+): string[] {
   const claudeDir = path.join(os.homedir(), ".claude");
   return [
     "run",
@@ -174,6 +212,10 @@ export function buildDockerRunArgs(sessionId: string, claudeArgs: string[], cwd:
     `${cwd}:${cwd}`,
     "-v",
     `${claudeDir}:${CONTAINER_HOME}/.claude`,
+    // Overlay the live Keychain credential over the dir mount's possibly-stale
+    // ~/.claude/.credentials.json — a deeper bind-mount target shadows the file inside
+    // the dir mount. Read-only; the host file is never modified. Absent → no overlay.
+    ...(credentialsPath ? ["-v", `${credentialsPath}:${CONTAINER_HOME}/.claude/.credentials.json:ro`] : []),
     "-v",
     `${claudeConfigPath}:${CONTAINER_HOME}/.claude.json`,
     // Opt-in host credentials (gh / gitconfig / SSH agent) — empty unless env-enabled.

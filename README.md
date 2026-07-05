@@ -146,15 +146,24 @@ app's GUI MCP + activity hooks over `host.docker.internal`. Build the image firs
 
 This **contains** Claude — it can't reach the host filesystem outside the mounts, host
 processes, or arbitrary host ports. It is **not full isolation**: the **workspace** and
-**`~/.claude`** are bind-mounted **read-write** by design (so Claude edits your project
-and stays logged in, and transcripts interoperate with host sessions), so those specific
-paths stay mutable from inside. The sandbox is **non-persistent** (the container is
+**`~/.claude`** are bind-mounted **read-write** by design (so Claude edits your project,
+and transcripts interoperate with host sessions), so those specific paths stay mutable
+from inside. The sandbox is **non-persistent** (the container is
 `--rm`, tied to the session), **opt-in and single-view only** — the grid keeps its host +
 tmux path, and with the flag unset (or Docker unavailable) everything runs on the host
 exactly as before. **macOS only** for now — on Linux (bind-mount uid ownership) and
 Windows (host paths aren't valid Linux container paths) it falls back to the host spawn;
 both are follow-ups. Adding arbitrary user MCP servers to the sandbox is in progress
 (see #202).
+
+**Authentication (macOS).** Claude's live login token lives in the macOS **Keychain**,
+which the container can't read (mounting `~/.claude` alone isn't enough — its
+`.credentials.json` is often absent or stale). On each sandbox spawn MulmoTerminal exports
+the current credential to a per-session `~/.mulmoterminal/sandbox/creds-<id>.json`
+(mode `0600`, removed when the session ends) and mounts it **read-only** over the
+container's `~/.claude/.credentials.json`; your host `~/.claude` is never modified. If
+you've never logged in on the host, run `claude` once first — otherwise the server logs a
+warning and the container shows "Not logged in".
 
 **Host credentials (opt-in).** By default the sandbox has no host credentials. To let the
 sandboxed Claude use `gh`/`git`, set **`SANDBOX_MOUNT_CONFIGS=gh,gitconfig`** — a **fixed

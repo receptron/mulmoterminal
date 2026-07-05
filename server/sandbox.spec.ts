@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -9,6 +9,8 @@ import {
   buildDockerRunArgs,
   writeSandboxClaudeConfig,
   sandboxClaudeConfigPath,
+  sandboxCredentialsPath,
+  cleanupSandbox,
   parseMountConfigNames,
   resolveSandboxAuthArgs,
 } from "./sandbox";
@@ -69,6 +71,39 @@ describe("buildDockerRunArgs", () => {
     expect(args).toContain(`${path.join(os.homedir(), ".claude")}:/home/node/.claude`);
     expect(args).toContain("/cfg/x.json:/home/node/.claude.json"); // the generated config, NOT host ~/.claude.json
     expect(args[args.indexOf("-w") + 1]).toBe("/Users/me/proj");
+  });
+});
+
+describe("sandboxCredentialsPath", () => {
+  it("names a per-session creds file under the sandbox dir", () => {
+    expect(sandboxCredentialsPath("abc-123")).toBe(path.join(os.homedir(), ".mulmoterminal", "sandbox", "creds-abc-123.json"));
+  });
+});
+
+describe("buildDockerRunArgs credential overlay", () => {
+  it("overlays the creds file read-only, AFTER the ~/.claude dir mount so it shadows the stale one", () => {
+    const args = buildDockerRunArgs("sid1", ["--x"], "/Users/me/proj", "/cfg/x.json", "/creds/y.json");
+    expect(args).toContain("/creds/y.json:/home/node/.claude/.credentials.json:ro"); // read-only, host file untouched
+    const dirMount = args.indexOf(`${path.join(os.homedir(), ".claude")}:/home/node/.claude`);
+    const overlay = args.indexOf("/creds/y.json:/home/node/.claude/.credentials.json:ro");
+    expect(dirMount).toBeGreaterThan(-1);
+    expect(overlay).toBeGreaterThan(dirMount); // a deeper target only shadows when mounted after its parent
+  });
+  it("adds NO credential overlay when credentialsPath is omitted/null", () => {
+    const args = buildDockerRunArgs("sid1", ["--x"], "/Users/me/proj", "/cfg/x.json");
+    expect(args.some((a) => a.includes("/.claude/.credentials.json"))).toBe(false);
+  });
+});
+
+describe("cleanupSandbox", () => {
+  it("unlinks the per-session credential file (no leaked token after reap)", () => {
+    const sid = "cleanup-creds-1";
+    const file = sandboxCredentialsPath(sid);
+    mkdirSync(path.dirname(file), { recursive: true });
+    writeFileSync(file, "dummy");
+    expect(existsSync(file)).toBe(true);
+    cleanupSandbox(sid);
+    expect(existsSync(file)).toBe(false);
   });
 });
 

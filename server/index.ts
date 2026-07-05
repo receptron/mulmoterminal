@@ -24,6 +24,7 @@ import {
   dockerAvailable,
   buildDockerRunArgs,
   writeSandboxClaudeConfig,
+  writeSandboxCredentials,
   cleanupSandbox,
   rewriteLoopbackForDocker,
   SANDBOX_HOST,
@@ -1532,6 +1533,20 @@ function ptySpawn(sessionId: string, file: string, args: string[], cwd: string, 
   return { term: spawnPty(file, args, cwd), tmux: false };
 }
 
+// Spawn the single-view session inside a Docker container (the sandbox path). Exports the
+// host's live Keychain credential so the containerized claude is authenticated — without
+// it the container reads a stale/absent ~/.claude/.credentials.json and shows "Not logged in".
+function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string, ws: WebSocket | null): PtyEntry {
+  cleanupSandbox(sessionId); // clear any stale container/config/credential with this name
+  const claudeConfig = writeSandboxClaudeConfig(sessionId, cwd);
+  const credentials = writeSandboxCredentials(sessionId);
+  if (credentials === null)
+    console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
+  const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials), cwd);
+  console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
+  return { term, ws, buffer: "", cwd, sandbox: true };
+}
+
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -1573,11 +1588,7 @@ function spawnClaudePty(
   // a live tmux session for this id (survived a restart) reattaches; else create it.
   let entry: PtyEntry;
   if (sandbox) {
-    cleanupSandbox(sessionId); // clear any stale container/config with this name
-    const claudeConfig = writeSandboxClaudeConfig(sessionId, cwd);
-    const term = spawnPty("docker", buildDockerRunArgs(sessionId, args, cwd, claudeConfig), cwd);
-    console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
-    entry = { term, ws, buffer: "", cwd, sandbox: true };
+    entry = spawnSandboxEntry(sessionId, args, cwd, ws);
   } else {
     const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
     console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
