@@ -439,20 +439,35 @@ describe("record CRUD", () => {
 describe("action routes (seed prompts)", () => {
   const post = (url: string) => fetch(`${base}${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
 
-  it("returns a per-record action's seed prompt + role", async () => {
+  // #210 regression: the seed prompt must embed the <collection_paths> block so the skill
+  // can resolve skillDir/dataPath. Both routes silently dropped it before the fix.
+  const expectCollectionPaths = (prompt: string) => {
+    // The prompt's preamble literally names the tag ("<collection_paths> block carries…")
+    // before the real block, so anchor on the JSON object to skip that prose.
+    const block = prompt.match(/<collection_paths>\s*(\{[\s\S]*?\})\s*<\/collection_paths>/);
+    expect(block).not.toBeNull();
+    const paths = JSON.parse(block?.[1] ?? "{}");
+    expect(paths.slug).toBe("testcol");
+    expect(typeof paths.skillDir).toBe("string");
+    expect(typeof paths.dataPath).toBe("string");
+  };
+
+  it("returns a per-record action's seed prompt + role (with collection paths)", async () => {
     const res = await post("/api/collections/testcol/items/item1/actions/enrich");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { prompt: string; role: string };
     expect(body.role).toBe("general");
     expect(body.prompt).toContain("ENRICH_TEMPLATE");
+    expectCollectionPaths(body.prompt);
   });
 
-  it("returns a collection-level action's seed prompt + role", async () => {
+  it("returns a collection-level action's seed prompt + role (with collection paths)", async () => {
     const res = await post("/api/collections/testcol/actions/audit");
     expect(res.status).toBe(200);
     const body = (await res.json()) as { prompt: string; role: string };
     expect(body.role).toBe("general");
     expect(body.prompt).toContain("AUDIT_TEMPLATE");
+    expectCollectionPaths(body.prompt);
   });
 
   it("404s an unknown action id", async () => {
