@@ -32,4 +32,12 @@ describe("TMUX_CONF_LINES", () => {
   it("enables mouse so the wheel scrolls the program instead of cycling history", () => {
     expect(TMUX_CONF_LINES).toContain("set -g mouse on");
   });
+
+  // Regression: tmux swallows a program's OSC 52 unless set-clipboard is on AND the outer
+  // terminal is known to support it (the Ms override) — else Claude's auto-copy (#206)
+  // never reaches the browser clipboard inside grid terminals.
+  it("forwards OSC 52 to the outer terminal (Claude's auto-copy → browser clipboard)", () => {
+    expect(TMUX_CONF_LINES).toContain("set -g set-clipboard on");
+    expect(TMUX_CONF_LINES.some((l) => l.includes("terminal-overrides") && l.includes("Ms="))).toBe(true);
+  });
 });

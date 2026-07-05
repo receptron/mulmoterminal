@@ -34,13 +34,22 @@ export function tmuxAvailable(): boolean {
   return cachedAvailable;
 }
 
+// The terminfo `Ms` capability (OSC 52 clipboard write). tmux only forwards a program's
+// OSC 52 to the OUTER terminal when it knows the outer terminal supports it — our web
+// xterm does (via the ClipboardAddon, #206), but its terminfo doesn't advertise `Ms`, so
+// we declare it. Without this, tmux swallows Claude Code's auto-copy and it never reaches
+// the browser clipboard. Appended (not set) so tmux's built-in overrides survive.
+const OSC52_MS_OVERRIDE = ",*:Ms=\\E]52;%p1%s;%p2%s\\007";
+
 // Minimal config for our server: no status bar (this is a terminal INSIDE a terminal),
 // instant escape, generous scrollback, follow the latest client's size, never destroy a
-// session just because our client detached (that IS the persistence), and `mouse on`.
-// `mouse on` forwards the wheel to the running program (claude enables mouse tracking)
-// instead of tmux's default alternate-scroll, which turns the wheel into ↑/↓ arrows —
-// inside claude that cycles the input history rather than scrolling (the grid-terminal
-// scroll regression introduced by wrapping each pty in tmux).
+// session just because our client detached (that IS the persistence), plus two fixes for
+// the terminal-in-terminal wrapping:
+//   - `mouse on`: forward the wheel to the program (claude has mouse tracking) instead of
+//     tmux's default alternate-scroll, which turns the wheel into ↑/↓ arrows (cycling
+//     claude's input history rather than scrolling).
+//   - `set-clipboard on` + the `Ms` override: forward OSC 52 clipboard writes to the
+//     outer terminal so Claude's auto-copy reaches the browser clipboard (#206).
 export const TMUX_CONF_LINES: readonly string[] = [
   "set -g status off",
   "set -g escape-time 0",
@@ -48,16 +57,27 @@ export const TMUX_CONF_LINES: readonly string[] = [
   "set -g window-size latest",
   "set -g destroy-unattached off",
   "set -g mouse on",
+  "set -g set-clipboard on",
+  `set -ag terminal-overrides "${OSC52_MS_OVERRIDE}"`,
 ];
+
+// A fresh server sources CONF_FILE via `-f` on its first `new-session`, but a server
+// already running from persisted sessions ignores it — so apply the options that must be
+// live. Idempotent across node restarts: mouse/set-clipboard are plain global sets; the
+// Ms override is appended only when it isn't already present.
+function applyLiveTmuxOptions(): void {
+  tmux(["set", "-g", "mouse", "on"]);
+  tmux(["set", "-g", "set-clipboard", "on"]);
+  if (!tmux(["show", "-g", "terminal-overrides"]).stdout.includes("Ms=")) {
+    tmux(["set", "-ag", "terminal-overrides", OSC52_MS_OVERRIDE]);
+  }
+}
 
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });
     writeFileSync(CONF_FILE, TMUX_CONF_LINES.join("\n") + "\n");
-    // A fresh server sources CONF_FILE via `-f` on its first `new-session`, but a server
-    // already running from persisted sessions ignores it — so apply `mouse` live too.
-    // No-op when no server is up yet (the config file covers that case on first launch).
-    if (tmux(["list-sessions"]).status === 0) tmux(["set", "-g", "mouse", "on"]);
+    if (tmux(["list-sessions"]).status === 0) applyLiveTmuxOptions();
   } catch {
     // non-fatal — tmux falls back to its defaults (a status bar, etc.)
   }
