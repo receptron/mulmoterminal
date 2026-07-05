@@ -35,13 +35,29 @@ export function tmuxAvailable(): boolean {
 }
 
 // Minimal config for our server: no status bar (this is a terminal INSIDE a terminal),
-// instant escape, generous scrollback, follow the latest client's size, and never
-// destroy a session just because our client detached (that IS the persistence).
+// instant escape, generous scrollback, follow the latest client's size, never destroy a
+// session just because our client detached (that IS the persistence), and `mouse on`.
+// `mouse on` forwards the wheel to the running program (claude enables mouse tracking)
+// instead of tmux's default alternate-scroll, which turns the wheel into ↑/↓ arrows —
+// inside claude that cycles the input history rather than scrolling (the grid-terminal
+// scroll regression introduced by wrapping each pty in tmux).
+export const TMUX_CONF_LINES: readonly string[] = [
+  "set -g status off",
+  "set -g escape-time 0",
+  "set -g history-limit 20000",
+  "set -g window-size latest",
+  "set -g destroy-unattached off",
+  "set -g mouse on",
+];
+
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });
-    const conf = ["set -g status off", "set -g escape-time 0", "set -g history-limit 20000", "set -g window-size latest", "set -g destroy-unattached off"];
-    writeFileSync(CONF_FILE, conf.join("\n") + "\n");
+    writeFileSync(CONF_FILE, TMUX_CONF_LINES.join("\n") + "\n");
+    // A fresh server sources CONF_FILE via `-f` on its first `new-session`, but a server
+    // already running from persisted sessions ignores it — so apply `mouse` live too.
+    // No-op when no server is up yet (the config file covers that case on first launch).
+    if (tmux(["list-sessions"]).status === 0) tmux(["set", "-g", "mouse", "on"]);
   } catch {
     // non-fatal — tmux falls back to its defaults (a status bar, etc.)
   }
