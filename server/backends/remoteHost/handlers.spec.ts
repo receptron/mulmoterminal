@@ -9,16 +9,23 @@ import { createRemoteHostHandlers } from "./handlers.js";
 describe("createRemoteHostHandlers", () => {
   let ws: string;
   let spawned: string[];
+  let ingested: string[][];
   let handlers: ReturnType<typeof createRemoteHostHandlers>;
 
   beforeEach(() => {
     ws = mkdtempSync(path.join(tmpdir(), "mt-rh-"));
     spawned = [];
+    ingested = [];
     handlers = createRemoteHostHandlers({
       workspace: ws,
       spawnChat: (message) => {
         spawned.push(message);
         return { chatId: `chat-${spawned.length}` };
+      },
+      // Fake ingest: record the storage ids, echo a saved path per file.
+      ingest: async (storageIds) => {
+        ingested.push(storageIds);
+        return storageIds.map((id) => ({ path: `data/attachments/${id}.jpg`, mimeType: "image/jpeg" }));
       },
     });
   });
@@ -51,8 +58,17 @@ describe("createRemoteHostHandlers", () => {
     expect(spawned).toEqual([]);
   });
 
-  it("startChat rejects attachments (not supported on this host yet)", async () => {
-    await expect(handlers.startChat({ message: "hi", attachments: [{ storage_id: "abc" }] })).rejects.toThrow(/attachments/);
+  it("startChat ingests attachments and references their saved paths in the prompt", async () => {
+    const result = await handlers.startChat({ message: "look at this", attachments: [{ storage_id: "abc" }, { storage_id: "def" }] });
+    expect(ingested).toEqual([["abc", "def"]]);
+    expect(spawned[0]).toContain("look at this");
+    expect(spawned[0]).toContain("data/attachments/abc.jpg");
+    expect(spawned[0]).toContain("data/attachments/def.jpg");
+    expect(result).toEqual({ started: true, chatId: "chat-1" });
+  });
+
+  it("startChat rejects a malformed attachments param without spawning", async () => {
+    await expect(handlers.startChat({ message: "hi", attachments: [{ nope: 1 }] })).rejects.toThrow(/storage_id/);
     expect(spawned).toEqual([]);
   });
 
