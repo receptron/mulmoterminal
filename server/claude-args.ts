@@ -17,7 +17,6 @@ export interface ClaudeArgsInput {
   attachGuiMcp: boolean;
   mcpConfig: string; // GUI MCP config JSON (--mcp-config), used only when attachGuiMcp
   guiMcpTools: string; // comma-joined GUI tool names (--allowedTools), used only when attachGuiMcp
-  initialPrompt?: string;
 }
 
 export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
@@ -26,12 +25,10 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
     guiArgs.push("--mcp-config", input.mcpConfig, "--strict-mcp-config", "--allowedTools", input.guiMcpTools);
   }
 
-  const baseArgs =
-    input.canResume && input.resume !== null
-      ? ["--resume", input.resume, "--settings", input.settings, ...guiArgs]
-      : ["--session-id", input.sessionId, "--settings", input.settings, ...guiArgs];
-
-  // The initial prompt goes last as a positional arg; "--" ends option parsing so a
-  // prompt starting with "-" can't be reinterpreted as a flag.
-  return input.initialPrompt ? [...baseArgs, "--", input.initialPrompt] : baseArgs;
+  // No initial-prompt positional: an auto-run prompt is TYPED into the input box after
+  // claude is ready (see spawnClaudePty), not passed as an arg — a large prompt as a
+  // tmux `new-session` command arg overflows tmux's length limit ("command too long").
+  return input.canResume && input.resume !== null
+    ? ["--resume", input.resume, "--settings", input.settings, ...guiArgs]
+    : ["--session-id", input.sessionId, "--settings", input.settings, ...guiArgs];
 }

@@ -1579,7 +1579,6 @@ function spawnClaudePty(
     // Auto-allow the GUI tools + the user's own configured MCP servers (mcp__<id>), so
     // their tools don't trip a permission prompt on every call.
     guiMcpTools: [GUI_MCP_TOOLS, ...getUserMcpServers().map((s) => `mcp__${s.id}`)].join(","),
-    initialPrompt,
   });
 
   console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
@@ -1606,22 +1605,24 @@ function spawnClaudePty(
     pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
   }
 
-  // A draft is typed into the input box once claude is ready for input. ALL control
-  // bytes are stripped first — C0/C1, including ESC, Ctrl-C, CR/LF and an embedded
-  // bracketed-paste terminator (\e[201~) — so untrusted draft content (collection /
-  // custom-view text) can't inject terminal control sequences that break out of the
-  // paste and submit/interrupt. Only printable text is typed, wrapped in bracketed
-  // paste (\e[200~…\e[201~), with NO trailing Enter, so it can never auto-submit — the
-  // user reviews and presses Enter.
-
-  const draftText = draft ? sanitizeDraftText(draft) : "";
+  // The auto-run prompt (initialPrompt) and the editable draft are both delivered by
+  // TYPING into claude's input box once it's ready — NOT as a `claude` CLI arg, which a
+  // large prompt would overflow tmux's `new-session` command-length limit with ("command
+  // too long", killing the session). ALL control bytes are stripped first — C0/C1,
+  // including ESC, Ctrl-C, CR/LF and an embedded bracketed-paste terminator (\e[201~) —
+  // so untrusted text (collection / custom-view) can't inject sequences that break out
+  // of the paste. It's wrapped in bracketed paste (\e[200~…\e[201~); initialPrompt then
+  // presses Enter to run it, while a draft gets NO Enter so the user reviews + sends.
+  const pendingText = draft ?? initialPrompt;
+  const autoSubmit = draft === undefined && initialPrompt !== undefined;
+  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
   let draftDone = !draftText;
   let draftScan = "";
   const typeDraft = () => {
     if (draftDone) return;
     draftDone = true;
     try {
-      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
+      entry.term.write(`\x1b[200~${draftText}\x1b[201~${autoSubmit ? "\r" : ""}`);
     } catch {
       // pty already gone — nothing to draft into
     }
