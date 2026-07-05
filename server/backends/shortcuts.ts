@@ -69,8 +69,9 @@ function shortcutsFilePath(workspace: string): string {
   return path.join(workspace, "config", "shortcuts.json");
 }
 
-/** Read the pinned shortcuts. Missing / unreadable / malformed → `[]`. */
-async function readShortcuts(workspace: string): Promise<Shortcut[]> {
+/** Read the pinned shortcuts. Missing / unreadable / malformed → `[]`.
+ *  Exported so the remote-host handler can list shortcuts in-process. */
+export async function readShortcuts(workspace: string): Promise<Shortcut[]> {
   let text: string;
   try {
     text = await fs.readFile(shortcutsFilePath(workspace), "utf8");
