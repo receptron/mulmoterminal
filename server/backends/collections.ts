@@ -45,6 +45,10 @@ import {
 import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
 // Curated-registry engine (Discover tab): merged catalog fetch + bundle import.
 import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
+import { normalizeMutate } from "@mulmoclaude/core/remote-view";
+// Mobile custom-view builder — shared with the remote-host channel handlers so
+// the desktop phone-frame preview renders the EXACT artifact the phone receives.
+import { buildRemoteView, mutateRemoteView, remoteViewFailureMessage, mutateRemoteViewFailureMessage } from "./remoteView.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -146,6 +150,15 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode:
   if (result.kind === "conflict")
     return { rejected: { id: itemId, problem: `'${itemId}' already exists — mode "create" refuses overwrite; use "upsert" to update it` } };
   return { rejected: { id: itemId, problem: "write refused: the collection's data dir escapes the workspace" } };
+}
+
+/** HTTP status for a non-ok remote-view mutate (message via
+ *  mutateRemoteViewFailureMessage): 404 for a missing view/record, 403 for a
+ *  policy refusal, 400 otherwise. */
+function mutateStatus(kind: string): number {
+  if (kind === "view-not-found" || kind === "item-not-found") return 404;
+  if (kind === "not-writable" || kind === "delete-not-allowed" || kind === "field-not-editable" || kind === "path-escape") return 403;
+  return 400;
 }
 
 /** Mount the read-side REST surface. Mirrors MulmoClaude's
@@ -492,6 +505,62 @@ export function mountCollectionRoutes(app: Express): void {
       res.type("text/html").send(html);
     } catch (err) {
       log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Serve a mobile (`target: "mobile"`) custom view wrapped into its sandboxed
+  // srcdoc — the desktop phone-frame preview's data source. Same builder as the
+  // remote-host channel's `getRemoteView`, so the preview renders the exact
+  // artifact the phone receives (preview === phone).
+  app.get("/api/collections/:slug/remote-view", async (req: Request<{ slug: string }>, res: Response) => {
+    const { slug } = req.params;
+    const viewId = typeof req.query.id === "string" ? req.query.id : "";
+    const locale = typeof req.query.locale === "string" ? req.query.locale : "";
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${slug}' not found` });
+      return;
+    }
+    try {
+      const result = await buildRemoteView(collection, viewId, locale);
+      if (result.kind !== "ok") {
+        const notFound = result.kind === "view-not-found" || result.kind === "file-missing";
+        res.status(notFound ? 404 : 400).json({ error: remoteViewFailureMessage(result, slug) });
+        return;
+      }
+      res.json({ view: result.view, srcdoc: result.srcdoc, bytes: result.bytes });
+    } catch (err) {
+      log.warn("collections", "remote-view build failed", { slug, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // Apply one update/delete on behalf of a writable mobile view — the desktop
+  // preview's write channel. Same builder + host-side policy as the channel's
+  // `mutateRemoteViewItem`, so a preview mutation runs the exact enforcement the
+  // phone will.
+  app.post("/api/collections/:slug/remote-view/:viewId/mutate", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+    const { slug, viewId } = req.params;
+    const request = normalizeMutate((req.body ?? {}) as { op?: unknown; id?: unknown; patch?: unknown });
+    if (!request) {
+      res.status(400).json({ error: "invalid mutate request — expected { op: 'update'|'delete', id, patch? }" });
+      return;
+    }
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${slug}' not found` });
+      return;
+    }
+    try {
+      const result = await mutateRemoteView(collection, viewId, request);
+      if (result.kind !== "ok") {
+        res.status(mutateStatus(result.kind)).json({ error: mutateRemoteViewFailureMessage(result, slug) });
+        return;
+      }
+      res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
+    } catch (err) {
+      log.warn("collections", "remote-view mutate failed", { slug, viewId, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

@@ -44,6 +44,7 @@ const SCHEMA = {
   views: [
     { id: "v1", file: "views/v1.html", label: "Custom", capabilities: ["read"] },
     { id: "v2", file: "views/v2.html", label: "Editable", capabilities: ["read", "write"] },
+    { id: "phone", file: "views/phone.html", label: "Phone", target: "mobile", editableFields: ["name"] },
   ],
   actions: [{ id: "enrich", label: "Enrich", kind: "chat", role: "general", template: "templates/enrich.md" }],
   collectionActions: [{ id: "audit", label: "Audit", kind: "chat", role: "general", template: "templates/audit.md" }],
@@ -65,6 +66,7 @@ beforeAll(async () => {
   mkdirSync(path.join(ws, "data", "skills", "testcol", "views"), { recursive: true });
   writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v1.html"), "<head></head><body>view</body>");
   writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "v2.html"), "<head></head><body>editable</body>");
+  writeFileSync(path.join(ws, "data", "skills", "testcol", "views", "phone.html"), "<head></head><body>phone-view</body>");
 
   // A singleton collection with a write-capable view, to prove PUT /view-data
   // enforces the singleton invariant (only the fixed id is writable).
@@ -568,5 +570,52 @@ describe("collection / view delete routes", () => {
     expect((await fetch(`${base}/api/collections/testcol/views/v1`, { method: "DELETE" })).status).toBe(403);
     vi.mocked(deleteCustomView).mockResolvedValueOnce({ kind: "not-found", viewId: "v1" } as never);
     expect((await fetch(`${base}/api/collections/testcol/views/v1`, { method: "DELETE" })).status).toBe(404);
+  });
+});
+
+// The desktop phone-frame preview's data source: a target:"mobile" view built
+// host-side into its sandboxed srcdoc, plus its writable-view mutate channel.
+describe("mobile custom views (phone-frame preview)", () => {
+  it("GET /:slug/remote-view builds a mobile view into a sandboxed srcdoc", async () => {
+    const res = await fetch(`${base}/api/collections/testcol/remote-view?id=phone&locale=en`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.view).toMatchObject({ id: "phone", target: "mobile" });
+    expect(body.srcdoc).toContain("phone-view"); // the authored HTML body
+    expect(body.srcdoc).toContain("connect-src 'none'"); // the stricter mobile CSP
+    expect(typeof body.bytes).toBe("number");
+  });
+
+  it("GET /:slug/remote-view refuses a desktop view (400) and 404s an unknown view/collection", async () => {
+    expect((await fetch(`${base}/api/collections/testcol/remote-view?id=v1`)).status).toBe(400); // not target:mobile
+    expect((await fetch(`${base}/api/collections/testcol/remote-view?id=nope`)).status).toBe(404);
+    expect((await fetch(`${base}/api/collections/nope/remote-view?id=phone`)).status).toBe(404);
+  });
+
+  it("POST /:slug/remote-view/:viewId/mutate updates an editable field, forbids a non-editable one", async () => {
+    const ok = await fetch(`${base}/api/collections/testcol/remote-view/phone/mutate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ op: "update", id: "item1", patch: { name: "Renamed" } }),
+    });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).item.name).toBe("Renamed");
+
+    // `status` is not in the view's editableFields → host-side policy refuses it.
+    const forbidden = await fetch(`${base}/api/collections/testcol/remote-view/phone/mutate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ op: "update", id: "item1", patch: { status: "closed" } }),
+    });
+    expect(forbidden.status).toBe(403);
+  });
+
+  it("POST /:slug/remote-view/:viewId/mutate 400s a malformed request", async () => {
+    const res = await fetch(`${base}/api/collections/testcol/remote-view/phone/mutate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ nonsense: true }),
+    });
+    expect(res.status).toBe(400);
   });
 });

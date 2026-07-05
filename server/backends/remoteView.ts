@@ -1,3 +1,8 @@
+// Shared mobile custom-view builder, used by BOTH the remote-host command
+// channel (remoteHost/handlers.ts → the phone) and the desktop collection routes
+// (collections.ts → the phone-frame preview), so both render the identical
+// artifact (preview === phone).
+//
 // Assemble one mobile (`target: "mobile"`) custom view for the remote client:
 // find the view entry, read its HTML, pick its i18n dict for the requested
 // locale, wrap it into the sandboxed srcdoc (CSP + postMessage bootstrap —
