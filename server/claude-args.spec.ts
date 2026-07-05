@@ -52,8 +52,12 @@ describe("buildClaudeArgs", () => {
     expect(args).not.toContain("--resume");
   });
 
-  it("appends the initial prompt as a positional after -- (option terminator)", () => {
-    const args = buildClaudeArgs({ ...base, initialPrompt: "-rf danger" });
-    expect(args.slice(-2)).toEqual(["--", "-rf danger"]);
+  // Regression: an auto-run prompt must NOT be a `-- <prompt>` positional. A large seed
+  // prompt (e.g. a 20KB collection-action prompt) as a tmux `new-session` command arg
+  // overflows tmux's length limit ("command too long", killing the session); it's typed
+  // into the input box after spawn instead. So the argv must never carry a bare `--`.
+  it("never emits a `--` positional (auto-run text is typed in, not passed as an arg)", () => {
+    expect(buildClaudeArgs(base)).not.toContain("--");
+    expect(buildClaudeArgs({ ...base, canResume: true, resume: "44444444-4444-4444-4444-444444444444" })).not.toContain("--");
   });
 });
