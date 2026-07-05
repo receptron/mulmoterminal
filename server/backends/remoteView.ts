@@ -10,11 +10,7 @@
 // Also serves a view's record pages (getItems) and its writable-view mutates,
 // with the same host-side policy enforcement MulmoClaude uses.
 //
-// Ported from MulmoClaude's server/workspace/collections/remoteView.ts. The one
-// difference: MulmoTerminal has no thumbnail store, so image fields are never
-// inlined — they stay as workspace paths (unrenderable on the phone) and count
-// as `omitted`. Swap `noThumbnails` for a real resolver when a thumbnail store
-// lands (the rest of the contract is identical, so the phone client is unchanged).
+// Ported from MulmoClaude's server/workspace/collections/remoteView.ts.
 //
 // Discriminated results (not throws) so the channel handlers can map each
 // failure to an actionable message; factories keep the mapping unit-testable.
@@ -42,10 +38,11 @@ import {
 } from "@mulmoclaude/core/collection/server";
 import type { CollectionCustomView, CollectionItem, CollectionSchema } from "@mulmoclaude/core/collection";
 
-// Resolves a workspace image path to a downscaled `data:` URL, or null when it
-// can't (or won't). MulmoTerminal has no thumbnail store yet, so it never does.
+import { resolveThumbnail } from "./thumbnailStore.js";
+
+// Resolves a workspace image path to a downscaled JPEG `data:` URL, or null when
+// it can't (path escapes the workspace, missing, or undecodable).
 type ThumbnailResolver = (imagePath: string, maxEdge: number) => Promise<string | null>;
-const noThumbnails: ThumbnailResolver = async () => null;
 
 export interface RemoteViewInfo {
   id: string;
@@ -192,7 +189,7 @@ async function updateViaView(
   return { kind: "ok", op: "update", item: item as CollectionItem };
 }
 
-export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem, enrichItems, resolveThumbnail: noThumbnails });
+export const mutateRemoteView = createMutateRemoteView({ readItem, writeItem, deleteItem, enrichItems, resolveThumbnail });
 
 // ── Item pages (getItems) ──
 // A mobile view's record page: derive computed fields → slice/project (the same
@@ -271,7 +268,7 @@ export const createRemoteViewItems =
     return { kind: "ok", page, inlined, omitted };
   };
 
-export const remoteViewItems = createRemoteViewItems({ listItems, enrichItems, resolveThumbnail: noThumbnails });
+export const remoteViewItems = createRemoteViewItems({ listItems, enrichItems, resolveThumbnail });
 
 /** Message per non-ok item-page kind, thrown by the channel handler. */
 export function remoteViewItemsFailureMessage(result: Exclude<RemoteViewItemsResult, { kind: "ok" }>, slug: string): string {
