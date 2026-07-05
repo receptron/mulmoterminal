@@ -31,6 +31,8 @@ import {
   readSkillTemplate,
   buildActionSeedPrompt,
   buildCollectionActionSeedPrompt,
+  promptPathsFor,
+  getWorkspaceRoot,
   toSummary,
   toDetail,
   validateCollectionRecords,
@@ -410,7 +412,10 @@ export function mountCollectionRoutes(app: Express): void {
           res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
           return;
         }
-        res.json({ prompt: buildActionSeedPrompt(record, template), role: action.role });
+        // Pass the collection paths so the seed prompt carries the <collection_paths>
+        // block — the skill template needs skillDir/dataPath to find its files.
+        const paths = promptPathsFor(collection, getWorkspaceRoot());
+        res.json({ prompt: buildActionSeedPrompt(record, template, paths), role: action.role });
       } catch (err) {
         log.warn("collections", "item action seed failed", {
           slug: collection.slug,
@@ -442,7 +447,8 @@ export function mountCollectionRoutes(app: Express): void {
         return;
       }
       const allItems = await listItems(collection.dataDir);
-      res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template), role: action.role });
+      const paths = promptPathsFor(collection, getWorkspaceRoot());
+      res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template, paths), role: action.role });
     } catch (err) {
       log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
