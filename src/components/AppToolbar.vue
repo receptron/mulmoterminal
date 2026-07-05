@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { useRoute } from "vue-router";
 import { router } from "../router";
 import NotificationBell from "./NotificationBell.vue";
+import RemoteHostControl from "./RemoteHostControl.vue";
 import { useShortcuts } from "../composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
@@ -145,6 +146,7 @@ function showPrs(): void {
       </span>
     </nav>
     <NotificationBell class="toolbar-bell" />
+    <RemoteHostControl />
     <button
       type="button"
       class="launcher-btn sound-toggle"

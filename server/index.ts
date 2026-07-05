@@ -51,6 +51,7 @@ import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collec
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
+import { initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
@@ -1138,6 +1139,11 @@ mountWorktreeRoutes(app, { isAllowedOrigin });
 // (the browser hides paths from drag/drop and <input type=file>).
 mountPickFileRoute(app, { isAllowedOrigin });
 
+// POST /api/remote-host/connect|disconnect + GET /status — start/stop the
+// Firestore host loop from the toolbar Connect control. Same-origin guarded like
+// the other local-only routes; the connect idToken is never logged.
+mountRemoteHostRoutes(app, { isAllowedOrigin });
+
 // GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
 // can render its header immediately (live updates then arrive via the "sessions"
 // pub/sub channel). The single view reads activity straight from that channel.
@@ -1319,6 +1325,17 @@ const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden }) => {
   }
 };
 initFeedsBackend({ workspace: CLAUDE_CWD, spawnWorker: feedsSpawnWorker });
+
+// Remote host: let a phone drive MulmoTerminal over the Firestore command
+// channel. startChat reuses spawnClaudePty for a VISIBLE session the user can
+// watch. This only wires the singleton — the toolbar Connect control (which
+// signs in as the user) starts the actual Firestore runner + presence heartbeat.
+const remoteHostSpawnChat = (message: string) => {
+  const sessionId = randomUUID();
+  spawnClaudePty(sessionId, null, null, message);
+  return { chatId: sessionId };
+};
+initRemoteHostBackend({ workspace: CLAUDE_CWD, spawnChat: remoteHostSpawnChat });
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
 // engine host + notifier are configured. Fire-and-forget + non-fatal: a watcher
