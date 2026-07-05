@@ -4,7 +4,8 @@
 // src/composables/collections/uiHost.ts — a leaner host (no router, no vue-i18n host
 // instance, no confirm/notifier stores).
 //
-// Wired: data fetch (detail/list), record CRUD, read-only custom views, actions
+// Wired: data fetch (detail/list), record CRUD, custom views (read-only desktop +
+// read/write mobile phone-frame preview via fetchRemoteView/mutateRemoteView), actions
 // (seed prompt → startChat → a visible chat), favorites (useShortcuts), feed/agent
 // refresh + feed listing (via @mulmoclaude/core/feeds — see server/backends/feeds.ts),
 // collection/feed/view deletion and the Discover registry tab (listRegistry/importRegistry
@@ -12,7 +13,13 @@
 // navigation (useCollectionBrowse — the toolbar + browse overlay).
 // Still stubbed: the notifier.
 import { configureCollectionUi } from "@mulmoclaude/collection-plugin/vue";
-import type { CollectionApiResult, CollectionViewToken, CollectionActionResult } from "@mulmoclaude/collection-plugin/vue";
+import type {
+  CollectionApiResult,
+  CollectionViewToken,
+  CollectionActionResult,
+  CollectionRemoteViewResult,
+  CollectionRemoteViewMutateResult,
+} from "@mulmoclaude/collection-plugin/vue";
 import type {
   CollectionDetailResponse,
   CollectionsListResponse,
@@ -177,6 +184,20 @@ configureCollectionUi({
     }
   },
   buildViewSrcdoc: (html, boot) => buildCustomViewSrcdoc(html, boot),
+
+  // ── mobile custom views (phone-frame preview): a `target: "mobile"` view is
+  //    built HOST-side into its sandboxed srcdoc (server/backends/remoteView.ts,
+  //    shared with the remote-host channel), so the desktop preview renders the
+  //    exact artifact the phone gets. Optional + paired: providing both makes the
+  //    view selector surface mobile views. Image thumbnails aren't inlined (no
+  //    thumbnail store yet) — image fields render as placeholders, like the phone. ──
+  fetchRemoteView: (slug, viewId, locale) =>
+    apiGet<CollectionRemoteViewResult>(
+      `/api/collections/${encodeURIComponent(slug)}/remote-view?id=${encodeURIComponent(viewId)}&locale=${encodeURIComponent(locale)}`,
+    ),
+  mutateRemoteView: (slug, viewId, request) =>
+    apiPost<CollectionRemoteViewMutateResult>(`/api/collections/${encodeURIComponent(slug)}/remote-view/${encodeURIComponent(viewId)}/mutate`, request),
+
   // MulmoTerminal serves no per-view translations — return the documented
   // "no i18n" shape ({ locale: "", dict: {} }) so the iframe's __MC_VIEW.t(key)
   // echoes keys instead of failing.

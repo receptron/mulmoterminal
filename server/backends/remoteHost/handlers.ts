@@ -24,7 +24,7 @@ import {
   remoteViewFailureMessage,
   remoteViewItems,
   remoteViewItemsFailureMessage,
-} from "./remoteView.js";
+} from "../remoteView.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
