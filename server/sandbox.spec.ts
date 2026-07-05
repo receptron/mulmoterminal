@@ -74,6 +74,16 @@ describe("buildDockerRunArgs", () => {
   });
 });
 
+describe("sandbox image shipping", () => {
+  // Regression: the auto-build (ensureSandboxImage) resolves <pkg>/Dockerfile.sandbox, so
+  // it MUST be in the npm package `files` — else installs can't build the image and the
+  // sandbox fails with a cryptic `docker run` error.
+  it("ships Dockerfile.sandbox in the package files", () => {
+    const pkg = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
+    expect(pkg.files).toContain("Dockerfile.sandbox");
+  });
+});
+
 describe("sandboxCredentialsPath", () => {
   it("names a per-session creds file under the sandbox dir", () => {
     expect(sandboxCredentialsPath("abc-123")).toBe(path.join(os.homedir(), ".mulmoterminal", "sandbox", "creds-abc-123.json"));

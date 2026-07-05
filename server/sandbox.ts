@@ -10,7 +10,9 @@
 // Verified in Phase 0 (#202): a sandboxed claude authenticates via the mounted ~/.claude
 // and connects to the host GUI MCP over host.docker.internal.
 import { spawnSync } from "node:child_process";
-import { writeFileSync, chmodSync, rmSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, readFileSync, copyFileSync, chmodSync, rmSync, mkdirSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
 
@@ -50,6 +52,11 @@ function run(bin: string, args: string[]): { status: number | null } {
   return { status: spawnSync(bin, args, { stdio: "ignore" }).status };
 }
 
+// Like run(), but inherits stdio so the user sees the (slow, one-time) image build.
+function runInherit(bin: string, args: string[]): { status: number | null } {
+  return { status: spawnSync(bin, args, { stdio: "inherit" }).status };
+}
+
 // Is Docker usable (daemon reachable)? Only a POSITIVE result is cached — a failed check
 // (e.g. the daemon still starting when the server boots) is retried on the next spawn, so
 // transient unavailability doesn't permanently disable sandboxing until a restart.
@@ -57,6 +64,41 @@ let cachedDockerOk = false;
 export function dockerAvailable(): boolean {
   if (!cachedDockerOk) cachedDockerOk = run("docker", ["info"]).status === 0;
   return cachedDockerOk;
+}
+
+// The Dockerfile shipped with the package (package.json `files`), resolved relative to
+// this module like plugins-registry.ts does: <pkg>/server/sandbox.ts → <pkg>/Dockerfile.sandbox.
+// Works in dev and in an npm install.
+const DOCKERFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "Dockerfile.sandbox");
+// The Dockerfile's sha256 is stored as an image label so a changed Dockerfile rebuilds.
+const IMAGE_SHA_LABEL = "mulmoterminal.dockerfile.sha256";
+
+// Is the sandbox image present locally? The gate checks this so a missing image falls
+// back to the host spawn instead of a cryptic `docker run` failure ("Unable to find image").
+export function sandboxImageExists(): boolean {
+  return run("docker", ["image", "inspect", IMAGE]).status === 0;
+}
+
+function builtImageSha(): string {
+  const r = runCapture("docker", ["image", "inspect", IMAGE, "--format", `{{index .Config.Labels "${IMAGE_SHA_LABEL}"}}`]);
+  return r.status === 0 ? r.stdout.trim() : "";
+}
+
+// Build the sandbox image when it's missing or the Dockerfile changed since the last build.
+// Blocking (~1 min on first build) — call ONCE at startup, never per spawn. Returns whether
+// the image is ready afterwards; a failed build (e.g. offline) leaves the gate to fall back
+// to the host spawn. If the Dockerfile isn't shipped, we can't build — report existing state.
+export function ensureSandboxImage(): boolean {
+  if (!existsSync(DOCKERFILE)) return sandboxImageExists();
+  const sha = createHash("sha256").update(readFileSync(DOCKERFILE)).digest("hex");
+  if (sandboxImageExists() && builtImageSha() === sha) return true;
+  console.log("[sandbox] building the sandbox image (first run / Dockerfile changed — takes ~1 min)...");
+  // Tiny, secret-free build context: the Dockerfile COPYs nothing, so hand docker a dir
+  // holding only it — NOT SANDBOX_DIR, which holds credentials. `--load` for the buildx driver.
+  const ctx = path.join(SANDBOX_DIR, "build");
+  mkdirSync(ctx, { recursive: true });
+  copyFileSync(DOCKERFILE, path.join(ctx, "Dockerfile"));
+  return runInherit("docker", ["build", "-t", IMAGE, "--label", `${IMAGE_SHA_LABEL}=${sha}`, "--load", ctx]).status === 0;
 }
 
 // A per-session ~/.claude.json for the container. We deliberately do NOT mount the

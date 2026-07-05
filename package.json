@@ -24,7 +24,8 @@
     "bin/",
     "dist/",
     "server/",
-    "plugins/"
+    "plugins/",
+    "Dockerfile.sandbox"
   ],
   "engines": {
     "node": ">=22.9"
