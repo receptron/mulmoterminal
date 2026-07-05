@@ -1883,6 +1883,11 @@ wss.on("connection", (ws, req) => {
 
   let entry: PtyEntry;
   try {
+    // A sandbox session's credential is snapshotted at spawn onto its read-only mount. On
+    // reconnect, re-sync it from the Keychain (overwrites the mounted per-session file in
+    // place) so a token that rotated since spawn doesn't leave the reattached session stuck
+    // at "Not logged in".
+    if (live?.sandbox) writeSandboxCredentials(sessionId);
     entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
   } catch (err) {
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
