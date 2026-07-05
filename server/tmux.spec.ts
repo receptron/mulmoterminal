@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tmuxSessionName, tmuxNewSessionArgs } from "./tmux";
+import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES } from "./tmux";
 
 describe("tmuxSessionName", () => {
   it("prefixes the session id", () => {
@@ -23,5 +23,13 @@ describe("tmuxNewSessionArgs", () => {
     const dashdash = args.indexOf("--");
     expect(dashdash).toBeGreaterThan(0);
     expect(args.slice(dashdash + 1)).toEqual(["/bin/zsh", "-lc", "exec codex"]);
+  });
+});
+
+describe("TMUX_CONF_LINES", () => {
+  // Regression: without `mouse on`, tmux's default alternate-scroll turns the wheel into
+  // ↑/↓ arrows inside claude — cycling input history instead of scrolling the terminal.
+  it("enables mouse so the wheel scrolls the program instead of cycling history", () => {
+    expect(TMUX_CONF_LINES).toContain("set -g mouse on");
   });
 });
