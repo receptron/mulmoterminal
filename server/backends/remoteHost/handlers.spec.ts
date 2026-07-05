@@ -25,7 +25,17 @@ describe("createRemoteHostHandlers", () => {
   afterEach(() => rmSync(ws, { recursive: true, force: true }));
 
   it("exposes every expected handler", () => {
-    for (const name of ["listCollections", "getCollection", "listFeeds", "listShortcuts", "listAccountingBooks", "startChat"]) {
+    for (const name of [
+      "listCollections",
+      "getCollection",
+      "listFeeds",
+      "listShortcuts",
+      "listAccountingBooks",
+      "startChat",
+      "getRemoteView",
+      "getRemoteViewItems",
+      "mutateRemoteViewItem",
+    ]) {
       expect(typeof handlers[name]).toBe("function");
     }
   });

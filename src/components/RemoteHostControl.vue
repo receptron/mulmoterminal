@@ -7,7 +7,7 @@
 // starts the Firestore command loop + presence heartbeat. The dropdown shows
 // online/offline + the connected uid and offers Connect / Disconnect. Styling
 // mirrors NotificationBell (dark palette, material-symbols-outlined, dropdown).
-import { onUnmounted, ref, useTemplateRef } from "vue";
+import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 import { auth } from "../config/firebase";
@@ -119,6 +119,11 @@ async function onDisconnect() {
   busy.value = false;
 }
 
+// Fetch once on mount so the toolbar icon reflects the real connection state
+// after a page reload — not the default "disconnected" until the first click.
+onMounted(() => {
+  refreshStatus().catch(() => undefined);
+});
 onUnmounted(close);
 </script>
 

@@ -5,16 +5,26 @@
 // match MulmoClaude's handlers exactly, so one phone client (mulmoserver) drives
 // either host.
 //
-// Phase 1 = read-only capabilities + a text startChat. Mobile custom views
-// (getRemoteView / getRemoteViewItems / mutateRemoteViewItem) and chat image
-// attachments (ingestAttachments) are deferred — see plans/feat-remote-host.md.
+// Covers read-only lists, text startChat, and mobile custom views (getRemoteView
+// / getRemoteViewItems / mutateRemoteViewItem). Still deferred: chat image
+// attachments (ingestAttachments) and view image thumbnails — both need an
+// attachment/thumbnail store this host lacks. See plans/feat-remote-host.md.
 import { discoverCollections, listItems, loadCollection, toDetail, toSummary } from "@mulmoclaude/core/collection/server";
 import { listFeeds, readFeedState } from "@mulmoclaude/core/feeds/server";
+import { normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { listBooks } from "@mulmoclaude/accounting-plugin/server";
 import type { CommandHandlers, JsonObject } from "@mulmoclaude/core/remote-host";
 
 import { readShortcuts } from "../shortcuts.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
+import {
+  buildRemoteView,
+  mutateRemoteView,
+  mutateRemoteViewFailureMessage,
+  remoteViewFailureMessage,
+  remoteViewItems,
+  remoteViewItemsFailureMessage,
+} from "./remoteView.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
@@ -71,6 +81,48 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     listAccountingBooks: async () => {
       const { books } = await listBooks(workspace);
       return { books: books.map((book) => ({ id: book.id, name: book.name })) } as unknown as JsonObject;
+    },
+
+    // One mobile custom view, wrapped host-side into its sandboxed srcdoc (CSP +
+    // postMessage bootstrap) — the phone renders the artifact verbatim.
+    getRemoteView: async (params: JsonObject) => {
+      const slug = String(params.slug ?? "");
+      const viewId = String(params.viewId ?? "");
+      const locale = typeof params.locale === "string" ? params.locale : "";
+      const collection = await loadCollection(slug);
+      if (!collection) throw new Error(`collection '${slug}' not found`);
+      const result = await buildRemoteView(collection, viewId, locale);
+      if (result.kind !== "ok") throw new Error(remoteViewFailureMessage(result, slug));
+      return { view: result.view, srcdoc: result.srcdoc, bytes: result.bytes } as unknown as JsonObject;
+    },
+
+    // One page of a mobile view's records, projected to the view's fields. Image
+    // fields are NOT inlined on this host yet (no thumbnail store) — they come
+    // back as workspace paths (unrenderable on the phone) and count as `omitted`.
+    getRemoteViewItems: async (params: JsonObject) => {
+      const slug = String(params.slug ?? "");
+      const viewId = String(params.viewId ?? "");
+      const request = { offset: clampOffset(params.offset), limit: clampLimit(params.limit), fields: normalizeFields(params.fields) };
+      const collection = await loadCollection(slug);
+      if (!collection) throw new Error(`collection '${slug}' not found`);
+      const result = await remoteViewItems(collection, viewId, request);
+      if (result.kind !== "ok") throw new Error(remoteViewItemsFailureMessage(result, slug));
+      return { page: result.page, inlined: result.inlined, omitted: result.omitted } as unknown as JsonObject;
+    },
+
+    // Apply one update/delete requested by a writable mobile view, authorized by
+    // that view's declared surface (editableFields / allowDelete) and enforced
+    // HOST-side — the sandboxed view is never trusted.
+    mutateRemoteViewItem: async (params: JsonObject) => {
+      const slug = String(params.slug ?? "");
+      const viewId = String(params.viewId ?? "");
+      const request = normalizeMutate({ op: params.op, id: params.id, patch: params.patch });
+      if (!request) throw new Error("invalid mutate request — expected { op: 'update'|'delete', id, patch? }");
+      const collection = await loadCollection(slug);
+      if (!collection) throw new Error(`collection '${slug}' not found`);
+      const result = await mutateRemoteView(collection, viewId, request);
+      if (result.kind !== "ok") throw new Error(mutateRemoteViewFailureMessage(result, slug));
+      return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
     },
 
     // Start a visible chat from the phone, seeded verbatim with `message`. This
