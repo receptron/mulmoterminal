@@ -22,6 +22,8 @@ import {
   sandboxEnabled,
   sandboxPlatformSupported,
   dockerAvailable,
+  sandboxImageExists,
+  ensureSandboxImage,
   buildDockerRunArgs,
   writeSandboxClaudeConfig,
   writeSandboxCredentials,
@@ -1565,7 +1567,7 @@ function spawnClaudePty(
   // Sandbox only the SINGLE-VIEW interactive session: attachGuiMcp=true excludes grid
   // dev terminals (?gui=0), and ws!==null excludes hidden background/translation workers.
   // Falls back to the host spawn if the Docker daemon isn't reachable.
-  const sandbox = sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && ws !== null && dockerAvailable();
+  const sandbox = sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && ws !== null && dockerAvailable() && sandboxImageExists();
   const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
   const args = buildClaudeArgs({
     sessionId,
@@ -2010,11 +2012,13 @@ server.listen(PORT, () => {
   if (sandboxEnabled()) {
     if (!sandboxPlatformSupported()) {
       console.log("[sandbox] MULMOTERMINAL_SANDBOX set but only supported on macOS for now — using host spawn");
+    } else if (!dockerAvailable()) {
+      console.log("[sandbox] MULMOTERMINAL_SANDBOX set but Docker daemon unreachable — using host spawn");
+    } else if (ensureSandboxImage()) {
+      console.log("[sandbox] on — single-view Claude runs in a Docker container");
     } else {
       console.log(
-        dockerAvailable()
-          ? "[sandbox] on — single-view Claude runs in a Docker container"
-          : "[sandbox] MULMOTERMINAL_SANDBOX set but Docker daemon unreachable — using host spawn",
+        "[sandbox] sandbox image unavailable (build failed?) — using host spawn. Build it with: docker build -f Dockerfile.sandbox -t mulmoterminal-sandbox .",
       );
     }
   }

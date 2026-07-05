@@ -140,9 +140,11 @@ survive (tmux itself is gone). Command-cell scripts are ephemeral and not persis
 
 Set **`MULMOTERMINAL_SANDBOX=1`** (and have Docker running) to run the **single-view**
 Claude session inside a container instead of on the host, while Claude still reaches the
-app's GUI MCP + activity hooks over `host.docker.internal`. Build the image first:
-`docker build -f Dockerfile.sandbox -t mulmoterminal-sandbox .` (override the name with
-`MULMOTERMINAL_SANDBOX_IMAGE`).
+app's GUI MCP + activity hooks over `host.docker.internal`. The `mulmoterminal-sandbox`
+image is **built automatically** on first launch from the shipped `Dockerfile.sandbox`
+(~1 min, once; rebuilt only when that file changes). Override the name with
+`MULMOTERMINAL_SANDBOX_IMAGE`. If the image can't be built (e.g. Docker down), the session
+falls back to the host spawn — no cryptic failure.
 
 This **contains** Claude — it can't reach the host filesystem outside the mounts, host
 processes, or arbitrary host ports. It is **not full isolation**: the **workspace** and
