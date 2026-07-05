@@ -94,6 +94,9 @@ describe("parseMountConfigNames (credentials allowlist)", () => {
   it("collapses duplicate names (no duplicate -v mount → no docker error)", () => {
     expect(parseMountConfigNames("gh,gh,gitconfig,gh")).toEqual(["gh", "gitconfig"]);
   });
+  it("rejects prototype-chain keys (own-properties only)", () => {
+    expect(parseMountConfigNames("__proto__,constructor,toString,hasOwnProperty,gh")).toEqual(["gh"]);
+  });
 });
 
 describe("resolveSandboxAuthArgs (opt-in, env-gated)", () => {

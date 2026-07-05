@@ -109,7 +109,9 @@ export function parseMountConfigNames(csv: string | undefined): string[] {
   const names = (csv ?? "")
     .split(",")
     .map((s) => s.trim())
-    .filter((s) => s in CONFIG_MOUNTS);
+    // Object.hasOwn, not `in`: `in` would accept prototype keys (__proto__, constructor,
+    // toString) whose CONFIG_MOUNTS[name] has no .host() → a startup crash from env input.
+    .filter((s) => Object.hasOwn(CONFIG_MOUNTS, s));
   return [...new Set(names)];
 }
 
