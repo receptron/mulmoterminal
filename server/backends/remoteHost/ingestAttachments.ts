@@ -37,32 +37,42 @@ export interface IngestDeps {
   deleteObject: (storagePath: string) => Promise<void>;
 }
 
-// storage_ids -> path-only Attachments, in order. Rejects the whole batch on the
-// first failure to get bytes INTO the workspace (host not signed in, malformed
-// id, or a download/save that fails): the remote already uploaded and is waiting,
-// so a surfaced error beats silently starting a chat with a missing file. The
-// Storage delete is best-effort — the bytes are already safe in the workspace, so
-// a failed delete only logs and leaves an orphan for a Storage TTL sweep.
+// storage_ids -> path-only Attachments, in order. Two phases:
+//
+//  1. Fetch + save EVERY attachment into the workspace. Rejects the whole batch
+//     on the first hard failure (host not signed in, malformed id, or a
+//     download/save that fails) — WITHOUT deleting any staged object. So a remote
+//     retry with the same storage_ids still finds every upload: earlier files
+//     aren't reaped just because a later one failed.
+//  2. Only once all bytes are safely in the workspace, best-effort delete the
+//     staged objects. A failed delete only logs and leaves an orphan for a
+//     Storage TTL sweep — it never drops an already-ingested attachment.
 export const createIngestAttachments =
   (deps: IngestDeps) =>
   async (storageIds: string[]): Promise<Attachment[]> => {
     if (storageIds.length === 0) return [];
     const uid = deps.uid();
     if (!uid) throw new Error("remote host is not signed in");
-    const attachments: Attachment[] = [];
+
+    // Phase 1 — fetch + save all. A failure here throws before any delete.
+    const staged: Array<{ storagePath: string; attachment: Attachment }> = [];
     for (const storageId of storageIds) {
       if (!STORAGE_ID_RE.test(storageId)) throw new Error(`invalid storage_id: ${storageId}`);
       const storagePath = `users/${uid}/uploads/${storageId}`;
       const { base64, contentType } = await deps.fetchObject(storagePath);
       const saved = await deps.saveAttachment(base64, contentType);
+      staged.push({ storagePath, attachment: { path: saved.relativePath, mimeType: saved.mimeType } });
+    }
+
+    // Phase 2 — every file is now in the workspace; best-effort clean up staging.
+    for (const { storagePath } of staged) {
       try {
         await deps.deleteObject(storagePath);
       } catch (error) {
         console.warn("[remote-host] failed to delete staged upload after ingest; leaving orphan for TTL sweep", storagePath, String(error));
       }
-      attachments.push({ path: saved.relativePath, mimeType: saved.mimeType });
     }
-    return attachments;
+    return staged.map((entry) => entry.attachment);
   };
 
 // Wire the real Firebase-Storage deps to createIngestAttachments. `getBytes`

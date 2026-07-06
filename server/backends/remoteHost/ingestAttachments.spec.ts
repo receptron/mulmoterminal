@@ -60,6 +60,24 @@ describe("createIngestAttachments", () => {
     await expect(ingest(["a/b"])).rejects.toThrow(/invalid storage_id/);
   });
 
+  it("deletes NO staged object when a later attachment fails (a same-ids retry stays possible)", async () => {
+    const deleted: string[] = [];
+    let call = 0;
+    const ingest = createIngestAttachments({
+      ...baseDeps(),
+      fetchObject: async () => {
+        call += 1;
+        if (call === 2) throw new Error("fetch b failed");
+        return { base64: "AAAA", contentType: "image/jpeg" };
+      },
+      deleteObject: async (storagePath) => {
+        deleted.push(storagePath);
+      },
+    });
+    await expect(ingest(["a1", "b2"])).rejects.toThrow(/fetch b failed/);
+    expect(deleted).toEqual([]); // a1 was saved but not reaped → the remote can retry with the same ids
+  });
+
   it("tolerates a failed staging delete — the file is already ingested", async () => {
     const ingest = createIngestAttachments({
       ...baseDeps(),
