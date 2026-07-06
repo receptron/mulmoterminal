@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { ref, type Ref } from "vue";
 import { presetLabel, type CwdPreset } from "../components/presets";
 import type { Launcher } from "../components/launchers";
 import type { UserMcpServer } from "../components/userMcp";
@@ -37,6 +37,116 @@ function readLegacyRecents(): string[] {
   }
 }
 
+// POST a single config field as a partial update; the server keeps the other fields, so
+// this never clobbers them. Returns the server's echoed value for that field (or
+// `{ ok: false }` on failure) so each caller can update just its own singleton ref.
+async function postConfigField<T>(field: string, value: unknown): Promise<{ ok: true; value: T } | { ok: false }> {
+  try {
+    const res = await fetch("/api/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ [field]: value }) });
+    if (!res.ok) return { ok: false };
+    const body: Record<string, unknown> = await res.json();
+    return { ok: true, value: body[field] as T };
+  } catch {
+    return { ok: false };
+  }
+}
+
+// The record/remove/migrate preset mutations. Extracted so useAppConfig stays small; they
+// all funnel through the caller's `savePresets` (which owns the presetsVersion coordination
+// with loadConfig). Each preset write POSTs the whole array, so concurrent record/remove
+// calls (two grid cells launching at once) must not each derive `next` from the same stale
+// snapshot — the later POST would clobber the earlier one (last-write-wins, dropping a
+// just-launched dir). `serialize` runs the writes in order so every mutation reads the
+// freshly-saved list before computing its own.
+function createPresetMutations(presets: Ref<CwdPreset[]>, savePresets: (next: CwdPreset[]) => Promise<boolean>) {
+  let presetWrite: Promise<unknown> = Promise.resolve();
+  function serialize(mutate: () => Promise<void>): Promise<void> {
+    const run = presetWrite.then(mutate, mutate);
+    presetWrite = run.then(
+      () => {},
+      () => {},
+    );
+    return run;
+  }
+
+  // Auto-add the dir the user just launched in, so it becomes a one-click chip, and move it
+  // to the FRONT (most-recently-used) on every launch so the list reflects launch order. A
+  // re-launched dir keeps its existing (possibly manual) label; a new dir is prepended with
+  // its basename. Already at the front → no write. No cap: the user prunes the list with the
+  // chip's ✕. Called with the server-confirmed (effective) cwd so we only remember dirs that
+  // actually ran.
+  function recordPreset(path: string | null): Promise<void> {
+    if (!path) return Promise.resolve();
+    return serialize(async () => {
+      if (presets.value[0]?.path === path) return; // already most-recent — nothing to reorder
+      const existing = presets.value.find((p) => p.path === path);
+      const entry = existing ?? { label: presetLabel(path), path };
+      await savePresets([entry, ...presets.value.filter((p) => p.path !== path)]);
+    });
+  }
+
+  // Drop one preset (the chip's ✕). No-op when the path isn't present.
+  function removePreset(path: string): Promise<void> {
+    return serialize(async () => {
+      if (!presets.value.some((p) => p.path === path)) return;
+      await savePresets(presets.value.filter((p) => p.path !== path));
+    });
+  }
+
+  // One-time import of the pre-#163 localStorage recents so upgrading users keep their recent
+  // dirs as chips. New paths are prepended (most-recent first) so the last-used dir stays at
+  // the front — consistent with the MRU ordering; their basename is the label. The legacy key
+  // is cleared on success so a chip the user later deletes can't reappear. Dedup keeps it
+  // harmless if it runs twice.
+  async function migrateLegacyRecents(): Promise<void> {
+    const legacy = readLegacyRecents();
+    if (!legacy.length) return;
+    const known = new Set(presets.value.map((p) => p.path));
+    const additions = legacy.filter((path) => !known.has(path)).map((path) => ({ label: presetLabel(path), path }));
+    let saved = true;
+    if (additions.length) {
+      await serialize(async () => {
+        saved = await savePresets([...additions, ...presets.value]);
+      });
+    }
+    if (!saved) return; // keep the key so the import retries on the next load
+    try {
+      localStorage.removeItem(LEGACY_RECENTS_KEY);
+    } catch {
+      // storage blocked — dedup makes a retry harmless
+    }
+  }
+
+  return { recordPreset, removePreset, migrateLegacyRecents };
+}
+
+// The single-field savers each persist ONE config field and update its SINGLETON ref, so
+// they're module-level (no per-composable state) — useAppConfig just re-exports them.
+// Persist just the custom attention sound (a file path, or null to use the chime).
+async function saveSound(file: string | null): Promise<boolean> {
+  const r = await postConfigField<unknown>("soundFile", file);
+  if (r.ok) soundFile.value = typeof r.value === "string" ? r.value : null;
+  return r.ok;
+}
+// Persist the cross-repo PR list's repos (partial update, other fields untouched).
+async function savePrRepos(next: string[]): Promise<boolean> {
+  const r = await postConfigField<string[]>("prRepos", next);
+  if (r.ok) prRepos.value = r.value ?? [];
+  return r.ok;
+}
+// Persist the cell-launcher commands (partial update).
+async function saveLaunchers(next: Launcher[]): Promise<boolean> {
+  const r = await postConfigField<Launcher[]>("launchers", next);
+  if (r.ok) launchers.value = r.value ?? [];
+  return r.ok;
+}
+// Persist the user MCP servers (partial update).
+async function saveUserMcpServers(next: UserMcpServer[]): Promise<boolean> {
+  const r = await postConfigField<UserMcpServer[]>("userMcpServers", next);
+  if (r.ok) userMcpServers.value = r.value ?? [];
+  return r.ok;
+}
+
 // Server config (default workspace dir, home, directory presets, custom sound)
 // shared by both the single view and the grid view so each can open the settings
 // modal without duplicating the fetch/save logic.
@@ -51,6 +161,27 @@ export function useAppConfig() {
   // dir the user launched before the initial /api/config resolves would be dropped by
   // the slower, stale GET snapshot.
   let presetsVersion = 0;
+
+  // Persist the directory presets. Posts only cwdPresets — the server keeps the other
+  // fields, so this never clobbers them. Returns whether the save succeeded.
+  async function savePresets(next: CwdPreset[]): Promise<boolean> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const res = await fetch("/api/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwdPresets: next }) });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      presets.value = (await res.json()).cwdPresets ?? [];
+      presetsVersion++; // mark local state as newer than any in-flight loadConfig GET
+      return true;
+    } catch {
+      error.value = "Couldn't save presets. Check the server and try again.";
+      return false;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  const { recordPreset, removePreset, migrateLegacyRecents } = createPresetMutations(presets, savePresets);
 
   async function loadConfig() {
     const version = presetsVersion;
@@ -68,162 +199,6 @@ export function useAppConfig() {
       await migrateLegacyRecents();
     } catch {
       // the app still works; presets are just unavailable
-    }
-  }
-
-  // Persist the directory presets. Posts only cwdPresets — the server keeps the
-  // other fields (the sound), so this never clobbers it. Returns whether the save
-  // succeeded.
-  async function savePresets(next: CwdPreset[]): Promise<boolean> {
-    saving.value = true;
-    error.value = null;
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cwdPresets: next }),
-      });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      presets.value = (await res.json()).cwdPresets ?? [];
-      presetsVersion++; // mark local state as newer than any in-flight loadConfig GET
-      return true;
-    } catch {
-      error.value = "Couldn't save presets. Check the server and try again.";
-      return false;
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  // Each preset write POSTs the whole array, so concurrent record/remove calls
-  // (two grid cells launching at once) must not each derive `next` from the same
-  // stale snapshot — the later POST would clobber the earlier one (last-write-wins,
-  // dropping a just-launched dir). Serialize the writes so every mutation reads the
-  // freshly-saved list before computing its own.
-  let presetWrite: Promise<unknown> = Promise.resolve();
-  function serializePresetWrite(mutate: () => Promise<void>): Promise<void> {
-    const run = presetWrite.then(mutate, mutate);
-    presetWrite = run.then(
-      () => {},
-      () => {},
-    );
-    return run;
-  }
-
-  // Auto-add the dir the user just launched in, so it becomes a one-click chip, and
-  // move it to the FRONT (most-recently-used) on every launch so the list reflects
-  // launch order. A re-launched dir keeps its existing (possibly manual) label; a new
-  // dir is prepended with its basename. Already at the front → no write. No cap: the
-  // user prunes the list with the chip's ✕. Called with the server-confirmed
-  // (effective) cwd so we only remember dirs that actually ran.
-  function recordPreset(path: string | null): Promise<void> {
-    if (!path) return Promise.resolve();
-    return serializePresetWrite(async () => {
-      if (presets.value[0]?.path === path) return; // already most-recent — nothing to reorder
-      const existing = presets.value.find((p) => p.path === path);
-      const entry = existing ?? { label: presetLabel(path), path };
-      await savePresets([entry, ...presets.value.filter((p) => p.path !== path)]);
-    });
-  }
-
-  // Drop one preset (the chip's ✕). No-op when the path isn't present.
-  function removePreset(path: string): Promise<void> {
-    return serializePresetWrite(async () => {
-      if (!presets.value.some((p) => p.path === path)) return;
-      await savePresets(presets.value.filter((p) => p.path !== path));
-    });
-  }
-
-  // One-time import of the pre-#163 localStorage recents so upgrading users keep
-  // their recent dirs as chips. New paths are prepended (most-recent first, ahead of
-  // the existing presets) so the last-used dir stays at the front — consistent with
-  // the MRU ordering; their basename is the label. The legacy key is cleared on
-  // success so a chip the user later deletes can't reappear. Dedup keeps it harmless
-  // if it runs twice.
-  async function migrateLegacyRecents(): Promise<void> {
-    const legacy = readLegacyRecents();
-    if (!legacy.length) return;
-    const known = new Set(presets.value.map((p) => p.path));
-    const additions = legacy.filter((path) => !known.has(path)).map((path) => ({ label: presetLabel(path), path }));
-    let saved = true;
-    if (additions.length) {
-      await serializePresetWrite(async () => {
-        saved = await savePresets([...additions, ...presets.value]);
-      });
-    }
-    if (!saved) return; // keep the key so the import retries on the next load
-    try {
-      localStorage.removeItem(LEGACY_RECENTS_KEY);
-    } catch {
-      // storage blocked — dedup makes a retry harmless
-    }
-  }
-
-  // Persist just the custom attention sound (a file path, or null to use the chime).
-  // Applied immediately (like the theme), independent of the presets Save button.
-  async function saveSound(file: string | null): Promise<boolean> {
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ soundFile: file }),
-      });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      const c = await res.json();
-      soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Persist the cross-repo PR list's repos. POSTs only prRepos so the other fields
-  // (presets, sound) are untouched by the server-side partial update.
-  async function savePrRepos(next: string[]): Promise<boolean> {
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prRepos: next }),
-      });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      prRepos.value = (await res.json()).prRepos ?? [];
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Persist the cell-launcher commands. POSTs only launchers so the other fields are
-  // untouched by the server-side partial update.
-  async function saveLaunchers(next: Launcher[]): Promise<boolean> {
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ launchers: next }),
-      });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      launchers.value = (await res.json()).launchers ?? [];
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  // Persist the user MCP servers. POSTs only userMcpServers (partial update).
-  async function saveUserMcpServers(next: UserMcpServer[]): Promise<boolean> {
-    try {
-      const res = await fetch("/api/config", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userMcpServers: next }),
-      });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      userMcpServers.value = (await res.json()).userMcpServers ?? [];
-      return true;
-    } catch {
-      return false;
     }
   }
 
