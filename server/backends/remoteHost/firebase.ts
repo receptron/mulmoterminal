@@ -22,4 +22,7 @@ const firebaseConfig = {
   measurementId: "G-Y75JGK1G4T",
 } as const;
 
-export const { firestore, auth } = createRemoteHostFirebase(firebaseConfig);
+// storage: the phone stages full-res chat attachments (photos/PDFs the 1 MiB
+// command doc can't carry) to `users/{uid}/uploads/{id}`; the host — signed in as
+// the same user — pulls them from there (see remoteHost/ingestAttachments.ts).
+export const { firestore, auth, storage } = createRemoteHostFirebase(firebaseConfig);

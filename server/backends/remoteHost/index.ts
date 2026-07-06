@@ -13,8 +13,10 @@
 import type { Express, Request } from "express";
 import { createRemoteHost, createRemoteHostAuth, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
 
-import { auth, firestore } from "./firebase.js";
+import { auth, firestore, storage } from "./firebase.js";
 import { createRemoteHostHandlers } from "./handlers.js";
+import { createSaveAttachment } from "./attachmentStore.js";
+import { buildIngestAttachments } from "./ingestAttachments.js";
 
 const HOST_ID = "mulmoterminal";
 const PREFIX = "[remote-host]";
@@ -29,13 +31,16 @@ export interface RemoteHostBackendDeps {
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
   const authHelpers = createRemoteHostAuth(auth);
+  // Ingest pulls the phone's staged uploads (Firebase Storage, signed in as the
+  // user) into data/attachments/ and hands startChat path-only attachments.
+  const ingest = buildIngestAttachments({ storage, uid: authHelpers.currentUid, saveAttachment: createSaveAttachment(deps.workspace) });
   lifecycle = createRemoteHost({
     hostId: HOST_ID,
     signIn: authHelpers.signInHost,
     signOut: authHelpers.signOutHost,
     currentUid: authHelpers.currentUid,
     startRunner: (channel, handlers, options) => startHostRunner(firestore, channel, handlers, options),
-    handlers: createRemoteHostHandlers({ workspace: deps.workspace, spawnChat: deps.spawnChat }),
+    handlers: createRemoteHostHandlers({ workspace: deps.workspace, spawnChat: deps.spawnChat, ingest }),
     log: {
       info: (msg) => console.log(PREFIX, msg),
       warn: (msg) => console.warn(PREFIX, msg),

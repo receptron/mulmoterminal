@@ -5,15 +5,13 @@
 // match MulmoClaude's handlers exactly, so one phone client (mulmoserver) drives
 // either host.
 //
-// Covers read-only lists, text startChat, and mobile custom views (getRemoteView
-// / getRemoteViewItems / mutateRemoteViewItem). Still deferred: chat image
-// attachments (ingestAttachments) and view image thumbnails — both need an
-// attachment/thumbnail store this host lacks. See plans/feat-remote-host.md.
+// Covers read-only lists, startChat (text + image attachments), and mobile
+// custom views (getRemoteView / getRemoteViewItems / mutateRemoteViewItem).
 import { discoverCollections, listItems, loadCollection, toDetail, toSummary } from "@mulmoclaude/core/collection/server";
 import { listFeeds, readFeedState } from "@mulmoclaude/core/feeds/server";
 import { normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 import { listBooks } from "@mulmoclaude/accounting-plugin/server";
-import type { CommandHandlers, JsonObject } from "@mulmoclaude/core/remote-host";
+import type { CommandHandlers, JsonObject, JsonValue } from "@mulmoclaude/core/remote-host";
 
 import { readShortcuts } from "../shortcuts.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
@@ -25,15 +23,41 @@ import {
   remoteViewItems,
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
+import type { Attachment } from "./ingestAttachments.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
   // Start a visible chat seeded with `message`; returns the new session id.
   spawnChat: (message: string) => { chatId: string };
+  // Download the phone's staged uploads (by storage_id) into the workspace and
+  // return path-only attachments (remoteHost/ingestAttachments.ts).
+  ingest: (storageIds: string[]) => Promise<Attachment[]>;
 }
 
+// Parse the optional `attachments` param ([{ storage_id }]) into storage ids. A
+// malformed shape rejects the whole command: the remote already uploaded the
+// bytes and is waiting, so a surfaced error beats a chat missing its file.
+const readStorageIds = (attachments: JsonValue | undefined): string[] => {
+  if (attachments == null) return [];
+  if (!Array.isArray(attachments)) throw new Error("attachments must be an array of { storage_id }");
+  return attachments.map((entry) => {
+    const storageId = entry && typeof entry === "object" && !Array.isArray(entry) ? entry.storage_id : undefined;
+    if (typeof storageId !== "string" || storageId.length === 0) throw new Error("each attachments entry must be { storage_id: string }");
+    return storageId;
+  });
+};
+
+// The PTY-driven `claude` can't take image content blocks, so reference the
+// saved files by their workspace path in the seeded prompt — claude reads them
+// with its Read tool (its cwd is the workspace).
+const composeMessage = (message: string, attachments: Attachment[]): string => {
+  if (attachments.length === 0) return message;
+  const paths = attachments.map((file) => file.path).join("\n");
+  return `${message}\n\nAttached file(s) — read them from the workspace:\n${paths}`;
+};
+
 export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHandlers {
-  const { workspace, spawnChat } = deps;
+  const { workspace, spawnChat, ingest } = deps;
 
   return {
     // Mirrors GET /api/collections/list → { collections: CollectionSummary[] }.
@@ -125,17 +149,17 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
       return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
     },
 
-    // Start a visible chat from the phone, seeded verbatim with `message`. This
-    // host has no roles, so a `role` param is ignored. Attachments are not
-    // supported yet — reject rather than silently drop them (the remote already
-    // uploaded the bytes and would otherwise get a chat missing its files).
+    // Start a visible chat from the phone, seeded with `message`. This host has
+    // no roles, so a `role` param is ignored. Optional `attachments`
+    // ([{ storage_id }]) are downloaded into the workspace and referenced by path
+    // in the seeded prompt (the PTY claude reads them via its Read tool). Ingest
+    // BEFORE spawning so a download failure rejects the command instead of
+    // starting a chat missing its files.
     startChat: async (params: JsonObject) => {
       const message = (typeof params.message === "string" ? params.message : "").trim();
       if (!message) throw new Error("message is required");
-      if (Array.isArray(params.attachments) && params.attachments.length > 0) {
-        throw new Error("attachments are not supported on this host yet");
-      }
-      const { chatId } = spawnChat(message);
+      const attachments = await ingest(readStorageIds(params.attachments));
+      const { chatId } = spawnChat(composeMessage(message, attachments));
       return { started: true, chatId };
     },
   };
