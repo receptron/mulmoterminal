@@ -37,6 +37,7 @@ describe("createRemoteHostHandlers", () => {
       "listCollections",
       "getCollection",
       "listFeeds",
+      "getFeed",
       "listShortcuts",
       "listSkills",
       "listAccountingBooks",
