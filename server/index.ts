@@ -1571,6 +1571,58 @@ function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string,
   return { term, ws, buffer: "", cwd, sandbox: true };
 }
 
+// Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
+// claude's input box once it's ready — NOT as a `claude` CLI arg, which a large prompt
+// would overflow tmux's `new-session` command-length limit with ("command too long",
+// killing the session). ALL control bytes are stripped first — C0/C1, including ESC,
+// Ctrl-C, CR/LF and an embedded bracketed-paste terminator (\e[201~) — so untrusted text
+// (collection / custom-view) can't inject sequences that break out of the paste. It's
+// wrapped in bracketed paste (\e[200~…\e[201~); initialPrompt then presses Enter to run
+// it, while a draft gets NO Enter so the user reviews + sends. Returns a scanner to feed
+// the pty output to: it types once the input-box readiness marker paints (after a settle),
+// or after DRAFT_FALLBACK_MS if the marker never appears (UI drift). No-op when neither.
+function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined, draft: string | undefined): (data: string) => void {
+  const pendingText = draft ?? initialPrompt;
+  const autoSubmit = draft === undefined && initialPrompt !== undefined;
+  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
+  if (!draftText) return () => {};
+  let done = false;
+  let scan = "";
+  const typeDraft = () => {
+    if (done) return;
+    done = true;
+    try {
+      // Type the paste first; for an auto-run, submit with a CR in a SEPARATE write a beat
+      // later (DRAFT_SUBMIT_MS) so the Enter isn't dropped while Claude's TUI is still
+      // committing the paste. A draft gets no CR — the user reviews + sends.
+      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
+      if (autoSubmit) {
+        setTimeout(() => {
+          try {
+            entry.term.write("\r");
+          } catch {
+            // pty already gone — nothing to submit
+          }
+        }, DRAFT_SUBMIT_MS);
+      }
+    } catch {
+      // pty already gone — nothing to draft into
+    }
+  };
+  // Fallback: type even if the readiness marker never appears (UI string drift).
+  setTimeout(typeDraft, DRAFT_FALLBACK_MS);
+  return (data: string) => {
+    if (done) return;
+    // Type the draft once claude's input box has painted (its mode-hint status line),
+    // then settle briefly so the paste lands in the input rather than the scrollback.
+    scan = (scan + data).slice(-4096);
+    if (DRAFT_READY_MARKER.test(scan)) {
+      scan = "";
+      setTimeout(typeDraft, DRAFT_SETTLE_MS);
+    }
+  };
+}
+
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -1629,42 +1681,9 @@ function spawnClaudePty(
     pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
   }
 
-  // The auto-run prompt (initialPrompt) and the editable draft are both delivered by
-  // TYPING into claude's input box once it's ready — NOT as a `claude` CLI arg, which a
-  // large prompt would overflow tmux's `new-session` command-length limit with ("command
-  // too long", killing the session). ALL control bytes are stripped first — C0/C1,
-  // including ESC, Ctrl-C, CR/LF and an embedded bracketed-paste terminator (\e[201~) —
-  // so untrusted text (collection / custom-view) can't inject sequences that break out
-  // of the paste. It's wrapped in bracketed paste (\e[200~…\e[201~); initialPrompt then
-  // presses Enter to run it, while a draft gets NO Enter so the user reviews + sends.
-  const pendingText = draft ?? initialPrompt;
-  const autoSubmit = draft === undefined && initialPrompt !== undefined;
-  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
-  let draftDone = !draftText;
-  let draftScan = "";
-  const typeDraft = () => {
-    if (draftDone) return;
-    draftDone = true;
-    try {
-      // Type the paste first; for an auto-run, submit with a CR in a SEPARATE write a
-      // beat later (see DRAFT_SUBMIT_MS) so the Enter isn't dropped while Claude's TUI
-      // is still committing the paste. A draft gets no CR — the user reviews + sends.
-      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
-      if (autoSubmit) {
-        setTimeout(() => {
-          try {
-            entry.term.write("\r");
-          } catch {
-            // pty already gone — nothing to submit
-          }
-        }, DRAFT_SUBMIT_MS);
-      }
-    } catch {
-      // pty already gone — nothing to draft into
-    }
-  };
-  // Fallback: type even if the readiness marker never appears (UI string drift).
-  if (draftText) setTimeout(typeDraft, DRAFT_FALLBACK_MS);
+  // The auto-run prompt / editable draft is typed into the input box once ready (see
+  // attachDraftInjection) — its scanner is fed the pty output below.
+  const scanForDraftReady = attachDraftInjection(entry, initialPrompt, draft);
 
   // PTY -> browser (buffering a bounded tail for reattach).
   entry.term.onData((data) => {
@@ -1672,15 +1691,7 @@ function spawnClaudePty(
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
     }
-    // Type the draft once claude's input box has painted (its mode-hint status line),
-    // then settle briefly so the paste lands in the input rather than the scrollback.
-    if (!draftDone) {
-      draftScan = (draftScan + data).slice(-4096);
-      if (DRAFT_READY_MARKER.test(draftScan)) {
-        draftScan = "";
-        setTimeout(typeDraft, DRAFT_SETTLE_MS);
-      }
-    }
+    scanForDraftReady(data);
   });
 
   entry.term.onExit(({ exitCode, signal }) => {
@@ -1986,6 +1997,22 @@ function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | und
   return spawnLauncherPty(sessionId, ws, command, cwd);
 }
 
+// Resolve a launcher ws request to a session: reattach a live pty / surviving tmux
+// session (id kept, running program picked up via `tmux new-session -A`, command ignored),
+// or a fresh spawn of the indexed launcher command. Returns null when there's nothing to
+// reattach AND the index isn't a configured launcher.
+function resolveLaunchSession(requested: string | null, index: number): { sessionId: string; live: PtyEntry | undefined; command: string } | null {
+  const reattachId = requested && ptys.has(requested) ? requested : null;
+  const live = reattachId ? ptys.get(reattachId) : undefined;
+  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
+  // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
+  // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
+  const launcher = live || tmuxAlive ? null : resolveLauncher(index);
+  if (!live && !tmuxAlive && !launcher) return null;
+  const sessionId = reattachId ?? (tmuxAlive && requested ? requested : randomUUID());
+  return { sessionId, live, command: launcher?.command ?? DEFAULT_LAUNCH_CMD };
+}
+
 // Launcher terminal (?launcher=<index>&cwd=<dir>, ?session=<id> to reattach): run a
 // configured launch command as a persistent, reattachable PTY. Reuses the /ws session
 // lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
@@ -1998,23 +2025,15 @@ runLaunchWss.on("connection", (ws, req) => {
   const indexRaw = url.searchParams.get("launcher");
   const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
 
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const live = reattachId ? ptys.get(reattachId) : undefined;
-  // A tmux session that outlived a server restart: reattach it (keep the id; the
-  // running program is picked up via `tmux new-session -A`, ignoring the command).
-  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
-  // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
-  const launcher = live || tmuxAlive ? null : resolveLauncher(index);
-  if (!live && !tmuxAlive && !launcher) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
-
-  const sessionId = reattachId ?? (tmuxAlive && requested ? requested : randomUUID());
+  const resolved = resolveLaunchSession(requested, index);
+  if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
+  const { sessionId, live, command } = resolved;
   markDevTerminalSession(sessionId);
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
   let entry: PtyEntry;
   try {
-    entry = startLaunchEntry(sessionId, ws, live, launcher?.command ?? DEFAULT_LAUNCH_CMD, cwd);
+    entry = startLaunchEntry(sessionId, ws, live, command, cwd);
   } catch (err) {
     console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
     return closeWithError(ws, "Failed to start the launch command.");
