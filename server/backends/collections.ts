@@ -14,7 +14,7 @@
 // tier.
 import path from "node:path";
 import os from "node:os";
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import {
   configureCollectionHost,
   discoverCollections,
@@ -185,390 +185,441 @@ function mutateStatus(kind: string): number {
   return 400;
 }
 
-/** Mount the read-side REST surface. Mirrors MulmoClaude's
- *  GET /api/collections + GET /api/collections/:slug response shapes, which is what
- *  the package's UI binding (fetchCollectionDetail / listCollections) expects. */
-export function mountCollectionRoutes(app: Express): void {
-  // Discover tab: the merged curated-registry catalog (every configured registry's
-  // index.json, fetched + cached server-side). Registered before the ":slug" routes
-  // so "registry" is never captured as a slug.
-  app.get("/api/collections/registry/list", async (_req: Request, res: Response) => {
-    try {
-      res.json(await listRegistry());
-    } catch (err) {
-      log.warn("collections", "registry list failed", { error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+// ── Route handlers ──────────────────────────────────────────────────────────
+// One named handler per endpoint (kept small + individually testable); the wiring
+// list is mountCollectionRoutes at the bottom. All read module-level state
+// (workspaceRoot) + the imported engine functions — no per-request closure.
 
-  // Discover tab: install a registry collection into the shared workspace.
-  app.post("/api/collections/registry/import", async (req: Request, res: Response) => {
-    if (!workspaceRoot) {
-      res.status(503).json({ error: "collections backend not initialized" });
+// Discover tab: the merged curated-registry catalog (every configured registry's
+// index.json, fetched + cached server-side).
+const registryListHandler: RequestHandler = async (_req, res) => {
+  try {
+    res.json(await listRegistry());
+  } catch (err) {
+    log.warn("collections", "registry list failed", { error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Discover tab: install a registry collection into the shared workspace.
+const registryImportHandler: RequestHandler = async (req, res) => {
+  if (!workspaceRoot) {
+    res.status(503).json({ error: "collections backend not initialized" });
+    return;
+  }
+  const author = typeof req.body?.author === "string" ? req.body.author : "";
+  const slug = typeof req.body?.slug === "string" ? req.body.slug : "";
+  const registry = typeof req.body?.registry === "string" && req.body.registry ? req.body.registry : null;
+  if (!author || !slug) {
+    res.status(400).json({ error: "author and slug are required" });
+    return;
+  }
+  try {
+    const result = await importRegistry(author, slug, workspaceRoot, registry);
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
       return;
     }
-    const author = typeof req.body?.author === "string" ? req.body.author : "";
-    const slug = typeof req.body?.slug === "string" ? req.body.slug : "";
-    const registry = typeof req.body?.registry === "string" && req.body.registry ? req.body.registry : null;
-    if (!author || !slug) {
-      res.status(400).json({ error: "author and slug are required" });
+    res.json(result.response);
+  } catch (err) {
+    log.warn("collections", "registry import failed", { error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Delete one custom view: drop it from the schema + unlink its HTML. Refuses
+// user-scope / preset collections (read-only), like collection delete.
+const viewDeleteHandler: RequestHandler<{ slug: string; viewId: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  try {
+    const result = await deleteCustomView(collection, req.params.viewId);
+    if (result.kind !== "ok") {
+      res.status(result.kind === "not-found" ? 404 : 403).json({ error: `view delete refused (${result.kind})` });
       return;
     }
-    try {
-      const result = await importRegistry(author, slug, workspaceRoot, registry);
-      if (!result.ok) {
-        res.status(result.status).json({ error: result.error });
-        return;
-      }
-      res.json(result.response);
-    } catch (err) {
-      log.warn("collections", "registry import failed", { error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+    res.json({ deleted: true, viewId: result.viewId });
+  } catch (err) {
+    log.warn("collections", "view delete failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
 
-  // Delete one custom view: drop it from the schema + unlink its HTML. Refuses
-  // user-scope / preset collections (read-only), like collection delete.
-  app.delete("/api/collections/:slug/views/:viewId", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+// Delete an entire collection (skill + records) after archiving a restorable
+// copy. Only project-scope, non-preset collections are deletable; a refusal
+// (preset / user-scope / unsafe path) comes back as 403 with the reason.
+const collectionDeleteHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  try {
+    const result = await deleteCollection(collection);
+    if (result.kind !== "ok") {
+      res.status(403).json({ error: deleteCollectionRefusalMessage(result) });
       return;
     }
-    try {
-      const result = await deleteCustomView(collection, req.params.viewId);
-      if (result.kind !== "ok") {
-        res.status(result.kind === "not-found" ? 404 : 403).json({ error: `view delete refused (${result.kind})` });
-        return;
-      }
-      res.json({ deleted: true, viewId: result.viewId });
-    } catch (err) {
-      log.warn("collections", "view delete failed", { slug: req.params.slug, viewId: req.params.viewId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+    res.json({ deleted: true, slug: result.slug, archivePath: result.archivePath });
+  } catch (err) {
+    log.warn("collections", "collection delete failed", { slug: req.params.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
 
-  // Delete an entire collection (skill + records) after archiving a restorable
-  // copy. Only project-scope, non-preset collections are deletable; a refusal
-  // (preset / user-scope / unsafe path) comes back as 403 with the reason.
-  app.delete("/api/collections/:slug", async (req: Request<{ slug: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+// List skill-backed collections for the index + toolbar.
+const listHandler: RequestHandler = async (_req, res) => {
+  try {
+    const collections = await discoverCollections();
+    res.json({ collections: collections.map(toSummary) });
+  } catch (err) {
+    log.warn("collections", "list failed", { error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// A collection's live schema + records by slug. Backs both the card's own load
+// (CollectionView reads `status` for 404 → not-found) and ref/embed resolution.
+const detailHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  try {
+    const items = await listItems(collection.dataDir);
+    // Best-effort validation: a malformed record is silently skipped at read
+    // time, so surface the problems here too and let the view offer a Repair
+    // button. Never let validation failure turn a successful detail into a 500.
+    let issues: RecordIssue[] = [];
+    try {
+      issues = await validateCollectionRecords(collection);
+    } catch (err) {
+      log.warn("collections", "detail validation skipped", { slug: collection.slug, error: errorMessage(err) });
+    }
+    // Omit `issues` entirely when everything is fine (the "absent when clean"
+    // contract the view relies on).
+    res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
+  } catch (err) {
+    log.warn("collections", "detail failed", { slug: collection.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// ── Record CRUD (Tier 1: interactive editing — e.g. checking a to-do item) ──
+// Create a record. The id is the schema's primaryKey value from the body, or a
+// generated one; a singleton collection pins every create to its fixed id.
+const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  const record = extractRecord(req.body);
+  if (!record) {
+    res.status(400).json({ error: "request body must be a JSON object" });
+    return;
+  }
+  const itemId = resolveCreateItemId(collection.schema, record) ?? generateItemId();
+  const recordWithId: CollectionItem = { ...record, [collection.schema.primaryKey]: itemId };
+  try {
+    const result = await writeItem(collection.dataDir, itemId, recordWithId, { refuseOverwrite: true });
+    if (result.kind === "invalid-id") {
+      res.status(400).json({ error: `invalid item id: ${result.itemId}` });
       return;
     }
-    try {
-      const result = await deleteCollection(collection);
-      if (result.kind !== "ok") {
-        res.status(403).json({ error: deleteCollectionRefusalMessage(result) });
-        return;
-      }
-      res.json({ deleted: true, slug: result.slug, archivePath: result.archivePath });
-    } catch (err) {
-      log.warn("collections", "collection delete failed", { slug: req.params.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // List skill-backed collections for the index + toolbar.
-  app.get("/api/collections/list", async (_req: Request, res: Response) => {
-    try {
-      const collections = await discoverCollections();
-      res.json({ collections: collections.map(toSummary) });
-    } catch (err) {
-      log.warn("collections", "list failed", { error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // A collection's live schema + records by slug. Backs both the card's own load
-  // (CollectionView reads `status` for 404 → not-found) and ref/embed resolution.
-  app.get("/api/collections/:slug/detail", async (req: Request<{ slug: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    if (result.kind === "path-escape") {
+      res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
       return;
     }
-    try {
-      const items = await listItems(collection.dataDir);
-      // Best-effort validation: a malformed record is silently skipped at read
-      // time, so surface the problems here too and let the view offer a Repair
-      // button. Never let validation failure turn a successful detail into a 500.
-      let issues: RecordIssue[] = [];
-      try {
-        issues = await validateCollectionRecords(collection);
-      } catch (err) {
-        log.warn("collections", "detail validation skipped", { slug: collection.slug, error: errorMessage(err) });
-      }
-      // Omit `issues` entirely when everything is fine (the "absent when clean"
-      // contract the view relies on).
-      res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
-    } catch (err) {
-      log.warn("collections", "detail failed", { slug: collection.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // ── Record CRUD (Tier 1: interactive editing — e.g. checking a to-do item) ──
-  // Create a record. The id is the schema's primaryKey value from the body, or a
-  // generated one; a singleton collection pins every create to its fixed id.
-  app.post("/api/collections/:slug/items", async (req: Request<{ slug: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    if (result.kind === "conflict") {
+      res.status(409).json({ error: `item '${result.itemId}' already exists` });
       return;
     }
-    const record = extractRecord(req.body);
+    res.json({ itemId: result.itemId, item: result.item });
+  } catch (err) {
+    log.warn("collections", "item create failed", { slug: collection.slug, itemId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Update a record. The primaryKey is pinned to the URL itemId (the body can't
+// smuggle a different id). Singletons only accept their one fixed id.
+const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  const record = extractRecord(req.body);
+  if (!record) {
+    res.status(400).json({ error: "request body must be a JSON object" });
+    return;
+  }
+  const { singleton, primaryKey } = collection.schema;
+  if (singleton && req.params.itemId !== singleton) {
+    res.status(400).json({ error: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` });
+    return;
+  }
+  const recordWithId: CollectionItem = { ...record, [primaryKey]: req.params.itemId };
+  try {
+    const result = await writeItem(collection.dataDir, req.params.itemId, recordWithId);
+    if (result.kind === "invalid-id") {
+      res.status(400).json({ error: `invalid item id: ${result.itemId}` });
+      return;
+    }
+    if (result.kind === "path-escape") {
+      res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
+      return;
+    }
+    if (result.kind === "conflict") {
+      res.status(500).json({ error: "unexpected conflict on update" });
+      return;
+    }
+    res.json({ itemId: result.itemId, item: result.item });
+  } catch (err) {
+    log.warn("collections", "item update failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Delete a record.
+const itemDeleteHandler: RequestHandler<{ slug: string; itemId: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  try {
+    const result = await deleteItem(collection.dataDir, req.params.itemId);
+    if (result.kind === "invalid-id") {
+      res.status(400).json({ error: `invalid item id: ${result.itemId}` });
+      return;
+    }
+    if (result.kind === "path-escape") {
+      res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
+      return;
+    }
+    if (result.kind === "not-found") {
+      res.status(404).json({ error: `item '${result.itemId}' not found` });
+      return;
+    }
+    res.json({ deleted: true, itemId: result.itemId });
+  } catch (err) {
+    log.warn("collections", "item delete failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// ── Actions (kind: "chat") — return a seed prompt + role; the frontend feeds it
+//    to startChat, which spawns a visible chat. The records are edited by that
+//    agent session directly (the intended model). ──
+
+// Per-record action (e.g. Repair / enrich this record).
+const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
+  if (!action) {
+    res.status(404).json({ error: `action '${req.params.actionId}' not found on collection '${collection.slug}'` });
+    return;
+  }
+  try {
+    const record = await readItem(collection.dataDir, req.params.itemId);
     if (!record) {
-      res.status(400).json({ error: "request body must be a JSON object" });
+      res.status(404).json({ error: `item '${req.params.itemId}' not found` });
       return;
     }
-    const itemId = resolveCreateItemId(collection.schema, record) ?? generateItemId();
-    const recordWithId: CollectionItem = { ...record, [collection.schema.primaryKey]: itemId };
-    try {
-      const result = await writeItem(collection.dataDir, itemId, recordWithId, { refuseOverwrite: true });
-      if (result.kind === "invalid-id") {
-        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
-        return;
-      }
-      if (result.kind === "path-escape") {
-        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
-        return;
-      }
-      if (result.kind === "conflict") {
-        res.status(409).json({ error: `item '${result.itemId}' already exists` });
-        return;
-      }
-      res.json({ itemId: result.itemId, item: result.item });
-    } catch (err) {
-      log.warn("collections", "item create failed", { slug: collection.slug, itemId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // Update a record. The primaryKey is pinned to the URL itemId (the body can't
-  // smuggle a different id). Singletons only accept their one fixed id.
-  app.put("/api/collections/:slug/items/:itemId", async (req: Request<{ slug: string; itemId: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    // The action's `when` predicate is the authorization rule: the client hides
+    // out-of-state buttons, but a stale/crafted request could still target one.
+    if (!actionVisible(action, record)) {
+      res.status(409).json({ error: `action '${action.id}' is not available for item '${req.params.itemId}' in its current state` });
       return;
     }
-    const record = extractRecord(req.body);
-    if (!record) {
-      res.status(400).json({ error: "request body must be a JSON object" });
+    const template = await readSkillTemplate(collection.skillDir, action.template);
+    if (template === null) {
+      res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
       return;
     }
-    const { singleton, primaryKey } = collection.schema;
-    if (singleton && req.params.itemId !== singleton) {
-      res.status(400).json({ error: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` });
+    // Pass the collection paths so the seed prompt carries the <collection_paths>
+    // block — the skill template needs skillDir/dataPath to find its files.
+    const paths = promptPathsFor(collection, getWorkspaceRoot());
+    res.json({ prompt: buildActionSeedPrompt(record, template, paths), role: action.role });
+  } catch (err) {
+    log.warn("collections", "item action seed failed", {
+      slug: collection.slug,
+      itemId: req.params.itemId,
+      actionId: req.params.actionId,
+      error: errorMessage(err),
+    });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Collection-level action (operates over all records).
+const collectionActionHandler: RequestHandler<{ slug: string; actionId: string }> = async (req, res) => {
+  const collection = await loadCollection(req.params.slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
+  if (!action) {
+    res.status(404).json({ error: `collection action '${req.params.actionId}' not found on collection '${collection.slug}'` });
+    return;
+  }
+  try {
+    const template = await readSkillTemplate(collection.skillDir, action.template);
+    if (template === null) {
+      res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
       return;
     }
-    const recordWithId: CollectionItem = { ...record, [primaryKey]: req.params.itemId };
-    try {
-      const result = await writeItem(collection.dataDir, req.params.itemId, recordWithId);
-      if (result.kind === "invalid-id") {
-        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
-        return;
-      }
-      if (result.kind === "path-escape") {
-        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
-        return;
-      }
-      if (result.kind === "conflict") {
-        res.status(500).json({ error: "unexpected conflict on update" });
-        return;
-      }
-      res.json({ itemId: result.itemId, item: result.item });
-    } catch (err) {
-      log.warn("collections", "item update failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+    const allItems = await listItems(collection.dataDir);
+    const paths = promptPathsFor(collection, getWorkspaceRoot());
+    res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template, paths), role: action.role });
+  } catch (err) {
+    log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
 
-  // Delete a record.
-  app.delete("/api/collections/:slug/items/:itemId", async (req: Request<{ slug: string; itemId: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
-      return;
-    }
-    try {
-      const result = await deleteItem(collection.dataDir, req.params.itemId);
-      if (result.kind === "invalid-id") {
-        res.status(400).json({ error: `invalid item id: ${result.itemId}` });
-        return;
-      }
-      if (result.kind === "path-escape") {
-        res.status(403).json({ error: `data directory for '${collection.slug}' escapes the workspace` });
-        return;
-      }
-      if (result.kind === "not-found") {
-        res.status(404).json({ error: `item '${result.itemId}' not found` });
-        return;
-      }
-      res.json({ deleted: true, itemId: result.itemId });
-    } catch (err) {
-      log.warn("collections", "item delete failed", { slug: collection.slug, itemId: req.params.itemId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+// ── Custom views (sandboxed-iframe HTML views, e.g. a poster gallery) ──
+// A custom view is LLM-authored HTML rendered in a sandboxed iframe that fetches
+// its records from view-data with a scoped token. Both tiers are wired: a GET
+// read route and a PUT write route (the latter gated by a `write`-capable token).
 
-  // ── Actions (kind: "chat") — return a seed prompt + role; the frontend feeds it
-  //    to startChat, which spawns a visible chat. The records are edited by that
-  //    agent session directly (the intended model). ──
-
-  // Per-record action (e.g. Repair / enrich this record).
-  app.post(
-    "/api/collections/:slug/items/:itemId/actions/:actionId",
-    async (req: Request<{ slug: string; itemId: string; actionId: string }>, res: Response) => {
-      const collection = await loadCollection(req.params.slug);
-      if (!collection) {
-        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
-        return;
-      }
-      const action = collection.schema.actions?.find((entry) => entry.id === req.params.actionId);
-      if (!action) {
-        res.status(404).json({ error: `action '${req.params.actionId}' not found on collection '${collection.slug}'` });
-        return;
-      }
-      try {
-        const record = await readItem(collection.dataDir, req.params.itemId);
-        if (!record) {
-          res.status(404).json({ error: `item '${req.params.itemId}' not found` });
-          return;
-        }
-        // The action's `when` predicate is the authorization rule: the client hides
-        // out-of-state buttons, but a stale/crafted request could still target one.
-        if (!actionVisible(action, record)) {
-          res.status(409).json({ error: `action '${action.id}' is not available for item '${req.params.itemId}' in its current state` });
-          return;
-        }
-        const template = await readSkillTemplate(collection.skillDir, action.template);
-        if (template === null) {
-          res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
-          return;
-        }
-        // Pass the collection paths so the seed prompt carries the <collection_paths>
-        // block — the skill template needs skillDir/dataPath to find its files.
-        const paths = promptPathsFor(collection, getWorkspaceRoot());
-        res.json({ prompt: buildActionSeedPrompt(record, template, paths), role: action.role });
-      } catch (err) {
-        log.warn("collections", "item action seed failed", {
-          slug: collection.slug,
-          itemId: req.params.itemId,
-          actionId: req.params.actionId,
-          error: errorMessage(err),
-        });
-        res.status(500).json({ error: errorMessage(err) });
-      }
-    },
-  );
-
-  // Collection-level action (operates over all records).
-  app.post("/api/collections/:slug/actions/:actionId", async (req: Request<{ slug: string; actionId: string }>, res: Response) => {
-    const collection = await loadCollection(req.params.slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
-      return;
-    }
-    const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
-    if (!action) {
-      res.status(404).json({ error: `collection action '${req.params.actionId}' not found on collection '${collection.slug}'` });
-      return;
-    }
-    try {
-      const template = await readSkillTemplate(collection.skillDir, action.template);
-      if (template === null) {
-        res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
-        return;
-      }
-      const allItems = await listItems(collection.dataDir);
-      const paths = promptPathsFor(collection, getWorkspaceRoot());
-      res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template, paths), role: action.role });
-    } catch (err) {
-      log.warn("collections", "collection action seed failed", { slug: collection.slug, actionId: req.params.actionId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // ── Custom views (sandboxed-iframe HTML views, e.g. a poster gallery) ──
-  // A custom view is LLM-authored HTML rendered in a sandboxed iframe that fetches
-  // its records from view-data with a scoped token. Both tiers are wired: a GET
-  // read route and a PUT write route (the latter gated by a `write`-capable token).
-
-  // The custom view's raw HTML, read from the staging path via the package's
-  // path-safe reader. The frontend renders it sandboxed (token injected).
-  app.get("/api/collections/:slug/view-file", async (req: Request<{ slug: string }>, res: Response) => {
-    try {
-      const { slug } = req.params;
-      const viewId = typeof req.query.id === "string" ? req.query.id : "";
-      const collection = await loadCollection(slug);
-      if (!collection) {
-        res.status(404).json({ error: `collection '${slug}' not found` });
-        return;
-      }
-      const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
-      if (!view) {
-        res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
-        return;
-      }
-      const html = await readCustomViewHtml(collection, view.file);
-      if (html === null) {
-        res.status(404).json({ error: `view file '${view.file}' not found` });
-        return;
-      }
-      // This is LLM-authored HTML. The frontend renders it sandboxed via a
-      // fetch()→srcdoc iframe (not by navigating here), so harden the raw response
-      // against DIRECT navigation: `sandbox` gives it an opaque origin (its scripts
-      // can't reach the app origin's /api/*), and `nosniff` stops re-interpretation.
-      // The iframe path is unaffected — a fetch() reads the body regardless of this
-      // response-level CSP.
-      res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("Content-Security-Policy", "sandbox");
-      res.type("text/html").send(html);
-    } catch (err) {
-      log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // Serve a mobile (`target: "mobile"`) custom view wrapped into its sandboxed
-  // srcdoc — the desktop phone-frame preview's data source. Same builder as the
-  // remote-host channel's `getRemoteView`, so the preview renders the exact
-  // artifact the phone receives (preview === phone).
-  app.get("/api/collections/:slug/remote-view", async (req: Request<{ slug: string }>, res: Response) => {
+// The custom view's raw HTML, read from the staging path via the package's
+// path-safe reader. The frontend renders it sandboxed (token injected).
+const viewFileHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  try {
     const { slug } = req.params;
     const viewId = typeof req.query.id === "string" ? req.query.id : "";
-    const locale = typeof req.query.locale === "string" ? req.query.locale : "";
     const collection = await loadCollection(slug);
     if (!collection) {
       res.status(404).json({ error: `collection '${slug}' not found` });
       return;
     }
-    try {
-      const result = await buildRemoteView(collection, viewId, locale);
-      if (result.kind !== "ok") {
-        const notFound = result.kind === "view-not-found" || result.kind === "file-missing";
-        res.status(notFound ? 404 : 400).json({ error: remoteViewFailureMessage(result, slug) });
-        return;
-      }
-      res.json({ view: result.view, srcdoc: result.srcdoc, bytes: result.bytes });
-    } catch (err) {
-      log.warn("collections", "remote-view build failed", { slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) {
+      res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
+      return;
     }
-  });
+    const html = await readCustomViewHtml(collection, view.file);
+    if (html === null) {
+      res.status(404).json({ error: `view file '${view.file}' not found` });
+      return;
+    }
+    // This is LLM-authored HTML. The frontend renders it sandboxed via a
+    // fetch()→srcdoc iframe (not by navigating here), so harden the raw response
+    // against DIRECT navigation: `sandbox` gives it an opaque origin (its scripts
+    // can't reach the app origin's /api/*), and `nosniff` stops re-interpretation.
+    // The iframe path is unaffected — a fetch() reads the body regardless of this
+    // response-level CSP.
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.type("text/html").send(html);
+  } catch (err) {
+    log.warn("collections", "view-file read failed", { slug: req.params.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
 
-  // Apply one update/delete on behalf of a writable mobile view — the desktop
-  // preview's write channel. Same builder + host-side policy as the channel's
-  // `mutateRemoteViewItem`, so a preview mutation runs the exact enforcement the
-  // phone will.
-  app.post("/api/collections/:slug/remote-view/:viewId/mutate", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
-    const { slug, viewId } = req.params;
-    const request = normalizeMutate((req.body ?? {}) as { op?: unknown; id?: unknown; patch?: unknown });
-    if (!request) {
-      res.status(400).json({ error: "invalid mutate request — expected { op: 'update'|'delete', id, patch? }" });
+// Serve a mobile (`target: "mobile"`) custom view wrapped into its sandboxed
+// srcdoc — the desktop phone-frame preview's data source. Same builder as the
+// remote-host channel's `getRemoteView`, so the preview renders the exact
+// artifact the phone receives (preview === phone).
+const remoteViewHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  const { slug } = req.params;
+  const viewId = typeof req.query.id === "string" ? req.query.id : "";
+  const locale = typeof req.query.locale === "string" ? req.query.locale : "";
+  const collection = await loadCollection(slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${slug}' not found` });
+    return;
+  }
+  try {
+    const result = await buildRemoteView(collection, viewId, locale);
+    if (result.kind !== "ok") {
+      const notFound = result.kind === "view-not-found" || result.kind === "file-missing";
+      res.status(notFound ? 404 : 400).json({ error: remoteViewFailureMessage(result, slug) });
+      return;
+    }
+    res.json({ view: result.view, srcdoc: result.srcdoc, bytes: result.bytes });
+  } catch (err) {
+    log.warn("collections", "remote-view build failed", { slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Apply one update/delete on behalf of a writable mobile view — the desktop
+// preview's write channel. Same builder + host-side policy as the channel's
+// `mutateRemoteViewItem`, so a preview mutation runs the exact enforcement the
+// phone will.
+const remoteViewMutateHandler: RequestHandler<{ slug: string; viewId: string }> = async (req, res) => {
+  const { slug, viewId } = req.params;
+  const request = normalizeMutate((req.body ?? {}) as { op?: unknown; id?: unknown; patch?: unknown });
+  if (!request) {
+    res.status(400).json({ error: "invalid mutate request — expected { op: 'update'|'delete', id, patch? }" });
+    return;
+  }
+  const collection = await loadCollection(slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${slug}' not found` });
+    return;
+  }
+  try {
+    const result = await mutateRemoteView(collection, viewId, request);
+    if (result.kind !== "ok") {
+      res.status(mutateStatus(result.kind)).json({ error: mutateRemoteViewFailureMessage(result, slug) });
+      return;
+    }
+    res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
+  } catch (err) {
+    log.warn("collections", "remote-view mutate failed", { slug, viewId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// One page of a mobile view's records, with its declared image fields inlined
+// as `data:` thumbnails — the desktop phone-frame preview's paging source. Same
+// builder as the channel's getRemoteViewItems, so the preview pages the exact
+// data (real thumbnails) the phone gets.
+const remoteViewItemsHandler: RequestHandler<{ slug: string; viewId: string }> = async (req, res) => {
+  const { slug, viewId } = req.params;
+  const request = { offset: clampViewOffset(req.query.offset), limit: clampViewLimit(req.query.limit), fields: normalizeFields(csvParam(req.query.fields)) };
+  const collection = await loadCollection(slug);
+  if (!collection) {
+    res.status(404).json({ error: `collection '${slug}' not found` });
+    return;
+  }
+  try {
+    const result = await remoteViewItems(collection, viewId, request);
+    if (result.kind !== "ok") {
+      res.status(result.kind === "view-not-found" ? 404 : 400).json({ error: remoteViewItemsFailureMessage(result, slug) });
+      return;
+    }
+    res.json({ page: result.page, inlined: result.inlined, omitted: result.omitted });
+  } catch (err) {
+    log.warn("collections", "remote-view items failed", { slug, viewId, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Mint a scoped token for a custom view, clamped to what the view declared so a
+// read-only view can never obtain a write token.
+const viewTokenHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const body = (req.body ?? {}) as { viewId?: unknown; capabilities?: unknown };
+    const viewId = typeof body.viewId === "string" ? body.viewId.trim() : "";
+    if (!viewId) {
+      res.status(400).json({ error: "`viewId` is required" });
       return;
     }
     const collection = await loadCollection(slug);
@@ -576,143 +627,120 @@ export function mountCollectionRoutes(app: Express): void {
       res.status(404).json({ error: `collection '${slug}' not found` });
       return;
     }
-    try {
-      const result = await mutateRemoteView(collection, viewId, request);
-      if (result.kind !== "ok") {
-        res.status(mutateStatus(result.kind)).json({ error: mutateRemoteViewFailureMessage(result, slug) });
-        return;
-      }
-      res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
-    } catch (err) {
-      log.warn("collections", "remote-view mutate failed", { slug, viewId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // One page of a mobile view's records, with its declared image fields inlined
-  // as `data:` thumbnails — the desktop phone-frame preview's paging source. Same
-  // builder as the channel's getRemoteViewItems, so the preview pages the exact
-  // data (real thumbnails) the phone gets.
-  app.get("/api/collections/:slug/remote-view/:viewId/items", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
-    const { slug, viewId } = req.params;
-    const request = { offset: clampViewOffset(req.query.offset), limit: clampViewLimit(req.query.limit), fields: normalizeFields(csvParam(req.query.fields)) };
-    const collection = await loadCollection(slug);
-    if (!collection) {
-      res.status(404).json({ error: `collection '${slug}' not found` });
+    const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
+    if (!view) {
+      res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
       return;
     }
-    try {
-      const result = await remoteViewItems(collection, viewId, request);
-      if (result.kind !== "ok") {
-        res.status(result.kind === "view-not-found" ? 404 : 400).json({ error: remoteViewItemsFailureMessage(result, slug) });
-        return;
-      }
-      res.json({ page: result.page, inlined: result.inlined, omitted: result.omitted });
-    } catch (err) {
-      log.warn("collections", "remote-view items failed", { slug, viewId, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+    // The write tier is wired below (PUT /view-data), so grant exactly what the
+    // view declared. `clampCapabilities` defaults the requested set to the declared
+    // set, so a `["read"]` view still can never obtain a `write` token.
+    const granted = clampCapabilities(view.capabilities as ViewCapability[] | undefined, undefined);
+    const minted = mintViewToken(slug, granted);
+    res.json({ token: minted.token, exp: minted.exp, dataUrl: `/api/collections/${encodeURIComponent(slug)}/view-data`, capabilities: granted });
+  } catch (err) {
+    log.warn("collections", "view-token mint failed", { slug: req.params.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
 
-  // Mint a scoped token for a custom view, clamped to what the view declared so a
-  // read-only view can never obtain a write token.
-  app.post("/api/collections/:slug/view-token", async (req: Request<{ slug: string }>, res: Response) => {
-    try {
-      const { slug } = req.params;
-      const body = (req.body ?? {}) as { viewId?: unknown; capabilities?: unknown };
-      const viewId = typeof body.viewId === "string" ? body.viewId.trim() : "";
-      if (!viewId) {
-        res.status(400).json({ error: "`viewId` is required" });
-        return;
-      }
-      const collection = await loadCollection(slug);
-      if (!collection) {
-        res.status(404).json({ error: `collection '${slug}' not found` });
-        return;
-      }
-      const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
-      if (!view) {
-        res.status(404).json({ error: `custom view '${viewId}' not found on collection '${slug}'` });
-        return;
-      }
-      // The write tier is wired below (PUT /view-data), so grant exactly what the
-      // view declared. `clampCapabilities` defaults the requested set to the declared
-      // set, so a `["read"]` view still can never obtain a `write` token.
-      const granted = clampCapabilities(view.capabilities as ViewCapability[] | undefined, undefined);
-      const minted = mintViewToken(slug, granted);
-      res.json({ token: minted.token, exp: minted.exp, dataUrl: `/api/collections/${encodeURIComponent(slug)}/view-data`, capabilities: granted });
-    } catch (err) {
-      log.warn("collections", "view-token mint failed", { slug: req.params.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+// CORS for the view-data endpoint: the sandboxed iframe has an opaque origin, so
+// its fetch is cross-origin and preflighted. `*` is safe — auth is the unguessable
+// scoped token in the Authorization header (not a cookie), so no ambient-credential
+// leak; an origin without the token just gets a 401.
+const viewDataCors = (_req: Request, res: Response, next: NextFunction): void => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  next();
+};
 
-  // CORS for the view-data endpoint: the sandboxed iframe has an opaque origin, so
-  // its fetch is cross-origin and preflighted. `*` is safe — auth is the unguessable
-  // scoped token in the Authorization header (not a cookie), so no ambient-credential
-  // leak; an origin without the token just gets a 401.
-  const viewDataCors = (_req: Request, res: Response, next: NextFunction): void => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-    res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
-    next();
-  };
+// Scoped read: the view's enriched records as `{ items }` — the shape custom views
+// fetch from `window.__MC_VIEW.dataUrl`. Guarded by the view token only.
+const viewDataGetHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  try {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    const items = await enrichItems(collection, await listItems(collection.dataDir));
+    res.json({ items });
+  } catch (err) {
+    log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Scoped write: apply per-record updates from a custom view (e.g. the vocabulary
+// flashcard's grade buttons). Requires a `write`-capable token. Body is
+// `{ items: [...], mode?: "merge" | "upsert" | "create" }`, matching the documented
+// __MC_VIEW contract; `mode` defaults to `upsert` (write the record as given). The
+// response envelope is `{ written, rejected }` — `written` is the id of each stored
+// record, `rejected` a `{ id, problem }` per row that failed — the shape views read.
+const viewDataPutHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  try {
+    const collection = await loadCollection(req.params.slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    const body = (req.body ?? {}) as { items?: unknown; mode?: unknown };
+    if (!Array.isArray(body.items)) {
+      res.status(400).json({ error: "`items` must be an array" });
+      return;
+    }
+    const mode: ViewWriteMode = body.mode === undefined ? "upsert" : (body.mode as ViewWriteMode);
+    if (!VIEW_WRITE_MODES.includes(mode)) {
+      const modeList = VIEW_WRITE_MODES.map((m) => `"${m}"`).join(", ");
+      res.status(400).json({ error: `\`mode\` must be one of ${modeList}` });
+      return;
+    }
+    const written: string[] = [];
+    const rejected: Array<{ id: string; problem: string }> = [];
+    for (const raw of body.items) {
+      const outcome = await writeViewItem(collection, raw, mode);
+      if ("writtenId" in outcome) written.push(outcome.writtenId);
+      else rejected.push(outcome.rejected);
+    }
+    res.json({ written, rejected });
+  } catch (err) {
+    log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+/** Mount the read-side REST surface. Mirrors MulmoClaude's
+ *  GET /api/collections + GET /api/collections/:slug response shapes, which is what
+ *  the package's UI binding (fetchCollectionDetail / listCollections) expects.
+ *  One app.METHOD(path, handler) per endpoint — the handlers live above. */
+export function mountCollectionRoutes(app: Express): void {
+  // Registered before the ":slug" routes so "registry" is never captured as a slug.
+  app.get("/api/collections/registry/list", registryListHandler);
+  app.post("/api/collections/registry/import", registryImportHandler);
+
+  app.delete("/api/collections/:slug/views/:viewId", viewDeleteHandler);
+  app.delete("/api/collections/:slug", collectionDeleteHandler);
+
+  app.get("/api/collections/list", listHandler);
+  app.get("/api/collections/:slug/detail", detailHandler);
+
+  app.post("/api/collections/:slug/items", itemCreateHandler);
+  app.put("/api/collections/:slug/items/:itemId", itemUpdateHandler);
+  app.delete("/api/collections/:slug/items/:itemId", itemDeleteHandler);
+
+  app.post("/api/collections/:slug/items/:itemId/actions/:actionId", itemActionHandler);
+  app.post("/api/collections/:slug/actions/:actionId", collectionActionHandler);
+
+  app.get("/api/collections/:slug/view-file", viewFileHandler);
+  app.get("/api/collections/:slug/remote-view", remoteViewHandler);
+  app.post("/api/collections/:slug/remote-view/:viewId/mutate", remoteViewMutateHandler);
+  app.get("/api/collections/:slug/remote-view/:viewId/items", remoteViewItemsHandler);
+
+  app.post("/api/collections/:slug/view-token", viewTokenHandler);
   app.options("/api/collections/:slug/view-data", viewDataCors, (_req: Request, res: Response) => {
     res.status(204).end();
   });
-
-  // Scoped read: the view's enriched records as `{ items }` — the shape custom views
-  // fetch from `window.__MC_VIEW.dataUrl`. Guarded by the view token only.
-  app.get("/api/collections/:slug/view-data", viewDataCors, requireViewToken("read"), async (req: Request<{ slug: string }>, res: Response) => {
-    try {
-      const collection = await loadCollection(req.params.slug);
-      if (!collection) {
-        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
-        return;
-      }
-      const items = await enrichItems(collection, await listItems(collection.dataDir));
-      res.json({ items });
-    } catch (err) {
-      log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
-
-  // Scoped write: apply per-record updates from a custom view (e.g. the vocabulary
-  // flashcard's grade buttons). Requires a `write`-capable token. Body is
-  // `{ items: [...], mode?: "merge" | "upsert" | "create" }`, matching the documented
-  // __MC_VIEW contract; `mode` defaults to `upsert` (write the record as given). The
-  // response envelope is `{ written, rejected }` — `written` is the id of each stored
-  // record, `rejected` a `{ id, problem }` per row that failed — the shape views read.
-  app.put("/api/collections/:slug/view-data", viewDataCors, requireViewToken("write"), async (req: Request<{ slug: string }>, res: Response) => {
-    try {
-      const collection = await loadCollection(req.params.slug);
-      if (!collection) {
-        res.status(404).json({ error: `collection '${req.params.slug}' not found` });
-        return;
-      }
-      const body = (req.body ?? {}) as { items?: unknown; mode?: unknown };
-      if (!Array.isArray(body.items)) {
-        res.status(400).json({ error: "`items` must be an array" });
-        return;
-      }
-      const mode: ViewWriteMode = body.mode === undefined ? "upsert" : (body.mode as ViewWriteMode);
-      if (!VIEW_WRITE_MODES.includes(mode)) {
-        const modeList = VIEW_WRITE_MODES.map((m) => `"${m}"`).join(", ");
-        res.status(400).json({ error: `\`mode\` must be one of ${modeList}` });
-        return;
-      }
-      const written: string[] = [];
-      const rejected: Array<{ id: string; problem: string }> = [];
-      for (const raw of body.items) {
-        const outcome = await writeViewItem(collection, raw, mode);
-        if ("writtenId" in outcome) written.push(outcome.writtenId);
-        else rejected.push(outcome.rejected);
-      }
-      res.json({ written, rejected });
-    } catch (err) {
-      log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
-      res.status(500).json({ error: errorMessage(err) });
-    }
-  });
+  app.get("/api/collections/:slug/view-data", viewDataCors, requireViewToken("read"), viewDataGetHandler);
+  app.put("/api/collections/:slug/view-data", viewDataCors, requireViewToken("write"), viewDataPutHandler);
 }
