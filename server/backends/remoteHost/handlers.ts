@@ -57,28 +57,80 @@ const composeMessage = (message: string, attachments: Attachment[]): string => {
   return `${message}\n\nAttached file(s) — read them from the workspace:\n${paths}`;
 };
 
+// ── Deps-free command handlers (params + engine imports only) ──
+// Extracted to module scope so createRemoteHostHandlers stays small; the deps-using
+// handlers (workspace / spawnChat / ingest) stay in the factory below.
+
+// Mirrors GET /api/collections/list → { collections: CollectionSummary[] }. Feeds
+// (source "feed") are excluded — they are served by listFeeds.
+const listCollections: CommandHandlers["listCollections"] = async () => {
+  const collections = (await discoverCollections()).filter((collection) => collection.source !== "feed").map(toSummary);
+  return { collections } as unknown as JsonObject;
+};
+
+// One collection's detail + a PAGE of its records (pagination mandatory — the result
+// rides inside a 1 MiB Firestore command doc).
+const getCollection: CommandHandlers["getCollection"] = async (params: JsonObject) => {
+  const slug = String(params.slug ?? "");
+  const offset = clampOffset(params.offset);
+  const limit = clampLimit(params.limit);
+  const collection = await loadCollection(slug);
+  if (!collection) throw new Error(`collection '${slug}' not found`);
+  const all = deriveItems(collection.schema, await listItems(collection.dataDir));
+  return pageResult(toDetail(collection), all, offset, limit);
+};
+
+// One mobile custom view, wrapped host-side into its sandboxed srcdoc (CSP +
+// postMessage bootstrap) — the phone renders the artifact verbatim.
+const getRemoteView: CommandHandlers["getRemoteView"] = async (params: JsonObject) => {
+  const slug = String(params.slug ?? "");
+  const viewId = String(params.viewId ?? "");
+  const locale = typeof params.locale === "string" ? params.locale : "";
+  const collection = await loadCollection(slug);
+  if (!collection) throw new Error(`collection '${slug}' not found`);
+  const result = await buildRemoteView(collection, viewId, locale);
+  if (result.kind !== "ok") throw new Error(remoteViewFailureMessage(result, slug));
+  return { view: result.view, srcdoc: result.srcdoc, bytes: result.bytes } as unknown as JsonObject;
+};
+
+// One page of a mobile view's records, projected to the view's fields. Image fields are
+// NOT inlined on this host yet (no thumbnail store) — they come back as workspace paths
+// (unrenderable on the phone) and count as `omitted`.
+const getRemoteViewItems: CommandHandlers["getRemoteViewItems"] = async (params: JsonObject) => {
+  const slug = String(params.slug ?? "");
+  const viewId = String(params.viewId ?? "");
+  const request = { offset: clampOffset(params.offset), limit: clampLimit(params.limit), fields: normalizeFields(params.fields) };
+  const collection = await loadCollection(slug);
+  if (!collection) throw new Error(`collection '${slug}' not found`);
+  const result = await remoteViewItems(collection, viewId, request);
+  if (result.kind !== "ok") throw new Error(remoteViewItemsFailureMessage(result, slug));
+  return { page: result.page, inlined: result.inlined, omitted: result.omitted } as unknown as JsonObject;
+};
+
+// Apply one update/delete requested by a writable mobile view, authorized by that view's
+// declared surface (editableFields / allowDelete) and enforced HOST-side — the sandboxed
+// view is never trusted.
+const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (params: JsonObject) => {
+  const slug = String(params.slug ?? "");
+  const viewId = String(params.viewId ?? "");
+  const request = normalizeMutate({ op: params.op, id: params.id, patch: params.patch });
+  if (!request) throw new Error("invalid mutate request — expected { op: 'update'|'delete', id, patch? }");
+  const collection = await loadCollection(slug);
+  if (!collection) throw new Error(`collection '${slug}' not found`);
+  const result = await mutateRemoteView(collection, viewId, request);
+  if (result.kind !== "ok") throw new Error(mutateRemoteViewFailureMessage(result, slug));
+  return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
+};
+
 export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHandlers {
   const { workspace, spawnChat, ingest } = deps;
 
   return {
-    // Mirrors GET /api/collections/list → { collections: CollectionSummary[] }.
-    // Feeds (source "feed") are excluded — they are served by listFeeds.
-    listCollections: async () => {
-      const collections = (await discoverCollections()).filter((collection) => collection.source !== "feed").map(toSummary);
-      return { collections } as unknown as JsonObject;
-    },
-
-    // One collection's detail + a PAGE of its records (pagination mandatory — the
-    // result rides inside a 1 MiB Firestore command doc).
-    getCollection: async (params: JsonObject) => {
-      const slug = String(params.slug ?? "");
-      const offset = clampOffset(params.offset);
-      const limit = clampLimit(params.limit);
-      const collection = await loadCollection(slug);
-      if (!collection) throw new Error(`collection '${slug}' not found`);
-      const all = deriveItems(collection.schema, await listItems(collection.dataDir));
-      return pageResult(toDetail(collection), all, offset, limit);
-    },
+    listCollections,
+    getCollection,
+    getRemoteView,
+    getRemoteViewItems,
+    mutateRemoteViewItem,
 
     // Feed registry with retrieval kind / schedule / last-fetch time (read-only).
     listFeeds: async () => {
@@ -131,48 +183,6 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     listAccountingBooks: async () => {
       const { books } = await listBooks(workspace);
       return { books: books.map((book) => ({ id: book.id, name: book.name })) } as unknown as JsonObject;
-    },
-
-    // One mobile custom view, wrapped host-side into its sandboxed srcdoc (CSP +
-    // postMessage bootstrap) — the phone renders the artifact verbatim.
-    getRemoteView: async (params: JsonObject) => {
-      const slug = String(params.slug ?? "");
-      const viewId = String(params.viewId ?? "");
-      const locale = typeof params.locale === "string" ? params.locale : "";
-      const collection = await loadCollection(slug);
-      if (!collection) throw new Error(`collection '${slug}' not found`);
-      const result = await buildRemoteView(collection, viewId, locale);
-      if (result.kind !== "ok") throw new Error(remoteViewFailureMessage(result, slug));
-      return { view: result.view, srcdoc: result.srcdoc, bytes: result.bytes } as unknown as JsonObject;
-    },
-
-    // One page of a mobile view's records, projected to the view's fields. Image
-    // fields are NOT inlined on this host yet (no thumbnail store) — they come
-    // back as workspace paths (unrenderable on the phone) and count as `omitted`.
-    getRemoteViewItems: async (params: JsonObject) => {
-      const slug = String(params.slug ?? "");
-      const viewId = String(params.viewId ?? "");
-      const request = { offset: clampOffset(params.offset), limit: clampLimit(params.limit), fields: normalizeFields(params.fields) };
-      const collection = await loadCollection(slug);
-      if (!collection) throw new Error(`collection '${slug}' not found`);
-      const result = await remoteViewItems(collection, viewId, request);
-      if (result.kind !== "ok") throw new Error(remoteViewItemsFailureMessage(result, slug));
-      return { page: result.page, inlined: result.inlined, omitted: result.omitted } as unknown as JsonObject;
-    },
-
-    // Apply one update/delete requested by a writable mobile view, authorized by
-    // that view's declared surface (editableFields / allowDelete) and enforced
-    // HOST-side — the sandboxed view is never trusted.
-    mutateRemoteViewItem: async (params: JsonObject) => {
-      const slug = String(params.slug ?? "");
-      const viewId = String(params.viewId ?? "");
-      const request = normalizeMutate({ op: params.op, id: params.id, patch: params.patch });
-      if (!request) throw new Error("invalid mutate request — expected { op: 'update'|'delete', id, patch? }");
-      const collection = await loadCollection(slug);
-      if (!collection) throw new Error(`collection '${slug}' not found`);
-      const result = await mutateRemoteView(collection, viewId, request);
-      if (result.kind !== "ok") throw new Error(mutateRemoteViewFailureMessage(result, slug));
-      return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
     },
 
     // Start a visible chat from the phone, seeded with `message`. This host has

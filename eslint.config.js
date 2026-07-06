@@ -38,13 +38,11 @@ export default [
   },
   {
     // Complexity / size guards. Cognitive complexity is already covered by sonarjs
-    // (error@15). cyclomatic complexity, nesting depth, and callback nesting have zero
-    // offenders, so they're ERRORS — enforced going forward. Function length and param
-    // count stay WARN because two intentional offenders remain: createRemoteHostHandlers
-    // (92 lines, being reworked in an open PR) and spawnClaudePty's 7 params (hot path,
-    // not worth churning 5 call sites) — flip these two to error once those are resolved.
+    // (error@15). All ERRORS (enforced going forward) except max-params, which stays WARN
+    // for its one intentional offender: spawnClaudePty's 7 params (hot path, not worth
+    // churning 5 call sites into an options object) — flip it to error once resolved.
     rules: {
-      "max-lines-per-function": ["warn", { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
+      "max-lines-per-function": ["error", { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
       complexity: ["error", 20],
       "max-depth": ["error", 4],
       "max-params": ["warn", 6],
