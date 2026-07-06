@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import express from "express";
+import sharp from "sharp";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -85,6 +86,33 @@ beforeAll(async () => {
   writeFileSync(path.join(ws, "data", "singletoncol", "items", "me.json"), JSON.stringify({ id: "me", name: "Owner" }));
   mkdirSync(path.join(ws, "data", "skills", "singletoncol", "views"), { recursive: true });
   writeFileSync(path.join(ws, "data", "skills", "singletoncol", "views", "sv.html"), "<head></head><body>editable</body>");
+
+  // A collection with a mobile view that declares an image field, so the
+  // remote-view items route can inline a real thumbnail (isolated from testcol so
+  // its record counts don't perturb the detail/view-data tests above).
+  const PHOTOS_SCHEMA = {
+    title: "Photos",
+    icon: "image",
+    dataPath: "data/photoscol/items",
+    primaryKey: "id",
+    fields: {
+      id: { type: "string", label: "ID", primary: true, required: true },
+      name: { type: "string", label: "Name" },
+      photo: { type: "image", label: "Photo" },
+    },
+    views: [{ id: "gallery", file: "views/gallery.html", label: "Gallery", target: "mobile", imageFields: ["photo"] }],
+  };
+  mkdirSync(path.join(ws, ".claude", "skills", "photoscol"), { recursive: true });
+  writeFileSync(path.join(ws, ".claude", "skills", "photoscol", "schema.json"), JSON.stringify(PHOTOS_SCHEMA));
+  mkdirSync(path.join(ws, "data", "skills", "photoscol", "views"), { recursive: true });
+  writeFileSync(path.join(ws, "data", "skills", "photoscol", "views", "gallery.html"), "<head></head><body>gallery</body>");
+  mkdirSync(path.join(ws, "data", "photoscol", "images"), { recursive: true });
+  const pic = await sharp({ create: { width: 40, height: 24, channels: 3, background: { r: 200, g: 30, b: 90 } } })
+    .png()
+    .toBuffer();
+  writeFileSync(path.join(ws, "data", "photoscol", "images", "pic.png"), pic);
+  mkdirSync(path.join(ws, "data", "photoscol", "items"), { recursive: true });
+  writeFileSync(path.join(ws, "data", "photoscol", "items", "p1.json"), JSON.stringify({ id: "p1", name: "First", photo: "data/photoscol/images/pic.png" }));
 
   // Point the (singleton) collection host at the fixture. vitest isolates modules
   // per test file, so this configure is fresh for this worker.
@@ -617,5 +645,18 @@ describe("mobile custom views (phone-frame preview)", () => {
       body: JSON.stringify({ nonsense: true }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it("GET /:slug/remote-view/:viewId/items inlines the view's image field as a data URL thumbnail", async () => {
+    const res = await fetch(`${base}/api/collections/photoscol/remote-view/gallery/items`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.inlined).toBeGreaterThanOrEqual(1);
+    const record = body.page.items.find((item: { id: string }) => item.id === "p1");
+    expect(record.photo).toMatch(/^data:image\/jpeg;base64,/); // the path was replaced by a thumbnail
+  });
+
+  it("GET /:slug/remote-view/:viewId/items 404s an unknown view", async () => {
+    expect((await fetch(`${base}/api/collections/photoscol/remote-view/nope/items`)).status).toBe(404);
   });
 });
