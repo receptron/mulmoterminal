@@ -37,6 +37,28 @@ export default [
     },
   },
   {
+    // Complexity / size guards. All `warn` so they surface long or gnarly functions
+    // without failing the build (lint runs `eslint .` with no --max-warnings). Cognitive
+    // complexity is already covered by sonarjs (error@15); these add cyclomatic complexity,
+    // function length, nesting depth, params, and callback nesting.
+    rules: {
+      "max-lines-per-function": ["warn", { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
+      complexity: ["warn", 20],
+      "max-depth": ["warn", 4],
+      "max-params": ["warn", 6],
+      "max-nested-callbacks": ["warn", 4],
+    },
+  },
+  {
+    // Test files: a describe/it suite is one big (nested) callback by design, so the
+    // length + callback-nesting guards are noise here. Keep the logic-complexity guards on.
+    files: ["**/*.spec.{ts,js}", "**/*.test.{ts,js}"],
+    rules: {
+      "max-lines-per-function": "off",
+      "max-nested-callbacks": "off",
+    },
+  },
+  {
     // eslint-plugin-security tuning (mirrors mulmoclaude): these three rules fire
     // on safe, intentional patterns here — workspace-relative fs paths (session
     // files keyed by validated UUIDs), dynamic `obj[key]` lookups, and regexps —
