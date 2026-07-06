@@ -67,6 +67,15 @@ const log = {
   debug: (prefix: string, message: string, data?: Record<string, unknown>) => console.debug(`[${prefix}] ${message}`, data ?? ""),
 };
 
+// Skill roots — the single source of truth for where skills live on disk, shared
+// with the collection engine (below) AND the remote-host listSkills scanner
+// (remoteHost/skills.ts) so both scan the exact same directories and stay
+// consistent about the skill/collection split.
+/** `~/.claude/skills` — user scope (read-only). */
+export const userSkillsDir = (): string => path.join(os.homedir(), ".claude", "skills");
+/** `<root>/.claude/skills` — project scope. */
+export const projectSkillsDir = (root: string): string => path.join(root, ".claude", "skills");
+
 // The shared workspace root, captured at init so the registry import route can pass
 // it to the engine (importRegistry takes it explicitly; the read side reads the host).
 let workspaceRoot: string | null = null;
@@ -80,9 +89,9 @@ export function initCollectionsBackend(deps: { workspace: string }): void {
     log,
     paths: {
       // ~/.claude/skills — user scope (read-only).
-      userSkillsDir: path.join(os.homedir(), ".claude", "skills"),
+      userSkillsDir: userSkillsDir(),
       // <root>/.claude/skills — project scope.
-      projectSkillsDir: (root) => path.join(root, ".claude", "skills"),
+      projectSkillsDir,
       // <root>/feeds — feed registry root.
       feedsRoot: (root) => path.join(root, "feeds"),
       // <root>/data/skills — project-skills staging.

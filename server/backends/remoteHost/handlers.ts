@@ -14,6 +14,7 @@ import { listBooks } from "@mulmoclaude/accounting-plugin/server";
 import type { CommandHandlers, JsonObject, JsonValue } from "@mulmoclaude/core/remote-host";
 
 import { readShortcuts } from "../shortcuts.js";
+import { discoverSkillNames } from "./skills.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
 import {
   buildRemoteView,
@@ -100,6 +101,16 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
 
     // Pinned launcher shortcuts (favorites), read-only.
     listShortcuts: async () => ({ shortcuts: await readShortcuts(workspace) }) as unknown as JsonObject,
+
+    // Discoverable skill ids (~/.claude/skills + <workspace>/.claude/skills),
+    // read-only. Collection slugs are subtracted — a skill dir that ships a
+    // schema.json is a collection served by listCollections, so it must not
+    // double-list here (mirrors MulmoClaude's listSkills).
+    listSkills: async () => {
+      const [names, collections] = await Promise.all([discoverSkillNames({ workspaceRoot: workspace }), discoverCollections()]);
+      const collectionSlugs = new Set(collections.filter((collection) => collection.source !== "feed").map((collection) => collection.slug));
+      return { skills: names.filter((name) => !collectionSlugs.has(name)) } as unknown as JsonObject;
+    },
 
     // { id, name } per accounting book, for a mobile book picker.
     listAccountingBooks: async () => {
