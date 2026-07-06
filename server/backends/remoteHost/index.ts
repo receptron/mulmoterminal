@@ -17,6 +17,7 @@ import { auth, firestore, storage } from "./firebase.js";
 import { createRemoteHostHandlers } from "./handlers.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
+import { onExpire } from "./onExpire.js";
 
 const HOST_ID = "mulmoterminal";
 const PREFIX = "[remote-host]";
@@ -40,6 +41,9 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
     signOut: authHelpers.signOutHost,
     currentUid: authHelpers.currentUid,
     startRunner: (channel, handlers, options) => startHostRunner(firestore, channel, handlers, options),
+    // Expired offline-queued startChat commands: delete the phone's staged
+    // Storage uploads before the runner removes the doc (protocol v2 offline queue).
+    onExpire,
     handlers: createRemoteHostHandlers({ workspace: deps.workspace, spawnChat: deps.spawnChat, ingest }),
     log: {
       info: (msg) => console.log(PREFIX, msg),
