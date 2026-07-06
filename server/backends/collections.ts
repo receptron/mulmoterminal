@@ -45,10 +45,17 @@ import {
 import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
 // Curated-registry engine (Discover tab): merged catalog fetch + bundle import.
 import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
-import { normalizeMutate } from "@mulmoclaude/core/remote-view";
+import { clampLimit as clampViewLimit, clampOffset as clampViewOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
 // Mobile custom-view builder — shared with the remote-host channel handlers so
 // the desktop phone-frame preview renders the EXACT artifact the phone receives.
-import { buildRemoteView, mutateRemoteView, remoteViewFailureMessage, mutateRemoteViewFailureMessage } from "./remoteView.js";
+import {
+  buildRemoteView,
+  mutateRemoteView,
+  remoteViewFailureMessage,
+  mutateRemoteViewFailureMessage,
+  remoteViewItems,
+  remoteViewItemsFailureMessage,
+} from "./remoteView.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -150,6 +157,14 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode:
   if (result.kind === "conflict")
     return { rejected: { id: itemId, problem: `'${itemId}' already exists — mode "create" refuses overwrite; use "upsert" to update it` } };
   return { rejected: { id: itemId, problem: "write refused: the collection's data dir escapes the workspace" } };
+}
+
+/** A `fields` projection arrives as a CSV query (`?fields=title,photo`) or
+ *  repeated params; hand `normalizeFields` an array either way. */
+function csvParam(value: unknown): string[] | undefined {
+  if (Array.isArray(value)) return value.map((entry) => String(entry));
+  if (typeof value === "string" && value.length > 0) return value.split(",");
+  return undefined;
 }
 
 /** HTTP status for a non-ok remote-view mutate (message via
@@ -561,6 +576,31 @@ export function mountCollectionRoutes(app: Express): void {
       res.json(result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item });
     } catch (err) {
       log.warn("collections", "remote-view mutate failed", { slug, viewId, error: errorMessage(err) });
+      res.status(500).json({ error: errorMessage(err) });
+    }
+  });
+
+  // One page of a mobile view's records, with its declared image fields inlined
+  // as `data:` thumbnails — the desktop phone-frame preview's paging source. Same
+  // builder as the channel's getRemoteViewItems, so the preview pages the exact
+  // data (real thumbnails) the phone gets.
+  app.get("/api/collections/:slug/remote-view/:viewId/items", async (req: Request<{ slug: string; viewId: string }>, res: Response) => {
+    const { slug, viewId } = req.params;
+    const request = { offset: clampViewOffset(req.query.offset), limit: clampViewLimit(req.query.limit), fields: normalizeFields(csvParam(req.query.fields)) };
+    const collection = await loadCollection(slug);
+    if (!collection) {
+      res.status(404).json({ error: `collection '${slug}' not found` });
+      return;
+    }
+    try {
+      const result = await remoteViewItems(collection, viewId, request);
+      if (result.kind !== "ok") {
+        res.status(result.kind === "view-not-found" ? 404 : 400).json({ error: remoteViewItemsFailureMessage(result, slug) });
+        return;
+      }
+      res.json({ page: result.page, inlined: result.inlined, omitted: result.omitted });
+    } catch (err) {
+      log.warn("collections", "remote-view items failed", { slug, viewId, error: errorMessage(err) });
       res.status(500).json({ error: errorMessage(err) });
     }
   });

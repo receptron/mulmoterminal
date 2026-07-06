@@ -19,6 +19,7 @@ import type {
   CollectionActionResult,
   CollectionRemoteViewResult,
   CollectionRemoteViewMutateResult,
+  CollectionRemoteViewItemsResult,
 } from "@mulmoclaude/collection-plugin/vue";
 import type {
   CollectionDetailResponse,
@@ -197,6 +198,19 @@ configureCollectionUi({
     ),
   mutateRemoteView: (slug, viewId, request) =>
     apiPost<CollectionRemoteViewMutateResult>(`/api/collections/${encodeURIComponent(slug)}/remote-view/${encodeURIComponent(viewId)}/mutate`, request),
+  // Page a mobile view's records the way the phone does — via getRemoteViewItems,
+  // so the host projects to `fields` and inlines the view's declared image fields
+  // as `data:` thumbnails. Without this the preview would page raw (CSP-blocked)
+  // paths and show broken images.
+  fetchRemoteViewItems: (slug, viewId, request) => {
+    const query = new URLSearchParams();
+    if (request.offset != null) query.set("offset", String(request.offset));
+    if (request.limit != null) query.set("limit", String(request.limit));
+    if (request.fields?.length) query.set("fields", request.fields.join(","));
+    const qs = query.toString();
+    const suffix = qs ? `?${qs}` : "";
+    return apiGet<CollectionRemoteViewItemsResult>(`/api/collections/${encodeURIComponent(slug)}/remote-view/${encodeURIComponent(viewId)}/items${suffix}`);
+  },
 
   // MulmoTerminal serves no per-view translations — return the documented
   // "no i18n" shape ({ locale: "", dict: {} }) so the iframe's __MC_VIEW.t(key)
