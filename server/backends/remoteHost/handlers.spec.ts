@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createRemoteHostHandlers } from "./handlers.js";
+import { initCollectionsBackend } from "../collections.js";
 
 describe("createRemoteHostHandlers", () => {
   let ws: string;
@@ -37,6 +38,7 @@ describe("createRemoteHostHandlers", () => {
       "getCollection",
       "listFeeds",
       "listShortcuts",
+      "listSkills",
       "listAccountingBooks",
       "startChat",
       "getRemoteView",
@@ -85,5 +87,45 @@ describe("createRemoteHostHandlers", () => {
   it("listShortcuts returns an empty list when no shortcuts file exists", async () => {
     const result = (await handlers.listShortcuts({})) as unknown as { shortcuts: unknown[] };
     expect(result.shortcuts).toEqual([]);
+  });
+});
+
+// listSkills leans on the globally-configured collection host (discoverCollections)
+// to subtract collection slugs, so it gets its own block that wires that host at a
+// tmp workspace. Assertions use contains/not-contains because the user scope scans
+// the developer's real ~/.claude/skills, which the test can't control.
+describe("createRemoteHostHandlers · listSkills", () => {
+  let ws: string;
+  let handlers: ReturnType<typeof createRemoteHostHandlers>;
+
+  const COL_SCHEMA = {
+    title: "My Collection",
+    icon: "star",
+    dataPath: "data/mycol/items",
+    primaryKey: "id",
+    fields: { id: { type: "string", label: "ID", primary: true, required: true } },
+  };
+
+  beforeEach(() => {
+    ws = mkdtempSync(path.join(tmpdir(), "mt-rh-skills-"));
+    // A plain skill (SKILL.md only) — should be listed.
+    mkdirSync(path.join(ws, ".claude", "skills", "mt-plain-skill"), { recursive: true });
+    writeFileSync(path.join(ws, ".claude", "skills", "mt-plain-skill", "SKILL.md"), "---\ndescription: a plain skill\n---\n\nbody");
+    // A collection that ALSO ships a SKILL.md — appears in the raw skill scan but
+    // must be subtracted (listCollections serves it), so it should NOT be listed.
+    mkdirSync(path.join(ws, ".claude", "skills", "mt-collection"), { recursive: true });
+    writeFileSync(path.join(ws, ".claude", "skills", "mt-collection", "schema.json"), JSON.stringify(COL_SCHEMA));
+    writeFileSync(path.join(ws, ".claude", "skills", "mt-collection", "SKILL.md"), "---\ndescription: a collection\n---\n\nbody");
+    mkdirSync(path.join(ws, "data", "mycol", "items"), { recursive: true });
+
+    initCollectionsBackend({ workspace: ws });
+    handlers = createRemoteHostHandlers({ workspace: ws, spawnChat: () => ({ chatId: "x" }), ingest: async () => [] });
+  });
+  afterEach(() => rmSync(ws, { recursive: true, force: true }));
+
+  it("lists plain skill ids and subtracts collection slugs", async () => {
+    const { skills } = (await handlers.listSkills({})) as unknown as { skills: string[] };
+    expect(skills).toContain("mt-plain-skill");
+    expect(skills).not.toContain("mt-collection");
   });
 });
