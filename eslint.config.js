@@ -37,16 +37,18 @@ export default [
     },
   },
   {
-    // Complexity / size guards. All `warn` so they surface long or gnarly functions
-    // without failing the build (lint runs `eslint .` with no --max-warnings). Cognitive
-    // complexity is already covered by sonarjs (error@15); these add cyclomatic complexity,
-    // function length, nesting depth, params, and callback nesting.
+    // Complexity / size guards. Cognitive complexity is already covered by sonarjs
+    // (error@15). cyclomatic complexity, nesting depth, and callback nesting have zero
+    // offenders, so they're ERRORS — enforced going forward. Function length and param
+    // count stay WARN because two intentional offenders remain: createRemoteHostHandlers
+    // (92 lines, being reworked in an open PR) and spawnClaudePty's 7 params (hot path,
+    // not worth churning 5 call sites) — flip these two to error once those are resolved.
     rules: {
       "max-lines-per-function": ["warn", { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
-      complexity: ["warn", 20],
-      "max-depth": ["warn", 4],
+      complexity: ["error", 20],
+      "max-depth": ["error", 4],
       "max-params": ["warn", 6],
-      "max-nested-callbacks": ["warn", 4],
+      "max-nested-callbacks": ["error", 4],
     },
   },
   {
