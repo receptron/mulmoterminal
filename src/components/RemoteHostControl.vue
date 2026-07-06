@@ -139,7 +139,7 @@ onUnmounted(close);
       aria-label="Remote host"
       @click="toggle"
     >
-      <span class="material-symbols-outlined">smartphone</span>
+      <span class="material-symbols-outlined">phonelink</span>
     </button>
 
     <div v-if="open" class="rh-pop" role="group" aria-label="Remote host">
