@@ -1514,6 +1514,11 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
 const DRAFT_READY_MARKER = /shift\+tab to cycle/;
 const DRAFT_SETTLE_MS = 250;
 const DRAFT_FALLBACK_MS = 6000;
+// Claude's TUI commits a bracketed paste to its input box asynchronously; a CR glued
+// onto the same write can arrive before the paste lands and be dropped — leaving an
+// auto-run prompt typed-but-unsent. Send the submitting Enter as a SEPARATE chunk a
+// beat after the paste so it actually registers.
+const DRAFT_SUBMIT_MS = 150;
 
 // Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —
 // ESC, Ctrl-C, CR/LF, and an embedded bracketed-paste terminator) so untrusted draft
@@ -1641,7 +1646,19 @@ function spawnClaudePty(
     if (draftDone) return;
     draftDone = true;
     try {
-      entry.term.write(`\x1b[200~${draftText}\x1b[201~${autoSubmit ? "\r" : ""}`);
+      // Type the paste first; for an auto-run, submit with a CR in a SEPARATE write a
+      // beat later (see DRAFT_SUBMIT_MS) so the Enter isn't dropped while Claude's TUI
+      // is still committing the paste. A draft gets no CR — the user reviews + sends.
+      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
+      if (autoSubmit) {
+        setTimeout(() => {
+          try {
+            entry.term.write("\r");
+          } catch {
+            // pty already gone — nothing to submit
+          }
+        }, DRAFT_SUBMIT_MS);
+      }
     } catch {
       // pty already gone — nothing to draft into
     }
