@@ -13,7 +13,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 
 import { getWorkspaceRoot } from "@mulmoclaude/core/collection/server";
 
-import { containedPath } from "../files-browse.js";
+import { containedPath, realContainedWithin } from "../files-browse.js";
 
 /** Decode → downscale to fit `maxEdge` (never enlarge) → re-encode JPEG.
  *  Injected so tests exercise the resolver without the native `sharp` binary. */
@@ -79,12 +79,18 @@ export function createThumbnailResolver(resize: ResizeToJpeg = sharpResize) {
     }
     const abs = containedPath(root, relPath);
     if (!abs) return null;
-    const info = await stat(abs).catch(() => null);
+    // Lexical containment can be defeated by a symlink UNDER the workspace that
+    // points outside it (e.g. data/link.jpg -> /etc/passwd); resolve the real
+    // target and re-check before we stat/read it, so a symlinked path can't
+    // exfiltrate an out-of-workspace file to the phone.
+    const real = realContainedWithin(root, abs);
+    if (!real) return null;
+    const info = await stat(real).catch(() => null);
     if (!info?.isFile()) return null;
     const cached = cacheGet(relPath, info.mtimeMs, maxEdge);
     if (cached) return cached;
     try {
-      const out = await resize(await readFile(abs), maxEdge);
+      const out = await resize(await readFile(real), maxEdge);
       const dataUrl = `data:image/jpeg;base64,${out.toString("base64")}`;
       cacheSet(relPath, { mtimeMs: info.mtimeMs, maxEdge, dataUrl });
       return dataUrl;

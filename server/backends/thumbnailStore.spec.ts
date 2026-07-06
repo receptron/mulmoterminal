@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -13,9 +13,10 @@ const stubResize = async (input: Buffer, maxEdge: number) => Buffer.from(`RESIZE
 
 describe("thumbnail resolver", () => {
   const resolve = createThumbnailResolver(stubResize);
+  let ws = "";
 
   beforeAll(() => {
-    const ws = mkdtempSync(path.join(tmpdir(), "mt-thumb-"));
+    ws = mkdtempSync(path.join(tmpdir(), "mt-thumb-"));
     mkdirSync(path.join(ws, "data"), { recursive: true });
     writeFileSync(path.join(ws, "data", "pic.png"), Buffer.from([1, 2, 3, 4]));
     // Sets the workspace root the resolver reads via getWorkspaceRoot().
@@ -34,6 +35,16 @@ describe("thumbnail resolver", () => {
     expect(await resolve("data/nope.png", 512)).toBeNull();
     expect(await resolve("../outside.png", 512)).toBeNull();
     expect(await resolve("", 512)).toBeNull();
+  });
+
+  it("refuses a symlink under the workspace that points OUTSIDE it (no exfiltration)", async () => {
+    // A file outside the workspace, and a symlink under it that targets the file.
+    const outside = mkdtempSync(path.join(tmpdir(), "mt-outside-"));
+    const secret = path.join(outside, "secret.png");
+    writeFileSync(secret, Buffer.from([9, 9, 9, 9]));
+    symlinkSync(secret, path.join(ws, "data", "link.png"));
+    // Lexically "data/link.png" is contained; the real target escapes → null.
+    expect(await resolve("data/link.png", 512)).toBeNull();
   });
 
   it("caches by (path, mtime, maxEdge) so a repeated page doesn't re-decode", async () => {
