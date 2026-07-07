@@ -64,15 +64,17 @@ export interface CodexWsUrlInput {
   secure: boolean;
   sessionId: string | null; // reattach/resume this codex session; null => fresh
   cwd?: string | null;
+  devTerminal?: boolean; // grid dev terminal: no GUI MCP (?gui=0). Single view omits it => GUI MCP.
 }
 
 // The codex-terminal endpoint (a first-class codex session). Persistent & reattachable like
 // /ws; the browser sends the mulmoterminal session id to reattach/resume — the server maps it
-// to codex's own rollout id.
-export function buildCodexWsUrl({ host, secure, sessionId, cwd }: CodexWsUrlInput): string {
+// to codex's own rollout id. ?gui=0 (grid) runs codex without the GUI MCP.
+export function buildCodexWsUrl({ host, secure, sessionId, cwd, devTerminal }: CodexWsUrlInput): string {
   const params = new URLSearchParams();
   if (sessionId) params.set("session", sessionId);
   if (cwd) params.set("cwd", cwd);
+  if (devTerminal) params.set("gui", "0");
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : "";
   const proto = secure ? "wss:" : "ws:";

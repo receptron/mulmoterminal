@@ -91,4 +91,14 @@ describe("buildCodexWsUrl", () => {
   it("uses wss when secure", () => {
     expect(buildCodexWsUrl({ host: "h", secure: true, sessionId: null }).startsWith("wss://")).toBe(true);
   });
+
+  it("adds gui=0 for a grid dev terminal (no GUI MCP)", () => {
+    const u = new URL(buildCodexWsUrl({ host: "h", secure: false, sessionId: null, devTerminal: true }));
+    expect(u.searchParams.get("gui")).toBe("0");
+  });
+
+  it("omits gui for the single view (GUI MCP on)", () => {
+    const u = new URL(buildCodexWsUrl({ host: "h", secure: false, sessionId: null }));
+    expect(u.searchParams.has("gui")).toBe(false);
+  });
 });

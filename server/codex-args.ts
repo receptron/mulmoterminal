@@ -7,11 +7,21 @@ export interface CodexArgsInput {
   resume: string | null;
   // Model override (--model), or null to use codex's own configured default.
   model: string | null;
+  // The in-process GUI MCP endpoint to attach (single view), or null (grid dev terminal / no GUI).
+  guiMcpUrl: string | null;
 }
 
 export function buildCodexArgs(input: CodexArgsInput): string[] {
   const args: string[] = [];
   if (input.model) args.push("--model", input.model);
+  if (input.guiMcpUrl) {
+    // Attach the GUI MCP over streamable HTTP and auto-approve its tools so codex can drive the
+    // GUI panel without a per-call permission prompt. `-c` takes dotted TOML keys; the value is
+    // parsed as TOML (hence the quotes). No shell is involved (node-pty spawns codex directly),
+    // so the URL needs no escaping.
+    args.push("-c", `mcp_servers.mulmoterminal-gui.url="${input.guiMcpUrl}"`);
+    args.push("-c", `mcp_servers.mulmoterminal-gui.default_tools_approval_mode="approve"`);
+  }
   if (input.resume) args.push("resume", input.resume);
   return args;
 }
