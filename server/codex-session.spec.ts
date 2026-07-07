@@ -2,19 +2,23 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { parseSessionMetaLine, readSessionMeta, listRecentRollouts, snapshotSessions, findNewRollout, discoverCodexSession } from "./codex-session.js";
+import { parseSessionMetaLine, readSessionMeta, listRecentRollouts, snapshotSessions, pickFreshSession, watchForCodexSession } from "./codex-session.js";
 
 const UUID_A = "019f251d-001c-7542-b13e-9a627effce52";
 const UUID_B = "019db01d-aaa3-7ba2-b597-b29a7fca488f";
 
 const pad = (n: number): string => String(n).padStart(2, "0");
-const dayPath = (root: string, d: Date): string => path.join(root, String(d.getFullYear()), pad(d.getMonth() + 1), pad(d.getDate()));
+const todayDir = (root: string): string => {
+  const d = new Date();
+  return path.join(root, String(d.getFullYear()), pad(d.getMonth() + 1), pad(d.getDate()));
+};
 const metaLine = (id: string, cwd: string | null): string =>
-  JSON.stringify({ timestamp: "2026-07-08T00:00:00Z", type: "session_meta", payload: { id, cwd, originator: "codex-tui", source: "cli" } });
+  JSON.stringify({ timestamp: "t", type: "session_meta", payload: { id, cwd, originator: "codex-tui", source: "cli" } });
 
-function writeRollout(dir: string, id: string, cwd: string | null, extraLines: string[] = []): string {
+function writeRollout(root: string, id: string, cwd: string | null, extraLines: string[] = []): string {
+  const dir = todayDir(root);
   mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `rollout-2026-07-08T00-00-00-${id}.jsonl`);
+  const file = path.join(dir, `rollout-x-${id}.jsonl`);
   writeFileSync(file, [metaLine(id, cwd), ...extraLines].join("\n") + "\n");
   return file;
 }
@@ -37,7 +41,7 @@ describe("parseSessionMetaLine", () => {
   });
 });
 
-describe("readSessionMeta", () => {
+describe("codex-session fs helpers", () => {
   let root: string;
   beforeEach(() => {
     root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
@@ -47,49 +51,19 @@ describe("readSessionMeta", () => {
   });
 
   it("reads the meta from the first line of a multi-line rollout", () => {
-    const file = writeRollout(dayPath(root, new Date(2026, 6, 8)), UUID_A, "/work", ['{"type":"message"}', '{"type":"message"}']);
+    const file = writeRollout(root, UUID_A, "/work", ['{"type":"message"}', '{"type":"message"}']);
     expect(readSessionMeta(file)).toEqual({ id: UUID_A, cwd: "/work" });
   });
-  it("returns null for a missing file", () => {
+  it("returns null reading a missing file", () => {
     expect(readSessionMeta(path.join(root, "nope.jsonl"))).toBeNull();
   });
-});
-
-describe("snapshot / findNewRollout", () => {
-  let root: string;
-  const now = new Date(2026, 6, 8, 12, 0, 0);
-  beforeEach(() => {
-    root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
-  });
-  afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
-  });
-
   it("lists rollouts under today's day dir", () => {
-    writeRollout(dayPath(root, now), UUID_A, "/work");
-    expect(listRecentRollouts(root, now)).toHaveLength(1);
-  });
-  it("finds the file that appeared after the snapshot", () => {
-    writeRollout(dayPath(root, now), UUID_A, "/work");
-    const before = snapshotSessions(root, now);
-    const fresh = writeRollout(dayPath(root, now), UUID_B, "/work");
-    expect(findNewRollout(root, before, now)).toBe(fresh);
-  });
-  it("returns null when nothing new appeared", () => {
-    writeRollout(dayPath(root, now), UUID_A, "/work");
-    const before = snapshotSessions(root, now);
-    expect(findNewRollout(root, before, now)).toBeNull();
-  });
-  it("picks the newest by mtime when several are fresh", () => {
-    const older = writeRollout(dayPath(root, now), UUID_A, "/work");
-    const newer = writeRollout(dayPath(root, now), UUID_B, "/work");
-    utimesSync(older, new Date(2026, 6, 8, 10), new Date(2026, 6, 8, 10));
-    utimesSync(newer, new Date(2026, 6, 8, 11), new Date(2026, 6, 8, 11));
-    expect(findNewRollout(root, new Set(), now)).toBe(newer);
+    writeRollout(root, UUID_A, "/work");
+    expect(listRecentRollouts(root)).toHaveLength(1);
   });
 });
 
-describe("discoverCodexSession", () => {
+describe("pickFreshSession", () => {
   let root: string;
   beforeEach(() => {
     root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
@@ -98,16 +72,56 @@ describe("discoverCodexSession", () => {
     rmSync(root, { recursive: true, force: true });
   });
 
-  it("returns the id of a rollout that appears after the snapshot", async () => {
+  it("returns null when nothing appeared after the snapshot", () => {
+    writeRollout(root, UUID_A, "/a");
     const before = snapshotSessions(root);
-    writeRollout(dayPath(root, new Date()), UUID_A, "/work");
-    const found = await discoverCodexSession(root, before, { timeoutMs: 500, intervalMs: 10 });
+    expect(pickFreshSession(root, before, null)).toBeNull();
+  });
+  it("returns the rollout that appeared after the snapshot", () => {
+    const before = snapshotSessions(root);
+    writeRollout(root, UUID_A, "/a");
+    expect(pickFreshSession(root, before, null)?.id).toBe(UUID_A);
+  });
+  it("prefers the fresh rollout whose cwd matches", () => {
+    const before = snapshotSessions(root);
+    writeRollout(root, UUID_A, "/a");
+    writeRollout(root, UUID_B, "/b");
+    expect(pickFreshSession(root, before, "/b")?.id).toBe(UUID_B);
+  });
+  it("falls back to the newest by mtime when no cwd matches", () => {
+    const before = snapshotSessions(root);
+    const older = writeRollout(root, UUID_A, "/a");
+    const newer = writeRollout(root, UUID_B, "/b");
+    utimesSync(older, new Date(2026, 0, 1, 10), new Date(2026, 0, 1, 10));
+    utimesSync(newer, new Date(2026, 0, 1, 11), new Date(2026, 0, 1, 11));
+    expect(pickFreshSession(root, before, "/other")?.id).toBe(UUID_B);
+  });
+});
+
+describe("watchForCodexSession", () => {
+  let root: string;
+  beforeEach(() => {
+    root = mkdtempSync(path.join(tmpdir(), "mt-codex-"));
+  });
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("resolves the session once its rollout is present", async () => {
+    const before = snapshotSessions(root);
+    writeRollout(root, UUID_A, "/work");
+    const found = await watchForCodexSession(root, before, { pollMs: 10, maxWaitMs: 500 });
     expect(found?.id).toBe(UUID_A);
     expect(found?.cwd).toBe("/work");
   });
-  it("resolves null when no new session appears before the timeout", async () => {
+  it("stops immediately when cancelled", async () => {
     const before = snapshotSessions(root);
-    const found = await discoverCodexSession(root, before, { timeoutMs: 60, intervalMs: 10 });
+    const found = await watchForCodexSession(root, before, { pollMs: 10, maxWaitMs: 5000, isCancelled: () => true });
+    expect(found).toBeNull();
+  });
+  it("resolves null when nothing appears before the timeout", async () => {
+    const before = snapshotSessions(root);
+    const found = await watchForCodexSession(root, before, { pollMs: 10, maxWaitMs: 40 });
     expect(found).toBeNull();
   });
 });

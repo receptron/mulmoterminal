@@ -39,7 +39,7 @@ import { buildClaudeArgs } from "./claude-args.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
-import { codexSessionsRoot, snapshotSessions, discoverCodexSession } from "./codex-session.js";
+import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
 import {
   isRecord,
   parseJsonl,
@@ -2094,10 +2094,11 @@ function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
   });
 }
 
-// codex writes its rollout (with the minted id) at startup; capture it best-effort so a later
-// cold reconnect can `codex resume <id>`. A fork on resume overwrites the mapping with the new id.
-function rememberCodexRollout(sessionId: string, root: string, before: Set<string>): void {
-  discoverCodexSession(root, before)
+// codex persists its rollout only after the first user turn, so watch for the session's lifetime
+// (stop once its pty is gone) and capture the minted id so a later cold reconnect can
+// `codex resume <id>`. cwd disambiguates concurrent sessions best-effort.
+function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
+  watchForCodexSession(root, before, { cwd, isCancelled: () => !ptys.has(sessionId) })
     .then((meta) => {
       if (meta) codexRolloutIds.set(sessionId, meta.id);
     })
@@ -2115,7 +2116,7 @@ function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string
   const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
   ptys.set(sessionId, entry);
   if (resumeRolloutId) codexRolloutIds.set(sessionId, resumeRolloutId);
-  rememberCodexRollout(sessionId, root, before);
+  rememberCodexRollout(sessionId, root, before, cwd);
   wireCodexRelay(entry, sessionId);
   return entry;
 }

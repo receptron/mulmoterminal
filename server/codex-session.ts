@@ -5,8 +5,8 @@ import os from "node:os";
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const ROLLOUT_RE = /^rollout-.*\.jsonl$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DISCOVERY_TIMEOUT_MS = 5000;
-const DISCOVERY_INTERVAL_MS = 150;
+const WATCH_POLL_MS = 1000;
+const WATCH_MAX_WAIT_MS = 30 * 60 * 1000;
 
 export interface CodexSessionMeta {
   id: string;
@@ -54,7 +54,7 @@ function dayDir(root: string, when: Date): string {
 }
 
 // Only today + yesterday can hold a session spawned "now" (covers a spawn racing midnight),
-// so discovery never walks the whole history.
+// so watching never walks the whole history.
 function recentDayDirs(root: string, now: Date): string[] {
   return [dayDir(root, now), dayDir(root, new Date(now.getTime() - ONE_DAY_MS))];
 }
@@ -70,8 +70,8 @@ export function listRecentRollouts(root: string, now: Date = new Date()): string
   return recentDayDirs(root, now).flatMap(listRolloutsIn);
 }
 
-// The rollout files that exist BEFORE spawning codex; the one that appears after is
-// unambiguously this session's — no reliance on clock/mtime alignment.
+// The rollout files that exist BEFORE spawning codex; a file that appears after is this
+// session's (codex only persists its rollout after the first user turn, so this can be minutes).
 export function snapshotSessions(root: string, now: Date = new Date()): Set<string> {
   return new Set(listRecentRollouts(root, now));
 }
@@ -84,34 +84,41 @@ function mtimeMs(file: string): number {
   }
 }
 
-export function findNewRollout(root: string, before: Set<string>, now: Date = new Date()): string | null {
-  const fresh = listRecentRollouts(root, now).filter((file) => !before.has(file));
-  if (fresh.length === 0) return null;
-  return fresh.reduce((newest, file) => (mtimeMs(file) > mtimeMs(newest) ? file : newest));
+interface RolloutMeta extends CodexSessionMeta {
+  file: string;
+}
+
+// The freshest rollout that appeared since the snapshot. `cwd` disambiguates concurrent sessions
+// best-effort (a rollout records the dir codex ran in); otherwise the newest wins.
+export function pickFreshSession(root: string, before: Set<string>, cwd: string | null): RolloutMeta | null {
+  const found = listRecentRollouts(root)
+    .filter((file) => !before.has(file))
+    .map((file) => ({ file, meta: readSessionMeta(file) }))
+    .filter((x): x is { file: string; meta: CodexSessionMeta } => x.meta !== null);
+  if (found.length === 0) return null;
+  const byCwd = cwd ? found.find((x) => x.meta.cwd === cwd) : undefined;
+  const chosen = byCwd ?? found.reduce((a, b) => (mtimeMs(b.file) > mtimeMs(a.file) ? b : a));
+  return { ...chosen.meta, file: chosen.file };
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Poll for the rollout codex creates at startup, then read its minted id. Keeps polling past a
-// half-written first line (the file can appear before its JSON is flushed). Null on timeout —
-// e.g. codex failed to launch.
-export async function discoverCodexSession(
+// codex persists a session's rollout only AFTER its first user turn (like claude's transcript),
+// so we watch for the whole session — not just at spawn — until the rollout appears, then read
+// its minted id. Stops early when the session is gone (isCancelled) so it can't outlive the pty.
+export async function watchForCodexSession(
   root: string,
   before: Set<string>,
-  opts: { timeoutMs?: number; intervalMs?: number } = {},
-): Promise<(CodexSessionMeta & { file: string }) | null> {
-  const timeoutMs = opts.timeoutMs ?? DISCOVERY_TIMEOUT_MS;
-  const intervalMs = opts.intervalMs ?? DISCOVERY_INTERVAL_MS;
-  const deadline = Date.now() + timeoutMs;
-  const attempt = (): (CodexSessionMeta & { file: string }) | null => {
-    const file = findNewRollout(root, before);
-    const meta = file ? readSessionMeta(file) : null;
-    return meta && file ? { ...meta, file } : null;
-  };
-  let result = attempt();
-  while (!result && Date.now() < deadline) {
-    await delay(intervalMs);
-    result = attempt();
+  opts: { cwd?: string | null; pollMs?: number; maxWaitMs?: number; isCancelled?: () => boolean } = {},
+): Promise<RolloutMeta | null> {
+  const pollMs = opts.pollMs ?? WATCH_POLL_MS;
+  const deadline = Date.now() + (opts.maxWaitMs ?? WATCH_MAX_WAIT_MS);
+  const isCancelled = opts.isCancelled ?? (() => false);
+  const cwd = opts.cwd ?? null;
+  let result = pickFreshSession(root, before, cwd);
+  while (!result && Date.now() < deadline && !isCancelled()) {
+    await delay(pollMs);
+    result = pickFreshSession(root, before, cwd);
   }
   return result;
 }
