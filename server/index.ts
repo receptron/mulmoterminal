@@ -40,6 +40,7 @@ import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
+import { stripTerminalQueries } from "./terminal-replay.js";
 import {
   isRecord,
   parseJsonl,
@@ -1443,7 +1444,9 @@ function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntr
   }
   entry.ws = ws;
   if (entry.buffer && ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ type: "output", data: entry.buffer }));
+    // Strip terminal queries from the replay so xterm doesn't re-answer them as stray input
+    // (e.g. a DA reply surfacing as "0;276;0c" in the prompt) — see terminal-replay.ts.
+    ws.send(JSON.stringify({ type: "output", data: stripTerminalQueries(entry.buffer) }));
   }
   return entry;
 }
