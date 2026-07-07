@@ -103,38 +103,41 @@ export function listEntries(absDir: string): BrowseEntry[] {
     });
 }
 
-export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string }): void {
-  const baseOf = (req: Request) => resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, deps.defaultCwd);
-  const relOf = (req: Request) => (typeof req.query.path === "string" ? req.query.path : "");
+// Project base + relative path from a browse request's query. browseBase falls back to
+// the server's default cwd; browseRel defaults to "" (the base itself).
+const browseBase = (req: Request, defaultCwd: string): string => resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd);
+const browseRel = (req: Request): string => (typeof req.query.path === "string" ? req.query.path : "");
 
-  // Resolve `path` under the request's project base; 403 if it escapes — lexically OR
-  // through a symlink. Centralises the containment check so every route (read AND write)
-  // shares one gate.
-  const contained = (req: Request, res: Response): string | null => {
-    const base = baseOf(req);
-    const lexical = containedPath(base, relOf(req));
-    const abs = lexical ? realContainedWithin(base, lexical) : null;
-    if (!abs) {
-      res.status(403).json({ error: "path escapes the project root" });
-      return null;
-    }
-    return abs;
-  };
+// Resolve `path` under the request's project base; 403 (and returns null) if it escapes —
+// lexically OR through a symlink. One containment gate shared by every route (read + write).
+function containedFor(req: Request, res: Response, defaultCwd: string): string | null {
+  const base = browseBase(req, defaultCwd);
+  const lexical = containedPath(base, browseRel(req));
+  const abs = lexical ? realContainedWithin(base, lexical) : null;
+  if (!abs) {
+    res.status(403).json({ error: "path escapes the project root" });
+    return null;
+  }
+  return abs;
+}
+
+export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string }): void {
+  const { defaultCwd } = deps;
 
   app.get("/api/files/browse/list", (req, res) => {
-    const root = baseOf(req);
-    const abs = contained(req, res);
+    const root = browseBase(req, defaultCwd);
+    const abs = containedFor(req, res, defaultCwd);
     if (!abs) return;
     try {
       if (!fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "not a directory" });
-      res.json({ cwd: path.resolve(root), path: relOf(req), entries: listEntries(abs) });
+      res.json({ cwd: path.resolve(root), path: browseRel(req), entries: listEntries(abs) });
     } catch {
       res.status(404).json({ error: "not found" });
     }
   });
 
   app.get("/api/files/browse/text", (req, res) => {
-    const abs = contained(req, res);
+    const abs = containedFor(req, res, defaultCwd);
     if (!abs) return;
     try {
       const stat = fs.statSync(abs);
@@ -147,7 +150,7 @@ export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string 
   });
 
   app.get("/api/files/browse/md", async (req, res) => {
-    const abs = contained(req, res);
+    const abs = containedFor(req, res, defaultCwd);
     if (!abs) return;
     let text: string;
     try {
@@ -166,7 +169,7 @@ export function mountFilesBrowseRoutes(app: Express, deps: { defaultCwd: string 
   });
 
   app.put("/api/files/browse/write", (req, res) => {
-    const abs = contained(req, res);
+    const abs = containedFor(req, res, defaultCwd);
     if (!abs) return;
     const text = req.body?.text;
     if (typeof text !== "string") return res.status(400).json({ error: "body.text (string) required" });

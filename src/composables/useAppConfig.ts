@@ -51,13 +51,11 @@ async function postConfigField<T>(field: string, value: unknown): Promise<{ ok: 
   }
 }
 
-// The record/remove/migrate preset mutations. Extracted so useAppConfig stays small; they
-// all funnel through the caller's `savePresets` (which owns the presetsVersion coordination
-// with loadConfig). Each preset write POSTs the whole array, so concurrent record/remove
-// calls (two grid cells launching at once) must not each derive `next` from the same stale
-// snapshot — the later POST would clobber the earlier one (last-write-wins, dropping a
-// just-launched dir). `serialize` runs the writes in order so every mutation reads the
-// freshly-saved list before computing its own.
+// The record/remove/migrate preset mutations. Each preset write POSTs the whole array, so
+// concurrent record/remove calls (two grid cells launching at once) must not each derive
+// `next` from the same stale snapshot — the later POST would clobber the earlier one
+// (last-write-wins, dropping a just-launched dir). `serialize` runs the writes in order so
+// every mutation reads the freshly-saved list before computing its own.
 function createPresetMutations(presets: Ref<CwdPreset[]>, savePresets: (next: CwdPreset[]) => Promise<boolean>) {
   let presetWrite: Promise<unknown> = Promise.resolve();
   function serialize(mutate: () => Promise<void>): Promise<void> {
@@ -120,6 +118,41 @@ function createPresetMutations(presets: Ref<CwdPreset[]>, savePresets: (next: Cw
   return { recordPreset, removePreset, migrateLegacyRecents };
 }
 
+// The directory-preset subsystem: savePresets + the mutations above, owning the version
+// coordination with loadConfig. `version` is bumped by every local preset write; loadConfig
+// captures it (snapshotVersion) before its GET and adoptServerPresets skips the server list
+// if it changed meanwhile — else a dir the user launched before the initial /api/config
+// resolves would be dropped by the stale GET.
+function createPresetManager(presets: Ref<CwdPreset[]>, saving: Ref<boolean>, error: Ref<string | null>) {
+  let version = 0;
+
+  // Persist the directory presets. Posts only cwdPresets — the server keeps the other fields,
+  // so this never clobbers them. Returns whether the save succeeded.
+  async function savePresets(next: CwdPreset[]): Promise<boolean> {
+    saving.value = true;
+    error.value = null;
+    try {
+      const res = await fetch("/api/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwdPresets: next }) });
+      if (!res.ok) throw new Error(`save failed (${res.status})`);
+      presets.value = (await res.json()).cwdPresets ?? [];
+      version++;
+      return true;
+    } catch {
+      error.value = "Couldn't save presets. Check the server and try again.";
+      return false;
+    } finally {
+      saving.value = false;
+    }
+  }
+
+  const snapshotVersion = (): number => version;
+  const adoptServerPresets = (list: unknown, capturedVersion: number): void => {
+    if (version === capturedVersion) presets.value = Array.isArray(list) ? list : [];
+  };
+
+  return { savePresets, ...createPresetMutations(presets, savePresets), snapshotVersion, adoptServerPresets };
+}
+
 // The single-field savers each persist ONE config field and update its SINGLETON ref, so
 // they're module-level (no per-composable state) — useAppConfig just re-exports them.
 // Persist just the custom attention sound (a file path, or null to use the chime).
@@ -156,42 +189,18 @@ export function useAppConfig() {
   const presets = ref<CwdPreset[]>([]);
   const saving = ref(false);
   const error = ref<string | null>(null);
-  // Bumped by every local preset write (savePresets). loadConfig captures it before
-  // its GET and skips adopting the server list if it changed meanwhile — otherwise a
-  // dir the user launched before the initial /api/config resolves would be dropped by
-  // the slower, stale GET snapshot.
-  let presetsVersion = 0;
 
-  // Persist the directory presets. Posts only cwdPresets — the server keeps the other
-  // fields, so this never clobbers them. Returns whether the save succeeded.
-  async function savePresets(next: CwdPreset[]): Promise<boolean> {
-    saving.value = true;
-    error.value = null;
-    try {
-      const res = await fetch("/api/config", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwdPresets: next }) });
-      if (!res.ok) throw new Error(`save failed (${res.status})`);
-      presets.value = (await res.json()).cwdPresets ?? [];
-      presetsVersion++; // mark local state as newer than any in-flight loadConfig GET
-      return true;
-    } catch {
-      error.value = "Couldn't save presets. Check the server and try again.";
-      return false;
-    } finally {
-      saving.value = false;
-    }
-  }
-
-  const { recordPreset, removePreset, migrateLegacyRecents } = createPresetMutations(presets, savePresets);
+  const { savePresets, recordPreset, removePreset, migrateLegacyRecents, snapshotVersion, adoptServerPresets } = createPresetManager(presets, saving, error);
 
   async function loadConfig() {
-    const version = presetsVersion;
+    const version = snapshotVersion();
     try {
       const res = await fetch("/api/config");
       if (!res.ok) return;
       const c = await res.json();
       defaultCwd.value = c.cwd ?? null;
       home.value = c.home ?? null;
-      if (presetsVersion === version) presets.value = Array.isArray(c.cwdPresets) ? c.cwdPresets : [];
+      adoptServerPresets(c.cwdPresets, version);
       soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
       prRepos.value = Array.isArray(c.prRepos) ? c.prRepos : [];
       launchers.value = Array.isArray(c.launchers) ? c.launchers : [];

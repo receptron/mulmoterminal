@@ -1193,6 +1193,45 @@ app.get("/api/dir-sound", (req, res) => {
   });
 });
 
+// Cheap recency pass: stat (don't read) every session file just for its mtime, so the
+// list can be ranked by recency. Files that vanished between readdir and stat are skipped.
+async function collectOnDiskSessionStats(dir: string, files: string[]): Promise<DiskStat[]> {
+  const stats = await Promise.all(
+    files.map(async (file): Promise<DiskStat | null> => {
+      try {
+        const st = await fs.stat(path.join(dir, file));
+        return { kind: "disk", id: path.basename(file, ".jsonl"), file, mtime: st.mtimeMs };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return stats.filter((s): s is DiskStat => s !== null);
+}
+
+// In-memory sessions not yet written to disk. Prune (delete from knownSessions) any that
+// have since been persisted — the on-disk record (with its real title) wins.
+function collectPendingSessions(onDisk: Set<string>, includePending: boolean): PendingSession[] {
+  const pending: PendingSession[] = [];
+  for (const [id, meta] of includePending ? knownSessions : []) {
+    if (onDisk.has(id)) {
+      knownSessions.delete(id);
+      continue;
+    }
+    pending.push({
+      kind: "pending",
+      id,
+      title: meta.title,
+      mtime: meta.createdAt,
+      working: activity.get(id)?.working ?? false,
+      waiting: activity.get(id)?.waiting ?? false,
+      event: activity.get(id)?.event ?? null,
+      hidden: hiddenSessions.has(id),
+    });
+  }
+  return pending;
+}
+
 // List the chat sessions for the current project (CLAUDE_CWD), including
 // newly-created sessions that aren't persisted to disk yet.
 app.get("/api/sessions", async (req, res) => {
@@ -1214,42 +1253,10 @@ app.get("/api/sessions", async (req, res) => {
       if (!hasErrnoCode(err) || err.code !== "ENOENT") throw err;
     }
 
-    // Cheap pass: stat (don't read) every file just for its mtime, so we can
-    // rank by recency. Skip any that vanished between readdir and stat.
-    const onDiskStats = (
-      await Promise.all(
-        files.map(async (file): Promise<DiskStat | null> => {
-          try {
-            const st = await fs.stat(path.join(dir, file));
-            return { kind: "disk", id: path.basename(file, ".jsonl"), file, mtime: st.mtimeMs };
-          } catch {
-            return null;
-          }
-        }),
-      )
-    ).filter((s): s is DiskStat => s !== null);
+    const onDiskStats = await collectOnDiskSessionStats(dir, files);
     const onDisk = new Set(onDiskStats.map((s) => s.id));
-
-    // In-memory sessions not yet written to disk. Prune any that have since
-    // been persisted — the on-disk record (with its real title) wins. Skipped for
-    // a cwd-scoped query (pending sessions aren't tracked per directory).
-    const pending: PendingSession[] = [];
-    for (const [id, meta] of includePending ? knownSessions : []) {
-      if (onDisk.has(id)) {
-        knownSessions.delete(id);
-        continue;
-      }
-      pending.push({
-        kind: "pending",
-        id,
-        title: meta.title,
-        mtime: meta.createdAt,
-        working: activity.get(id)?.working ?? false,
-        waiting: activity.get(id)?.waiting ?? false,
-        event: activity.get(id)?.event ?? null,
-        hidden: hiddenSessions.has(id),
-      });
-    }
+    // Pending is skipped for a cwd-scoped query (pending sessions aren't tracked per dir).
+    const pending = collectPendingSessions(onDisk, includePending);
 
     // Keep only the most-recent N, then read & parse contents for just those
     // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation

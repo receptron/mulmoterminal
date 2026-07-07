@@ -42,7 +42,7 @@ export default [
     // for its one intentional offender: spawnClaudePty's 7 params (hot path, not worth
     // churning 5 call sites into an options object) — flip it to error once resolved.
     rules: {
-      "max-lines-per-function": ["error", { max: 80, skipBlankLines: true, skipComments: true, IIFEs: true }],
+      "max-lines-per-function": ["error", { max: 60, skipBlankLines: true, skipComments: true, IIFEs: true }],
       complexity: ["error", 20],
       "max-depth": ["error", 4],
       "max-params": ["warn", 6],
