@@ -15,7 +15,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
-  (e: "new" | "toggle-layout" | "refresh"): void;
+  (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 }>();
 
@@ -45,7 +45,12 @@ function relativeTime(ms: number): string {
       </button>
     </div>
 
-    <button class="new-btn" @click="emit('new')"><span class="material-symbols-outlined">add</span> New session</button>
+    <div class="new-row">
+      <button class="new-btn" @click="emit('new')"><span class="material-symbols-outlined">add</span> New session</button>
+      <button class="new-btn new-codex-btn" title="New Codex session" @click="emit('new-codex')">
+        <span class="material-symbols-outlined">add</span> Codex
+      </button>
+    </div>
 
     <div class="filters">
       <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
@@ -138,6 +143,17 @@ function relativeTime(ms: number): string {
 }
 .new-btn:hover {
   background: var(--bg-selected-hover);
+}
+.new-row {
+  display: flex;
+  gap: 8px;
+  margin: 0 12px 8px;
+}
+.new-row .new-btn {
+  margin: 0;
+}
+.new-row .new-btn:first-child {
+  flex: 1;
 }
 
 .filters {

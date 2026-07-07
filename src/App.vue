@@ -40,6 +40,9 @@ function onRunScript(command: PendingCommand) {
 }
 
 const activeId = ref<string | null>(null);
+// Which agent the single view runs (Claude by default). Codex connects to /ws/codex with the
+// GUI MCP attached, so it drives the GUI panel like Claude.
+const singleAgent = ref<"claude" | "codex">("claude");
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
 
@@ -193,6 +196,7 @@ function sendTextMessage(text: string): boolean {
 
 function selectSession(id: string) {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
+  singleAgent.value = "claude"; // the sidebar lists Claude sessions
   activeId.value = id;
   connectKey.value++;
 }
@@ -246,6 +250,13 @@ registerChatOpener((id: string, opts?: { draft?: boolean }) => {
 });
 
 function newSession() {
+  singleAgent.value = "claude";
+  activeId.value = null;
+  connectKey.value++;
+}
+
+function newCodexSession() {
+  singleAgent.value = "codex";
   activeId.value = null;
   connectKey.value++;
 }
@@ -273,6 +284,7 @@ function onSession(id: string) {
         :active-id="activeId"
         @select="selectSession"
         @new="newSession"
+        @new-codex="newCodexSession"
         @toggle-layout="toggleLayout"
         @refresh="refresh"
       />
@@ -283,6 +295,7 @@ function onSession(id: string) {
         :active-id="activeId"
         @select="selectSession"
         @new="newSession"
+        @new-codex="newCodexSession"
         @toggle-layout="toggleLayout"
         @refresh="refresh"
       />
@@ -299,6 +312,7 @@ function onSession(id: string) {
           :style="{ flex: `0 0 ${terminalWidth}px` }"
           persist-key="single"
           :session-id="activeId"
+          :codex="singleAgent === 'codex'"
           :connect-key="connectKey"
           :dir-theme="singleDirConfig.theme"
           :dir-colors="singleDirConfig.colors"
