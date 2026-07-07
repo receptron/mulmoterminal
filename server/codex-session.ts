@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -76,29 +76,24 @@ export function snapshotSessions(root: string, now: Date = new Date()): Set<stri
   return new Set(listRecentRollouts(root, now));
 }
 
-function mtimeMs(file: string): number {
-  try {
-    return statSync(file).mtimeMs;
-  } catch {
-    return 0;
-  }
-}
-
 interface RolloutMeta extends CodexSessionMeta {
   file: string;
 }
 
-// The freshest rollout that appeared since the snapshot. `cwd` disambiguates concurrent sessions
-// best-effort (a rollout records the dir codex ran in); otherwise the newest wins.
+// A rollout that appeared since the snapshot, attributed to this session ONLY when unambiguous:
+// exactly one appeared, or exactly one of several matches this session's cwd. Otherwise refuse to
+// guess (return null) — a wrong guess would let a cold resume reopen a *different* concurrent
+// codex conversation. A "newest wins" tiebreak would be exactly that wrong guess, so there isn't
+// one; a session that can't be attributed just stays unresumable-by-id (cold reconnect starts fresh).
 export function pickFreshSession(root: string, before: Set<string>, cwd: string | null): RolloutMeta | null {
   const found = listRecentRollouts(root)
     .filter((file) => !before.has(file))
     .map((file) => ({ file, meta: readSessionMeta(file) }))
     .filter((x): x is { file: string; meta: CodexSessionMeta } => x.meta !== null);
-  if (found.length === 0) return null;
-  const byCwd = cwd ? found.find((x) => x.meta.cwd === cwd) : undefined;
-  const chosen = byCwd ?? found.reduce((a, b) => (mtimeMs(b.file) > mtimeMs(a.file) ? b : a));
-  return { ...chosen.meta, file: chosen.file };
+  if (found.length === 1) return { ...found[0].meta, file: found[0].file };
+  const matches = cwd ? found.filter((x) => x.meta.cwd === cwd) : [];
+  if (matches.length === 1) return { ...matches[0].meta, file: matches[0].file };
+  return null;
 }
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));

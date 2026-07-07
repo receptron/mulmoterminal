@@ -2097,9 +2097,9 @@ function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
   });
 }
 
-// codex persists its rollout only after the first user turn, so watch for the session's lifetime
+// codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
 // (stop once its pty is gone) and capture the minted id so a later cold reconnect can
-// `codex resume <id>`. cwd disambiguates concurrent sessions best-effort.
+// `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
 function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
   watchForCodexSession(root, before, { cwd, isCancelled: () => !ptys.has(sessionId) })
     .then((meta) => {
@@ -2118,8 +2118,13 @@ function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string
   console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
   const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
   ptys.set(sessionId, entry);
-  if (resumeRolloutId) codexRolloutIds.set(sessionId, resumeRolloutId);
-  rememberCodexRollout(sessionId, root, before, cwd);
+  if (resumeRolloutId) {
+    codexRolloutIds.set(sessionId, resumeRolloutId);
+  } else {
+    // Discover the id only for a FRESH session. On resume we already know it; running the watcher
+    // could overwrite the known id with a mis-attributed concurrent rollout.
+    rememberCodexRollout(sessionId, root, before, cwd);
+  }
   wireCodexRelay(entry, sessionId);
   return entry;
 }

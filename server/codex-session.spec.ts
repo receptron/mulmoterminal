@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseSessionMetaLine, readSessionMeta, listRecentRollouts, snapshotSessions, pickFreshSession, watchForCodexSession } from "./codex-session.js";
@@ -77,24 +77,28 @@ describe("pickFreshSession", () => {
     const before = snapshotSessions(root);
     expect(pickFreshSession(root, before, null)).toBeNull();
   });
-  it("returns the rollout that appeared after the snapshot", () => {
+  it("attributes a single fresh rollout (unambiguous)", () => {
     const before = snapshotSessions(root);
     writeRollout(root, UUID_A, "/a");
-    expect(pickFreshSession(root, before, null)?.id).toBe(UUID_A);
+    expect(pickFreshSession(root, before, "/anything")?.id).toBe(UUID_A);
   });
-  it("prefers the fresh rollout whose cwd matches", () => {
+  it("attributes the unique cwd match when several are fresh", () => {
     const before = snapshotSessions(root);
     writeRollout(root, UUID_A, "/a");
     writeRollout(root, UUID_B, "/b");
     expect(pickFreshSession(root, before, "/b")?.id).toBe(UUID_B);
   });
-  it("falls back to the newest by mtime when no cwd matches", () => {
+  it("refuses to guess when several fresh rollouts share the cwd", () => {
     const before = snapshotSessions(root);
-    const older = writeRollout(root, UUID_A, "/a");
-    const newer = writeRollout(root, UUID_B, "/b");
-    utimesSync(older, new Date(2026, 0, 1, 10), new Date(2026, 0, 1, 10));
-    utimesSync(newer, new Date(2026, 0, 1, 11), new Date(2026, 0, 1, 11));
-    expect(pickFreshSession(root, before, "/other")?.id).toBe(UUID_B);
+    writeRollout(root, UUID_A, "/same");
+    writeRollout(root, UUID_B, "/same");
+    expect(pickFreshSession(root, before, "/same")).toBeNull();
+  });
+  it("refuses to guess when several are fresh and none matches the cwd", () => {
+    const before = snapshotSessions(root);
+    writeRollout(root, UUID_A, "/a");
+    writeRollout(root, UUID_B, "/b");
+    expect(pickFreshSession(root, before, "/other")).toBeNull();
   });
 });
 
