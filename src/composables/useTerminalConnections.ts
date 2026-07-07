@@ -20,7 +20,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import "@xterm/xterm/css/xterm.css";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl } from "../components/wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../components/wsUrl";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -34,6 +34,9 @@ export interface ConnTarget {
   // A configured launcher (shell/codex/command). Unlike `command` this is a PERSISTENT
   // session — it reconnects on drop and reattaches by session id, like a Claude cell.
   launcher: { index: number } | null;
+  // A first-class codex session (/ws/codex) instead of a Claude one. Persistent &
+  // reattachable like a Claude cell; the server discovers + resumes codex's own id.
+  codex?: boolean;
 }
 
 // Forwarded to whatever component is currently attached, so the parent's existing
@@ -168,6 +171,7 @@ function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): 
   const host = location.host;
   if (target.command) return buildRunWsUrl({ host, secure, index: target.command.index, cwd: target.cwd });
   if (target.launcher) return buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
+  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd });
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
 }
 
