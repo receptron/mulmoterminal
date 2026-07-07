@@ -100,6 +100,17 @@ describe("pickFreshSession", () => {
     writeRollout(root, UUID_B, "/b");
     expect(pickFreshSession(root, before, "/other")).toBeNull();
   });
+  it("skips a rollout already claimed by another session", () => {
+    const before = snapshotSessions(root);
+    const a = writeRollout(root, UUID_A, "/same");
+    writeRollout(root, UUID_B, "/same");
+    expect(pickFreshSession(root, before, "/same", new Set([a]))?.id).toBe(UUID_B);
+  });
+  it("returns null when the only fresh rollout is already claimed", () => {
+    const before = snapshotSessions(root);
+    const a = writeRollout(root, UUID_A, "/a");
+    expect(pickFreshSession(root, before, null, new Set([a]))).toBeNull();
+  });
 });
 
 describe("watchForCodexSession", () => {

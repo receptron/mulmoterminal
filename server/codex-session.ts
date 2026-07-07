@@ -85,9 +85,11 @@ interface RolloutMeta extends CodexSessionMeta {
 // guess (return null) — a wrong guess would let a cold resume reopen a *different* concurrent
 // codex conversation. A "newest wins" tiebreak would be exactly that wrong guess, so there isn't
 // one; a session that can't be attributed just stays unresumable-by-id (cold reconnect starts fresh).
-export function pickFreshSession(root: string, before: Set<string>, cwd: string | null): RolloutMeta | null {
+// `claimed` holds rollouts already mapped to another session, so a single rollout is never
+// attributed to two keys (which would resume one conversation from both).
+export function pickFreshSession(root: string, before: Set<string>, cwd: string | null, claimed?: Set<string>): RolloutMeta | null {
   const found = listRecentRollouts(root)
-    .filter((file) => !before.has(file))
+    .filter((file) => !before.has(file) && !claimed?.has(file))
     .map((file) => ({ file, meta: readSessionMeta(file) }))
     .filter((x): x is { file: string; meta: CodexSessionMeta } => x.meta !== null);
   if (found.length === 1) return { ...found[0].meta, file: found[0].file };
@@ -104,16 +106,16 @@ const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 export async function watchForCodexSession(
   root: string,
   before: Set<string>,
-  opts: { cwd?: string | null; pollMs?: number; maxWaitMs?: number; isCancelled?: () => boolean } = {},
+  opts: { cwd?: string | null; pollMs?: number; maxWaitMs?: number; isCancelled?: () => boolean; claimed?: Set<string> } = {},
 ): Promise<RolloutMeta | null> {
   const pollMs = opts.pollMs ?? WATCH_POLL_MS;
   const deadline = Date.now() + (opts.maxWaitMs ?? WATCH_MAX_WAIT_MS);
   const isCancelled = opts.isCancelled ?? (() => false);
   const cwd = opts.cwd ?? null;
-  let result = pickFreshSession(root, before, cwd);
+  let result = pickFreshSession(root, before, cwd, opts.claimed);
   while (!result && Date.now() < deadline && !isCancelled()) {
     await delay(pollMs);
-    result = pickFreshSession(root, before, cwd);
+    result = pickFreshSession(root, before, cwd, opts.claimed);
   }
   return result;
 }

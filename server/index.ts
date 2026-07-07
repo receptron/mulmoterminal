@@ -449,6 +449,9 @@ const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
 // mulmoterminal session key -> the codex rollout id it maps to. codex mints its own id, so we
 // discover it after spawn and keep it here to `codex resume <id>` once the live PTY is gone.
 const codexRolloutIds = new Map<string, string>();
+// Rollout files already attributed to a session, so a single rollout is never mapped to two keys
+// (which would let both cold-resume the same conversation). Serialized by the single event loop.
+const claimedCodexRollouts = new Set<string>();
 
 // New sessions started in this process that have no .jsonl on disk yet (Claude
 // only writes the file on the first prompt). Merged into /api/sessions so a
@@ -2101,9 +2104,11 @@ function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
 // (stop once its pty is gone) and capture the minted id so a later cold reconnect can
 // `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
 function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
-  watchForCodexSession(root, before, { cwd, isCancelled: () => !ptys.has(sessionId) })
+  watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => !ptys.has(sessionId) })
     .then((meta) => {
-      if (meta) codexRolloutIds.set(sessionId, meta.id);
+      if (!meta) return;
+      claimedCodexRollouts.add(meta.file);
+      codexRolloutIds.set(sessionId, meta.id);
     })
     .catch(() => {});
 }
