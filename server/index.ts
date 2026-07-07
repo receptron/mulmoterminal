@@ -36,6 +36,7 @@ import { listIssuesAcrossRepos } from "./issues.js";
 import { publicDirConfig, dirSoundFile } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
+import { claudeAdapter } from "./agents/claude.js";
 import {
   isRecord,
   parseJsonl,
@@ -150,7 +151,7 @@ const messageOf = (e: unknown): string => (e instanceof Error ? e.message : Stri
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 34567;
-const CLAUDE_BIN = process.env.CLAUDE_BIN || "claude";
+const CLAUDE_BIN = claudeAdapter.bin();
 // Permission mode for backend-spawned Claude sessions. Defaults to "auto" so
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
@@ -1518,7 +1519,7 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
 // typed `draft`; too early and the bytes are echoed into the scrollback instead. We
 // wait for its status line to paint (the "shift+tab to cycle" mode hint), settle
 // briefly, then type. A fallback fires if that marker never shows (UI string drift).
-const DRAFT_READY_MARKER = /shift\+tab to cycle/;
+const DRAFT_READY_MARKER = claudeAdapter.draftReadyMarker;
 const DRAFT_SETTLE_MS = 250;
 const DRAFT_FALLBACK_MS = 6000;
 // Claude's TUI commits a bracketed paste to its input box asynchronously; a CR glued
