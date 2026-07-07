@@ -54,15 +54,10 @@ async function fetchModelStatus(): Promise<VoiceModelStatusResponse | null> {
   }
 }
 
-export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
-  const capable = ref(false);
-  const available = ref(false);
-  const downloading = ref(false);
-  const listening = ref(false);
-  const transcribing = ref(false);
-  const error = ref<string | null>(null);
-
-  const transport: VoiceCaptureTransport = {
+// The controller's transport: plain fetch for transcription + a status poll that doubles
+// as our capability/downloading refresh (keeps `capable`/`downloading` in sync).
+function createVoiceTransport(capable: Ref<boolean>, downloading: Ref<boolean>): VoiceCaptureTransport {
+  return {
     async transcribe(dataUrl, language) {
       const res = await fetch("/api/transcribe", {
         method: "POST",
@@ -72,22 +67,27 @@ export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
       if (!res.ok) throw new Error(`transcription failed (HTTP ${res.status})`);
       return (await res.json()) as { text: string };
     },
-    // Also keeps `capable`/`downloading` in sync — this is the controller's poll
-    // loop, so it doubles as our status refresh.
+    // `status` is null on a transient fetch/non-OK; `model` may be absent on a partial
+    // response. Optional-chain throughout so a status blip degrades to "not ready" instead
+    // of throwing and wedging the controller's poll loop.
     async getStatus() {
-      // `status` is null on a transient fetch/non-OK; `model` may be absent on a
-      // partial response. Optional-chain throughout so a status blip degrades to
-      // "not ready" instead of throwing and wedging the controller's poll loop.
       const status = await fetchModelStatus();
       capable.value = status?.capable ?? false;
       downloading.value = status?.model?.state === "downloading";
-      return {
-        ready: status?.capable === true && status?.model?.state === "ready",
-        downloading: downloading.value,
-      };
+      return { ready: status?.capable === true && status?.model?.state === "ready", downloading: downloading.value };
     },
   };
+}
 
+export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
+  const capable = ref(false);
+  const available = ref(false);
+  const downloading = ref(false);
+  const listening = ref(false);
+  const transcribing = ref(false);
+  const error = ref<string | null>(null);
+
+  const transport = createVoiceTransport(capable, downloading);
   const capture = createVoiceCapture(transport, () => localeToWhisperLanguage(browserLocale()), {
     onTranscript: (text) => {
       error.value = null;
