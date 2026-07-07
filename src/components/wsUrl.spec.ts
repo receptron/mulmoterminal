@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl } from "./wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "./wsUrl";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {
@@ -71,5 +71,24 @@ describe("buildLaunchWsUrl", () => {
   it("uses wss when secure", () => {
     const url = buildLaunchWsUrl({ host: "h", secure: true, sessionId: null, launcher: 1 });
     expect(url.startsWith("wss://")).toBe(true);
+  });
+});
+
+describe("buildCodexWsUrl", () => {
+  it("targets /ws/codex with the reattach session + cwd", () => {
+    const u = new URL(buildCodexWsUrl({ host: "h", secure: false, sessionId: "abc", cwd: "/work/proj" }));
+    expect(u.pathname).toBe("/ws/codex");
+    expect(u.searchParams.get("session")).toBe("abc");
+    expect(u.searchParams.get("cwd")).toBe("/work/proj");
+  });
+
+  it("fresh codex (null id): no session param", () => {
+    const u = new URL(buildCodexWsUrl({ host: "h", secure: false, sessionId: null }));
+    expect(u.pathname).toBe("/ws/codex");
+    expect(u.searchParams.has("session")).toBe(false);
+  });
+
+  it("uses wss when secure", () => {
+    expect(buildCodexWsUrl({ host: "h", secure: true, sessionId: null }).startsWith("wss://")).toBe(true);
   });
 });

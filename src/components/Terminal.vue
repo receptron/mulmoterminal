@@ -34,6 +34,8 @@ const props = defineProps<{
   // A configured launcher (shell/codex/command) — persistent & reattachable, connects
   // to /ws/launch instead of resuming a Claude session.
   launcher?: { index: number } | null;
+  // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
+  codex?: boolean;
   runMenu?: boolean;
   persistKey?: string | null;
   // Per-directory overrides from <cwd>/.mulmoterminal.json. `dirTheme` pins this
@@ -62,6 +64,7 @@ function currentTarget(): conn.ConnTarget {
     devTerminal: !!props.devTerminal,
     command: props.command ?? null,
     launcher: props.launcher ?? null,
+    codex: !!props.codex,
   };
 }
 

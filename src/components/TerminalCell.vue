@@ -23,6 +23,9 @@ const props = defineProps<{
   expanded: boolean;
   initialSessionId: string | null;
   initialCwd: string | null;
+  // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
+  // (or "claude") resumes as a normal Claude session.
+  initialAgent?: "codex" | null;
   defaultCwd: string | null;
   presets: CwdPreset[];
   // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
@@ -50,12 +53,17 @@ const emit = defineEmits<{
   (e: "move", dir: -1 | 1): void;
   // Report live activity up so the grid can attention-sort in auto mode.
   (e: "status", value: CellStatus): void;
+  // The agent chosen (Claude/Codex) for this fresh launch, so the grid persists it.
+  (e: "agent", value: "claude" | "codex"): void;
 }>();
 
 // A cell with a persisted session relaunches (resumes) on mount; otherwise it
 // starts empty and lazy-launches when the user picks a dir and clicks Start.
 const launched = ref(props.initialSessionId !== null);
 const sessionId = ref<string | null>(props.initialSessionId);
+// The agent this cell runs (Claude by default). Fixed once launched; restored from the
+// persisted cell on reload so a codex cell reconnects to /ws/codex.
+const agent = ref<"claude" | "codex">(props.initialAgent === "codex" ? "codex" : "claude");
 const connectKey = ref(0);
 
 // The directory this terminal runs in (shown in the header, sent to the server).
@@ -183,6 +191,7 @@ function launchIn(dir: string | null) {
   sessionId.value = null; // new session — the server generates the id
   connectKey.value++;
   launched.value = true;
+  emit("agent", agent.value); // let the grid persist which agent this cell launched
   recordNextCwd = true;
   loadDiff(); // no-op for a non-worktree dir
 }
@@ -810,6 +819,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :session-id="sessionId"
         :connect-key="connectKey"
         :cwd="cwd"
+        :codex="agent === 'codex'"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
         dev-terminal
@@ -915,6 +925,28 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             ✕
           </button>
         </span>
+      </div>
+      <div class="cell-agent" role="radiogroup" aria-label="Agent">
+        <button
+          type="button"
+          class="cell-agent-btn"
+          :class="{ active: agent === 'claude' }"
+          role="radio"
+          :aria-checked="agent === 'claude'"
+          @click="agent = 'claude'"
+        >
+          Claude
+        </button>
+        <button
+          type="button"
+          class="cell-agent-btn"
+          :class="{ active: agent === 'codex' }"
+          role="radio"
+          :aria-checked="agent === 'codex'"
+          @click="agent = 'codex'"
+        >
+          Codex
+        </button>
       </div>
       <label class="cell-launch-label">
         <span class="cell-launch-caption">Working directory</span>
@@ -1330,6 +1362,34 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.cell-agent {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-deep);
+  align-self: flex-start;
+}
+.cell-agent-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 4px 14px;
+  border-radius: 5px;
+}
+.cell-agent-btn:hover {
+  color: var(--text);
+}
+.cell-agent-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text);
 }
 .cell-dir-input {
   width: 100%;

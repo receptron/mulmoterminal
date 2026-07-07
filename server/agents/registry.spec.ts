@@ -1,12 +1,19 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { getAgentAdapter } from "./registry.js";
 import { claudeAdapter } from "./claude.js";
+import { codexAdapter } from "./codex.js";
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) Reflect.deleteProperty(process.env, key);
+  else process.env[key] = value;
+}
 
 describe("agent registry", () => {
-  const originalBin = process.env.CLAUDE_BIN;
+  const originalClaudeBin = process.env.CLAUDE_BIN;
+  const originalCodexBin = process.env.CODEX_BIN;
   afterEach(() => {
-    if (originalBin === undefined) delete process.env.CLAUDE_BIN;
-    else process.env.CLAUDE_BIN = originalBin;
+    restoreEnv("CLAUDE_BIN", originalClaudeBin);
+    restoreEnv("CODEX_BIN", originalCodexBin);
   });
 
   it("defaults to the Claude adapter", () => {
@@ -14,15 +21,24 @@ describe("agent registry", () => {
     expect(getAgentAdapter("claude")).toBe(claudeAdapter);
   });
 
-  it("resolves the Claude binary from CLAUDE_BIN, falling back to 'claude'", () => {
-    delete process.env.CLAUDE_BIN;
-    expect(claudeAdapter.bin()).toBe("claude");
-    process.env.CLAUDE_BIN = "/custom/path/claude";
-    expect(claudeAdapter.bin()).toBe("/custom/path/claude");
+  it("resolves the codex adapter", () => {
+    expect(getAgentAdapter("codex").kind).toBe("codex");
+    expect(getAgentAdapter("codex")).toBe(codexAdapter);
   });
 
-  it("matches Claude's draft-ready TUI hint", () => {
+  it("reads each agent's binary from its env override, with a sensible default", () => {
+    delete process.env.CLAUDE_BIN;
+    delete process.env.CODEX_BIN;
+    expect(claudeAdapter.bin()).toBe("claude");
+    expect(codexAdapter.bin()).toBe("codex");
+    process.env.CLAUDE_BIN = "/custom/claude";
+    process.env.CODEX_BIN = "/custom/codex";
+    expect(claudeAdapter.bin()).toBe("/custom/claude");
+    expect(codexAdapter.bin()).toBe("/custom/codex");
+  });
+
+  it("exposes Claude's draft-ready marker but not codex's (not wired yet)", () => {
     expect(claudeAdapter.draftReadyMarker.test("... press shift+tab to cycle modes")).toBe(true);
-    expect(claudeAdapter.draftReadyMarker.test("no hint here")).toBe(false);
+    expect(getAgentAdapter("codex").draftReadyMarker).toBeUndefined();
   });
 });
