@@ -58,3 +58,23 @@ export function buildLaunchWsUrl({ host, secure, sessionId, cwd, launcher }: Lau
   const proto = secure ? "wss:" : "ws:";
   return `${proto}//${host}/ws/launch?${params.toString()}`;
 }
+
+export interface CodexWsUrlInput {
+  host: string;
+  secure: boolean;
+  sessionId: string | null; // reattach/resume this codex session; null => fresh
+  cwd?: string | null;
+}
+
+// The codex-terminal endpoint (a first-class codex session). Persistent & reattachable like
+// /ws; the browser sends the mulmoterminal session id to reattach/resume — the server maps it
+// to codex's own rollout id.
+export function buildCodexWsUrl({ host, secure, sessionId, cwd }: CodexWsUrlInput): string {
+  const params = new URLSearchParams();
+  if (sessionId) params.set("session", sessionId);
+  if (cwd) params.set("cwd", cwd);
+  const qs = params.toString();
+  const suffix = qs ? `?${qs}` : "";
+  const proto = secure ? "wss:" : "ws:";
+  return `${proto}//${host}/ws/codex${suffix}`;
+}

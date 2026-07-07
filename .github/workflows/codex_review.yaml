@@ -43,7 +43,7 @@ on:
   # take is wanted on draft promotion, use `workflow_dispatch` instead.
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, dev_tool]
+    branches: [main, dev_tool, feat/multi-agent]
   # Manual escalation: run on demand against any PR (re-review,
   # one-off check on a closed PR, etc.).
   workflow_dispatch:

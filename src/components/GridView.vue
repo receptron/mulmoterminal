@@ -8,6 +8,7 @@ import {
   addCell,
   setSession,
   setCwd,
+  setCellAgent,
   closeCell,
   toggleExpand,
   switchPage,
@@ -107,6 +108,7 @@ function onAddTerminal() {
 }
 const onSession = (uid: number, id: string) => (state.value = setSession(state.value, uid, id));
 const onCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, uid, cwd));
+const onAgent = (uid: number, agent: "claude" | "codex") => (state.value = setCellAgent(state.value, uid, agent));
 const onClose = (uid: number) => (state.value = closeCell(state.value, uid));
 const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value, uid));
 const onRun = (uid: number, command: { index: number; label: string; cwd: string | null }) => (state.value = runCommand(state.value, uid, command));
@@ -180,6 +182,7 @@ function closeSettings() {
       :reorderable="reorderable"
       :open-session-ids="openSessionIds"
       @session="onSession"
+      @agent="onAgent"
       @cwd="onCwd"
       @record-cwd="recordPreset"
       @remove-preset="removePreset"

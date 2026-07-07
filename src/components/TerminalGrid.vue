@@ -36,6 +36,7 @@ const emit = defineEmits<{
   (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
+  (e: "agent", uid: number, value: "claude" | "codex"): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
@@ -87,6 +88,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           :expanded="cell.uid === expandedUid"
           :initial-session-id="cell.session"
           :initial-cwd="cell.cwd"
+          :initial-agent="cell.agent"
           :default-cwd="defaultCwd"
           :presets="presets"
           :launchers="launchers"
@@ -96,6 +98,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           :reorderable="reorderable"
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @session="(id) => emit('session', cell.uid, id)"
+          @agent="(a) => emit('agent', cell.uid, a)"
           @cwd="(c) => emit('cwd', cell.uid, c)"
           @record-cwd="(c) => emit('record-cwd', c)"
           @remove-preset="(path) => emit('remove-preset', path)"
