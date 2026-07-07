@@ -37,6 +37,9 @@ import { publicDirConfig, dirSoundFile } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { claudeAdapter } from "./agents/claude.js";
+import { codexAdapter } from "./agents/codex.js";
+import { buildCodexArgs } from "./codex-args.js";
+import { codexSessionsRoot, snapshotSessions, discoverCodexSession } from "./codex-session.js";
 import {
   isRecord,
   parseJsonl,
@@ -152,6 +155,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = process.env.PORT || 34567;
 const CLAUDE_BIN = claudeAdapter.bin();
+const CODEX_BIN = codexAdapter.bin();
+// Model override for codex sessions (--model); null uses codex's own configured default.
+const CODEX_MODEL = process.env.CODEX_MODEL || null;
 // Permission mode for backend-spawned Claude sessions. Defaults to "auto" so
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
@@ -438,6 +444,10 @@ const LAST_PROMPT_CAP = 200;
 // is reaped once the session goes idle (Stop hook) or the process exits. `ws`
 // is null while the session runs in the background.
 const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
+
+// mulmoterminal session key -> the codex rollout id it maps to. codex mints its own id, so we
+// discover it after spawn and keep it here to `codex resume <id>` once the live PTY is gone.
+const codexRolloutIds = new Map<string, string>();
 
 // New sessions started in this process that have no .jsonl on disk yet (Claude
 // only writes the file on the first prompt). Merged into /api/sessions so a
@@ -1392,10 +1402,14 @@ const runWss = new WebSocketServer({ noServer: true });
 // too. Unlike /ws/run these are PERSISTENT & reattachable (they share the /ws session
 // lifecycle — ptys map, reattach, reap grace) but carry no Claude hooks/transcript.
 const runLaunchWss = new WebSocketServer({ noServer: true });
+// First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
+// with session discovery + resume. Its own endpoint so /ws stays claude-only.
+const runCodexWss = new WebSocketServer({ noServer: true });
 function wssForPath(pathname: string): WebSocketServer | null {
   if (pathname === "/ws") return wss;
   if (pathname === "/ws/run") return runWss;
   if (pathname === "/ws/launch") return runLaunchWss;
+  if (pathname === "/ws/codex") return runCodexWss;
   return null; // e.g. /ws/pubsub — left to socket.io's own upgrade handler
 }
 server.on("upgrade", (req, socket, head) => {
@@ -2045,6 +2059,90 @@ runLaunchWss.on("connection", (ws, req) => {
   } catch (err) {
     console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
     return closeWithError(ws, "Failed to start the launch command.");
+  }
+
+  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
+  ws.on("close", () => handleClientClose(entry, ws, sessionId));
+});
+
+// codex is a first-class agent like claude, but it mints its own session id (no --session-id),
+// so the browser-facing id is a mulmoterminal-minted key; we discover codex's real rollout id
+// after spawn and resume it with `codex resume <id>` once the live PTY is gone. Reattach a live
+// pty / surviving tmux session (running codex picked up, no resume); else cold-resume a known
+// rollout id; else a fresh session (a new minted key).
+function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
+  const reattachId = requested && ptys.has(requested) ? requested : null;
+  const live = reattachId ? ptys.get(reattachId) : undefined;
+  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
+  const resumeRolloutId = !live && !tmuxAlive && requested ? (codexRolloutIds.get(requested) ?? null) : null;
+  const sessionId = reattachId ?? ((tmuxAlive || resumeRolloutId) && requested ? requested : randomUUID());
+  return { sessionId, live, resumeRolloutId };
+}
+
+function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
+  entry.term.onData((data) => {
+    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
+  });
+  entry.term.onExit(({ exitCode, signal }) => {
+    console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
+    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
+      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
+      entry.ws.close();
+    }
+    reap(sessionId);
+  });
+}
+
+// codex writes its rollout (with the minted id) at startup; capture it best-effort so a later
+// cold reconnect can `codex resume <id>`. A fork on resume overwrites the mapping with the new id.
+function rememberCodexRollout(sessionId: string, root: string, before: Set<string>): void {
+  discoverCodexSession(root, before)
+    .then((meta) => {
+      if (meta) codexRolloutIds.set(sessionId, meta.id);
+    })
+    .catch(() => {});
+}
+
+function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string | null, cwd: string): PtyEntry {
+  const root = codexSessionsRoot();
+  const before = snapshotSessions(root);
+  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL });
+  const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
+  const via = tmux ? " via tmux" : "";
+  const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
+  console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
+  ptys.set(sessionId, entry);
+  if (resumeRolloutId) codexRolloutIds.set(sessionId, resumeRolloutId);
+  rememberCodexRollout(sessionId, root, before);
+  wireCodexRelay(entry, sessionId);
+  return entry;
+}
+
+function startCodexEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, resumeRolloutId: string | null, cwd: string): PtyEntry {
+  if (live) return reattachPty(live, ws, sessionId);
+  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd);
+}
+
+// codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume): a first-class codex session,
+// persistent + reattachable, marked a dev terminal so it stays out of the claude chat sidebar.
+runCodexWss.on("connection", (ws, req) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const raw = url.searchParams.get("session");
+  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
+  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+
+  const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
+  markDevTerminalSession(sessionId);
+  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
+
+  let entry: PtyEntry;
+  try {
+    entry = startCodexEntry(sessionId, ws, live, resumeRolloutId, cwd);
+  } catch (err) {
+    console.error(`[ws/codex] failed to start ${sessionId}: ${messageOf(err)}`);
+    return closeWithError(ws, "Failed to start codex. Is the `codex` CLI installed and on your PATH?");
   }
 
   ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
