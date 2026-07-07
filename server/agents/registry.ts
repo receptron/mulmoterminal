@@ -5,8 +5,7 @@ const adapters: Record<AgentKind, AgentAdapter> = {
   claude: claudeAdapter,
 };
 
-// Resolve the adapter for an agent kind. Defaults to Claude — the only agent today and
-// the fallback for any session that doesn't name one.
+// Resolve the adapter for a kind; Claude is the default and the fallback.
 export function getAgentAdapter(kind: AgentKind = "claude"): AgentAdapter {
   return adapters[kind];
 }

@@ -1,7 +1,6 @@
 import type { AgentAdapter } from "./types.js";
 
-// "shift+tab to cycle" is the permission-mode hint Claude Code paints once its input box
-// is ready — the cue the draft-typing flow waits for before pasting a seed.
+// "shift+tab to cycle" is the hint Claude paints once its input box is ready for a paste.
 export const claudeAdapter: AgentAdapter = {
   kind: "claude",
   bin: () => process.env.CLAUDE_BIN || "claude",
