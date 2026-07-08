@@ -2,10 +2,18 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
+import { useCost } from "../composables/useCost";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
 
-const props = defineProps<{ soundFile?: string | null; prRepos?: string[]; launchers?: Launcher[]; userMcpServers?: UserMcpServer[] }>();
+const props = defineProps<{
+  soundFile?: string | null;
+  prRepos?: string[];
+  launchers?: Launcher[];
+  userMcpServers?: UserMcpServer[];
+  cwd?: string | null;
+  sessionId?: string | null;
+}>();
 const emit = defineEmits<{
   (e: "update-sound", file: string | null): void;
   (e: "update-repos", repos: string[]): void;
@@ -149,6 +157,14 @@ function onThemeKey(e: KeyboardEvent, index: number) {
   themesEl.value?.querySelectorAll<HTMLElement>(".theme-card")[next]?.focus();
 }
 
+// Read-only estimated cost (Session / Today / Month), loaded when the modal opens.
+const { cost, error: costError, load: loadCost } = useCost();
+function formatUsd(value: number | undefined): string {
+  if (value === undefined) return "—";
+  if (value > 0 && value < 0.01) return "<$0.01";
+  return `$${value.toFixed(2)}`;
+}
+
 const modalEl = ref<HTMLElement>();
 
 // Modal keyboard behavior: Escape closes; Tab is trapped within the dialog.
@@ -173,10 +189,16 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+// Load cost unconditionally — the server falls back to the workspace when no cwd is
+// passed, so Today/Month still populate in the grid view (no active single-view
+// session ⇒ no cwd/sessionId). Re-fetch if cwd/sessionId arrive or change while open.
+const refreshCost = () => loadCost(props.cwd ?? null, props.sessionId ?? null);
 onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   nextTick(() => modalEl.value?.querySelector<HTMLElement>("input, button")?.focus());
+  refreshCost();
 });
+watch([() => props.cwd, () => props.sessionId], refreshCost);
 onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
@@ -321,6 +343,30 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         />
         <button class="btn" type="button" :disabled="!newMcpValid" @click="addMcpServer">Add</button>
       </div>
+
+      <h3 class="section-title">Cost (estimated)</h3>
+      <p class="hint">
+        Estimated spend for this project from <strong>public per-model pricing</strong> (input, output, and cache tokens) — actual billing may differ, and
+        flat-plan (Max) usage isn't reflected. Today / Month roll up this project's sessions.
+      </p>
+      <div class="cost-grid" role="group" aria-label="Estimated cost" title="Estimated from public per-model pricing; actual billing may differ.">
+        <div class="cost-cell">
+          <span class="cost-label">Session</span>
+          <span class="cost-value">{{ formatUsd(cost?.session) }}</span>
+        </div>
+        <div class="cost-cell">
+          <span class="cost-label">Today</span>
+          <span class="cost-value">{{ formatUsd(cost?.today) }}</span>
+        </div>
+        <div class="cost-cell">
+          <span class="cost-label">Month</span>
+          <span class="cost-value">{{ formatUsd(cost?.month) }}</span>
+        </div>
+      </div>
+      <p v-if="costError" class="hint cost-note">Couldn't load cost estimate.</p>
+      <p v-else-if="cost && (cost.unpricedTurns > 0 || cost.sessionUnpricedTurns > 0)" class="hint cost-note">
+        Some turns used a model with no known price and are excluded from these estimates.
+      </p>
 
       <div class="modal-foot">
         <span class="spacer" />
@@ -498,6 +544,35 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+.cost-grid {
+  display: flex;
+  gap: 8px;
+}
+.cost-cell {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.cost-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+.cost-value {
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+}
+.cost-note {
+  margin: 8px 0 0;
 }
 .modal-foot {
   display: flex;

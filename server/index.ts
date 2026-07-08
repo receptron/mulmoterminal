@@ -61,6 +61,7 @@ import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { mountCommandSummaryRoute } from "./command-summary.js";
+import { mountCostRoute } from "./cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
@@ -1186,6 +1187,10 @@ mountPickFileRoute(app, { isAllowedOrigin });
 // terminal output and returns a short Errors/Warnings/cause/fix summary (issue #246).
 // Same-origin guarded like the other local-action routes.
 mountCommandSummaryRoute(app, { isAllowedOrigin });
+
+// GET /api/cost — estimated $ cost (session + today/month roll-up) for a project's
+// sessions, from public per-model pricing. Read-only; shown in the Settings modal (#245).
+mountCostRoute(app, { resolveCwd: resolveWorkspace });
 
 // POST /api/remote-host/connect|disconnect + GET /status — start/stop the
 // Firestore host loop from the toolbar Connect control. Same-origin guarded like
