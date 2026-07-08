@@ -19,6 +19,7 @@ import {
   type Launcher,
   type UserMcpServer,
 } from "./app-config.js";
+import { sanitizeButtons, sanitizeChips, type HeaderConfig } from "./header-config.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -41,54 +42,66 @@ export function getUserMcpServers(): UserMcpServer[] {
   return config.userMcpServers;
 }
 
+// The global terminal-header buttons/chips — read live so /api/header reflects a config
+// change on the next fetch without a restart.
+export function getHeaderConfig(): HeaderConfig {
+  return { buttons: config.buttons, chips: config.chips };
+}
+
+// Body fields that must be an array when present (a partial POST /api/config may omit any).
+const ARRAY_FIELDS = ["cwdPresets", "prRepos", "launchers", "userMcpServers", "buttons"] as const;
+function badArrayField(body: Record<string, unknown>): string | null {
+  for (const field of ARRAY_FIELDS) {
+    if (body[field] !== undefined && !Array.isArray(body[field])) return field;
+  }
+  return null;
+}
+
+// `chips` is nullable (null = unconfigured), so it can't join ARRAY_FIELDS: reject any present value that
+// is neither an array nor null instead of letting sanitizeChips silently coerce it to null (erasing config).
+function badChipsField(body: Record<string, unknown>): boolean {
+  return body.chips !== undefined && body.chips !== null && !Array.isArray(body.chips);
+}
+
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
+  // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
+  // everything it can write — buttons/chips included — and round-trip it.
+  const configResponse = () => ({
+    cwd: claudeCwd,
+    cwdPresets: config.cwdPresets,
+    soundFile: config.soundFile,
+    prRepos: config.prRepos,
+    launchers: config.launchers,
+    userMcpServers: config.userMcpServers,
+    buttons: config.buttons,
+    chips: config.chips,
+  });
+
   app.get("/api/config", (_req, res) => {
-    res.json({
-      cwd: claudeCwd,
-      cwdPresets: config.cwdPresets,
-      soundFile: config.soundFile,
-      prRepos: config.prRepos,
-      launchers: config.launchers,
-      userMcpServers: config.userMcpServers,
-      home: os.homedir(),
-    });
+    res.json({ ...configResponse(), home: os.homedir() });
   });
 
   app.post("/api/config", (req, res) => {
     const body = req.body ?? {};
     // Partial update: keep the field the request omits so saving the sound doesn't
     // wipe the presets (and vice-versa). cwdPresets, when present, must be an array.
-    if (body.cwdPresets !== undefined && !Array.isArray(body.cwdPresets)) {
-      return res.status(400).json({ error: "cwdPresets must be an array" });
-    }
-    if (body.prRepos !== undefined && !Array.isArray(body.prRepos)) {
-      return res.status(400).json({ error: "prRepos must be an array" });
-    }
-    if (body.launchers !== undefined && !Array.isArray(body.launchers)) {
-      return res.status(400).json({ error: "launchers must be an array" });
-    }
-    if (body.userMcpServers !== undefined && !Array.isArray(body.userMcpServers)) {
-      return res.status(400).json({ error: "userMcpServers must be an array" });
-    }
+    const badField = badArrayField(body);
+    if (badField) return res.status(400).json({ error: `${badField} must be an array` });
+    if (badChipsField(body)) return res.status(400).json({ error: "chips must be an array or null" });
     const next: AppConfig = {
       cwdPresets: body.cwdPresets !== undefined ? sanitizePresets(body.cwdPresets) : config.cwdPresets,
       soundFile: body.soundFile !== undefined ? sanitizeSoundFile(body.soundFile) : config.soundFile,
       prRepos: body.prRepos !== undefined ? sanitizeRepos(body.prRepos) : config.prRepos,
       launchers: body.launchers !== undefined ? sanitizeLaunchers(body.launchers) : config.launchers,
       userMcpServers: body.userMcpServers !== undefined ? sanitizeUserMcpServers(body.userMcpServers) : config.userMcpServers,
+      buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : config.buttons,
+      chips: body.chips !== undefined ? sanitizeChips(body.chips) : config.chips,
     };
     // Stage, persist, commit in-memory only on success — a failed write must not
     // leave GET exposing values that won't survive a restart.
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });
     config = next;
-    res.json({
-      cwd: claudeCwd,
-      cwdPresets: config.cwdPresets,
-      soundFile: config.soundFile,
-      prRepos: config.prRepos,
-      launchers: config.launchers,
-      userMcpServers: config.userMcpServers,
-    });
+    res.json(configResponse());
   });
 
   // Stream the user's custom attention sound (their own file, set in config). The

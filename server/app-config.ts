@@ -5,6 +5,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { sanitizePresets, type CwdPreset } from "./cwd-presets.js";
+import { sanitizeButtons, sanitizeChips, type HeaderButton, type HeaderChip } from "./header-config.js";
 
 // A named program a grid cell can launch instead of Claude (a plain shell, codex,
 // any interactive command). `command` is run on the user's own machine as an
@@ -34,6 +35,10 @@ export interface AppConfig {
   launchers: Launcher[];
   // User-added HTTP MCP servers merged into the single-view session's --mcp-config.
   userMcpServers: UserMcpServer[];
+  // Global terminal-header action buttons; applied to every terminal (scoped with `when`).
+  buttons: HeaderButton[];
+  // Global header display chips, or null when unconfigured (the client keeps its default set).
+  chips: HeaderChip[] | null;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -110,7 +115,7 @@ export function sanitizeSoundFile(input: unknown): string | null {
 
 // Fresh object each call — callers hold and mutate the returned config in place, so a
 // shared default constant would be corrupted across loads.
-const emptyConfig = (): AppConfig => ({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [] });
+const emptyConfig = (): AppConfig => ({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: [], chips: null });
 
 export function loadAppConfig(file: string): AppConfig {
   try {
@@ -122,6 +127,8 @@ export function loadAppConfig(file: string): AppConfig {
       prRepos: sanitizeRepos(raw?.prRepos),
       launchers: sanitizeLaunchers(raw?.launchers),
       userMcpServers: sanitizeUserMcpServers(raw?.userMcpServers),
+      buttons: sanitizeButtons(raw?.buttons),
+      chips: sanitizeChips(raw?.chips),
     };
   } catch {
     return emptyConfig();
@@ -139,6 +146,8 @@ export function saveAppConfig(file: string, config: AppConfig): boolean {
       prRepos: config.prRepos,
       launchers: config.launchers,
       userMcpServers: config.userMcpServers,
+      buttons: config.buttons,
+      chips: config.chips,
     };
     writeFileSync(file, JSON.stringify(payload, null, 2));
     return true;
