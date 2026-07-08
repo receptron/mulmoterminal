@@ -29,6 +29,14 @@ and a **1-line DSL** (sugar). Two parts:
 Session **launch** (agent/model/worktree at spawn time) is explicitly **out of scope** — this is about a
 terminal that is already running.
 
+### Hard requirement: default (no config) == today
+
+With **no `buttons`/`chips` config anywhere**, the header must render and behave **exactly as it does
+today** — same built-in chips in the same order, same built-in buttons (🎤/📎/📂), same ▶ Run menu. Config
+is **purely additive/overriding**: `chips` absent ⇒ the client uses its current hardcoded default set;
+`buttons` absent ⇒ only the current built-in buttons show; `script.json` still works until migrated. The
+resolver signals "unconfigured" (`chips: null`, `buttons: []`) so the client falls back to today's UI.
+
 ## Current state (grounding)
 
 **Terminal header (`Terminal.vue .header`, all views):** `Terminal` label · dir badge (name/color) ·
