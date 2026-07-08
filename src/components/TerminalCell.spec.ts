@@ -534,6 +534,39 @@ describe("TerminalCell", () => {
     expect(w.find(".cell-model").exists()).toBe(false); // ctx omitted from the list → hidden despite context set
   });
 
+  it("renders duplicate built-in chips without key collisions", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes("/api/header"))
+        return {
+          ok: true,
+          json: async () => ({
+            buttons: [],
+            chips: [
+              { kind: "builtin", id: "usage" },
+              { kind: "builtin", id: "usage" },
+            ],
+          }),
+        };
+      return {
+        ok: true,
+        json: async () => ({
+          working: false,
+          waiting: false,
+          lastPrompt: null,
+          usage: { inputTokens: 100, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          context: { model: "claude-opus-4-8", contextTokens: 1 },
+        }),
+      };
+    }) as unknown as typeof fetch;
+    const w = mountCell(id, { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.findAll(".cell-usage")).toHaveLength(2); // both duplicates render, unique keys → no collision
+  });
+
   it("shows no model badge when the session has no model yet", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {

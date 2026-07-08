@@ -164,9 +164,10 @@ const cellChips = computed<CellChipView[]>(() => {
   const configured = headerChips.value;
   if (configured === null) return DEFAULT_CELL_CHIP_IDS.map((id) => ({ key: `b-${id}`, builtin: id, custom: null }));
   const views: CellChipView[] = [];
+  // Key by index so a config that repeats a built-in (sanitizeChips allows duplicates) can't collide.
   configured.forEach((chip, i) => {
     if (chip.kind === "custom") views.push({ key: `c-${i}`, builtin: null, custom: { label: chip.label, text: chip.text } });
-    else if (ROW1_BUILTIN_CHIPS.has(chip.id)) views.push({ key: `b-${chip.id}`, builtin: chip.id, custom: null });
+    else if (ROW1_BUILTIN_CHIPS.has(chip.id)) views.push({ key: `b-${i}-${chip.id}`, builtin: chip.id, custom: null });
   });
   return views;
 });
