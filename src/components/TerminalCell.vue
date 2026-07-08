@@ -809,7 +809,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
         <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
         <span class="cell-actions">
-          <button v-if="sessionId" class="cell-btn" title="Activity timeline" aria-label="Show activity timeline" @click="timelineOpen = true">🕘</button>
+          <button
+            v-if="sessionId && agent !== 'codex'"
+            class="cell-btn"
+            title="Activity timeline"
+            aria-label="Show activity timeline"
+            @click="timelineOpen = true"
+          >
+            🕘
+          </button>
           <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
           <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
           <button

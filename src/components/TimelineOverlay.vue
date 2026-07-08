@@ -2,7 +2,7 @@
 // A read-only activity timeline for one session: the tools the agent ran (newest
 // first), fetched from GET /api/transcript/timeline. Opened from the cell header's
 // 🕘 button so you can see "what did it do?" without scrolling the raw transcript.
-import { ref, watch } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 
 interface TimelineEvent {
   ts: string;
@@ -49,17 +49,30 @@ const formatTime = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
 };
 
+// Document-level Escape so dismissal works regardless of focus (the backdrop isn't
+// focused). Attached only while open; always removed on unmount.
+const onKeydown = (e: KeyboardEvent) => {
+  if (e.key === "Escape") emit("close");
+};
+
 watch(
   () => props.open,
   (open) => {
-    if (open) load();
+    if (open) {
+      load();
+      document.addEventListener("keydown", onKeydown);
+    } else {
+      document.removeEventListener("keydown", onKeydown);
+    }
   },
   { immediate: true },
 );
+
+onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <div v-if="open" class="tl-backdrop" @click.self="emit('close')" @keydown.escape="emit('close')">
+  <div v-if="open" class="tl-backdrop" @click.self="emit('close')">
     <div class="tl-modal" role="dialog" aria-label="Activity timeline" tabindex="-1">
       <div class="tl-head">
         <span class="tl-title">Activity</span>

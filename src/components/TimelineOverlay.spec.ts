@@ -52,4 +52,13 @@ describe("TimelineOverlay", () => {
     await w.find(".tl-close").trigger("click");
     expect(w.emitted("close")).toBeTruthy();
   });
+
+  it("closes on a document-level Escape keydown (focus-independent)", async () => {
+    vi.stubGlobal("fetch", mockFetch({ events, truncated: false }));
+    const w = mount(TimelineOverlay, { attachTo: document.body, props: { sessionId: "s", cwd: "/x", open: true } });
+    await flushPromises();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(w.emitted("close")).toBeTruthy();
+    w.unmount();
+  });
 });
