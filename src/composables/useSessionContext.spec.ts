@@ -34,4 +34,20 @@ describe("useSessionContext", () => {
     expect(result.context.value).toBeNull();
     unmount();
   });
+
+  it("drops the old model when the session switches, even if the new fetch fails", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ context: { model: "claude-opus-4-8", contextTokens: 1 } }))
+      .mockResolvedValueOnce({ ok: false } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const id = ref<string | null>("sess-1");
+    const { result, unmount } = withSetup(() => useSessionContext(id, ref<string | null>(null)));
+    await flushPromises();
+    expect(result.context.value?.model).toBe("claude-opus-4-8");
+    id.value = "sess-2"; // switch session; the refetch fails (ok:false)
+    await flushPromises();
+    expect(result.context.value).toBeNull(); // no stale sess-1 model
+    unmount();
+  });
 });

@@ -13,12 +13,20 @@ const isContext = (c: unknown): c is SessionContext => typeof c === "object" && 
 export function useSessionContext(sessionId: Ref<string | null>, cwd: Ref<string | null>) {
   const context = ref<SessionContext | null>(null);
   let requestSeq = 0;
+  let loadedFor: string | null = null; // the session id `context` currently reflects
 
   async function refresh(): Promise<void> {
     const id = sessionId.value;
     if (!id) {
       context.value = null;
+      loadedFor = null;
       return;
+    }
+    // Switched to a different session: drop the old model now, so a slow/failed fetch can't keep
+    // showing the previous session's model. A same-session refresh keeps the last value (no flicker).
+    if (loadedFor !== id) {
+      context.value = null;
+      loadedFor = null;
     }
     const query = cwd.value ? `?cwd=${encodeURIComponent(cwd.value)}` : "";
     const seq = ++requestSeq;
@@ -27,7 +35,10 @@ export function useSessionContext(sessionId: Ref<string | null>, cwd: Ref<string
       if (seq !== requestSeq || !res.ok) return;
       const data = await res.json();
       // Guard against a stale response: the terminal may have switched session mid-flight.
-      if (seq === requestSeq && id === sessionId.value && isContext(data.context)) context.value = data.context;
+      if (seq === requestSeq && id === sessionId.value && isContext(data.context)) {
+        context.value = data.context;
+        loadedFor = id;
+      }
     } catch {
       // best-effort — `${model}` just renders empty until a later fetch succeeds
     }
