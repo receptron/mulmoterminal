@@ -84,7 +84,9 @@ describe("CommandCell summarize", () => {
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe("/api/command/summarize");
-    expect(JSON.parse(String(init?.body)).log).toContain("npm ERR!");
+    const sent = JSON.parse(String(init?.body));
+    expect(sent.log).toContain("npm ERR!");
+    expect(typeof sent.locale).toBe("string"); // browser locale forwarded for the reply language
     expect(w.find(".cell-summary-text").text()).toContain("missing module foo");
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { truncateLog, buildSummaryPrompt, parseSummaryOutput, summarizeLog, MAX_LOG_KB, type RunClaude } from "./command-summary.js";
+import { truncateLog, buildSummaryPrompt, normalizeLocale, parseSummaryOutput, summarizeLog, MAX_LOG_KB, type RunClaude } from "./command-summary.js";
 
 const KB = 1024;
 const ok = (stdout: string): RunClaude => vi.fn(async () => ({ stdout, stderr: "", code: 0 }));
@@ -48,9 +48,23 @@ describe("truncateLog", () => {
 });
 
 describe("buildSummaryPrompt", () => {
-  it("asks for the four labelled sections", () => {
-    const p = buildSummaryPrompt();
-    for (const label of ["Errors:", "Warnings:", "Likely cause:", "Suggested fix:"]) expect(p).toContain(label);
+  it("names the four things to report and defaults to English", () => {
+    const p = buildSummaryPrompt().toLowerCase();
+    for (const s of ["error", "warning", "cause", "fix"]) expect(p).toContain(s);
+    expect(buildSummaryPrompt()).toContain('"en"');
+  });
+  it("instructs the reply language from the given locale", () => {
+    expect(buildSummaryPrompt("ja")).toContain('"ja"');
+  });
+});
+
+describe("normalizeLocale", () => {
+  it("reduces a full tag to its base language", () => {
+    expect(normalizeLocale("ja-JP")).toBe("ja");
+    expect(normalizeLocale("en-US")).toBe("en");
+  });
+  it("falls back to en for missing / malformed input", () => {
+    for (const bad of [undefined, "", "../evil", 123, "toolonglanguagecode"]) expect(normalizeLocale(bad)).toBe("en");
   });
 });
 
@@ -70,6 +84,12 @@ describe("summarizeLog", () => {
     expect(res).toEqual({ summary: "Errors: missing module\nSuggested fix: yarn add foo", truncated: false });
     expect(runClaude).toHaveBeenCalledOnce();
     expect(runClaude.mock.calls[0][0].input).toContain("npm ERR!");
+  });
+
+  it("threads the locale into the prompt so claude replies in that language", async () => {
+    const runClaude = ok("要約: モジュール不足");
+    await summarizeLog("npm ERR!", { runClaude, locale: "ja" });
+    expect(runClaude.mock.calls[0][0].prompt).toContain('"ja"');
   });
 
   it("short-circuits empty output without spawning claude", async () => {

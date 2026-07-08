@@ -40,16 +40,28 @@ export function truncateLog(log: string, maxKb: number = MAX_LOG_KB): TruncatedL
   return { text: startsMidLine && firstNewline >= 0 ? tail.slice(firstNewline + 1) : tail, truncated: true };
 }
 
+export const DEFAULT_LOCALE = "en";
+
+// Reduce a client-supplied locale to a safe base language code (e.g. "ja-JP" -> "ja").
+// The value is interpolated into the claude prompt, so anything unexpected falls back
+// to the default rather than injecting a free-form string.
+export function normalizeLocale(v: unknown): string {
+  const base = typeof v === "string" ? v.split("-")[0].toLowerCase() : "";
+  return /^[a-z]{2,8}$/.test(base) ? base : DEFAULT_LOCALE;
+}
+
 // The headless instruction passed as `claude -p <prompt>`; the log rides on stdin.
-export function buildSummaryPrompt(): string {
+// The reply (including its section labels) is written in the caller's language.
+export function buildSummaryPrompt(locale: string = DEFAULT_LOCALE): string {
   return [
     "You are given the captured terminal output of a single shell command on stdin.",
-    "Reply CONCISELY in plain text (no markdown), under ~120 words, using only these",
-    "labelled lines and OMITTING any that do not apply:",
-    "Errors: the concrete error(s)",
-    "Warnings: notable warnings",
-    "Likely cause: the most probable root cause",
-    "Suggested fix: the smallest actionable next step",
+    `Write your ENTIRE reply — including the section labels — in the language of IETF locale code "${locale}" (e.g. "ja" = Japanese, "en" = English).`,
+    "Reply CONCISELY in plain text (no markdown), under ~120 words, using short labelled",
+    "lines for each of the following and OMITTING any that do not apply:",
+    "- the concrete error(s)",
+    "- notable warnings",
+    "- the most probable root cause",
+    "- the smallest actionable next step (the fix)",
     "Do not echo the log back.",
   ].join("\n");
 }
@@ -102,6 +114,7 @@ export interface SummarizeDeps {
   runClaude?: RunClaude;
   claudeBin?: string;
   maxLogKb?: number;
+  locale?: string;
 }
 
 // Truncate the log, then (unless it's empty) run claude headless for a summary.
@@ -110,7 +123,12 @@ export async function summarizeLog(log: string, deps: SummarizeDeps = {}): Promi
   const bin = deps.claudeBin ?? claudeAdapter.bin();
   const { text, truncated } = truncateLog(log, deps.maxLogKb ?? MAX_LOG_KB);
   if (!text.trim()) return { summary: EMPTY_OUTPUT_SUMMARY, truncated };
-  const { stdout, stderr, code } = await runClaude({ bin, prompt: buildSummaryPrompt(), input: text, timeoutMs: SUMMARY_TIMEOUT_MS });
+  const { stdout, stderr, code } = await runClaude({
+    bin,
+    prompt: buildSummaryPrompt(deps.locale ?? DEFAULT_LOCALE),
+    input: text,
+    timeoutMs: SUMMARY_TIMEOUT_MS,
+  });
   const summary = parseSummaryOutput(stdout);
   if (!summary) throw new Error(stderr.trim() || `claude produced no summary (exit ${code})`);
   return { summary, truncated };
@@ -129,7 +147,7 @@ export function mountCommandSummaryRoute(app: Express, { isAllowedOrigin }: Comm
     const body = isRecord(req.body) ? req.body : {};
     if (typeof body.log !== "string") return res.status(400).json({ error: "body.log (string) required" });
     try {
-      res.json(await summarizeLog(body.log));
+      res.json(await summarizeLog(body.log, { locale: normalizeLocale(body.locale) }));
     } catch (e) {
       res.status(502).json({ error: `summary failed: ${messageOf(e)}` });
     }

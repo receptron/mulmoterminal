@@ -60,6 +60,10 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
+// The summary language follows the browser's base language — MulmoTerminal has no
+// locale picker (same signal as useVoiceInput / accountingUi / App.vue).
+const browserLocale = (): string => (navigator.language || "en").split("-")[0];
+
 async function postSummary(log: string): Promise<{ summary: string; truncated: boolean }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SUMMARY_FETCH_TIMEOUT_MS);
@@ -67,7 +71,7 @@ async function postSummary(log: string): Promise<{ summary: string; truncated: b
     const res = await fetch("/api/command/summarize", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ log }),
+      body: JSON.stringify({ log, locale: browserLocale() }),
       signal: controller.signal,
     });
     const data: unknown = await res.json().catch(() => ({}));
