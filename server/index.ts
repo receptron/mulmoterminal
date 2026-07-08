@@ -50,8 +50,10 @@ import {
   latestMeaningfulUserPromptFromJsonl,
   preferredHeaderPrompt,
   sessionUsageFromJsonl,
+  latestTurnContextFromJsonl,
   timelineFromJsonl,
   type SessionUsage,
+  type LatestTurnContext,
   type TimelineEvent,
 } from "./transcript.js";
 import { mountOpenDirRoute } from "./open-dir.js";
@@ -715,14 +717,20 @@ async function latestUserPrompt(cwd: string, id: string): Promise<string | null>
 }
 
 const EMPTY_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-// One read of a session's transcript → its latest prompt AND cumulative token usage,
-// so /api/session/:id doesn't parse the .jsonl twice.
-async function readSessionSummary(cwd: string, id: string): Promise<{ lastPrompt: string | null; usage: SessionUsage }> {
+const EMPTY_CONTEXT: LatestTurnContext = { model: null, contextTokens: 0 };
+interface SessionSummary {
+  lastPrompt: string | null;
+  usage: SessionUsage;
+  context: LatestTurnContext;
+}
+// One read of a session's transcript → its latest prompt, cumulative token usage, and
+// current-turn context, so /api/session/:id doesn't parse the .jsonl more than once.
+async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
   try {
     const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    return { lastPrompt: latestMeaningfulUserPromptFromJsonl(raw), usage: sessionUsageFromJsonl(raw) };
+    return { lastPrompt: latestMeaningfulUserPromptFromJsonl(raw), usage: sessionUsageFromJsonl(raw), context: latestTurnContextFromJsonl(raw) };
   } catch {
-    return { lastPrompt: null, usage: EMPTY_USAGE };
+    return { lastPrompt: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
   }
 }
 
@@ -1194,7 +1202,7 @@ app.get("/api/session/:id", async (req, res) => {
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, usage } = await readSessionSummary(cwd, id);
+  const { lastPrompt: transcriptPrompt, usage, context } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
   res.json({
     id,
@@ -1204,6 +1212,7 @@ app.get("/api/session/:id", async (req, res) => {
     event: a.event ?? null,
     lastPrompt,
     usage,
+    context,
   });
 });
 
