@@ -6,6 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
+import { headerStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
 import TimelineOverlay from "./TimelineOverlay.vue";
@@ -91,6 +92,7 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 // palette and shows a project badge. Re-fetched when the effective cwd changes.
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
+const headerStyle = computed(() => headerStyleFor(dirConfig.value.headerColor, dirConfig.value.headerTextColor));
 // Live git status (branch/dirty/ahead·behind) for the header chip. `refreshGit`
 // is called alongside loadDiff() so a finished turn's changes show immediately.
 const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
@@ -812,7 +814,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
-      <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" @click="onHeaderClick">
+      <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" :style="headerStyle" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
         <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
              header's job is to zoom (switch to this terminal), so the dir is inert text
@@ -1144,7 +1146,10 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   gap: 8px;
   height: 34px;
   padding: 0 8px;
-  background: var(--bg-panel);
+  /* Per-dir override via .mulmoterminal.json (headerColor/headerTextColor) sets these
+     vars; the status tint below still wins for the background while working/blocked. */
+  background: var(--cell-header-bg, var(--bg-panel));
+  color: var(--cell-header-fg, inherit);
   border-bottom: 1px solid var(--border);
 }
 /* The header also tints by status (working/done = blue, blocked = amber). */
@@ -1209,7 +1214,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   cursor: pointer;
   font-family: ui-monospace, "JetBrains Mono", monospace;
   font-size: 11px;
-  color: var(--text-dim);
+  color: var(--cell-header-fg, var(--text-dim));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1300,7 +1305,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   min-width: 0;
   font-family: system-ui, sans-serif;
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--cell-header-fg, var(--text-secondary));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

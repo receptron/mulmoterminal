@@ -1305,6 +1305,21 @@ describe("TerminalCell", () => {
     expect(w.emitted("toggle-expand")).toHaveLength(1);
   });
 
+  it("applies headerColor/headerTextColor from .mulmoterminal.json as header CSS vars", async () => {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/dir-config")) return { ok: true, json: async () => ({ headerColor: "#112233", headerTextColor: "#ffffff" }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+    // A cwd unique to this test so useDirConfig's per-cwd cache doesn't collide.
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/hdr-color-cell" });
+    await flushPromises();
+    const style = w.find(".cell-header").attributes("style") ?? "";
+    expect(style).toContain("--cell-header-bg: #112233");
+    expect(style).toContain("--cell-header-fg: #ffffff");
+  });
+
   it("tints a preset chip whose dir already has a running session elsewhere", () => {
     const w = mountCell(null, {
       presets: [

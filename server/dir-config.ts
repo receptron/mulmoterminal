@@ -50,6 +50,11 @@ const THEME_COLOR_KEYS: readonly string[] = [
 export interface DirConfig {
   name: string | null;
   badgeColor: string | null;
+  // The cell header's own background / text color (grid cell + single view). Hex
+  // #rrggbb, or null to keep the theme default. Distinct from `colors` (the xterm
+  // palette) — these tint the chrome around the terminal, not the terminal itself.
+  headerColor: string | null;
+  headerTextColor: string | null;
   theme: ThemeId | null;
   // Per-key xterm palette overrides (on top of `theme`), or null when none are valid.
   colors: Record<string, string> | null;
@@ -63,6 +68,8 @@ export interface DirConfig {
 export interface PublicDirConfig {
   name: string | null;
   badgeColor: string | null;
+  headerColor: string | null;
+  headerTextColor: string | null;
   theme: ThemeId | null;
   colors: Record<string, string> | null;
   hasSound: boolean;
@@ -116,7 +123,7 @@ export function resolveDirSound(cwd: string, input: unknown): string | null {
   return resolved;
 }
 
-const EMPTY: DirConfig = { name: null, badgeColor: null, theme: null, colors: null, sound: null };
+const EMPTY: DirConfig = { name: null, badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, sound: null };
 
 export function loadDirConfig(cwd: string): DirConfig {
   try {
@@ -128,6 +135,8 @@ export function loadDirConfig(cwd: string): DirConfig {
     return {
       name: sanitizeName(raw.name),
       badgeColor: sanitizeColor(raw.badgeColor),
+      headerColor: sanitizeColor(raw.headerColor),
+      headerTextColor: sanitizeColor(raw.headerTextColor),
       theme: isThemeId(raw.theme) ? raw.theme : null,
       colors: sanitizeColors(raw.colors),
       sound: resolveDirSound(base, raw.sound),
@@ -138,8 +147,8 @@ export function loadDirConfig(cwd: string): DirConfig {
 }
 
 export function publicDirConfig(cwd: string): PublicDirConfig {
-  const { name, badgeColor, theme, colors, sound } = loadDirConfig(cwd);
-  return { name, badgeColor, theme, colors, hasSound: sound !== null };
+  const { name, badgeColor, headerColor, headerTextColor, theme, colors, sound } = loadDirConfig(cwd);
+  return { name, badgeColor, headerColor, headerTextColor, theme, colors, hasSound: sound !== null };
 }
 
 export function dirSoundFile(cwd: string): string | null {

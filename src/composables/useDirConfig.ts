@@ -8,13 +8,17 @@ import { isThemeId, type ThemeId } from "./useTheme";
 export interface DirConfig {
   name: string | null;
   badgeColor: string | null;
+  // The cell header's own background / text color (grid cell + single view), or null
+  // to keep the theme default. Distinct from `colors` (the xterm palette).
+  headerColor: string | null;
+  headerTextColor: string | null;
   theme: ThemeId | null;
   // Per-key xterm palette overrides applied on top of `theme` (or the app theme).
   colors: Partial<ITheme> | null;
   hasSound: boolean;
 }
 
-const EMPTY: DirConfig = { name: null, badgeColor: null, theme: null, colors: null, hasSound: false };
+const EMPTY: DirConfig = { name: null, badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, hasSound: false };
 
 // The ITheme keys a dir may override; values arrive server-sanitized but are
 // re-checked here so a hand-rolled response can't widen the terminal options.
@@ -66,6 +70,8 @@ function parse(c: unknown): DirConfig {
   return {
     name: typeof c.name === "string" ? c.name : null,
     badgeColor: typeof c.badgeColor === "string" ? c.badgeColor : null,
+    headerColor: typeof c.headerColor === "string" ? c.headerColor : null,
+    headerTextColor: typeof c.headerTextColor === "string" ? c.headerTextColor : null,
     theme: isThemeId(c.theme) ? c.theme : null,
     colors: parseColors(c.colors),
     hasSound: c.hasSound === true,

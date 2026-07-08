@@ -5,7 +5,7 @@ import path from "node:path";
 import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile } from "./dir-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-dircfg-"));
-const EMPTY = { name: null, badgeColor: null, theme: null, colors: null, sound: null };
+const EMPTY = { name: null, badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, sound: null };
 
 function withConfig(body: unknown): { dir: string; cleanup: () => void } {
   const dir = tmp();
@@ -87,9 +87,32 @@ describe("resolveDirSound", () => {
 
 describe("loadDirConfig", () => {
   it("loads and sanitizes a full config", () => {
-    const { dir, cleanup } = withConfig({ name: "  PROD  ", badgeColor: "#CF222E", theme: "nord", sound: "./a.mp3" });
+    const { dir, cleanup } = withConfig({
+      name: "  PROD  ",
+      badgeColor: "#CF222E",
+      headerColor: "#190A23",
+      headerTextColor: "#FFFFFF",
+      theme: "nord",
+      sound: "./a.mp3",
+    });
     writeFileSync(path.join(dir, "a.mp3"), "x");
-    expect(loadDirConfig(dir)).toEqual({ name: "PROD", badgeColor: "#cf222e", theme: "nord", colors: null, sound: path.join(dir, "a.mp3") });
+    expect(loadDirConfig(dir)).toEqual({
+      name: "PROD",
+      badgeColor: "#cf222e",
+      headerColor: "#190a23",
+      headerTextColor: "#ffffff",
+      theme: "nord",
+      colors: null,
+      sound: path.join(dir, "a.mp3"),
+    });
+    cleanup();
+  });
+
+  it("drops malformed header colors (hex #rrggbb only)", () => {
+    const { dir, cleanup } = withConfig({ headerColor: "red", headerTextColor: "#fff" });
+    const cfg = loadDirConfig(dir);
+    expect(cfg.headerColor).toBeNull(); // not #rrggbb
+    expect(cfg.headerTextColor).toBeNull(); // shorthand not accepted
     cleanup();
   });
 
@@ -139,7 +162,7 @@ describe("publicDirConfig / dirSoundFile", () => {
   it("exposes hasSound but not the raw path", () => {
     const { dir, cleanup } = withConfig({ name: "x", sound: "./a.mp3" });
     writeFileSync(path.join(dir, "a.mp3"), "x");
-    expect(publicDirConfig(dir)).toEqual({ name: "x", badgeColor: null, theme: null, colors: null, hasSound: true });
+    expect(publicDirConfig(dir)).toEqual({ name: "x", badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, hasSound: true });
     expect(dirSoundFile(dir)).toBe(path.join(dir, "a.mp3"));
     cleanup();
   });
