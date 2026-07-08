@@ -11,6 +11,9 @@ export interface CodexArgsInput {
   guiMcpUrl: string | null;
 }
 
+// NOTE: a seed prompt is NOT passed here as a positional [PROMPT] — a long collection-action prompt
+// overflows tmux's new-session command-length limit ("command too long"). It is typed into codex's
+// input box after startup instead (see attachCodexAutoRun in index.ts).
 export function buildCodexArgs(input: CodexArgsInput): string[] {
   const args: string[] = [];
   if (input.model) args.push("--model", input.model);

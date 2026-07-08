@@ -18,6 +18,7 @@ import path from "node:path";
 import os from "node:os";
 import { mkdirSync } from "node:fs";
 import { seedHelps, syncPresetSkills, syncActivePresetSkills, presetSkillsAssetDir } from "@mulmoclaude/core/workspace-setup";
+import { syncCodexSkills, codexSkillsRoot } from "../codex-skills.js";
 
 // Console-backed logger, matching the prefix style other backends use.
 const log = {
@@ -84,5 +85,12 @@ export function initWorkspaceSetup(deps: { workspace: string }): void {
     mkdirSync(active, { recursive: true });
     const result = syncActivePresetSkills({ sourceDir: presetSkillsAssetDir(), activeDir: active, onInfo, onWarn });
     log.info("refreshed active preset skills", { updated: result.updated.length, removed: result.removed.length, skipped: result.skipped.length });
+  });
+
+  // Mirror the workspace's skills into codex's own skills dir (~/.codex/skills) so codex loads them
+  // by description — codex has no /<slug> command, so a codex chat seed names the skill instead.
+  safeStep("mirrorCodexSkills", () => {
+    const result = syncCodexSkills(path.join(workspace, ".claude", "skills"), codexSkillsRoot());
+    log.info("mirrored skills to codex", { mirrored: result.mirrored.length, skipped: result.skipped.length });
   });
 }

@@ -243,9 +243,9 @@ onUnmounted(() => clearTimeout(draftHintTimer));
 // A collection action spawned a new chat and wants it shown: close the browse overlay
 // (if open) and select the session so the terminal displays it. A draft also shows the
 // preparing hint until claude is ready for the prefilled text.
-registerChatOpener((id: string, opts?: { draft?: boolean }) => {
+registerChatOpener((id, opts) => {
   browseClose();
-  selectSession(id);
+  selectSession(id, opts?.agent ?? "claude");
   if (opts?.draft) showDraftHint();
 });
 

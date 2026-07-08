@@ -42,6 +42,7 @@ import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
 import { listCodexSessions, codexRolloutExists } from "./codex-sessions.js";
+import { codexifySkillSeed } from "./codex-skills.js";
 import { stripTerminalQueries } from "./terminal-replay.js";
 import {
   isRecord,
@@ -801,26 +802,29 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
   const draft = body.draft === true;
+  const agent = body.agent === "codex" ? "codex" : "claude";
   const sessionId = randomUUID();
   if (body.hidden === true) hiddenSessions.add(sessionId);
-  // ws is null: the session runs headless until the user opens it (reattach
-  // replays the buffered output). The "created" pubsub event in spawnClaudePty
-  // surfaces it in the sidebar right away. A draft spawns with NO initial prompt
-  // (so claude doesn't auto-run) and gets the text typed into its input box instead.
+  // ws is null: the session runs headless until the user opens it (reattach replays the buffered
+  // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
+  // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
+  // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
   try {
-    if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
+    if (agent === "codex") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
+    else if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
     else spawnClaudePty(sessionId, null, null, message);
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
     return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
   }
-  return res.json({
-    message: draft
-      ? `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`
-      : `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
-    jsonData: { chatId: sessionId },
-  });
+  return res.json({ message: backgroundChatMessage(agent, draft, sessionId), jsonData: { chatId: sessionId, agent } });
 });
+
+function backgroundChatMessage(agent: "claude" | "codex", draft: boolean, sessionId: string): string {
+  if (agent === "codex") return `Spawned a new codex session (chatId ${sessionId}) auto-running the prompt.`;
+  if (draft) return `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`;
+  return `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`;
+}
 
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
@@ -1719,6 +1723,47 @@ function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined
   };
 }
 
+// codex's TUI has no stable "input ready" marker (its placeholder rotates), so instead of matching
+// a string we wait for its startup output to SETTLE — the boot banner + MCP-boot spinner keep
+// emitting until the input prompt is ready, so a quiet gap means codex is waiting for input. Then
+// paste the seed + Enter to auto-run it. Same reason as attachDraftInjection: a long prompt can't go
+// through tmux's new-session command-length limit ("command too long"). Returns a scanner fed the
+// pty output.
+const CODEX_READY_QUIET_MS = 1000;
+const CODEX_AUTORUN_MAX_WAIT_MS = 15_000;
+function attachCodexAutoRun(entry: PtyEntry, prompt: string): (data: string) => void {
+  const text = sanitizeDraftText(prompt);
+  if (!text) return () => {};
+  let done = false;
+  let quiet: ReturnType<typeof setTimeout> | null = null;
+  const type = () => {
+    if (done) return;
+    done = true;
+    if (quiet) clearTimeout(quiet);
+    try {
+      entry.term.write(`\x1b[200~${text}\x1b[201~`);
+      setTimeout(() => {
+        try {
+          entry.term.write("\r");
+        } catch {
+          // pty already gone — nothing to submit
+        }
+      }, DRAFT_SUBMIT_MS);
+    } catch {
+      // pty already gone — nothing to type into
+    }
+  };
+  const cap = setTimeout(type, CODEX_AUTORUN_MAX_WAIT_MS);
+  return () => {
+    if (done) return;
+    if (quiet) clearTimeout(quiet);
+    quiet = setTimeout(() => {
+      clearTimeout(cap);
+      type();
+    }, CODEX_READY_QUIET_MS);
+  };
+}
+
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -2161,10 +2206,11 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   return { sessionId, live, resumeRolloutId };
 }
 
-function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
+function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
   entry.term.onData((data) => {
     entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
+    onOutput?.(data);
   });
   entry.term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
@@ -2189,7 +2235,14 @@ function rememberCodexRollout(sessionId: string, root: string, before: Set<strin
     .catch(() => {});
 }
 
-function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string | null, cwd: string, attachGuiMcp: boolean): PtyEntry {
+function spawnCodexPty(
+  sessionId: string,
+  ws: WebSocket | null,
+  resumeRolloutId: string | null,
+  cwd: string,
+  attachGuiMcp: boolean,
+  initialPrompt: string | null,
+): PtyEntry {
   const root = codexSessionsRoot();
   const before = snapshotSessions(root);
   // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
@@ -2209,7 +2262,10 @@ function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string
     // could overwrite the known id with a mis-attributed concurrent rollout.
     rememberCodexRollout(sessionId, root, before, cwd);
   }
-  wireCodexRelay(entry, sessionId);
+  // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
+  // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
+  const autoRun = initialPrompt ? attachCodexAutoRun(entry, initialPrompt) : undefined;
+  wireCodexRelay(entry, sessionId, autoRun);
   return entry;
 }
 
@@ -2222,7 +2278,7 @@ function startCodexEntry(
   attachGuiMcp: boolean,
 ): PtyEntry {
   if (live) return reattachPty(live, ws, sessionId);
-  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp);
+  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, null); // interactive: no seed
 }
 
 // codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs
