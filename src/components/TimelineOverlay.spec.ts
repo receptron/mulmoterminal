@@ -61,4 +61,27 @@ describe("TimelineOverlay", () => {
     expect(w.emitted("close")).toBeTruthy();
     w.unmount();
   });
+
+  it("ignores a stale response superseded by a newer open", async () => {
+    const resp = (payload: unknown) => ({ ok: true, json: () => Promise.resolve(payload) });
+    let resolveStale: (v: unknown) => void = () => {};
+    const stale = new Promise((r) => {
+      resolveStale = r;
+    });
+    const fetchMock = vi
+      .fn()
+      .mockReturnValueOnce(stale) // first open (session a) resolves LAST
+      .mockResolvedValueOnce(resp({ events: [{ ts: "t", tool: "Read", summary: "B" }], truncated: false }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const w = mount(TimelineOverlay, { props: { sessionId: "a", cwd: "/x", open: true } });
+    await w.setProps({ open: false });
+    await w.setProps({ sessionId: "b", open: true }); // second open supersedes the first
+    await flushPromises();
+    resolveStale(resp({ events: [{ ts: "t", tool: "Bash", summary: "A" }], truncated: false }));
+    await flushPromises();
+
+    expect(w.findAll(".tl-row .tl-tool").map((n) => n.text())).toEqual(["Read"]); // newest wins, stale ignored
+    w.unmount();
+  });
 });

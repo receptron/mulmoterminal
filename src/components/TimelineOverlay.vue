@@ -18,11 +18,15 @@ const truncated = ref(false);
 const loading = ref(false);
 const error = ref(false);
 
-const isTimeline = (v: unknown): v is { events: TimelineEvent[]; truncated: boolean } =>
-  typeof v === "object" && v !== null && Array.isArray((v as { events?: unknown }).events);
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+const isTimeline = (v: unknown): v is { events: TimelineEvent[]; truncated: boolean } => isRecord(v) && Array.isArray(v.events);
 
+// Bumped per load so a slow fetch for a previously-opened session can't overwrite the
+// state of a newer open (reopening quickly for a different session/cwd).
+let req = 0;
 async function load(): Promise<void> {
   if (!props.sessionId) return;
+  const my = ++req;
   loading.value = true;
   error.value = false;
   try {
@@ -31,13 +35,16 @@ async function load(): Promise<void> {
     const res = await fetch(`/api/transcript/timeline?${params.toString()}`);
     if (!res.ok) throw new Error(String(res.status));
     const data: unknown = await res.json();
+    if (my !== req) return; // superseded by a newer open
     events.value = isTimeline(data) ? data.events : [];
     truncated.value = isTimeline(data) && data.truncated;
   } catch {
-    error.value = true;
-    events.value = [];
+    if (my === req) {
+      error.value = true;
+      events.value = [];
+    }
   } finally {
-    loading.value = false;
+    if (my === req) loading.value = false;
   }
 }
 
@@ -73,7 +80,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 <template>
   <div v-if="open" class="tl-backdrop" @click.self="emit('close')">
-    <div class="tl-modal" role="dialog" aria-label="Activity timeline" tabindex="-1">
+    <div class="tl-modal" role="dialog" aria-modal="true" aria-label="Activity timeline" tabindex="-1">
       <div class="tl-head">
         <span class="tl-title">Activity</span>
         <span class="tl-count">{{ events.length }} step{{ events.length === 1 ? "" : "s" }}{{ truncated ? "+" : "" }}</span>
