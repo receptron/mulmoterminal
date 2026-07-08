@@ -64,16 +64,21 @@ function badChipsField(body: Record<string, unknown>): boolean {
 }
 
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
+  // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
+  // everything it can write — buttons/chips included — and round-trip it.
+  const configResponse = () => ({
+    cwd: claudeCwd,
+    cwdPresets: config.cwdPresets,
+    soundFile: config.soundFile,
+    prRepos: config.prRepos,
+    launchers: config.launchers,
+    userMcpServers: config.userMcpServers,
+    buttons: config.buttons,
+    chips: config.chips,
+  });
+
   app.get("/api/config", (_req, res) => {
-    res.json({
-      cwd: claudeCwd,
-      cwdPresets: config.cwdPresets,
-      soundFile: config.soundFile,
-      prRepos: config.prRepos,
-      launchers: config.launchers,
-      userMcpServers: config.userMcpServers,
-      home: os.homedir(),
-    });
+    res.json({ ...configResponse(), home: os.homedir() });
   });
 
   app.post("/api/config", (req, res) => {
@@ -96,14 +101,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     // leave GET exposing values that won't survive a restart.
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });
     config = next;
-    res.json({
-      cwd: claudeCwd,
-      cwdPresets: config.cwdPresets,
-      soundFile: config.soundFile,
-      prRepos: config.prRepos,
-      launchers: config.launchers,
-      userMcpServers: config.userMcpServers,
-    });
+    res.json(configResponse());
   });
 
   // Stream the user's custom attention sound (their own file, set in config). The
