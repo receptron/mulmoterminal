@@ -51,6 +51,10 @@ describe("evalWhen", () => {
     expect(evalWhen("agent==codex || repo==receptron/mulmoterminal", ctx())).toBe(true);
     expect(evalWhen("mystery", ctx())).toBe(false);
   });
+  it("fails closed for an unknown key on both == and != (a typo hides, never exposes)", () => {
+    expect(evalWhen("agnet == claude", ctx())).toBe(false);
+    expect(evalWhen("agnet != codex", ctx())).toBe(false);
+  });
 });
 
 describe("resolveHeader", () => {
@@ -58,7 +62,7 @@ describe("resolveHeader", () => {
     expect(resolveHeader({ buttons: [], chips: null }, ctx()).chips).toBeNull();
   });
 
-  it("filters buttons by `when` and substitutes their payloads", () => {
+  it("filters buttons by `when`, drops shell buttons (not wired yet), and substitutes payloads", () => {
     const config: HeaderConfig = {
       buttons: [
         { id: "pr", emoji: "🔀", label: "PR", run: "shell", cmd: "gh pr create --head ${branch}", when: "isGitRepo" },
@@ -68,9 +72,9 @@ describe("resolveHeader", () => {
       chips: null,
     };
     const out = resolveHeader(config, ctx());
-    expect(out.buttons.map((b) => b.id)).toEqual(["pr", "gh"]); // codex-only hidden for a claude session
-    expect(out.buttons[0].cmd).toBe("gh pr create --head feat/foo");
-    expect(out.buttons[1].open).toEqual({ url: "https://github.com/receptron/mulmoterminal" });
+    // "pr" is dropped (run:"shell" not dispatchable yet); "cx" hidden for a claude session; only "gh" remains.
+    expect(out.buttons.map((b) => b.id)).toEqual(["gh"]);
+    expect(out.buttons[0].open).toEqual({ url: "https://github.com/receptron/mulmoterminal" });
   });
 
   it("resolves built-in and custom chips, dropping a custom chip whose when is false", () => {

@@ -1,6 +1,7 @@
 // Dispatch a header action button. `input` types text into the running session; `open` opens a
 // url / reveals a dir / opens the in-app file explorer or a view. `shell` (run an arbitrary command
-// in the dir) needs a command-cell handoff and lands in a later phase — for now it's a no-op warn.
+// in the dir) needs a command-cell handoff and lands in a later phase; the server already drops shell
+// buttons from /api/header, so the branch below is only a defensive fallback (no-op warn).
 import { filesGotoIndex } from "./useFilesView";
 import { prsGotoIndex } from "./usePrsView";
 import { wikiGotoIndex } from "./useWikiBrowse";
@@ -47,6 +48,7 @@ export function runHeaderButton(button: HeaderButton, slotKey: string | null, cw
     dispatchOpen(button.open, cwd);
     return;
   }
-  // run === "shell": deferred to the command-cell phase (see plans/feat-header-toolbar-config.md).
+  // run === "shell": suppressed server-side until the command-cell phase (see plans/feat-header-toolbar-config.md);
+  // this only fires if a shell button somehow reaches the client.
   console.warn(`[header] shell button "${button.id}" runs in a later update`);
 }

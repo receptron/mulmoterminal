@@ -61,8 +61,8 @@ function evalAtom(atom: string, ctx: HeaderContext): boolean {
   const value = trimmed.slice(idx + op.length).trim();
   if (!KEY_RE.test(key)) return false;
   const actual = varValue(ctx, key);
-  const equal = actual !== undefined && actual === value;
-  return op === "==" ? equal : !equal;
+  if (actual === undefined) return false; // unknown key → fail closed, so a `when` typo hides rather than exposes
+  return op === "==" ? actual === value : actual !== value;
 }
 
 // `&&` binds tighter than `||`; no parentheses in v1. Empty/absent condition → always visible.
@@ -96,7 +96,9 @@ function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null 
 }
 
 export function resolveHeader(config: HeaderConfig, ctx: HeaderContext): ResolvedHeader {
-  const buttons = config.buttons.filter((b) => evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
+  // `run:"shell"` dispatch is not wired yet (it needs an id-based exec route); suppress those buttons so a
+  // configured shell button never renders as actionable-but-inert. Drop this `run !== "shell"` clause when shell lands.
+  const buttons = config.buttons.filter((b) => b.run !== "shell" && evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
   const chips = config.chips === null ? null : config.chips.map((c) => resolveChip(c, ctx)).filter((c): c is ResolvedChip => c !== null);
   return { buttons, chips };
 }
