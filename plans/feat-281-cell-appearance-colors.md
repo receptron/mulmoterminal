@@ -18,8 +18,17 @@
   - status frame（`.cell.is-*`）と status dot（`.cell-dot.is-*`）は活動中に上書き＝
     フィードバック維持。custom は idle 時。
 
+## 追加: row 2 / 単一ビューのヘッダーも対応
+QA で 2 行目（`Terminal.vue` のヘッダー = grid row 2 + 単一ビュー）が未対応で白く浮い
+ていたため、既存の `headerColor` / `headerTextColor` / `buttonColor` を同ヘッダーにも
+適用（新フィールドなし、クライアント配線のみ）:
+- `cellHeaderStyle.ts`: `terminalHeaderStyleFor(bg, text, button)` を追加。
+- `Terminal.vue`: `dirHeaderColor` / `dirHeaderTextColor` / `dirButtonColor` props を
+  追加、`.header` に `:style`、`.header` 背景・文字と `.icon-btn` 色を変数参照に。
+- `TerminalCell.vue` / `App.vue`: dirConfig の header 色を props で渡す。
+
 ## テスト
 - `server/dir-config.spec.ts`: 4 フィールドの読み込み（EMPTY / full config / public）。
-- `src/components/cellHeaderStyle.spec.ts`: `cellStyleFor` のマッピング / 一部 / 空 / 非hex。
+- `src/components/cellHeaderStyle.spec.ts`: `cellStyleFor` / `terminalHeaderStyleFor`。
 - `src/components/TerminalCell.spec.ts`: dir-config の 4 色が `.cell` に CSS変数として載る。
-- `README.md`: 表に 4 行追加。
+- `README.md`: 表に 4 行追加 + header 色の説明を両ヘッダー対応に更新。

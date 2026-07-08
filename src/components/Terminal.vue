@@ -4,6 +4,7 @@ import { type ITheme } from "@xterm/xterm";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
+import { terminalHeaderStyleFor } from "./cellHeaderStyle";
 import { useVoiceInput } from "../composables/useVoiceInput";
 import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
@@ -51,6 +52,11 @@ const props = defineProps<{
   dirColors?: Partial<ITheme> | null;
   dirName?: string | null;
   dirBadgeColor?: string | null;
+  // The header row's own colors (matches the grid cell's row-1 header): background,
+  // text, and the icon buttons. Hex #rrggbb or null for the theme default.
+  dirHeaderColor?: string | null;
+  dirHeaderTextColor?: string | null;
+  dirButtonColor?: string | null;
 }>();
 const emit = defineEmits<{
   (e: "session" | "cwd", value: string): void;
@@ -94,6 +100,7 @@ function effectiveTermTheme(): ITheme {
   return props.dirColors ? { ...base, ...props.dirColors } : base;
 }
 const dirBadgeStyle = computed(() => badgeStyleFor(props.dirBadgeColor));
+const headerStyle = computed(() => terminalHeaderStyleFor(props.dirHeaderColor, props.dirHeaderTextColor, props.dirButtonColor));
 
 // Voice input: a mic in the header transcribes speech (locally, via whisper.cpp)
 // and inserts it at the prompt for the user to review and submit — same channel as
@@ -231,7 +238,7 @@ onUnmounted(() => {
 
 <template>
   <div class="terminal-wrapper">
-    <div v-if="!hideHeader" class="header">
+    <div v-if="!hideHeader" class="header" :style="headerStyle">
       <span class="title">Terminal</span>
       <span v-if="dirName" class="dir-badge" :style="dirBadgeStyle" :title="dirName">{{ dirName }}</span>
       <GitBranchChip :status="gitStatus" />
@@ -282,8 +289,10 @@ onUnmounted(() => {
 
 .header {
   padding: 8px 16px;
-  background: var(--bg-panel);
-  color: var(--text);
+  /* Per-dir overrides via .mulmoterminal.json (headerColor/headerTextColor); matches
+     the grid cell's row-1 header so both header rows share the look. */
+  background: var(--cell-header-bg, var(--bg-panel));
+  color: var(--cell-header-fg, var(--text));
   font-family: system-ui, sans-serif;
   font-size: 14px;
   display: flex;
@@ -322,7 +331,7 @@ onUnmounted(() => {
   background: transparent;
   border: none;
   border-radius: 4px;
-  color: var(--text-muted);
+  color: var(--cell-btn, var(--text-muted));
   cursor: pointer;
 }
 

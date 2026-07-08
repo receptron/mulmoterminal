@@ -31,3 +31,16 @@ export function cellStyleFor(
   if (isHex(button)) style["--cell-btn"] = button;
   return style;
 }
+
+// The Terminal component's own header row (the grid cell's row 2 and the single view's
+// header) reuses the same header colors + button color, via the same CSS vars, so both
+// header rows match. Emitted on that header element.
+export function terminalHeaderStyleFor(
+  background: string | null | undefined,
+  text: string | null | undefined,
+  button: string | null | undefined,
+): Record<string, string> {
+  const style = headerStyleFor(background, text);
+  if (isHex(button)) style["--cell-btn"] = button;
+  return style;
+}

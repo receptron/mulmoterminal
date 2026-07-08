@@ -860,6 +860,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :codex="agent === 'codex'"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
+        :dir-header-color="dirConfig.headerColor"
+        :dir-header-text-color="dirConfig.headerTextColor"
+        :dir-button-color="dirConfig.buttonColor"
         :hide-header="filmstrip"
         dev-terminal
         run-menu

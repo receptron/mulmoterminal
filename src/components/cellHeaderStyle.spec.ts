@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
+import { headerStyleFor, cellStyleFor, terminalHeaderStyleFor } from "./cellHeaderStyle";
 
 describe("headerStyleFor", () => {
   it("maps a background + text color to the header CSS variables", () => {
@@ -46,5 +46,20 @@ describe("cellStyleFor", () => {
 
   it("drops non-hex values", () => {
     expect(cellStyleFor("blue", "#12", "rgb(0,0,0)", "#abcdef")).toEqual({ "--cell-btn": "#abcdef" });
+  });
+});
+
+describe("terminalHeaderStyleFor", () => {
+  it("reuses the header bg/fg vars and adds the button var", () => {
+    expect(terminalHeaderStyleFor("#241640", "#ffd166", "#4dd0e1")).toEqual({
+      "--cell-header-bg": "#241640",
+      "--cell-header-fg": "#ffd166",
+      "--cell-btn": "#4dd0e1",
+    });
+  });
+
+  it("emits only the set + valid vars", () => {
+    expect(terminalHeaderStyleFor("#241640", null, "nope")).toEqual({ "--cell-header-bg": "#241640" });
+    expect(terminalHeaderStyleFor(null, null, null)).toEqual({});
   });
 });
