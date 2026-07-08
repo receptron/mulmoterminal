@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+// Capture the key handler ensure() registers, so a test can drive it and assert the
+// real wiring (send + suppress-default) — hoisted so the mock factory can write to it.
+// Defaults to a no-op that returns true, so a test that forgot to attach would see the
+// pass-through behavior (and thus fail the Shift+Enter assertion) rather than crash.
+const mockKeyState: { handler: (e: unknown) => boolean } = vi.hoisted(() => ({ handler: () => true }));
+
 // Mock xterm + addons so the manager runs headless (no real DOM terminal / canvas).
 // Factories are hoisted above imports, so the fakes are declared INSIDE them.
 vi.mock("@xterm/xterm", () => ({
@@ -10,7 +16,9 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon() {}
     open() {}
     onData() {}
-    attachCustomKeyEventHandler() {}
+    attachCustomKeyEventHandler(fn: (e: unknown) => boolean) {
+      mockKeyState.handler = fn;
+    }
     write() {}
     reset() {}
     focus() {}
@@ -99,6 +107,24 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     conn.attach("cell-race", target(null), second, el2);
     expect(second.onSession).toHaveBeenCalledWith("sess-123");
     expect(second.onCwd).toHaveBeenCalledWith("/resolved");
+  });
+
+  it("wires Shift+Enter through ensure(): registers a handler that sends \\x1b\\r on the ws and cancels the default", () => {
+    mockKeyState.handler = () => true; // reset (the mock persists across tests)
+    conn.attach("cell-key", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
+    const ws = FakeWebSocket.instances.at(-1);
+    if (!ws) throw new Error("no socket created");
+    ws.onopen?.(); // open so send() passes the readyState guard
+
+    const shiftEnter = { type: "keydown", key: "Enter", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false };
+    expect(mockKeyState.handler(shiftEnter)).toBe(false); // false => xterm won't also emit \r
+    expect(ws.sent).toContain(JSON.stringify({ type: "input", data: conn.NEWLINE_SEQUENCE }));
+
+    // A plain Enter is left to xterm (returns true, sends nothing extra).
+    ws.sent.length = 0;
+    expect(mockKeyState.handler({ type: "keydown", key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false })).toBe(true);
+    expect(ws.sent).toHaveLength(0);
+    conn.release("cell-key");
   });
 
   it("does not replay a session id before the server has assigned one", () => {
