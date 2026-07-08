@@ -7,6 +7,7 @@ import {
   userPromptText,
   parseJsonl,
   sessionUsageFromJsonl,
+  latestTurnContextFromJsonl,
   timelineFromJsonl,
 } from "./transcript.js";
 
@@ -159,6 +160,45 @@ describe("sessionUsageFromJsonl", () => {
   });
   it("is all-zero for an empty / promptless transcript", () => {
     expect(sessionUsageFromJsonl("")).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 });
+  });
+});
+
+describe("latestTurnContextFromJsonl", () => {
+  const assistant = (model: string, usage: Record<string, number>) => line({ type: "assistant", message: { model, usage } });
+
+  it("returns the LAST turn's input + both cache buckets (not the cumulative sum)", () => {
+    const raw = [
+      line({ type: "user", message: { content: "hi" } }),
+      assistant("claude-opus-4-20250101", { input_tokens: 100, cache_read_input_tokens: 5, cache_creation_input_tokens: 3 }),
+      assistant("claude-opus-4-20250101", { input_tokens: 200, cache_read_input_tokens: 50_000, cache_creation_input_tokens: 1_000 }),
+    ].join("\n");
+    // Only the final turn: 200 + 50000 + 1000 (NOT summed with the first turn).
+    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-opus-4-20250101", contextTokens: 51_200 });
+  });
+
+  it("tracks the most recent model across turns", () => {
+    const raw = [assistant("claude-sonnet-4-20250101", { input_tokens: 10 }), assistant("claude-opus-4-20250101", { input_tokens: 20 })].join("\n");
+    expect(latestTurnContextFromJsonl(raw).model).toBe("claude-opus-4-20250101");
+  });
+
+  it("treats missing cache buckets as zero", () => {
+    const raw = assistant("claude-haiku-4", { input_tokens: 42 });
+    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-haiku-4", contextTokens: 42 });
+  });
+
+  it("keeps a model even when the final turn carries no usage", () => {
+    const raw = [assistant("claude-opus-4", { input_tokens: 300 }), line({ type: "assistant", message: { model: "claude-opus-4" } })].join("\n");
+    // model still resolves; contextTokens holds the last turn that HAD usage.
+    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-opus-4", contextTokens: 300 });
+  });
+
+  it("is empty for an empty / promptless transcript", () => {
+    expect(latestTurnContextFromJsonl("")).toEqual({ model: null, contextTokens: 0 });
+  });
+
+  it("ignores non-assistant and malformed lines", () => {
+    const raw = [line({ type: "user", message: { content: "hi" } }), "not json", assistant("gpt-5-codex", { input_tokens: 7 })].join("\n");
+    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "gpt-5-codex", contextTokens: 7 });
   });
 });
 

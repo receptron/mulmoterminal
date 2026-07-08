@@ -190,6 +190,29 @@ export function sessionUsageFromJsonl(raw: string): SessionUsage {
   return total;
 }
 
+// The CURRENT context size + running model for a session, from the LAST assistant
+// turn. `contextTokens` is that turn's fresh input plus both cache buckets — the
+// tokens re-sent as context for the next turn. This is NOT the cumulative
+// sessionUsageFromJsonl sum, which counts every turn's re-sent context and so
+// double-counts. `model` is the most recent assistant turn's declared model.
+export interface LatestTurnContext {
+  model: string | null;
+  contextTokens: number;
+}
+
+const contextTokensOf = (u: Record<string, unknown>): number =>
+  usageNum(u, "input_tokens") + usageNum(u, "cache_read_input_tokens") + usageNum(u, "cache_creation_input_tokens");
+
+export function latestTurnContextFromJsonl(raw: string): LatestTurnContext {
+  const latest: LatestTurnContext = { model: null, contextTokens: 0 };
+  for (const o of parseJsonl(raw)) {
+    if (o.type !== "assistant" || !isRecord(o.message)) continue;
+    if (typeof o.message.model === "string" && o.message.model) latest.model = o.message.model;
+    if (isRecord(o.message.usage)) latest.contextTokens = contextTokensOf(o.message.usage);
+  }
+  return latest;
+}
+
 // A single tool the agent ran, for the activity timeline. `summary` is a 1-line
 // description drawn from the tool's most salient input (a command, a file path, …).
 export interface TimelineEvent {
