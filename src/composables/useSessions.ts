@@ -13,6 +13,9 @@ export interface Session {
   /** A hidden background worker (spawnBackgroundChat hidden:true) — listed, but
    *  never treated as unread/bold. */
   hidden?: boolean;
+  /** "codex" for a codex session (from ~/.codex); absent = a Claude session. Drives the
+   *  row badge and which agent the single view resumes as. */
+  agent?: "codex";
 }
 
 // "unread" = a session whose `waiting` flag is set, EXCEPT hidden background
@@ -49,12 +52,33 @@ export function useSessions() {
   const loading = ref(true);
   const error = ref<string | null>(null);
 
+  // codex sessions (~/.codex) merged alongside Claude's — best-effort, so a codex-endpoint
+  // failure never blocks the Claude list. codex activity isn't tracked, so they read as idle.
+  async function fetchCodexSessions(): Promise<Session[]> {
+    try {
+      const res = await fetch("/api/codex/sessions");
+      if (!res.ok) return [];
+      const data = await res.json();
+      return (data.sessions ?? []).map((s: { id: string; title: string; mtime: number }): Session => ({
+        id: s.id,
+        title: s.title,
+        mtime: s.mtime,
+        working: false,
+        waiting: false,
+        agent: "codex",
+      }));
+    } catch {
+      return [];
+    }
+  }
+
   async function load(resort = false) {
     try {
-      const res = await fetch("/api/sessions");
+      const [res, codex] = await Promise.all([fetch("/api/sessions"), fetchCodexSessions()]);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      sessions.value = mergeStable(sessions.value, data.sessions ?? [], resort);
+      const incoming = [...(data.sessions ?? []), ...codex].sort((a: Session, b: Session) => b.mtime - a.mtime);
+      sessions.value = mergeStable(sessions.value, incoming, resort);
       error.value = null;
     } catch (e) {
       // load() runs on every pub/sub push; a transient refetch failure must not

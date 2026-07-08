@@ -194,9 +194,9 @@ function sendTextMessage(text: string): boolean {
   return terminalRef.value?.submitText(text) ?? false;
 }
 
-function selectSession(id: string) {
+function selectSession(id: string, agent: "claude" | "codex" = "claude") {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
-  singleAgent.value = "claude"; // the sidebar lists Claude sessions
+  singleAgent.value = agent; // resume the row's agent (codex rows reconnect via /ws/codex)
   activeId.value = id;
   connectKey.value++;
 }

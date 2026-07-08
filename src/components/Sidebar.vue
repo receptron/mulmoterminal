@@ -14,7 +14,7 @@ const props = defineProps<{
   filter: Filter;
 }>();
 const emit = defineEmits<{
-  (e: "select", id: string): void;
+  (e: "select", id: string, agent: "claude" | "codex"): void;
   (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 }>();
@@ -73,10 +73,11 @@ function relativeTime(ms: number): string {
         :key="s.id"
         :class="['item', { active: s.id === props.activeId, waiting: isUnread(s) }]"
         :title="s.title"
-        @click="emit('select', s.id)"
+        @click="emit('select', s.id, s.agent ?? 'claude')"
       >
         <span class="item-title">
           <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
+          <span v-if="s.agent === 'codex'" class="agent-badge">codex</span>
           {{ s.title }}
         </span>
         <span class="item-time">{{ relativeTime(s.mtime) }}</span>
@@ -207,6 +208,19 @@ function relativeTime(ms: number): string {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.agent-badge {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-selected);
+  color: var(--text-dim);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  vertical-align: middle;
 }
 
 /* Background session waiting for input (Notification); cleared on foreground. */
