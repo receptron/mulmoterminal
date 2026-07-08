@@ -24,13 +24,20 @@ export interface TruncatedLog {
 
 // Keep the LAST maxKb of the log. When it overflows, drop the leading partial line so
 // a half-line (or a codepoint split by the byte cut) doesn't head the excerpt.
+const NEWLINE_BYTE = 0x0a;
 export function truncateLog(log: string, maxKb: number = MAX_LOG_KB): TruncatedLog {
   const maxBytes = maxKb * BYTES_PER_KB;
   const buf = Buffer.from(log, "utf8");
   if (buf.length <= maxBytes) return { text: log, truncated: false };
-  const tail = buf.subarray(buf.length - maxBytes).toString("utf8");
+  const cut = buf.length - maxBytes;
+  const tail = buf.subarray(cut).toString("utf8");
+  // Only drop the leading line when the cut landed MID-line (the byte before the tail
+  // isn't a newline) — that partial line, and any codepoint split by the byte cut,
+  // is noise. At an exact line boundary the tail already starts with a whole line, so
+  // dropping it would discard a valid line (possibly the key error).
+  const startsMidLine = buf[cut - 1] !== NEWLINE_BYTE;
   const firstNewline = tail.indexOf("\n");
-  return { text: firstNewline >= 0 ? tail.slice(firstNewline + 1) : tail, truncated: true };
+  return { text: startsMidLine && firstNewline >= 0 ? tail.slice(firstNewline + 1) : tail, truncated: true };
 }
 
 // The headless instruction passed as `claude -p <prompt>`; the log rides on stdin.

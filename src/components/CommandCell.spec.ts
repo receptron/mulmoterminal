@@ -72,7 +72,7 @@ describe("CommandCell summarize", () => {
   });
 
   it("posts the captured output and renders the returned summary", async () => {
-    const fetchMock = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(() =>
       Promise.resolve(jsonResponse({ summary: "Errors: missing module foo\nSuggested fix: yarn add foo", truncated: false })),
     );
     vi.stubGlobal("fetch", fetchMock);

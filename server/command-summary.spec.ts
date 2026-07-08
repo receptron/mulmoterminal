@@ -23,6 +23,16 @@ describe("truncateLog", () => {
     expect(text.startsWith("OLD-HEAD-LINE")).toBe(false);
   });
 
+  it("keeps the first line intact when the cut lands exactly on a line boundary", () => {
+    const firstLine = "KEEP-FIRST-LINE\n";
+    const tail = firstLine + "y".repeat(2 * KB - firstLine.length); // exactly 2 KB of whole lines
+    const log = "PRECEDING-DROPPED-LINE\n" + tail; // the byte before the cut is the '\n'
+    const { text, truncated } = truncateLog(log, 2);
+    expect(truncated).toBe(true);
+    expect(text.startsWith("KEEP-FIRST-LINE")).toBe(true); // NOT dropped at a boundary cut
+    expect(text).not.toContain("PRECEDING-DROPPED-LINE");
+  });
+
   it("just-over-the-cap by one byte truncates", () => {
     const log = "h\n" + "y".repeat(KB);
     expect(truncateLog(log, 1).truncated).toBe(true);
