@@ -10,6 +10,7 @@ vi.mock("@xterm/xterm", () => ({
     loadAddon() {}
     open() {}
     onData() {}
+    attachCustomKeyEventHandler() {}
     write() {}
     reset() {}
     focus() {}
@@ -125,5 +126,36 @@ describe("isSystemClipboard", () => {
 
   it("ignores primary / select / cut-buffer selections", () => {
     for (const sel of ["p", "s", "0", "7"]) expect(conn.isSystemClipboard(sel)).toBe(false);
+  });
+});
+
+describe("shiftEnterNewline", () => {
+  const ev = (over: Partial<KeyboardEvent>): Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey"> => ({
+    type: "keydown",
+    key: "Enter",
+    shiftKey: false,
+    altKey: false,
+    ctrlKey: false,
+    metaKey: false,
+    ...over,
+  });
+
+  it("returns the newline sequence for a Shift+Enter keydown", () => {
+    expect(conn.shiftEnterNewline(ev({ shiftKey: true }))).toBe(conn.NEWLINE_SEQUENCE);
+  });
+
+  it("returns null for a plain Enter (so it still submits)", () => {
+    expect(conn.shiftEnterNewline(ev({}))).toBeNull();
+  });
+
+  it("returns null on keyup and for non-Enter keys", () => {
+    expect(conn.shiftEnterNewline(ev({ shiftKey: true, type: "keyup" }))).toBeNull();
+    expect(conn.shiftEnterNewline(ev({ shiftKey: true, key: "a" }))).toBeNull();
+  });
+
+  it("returns null when another modifier is also held (Ctrl/Alt/Meta+Shift+Enter)", () => {
+    for (const mod of ["altKey", "ctrlKey", "metaKey"] as const) {
+      expect(conn.shiftEnterNewline(ev({ shiftKey: true, [mod]: true }))).toBeNull();
+    }
   });
 });
