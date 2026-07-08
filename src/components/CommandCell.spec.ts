@@ -90,6 +90,40 @@ describe("CommandCell summarize", () => {
     expect(w.find(".cell-summary-text").text()).toContain("missing module foo");
   });
 
+  it("copies the command + summary as a prompt to the clipboard", async () => {
+    const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ summary: "Errors: missing module foo", truncated: false })),
+    );
+    const w = mountCell();
+    await w.find('[aria-label="Summarize command output"]').trigger("click");
+    await flushPromises();
+
+    await w.find(".cell-summary-continue").trigger("click");
+    expect(writeText).toHaveBeenCalledOnce();
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain("Dev server"); // the command label
+    expect(copied).toContain("/work/proj"); // the command's dir
+    expect(copied).toContain("missing module foo"); // the summary
+    await flushPromises();
+    expect(w.find(".cell-summary-continue").text()).toContain("Copied");
+  });
+
+  it("does not throw when the clipboard API is unavailable (insecure origin / webview)", async () => {
+    vi.stubGlobal("navigator", {}); // no `clipboard`
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ summary: "Errors: boom", truncated: false })),
+    );
+    const w = mountCell();
+    await w.find('[aria-label="Summarize command output"]').trigger("click");
+    await flushPromises();
+    await w.find(".cell-summary-continue").trigger("click"); // must not throw
+    expect(w.find(".cell-summary-continue").text()).toContain("Copy"); // stays "Copy as prompt"
+  });
+
   it("shows the truncation note when the server truncated the log", async () => {
     vi.stubGlobal(
       "fetch",
