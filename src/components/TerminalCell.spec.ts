@@ -19,9 +19,12 @@ vi.mock("../composables/usePubSub", () => ({
 vi.mock("./Terminal.vue", () => ({
   default: {
     name: "TerminalView",
-    props: ["sessionId", "connectKey", "cwd"],
+    props: ["sessionId", "connectKey", "cwd", "hideHeader"],
     emits: ["session", "cwd"],
-    template: '<div class="stub-term" />',
+    // Render the header-actions slot so the cell's icon buttons (moved onto the
+    // terminal's header row) are present in the test DOM — but only when the header
+    // is shown, mirroring Terminal.vue's `v-if="!hideHeader"`.
+    template: '<div class="stub-term"><slot v-if="!hideHeader" name="header-actions" /></div>',
     methods: {
       terminate() {},
       submitText() {
@@ -66,12 +69,15 @@ function mountCell(
     cancellable?: boolean;
     openSessionIds?: string[];
     openCwds?: string[];
+    expanded?: boolean;
+    zoomed?: boolean;
   } = {},
 ) {
   return mount(TerminalCell, {
     props: {
       uid: 1,
-      expanded: false,
+      expanded: opts.expanded ?? false,
+      zoomed: opts.zoomed ?? false,
       initialSessionId,
       initialCwd: opts.initialCwd ?? null,
       defaultCwd: opts.defaultCwd ?? "/home/me/my-project",
@@ -1228,6 +1234,38 @@ describe("TerminalCell", () => {
     expect(warn.text()).toContain("2 unpushed");
     expect(warn.text()).toContain("1 uncommitted");
     expect(w.find(".ccx-remove").text()).toContain("Discard");
+  });
+
+  it("row 1 is info-only; the icon actions live on row 2 (the terminal header slot)", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    // Row 1 (cell-header) holds info: dir (clickable) + prompt, but NOT the action buttons.
+    const header = w.find(".cell-header");
+    expect(header.find("button.cell-dir").exists()).toBe(true);
+    expect(header.find(".cell-close").exists()).toBe(false);
+    expect(header.find('[aria-label="Expand terminal"]').exists()).toBe(false);
+    // Row 2 (rendered via the TerminalView header-actions slot) holds the icon buttons.
+    expect(w.find(".cell-close").exists()).toBe(true);
+    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
+  });
+
+  it("shows the restore label + icon when the cell is expanded", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
+    await flushPromises();
+    expect(w.find('[aria-label="Restore terminal"]').exists()).toBe(true);
+    expect(w.find("button.cell-dir").exists()).toBe(true); // dir stays clickable
+  });
+
+  it("a filmstrip thumbnail (another cell zoomed) drops to dir + activity + zoom only", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
+    await flushPromises();
+    // Info stripped: no git chip / usage; the second (terminal) header row is hidden.
+    expect(w.find(".git-chip").exists()).toBe(false);
+    expect(w.find(".cell-usage").exists()).toBe(false);
+    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
+    // Only the zoom button + dir + prompt remain.
+    expect(w.find(".cell-zoom-thumb").exists()).toBe(true);
+    expect(w.find("button.cell-dir").exists()).toBe(true);
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {

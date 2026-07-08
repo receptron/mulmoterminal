@@ -87,6 +87,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           v-else
           :uid="cell.uid"
           :expanded="cell.uid === expandedUid"
+          :zoomed="zoomed"
           :initial-session-id="cell.session"
           :initial-cwd="cell.cwd"
           :initial-agent="cell.agent"

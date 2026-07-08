@@ -39,6 +39,9 @@ const props = defineProps<{
   // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
   codex?: boolean;
   runMenu?: boolean;
+  // Hide this terminal's own header row (used when a grid cell is zoomed: the cell's
+  // header already shows dir + activity, so the embedded header would just be clutter).
+  hideHeader?: boolean;
   persistKey?: string | null;
   // Per-directory overrides from <cwd>/.mulmoterminal.json. `dirTheme` pins this
   // terminal's xterm palette (overriding the app-wide theme for this cell only);
@@ -228,7 +231,7 @@ onUnmounted(() => {
 
 <template>
   <div class="terminal-wrapper">
-    <div class="header">
+    <div v-if="!hideHeader" class="header">
       <span class="title">Terminal</span>
       <span v-if="dirName" class="dir-badge" :style="dirBadgeStyle" :title="dirName">{{ dirName }}</span>
       <GitBranchChip :status="gitStatus" />
@@ -257,6 +260,9 @@ onUnmounted(() => {
         >
           <span class="material-symbols-outlined">folder_open</span>
         </button>
+        <!-- A grid cell injects its own actions (GitHub / timeline / reorder / zoom /
+             close) here, so all the icon buttons live on this one header row. -->
+        <slot name="header-actions" />
       </div>
     </div>
     <div ref="terminalRef" :class="['terminal-container', { 'drag-over': dragOver }]" @dragover="onDragOver" @dragleave="dragOver = false" @drop="onDrop" />

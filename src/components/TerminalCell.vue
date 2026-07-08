@@ -33,6 +33,9 @@ const props = defineProps<{
   // terminal, so flipping to an off-page tab detaches the view without reaping the PTY.
   uid: number;
   expanded: boolean;
+  // True while SOME cell in the grid is zoomed. A non-expanded cell then renders as a
+  // small filmstrip thumbnail, so it drops to a minimal header (dir + activity + zoom).
+  zoomed?: boolean;
   initialSessionId: string | null;
   initialCwd: string | null;
   // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
@@ -92,6 +95,9 @@ const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
 const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
 // Activity timeline overlay (the header 🕘) — only meaningful for a Claude session.
 const timelineOpen = ref(false);
+// A small filmstrip thumbnail (some OTHER cell is zoomed): strip the header to just
+// dir + what it's doing + a zoom button, and hide the second (terminal) header row.
+const filmstrip = computed(() => !!props.zoomed && !props.expanded);
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
@@ -803,44 +809,72 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 <template>
   <div class="cell" :class="statusClass">
     <template v-if="launched">
+      <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
+           BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
       <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
         <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
-        <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-        <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-        <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-          <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-          <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
-        </button>
-        <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
-          <button
-            type="button"
-            class="cell-gh"
-            title="Open on GitHub"
-            aria-label="Open on GitHub"
-            aria-haspopup="true"
-            :aria-expanded="ghMenuOpen"
-            @click="ghMenuOpen = !ghMenuOpen"
-          >
-            <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path
-                fill-rule="evenodd"
-                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-              />
-            </svg>
+        <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
+             thumbnail, leaving only dir + what it's doing + a zoom button. -->
+        <template v-if="!filmstrip">
+          <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
+          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
           </button>
-          <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
-            <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
-            <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
-            <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
-          </div>
-        </span>
+          <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+          <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+        </template>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
-        <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-        <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
-        <span class="cell-actions">
+        <!-- Filmstrip: the only action is to zoom into this cell (row 2 is hidden). -->
+        <button v-if="filmstrip" class="cell-btn cell-zoom-thumb" title="Expand" aria-label="Expand terminal" @click.stop="emit('toggle-expand')">⤢</button>
+      </div>
+      <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
+      <TerminalView
+        ref="termRef"
+        class="cell-term"
+        :persist-key="`cell-${uid}`"
+        :session-id="sessionId"
+        :connect-key="connectKey"
+        :cwd="cwd"
+        :codex="agent === 'codex'"
+        :dir-theme="dirConfig.theme"
+        :dir-colors="dirConfig.colors"
+        :hide-header="filmstrip"
+        dev-terminal
+        run-menu
+        @session="onSession"
+        @cwd="onServerCwd"
+        @run="(cmd) => emit('runSpare', cmd)"
+      >
+        <!-- Row 2 — the cell's icon actions, gathered onto the terminal's header row. -->
+        <template #header-actions>
+          <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
+            <button
+              type="button"
+              class="cell-gh"
+              title="Open on GitHub"
+              aria-label="Open on GitHub"
+              aria-haspopup="true"
+              :aria-expanded="ghMenuOpen"
+              @click="ghMenuOpen = !ghMenuOpen"
+            >
+              <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                />
+              </svg>
+            </button>
+            <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
+              <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
+              <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
+              <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
+            </div>
+          </span>
           <button
             v-if="sessionId && agent !== 'codex'"
             class="cell-btn"
@@ -861,25 +895,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             {{ expanded ? "⤡" : "⤢" }}
           </button>
           <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
-        </span>
-      </div>
-      <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
-      <TerminalView
-        ref="termRef"
-        class="cell-term"
-        :persist-key="`cell-${uid}`"
-        :session-id="sessionId"
-        :connect-key="connectKey"
-        :cwd="cwd"
-        :codex="agent === 'codex'"
-        :dir-theme="dirConfig.theme"
-        :dir-colors="dirConfig.colors"
-        dev-terminal
-        run-menu
-        @session="onSession"
-        @cwd="onServerCwd"
-        @run="(cmd) => emit('runSpare', cmd)"
-      />
+        </template>
+      </TerminalView>
       <div v-if="diffOpen && diff" class="cell-diff">
         <div class="cell-diff-head">
           <span class="cell-diff-title">Changes vs {{ diff?.base ?? "base" }}</span>
