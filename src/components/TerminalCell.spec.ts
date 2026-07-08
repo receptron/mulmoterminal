@@ -498,6 +498,42 @@ describe("TerminalCell", () => {
     expect(badge.text()).toBe("Opus · ctx 35%"); // 70k / 200k
   });
 
+  it("renders configured chips: hides an omitted built-in, keeps a listed one, and shows custom text", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      // chips lists usage + a custom chip, but NOT ctx — so the model badge must be hidden even though context is set.
+      if (u.includes("/api/header"))
+        return {
+          ok: true,
+          json: async () => ({
+            buttons: [],
+            chips: [
+              { kind: "builtin", id: "usage" },
+              { kind: "custom", label: "env", text: "prod" },
+            ],
+          }),
+        };
+      return {
+        ok: true,
+        json: async () => ({
+          working: false,
+          waiting: false,
+          lastPrompt: null,
+          usage: { inputTokens: 100, outputTokens: 200, cacheReadTokens: 0, cacheCreationTokens: 0 },
+          context: { model: "claude-opus-4-8", contextTokens: 70_000 },
+        }),
+      };
+    }) as unknown as typeof fetch;
+    const w = mountCell(id, { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find(".cell-hdr-chip").text()).toBe("prod"); // custom chip renders its substituted text
+    expect(w.find(".cell-usage").exists()).toBe(true); // usage is listed
+    expect(w.find(".cell-model").exists()).toBe(false); // ctx omitted from the list → hidden despite context set
+  });
+
   it("shows no model badge when the session has no model yet", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {
