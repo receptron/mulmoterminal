@@ -359,6 +359,8 @@ function onSession(id: string) {
       :pr-repos="prRepos"
       :launchers="launchers"
       :user-mcp-servers="userMcpServers"
+      :cwd="effectiveCwd"
+      :session-id="activeId"
       @update-sound="saveSound"
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
