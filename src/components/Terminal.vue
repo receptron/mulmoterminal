@@ -11,6 +11,8 @@ import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
 import GitBranchChip from "./GitBranchChip.vue";
 import { filesGotoIndex } from "../composables/useFilesView";
+import { useHeaderButtons } from "../composables/useHeaderButtons";
+import { runHeaderButton } from "../composables/useHeaderAction";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
@@ -85,6 +87,15 @@ const status = computed(() => conn.connView.get(slotKey)?.status ?? "connecting"
 // The server-resolved cwd of the connected session (the open project), used by the
 // Run menu so it lists THAT directory's scripts. Falls back to the requested cwd.
 const serverCwd = computed(() => conn.connView.get(slotKey)?.serverCwd ?? props.cwd ?? null);
+
+// User-configured header action buttons for this session's dir (GET /api/header). Additive: with no
+// config the list is empty so the header is unchanged. `input`/`open` run client-side; `shell` is
+// wired in a later phase.
+const { buttons: headerButtons } = useHeaderButtons({
+  cwd: serverCwd,
+  session: computed(() => props.sessionId),
+  agent: computed<"claude" | "codex">(() => (props.codex ? "codex" : "claude")),
+});
 // Git status chip — single view only. In the grid the embedding TerminalCell shows
 // its own chip, so null the cwd here to skip redundant polling (status stays null).
 const gitCwd = computed(() => (props.devTerminal ? null : serverCwd.value));
@@ -246,6 +257,18 @@ onUnmounted(() => {
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
       <div class="header-actions">
         <button
+          v-for="b in headerButtons"
+          :key="b.id"
+          type="button"
+          class="icon-btn hdr-action"
+          :title="b.label"
+          :aria-label="b.label"
+          @click="runHeaderButton(b, slotKey, serverCwd)"
+        >
+          <span v-if="b.emoji" class="hdr-emoji">{{ b.emoji }}</span>
+          <span v-else class="material-symbols-outlined">{{ b.icon || "bolt" }}</span>
+        </button>
+        <button
           v-if="voice.capable.value"
           type="button"
           :class="['icon-btn', 'voice', { listening: voice.listening.value, busy: voice.downloading.value || voice.transcribing.value }]"
@@ -342,6 +365,11 @@ onUnmounted(() => {
 
 .icon-btn .material-symbols-outlined {
   font-size: 18px;
+}
+/* A configured action button's emoji glyph, sized to sit with the icon buttons. */
+.hdr-emoji {
+  font-size: 15px;
+  line-height: 1;
 }
 
 /* Recording: solid red, gently pulsing. Busy (download/transcribe): the spinner
