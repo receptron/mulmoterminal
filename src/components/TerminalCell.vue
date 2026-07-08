@@ -803,23 +803,42 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 <template>
   <div class="cell" :class="statusClass">
     <template v-if="launched">
+      <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
+           BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
       <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
-        <!-- Zoomed: show the dir as plain text (no open-folder), so a full-screen cell
-             stays a clean "dir + what it's doing + restore" header. -->
-        <button v-if="headerDir && !expanded" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
+        <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
-        <span v-else-if="headerDir" class="cell-dir cell-dir-static" :title="cwd ?? ''"
-          ><span class="cell-dir-path">{{ headerDir }}</span></span
-        >
         <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-        <template v-if="!expanded">
-          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
-          </button>
+        <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
+        <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+          <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+          <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+        </button>
+        <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+        <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+        <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
+      </div>
+      <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
+      <TerminalView
+        ref="termRef"
+        class="cell-term"
+        :persist-key="`cell-${uid}`"
+        :session-id="sessionId"
+        :connect-key="connectKey"
+        :cwd="cwd"
+        :codex="agent === 'codex'"
+        :dir-theme="dirConfig.theme"
+        :dir-colors="dirConfig.colors"
+        dev-terminal
+        run-menu
+        @session="onSession"
+        @cwd="onServerCwd"
+        @run="(cmd) => emit('runSpare', cmd)"
+      >
+        <!-- Row 2 — the cell's icon actions, gathered onto the terminal's header row. -->
+        <template #header-actions>
           <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
             <button
               type="button"
@@ -843,13 +862,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
             </div>
           </span>
-        </template>
-        <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
-        <ModelContextBadge v-if="context && !expanded" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-        <span v-if="showUsage && !expanded" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
-        <span class="cell-actions">
           <button
-            v-if="sessionId && agent !== 'codex' && !expanded"
+            v-if="sessionId && agent !== 'codex'"
             class="cell-btn"
             title="Activity timeline"
             aria-label="Show activity timeline"
@@ -857,8 +871,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             🕘
           </button>
-          <button v-if="reorderable && !expanded" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
-          <button v-if="reorderable && !expanded" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
+          <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
+          <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
           <button
             class="cell-btn"
             :title="expanded ? 'Restore' : 'Expand'"
@@ -867,27 +881,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             {{ expanded ? "⤡" : "⤢" }}
           </button>
-          <button v-if="!expanded" class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
-        </span>
-      </div>
-      <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
-      <TerminalView
-        ref="termRef"
-        class="cell-term"
-        :persist-key="`cell-${uid}`"
-        :session-id="sessionId"
-        :connect-key="connectKey"
-        :cwd="cwd"
-        :codex="agent === 'codex'"
-        :dir-theme="dirConfig.theme"
-        :dir-colors="dirConfig.colors"
-        :hide-header="expanded"
-        dev-terminal
-        run-menu
-        @session="onSession"
-        @cwd="onServerCwd"
-        @run="(cmd) => emit('runSpare', cmd)"
-      />
+          <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
+        </template>
+      </TerminalView>
       <div v-if="diffOpen && diff" class="cell-diff">
         <div class="cell-diff-head">
           <span class="cell-diff-title">Changes vs {{ diff?.base ?? "base" }}</span>

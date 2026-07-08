@@ -19,9 +19,11 @@ vi.mock("../composables/usePubSub", () => ({
 vi.mock("./Terminal.vue", () => ({
   default: {
     name: "TerminalView",
-    props: ["sessionId", "connectKey", "cwd", "hideHeader"],
+    props: ["sessionId", "connectKey", "cwd"],
     emits: ["session", "cwd"],
-    template: '<div class="stub-term" />',
+    // Render the header-actions slot so the cell's icon buttons (moved onto the
+    // terminal's header row) are present in the test DOM.
+    template: '<div class="stub-term"><slot name="header-actions" /></div>',
     methods: {
       terminate() {},
       submitText() {
@@ -1231,26 +1233,24 @@ describe("TerminalCell", () => {
     expect(w.find(".ccx-remove").text()).toContain("Discard");
   });
 
-  it("expanded (zoomed) cell shows a minimal header — dir (static) + restore, no clutter", async () => {
-    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
-    await flushPromises();
-    // dir is plain text, not an open-folder button
-    expect(w.find("button.cell-dir").exists()).toBe(false);
-    expect(w.find(".cell-dir-static").exists()).toBe(true);
-    // clutter removed: usage, timeline, close all hidden
-    expect(w.find(".cell-close").exists()).toBe(false);
-    expect(w.find('[aria-label="Show activity timeline"]').exists()).toBe(false);
-    // only the restore toggle remains
-    expect(w.find('[aria-label="Restore terminal"]').exists()).toBe(true);
-    // the embedded terminal's own header is suppressed when zoomed
-    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
-  });
-
-  it("non-expanded cell keeps the clickable dir + close button", async () => {
+  it("row 1 is info-only; the icon actions live on row 2 (the terminal header slot)", async () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
     await flushPromises();
-    expect(w.find("button.cell-dir").exists()).toBe(true);
+    // Row 1 (cell-header) holds info: dir (clickable) + prompt, but NOT the action buttons.
+    const header = w.find(".cell-header");
+    expect(header.find("button.cell-dir").exists()).toBe(true);
+    expect(header.find(".cell-close").exists()).toBe(false);
+    expect(header.find('[aria-label="Expand terminal"]').exists()).toBe(false);
+    // Row 2 (rendered via the TerminalView header-actions slot) holds the icon buttons.
     expect(w.find(".cell-close").exists()).toBe(true);
+    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
+  });
+
+  it("shows the restore label + icon when the cell is expanded", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
+    await flushPromises();
+    expect(w.find('[aria-label="Restore terminal"]').exists()).toBe(true);
+    expect(w.find("button.cell-dir").exists()).toBe(true); // dir stays clickable
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {

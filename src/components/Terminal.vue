@@ -260,6 +260,9 @@ onUnmounted(() => {
         >
           <span class="material-symbols-outlined">folder_open</span>
         </button>
+        <!-- A grid cell injects its own actions (GitHub / timeline / reorder / zoom /
+             close) here, so all the icon buttons live on this one header row. -->
+        <slot name="header-actions" />
       </div>
     </div>
     <div ref="terminalRef" :class="['terminal-container', { 'drag-over': dragOver }]" @dragover="onDragOver" @dragleave="dragOver = false" @drop="onDrop" />
