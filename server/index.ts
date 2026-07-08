@@ -40,6 +40,7 @@ import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
+import { listCodexSessions, codexRolloutExists } from "./codex-sessions.js";
 import { stripTerminalQueries } from "./terminal-replay.js";
 import {
   isRecord,
@@ -1303,6 +1304,20 @@ app.get("/api/sessions", async (req, res) => {
   }
 });
 
+// codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
+// the single view's sidebar lists these so past codex conversations are switchable + resumable.
+app.get("/api/codex/sessions", async (req, res) => {
+  try {
+    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
+    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
+    const sessions = await listCodexSessions(codexSessionsRoot(), cwd, SESSION_LIST_LIMIT);
+    res.json({ cwd, sessions });
+  } catch (err) {
+    console.error("[api] /api/codex/sessions failed:", err);
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 const server = http.createServer(app);
 pubsub = createPubSub(server, isAllowedOrigin);
 
@@ -2076,11 +2091,19 @@ runLaunchWss.on("connection", (ws, req) => {
 // after spawn and resume it with `codex resume <id>` once the live PTY is gone. Reattach a live
 // pty / surviving tmux session (running codex picked up, no resume); else cold-resume a known
 // rollout id; else a fresh session (a new minted key).
+// A rollout id to cold-resume for a requested session key: one we started here (key -> rollout id),
+// or a rollout id straight from the sidebar (its own id), or null (start fresh).
+function codexResumeIdFor(requested: string): string | null {
+  const mapped = codexRolloutIds.get(requested);
+  if (mapped) return mapped;
+  return codexRolloutExists(codexSessionsRoot(), requested) ? requested : null;
+}
+
 function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
   const reattachId = requested && ptys.has(requested) ? requested : null;
   const live = reattachId ? ptys.get(reattachId) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeRolloutId = !live && !tmuxAlive && requested ? (codexRolloutIds.get(requested) ?? null) : null;
+  const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
   const sessionId = reattachId ?? ((tmuxAlive || resumeRolloutId) && requested ? requested : randomUUID());
   return { sessionId, live, resumeRolloutId };
 }
