@@ -96,9 +96,11 @@ const { context: sessionContext } = useSessionContext(
   serverCwd,
 );
 // User-configured header action buttons for this session's dir (GET /api/header). Additive: with no
-// config the list is empty so the header is unchanged.
+// config the list is empty so the header is unchanged. They target the running agent session, so they're
+// suppressed on a command/launcher terminal — those embed Terminal without a session and don't handle `run`.
+const headerButtonsCwd = computed(() => (props.command || props.launcher ? null : serverCwd.value));
 const { buttons: headerButtons } = useHeaderButtons({
-  cwd: serverCwd,
+  cwd: headerButtonsCwd,
   session: computed(() => props.sessionId),
   agent: computed<"claude" | "codex">(() => (props.codex ? "codex" : "claude")),
   model: computed(() => sessionContext.value?.model ?? null),
