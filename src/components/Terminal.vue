@@ -5,8 +5,10 @@ import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
 import { useVoiceInput } from "../composables/useVoiceInput";
+import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
+import GitBranchChip from "./GitBranchChip.vue";
 import { filesGotoIndex } from "../composables/useFilesView";
 
 // `null` => start a fresh session; otherwise resume the given session id.
@@ -74,6 +76,10 @@ const status = computed(() => conn.connView.get(slotKey)?.status ?? "connecting"
 // The server-resolved cwd of the connected session (the open project), used by the
 // Run menu so it lists THAT directory's scripts. Falls back to the requested cwd.
 const serverCwd = computed(() => conn.connView.get(slotKey)?.serverCwd ?? props.cwd ?? null);
+// Git status chip — single view only. In the grid the embedding TerminalCell shows
+// its own chip, so null the cwd here to skip redundant polling (status stays null).
+const gitCwd = computed(() => (props.devTerminal ? null : serverCwd.value));
+const { status: gitStatus } = useGitStatus(gitCwd);
 const dragOver = ref(false);
 const { themeId } = useTheme();
 
@@ -220,6 +226,7 @@ onUnmounted(() => {
     <div class="header">
       <span class="title">Terminal</span>
       <span v-if="dirName" class="dir-badge" :style="dirBadgeStyle" :title="dirName">{{ dirName }}</span>
+      <GitBranchChip :status="gitStatus" />
       <span :class="['status', status]">{{ status }}</span>
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
       <div class="header-actions">

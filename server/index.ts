@@ -17,6 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers } from "./config-routes.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
+import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
 import {
   sandboxEnabled,
@@ -1191,6 +1192,14 @@ app.get("/api/session/:id", async (req, res) => {
 app.get("/api/dir-config", (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(publicDirConfig(cwd));
+});
+
+// Live git status (branch / dirty / ahead·behind) for a terminal's dir, so the
+// header can show it without the user typing `git status`. A non-git dir is
+// `repo:false`, not an error.
+app.get("/api/git-status", async (req, res) => {
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  res.json(await gitStatus(cwd));
 });
 
 // Stream a directory's custom attention sound. The path never comes from the
