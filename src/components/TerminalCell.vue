@@ -7,6 +7,7 @@ import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import GitBranchChip from "./GitBranchChip.vue";
+import ModelContextBadge from "./ModelContextBadge.vue";
 import TimelineOverlay from "./TimelineOverlay.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
@@ -120,6 +121,16 @@ interface Usage {
 const usage = ref<Usage | null>(null);
 const isUsage = (u: unknown): u is Usage => typeof u === "object" && u !== null && "outputTokens" in u;
 
+// The running model + current-turn context size (from /api/session/:id), for the
+// model/context badge. Null until first fetched; model may be null with no assistant
+// turn yet, which hides the badge.
+interface SessionContext {
+  model: string | null;
+  contextTokens: number;
+}
+const context = ref<SessionContext | null>(null);
+const isContext = (c: unknown): c is SessionContext => typeof c === "object" && c !== null && "contextTokens" in c;
+
 const { subscribe } = usePubSub();
 let unsubscribe: (() => void) | null = null;
 
@@ -154,6 +165,7 @@ async function loadInitial(id: string) {
     if (id === sessionId.value) {
       applyActivity(data);
       if (isUsage(data.usage)) usage.value = data.usage;
+      if (isContext(data.context)) context.value = data.context;
     }
   } catch {
     // best-effort — pub/sub will fill it in on the next event
@@ -170,7 +182,9 @@ async function refreshUsage() {
     const res = await fetch(`/api/session/${id}${q}`);
     if (!res.ok) return;
     const data = await res.json();
-    if (id === sessionId.value && isUsage(data.usage)) usage.value = data.usage;
+    if (id !== sessionId.value) return;
+    if (isUsage(data.usage)) usage.value = data.usage;
+    if (isContext(data.context)) context.value = data.context;
   } catch {
     // best-effort
   }
@@ -521,6 +535,7 @@ function teardown() {
   activityEvent.value = null;
   lastPrompt.value = null;
   usage.value = null;
+  context.value = null;
   cwd.value = props.defaultCwd;
   dirInput.value = props.defaultCwd ?? "";
   dirTouched.value = false; // fresh launcher again — let a late preset sync re-prefill
@@ -815,6 +830,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </div>
         </span>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
+        <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
         <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
         <span class="cell-actions">
           <button

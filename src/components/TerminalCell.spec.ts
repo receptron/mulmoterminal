@@ -472,6 +472,36 @@ describe("TerminalCell", () => {
     expect(badge.text()).toContain("3.4k"); // output 3400
   });
 
+  it("shows the model/context badge from /api/session/:id context", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return {
+        ok: true,
+        json: async () => ({ working: false, waiting: false, lastPrompt: null, context: { model: "claude-opus-4-20250514", contextTokens: 70_000 } }),
+      };
+    }) as unknown as typeof fetch;
+    const w = mountCell(id);
+    await flushPromises();
+    const badge = w.find(".cell-model");
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toBe("Opus · ctx 35%"); // 70k / 200k
+  });
+
+  it("shows no model badge when the session has no model yet", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, context: { model: null, contextTokens: 0 } }) };
+    }) as unknown as typeof fetch;
+    const w = mountCell(id);
+    await flushPromises();
+    expect(w.find(".cell-model").exists()).toBe(false);
+  });
+
   it("clears a stale prompt when the server sends lastPrompt: null", async () => {
     const id = "33333333-3333-3333-3333-333333333333";
     const w = mountCell(id);
