@@ -2,7 +2,7 @@
 // A read-only activity timeline for one session: the tools the agent ran (newest
 // first), fetched from GET /api/transcript/timeline. Opened from the cell header's
 // 🕘 button so you can see "what did it do?" without scrolling the raw transcript.
-import { ref, watch, onUnmounted } from "vue";
+import { ref, watch, onUnmounted, nextTick } from "vue";
 
 interface TimelineEvent {
   ts: string;
@@ -56,20 +56,46 @@ const formatTime = (iso: string): string => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleTimeString();
 };
 
-// Document-level Escape so dismissal works regardless of focus (the backdrop isn't
-// focused). Attached only while open; always removed on unmount.
+const modalEl = ref<HTMLElement | null>(null);
+
+// Modal keyboard behavior (mirrors SettingsModal): Escape closes; Tab is trapped in
+// the dialog so focus can't reach background controls. Document-level so it works
+// regardless of where focus lands. Attached only while open; removed on close/unmount.
 const onKeydown = (e: KeyboardEvent) => {
-  if (e.key === "Escape") emit("close");
+  if (e.key === "Escape") {
+    emit("close");
+    return;
+  }
+  if (e.key !== "Tab" || !modalEl.value) return;
+  const focusable = [...modalEl.value.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])')].filter((el) => !el.hasAttribute("disabled"));
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
 };
 
+// One watch over open + identity: (re)load whenever the overlay is open — covering
+// both the open transition and a session/cwd change while it stays open (so it never
+// shows a previous session's activity) — and manage the key listener + initial focus
+// only on the open transition.
 watch(
-  () => props.open,
-  (open) => {
-    if (open) {
-      load();
-      document.addEventListener("keydown", onKeydown);
-    } else {
+  [() => props.open, () => props.sessionId, () => props.cwd],
+  (vals, oldVals) => {
+    const open = vals[0];
+    if (!open) {
       document.removeEventListener("keydown", onKeydown);
+      return;
+    }
+    load();
+    if (!oldVals?.[0]) {
+      document.addEventListener("keydown", onKeydown);
+      nextTick(() => modalEl.value?.focus());
     }
   },
   { immediate: true },
@@ -80,7 +106,7 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 
 <template>
   <div v-if="open" class="tl-backdrop" @click.self="emit('close')">
-    <div class="tl-modal" role="dialog" aria-modal="true" aria-label="Activity timeline" tabindex="-1">
+    <div ref="modalEl" class="tl-modal" role="dialog" aria-modal="true" aria-label="Activity timeline" tabindex="-1">
       <div class="tl-head">
         <span class="tl-title">Activity</span>
         <span class="tl-count">{{ events.length }} step{{ events.length === 1 ? "" : "s" }}{{ truncated ? "+" : "" }}</span>

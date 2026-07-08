@@ -84,4 +84,16 @@ describe("TimelineOverlay", () => {
     expect(w.findAll(".tl-row .tl-tool").map((n) => n.text())).toEqual(["Read"]); // newest wins, stale ignored
     w.unmount();
   });
+
+  it("reloads when the session changes while the overlay stays open", async () => {
+    const fetchMock = mockFetch({ events, truncated: false });
+    vi.stubGlobal("fetch", fetchMock);
+    const w = mount(TimelineOverlay, { props: { sessionId: "a", cwd: "/x", open: true } });
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await w.setProps({ sessionId: "b" });
+    await flushPromises();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    w.unmount();
+  });
 });
