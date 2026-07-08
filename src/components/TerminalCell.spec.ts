@@ -65,6 +65,7 @@ function mountCell(
     home?: string | null;
     cancellable?: boolean;
     openSessionIds?: string[];
+    openCwds?: string[];
   } = {},
 ) {
   return mount(TerminalCell, {
@@ -78,6 +79,7 @@ function mountCell(
       home: opts.home ?? "/home/me",
       cancellable: opts.cancellable ?? false,
       openSessionIds: opts.openSessionIds ?? [],
+      openCwds: opts.openCwds ?? [],
     },
   });
 }
@@ -1226,5 +1228,22 @@ describe("TerminalCell", () => {
     expect(warn.text()).toContain("2 unpushed");
     expect(warn.text()).toContain("1 uncommitted");
     expect(w.find(".ccx-remove").text()).toContain("Discard");
+  });
+
+  it("tints a preset chip whose dir already has a running session elsewhere", () => {
+    const w = mountCell(null, {
+      presets: [
+        { label: "proj-a", path: "/home/me/a" },
+        { label: "proj-b", path: "/home/me/b" },
+      ],
+      openCwds: ["/home/me/a"],
+    });
+    const chips = w.findAll(".cell-chip");
+    const running = chips.find((c) => c.text().includes("proj-a"));
+    const idle = chips.find((c) => c.text().includes("proj-b"));
+    expect(running?.classes()).toContain("is-running");
+    expect(running?.find(".cell-chip-dot").exists()).toBe(true);
+    expect(idle?.classes()).not.toContain("is-running");
+    expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
   });
 });
