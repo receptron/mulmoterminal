@@ -1265,7 +1265,25 @@ describe("TerminalCell", () => {
     expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
     // Row 1 keeps dir + prompt + the expand/close actions (row 2 is hidden).
     expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
-    expect(w.find("button.cell-dir").exists()).toBe(true);
+    // The dir stays visible but as inert text (not an "open dir" button).
+    expect(w.find("span.cell-dir").exists()).toBe(true);
+    expect(w.find("button.cell-dir").exists()).toBe(false);
+  });
+
+  it("a filmstrip thumbnail's dir click zooms (switch to it) instead of opening the dir", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = vi.fn((url: string) => {
+      urls.push(String(url));
+      if (String(url).includes("/api/sessions")) return Promise.resolve({ ok: true, json: async () => ({ sessions: [] }) });
+      return Promise.resolve({ ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) });
+    }) as unknown as typeof fetch;
+
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
+    await flushPromises();
+    await w.find(".cell-dir").trigger("click");
+
+    expect(w.emitted("toggle-expand")).toHaveLength(1); // zoomed instead
+    expect(urls).not.toContain("/api/open-dir"); // dir was NOT opened
   });
 
   it("does not zoom on a header-background click in the normal grid (only the ⤢ button zooms)", async () => {

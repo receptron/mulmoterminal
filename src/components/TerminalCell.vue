@@ -814,9 +814,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
       <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
-        <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
+        <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
+             header's job is to zoom (switch to this terminal), so the dir is inert text
+             and a click on it falls through to the header's zoom gesture. -->
+        <button v-if="headerDir && !filmstrip" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
+        <span v-else-if="headerDir" class="cell-dir" :title="cwd ?? ''">
+          <span class="cell-dir-path">{{ headerDir }}</span>
+        </span>
         <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
              thumbnail, leaving only dir + what it's doing + a zoom button. -->
         <template v-if="!filmstrip">
