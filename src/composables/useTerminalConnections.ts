@@ -171,7 +171,7 @@ function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): 
   const host = location.host;
   if (target.command) return buildRunWsUrl({ host, secure, index: target.command.index, cwd: target.cwd });
   if (target.launcher) return buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
-  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd });
+  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
 }
 

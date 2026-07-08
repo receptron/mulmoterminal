@@ -2113,10 +2113,13 @@ function rememberCodexRollout(sessionId: string, root: string, before: Set<strin
     .catch(() => {});
 }
 
-function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string | null, cwd: string): PtyEntry {
+function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string | null, cwd: string, attachGuiMcp: boolean): PtyEntry {
   const root = codexSessionsRoot();
   const before = snapshotSessions(root);
-  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL });
+  // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
+  // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
+  const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
+  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl });
   const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
   const via = tmux ? " via tmux" : "";
   const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
@@ -2134,26 +2137,35 @@ function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string
   return entry;
 }
 
-function startCodexEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, resumeRolloutId: string | null, cwd: string): PtyEntry {
+function startCodexEntry(
+  sessionId: string,
+  ws: WebSocket,
+  live: PtyEntry | undefined,
+  resumeRolloutId: string | null,
+  cwd: string,
+  attachGuiMcp: boolean,
+): PtyEntry {
   if (live) return reattachPty(live, ws, sessionId);
-  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd);
+  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp);
 }
 
-// codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume): a first-class codex session,
-// persistent + reattachable, marked a dev terminal so it stays out of the claude chat sidebar.
+// codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs
+// codex without the GUI MCP and keeps it out of the sidebar; absent (single view) attaches the GUI
+// MCP so codex drives the GUI panel like claude.
 runCodexWss.on("connection", (ws, req) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   const raw = url.searchParams.get("session");
   const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
   const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
   const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
-  markDevTerminalSession(sessionId);
+  if (!attachGuiMcp) markDevTerminalSession(sessionId);
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
   let entry: PtyEntry;
   try {
-    entry = startCodexEntry(sessionId, ws, live, resumeRolloutId, cwd);
+    entry = startCodexEntry(sessionId, ws, live, resumeRolloutId, cwd, attachGuiMcp);
   } catch (err) {
     console.error(`[ws/codex] failed to start ${sessionId}: ${messageOf(err)}`);
     return closeWithError(ws, "Failed to start codex. Is the `codex` CLI installed and on your PATH?");

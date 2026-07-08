@@ -12,7 +12,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "select", id: string): void;
-  (e: "new" | "toggle-layout" | "refresh"): void;
+  (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 }>();
 
@@ -36,6 +36,7 @@ const visibleSessions = computed(() => {
     <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">
       <span class="material-symbols-outlined">add</span>
     </button>
+    <button class="new-btn new-codex-btn" title="New Codex session" aria-label="New Codex session" @click="emit('new-codex')">cx</button>
 
     <div class="filters">
       <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
@@ -97,6 +98,11 @@ const visibleSessions = computed(() => {
 }
 .new-btn:hover {
   background: var(--bg-selected-hover);
+}
+.new-codex-btn {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .filters {
