@@ -11,7 +11,7 @@ const props = defineProps<{
   filter: Filter;
 }>();
 const emit = defineEmits<{
-  (e: "select", id: string): void;
+  (e: "select", id: string, agent: "claude" | "codex"): void;
   (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 }>();
@@ -53,9 +53,10 @@ const visibleSessions = computed(() => {
         :class="['tab', { active: s.id === props.activeId, waiting: isUnread(s) }]"
         :title="s.title"
         :aria-current="s.id === props.activeId ? 'page' : undefined"
-        @click="emit('select', s.id)"
+        @click="emit('select', s.id, s.agent ?? 'claude')"
       >
         <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
+        <span v-if="s.agent === 'codex'" class="agent-badge">cx</span>
         <span class="tab-title">{{ s.title }}</span>
         <span v-if="isUnread(s) && s.id !== props.activeId" class="unread-dot" aria-label="Unread" />
       </button>
@@ -102,6 +103,16 @@ const visibleSessions = computed(() => {
 .new-codex-btn {
   font-size: 12px;
   font-weight: 600;
+  text-transform: uppercase;
+}
+.agent-badge {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: var(--bg-selected);
+  color: var(--text-dim);
+  font-size: 9px;
+  font-weight: 700;
   text-transform: uppercase;
 }
 

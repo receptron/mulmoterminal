@@ -89,9 +89,16 @@ describe("Sidebar", () => {
     expect(wrapper.emitted("refresh")).toHaveLength(1);
   });
 
-  it("emits select with the session id on click", async () => {
+  it("emits select with the session id + agent on click", async () => {
     const wrapper = mountSidebar({ sessions: [row({ id: "a", title: "Alpha" })] });
     await wrapper.find(".item").trigger("click");
-    expect(wrapper.emitted("select")?.[0]).toEqual(["a"]);
+    expect(wrapper.emitted("select")?.[0]).toEqual(["a", "claude"]);
+  });
+
+  it("emits the codex agent + shows a badge for a codex row", async () => {
+    const wrapper = mountSidebar({ sessions: [row({ id: "c", title: "Cx", agent: "codex" })] });
+    expect(wrapper.find(".agent-badge").exists()).toBe(true);
+    await wrapper.find(".item").trigger("click");
+    expect(wrapper.emitted("select")?.[0]).toEqual(["c", "codex"]);
   });
 });
