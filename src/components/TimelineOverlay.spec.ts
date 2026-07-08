@@ -85,6 +85,20 @@ describe("TimelineOverlay", () => {
     w.unmount();
   });
 
+  it("clears the truncated flag on a later error (no stale '+')", async () => {
+    const okTrunc = { ok: true, json: () => Promise.resolve({ events, truncated: true }) };
+    const fail = { ok: false, json: () => Promise.resolve({}) };
+    const fetchMock = vi.fn().mockResolvedValueOnce(okTrunc).mockResolvedValueOnce(fail);
+    vi.stubGlobal("fetch", fetchMock);
+    const w = mount(TimelineOverlay, { props: { sessionId: "a", cwd: "/x", open: true } });
+    await flushPromises();
+    expect(w.find(".tl-count").text()).toContain("+");
+    await w.setProps({ sessionId: "b" }); // reload → error
+    await flushPromises();
+    expect(w.find(".tl-count").text()).not.toContain("+");
+    w.unmount();
+  });
+
   it("reloads when the session changes while the overlay stays open", async () => {
     const fetchMock = mockFetch({ events, truncated: false });
     vi.stubGlobal("fetch", fetchMock);

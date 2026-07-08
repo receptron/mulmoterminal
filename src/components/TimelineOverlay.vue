@@ -42,6 +42,7 @@ async function load(): Promise<void> {
     if (my === req) {
       error.value = true;
       events.value = [];
+      truncated.value = false; // don't leak a prior load's "+"
     }
   } finally {
     if (my === req) loading.value = false;
