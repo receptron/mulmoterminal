@@ -16,11 +16,12 @@ import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
-// Clicking the header background zooms this cell — while another cell is zoomed
-// that's the easy "switch to this terminal" gesture. Header buttons keep their
-// action; the already-zoomed cell ignores it (restore is the ⤡ button).
+// Clicking the header background zooms this cell ONLY when it's a filmstrip thumbnail
+// (another cell is zoomed) — the easy "switch to this terminal" gesture. In the normal
+// grid the header is inert; the ⤢ button is the only way to zoom. Header buttons keep
+// their action.
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, filmstrip.value)) emit("toggle-expand");
 }
 
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns
@@ -811,7 +812,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
-      <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" @click="onHeaderClick">
+      <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
         <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
@@ -1151,8 +1152,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   color: var(--warn);
   border-bottom-color: var(--amber);
 }
-/* A non-zoomed cell's header is a click target: zoom (switch to) this terminal.
-   Signalled with a pointer cursor + a hover tint so it's discoverable. */
+/* A filmstrip thumbnail's header is a click target: zoom (switch to) this terminal.
+   Signalled with a pointer cursor + a hover tint so it's discoverable. (Normal grid
+   cells are not zoomable by header click — only the ⤢ button.) */
 .cell-header.is-zoomable {
   cursor: pointer;
 }
