@@ -13,3 +13,21 @@ export function headerStyleFor(background: string | null | undefined, text: stri
   if (isHex(text)) style["--cell-header-fg"] = text;
   return style;
 }
+
+// Inline CSS custom properties for the cell frame + accents, set on the cell root so
+// descendants inherit them: body background, border, the idle status dot, and the
+// header's icon buttons. Like the header vars, the status frame/dot still override
+// their targets while working/blocked so activity feedback is preserved.
+export function cellStyleFor(
+  background: string | null | undefined,
+  border: string | null | undefined,
+  dot: string | null | undefined,
+  button: string | null | undefined,
+): Record<string, string> {
+  const style: Record<string, string> = {};
+  if (isHex(background)) style["--cell-bg"] = background;
+  if (isHex(border)) style["--cell-border"] = border;
+  if (isHex(dot)) style["--cell-dot"] = dot;
+  if (isHex(button)) style["--cell-btn"] = button;
+  return style;
+}
