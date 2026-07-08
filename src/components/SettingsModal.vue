@@ -189,11 +189,16 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+// Load cost unconditionally — the server falls back to the workspace when no cwd is
+// passed, so Today/Month still populate in the grid view (no active single-view
+// session ⇒ no cwd/sessionId). Re-fetch if cwd/sessionId arrive or change while open.
+const refreshCost = () => loadCost(props.cwd ?? null, props.sessionId ?? null);
 onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   nextTick(() => modalEl.value?.querySelector<HTMLElement>("input, button")?.focus());
-  if (props.cwd) loadCost(props.cwd, props.sessionId);
+  refreshCost();
 });
+watch([() => props.cwd, () => props.sessionId], refreshCost);
 onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
