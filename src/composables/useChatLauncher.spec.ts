@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { nextTick } from "vue";
 import { registerChatOpener, startCollectionChat, launchAgent } from "./useChatLauncher";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
@@ -79,5 +80,11 @@ describe("startCollectionChat", () => {
     await startCollectionChat("oops");
 
     expect(opener).not.toHaveBeenCalled();
+  });
+
+  it("persists the launch agent to localStorage", async () => {
+    launchAgent.value = "codex";
+    await nextTick();
+    expect(localStorage.getItem("mt-launch-agent")).toBe("codex");
   });
 });

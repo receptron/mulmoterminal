@@ -12,16 +12,17 @@
 // submitting, so the user can review / edit before pressing Enter; without it the
 // prompt is auto-sent as claude's first turn (startChat / actions).
 
-import { ref } from "vue";
+import { ref, watch } from "vue";
 
 export type Agent = "claude" | "codex";
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
 let openSessionFn: OpenSessionFn | null = null;
 
-// Which agent a collection action / chat spawns. Bound to the Claude/Codex toggle in the
-// collection browser (CollectionsBrowseOverlay); persists across opens. Reactive so the toggle
-// reflects it.
-export const launchAgent = ref<Agent>("claude");
+// Which agent a collection action / chat spawns. Bound to the Claude/Codex toggle in the collection
+// browser (CollectionsBrowseOverlay); persisted in localStorage so the choice survives reloads.
+const LAUNCH_AGENT_KEY = "mt-launch-agent";
+export const launchAgent = ref<Agent>(localStorage.getItem(LAUNCH_AGENT_KEY) === "codex" ? "codex" : "claude");
+watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 
 /** App.vue registers how to make a session visible (close the overlay + select it).
  *  `opts.draft` lets it show a "preparing draft…" hint while claude boots + the text
