@@ -1268,6 +1268,25 @@ describe("TerminalCell", () => {
     expect(w.find("button.cell-dir").exists()).toBe(true);
   });
 
+  it("does not zoom on a header-background click in the normal grid (only the ⤢ button zooms)", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find(".cell-header").classes()).not.toContain("is-zoomable");
+    await w.find(".cell-header").trigger("click");
+    expect(w.emitted("toggle-expand")).toBeUndefined();
+    // The dedicated button still works.
+    await w.find('[aria-label="Expand terminal"]').trigger("click");
+    expect(w.emitted("toggle-expand")).toHaveLength(1);
+  });
+
+  it("zooms on a header-background click when it's a filmstrip thumbnail (switch to it)", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
+    await flushPromises();
+    expect(w.find(".cell-header").classes()).toContain("is-zoomable");
+    await w.find(".cell-header").trigger("click");
+    expect(w.emitted("toggle-expand")).toHaveLength(1);
+  });
+
   it("tints a preset chip whose dir already has a running session elsewhere", () => {
     const w = mountCell(null, {
       presets: [
