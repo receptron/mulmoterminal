@@ -67,7 +67,7 @@ export function useHeaderButtons(params: Params) {
     window.addEventListener("focus", onFocus);
   });
   onBeforeUnmount(() => window.removeEventListener("focus", onFocus));
-  watch([params.cwd, params.session, params.agent], () => void refresh());
+  watch([params.cwd, params.session, params.agent, () => params.model?.value], () => void refresh());
 
   return { buttons, chips, refresh };
 }

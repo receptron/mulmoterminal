@@ -57,6 +57,12 @@ function badArrayField(body: Record<string, unknown>): string | null {
   return null;
 }
 
+// `chips` is nullable (null = unconfigured), so it can't join ARRAY_FIELDS: reject any present value that
+// is neither an array nor null instead of letting sanitizeChips silently coerce it to null (erasing config).
+function badChipsField(body: Record<string, unknown>): boolean {
+  return body.chips !== undefined && body.chips !== null && !Array.isArray(body.chips);
+}
+
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
   app.get("/api/config", (_req, res) => {
     res.json({
@@ -76,6 +82,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     // wipe the presets (and vice-versa). cwdPresets, when present, must be an array.
     const badField = badArrayField(body);
     if (badField) return res.status(400).json({ error: `${badField} must be an array` });
+    if (badChipsField(body)) return res.status(400).json({ error: "chips must be an array or null" });
     const next: AppConfig = {
       cwdPresets: body.cwdPresets !== undefined ? sanitizePresets(body.cwdPresets) : config.cwdPresets,
       soundFile: body.soundFile !== undefined ? sanitizeSoundFile(body.soundFile) : config.soundFile,
