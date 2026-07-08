@@ -133,6 +133,10 @@ function ensure(key: string, target: ConnTarget): Conn {
     cursorBlink: true,
     fontSize: 14,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', monospace",
+    // Treat macOS Option as Meta so Claude's Alt bindings reach the PTY: Alt+Enter
+    // (newline), Alt+B/F (word nav), Alt+Backspace (delete word). Without this, Option
+    // types accented characters instead — same class of bug as Shift+Enter above.
+    macOptionIsMeta: true,
   });
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
