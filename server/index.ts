@@ -42,6 +42,7 @@ import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
 import { listCodexSessions, codexRolloutExists } from "./codex-sessions.js";
+import { codexifySkillSeed } from "./codex-skills.js";
 import { stripTerminalQueries } from "./terminal-replay.js";
 import {
   isRecord,
@@ -784,7 +785,7 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
   // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
   try {
-    if (agent === "codex") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, message);
+    if (agent === "codex") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
     else if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
     else spawnClaudePty(sessionId, null, null, message);
   } catch (err) {
