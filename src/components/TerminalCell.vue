@@ -961,6 +961,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             type="button"
             class="cell-chip-main"
             :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : p.path"
+            :aria-label="isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : undefined"
             @click="selectPreset(p)"
           >
             <span v-if="isCwdRunning(p.path)" class="cell-chip-dot" aria-hidden="true" />{{ p.label }}

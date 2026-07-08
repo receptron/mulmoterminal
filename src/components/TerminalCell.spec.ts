@@ -1243,7 +1243,10 @@ describe("TerminalCell", () => {
     const idle = chips.find((c) => c.text().includes("proj-b"));
     expect(running?.classes()).toContain("is-running");
     expect(running?.find(".cell-chip-dot").exists()).toBe(true);
+    // a11y: the running state is exposed in text, not just color/hover
+    expect(running?.find(".cell-chip-main").attributes("aria-label")).toContain("already running");
     expect(idle?.classes()).not.toContain("is-running");
     expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
+    expect(idle?.find(".cell-chip-main").attributes("aria-label")).toBeUndefined();
   });
 });
