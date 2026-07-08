@@ -19,6 +19,19 @@ describe("ModelContextBadge", () => {
     expect(mountBadge({ model: "claude-haiku-4-20250101", contextTokens: 20_000 }).find(".cell-model").text()).toBe("Haiku · ctx 10%");
   });
 
+  it("uses a 1M window for current-generation models (Opus 4.6+, Sonnet 4.6+, Fable/Mythos)", () => {
+    // Regression: a full opus-4-8 session (~999k ctx) reads as ~100%, not ~500% against a 200k window.
+    expect(mountBadge({ model: "claude-opus-4-8", contextTokens: 999_606 }).find(".cell-model").text()).toBe("Opus · ctx 100%");
+    expect(mountBadge({ model: "claude-sonnet-5", contextTokens: 500_000 }).find(".cell-model").text()).toBe("Sonnet · ctx 50%");
+    expect(mountBadge({ model: "claude-sonnet-4-6", contextTokens: 100_000 }).find(".cell-model").text()).toBe("Sonnet · ctx 10%");
+    expect(mountBadge({ model: "claude-fable-5", contextTokens: 250_000 }).find(".cell-model").text()).toBe("Fable · ctx 25%");
+  });
+
+  it("keeps the 200k window for older Opus/Sonnet (pre-4.6)", () => {
+    expect(mountBadge({ model: "claude-opus-4-5-20251101", contextTokens: 100_000 }).find(".cell-model").text()).toBe("Opus · ctx 50%");
+    expect(mountBadge({ model: "claude-sonnet-4-5-20250929", contextTokens: 100_000 }).find(".cell-model").text()).toBe("Sonnet · ctx 50%");
+  });
+
   it("shows the model tail but NO % for an unknown model (never guesses a window)", () => {
     const w = mountBadge({ agent: "codex", model: "gpt-5-codex", contextTokens: 999_999 });
     expect(w.find(".cell-model").text()).toBe("gpt-5-codex");
