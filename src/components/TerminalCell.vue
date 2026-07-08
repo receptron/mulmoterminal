@@ -805,44 +805,51 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
     <template v-if="launched">
       <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
-        <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
+        <!-- Zoomed: show the dir as plain text (no open-folder), so a full-screen cell
+             stays a clean "dir + what it's doing + restore" header. -->
+        <button v-if="headerDir && !expanded" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
+        <span v-else-if="headerDir" class="cell-dir cell-dir-static" :title="cwd ?? ''"
+          ><span class="cell-dir-path">{{ headerDir }}</span></span
+        >
         <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-        <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-        <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-          <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-          <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
-        </button>
-        <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
-          <button
-            type="button"
-            class="cell-gh"
-            title="Open on GitHub"
-            aria-label="Open on GitHub"
-            aria-haspopup="true"
-            :aria-expanded="ghMenuOpen"
-            @click="ghMenuOpen = !ghMenuOpen"
-          >
-            <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
-              <path
-                fill-rule="evenodd"
-                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
-              />
-            </svg>
+        <template v-if="!expanded">
+          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
+          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
           </button>
-          <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
-            <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
-            <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
-            <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
-          </div>
-        </span>
+          <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
+            <button
+              type="button"
+              class="cell-gh"
+              title="Open on GitHub"
+              aria-label="Open on GitHub"
+              aria-haspopup="true"
+              :aria-expanded="ghMenuOpen"
+              @click="ghMenuOpen = !ghMenuOpen"
+            >
+              <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  fill-rule="evenodd"
+                  d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+                />
+              </svg>
+            </button>
+            <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
+              <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
+              <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
+              <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
+            </div>
+          </span>
+        </template>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
-        <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-        <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+        <ModelContextBadge v-if="context && !expanded" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+        <span v-if="showUsage && !expanded" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
         <span class="cell-actions">
           <button
-            v-if="sessionId && agent !== 'codex'"
+            v-if="sessionId && agent !== 'codex' && !expanded"
             class="cell-btn"
             title="Activity timeline"
             aria-label="Show activity timeline"
@@ -850,8 +857,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             🕘
           </button>
-          <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
-          <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
+          <button v-if="reorderable && !expanded" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
+          <button v-if="reorderable && !expanded" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
           <button
             class="cell-btn"
             :title="expanded ? 'Restore' : 'Expand'"
@@ -860,7 +867,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             {{ expanded ? "⤡" : "⤢" }}
           </button>
-          <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
+          <button v-if="!expanded" class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
         </span>
       </div>
       <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
@@ -874,6 +881,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :codex="agent === 'codex'"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
+        :hide-header="expanded"
         dev-terminal
         run-menu
         @session="onSession"
@@ -1190,6 +1198,10 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
      rtl box the ellipsis falls on the left. The inner span keeps the path itself
      in natural left-to-right order (plaintext base direction). */
   direction: rtl;
+}
+/* Zoomed cell: the dir is plain text, not an open-folder button. */
+.cell-dir-static {
+  cursor: default;
 }
 .cell-dir-path {
   unicode-bidi: plaintext;

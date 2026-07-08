@@ -19,7 +19,7 @@ vi.mock("../composables/usePubSub", () => ({
 vi.mock("./Terminal.vue", () => ({
   default: {
     name: "TerminalView",
-    props: ["sessionId", "connectKey", "cwd"],
+    props: ["sessionId", "connectKey", "cwd", "hideHeader"],
     emits: ["session", "cwd"],
     template: '<div class="stub-term" />',
     methods: {
@@ -66,12 +66,13 @@ function mountCell(
     cancellable?: boolean;
     openSessionIds?: string[];
     openCwds?: string[];
+    expanded?: boolean;
   } = {},
 ) {
   return mount(TerminalCell, {
     props: {
       uid: 1,
-      expanded: false,
+      expanded: opts.expanded ?? false,
       initialSessionId,
       initialCwd: opts.initialCwd ?? null,
       defaultCwd: opts.defaultCwd ?? "/home/me/my-project",
@@ -1228,6 +1229,28 @@ describe("TerminalCell", () => {
     expect(warn.text()).toContain("2 unpushed");
     expect(warn.text()).toContain("1 uncommitted");
     expect(w.find(".ccx-remove").text()).toContain("Discard");
+  });
+
+  it("expanded (zoomed) cell shows a minimal header — dir (static) + restore, no clutter", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
+    await flushPromises();
+    // dir is plain text, not an open-folder button
+    expect(w.find("button.cell-dir").exists()).toBe(false);
+    expect(w.find(".cell-dir-static").exists()).toBe(true);
+    // clutter removed: usage, timeline, close all hidden
+    expect(w.find(".cell-close").exists()).toBe(false);
+    expect(w.find('[aria-label="Show activity timeline"]').exists()).toBe(false);
+    // only the restore toggle remains
+    expect(w.find('[aria-label="Restore terminal"]').exists()).toBe(true);
+    // the embedded terminal's own header is suppressed when zoomed
+    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
+  });
+
+  it("non-expanded cell keeps the clickable dir + close button", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find("button.cell-dir").exists()).toBe(true);
+    expect(w.find(".cell-close").exists()).toBe(true);
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {
