@@ -10,8 +10,16 @@ import GitBranchChip from "./GitBranchChip.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
+import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
+
+// Clicking the header background zooms this cell — while another cell is zoomed
+// that's the easy "switch to this terminal" gesture. Header buttons keep their
+// action; the already-zoomed cell ignores it (restore is the ⤡ button).
+function onHeaderClick(event: MouseEvent) {
+  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+}
 
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns
 // the state). `initialSessionId` resumes a session on mount (reload restore).
@@ -769,7 +777,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 <template>
   <div class="cell" :class="statusClass">
     <template v-if="launched">
-      <div class="cell-header" :class="statusClass">
+      <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" @click="onHeaderClick">
         <span class="cell-dot" :class="statusClass" :title="statusLabel" />
         <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
@@ -1078,6 +1086,14 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   background: var(--warn-bg-subtle);
   color: var(--warn);
   border-bottom-color: var(--amber);
+}
+/* A non-zoomed cell's header is a click target: zoom (switch to) this terminal.
+   Signalled with a pointer cursor + a hover tint so it's discoverable. */
+.cell-header.is-zoomable {
+  cursor: pointer;
+}
+.cell-header.is-zoomable:hover {
+  background: var(--bg-hover);
 }
 
 /* Status dot: idle / working (pulsing blue) / done (static blue) / blocked (amber). */
