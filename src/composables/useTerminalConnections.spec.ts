@@ -158,4 +158,18 @@ describe("shiftEnterNewline", () => {
       expect(conn.shiftEnterNewline(ev({ shiftKey: true, [mod]: true }))).toBeNull();
     }
   });
+
+  it("makeShiftEnterHandler sends the newline and cancels the default on Shift+Enter", () => {
+    const send = vi.fn();
+    const handler = conn.makeShiftEnterHandler(send);
+    expect(handler(ev({ shiftKey: true }))).toBe(false); // false => xterm won't also send \r
+    expect(send).toHaveBeenCalledWith(conn.NEWLINE_SEQUENCE);
+  });
+
+  it("makeShiftEnterHandler passes plain Enter through (returns true, sends nothing)", () => {
+    const send = vi.fn();
+    const handler = conn.makeShiftEnterHandler(send);
+    expect(handler(ev({}))).toBe(true);
+    expect(send).not.toHaveBeenCalled();
+  });
 });

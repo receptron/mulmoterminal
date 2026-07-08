@@ -34,6 +34,17 @@ export function shiftEnterNewline(e: ModifierKeyEvent): string | null {
   return isShiftEnter ? NEWLINE_SEQUENCE : null;
 }
 
+// The xterm custom key handler: on Shift+Enter, `send` the newline and return false
+// (cancel xterm's default \r); otherwise return true so xterm handles the key normally.
+export function makeShiftEnterHandler(send: (data: string) => void): (e: ModifierKeyEvent) => boolean {
+  return (e) => {
+    const newline = shiftEnterNewline(e);
+    if (newline === null) return true;
+    send(newline);
+    return false;
+  };
+}
+
 // What a slot connects to. Mirrors the relevant Terminal.vue props; a connectKey
 // change (session switch / relaunch) hands a fresh target to retarget().
 export interface ConnTarget {
@@ -162,12 +173,11 @@ function ensure(key: string, target: ConnTarget): Conn {
   });
   // Shift+Enter → newline (not submit): send the sequence ourselves and suppress the
   // \r xterm would otherwise emit for it (returning false cancels the default).
-  term.attachCustomKeyEventHandler((e) => {
-    const newline = shiftEnterNewline(e);
-    if (newline === null) return true;
-    if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data: newline }));
-    return false;
-  });
+  term.attachCustomKeyEventHandler(
+    makeShiftEnterHandler((data) => {
+      if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data }));
+    }),
+  );
   return c;
 }
 
