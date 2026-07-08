@@ -9,12 +9,11 @@ export interface CodexArgsInput {
   model: string | null;
   // The in-process GUI MCP endpoint to attach (single view), or null (grid dev terminal / no GUI).
   guiMcpUrl: string | null;
-  // A prompt to auto-run as the session's first turn (codex's positional [PROMPT]), or null for an
-  // interactive session with no seed. codex has no --system-prompt, so any instructions must already
-  // be part of this text.
-  initialPrompt: string | null;
 }
 
+// NOTE: a seed prompt is NOT passed here as a positional [PROMPT] — a long collection-action prompt
+// overflows tmux's new-session command-length limit ("command too long"). It is typed into codex's
+// input box after startup instead (see attachCodexAutoRun in index.ts).
 export function buildCodexArgs(input: CodexArgsInput): string[] {
   const args: string[] = [];
   if (input.model) args.push("--model", input.model);
@@ -27,7 +26,5 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
     args.push("-c", `mcp_servers.mulmoterminal-gui.default_tools_approval_mode="approve"`);
   }
   if (input.resume) args.push("resume", input.resume);
-  // The positional PROMPT goes last — for `codex [OPTS] [PROMPT]` and `codex resume <id> [PROMPT]`.
-  if (input.initialPrompt) args.push(input.initialPrompt);
   return args;
 }

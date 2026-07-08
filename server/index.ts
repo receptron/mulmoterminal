@@ -1678,6 +1678,47 @@ function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined
   };
 }
 
+// codex's TUI has no stable "input ready" marker (its placeholder rotates), so instead of matching
+// a string we wait for its startup output to SETTLE — the boot banner + MCP-boot spinner keep
+// emitting until the input prompt is ready, so a quiet gap means codex is waiting for input. Then
+// paste the seed + Enter to auto-run it. Same reason as attachDraftInjection: a long prompt can't go
+// through tmux's new-session command-length limit ("command too long"). Returns a scanner fed the
+// pty output.
+const CODEX_READY_QUIET_MS = 1000;
+const CODEX_AUTORUN_MAX_WAIT_MS = 15_000;
+function attachCodexAutoRun(entry: PtyEntry, prompt: string): (data: string) => void {
+  const text = sanitizeDraftText(prompt);
+  if (!text) return () => {};
+  let done = false;
+  let quiet: ReturnType<typeof setTimeout> | null = null;
+  const type = () => {
+    if (done) return;
+    done = true;
+    if (quiet) clearTimeout(quiet);
+    try {
+      entry.term.write(`\x1b[200~${text}\x1b[201~`);
+      setTimeout(() => {
+        try {
+          entry.term.write("\r");
+        } catch {
+          // pty already gone — nothing to submit
+        }
+      }, DRAFT_SUBMIT_MS);
+    } catch {
+      // pty already gone — nothing to type into
+    }
+  };
+  const cap = setTimeout(type, CODEX_AUTORUN_MAX_WAIT_MS);
+  return () => {
+    if (done) return;
+    if (quiet) clearTimeout(quiet);
+    quiet = setTimeout(() => {
+      clearTimeout(cap);
+      type();
+    }, CODEX_READY_QUIET_MS);
+  };
+}
+
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -2120,10 +2161,11 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   return { sessionId, live, resumeRolloutId };
 }
 
-function wireCodexRelay(entry: PtyEntry, sessionId: string): void {
+function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
   entry.term.onData((data) => {
     entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
+    onOutput?.(data);
   });
   entry.term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
@@ -2161,7 +2203,7 @@ function spawnCodexPty(
   // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
   // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
   const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
-  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl, initialPrompt });
+  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl });
   const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
   const via = tmux ? " via tmux" : "";
   const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
@@ -2175,7 +2217,10 @@ function spawnCodexPty(
     // could overwrite the known id with a mis-attributed concurrent rollout.
     rememberCodexRollout(sessionId, root, before, cwd);
   }
-  wireCodexRelay(entry, sessionId);
+  // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
+  // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
+  const autoRun = initialPrompt ? attachCodexAutoRun(entry, initialPrompt) : undefined;
+  wireCodexRelay(entry, sessionId, autoRun);
   return entry;
 }
 

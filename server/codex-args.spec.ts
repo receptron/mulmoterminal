@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildCodexArgs } from "./codex-args.js";
 
-const base = { resume: null, model: null, guiMcpUrl: null, initialPrompt: null };
+const base = { resume: null, model: null, guiMcpUrl: null };
 
 describe("buildCodexArgs", () => {
   it("passes no id for a fresh session (codex mints its own)", () => {
@@ -32,18 +32,10 @@ describe("buildCodexArgs", () => {
     ]);
   });
 
-  it("appends the initial prompt as the trailing positional for a fresh session", () => {
-    expect(buildCodexArgs({ ...base, initialPrompt: "fix the login bug" })).toEqual(["fix the login bug"]);
-  });
-
-  it("appends the initial prompt after the resume id (codex resume <id> [PROMPT])", () => {
-    expect(buildCodexArgs({ ...base, resume: "id1", initialPrompt: "do the thing" })).toEqual(["resume", "id1", "do the thing"]);
-  });
-
-  it("orders model, GUI MCP, resume, then the prompt last", () => {
-    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpUrl: "gui-mcp-endpoint", initialPrompt: "seed" });
+  it("orders model, GUI MCP, then the resume subcommand (no positional prompt)", () => {
+    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpUrl: "gui-mcp-endpoint" });
     expect(args.slice(0, 2)).toEqual(["--model", "gpt-5.4"]);
     expect(args).toContain("-c");
-    expect(args.slice(-3)).toEqual(["resume", "id1", "seed"]);
+    expect(args.slice(-2)).toEqual(["resume", "id1"]);
   });
 });
