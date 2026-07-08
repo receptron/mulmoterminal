@@ -5,6 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // Defaults to a no-op that returns true, so a test that forgot to attach would see the
 // pass-through behavior (and thus fail the Shift+Enter assertion) rather than crash.
 const mockKeyState: { handler: (e: unknown) => boolean } = vi.hoisted(() => ({ handler: () => true }));
+// The options ensure() passes to `new Terminal({...})`, captured for assertions.
+const mockTermState: { options: Record<string, unknown> } = vi.hoisted(() => ({ options: {} }));
 
 // Mock xterm + addons so the manager runs headless (no real DOM terminal / canvas).
 // Factories are hoisted above imports, so the fakes are declared INSIDE them.
@@ -13,6 +15,9 @@ vi.mock("@xterm/xterm", () => ({
     options: Record<string, unknown> = {};
     cols = 80;
     rows = 24;
+    constructor(opts: Record<string, unknown>) {
+      mockTermState.options = opts;
+    }
     loadAddon() {}
     open() {}
     onData() {}
@@ -125,6 +130,13 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     expect(mockKeyState.handler({ type: "keydown", key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false })).toBe(true);
     expect(ws.sent).toHaveLength(0);
     conn.release("cell-key");
+  });
+
+  it("configures xterm with macOptionIsMeta so macOS Option acts as Meta (Alt bindings reach the PTY)", () => {
+    mockTermState.options = {};
+    conn.attach("cell-opt", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
+    expect(mockTermState.options.macOptionIsMeta).toBe(true);
+    conn.release("cell-opt");
   });
 
   it("does not replay a session id before the server has assigned one", () => {
