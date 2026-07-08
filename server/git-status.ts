@@ -20,12 +20,16 @@ const toCount = (s: string): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-// The current branch, or detached when HEAD isn't on a branch (git prints "HEAD").
+// The current branch, or detached when HEAD isn't on a branch. `symbolic-ref`
+// resolves the branch even on an UNBORN branch (fresh `git init` before the first
+// commit), where `rev-parse --abbrev-ref HEAD` fails; it also fails cleanly on a
+// detached HEAD, which we then confirm by whether HEAD resolves to a commit.
 async function currentBranch(cwd: string): Promise<{ branch: string | null; detached: boolean }> {
-  const res = await git(["rev-parse", "--abbrev-ref", "HEAD"], cwd);
-  const name = res.ok ? res.stdout.trim() : "";
-  if (!name || name === "HEAD") return { branch: null, detached: name === "HEAD" };
-  return { branch: name, detached: false };
+  const sym = await git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd);
+  const name = sym.ok ? sym.stdout.trim() : "";
+  if (name) return { branch: name, detached: false };
+  const head = await git(["rev-parse", "--verify", "--quiet", "HEAD"], cwd);
+  return { branch: null, detached: head.ok };
 }
 
 async function dirtyCount(cwd: string): Promise<number> {

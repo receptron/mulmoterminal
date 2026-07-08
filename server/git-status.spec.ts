@@ -52,6 +52,17 @@ describe("gitStatus", () => {
     expect(s.upstream).toBe(false); // no remote in the test repo
   });
 
+  it("shows the branch on an unborn branch (git init, no commit yet)", async () => {
+    if (!hasGit) return;
+    const fresh = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-unborn-")));
+    g(fresh, "init", "-b", "main"); // no commit — unborn HEAD
+    const s = await gitStatus(fresh);
+    expect(s.repo).toBe(true);
+    expect(s.branch).toBe("main");
+    expect(s.detached).toBe(false);
+    rmSync(fresh, { recursive: true, force: true });
+  });
+
   it("counts dirty entries (modified + untracked)", async () => {
     if (!hasGit) return;
     writeFileSync(path.join(repo, "README.md"), "changed\n"); // modify tracked
