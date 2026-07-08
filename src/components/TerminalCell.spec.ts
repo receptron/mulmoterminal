@@ -19,11 +19,12 @@ vi.mock("../composables/usePubSub", () => ({
 vi.mock("./Terminal.vue", () => ({
   default: {
     name: "TerminalView",
-    props: ["sessionId", "connectKey", "cwd"],
+    props: ["sessionId", "connectKey", "cwd", "hideHeader"],
     emits: ["session", "cwd"],
     // Render the header-actions slot so the cell's icon buttons (moved onto the
-    // terminal's header row) are present in the test DOM.
-    template: '<div class="stub-term"><slot name="header-actions" /></div>',
+    // terminal's header row) are present in the test DOM — but only when the header
+    // is shown, mirroring Terminal.vue's `v-if="!hideHeader"`.
+    template: '<div class="stub-term"><slot v-if="!hideHeader" name="header-actions" /></div>',
     methods: {
       terminate() {},
       submitText() {
@@ -69,12 +70,14 @@ function mountCell(
     openSessionIds?: string[];
     openCwds?: string[];
     expanded?: boolean;
+    zoomed?: boolean;
   } = {},
 ) {
   return mount(TerminalCell, {
     props: {
       uid: 1,
       expanded: opts.expanded ?? false,
+      zoomed: opts.zoomed ?? false,
       initialSessionId,
       initialCwd: opts.initialCwd ?? null,
       defaultCwd: opts.defaultCwd ?? "/home/me/my-project",
@@ -1251,6 +1254,18 @@ describe("TerminalCell", () => {
     await flushPromises();
     expect(w.find('[aria-label="Restore terminal"]').exists()).toBe(true);
     expect(w.find("button.cell-dir").exists()).toBe(true); // dir stays clickable
+  });
+
+  it("a filmstrip thumbnail (another cell zoomed) drops to dir + activity + zoom only", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
+    await flushPromises();
+    // Info stripped: no git chip / usage; the second (terminal) header row is hidden.
+    expect(w.find(".git-chip").exists()).toBe(false);
+    expect(w.find(".cell-usage").exists()).toBe(false);
+    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
+    // Only the zoom button + dir + prompt remain.
+    expect(w.find(".cell-zoom-thumb").exists()).toBe(true);
+    expect(w.find("button.cell-dir").exists()).toBe(true);
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {

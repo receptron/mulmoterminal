@@ -33,6 +33,9 @@ const props = defineProps<{
   // terminal, so flipping to an off-page tab detaches the view without reaping the PTY.
   uid: number;
   expanded: boolean;
+  // True while SOME cell in the grid is zoomed. A non-expanded cell then renders as a
+  // small filmstrip thumbnail, so it drops to a minimal header (dir + activity + zoom).
+  zoomed?: boolean;
   initialSessionId: string | null;
   initialCwd: string | null;
   // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
@@ -92,6 +95,9 @@ const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
 const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
 // Activity timeline overlay (the header 🕘) — only meaningful for a Claude session.
 const timelineOpen = ref(false);
+// A small filmstrip thumbnail (some OTHER cell is zoomed): strip the header to just
+// dir + what it's doing + a zoom button, and hide the second (terminal) header row.
+const filmstrip = computed(() => !!props.zoomed && !props.expanded);
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
@@ -810,15 +816,21 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <button v-if="headerDir" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
-        <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-        <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-        <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-          <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-          <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
-        </button>
-        <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-        <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+        <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
+             thumbnail, leaving only dir + what it's doing + a zoom button. -->
+        <template v-if="!filmstrip">
+          <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
+          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+          </button>
+          <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+          <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+        </template>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
+        <!-- Filmstrip: the only action is to zoom into this cell (row 2 is hidden). -->
+        <button v-if="filmstrip" class="cell-btn cell-zoom-thumb" title="Expand" aria-label="Expand terminal" @click.stop="emit('toggle-expand')">⤢</button>
       </div>
       <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
       <TerminalView
@@ -831,6 +843,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :codex="agent === 'codex'"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
+        :hide-header="filmstrip"
         dev-terminal
         run-menu
         @session="onSession"
@@ -1194,10 +1207,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
      rtl box the ellipsis falls on the left. The inner span keeps the path itself
      in natural left-to-right order (plaintext base direction). */
   direction: rtl;
-}
-/* Zoomed cell: the dir is plain text, not an open-folder button. */
-.cell-dir-static {
-  cursor: default;
 }
 .cell-dir-path {
   unicode-bidi: plaintext;
