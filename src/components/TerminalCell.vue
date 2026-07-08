@@ -829,8 +829,19 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
         </template>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
-        <!-- Filmstrip: the only action is to zoom into this cell (row 2 is hidden). -->
-        <button v-if="filmstrip" class="cell-btn cell-zoom-thumb" title="Expand" aria-label="Expand terminal" @click.stop="emit('toggle-expand')">⤢</button>
+        <!-- Expand/restore + close stay on row 1 (the info row); the other icons live on
+             row 2. `.stop` so they don't trigger the header's click-to-zoom. -->
+        <span class="cell-actions">
+          <button
+            class="cell-btn"
+            :title="expanded ? 'Restore' : 'Expand'"
+            :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
+            @click.stop="emit('toggle-expand')"
+          >
+            {{ expanded ? "⤡" : "⤢" }}
+          </button>
+          <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click.stop="close">✕</button>
+        </span>
       </div>
       <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
       <TerminalView
@@ -886,15 +897,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
           <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
           <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
-          <button
-            class="cell-btn"
-            :title="expanded ? 'Restore' : 'Expand'"
-            :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
-            @click="emit('toggle-expand')"
-          >
-            {{ expanded ? "⤡" : "⤢" }}
-          </button>
-          <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
         </template>
       </TerminalView>
       <div v-if="diffOpen && diff" class="cell-diff">
