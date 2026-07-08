@@ -114,6 +114,9 @@ function copyPrompt() {
   const lines = [`Command: ${props.command.label}`];
   if (props.command.cwd) lines.push(`Directory: ${props.command.cwd}`);
   lines.push("", "Summary of its output:", summaryText.value.trim(), "", "Follow-up: ");
+  // The Clipboard API is absent on insecure origins (a LAN IP, not localhost) and some
+  // webviews; guard so a click can't throw synchronously. Nothing to fall back to here.
+  if (!navigator.clipboard?.writeText) return;
   navigator.clipboard
     .writeText(lines.join("\n"))
     .then(() => {
@@ -121,7 +124,7 @@ function copyPrompt() {
       setTimeout(() => (copied.value = false), 1500);
     })
     .catch(() => {
-      // clipboard blocked (no focus / permission) — nothing to fall back to here
+      // clipboard blocked (no focus / permission) — leave the button label unchanged
     });
 }
 

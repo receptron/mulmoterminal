@@ -111,6 +111,19 @@ describe("CommandCell summarize", () => {
     expect(w.find(".cell-summary-continue").text()).toContain("Copied");
   });
 
+  it("does not throw when the clipboard API is unavailable (insecure origin / webview)", async () => {
+    vi.stubGlobal("navigator", {}); // no `clipboard`
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse({ summary: "Errors: boom", truncated: false })),
+    );
+    const w = mountCell();
+    await w.find('[aria-label="Summarize command output"]').trigger("click");
+    await flushPromises();
+    await w.find(".cell-summary-continue").trigger("click"); // must not throw
+    expect(w.find(".cell-summary-continue").text()).toContain("Copy"); // stays "Copy as prompt"
+  });
+
   it("shows the truncation note when the server truncated the log", async () => {
     vi.stubGlobal(
       "fetch",
