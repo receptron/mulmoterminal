@@ -3,8 +3,10 @@ import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vu
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
 import { useDirConfig } from "../composables/useDirConfig";
+import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
+import GitBranchChip from "./GitBranchChip.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
@@ -72,6 +74,9 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 // palette and shows a project badge. Re-fetched when the effective cwd changes.
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
+// Live git status (branch/dirty/ahead·behind) for the header chip. `refreshGit`
+// is called alongside loadDiff() so a finished turn's changes show immediately.
+const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
@@ -739,6 +744,7 @@ watch(working, (now, prev) => {
   if (prev && !now) {
     loadDiff();
     refreshUsage();
+    refreshGit(); // branch/dirty may have changed (commit, checkout, edits)
   }
 });
 
@@ -769,6 +775,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <span class="cell-dir-path">{{ headerDir }}</span>
         </button>
         <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+        <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
         <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
           <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
           <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
