@@ -247,7 +247,7 @@ describe("TerminalCell", () => {
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Build");
     await items[0].trigger("click");
-    expect(w.emitted("run")?.[0]?.[0]).toEqual({ index: 0, label: "Build", cwd: "/home/me/proj" });
+    expect(w.emitted("run")?.[0]?.[0]).toEqual({ source: "script", index: 0, label: "Build", cwd: "/home/me/proj" });
   });
 
   it("shows the resumed session's latest prompt from /api/session (with cwd), not the bare id", async () => {

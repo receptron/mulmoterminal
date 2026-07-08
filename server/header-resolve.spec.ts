@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { substitute, evalWhen, resolveHeader } from "./header-resolve.js";
+import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand } from "./header-resolve.js";
 import type { HeaderConfig, HeaderContext } from "./header-config.js";
+
+// POSIX single-quote escaping, matching the server's shellQuoteFor(non-win32).
+const posixQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
 
 const ctx = (over: Partial<HeaderContext> = {}): HeaderContext => ({
   dir: "/Users/x/myrepo",
@@ -62,7 +65,7 @@ describe("resolveHeader", () => {
     expect(resolveHeader({ buttons: [], chips: null }, ctx()).chips).toBeNull();
   });
 
-  it("filters buttons by `when`, drops shell buttons (not wired yet), and substitutes payloads", () => {
+  it("filters buttons by `when`, keeps shell buttons but never leaks their cmd, and substitutes payloads", () => {
     const config: HeaderConfig = {
       buttons: [
         { id: "pr", emoji: "🔀", label: "PR", run: "shell", cmd: "gh pr create --head ${branch}", when: "isGitRepo" },
@@ -72,9 +75,11 @@ describe("resolveHeader", () => {
       chips: null,
     };
     const out = resolveHeader(config, ctx());
-    // "pr" is dropped (run:"shell" not dispatchable yet); "cx" hidden for a claude session; only "gh" remains.
-    expect(out.buttons.map((b) => b.id)).toEqual(["gh"]);
-    expect(out.buttons[0].open).toEqual({ url: "https://github.com/receptron/mulmoterminal" });
+    // "cx" is hidden for a claude session; "pr" (shell) and "gh" (open) remain.
+    expect(out.buttons.map((b) => b.id)).toEqual(["pr", "gh"]);
+    expect(out.buttons[0].run).toBe("shell");
+    expect(out.buttons[0]).not.toHaveProperty("cmd"); // the command is re-resolved server-side, never sent to the client
+    expect(out.buttons[1].open).toEqual({ url: "https://github.com/receptron/mulmoterminal" });
   });
 
   it("resolves built-in and custom chips, dropping a custom chip whose when is false", () => {
@@ -91,5 +96,37 @@ describe("resolveHeader", () => {
   it("keeps custom chips and substitutes their text when visible", () => {
     const out = resolveHeader({ buttons: [], chips: [{ label: "↑↓", text: "↑${ahead} ↓${behind}" }] }, ctx());
     expect(out.chips).toEqual([{ kind: "custom", label: "↑↓", text: "↑2 ↓0" }]);
+  });
+});
+
+describe("substituteShell", () => {
+  it("shell-quotes each substituted value so metacharacters can't inject", () => {
+    const out = substituteShell("gh pr create --head ${branch}", ctx({ branch: "a; rm -rf / #$(whoami)`x`" }), posixQuote);
+    expect(out).toBe("gh pr create --head 'a; rm -rf / #$(whoami)`x`'");
+  });
+  it("escapes an embedded single quote and leaves an unknown ${var} literal", () => {
+    expect(substituteShell("echo ${branch}", ctx({ branch: "o'clock" }), posixQuote)).toBe("echo 'o'\\''clock'");
+    expect(substituteShell("echo ${nope}", ctx(), posixQuote)).toBe("echo ${nope}");
+  });
+});
+
+describe("resolveButtonCommand", () => {
+  const cfg = (): HeaderConfig => ({
+    buttons: [
+      { id: "pr", label: "PR", run: "shell", cmd: "gh pr create --head ${branch}", when: "isGitRepo" },
+      { id: "hidden", label: "Hidden", run: "shell", cmd: "echo hi", when: "agent == codex" },
+      { id: "open", label: "Open", run: "open", open: { url: "https://x" } },
+    ],
+    chips: null,
+  });
+
+  it('resolves any run:"shell" button by id with escaped ${vars} (when is a display filter, not an exec gate)', () => {
+    expect(resolveButtonCommand(cfg(), ctx({ branch: "feat/x" }), "pr", posixQuote)).toBe("gh pr create --head 'feat/x'");
+    // "hidden" resolves even though its when (agent==codex) is false for this claude ctx: exec isn't gated on when.
+    expect(resolveButtonCommand(cfg(), ctx(), "hidden", posixQuote)).toBe("echo hi");
+  });
+  it("returns null for an unknown id or a non-shell button", () => {
+    expect(resolveButtonCommand(cfg(), ctx(), "nope", posixQuote)).toBeNull();
+    expect(resolveButtonCommand(cfg(), ctx(), "open", posixQuote)).toBeNull();
   });
 });

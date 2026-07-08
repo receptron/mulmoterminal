@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { usePendingScript } from "./usePendingScript";
+import type { RunCommand } from "../components/runCommand";
 
-const CMD = { index: 1, label: "Build", cwd: "/proj" };
+const CMD: RunCommand = { source: "script", index: 1, label: "Build", cwd: "/proj" };
 
 describe("usePendingScript", () => {
   it("hands the requested command to the next taker, then clears it", () => {

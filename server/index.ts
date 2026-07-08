@@ -17,7 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
-import { resolveHeader } from "./header-resolve.js";
+import { resolveHeader, resolveButtonCommand } from "./header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
@@ -2092,45 +2092,61 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
 
-// Command terminal (?index=<n>&cwd=<dir>): resolve the script from <dir>'s
-// script.json by index (the browser never sends a raw command) and run it there in
-// a plain PTY. Ephemeral — when the socket closes, the process is killed.
+// Command terminal: resolve the command SERVER-SIDE (the browser never sends a raw command) and run it
+// in an ephemeral PTY. `?index=<n>&cwd=<dir>` runs <dir>/script.json[n]; `?buttonId=<id>&cwd&session&
+// agent&model` runs a header run:"shell" button, re-resolved from config against the session context with
+// shell-escaped ${vars}. When the socket closes, the process is killed.
 runWss.on("connection", (ws, req) => {
-  const url = new URL(req.url ?? "/", "http://localhost");
+  void startRunTerminal(ws, new URL(req.url ?? "/", "http://localhost"));
+});
+
+// POSIX/PowerShell single-arg quoting, so a substituted ${branch}/${repo}/${task} can't break out of the
+// command string. POSIX closes the quote, escapes the literal quote, reopens; PowerShell doubles quotes.
+function shellQuoteFor(platform: NodeJS.Platform): (value: string) => string {
+  if (platform === "win32") return (value) => `'${value.replace(/'/g, "''")}'`;
+  return (value) => `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
+  const buttonId = url.searchParams.get("buttonId");
+  if (!buttonId) return null;
+  const sessionRaw = url.searchParams.get("session");
+  const session = sessionRaw && SESSION_ID_RE.test(sessionRaw) ? sessionRaw : null;
+  const agent = url.searchParams.get("agent") === "codex" ? "codex" : "claude";
+  const config = loadHeaderConfig(cwd, getHeaderConfig());
+  const context = await buildHeaderContext(cwd, { session, agent, model: url.searchParams.get("model") });
+  const command = resolveButtonCommand(config, context, buttonId, shellQuoteFor(process.platform));
+  return command ? { command, cwd } : null;
+}
+
+async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: string } | null> {
+  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const byButton = await resolveButtonRun(url, cwd);
+  if (byButton) return byButton;
   const indexRaw = url.searchParams.get("index");
   const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
-  const resolved = resolveScript(cwd, index);
-  if (!resolved) {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "error", message: "Script not found — check script.json." }));
-      ws.close();
-    }
-    return;
-  }
+  return resolveScript(cwd, index);
+}
 
+async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
+  const resolved = await resolveRunTarget(url);
+  if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
   let term: IPty;
   try {
     term = spawnCommandPty(resolved.command, resolved.cwd, ws);
   } catch (err) {
     console.error(`[ws/run] failed to start command: ${messageOf(err)}`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "error", message: "Failed to start the command." }));
-      ws.close();
-    }
-    return;
+    return closeWithError(ws, "Failed to start the command.");
   }
-
   ws.on("message", (raw) => handleCommandFrame(term, raw));
   ws.on("close", () => {
-    // Ephemeral: no reattach/grace window — the viewer is gone, so end the process.
     try {
-      term.kill();
+      term.kill(); // ephemeral: no reattach/grace window — the viewer is gone, so end the process
     } catch {
       // already exited — nothing to kill
     }
   });
-});
+}
 
 // Send a terminal error to the socket and close it (no reconnect on the client side).
 function closeWithError(ws: WebSocket, message: string): void {

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onUnmounted, watch, useTemplateRef } from "vue";
+import type { RunCommand } from "./runCommand";
 
 // A header dropdown that lists a directory's script.json entries and emits the one
 // picked, so the parent can launch it. Scripts are fetched up front (and on cwd
@@ -11,7 +12,7 @@ interface RunnableScript {
   command: string;
 }
 const props = defineProps<{ cwd: string | null }>();
-const emit = defineEmits<{ (e: "run", command: { index: number; label: string; cwd: string | null }): void }>();
+const emit = defineEmits<{ (e: "run", command: RunCommand): void }>();
 
 const open = ref(false);
 const scripts = ref<RunnableScript[]>([]);
@@ -75,7 +76,7 @@ function toggle() {
 }
 
 function pick(s: RunnableScript) {
-  emit("run", { index: s.index, label: s.label, cwd: scriptsCwd.value ?? props.cwd });
+  emit("run", { source: "script", index: s.index, label: s.label, cwd: scriptsCwd.value ?? props.cwd });
   close();
 }
 

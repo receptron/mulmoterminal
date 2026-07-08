@@ -17,7 +17,7 @@ export interface HeaderButton {
   icon?: string;
   label: string;
   run: "shell" | "input" | "open";
-  cmd?: string;
+  // No `cmd`: a shell button's command stays server-side and is re-resolved by id at exec time.
   text?: string;
   open?: OpenTarget;
 }

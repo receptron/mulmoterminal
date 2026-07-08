@@ -1,10 +1,7 @@
 import { ref } from "vue";
+import type { RunCommand } from "../components/runCommand";
 
-export interface PendingCommand {
-  index: number;
-  label: string;
-  cwd: string | null;
-}
+export type PendingCommand = RunCommand;
 
 // Hands a script picked from the single view's terminal header over to the grid
 // view: command cells live only in the grid, so the single view stashes the pick

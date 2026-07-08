@@ -88,10 +88,29 @@ function resolveButton(button: HeaderButton, ctx: HeaderContext): ResolvedButton
   const resolved: ResolvedButton = { id: button.id, label: button.label, run: button.run };
   if (button.emoji) resolved.emoji = button.emoji;
   if (button.icon) resolved.icon = button.icon;
-  if (button.cmd) resolved.cmd = substitute(button.cmd, ctx);
   if (button.text) resolved.text = substitute(button.text, ctx);
   if (button.open) resolved.open = resolveOpen(button.open, ctx);
-  return resolved;
+  return resolved; // shell `cmd` is deliberately not resolved here — see resolveButtonCommand
+}
+
+// Like `substitute`, but each ${var} value is passed through `quote` before insertion. Used to build a
+// shell command whose context values (branch/repo/task) may contain metacharacters: the command template
+// is trusted config, so only the substituted values are escaped.
+export function substituteShell(text: string, ctx: HeaderContext, quote: (value: string) => string): string {
+  return text.replace(VAR_RE, (whole, name: string) => {
+    const value = varValue(ctx, name);
+    return value === undefined ? whole : quote(value);
+  });
+}
+
+// Resolve a shell button's command by id at exec time. Authorization is membership in the user's trusted
+// config — the button must exist and be run:"shell". It deliberately does NOT re-check `when`: the exec
+// context is built entirely from client input (cwd/agent/model/session), so `when` can't be a server-side
+// gate; it's a display-time visibility filter (applied in resolveHeader for /api/header). The security
+// boundary is "the command is in the user's config" + the same-origin guard on /ws/run.
+export function resolveButtonCommand(config: HeaderConfig, ctx: HeaderContext, buttonId: string, quote: (value: string) => string): string | null {
+  const button = config.buttons.find((b) => b.id === buttonId && b.run === "shell");
+  return button?.cmd ? substituteShell(button.cmd, ctx, quote) : null;
 }
 
 function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null {
@@ -100,9 +119,7 @@ function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null 
 }
 
 export function resolveHeader(config: HeaderConfig, ctx: HeaderContext): ResolvedHeader {
-  // `run:"shell"` dispatch is not wired yet (it needs an id-based exec route); suppress those buttons so a
-  // configured shell button never renders as actionable-but-inert. Drop this `run !== "shell"` clause when shell lands.
-  const buttons = config.buttons.filter((b) => b.run !== "shell" && evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
+  const buttons = config.buttons.filter((b) => evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
   const chips = config.chips === null ? null : config.chips.map((c) => resolveChip(c, ctx)).filter((c): c is ResolvedChip => c !== null);
   return { buttons, chips };
 }

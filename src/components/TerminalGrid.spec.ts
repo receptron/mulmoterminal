@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import type { Cell } from "./gridTabs";
+import type { RunCommand } from "./runCommand";
 
 // Stub the cells so the page renderer can be tested without Terminal/xterm/pub-sub.
 vi.mock("./TerminalCell.vue", () => ({
@@ -91,7 +92,7 @@ describe("TerminalGrid (page renderer)", () => {
 });
 
 describe("TerminalGrid command cells", () => {
-  const CMD = { index: 1, label: "Dev server", cwd: "/work/proj" };
+  const CMD: RunCommand = { source: "script", index: 1, label: "Dev server", cwd: "/work/proj" };
 
   it("renders a CommandCell (not a TerminalCell) for a cell carrying a command", () => {
     const w = mountGrid([cmdCell(3, CMD)]);

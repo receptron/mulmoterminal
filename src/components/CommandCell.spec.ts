@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import CommandCell from "./CommandCell.vue";
+import type { RunCommand } from "./runCommand";
 
 // Stub the terminal so no xterm/WebSocket is needed; it forwards the props the cell
 // passes (command/connectKey), can emit "exit" to drive the re-run UI, and exposes
@@ -21,7 +22,7 @@ vi.mock("./Terminal.vue", () => ({
   },
 }));
 
-const COMMAND = { index: 2, label: "Dev server", cwd: "/work/proj" };
+const COMMAND: RunCommand = { source: "script", index: 2, label: "Dev server", cwd: "/work/proj" };
 const mountCell = () => mount(CommandCell, { props: { expanded: false, command: COMMAND, home: "/work" } });
 const term = (w: ReturnType<typeof mount>) => w.findComponent({ name: "TerminalView" });
 const jsonResponse = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });

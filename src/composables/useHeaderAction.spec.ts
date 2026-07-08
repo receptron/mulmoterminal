@@ -60,9 +60,9 @@ describe("runHeaderButton", () => {
     expect(m.filesGotoIndex).toHaveBeenLastCalledWith("/c");
   });
 
-  it("shell → no-op warn until the command-cell phase", () => {
+  it("shell → defensive no-op warn (Terminal.vue emits `run` instead; server suppresses shell here)", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    runHeaderButton(btn({ run: "shell", cmd: "yarn lint" }), "single", "/x");
+    runHeaderButton(btn({ run: "shell" }), "single", "/x");
     expect(m.submitText).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
