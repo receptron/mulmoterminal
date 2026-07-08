@@ -58,6 +58,7 @@ import { mountOpenDirRoute } from "./open-dir.js";
 import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
+import { mountCommandSummaryRoute } from "./command-summary.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
@@ -1172,6 +1173,11 @@ mountWorktreeRoutes(app, { isAllowedOrigin });
 // path(s) — how a browser tab inserts a real filesystem path into the terminal
 // (the browser hides paths from drag/drop and <input type=file>).
 mountPickFileRoute(app, { isAllowedOrigin });
+
+// POST /api/command/summarize runs `claude -p` headless over a Run cell's captured
+// terminal output and returns a short Errors/Warnings/cause/fix summary (issue #246).
+// Same-origin guarded like the other local-action routes.
+mountCommandSummaryRoute(app, { isAllowedOrigin });
 
 // POST /api/remote-host/connect|disconnect + GET /status — start/stop the
 // Firestore host loop from the toolbar Connect control. Same-origin guarded like

@@ -61,6 +61,7 @@ server, and opens the browser. For local development from a clone, see
 - [Server API specification](#server-api-specification)
   - [HTTP: `GET /api/sessions`](#http-get-apisessions)
   - [HTTP: `GET /api/scripts`](#http-get-apiscripts)
+  - [HTTP: `POST /api/command/summarize`](#http-post-apicommandsummarize)
   - [HTTP: `POST /api/hook`](#http-post-apihook)
   - [WebSocket: `/ws` (terminal)](#websocket-ws-terminal)
   - [WebSocket: `/ws/run` (command terminal)](#websocket-wsrun-command-terminal)
@@ -342,6 +343,13 @@ offers a **↻ re-run**. The browser only ever sends the script's **index** + it
 directory; the server reads that directory's `script.json` and resolves the
 command, so the file is the allowlist of what can run.
 
+Each command cell also has a **✦ Summarize** button: click it to send the cell's
+captured output to `claude -p` (headless) and get a short **Errors / Warnings /
+likely cause / suggested fix** note in a panel — handy when a build or install
+buries the one failing line in thousands. It's manual (never auto-runs) and analyzes
+the last 32 KB of output. See
+[`POST /api/command/summarize`](#http-post-apicommandsummarize).
+
 ---
 
 ## Files view (browse & edit)
@@ -417,6 +425,33 @@ position the client sends back to `/ws/run`).
 
 A missing or invalid `script.json` is **not** an error — it yields an empty
 `scripts` array.
+
+### HTTP: `POST /api/command/summarize`
+
+Runs `claude -p` **headless** over a command cell's captured terminal output and
+returns a short summary (Errors / Warnings / likely cause / suggested fix). Backs the
+**✦ Summarize** button on a Run cell (see [Scripts (Run menu)](#scripts-run-menu)).
+The browser sends the cell's xterm buffer as `log`; the server truncates it to the
+last **32 KB** (the tail, where errors + the exit line live), runs the CLI with the
+log piped on stdin (argv — no shell), and returns its answer. Same-origin guarded.
+
+**Request `application/json`**:
+
+```jsonc
+{ "log": "npm ERR! cannot find module 'foo'\n..." }
+```
+
+**Response `200 application/json`**:
+
+```jsonc
+{
+  "summary": "Errors: cannot find module 'foo'\nSuggested fix: run `yarn add foo`",
+  "truncated": false // true when the log exceeded 32 KB and only the tail was analyzed
+}
+```
+
+Empty output returns a `{ summary }` note rather than calling the CLI. Errors:
+`400` (missing `log`), `403` (disallowed origin), `502` (the `claude` run failed).
 
 ### HTTP: `POST /api/hook`
 

@@ -388,6 +388,17 @@ export function focus(key: string) {
   conns.get(key)?.term.focus();
 }
 
+// Read a slot's xterm buffer (scrollback + viewport) as plain text — used to hand a
+// command cell's captured output to the AI summariser. Each line is trailing-trimmed
+// by translateToString; trailing blank lines are dropped. "" for an unknown slot.
+export function readBuffer(key: string): string {
+  const c = conns.get(key);
+  if (!c) return "";
+  const buf = c.term.buffer.active;
+  const lines = Array.from({ length: buf.length }, (_, i) => buf.getLine(i)?.translateToString(true) ?? "");
+  return lines.join("\n").trimEnd();
+}
+
 // Refit to the current host size and push the new dimensions to the PTY.
 export function fit(key: string) {
   const c = conns.get(key);
