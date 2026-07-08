@@ -165,7 +165,12 @@ function submitText(text: string): boolean {
 function terminate() {
   conn.terminate(slotKey);
 }
-defineExpose({ submitText, terminate });
+// The current xterm buffer as plain text, so a command cell can send its captured
+// output to the AI summariser.
+function readOutput(): string {
+  return conn.readBuffer(slotKey);
+}
+defineExpose({ submitText, terminate, readOutput });
 
 // Insert text (a path, or space-joined paths) at the terminal cursor via the
 // normal input channel — no trailing CR, so the user reviews and submits.
