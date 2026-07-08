@@ -65,7 +65,8 @@ export interface ResolvedButton {
   icon?: string;
   label: string;
   run: RunType;
-  cmd?: string;
+  // No `cmd`: a shell button's command is never sent to the client — it's re-resolved server-side by id
+  // at exec time (see resolveButtonCommand), so the browser never holds a raw command.
   text?: string;
   open?: OpenTarget;
 }

@@ -9,6 +9,7 @@ import { badgeStyleFor } from "./dirBadge";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
+import type { RunCommand } from "./runCommand";
 import TimelineOverlay from "./TimelineOverlay.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
@@ -66,7 +67,7 @@ const emit = defineEmits<{
   (e: "session" | "cwd" | "record-cwd" | "remove-preset", value: string): void;
   // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
   // terminal's header menu, which must NOT replace the session — it runs in a new cell.
-  (e: "run" | "runSpare", value: { index: number; label: string; cwd: string | null }): void;
+  (e: "run" | "runSpare", value: RunCommand): void;
   // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
   (e: "launch", value: LaunchPick): void;
   // Swap this cell left (-1) or right (+1) in manual sort mode.
@@ -345,7 +346,7 @@ async function loadScripts() {
 }
 
 function runScript(s: RunnableScript) {
-  emit("run", { index: s.index, label: s.label, cwd: scriptsCwd.value ?? (dirInput.value.trim() || props.defaultCwd) });
+  emit("run", { source: "script", index: s.index, label: s.label, cwd: scriptsCwd.value ?? (dirInput.value.trim() || props.defaultCwd) });
 }
 
 // Per-agent isolation: when the dir is a git repo, the launcher can start claude in

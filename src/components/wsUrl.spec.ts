@@ -49,6 +49,25 @@ describe("buildRunWsUrl", () => {
     expect(url.startsWith("wss://")).toBe(true);
     expect(new URL(url).searchParams.get("index")).toBe("0");
   });
+
+  it("targets /ws/run with a header button id + session context (no index)", () => {
+    const url = buildRunWsUrl({ host: "h", secure: false, cwd: "/work/proj", buttonId: "pr", session: "s1", agent: "codex", model: "claude-opus-4-8" });
+    const q = new URL(url).searchParams;
+    expect(q.get("buttonId")).toBe("pr");
+    expect(q.get("cwd")).toBe("/work/proj");
+    expect(q.get("session")).toBe("s1");
+    expect(q.get("agent")).toBe("codex");
+    expect(q.get("model")).toBe("claude-opus-4-8");
+    expect(q.get("index")).toBeNull();
+  });
+
+  it("omits an absent session/model for a button command", () => {
+    const q = new URL(buildRunWsUrl({ host: "h", secure: false, buttonId: "b", session: null, agent: "claude", model: null })).searchParams;
+    expect(q.get("buttonId")).toBe("b");
+    expect(q.get("agent")).toBe("claude");
+    expect(q.has("session")).toBe(false);
+    expect(q.has("model")).toBe(false);
+  });
 });
 
 describe("buildLaunchWsUrl", () => {

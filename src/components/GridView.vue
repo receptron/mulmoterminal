@@ -29,6 +29,7 @@ import {
   type GridState,
   type CellStatus,
 } from "./gridTabs";
+import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
@@ -119,9 +120,9 @@ const onCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, u
 const onAgent = (uid: number, agent: "claude" | "codex") => (state.value = setCellAgent(state.value, uid, agent));
 const onClose = (uid: number) => (state.value = closeCell(state.value, uid));
 const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value, uid));
-const onRun = (uid: number, command: { index: number; label: string; cwd: string | null }) => (state.value = runCommand(state.value, uid, command));
+const onRun = (uid: number, command: RunCommand) => (state.value = runCommand(state.value, uid, command));
 // A running cell's header Run menu: launch in a spare cell so the session survives.
-const onRunSpare = (command: { index: number; label: string; cwd: string | null }) => (state.value = runScriptInNewCell(state.value, command));
+const onRunSpare = (command: RunCommand) => (state.value = runScriptInNewCell(state.value, command));
 // The empty cell launcher picked a configured program (shell/codex/…): turn it into a
 // persistent launcher cell. Its session id arrives later via onSession.
 const onLaunch = (uid: number, pick: { index: number; label: string; cwd: string | null }) =>
