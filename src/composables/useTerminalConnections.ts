@@ -24,6 +24,27 @@ import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } 
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
+// Shift+Enter must insert a NEWLINE in the prompt, not submit. xterm sends "\r" for
+// both Enter and Shift+Enter, so the PTY can't tell them apart — we intercept the key
+// and send the sequence Claude Code reads as a newline (Meta/Alt+Enter = ESC + CR).
+export const NEWLINE_SEQUENCE = "\x1b\r";
+type ModifierKeyEvent = Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey">;
+export function shiftEnterNewline(e: ModifierKeyEvent): string | null {
+  const isShiftEnter = e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
+  return isShiftEnter ? NEWLINE_SEQUENCE : null;
+}
+
+// The xterm custom key handler: on Shift+Enter, `send` the newline and return false
+// (cancel xterm's default \r); otherwise return true so xterm handles the key normally.
+export function makeShiftEnterHandler(send: (data: string) => void): (e: ModifierKeyEvent) => boolean {
+  return (e) => {
+    const newline = shiftEnterNewline(e);
+    if (newline === null) return true;
+    send(newline);
+    return false;
+  };
+}
+
 // What a slot connects to. Mirrors the relevant Terminal.vue props; a connectKey
 // change (session switch / relaunch) hands a fresh target to retarget().
 export interface ConnTarget {
@@ -150,6 +171,13 @@ function ensure(key: string, target: ConnTarget): Conn {
       c.ws.send(JSON.stringify({ type: "input", data }));
     }
   });
+  // Shift+Enter → newline (not submit): send the sequence ourselves and suppress the
+  // \r xterm would otherwise emit for it (returning false cancels the default).
+  term.attachCustomKeyEventHandler(
+    makeShiftEnterHandler((data) => {
+      if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data }));
+    }),
+  );
   return c;
 }
 
