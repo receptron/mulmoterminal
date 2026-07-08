@@ -359,8 +359,8 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         </div>
       </div>
       <p v-if="costError" class="hint cost-note">Couldn't load cost estimate.</p>
-      <p v-else-if="cost && cost.unpricedTurns > 0" class="hint cost-note">
-        {{ cost.unpricedTurns }} turn(s) used a model with no known price and are excluded.
+      <p v-else-if="cost && (cost.unpricedTurns > 0 || cost.sessionUnpricedTurns > 0)" class="hint cost-note">
+        Some turns used a model with no known price and are excluded from these estimates.
       </p>
 
       <div class="modal-foot">

@@ -170,7 +170,7 @@ async function rollupProjectCost(cwd: string): Promise<CostRollup> {
   const now = new Date();
   const monthStart_ms = startOfMonth_ms(now);
   const todayStart_ms = startOfToday_ms(now);
-  const all = await statJsonlFiles(dir).catch(() => [] as FileStat[]);
+  const all: FileStat[] = await statJsonlFiles(dir).catch(() => []);
   const inMonth = all.filter((s) => s.mtime_ms >= monthStart_ms).sort((a, b) => b.mtime_ms - a.mtime_ms);
   const capped = inMonth.slice(0, MAX_COST_FILES);
   if (inMonth.length > capped.length) {
@@ -187,19 +187,29 @@ async function rollupProjectCost(cwd: string): Promise<CostRollup> {
   );
 }
 
-// GET /api/cost?cwd=&session= → { session?, today, month, currency, unpricedTurns }.
-// today/month roll up the project's sessions; session (optional) is one transcript.
+// GET /api/cost?cwd=&session= → { session?, sessionUnpricedTurns, today, month,
+// currency, unpricedTurns }. today/month roll up the project's sessions; session
+// (optional) is one transcript. The session's OWN unpriced-turn count is reported
+// separately, since that session may fall outside the month window / file cap and so
+// isn't reflected in `unpricedTurns` (which covers the roll-up only).
 export function mountCostRoute(app: Express, deps: { resolveCwd: (cwd: string | null) => string }): void {
   app.get("/api/cost", async (req, res) => {
     const cwd = deps.resolveCwd(typeof req.query.cwd === "string" ? req.query.cwd : null);
     const sessionParam = typeof req.query.session === "string" ? req.query.session : null;
     try {
       const rollup = await rollupProjectCost(cwd);
-      const session = sessionParam && SESSION_ID_RE.test(sessionParam) ? (await readFileCost(projectSessionsDir(cwd), `${sessionParam}.jsonl`)).usd : undefined;
-      res.json({ session, today: rollup.today, month: rollup.month, currency: "USD", unpricedTurns: rollup.unpricedTurns });
+      const sessionCost = sessionParam && SESSION_ID_RE.test(sessionParam) ? await readFileCost(projectSessionsDir(cwd), `${sessionParam}.jsonl`) : null;
+      res.json({
+        session: sessionCost?.usd,
+        sessionUnpricedTurns: sessionCost?.unpricedTurns ?? 0,
+        today: rollup.today,
+        month: rollup.month,
+        currency: "USD",
+        unpricedTurns: rollup.unpricedTurns,
+      });
     } catch (err) {
       console.error("[api] /api/cost failed:", err);
-      res.json({ today: 0, month: 0, currency: "USD", unpricedTurns: 0 });
+      res.json({ today: 0, month: 0, currency: "USD", unpricedTurns: 0, sessionUnpricedTurns: 0 });
     }
   });
 }

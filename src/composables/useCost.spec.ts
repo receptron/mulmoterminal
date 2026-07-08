@@ -13,12 +13,12 @@ const stubFetch = (impl: (url: string) => { ok: boolean; json: () => Promise<unk
 
 describe("useCost", () => {
   it("loads and parses a cost payload", async () => {
-    stubFetch(() => ({ ok: true, json: async () => ({ session: 0.42, today: 1.5, month: 12.3, currency: "USD", unpricedTurns: 2 }) }));
+    stubFetch(() => ({ ok: true, json: async () => ({ session: 0.42, today: 1.5, month: 12.3, currency: "USD", unpricedTurns: 2, sessionUnpricedTurns: 1 }) }));
     const { cost, error, loading, load } = useCost();
     await load("/proj", "11111111-2222-3333-4444-555555555555");
     expect(error.value).toBe(false);
     expect(loading.value).toBe(false);
-    expect(cost.value).toEqual({ session: 0.42, today: 1.5, month: 12.3, currency: "USD", unpricedTurns: 2 });
+    expect(cost.value).toEqual({ session: 0.42, today: 1.5, month: 12.3, currency: "USD", unpricedTurns: 2, sessionUnpricedTurns: 1 });
   });
 
   it("passes cwd and session as query params", async () => {
@@ -37,7 +37,7 @@ describe("useCost", () => {
     stubFetch(() => ({ ok: true, json: async () => ({ currency: "USD" }) }));
     const { cost, load } = useCost();
     await load("/proj");
-    expect(cost.value).toEqual({ session: undefined, today: 0, month: 0, currency: "USD", unpricedTurns: 0 });
+    expect(cost.value).toEqual({ session: undefined, today: 0, month: 0, currency: "USD", unpricedTurns: 0, sessionUnpricedTurns: 0 });
   });
 
   it("flags an error on a non-ok response", async () => {

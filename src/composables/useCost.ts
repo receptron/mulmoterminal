@@ -7,7 +7,8 @@ export interface CostRollup {
   today: number;
   month: number;
   currency: string;
-  unpricedTurns: number;
+  unpricedTurns: number; // in the today/month roll-up
+  sessionUnpricedTurns: number; // in the requested session (may be outside the roll-up window)
 }
 
 const COST_FETCH_TIMEOUT_MS = 8000;
@@ -23,6 +24,7 @@ function parseCost(data: unknown): CostRollup | null {
     month: finiteNumber(data.month) ?? 0,
     currency: typeof data.currency === "string" ? data.currency : "USD",
     unpricedTurns: finiteNumber(data.unpricedTurns) ?? 0,
+    sessionUnpricedTurns: finiteNumber(data.sessionUnpricedTurns) ?? 0,
   };
 }
 
