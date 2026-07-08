@@ -4,21 +4,25 @@
 import { computed, type ComputedRef } from "vue";
 import { router } from "../router";
 
-// Where to return when the PR view closes. Captured when opening from a normal view
-// (the grid or chat) so Close restores it instead of always dropping to chat.
-let returnPath = "/";
+// The view to return to when the PR view closes rides on the history entry (router
+// state), NOT a module variable — so entering /prs via browser back/forward restores
+// that entry's own origin instead of a stale one, and a fresh/direct load falls back
+// to chat.
+const originFromHistory = (): string => {
+  const origin = router.options.history.state.returnPath;
+  return typeof origin === "string" ? origin : "/";
+};
 
-/** Open the cross-repo PR list. */
+/** Open the cross-repo PR list, remembering the view it was opened from. */
 export function prsGotoIndex(): void {
-  if (router.currentRoute.value.name !== "prs") {
-    returnPath = router.currentRoute.value.fullPath;
-  }
-  router.push("/prs");
+  const alreadyOpen = router.currentRoute.value.name === "prs";
+  const returnPath = alreadyOpen ? originFromHistory() : router.currentRoute.value.fullPath;
+  router.push({ path: "/prs", state: { returnPath } });
 }
 
 /** Close the PR view → back to the view it was opened from. */
 export function prsClose(): void {
-  router.push(returnPath);
+  router.push(originFromHistory());
 }
 
 export function usePrsView(): { isOpen: ComputedRef<boolean>; close: () => void } {

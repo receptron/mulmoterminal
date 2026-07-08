@@ -42,11 +42,30 @@ describe("usePrsView return-to-origin", () => {
     prsGotoIndex();
     await settle();
 
-    prsGotoIndex(); // re-push /prs while already open — origin must hold
+    prsGotoIndex(); // re-push /prs while already open — origin must ride along
     await settle();
 
     prsClose();
     await settle();
     expect(router.currentRoute.value.name).toBe("terminals");
+  });
+
+  // Regression (codex #273): the origin rides the history entry, so a /prs reached
+  // WITHOUT prsGotoIndex (browser back/forward, direct load) must fall back to chat —
+  // never a stale origin captured by an earlier open.
+  it("falls back to chat for a history-driven /prs, ignoring an earlier open's origin", async () => {
+    await router.push("/terminals");
+    await settle();
+    prsGotoIndex(); // captures /terminals into that entry's state
+    await settle();
+
+    await router.push("/");
+    await settle();
+    await router.push("/prs"); // fresh /prs entry, no captured origin
+    await settle();
+
+    prsClose();
+    await settle();
+    expect(router.currentRoute.value.name).toBe("chat");
   });
 });
