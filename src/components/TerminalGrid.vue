@@ -60,6 +60,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
         <CommandCell
           v-if="cell.command"
           :expanded="cell.uid === expandedUid"
+          :zoomed="zoomed"
           :command="cell.command"
           :home="home"
           :reorderable="reorderable"
@@ -72,6 +73,7 @@ const zoomed = computed(() => props.expandedUid !== null && mounted.value);
           v-else-if="cell.launcher"
           :uid="cell.uid"
           :expanded="cell.uid === expandedUid"
+          :zoomed="zoomed"
           :launcher="cell.launcher"
           :session="cell.session"
           :cwd="cell.cwd"

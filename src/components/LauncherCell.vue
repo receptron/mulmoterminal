@@ -14,6 +14,9 @@ import type { CellStatus, CellLauncher } from "./gridTabs";
 const props = defineProps<{
   uid: number;
   expanded: boolean;
+  // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
+  // (unless it's the zoomed one). Only then does a header-background click zoom it.
+  zoomed?: boolean;
   launcher: CellLauncher;
   session: string | null;
   cwd: string | null;
@@ -30,9 +33,11 @@ const emit = defineEmits<{
   (e: "session", id: string): void;
 }>();
 
-// Click the header background to zoom (switch to) this cell; buttons keep their action.
+// A filmstrip thumbnail zooms (switches to) this cell on a header-background click;
+// in the normal grid the header is inert (only the ⤢ button zooms). Buttons keep their action.
+const filmstrip = computed(() => !!props.zoomed && !props.expanded);
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, filmstrip.value)) emit("toggle-expand");
 }
 
 // connectKey bump re-launches after the process exits (relaunch button).
@@ -59,7 +64,7 @@ function relaunch() {
 
 <template>
   <div class="cell">
-    <div class="cell-header" :class="{ 'is-zoomable': !expanded }" @click="onHeaderClick">
+    <div class="cell-header" :class="{ 'is-zoomable': filmstrip }" @click="onHeaderClick">
       <span class="cell-dot" :class="finished ? 'is-idle' : 'is-working'" :title="finished ? 'Exited' : 'Running…'" />
       <span v-if="dirDisplay" class="cell-dir" :title="cwd ?? ''"
         ><span class="cell-dir-path">{{ dirDisplay }}</span></span

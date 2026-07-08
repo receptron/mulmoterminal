@@ -11,6 +11,9 @@ import type { CellStatus } from "./gridTabs";
 // (the server resolves it); the command runs in `command.cwd`.
 const props = defineProps<{
   expanded: boolean;
+  // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
+  // (unless it's the zoomed one). Only then does a header-background click zoom it.
+  zoomed?: boolean;
   command: { index: number; label: string; cwd: string | null };
   home: string | null;
   // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
@@ -128,15 +131,17 @@ function copyPrompt() {
     });
 }
 
-// Click the header background to zoom (switch to) this cell; buttons keep their action.
+// A filmstrip thumbnail zooms (switches to) this cell on a header-background click;
+// in the normal grid the header is inert (only the ⤢ button zooms). Buttons keep their action.
+const filmstrip = computed(() => !!props.zoomed && !props.expanded);
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, filmstrip.value)) emit("toggle-expand");
 }
 </script>
 
 <template>
   <div class="cell">
-    <div class="cell-header" :class="{ 'is-zoomable': !expanded }" @click="onHeaderClick">
+    <div class="cell-header" :class="{ 'is-zoomable': filmstrip }" @click="onHeaderClick">
       <span class="cell-dot" :class="finished ? 'is-idle' : 'is-working'" :title="finished ? 'Finished' : 'Running…'" />
       <span v-if="dirDisplay" class="cell-dir" :title="command.cwd ?? ''"
         ><span class="cell-dir-path">{{ dirDisplay }}</span></span
