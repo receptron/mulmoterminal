@@ -4,5 +4,8 @@
 // already-zoomed cell ignores stray header clicks (it restores via its ⤡ button).
 export function shouldZoomOnHeaderClick(target: EventTarget | null, expanded: boolean): boolean {
   if (expanded) return false;
-  return !(target instanceof HTMLElement && target.closest("button"));
+  // `Element` (not `HTMLElement`): a click can land on an SVG icon inside a button
+  // (e.g. the GitHub button), and SVGElement isn't an HTMLElement — but it IS an
+  // Element with closest(), so this still walks up to the enclosing button.
+  return !(target instanceof Element && target.closest("button"));
 }
