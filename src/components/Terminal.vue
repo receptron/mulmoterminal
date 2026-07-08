@@ -12,6 +12,7 @@ import RunMenu from "./RunMenu.vue";
 import GitBranchChip from "./GitBranchChip.vue";
 import { filesGotoIndex } from "../composables/useFilesView";
 import { useHeaderButtons } from "../composables/useHeaderButtons";
+import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
 
 // `null` => start a fresh session; otherwise resume the given session id.
@@ -88,6 +89,11 @@ const status = computed(() => conn.connView.get(slotKey)?.status ?? "connecting"
 // Run menu so it lists THAT directory's scripts. Falls back to the requested cwd.
 const serverCwd = computed(() => conn.connView.get(slotKey)?.serverCwd ?? props.cwd ?? null);
 
+// The running model, so header buttons/chips can substitute `${model}`.
+const { context: sessionContext } = useSessionContext(
+  computed(() => props.sessionId),
+  serverCwd,
+);
 // User-configured header action buttons for this session's dir (GET /api/header). Additive: with no
 // config the list is empty so the header is unchanged. `input`/`open` run client-side; `shell` is
 // wired in a later phase.
@@ -95,6 +101,7 @@ const { buttons: headerButtons } = useHeaderButtons({
   cwd: serverCwd,
   session: computed(() => props.sessionId),
   agent: computed<"claude" | "codex">(() => (props.codex ? "codex" : "claude")),
+  model: computed(() => sessionContext.value?.model ?? null),
 });
 // Git status chip — single view only. In the grid the embedding TerminalCell shows
 // its own chip, so null the cwd here to skip redundant polling (status stays null).
