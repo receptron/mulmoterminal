@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { registerChatOpener, startCollectionChat, setActiveChatAgent } from "./useChatLauncher";
+import { registerChatOpener, startCollectionChat, launchAgent } from "./useChatLauncher";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
   const fn = vi.fn((url: string, init?: RequestInit) => {
@@ -14,7 +14,7 @@ describe("startCollectionChat", () => {
   beforeEach(() => registerChatOpener(vi.fn()));
   afterEach(() => {
     vi.unstubAllGlobals();
-    setActiveChatAgent("claude"); // reset module state so the codex test doesn't leak
+    launchAgent.value = "claude"; // reset shared state so the codex test doesn't leak
   });
 
   it("spawns a chat seeded with the prompt and selects it (hidden=false)", async () => {
@@ -32,8 +32,8 @@ describe("startCollectionChat", () => {
     expect(opener).toHaveBeenCalledWith("sess-1", { draft: false, agent: "claude" });
   });
 
-  it("spawns a codex chat (auto-run, draft forced off) when the active agent is codex", async () => {
-    setActiveChatAgent("codex");
+  it("spawns a codex chat (auto-run, draft forced off) when the launch agent is codex", async () => {
+    launchAgent.value = "codex";
     const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "cx-1", agent: "codex" } }) }));
     const opener = vi.fn();
     registerChatOpener(opener);

@@ -11,6 +11,7 @@ import PluginFrame from "./PluginFrame.vue";
 import { collectionShadowCss } from "../collectionShadowCss";
 import { useCollectionBrowse } from "../composables/useCollectionBrowse";
 import { pushCollectionTeleportTarget, popCollectionTeleportTarget } from "../composables/collectionUi";
+import { launchAgent } from "../composables/useChatLauncher";
 
 // Navigation is the toolbar's job (the Chat tab closes this; Collections / favorite
 // tabs switch what it shows), so the overlay itself carries no chrome — it just fills
@@ -51,12 +52,39 @@ onMounted(() => window.addEventListener("keydown", onKeydown));
 
 <template>
   <div v-if="isOpen" class="browse-overlay" role="region" aria-label="Collections">
-    <PluginFrame :css="collectionShadowCss" height="100%">
-      <div ref="probe" style="height: 100%">
-        <CollectionsIndexView v-if="view.mode === 'index'" />
-        <CollectionView v-else-if="view.mode === 'detail'" />
+    <div class="browse-bar">
+      <span class="browse-bar-label">Launch with</span>
+      <div class="agent-toggle" role="radiogroup" aria-label="Launch agent">
+        <button
+          type="button"
+          class="agent-btn"
+          :class="{ active: launchAgent === 'claude' }"
+          role="radio"
+          :aria-checked="launchAgent === 'claude'"
+          @click="launchAgent = 'claude'"
+        >
+          Claude
+        </button>
+        <button
+          type="button"
+          class="agent-btn"
+          :class="{ active: launchAgent === 'codex' }"
+          role="radio"
+          :aria-checked="launchAgent === 'codex'"
+          @click="launchAgent = 'codex'"
+        >
+          Codex
+        </button>
       </div>
-    </PluginFrame>
+    </div>
+    <div class="browse-body">
+      <PluginFrame :css="collectionShadowCss" height="100%">
+        <div ref="probe" style="height: 100%">
+          <CollectionsIndexView v-if="view.mode === 'index'" />
+          <CollectionView v-else-if="view.mode === 'detail'" />
+        </div>
+      </PluginFrame>
+    </div>
   </div>
 </template>
 
@@ -70,5 +98,55 @@ onMounted(() => window.addEventListener("keydown", onKeydown));
   bottom: 0;
   z-index: 50;
   background: var(--bg-deep);
+  display: flex;
+  flex-direction: column;
+}
+
+/* A thin bar picking which agent a collection action / chat launches. */
+.browse-bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: system-ui, sans-serif;
+}
+.browse-bar-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+}
+.agent-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--bg-panel);
+}
+.agent-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font:
+    500 12px system-ui,
+    sans-serif;
+  padding: 3px 14px;
+  border-radius: 5px;
+}
+.agent-btn:hover {
+  color: var(--text);
+}
+.agent-btn.active {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.browse-body {
+  flex: 1;
+  min-height: 0;
 }
 </style>

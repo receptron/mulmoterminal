@@ -12,16 +12,16 @@
 // submitting, so the user can review / edit before pressing Enter; without it the
 // prompt is auto-sent as claude's first turn (startChat / actions).
 
-type Agent = "claude" | "codex";
+import { ref } from "vue";
+
+export type Agent = "claude" | "codex";
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
 let openSessionFn: OpenSessionFn | null = null;
 
-// The single view's current agent, so a collection action spawns the SAME agent (codex actions
-// run in codex). App.vue keeps this in sync.
-let activeAgent: Agent = "claude";
-export function setActiveChatAgent(agent: Agent): void {
-  activeAgent = agent;
-}
+// Which agent a collection action / chat spawns. Bound to the Claude/Codex toggle in the
+// collection browser (CollectionsBrowseOverlay); persists across opens. Reactive so the toggle
+// reflects it.
+export const launchAgent = ref<Agent>("claude");
 
 /** App.vue registers how to make a session visible (close the overlay + select it).
  *  `opts.draft` lets it show a "preparing draft…" hint while claude boots + the text
@@ -35,14 +35,15 @@ export function registerChatOpener(fn: OpenSessionFn): void {
 export async function startCollectionChat(prompt: string, opts: { hidden?: boolean; draft?: boolean } = {}): Promise<void> {
   const message = prompt.trim();
   if (!message) return;
+  const agent = launchAgent.value;
   // codex has no editable-draft path (it auto-runs the seed), so a draft only applies to claude.
-  const draft = activeAgent === "claude" && opts.draft === true;
+  const draft = agent === "claude" && opts.draft === true;
   let chatId: string | undefined;
   try {
     const res = await fetch("/api/plugin/spawnBackgroundChat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ message, draft, agent: activeAgent }),
+      body: JSON.stringify({ message, draft, agent }),
     });
     if (!res.ok) {
       console.error(`[startChat] spawn failed: HTTP ${res.status}`);
@@ -55,5 +56,5 @@ export async function startCollectionChat(prompt: string, opts: { hidden?: boole
     return;
   }
   // hidden=false → bring the new terminal session into view for the user (as the right agent).
-  if (chatId && !opts.hidden) openSessionFn?.(chatId, { draft, agent: activeAgent });
+  if (chatId && !opts.hidden) openSessionFn?.(chatId, { draft, agent });
 }
