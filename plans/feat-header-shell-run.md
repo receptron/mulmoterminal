@@ -28,8 +28,10 @@ single view hands off to a grid command cell (same as the Run menu), grid cells 
   - `resolveButton`: **omit `cmd`** from the resolved output (never leak the command to the client).
   - add `substituteShell(text, ctx, quote)` — like `substitute` but each `${var}` value is passed through
     `quote`.
-  - add `resolveButtonCommand(config, ctx, buttonId, quote)` — find the shell button by id whose `when`
-    passes, return its shell-escaped resolved `cmd`, else `null`.
+  - add `resolveButtonCommand(config, ctx, buttonId, quote)` — find the `run:"shell"` button by id, return
+    its shell-escaped resolved `cmd`, else `null`. Authorization is **config membership**, not `when`: the
+    exec context is built from client input (cwd/agent/model/session), so `when` can't be a server gate —
+    it stays a display-time filter (in `resolveHeader`). The boundary is trusted-config + the origin guard.
 - `server/index.ts`
   - `shellQuoteFor(platform)` — POSIX `'…'` with `'\''` escaping; PowerShell `'…'` with `''` escaping.
   - `runWss` connection: if `?buttonId=` is present, resolve via `loadHeaderConfig` + `buildHeaderContext`

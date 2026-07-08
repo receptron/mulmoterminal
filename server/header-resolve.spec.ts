@@ -120,12 +120,13 @@ describe("resolveButtonCommand", () => {
     chips: null,
   });
 
-  it("resolves a shell button's command by id with escaped ${vars}", () => {
+  it('resolves any run:"shell" button by id with escaped ${vars} (when is a display filter, not an exec gate)', () => {
     expect(resolveButtonCommand(cfg(), ctx({ branch: "feat/x" }), "pr", posixQuote)).toBe("gh pr create --head 'feat/x'");
+    // "hidden" resolves even though its when (agent==codex) is false for this claude ctx: exec isn't gated on when.
+    expect(resolveButtonCommand(cfg(), ctx(), "hidden", posixQuote)).toBe("echo hi");
   });
-  it("returns null for an unknown id, a non-shell button, or a button whose `when` is false", () => {
+  it("returns null for an unknown id or a non-shell button", () => {
     expect(resolveButtonCommand(cfg(), ctx(), "nope", posixQuote)).toBeNull();
     expect(resolveButtonCommand(cfg(), ctx(), "open", posixQuote)).toBeNull();
-    expect(resolveButtonCommand(cfg(), ctx(), "hidden", posixQuote)).toBeNull(); // when: agent==codex, ctx is claude
   });
 });

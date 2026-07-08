@@ -103,12 +103,14 @@ export function substituteShell(text: string, ctx: HeaderContext, quote: (value:
   });
 }
 
-// Resolve a shell button's command by id at exec time: the button must exist, be run:"shell", carry a
-// cmd, and pass its `when`. Returns the shell-escaped command, or null (unknown id / not shell / hidden).
+// Resolve a shell button's command by id at exec time. Authorization is membership in the user's trusted
+// config — the button must exist and be run:"shell". It deliberately does NOT re-check `when`: the exec
+// context is built entirely from client input (cwd/agent/model/session), so `when` can't be a server-side
+// gate; it's a display-time visibility filter (applied in resolveHeader for /api/header). The security
+// boundary is "the command is in the user's config" + the same-origin guard on /ws/run.
 export function resolveButtonCommand(config: HeaderConfig, ctx: HeaderContext, buttonId: string, quote: (value: string) => string): string | null {
-  const button = config.buttons.find((b) => b.id === buttonId);
-  if (!button || button.run !== "shell" || !button.cmd || !evalWhen(button.when, ctx)) return null;
-  return substituteShell(button.cmd, ctx, quote);
+  const button = config.buttons.find((b) => b.id === buttonId && b.run === "shell");
+  return button?.cmd ? substituteShell(button.cmd, ctx, quote) : null;
 }
 
 function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null {
