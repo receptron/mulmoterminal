@@ -74,6 +74,10 @@ export function evalWhen(expr: string | undefined, ctx: HeaderContext): boolean 
 function resolveOpen(open: OpenTarget, ctx: HeaderContext): OpenTarget {
   const out: OpenTarget = {};
   if (open.url) out.url = substitute(open.url, ctx);
+  // `reveal`/`files` are intentionally NOT confined to the session cwd (accepted trust boundary): per-project
+  // config is the same trust surface as script.json (which already runs arbitrary shell from <cwd>), and
+  // revealing a sibling worktree/related repo is a real workflow. Any hardening should be a cross-cutting
+  // "trusted directories" gate that also covers script.json, not a header-only path check. See the spec.
   if (open.reveal) out.reveal = substitute(open.reveal, ctx);
   if (open.files) out.files = substitute(open.files, ctx);
   if (open.view) out.view = open.view;

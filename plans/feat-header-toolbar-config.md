@@ -167,12 +167,21 @@ The DSL is stored/edited as text and parsed to the JSON model; the settings UI c
 - Transition: keep reading `script.json` and auto-bridge its entries to `run:"shell"` buttons; the ▶ Run
   menu is replaced by those buttons and `script.json` is deprecated (removed after migration).
 
-### Security
+### Security & trust boundary
 
-- `run:"shell"` / `run:"input"` go through the existing sanitize path (`sanitizeScripts`, the flag-smuggle
-  guards in `server/index.ts`). `run:"input"` injects into the PTY via the existing draft/paste mechanism.
-- `run:"open"` `url` keeps the http/https scheme allowlist; `reveal`/`files` resolve paths **inside the
-  session's cwd** (same confinement as `dir-config`/`FilesOverlay`).
+- `run:"shell"` is **not dispatched yet**: resolved shell buttons are dropped server-side until an
+  id-based, **argv-based** exec route lands (templated `${var}` values are never interpolated into
+  `shell -lc`). `run:"input"` injects into the PTY via the existing draft/paste mechanism.
+- `run:"open"` `url` keeps the http/https scheme allowlist. `/api/open-dir` (reveal) already enforces
+  same-origin + absolute path + `isDirectory` + argv (no shell).
+- **`reveal`/`files` paths are intentionally NOT confined to the session cwd** (accepted trust boundary).
+  Per-project `.mulmoterminal.json` is the same trust surface as `script.json`, which already runs
+  arbitrary shell from `<cwd>`; revealing/listing a folder is strictly weaker, and revealing a sibling
+  worktree or related repo (`${dir}` is only the default) is a legitimate workflow. Opening an untrusted
+  repo in mulmoterminal already trusts its `script.json` — the header adds no capability beyond that.
+- Hardening against untrusted-repo config, if wanted, belongs in a **cross-cutting "trusted directories"
+  gate that also covers `script.json`**, not a header-only lexical/realpath check that would regress
+  worktree reveal while `script.json` stays open. Tracked as a separate follow-up.
 - Variables are server-resolved from trusted session state; v1 has no `${input}`, so no user-supplied
   substitution.
 
