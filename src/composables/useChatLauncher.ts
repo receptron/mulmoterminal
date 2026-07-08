@@ -24,7 +24,7 @@ export function registerChatOpener(fn: OpenSessionFn): void {
 
 /** Spawn a new chat seeded with `prompt`; when not hidden, make it visible. With
  *  `draft`, the prompt is prefilled in the input box but NOT submitted. */
-export async function startCollectionChat(prompt: string, opts: { hidden?: boolean; draft?: boolean; cwd?: string | null } = {}): Promise<void> {
+export async function startCollectionChat(prompt: string, opts: { hidden?: boolean; draft?: boolean } = {}): Promise<void> {
   const message = prompt.trim();
   if (!message) return;
   let chatId: string | undefined;
@@ -32,9 +32,7 @@ export async function startCollectionChat(prompt: string, opts: { hidden?: boole
     const res = await fetch("/api/plugin/spawnBackgroundChat", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      // `cwd` runs the new session in that dir (e.g. a command cell's cwd) so Claude
-      // can act on the files there; omitted → the server's workspace default.
-      body: JSON.stringify({ message, draft: opts.draft === true, cwd: opts.cwd ?? undefined }),
+      body: JSON.stringify({ message, draft: opts.draft === true }),
     });
     if (!res.ok) {
       console.error(`[startChat] spawn failed: HTTP ${res.status}`);

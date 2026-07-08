@@ -21,9 +21,6 @@ vi.mock("./Terminal.vue", () => ({
   },
 }));
 
-vi.mock("../composables/useChatLauncher", () => ({ startCollectionChat: vi.fn() }));
-import { startCollectionChat } from "../composables/useChatLauncher";
-
 const COMMAND = { index: 2, label: "Dev server", cwd: "/work/proj" };
 const mountCell = () => mount(CommandCell, { props: { expanded: false, command: COMMAND, home: "/work" } });
 const term = (w: ReturnType<typeof mount>) => w.findComponent({ name: "TerminalView" });
@@ -93,8 +90,9 @@ describe("CommandCell summarize", () => {
     expect(w.find(".cell-summary-text").text()).toContain("missing module foo");
   });
 
-  it("continues in Claude: seeds a draft session in the command's cwd with the summary", async () => {
-    vi.mocked(startCollectionChat).mockClear();
+  it("copies the command + summary as a prompt to the clipboard", async () => {
+    const writeText = vi.fn<(text: string) => Promise<void>>(() => Promise.resolve());
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => jsonResponse({ summary: "Errors: missing module foo", truncated: false })),
@@ -104,11 +102,13 @@ describe("CommandCell summarize", () => {
     await flushPromises();
 
     await w.find(".cell-summary-continue").trigger("click");
-    expect(startCollectionChat).toHaveBeenCalledOnce();
-    const [prompt, opts] = vi.mocked(startCollectionChat).mock.calls[0];
-    expect(prompt).toContain("Dev server"); // the command label
-    expect(prompt).toContain("missing module foo"); // the summary
-    expect(opts).toEqual({ draft: true, cwd: "/work/proj" }); // draft session in the command's dir
+    expect(writeText).toHaveBeenCalledOnce();
+    const copied = String(writeText.mock.calls[0][0]);
+    expect(copied).toContain("Dev server"); // the command label
+    expect(copied).toContain("/work/proj"); // the command's dir
+    expect(copied).toContain("missing module foo"); // the summary
+    await flushPromises();
+    expect(w.find(".cell-summary-continue").text()).toContain("Copied");
   });
 
   it("shows the truncation note when the server truncated the log", async () => {

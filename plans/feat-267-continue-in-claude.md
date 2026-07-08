@@ -1,20 +1,15 @@
-# feat #267 — サマリーから「Continue in Claude」
+# feat #267 — サマリーを「Copy as prompt」
 
-案A（確定）。Run セルの ✦ Summary パネルに「Continue in Claude」を追加し、`command.cwd` で
-編集可能な初期プロンプト付き Claude セッションを起動する。
+案A → フィードバックで **Copy 方式**に転換。Run セルの ✦ Summary パネルに「Copy as prompt」を追加し、
+command + cwd + 要約 + 続きの行を**クリップボードにコピー**。ユーザーが好きな Claude セッション
+（グリッドのセル / 単一ビュー）に貼って続ける。ビューのジャンプなし・最も柔軟。
 
 ## 実装
-- **サーバ** `server/index.ts`: `POST /api/plugin/spawnBackgroundChat` が `body.cwd` を受け取り
-  `resolveWorkspace(cwd)` で解決して `spawnClaudePty(..., cwd, ...)` に渡す（従来は CLAUDE_CWD 固定）。
-- **クライアント** `useChatLauncher.startCollectionChat(prompt, { draft, cwd })`: `cwd` を POST body に追加。
-- **UI** `CommandCell.vue`: Summary パネルにボタン。`continueInClaude()` が
-  `command.label` + 要約から簡潔な draft を作り `startCollectionChat(prompt, { draft:true, cwd:command.cwd })`。
-  既存の `registerChatOpener`（App.vue）でセッションを開く。
+- `CommandCell.vue`: `copyPrompt()` が `navigator.clipboard.writeText` で
+  `Command: <label>` / `Directory: <cwd>` / `Summary of its output:` / `<summary>` / `Follow-up:`
+  を改行付きでコピー（クリップボードは改行を保持）。ボタンは押下後 1.5s「✓ Copied」表示。
+- セッション起動・cwd 配線（spawnBackgroundChat の cwd / startCollectionChat の cwd）は撤回。
 
-## 設計判断
-- draft はサーバで**1行に平坦化**（制御バイト除去）されるため、生出力は載せず **command + 要約のみ**の簡潔な draft に。必要なら Claude が再実行して詳細を得られる。
-- 表示先は既存 opener（単一ビュー）を再利用（MVP）。グリッドセル起動は follow-up。
-- Claude 固定（Codex は follow-up）。自動「修正」（案C）は非スコープ。
-
-## 非スコープ
-- 生出力全文の受け渡し（平坦化のため）／グリッドセル起動／Codex／自動送信
+## 非スコープ（follow-up 候補）
+- グリッドセルで直接起動（②案）
+- 生出力全文の同梱 / Codex

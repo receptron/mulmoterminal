@@ -3,7 +3,6 @@ import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
-import { startCollectionChat } from "../composables/useChatLauncher";
 import type { CellStatus } from "./gridTabs";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
@@ -107,16 +106,23 @@ function closeSummary() {
   showSummary.value = false;
 }
 
-// "Continue in Claude": open a real Claude session in the command's dir, seeded with
-// an editable draft (command + summary) so the user can ask a follow-up or say "fix
-// it". The server flattens the draft to one line, so we keep it concise (the summary
-// distills the output); Claude can re-run the command for full detail if needed.
-function continueInClaude() {
-  const summary = summaryText.value.trim();
-  const prompt = summary
-    ? `About the output of \`${props.command.label}\` — summary: ${summary}. My follow-up: `
-    : `About the output of \`${props.command.label}\`: `;
-  startCollectionChat(prompt, { draft: true, cwd: props.command.cwd });
+// Copy the command + summary as a ready-to-paste prompt, so the user can drop it into
+// whatever Claude session they choose (a grid cell in this dir, the single view, …)
+// and take it from there — no forced view switch. Multi-line survives the clipboard.
+const copied = ref(false);
+function copyPrompt() {
+  const lines = [`Command: ${props.command.label}`];
+  if (props.command.cwd) lines.push(`Directory: ${props.command.cwd}`);
+  lines.push("", "Summary of its output:", summaryText.value.trim(), "", "Follow-up: ");
+  navigator.clipboard
+    .writeText(lines.join("\n"))
+    .then(() => {
+      copied.value = true;
+      setTimeout(() => (copied.value = false), 1500);
+    })
+    .catch(() => {
+      // clipboard blocked (no focus / permission) — nothing to fall back to here
+    });
 }
 
 // Click the header background to zoom (switch to) this cell; buttons keep their action.
@@ -171,8 +177,8 @@ function onHeaderClick(event: MouseEvent) {
           <pre class="cell-summary-text">{{ summaryText }}</pre>
           <p v-if="summaryTruncated" class="cell-summary-note">(long output — summarized the tail only)</p>
           <div class="cell-summary-actions">
-            <button type="button" class="cell-summary-continue" title="Open a Claude session in this dir, seeded with this context" @click="continueInClaude">
-              ✦ Continue in Claude →
+            <button type="button" class="cell-summary-continue" title="Copy this as a prompt to paste into a Claude session" @click="copyPrompt">
+              {{ copied ? "✓ Copied" : "⧉ Copy as prompt" }}
             </button>
           </div>
         </template>
