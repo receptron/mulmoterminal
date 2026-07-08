@@ -16,11 +16,30 @@ const CLAUDE_FAMILIES = [
   { match: "opus", label: "Opus" },
   { match: "sonnet", label: "Sonnet" },
   { match: "haiku", label: "Haiku" },
+  { match: "fable", label: "Fable" },
+  { match: "mythos", label: "Mythos" },
 ];
 
-// Approximate context window per model family, in tokens. A model with no entry
-// here shows its label but no % — we never guess a window.
-const CONTEXT_WINDOW_TOKENS: Record<string, number> = { opus: 200_000, sonnet: 200_000, haiku: 200_000 };
+const MILLION_TOKENS = 1_000_000;
+const K200_TOKENS = 200_000;
+// Context window per model, matched as an ordered substring list (first hit wins) against the
+// lowercased model id. The current Claude generation ships a 1M window — Opus 4.6+, Sonnet 4.6+,
+// Fable, Mythos — so those are listed explicitly; everything else (older Opus/Sonnet, all Haiku)
+// falls through to the 200k default. Add new 1M model ids here when they ship — otherwise a
+// full session over-reports (e.g. a 1M model shown against 200k reads as ~500%). A model matched
+// by neither list (a codex/other-provider id) shows its label but no % — we never guess a window.
+const CONTEXT_WINDOWS: { match: string; tokens: number }[] = [
+  { match: "opus-4-6", tokens: MILLION_TOKENS },
+  { match: "opus-4-7", tokens: MILLION_TOKENS },
+  { match: "opus-4-8", tokens: MILLION_TOKENS },
+  { match: "sonnet-4-6", tokens: MILLION_TOKENS },
+  { match: "sonnet-5", tokens: MILLION_TOKENS },
+  { match: "fable", tokens: MILLION_TOKENS },
+  { match: "mythos", tokens: MILLION_TOKENS },
+  { match: "opus", tokens: K200_TOKENS },
+  { match: "sonnet", tokens: K200_TOKENS },
+  { match: "haiku", tokens: K200_TOKENS },
+];
 const PERCENT = 100;
 
 const AGENT_NAME: Record<"claude" | "codex", string> = { claude: "Claude", codex: "Codex" };
@@ -33,8 +52,8 @@ function shortModelLabel(model: string): string {
 
 function contextWindowTokens(model: string): number | null {
   const lower = model.toLowerCase();
-  const key = Object.keys(CONTEXT_WINDOW_TOKENS).find((k) => lower.includes(k));
-  return key ? CONTEXT_WINDOW_TOKENS[key] : null;
+  const entry = CONTEXT_WINDOWS.find((w) => lower.includes(w.match));
+  return entry ? entry.tokens : null;
 }
 
 const label = computed(() => (props.model ? shortModelLabel(props.model) : null));
