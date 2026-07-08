@@ -189,3 +189,43 @@ export function sessionUsageFromJsonl(raw: string): SessionUsage {
   }
   return total;
 }
+
+// A single tool the agent ran, for the activity timeline. `summary` is a 1-line
+// description drawn from the tool's most salient input (a command, a file path, …).
+export interface TimelineEvent {
+  ts: string; // ISO timestamp of the assistant turn that issued the tool_use
+  tool: string; // tool name: Bash / Read / Edit / Write / Grep / …
+  summary: string;
+}
+
+const SUMMARY_MAX_CHARS = 140;
+
+const firstString = (...vals: unknown[]): string => {
+  for (const v of vals) if (typeof v === "string" && v.trim()) return v.trim();
+  return "";
+};
+
+// The most salient input field per tool, collapsed to one line and capped. Falls
+// back across the common input keys so an unknown tool still gets a useful summary.
+function summarizeToolInput(input: unknown): string {
+  const i = isRecord(input) ? input : {};
+  const raw = firstString(i.command, i.file_path, i.path, i.pattern, i.url, i.query, i.prompt, i.description);
+  const oneLine = raw.replace(/\s+/g, " ").trim();
+  return oneLine.length > SUMMARY_MAX_CHARS ? `${oneLine.slice(0, SUMMARY_MAX_CHARS)}…` : oneLine;
+}
+
+// Chronological tool_use events from a transcript, for the activity timeline. Each
+// assistant turn may carry several tool_use blocks; text blocks are ignored.
+export function timelineFromJsonl(raw: string): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+  for (const o of parseJsonl(raw)) {
+    if (o.type !== "assistant" || !isRecord(o.message) || !Array.isArray(o.message.content)) continue;
+    const ts = typeof o.timestamp === "string" ? o.timestamp : "";
+    for (const block of o.message.content) {
+      if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") {
+        events.push({ ts, tool: block.name, summary: summarizeToolInput(block.input) });
+      }
+    }
+  }
+  return events;
+}
