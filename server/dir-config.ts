@@ -6,6 +6,7 @@
 // clear home.
 import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
+import { sanitizeButtons, sanitizeChips, type HeaderButton, type HeaderChip } from "./header-config.js";
 
 // Mirrors the theme ids in src/composables/useTheme.ts. The server can't import the
 // Vue composable, so the whitelist is duplicated here — keep the two in sync.
@@ -67,6 +68,10 @@ export interface DirConfig {
   // Absolute path to the attention sound, resolved within cwd; null when unset or the
   // configured path is absolute / escapes the directory / doesn't exist.
   sound: string | null;
+  // Per-project terminal-header action buttons (merged over the global ones by id).
+  buttons: HeaderButton[];
+  // Per-project header display chips, or null when this dir doesn't configure them.
+  chips: HeaderChip[] | null;
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
@@ -145,6 +150,8 @@ const EMPTY: DirConfig = {
   theme: null,
   colors: null,
   sound: null,
+  buttons: [],
+  chips: null,
 };
 
 export function loadDirConfig(cwd: string): DirConfig {
@@ -166,6 +173,8 @@ export function loadDirConfig(cwd: string): DirConfig {
       theme: isThemeId(raw.theme) ? raw.theme : null,
       colors: sanitizeColors(raw.colors),
       sound: resolveDirSound(base, raw.sound),
+      buttons: sanitizeButtons(raw.buttons),
+      chips: sanitizeChips(raw.chips),
     };
   } catch {
     return EMPTY;

@@ -77,7 +77,7 @@ describe("sanitizeUserMcpServers", () => {
 });
 
 describe("loadAppConfig / saveAppConfig", () => {
-  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [] };
+  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: [], chips: null };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
@@ -87,6 +87,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       prRepos: ["o/r"],
       launchers: [{ label: "Shell", command: "$SHELL" }],
       userMcpServers: [{ id: "weather", url: "http://localhost:9000/mcp" }],
+      buttons: [{ id: "pr", label: "PR", run: "shell" as const, cmd: "gh pr create" }],
+      chips: ["dir", "git"],
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -122,6 +124,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       prRepos: ["o/r"],
       launchers: [{ label: "S", command: "sh" }],
       userMcpServers: [{ id: "ok", url: "https://x/mcp" }],
+      buttons: [],
+      chips: null,
     });
     rmSync(dir, { recursive: true, force: true });
   });

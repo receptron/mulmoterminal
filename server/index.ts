@@ -15,7 +15,9 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers } from "./config-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
+import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
+import { resolveHeader } from "./header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
@@ -1239,6 +1241,19 @@ app.get("/api/dir-config", (req, res) => {
 app.get("/api/git-status", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await gitStatus(cwd));
+});
+
+// The resolved terminal-header config (buttons + chips) for a session: global config merged with the
+// dir's, with `when` evaluated and ${vars} substituted for this session's live context. `chips:null`
+// means unconfigured, so the client keeps its default header (see plans/feat-header-toolbar-config.md).
+app.get("/api/header", async (req, res) => {
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const session = typeof req.query.session === "string" && SESSION_ID_RE.test(req.query.session) ? req.query.session : null;
+  const agent = req.query.agent === "codex" ? "codex" : "claude";
+  const model = typeof req.query.model === "string" ? req.query.model : null;
+  const config = loadHeaderConfig(cwd, getHeaderConfig());
+  const context = await buildHeaderContext(cwd, { session, agent, model });
+  res.json(resolveHeader(config, context));
 });
 
 // The tool-activity timeline for a session (what the agent ran, newest last), so a
