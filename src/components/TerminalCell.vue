@@ -7,6 +7,7 @@ import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import GitBranchChip from "./GitBranchChip.vue";
+import TimelineOverlay from "./TimelineOverlay.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
@@ -77,6 +78,8 @@ const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
 // Live git status (branch/dirty/ahead·behind) for the header chip. `refreshGit`
 // is called alongside loadDiff() so a finished turn's changes show immediately.
 const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
+// Activity timeline overlay (the header 🕘) — only meaningful for a Claude session.
+const timelineOpen = ref(false);
 // The launch form's editable dir. Prefer this cell's persisted dir, then the most
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
@@ -806,6 +809,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
         <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
         <span class="cell-actions">
+          <button v-if="sessionId" class="cell-btn" title="Activity timeline" aria-label="Show activity timeline" @click="timelineOpen = true">🕘</button>
           <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move terminal left" @click="emit('move', -1)">◀</button>
           <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
           <button
@@ -819,6 +823,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="close">✕</button>
         </span>
       </div>
+      <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
       <TerminalView
         ref="termRef"
         class="cell-term"

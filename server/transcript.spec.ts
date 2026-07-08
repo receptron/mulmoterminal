@@ -7,6 +7,7 @@ import {
   userPromptText,
   parseJsonl,
   sessionUsageFromJsonl,
+  timelineFromJsonl,
 } from "./transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
@@ -158,5 +159,51 @@ describe("sessionUsageFromJsonl", () => {
   });
   it("is all-zero for an empty / promptless transcript", () => {
     expect(sessionUsageFromJsonl("")).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 });
+  });
+});
+
+describe("timelineFromJsonl", () => {
+  const toolTurn = (ts: string, blocks: unknown[]) => line({ type: "assistant", timestamp: ts, message: { content: blocks } });
+  const bash = (command: string) => ({ type: "tool_use", name: "Bash", input: { command, description: "d" } });
+  const read = (file_path: string) => ({ type: "tool_use", name: "Read", input: { file_path } });
+
+  it("returns [] for an empty transcript", () => {
+    expect(timelineFromJsonl("")).toEqual([]);
+  });
+
+  it("extracts tool_use events with tool name + a summary of the key input", () => {
+    const raw = [
+      line({ type: "user", message: { content: "go" } }),
+      toolTurn("2026-06-29T04:42:01.468Z", [bash("git status")]),
+      toolTurn("2026-06-29T04:42:12.806Z", [read("/a/b/GridView.vue")]),
+    ].join("\n");
+    expect(timelineFromJsonl(raw)).toEqual([
+      { ts: "2026-06-29T04:42:01.468Z", tool: "Bash", summary: "git status" },
+      { ts: "2026-06-29T04:42:12.806Z", tool: "Read", summary: "/a/b/GridView.vue" },
+    ]);
+  });
+
+  it("emits one event per tool_use block in a turn and ignores text blocks", () => {
+    const raw = toolTurn("2026-06-29T04:42:01.468Z", [{ type: "text", text: "thinking" }, bash("ls"), read("/x.ts")]);
+    const events = timelineFromJsonl(raw);
+    expect(events).toHaveLength(2);
+    expect(events.map((e) => e.tool)).toEqual(["Bash", "Read"]);
+  });
+
+  it("collapses whitespace and truncates a long summary", () => {
+    const long = "echo " + "x".repeat(200);
+    const [ev] = timelineFromJsonl(toolTurn("2026-06-29T04:42:01.468Z", [bash(long)]));
+    expect(ev.summary).toHaveLength(141); // 140 chars + the ellipsis
+    expect(ev.summary.endsWith("…")).toBe(true);
+  });
+
+  it("ignores non-assistant records and malformed lines", () => {
+    const raw = [line({ type: "user", message: { content: "hi" } }), "not json", line({ type: "assistant", message: {} })].join("\n");
+    expect(timelineFromJsonl(raw)).toEqual([]);
+  });
+
+  it("uses an empty ts when the record has no timestamp", () => {
+    const raw = line({ type: "assistant", message: { content: [bash("pwd")] } });
+    expect(timelineFromJsonl(raw)[0].ts).toBe("");
   });
 });
