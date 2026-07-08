@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
+import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import type { CellStatus, CellLauncher } from "./gridTabs";
 
 // A grid cell running a configured launch command (a plain shell, codex, any
@@ -29,6 +30,11 @@ const emit = defineEmits<{
   (e: "session", id: string): void;
 }>();
 
+// Click the header background to zoom (switch to) this cell; buttons keep their action.
+function onHeaderClick(event: MouseEvent) {
+  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+}
+
 // connectKey bump re-launches after the process exits (relaunch button).
 const connectKey = ref(0);
 const finished = ref(false);
@@ -53,7 +59,7 @@ function relaunch() {
 
 <template>
   <div class="cell">
-    <div class="cell-header">
+    <div class="cell-header" :class="{ 'is-zoomable': !expanded }" @click="onHeaderClick">
       <span class="cell-dot" :class="finished ? 'is-idle' : 'is-working'" :title="finished ? 'Exited' : 'Running…'" />
       <span v-if="dirDisplay" class="cell-dir" :title="cwd ?? ''"
         ><span class="cell-dir-path">{{ dirDisplay }}</span></span
@@ -107,6 +113,13 @@ function relaunch() {
   padding: 0 8px;
   background: #16213e;
   border-bottom: 1px solid #2a2a4e;
+}
+/* Header background is a click target: zoom (switch to) this cell. */
+.cell-header.is-zoomable {
+  cursor: pointer;
+}
+.cell-header.is-zoomable:hover {
+  background: #1c2a4e;
 }
 .cell-dot {
   flex: 0 0 auto;

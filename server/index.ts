@@ -50,7 +50,9 @@ import {
   latestMeaningfulUserPromptFromJsonl,
   preferredHeaderPrompt,
   sessionUsageFromJsonl,
+  timelineFromJsonl,
   type SessionUsage,
+  type TimelineEvent,
 } from "./transcript.js";
 import { mountOpenDirRoute } from "./open-dir.js";
 import { mountGitRemoteRoute } from "./gitRemote.js";
@@ -724,6 +726,19 @@ async function readSessionSummary(cwd: string, id: string): Promise<{ lastPrompt
   }
 }
 
+// The tool-activity timeline for a session, capped to the most recent events so the
+// payload stays bounded on a long session. A missing transcript is an empty list.
+const TIMELINE_MAX_EVENTS = 300;
+async function sessionTimeline(cwd: string, id: string): Promise<{ events: TimelineEvent[]; truncated: boolean }> {
+  try {
+    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
+    const all = timelineFromJsonl(raw);
+    return { events: all.slice(-TIMELINE_MAX_EVENTS), truncated: all.length > TIMELINE_MAX_EVENTS };
+  } catch {
+    return { events: [], truncated: false };
+  }
+}
+
 // Scan a session JSONL for a human-friendly title and last activity.
 async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> {
   const full = path.join(dir, file);
@@ -1206,6 +1221,15 @@ app.get("/api/dir-config", (req, res) => {
 app.get("/api/git-status", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await gitStatus(cwd));
+});
+
+// The tool-activity timeline for a session (what the agent ran, newest last), so a
+// cell can show "what did it do?" without scrolling the raw transcript.
+app.get("/api/transcript/timeline", async (req, res) => {
+  const { session } = req.query;
+  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  res.json(await sessionTimeline(cwd, session));
 });
 
 // Stream a directory's custom attention sound. The path never comes from the

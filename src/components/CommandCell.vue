@@ -2,6 +2,7 @@
 import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
+import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import type { CellStatus } from "./gridTabs";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
@@ -104,11 +105,16 @@ async function summarize() {
 function closeSummary() {
   showSummary.value = false;
 }
+
+// Click the header background to zoom (switch to) this cell; buttons keep their action.
+function onHeaderClick(event: MouseEvent) {
+  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+}
 </script>
 
 <template>
   <div class="cell">
-    <div class="cell-header">
+    <div class="cell-header" :class="{ 'is-zoomable': !expanded }" @click="onHeaderClick">
       <span class="cell-dot" :class="finished ? 'is-idle' : 'is-working'" :title="finished ? 'Finished' : 'Running…'" />
       <span v-if="dirDisplay" class="cell-dir" :title="command.cwd ?? ''"
         ><span class="cell-dir-path">{{ dirDisplay }}</span></span
@@ -178,6 +184,13 @@ function closeSummary() {
   padding: 0 8px;
   background: #16213e;
   border-bottom: 1px solid #2a2a4e;
+}
+/* Header background is a click target: zoom (switch to) this cell. */
+.cell-header.is-zoomable {
+  cursor: pointer;
+}
+.cell-header.is-zoomable:hover {
+  background: #1c2a4e;
 }
 
 .cell-dot {
