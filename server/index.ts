@@ -776,26 +776,29 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
   const draft = body.draft === true;
+  const agent = body.agent === "codex" ? "codex" : "claude";
   const sessionId = randomUUID();
   if (body.hidden === true) hiddenSessions.add(sessionId);
-  // ws is null: the session runs headless until the user opens it (reattach
-  // replays the buffered output). The "created" pubsub event in spawnClaudePty
-  // surfaces it in the sidebar right away. A draft spawns with NO initial prompt
-  // (so claude doesn't auto-run) and gets the text typed into its input box instead.
+  // ws is null: the session runs headless until the user opens it (reattach replays the buffered
+  // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
+  // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
+  // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
   try {
-    if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
+    if (agent === "codex") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, message);
+    else if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
     else spawnClaudePty(sessionId, null, null, message);
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
     return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
   }
-  return res.json({
-    message: draft
-      ? `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`
-      : `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`,
-    jsonData: { chatId: sessionId },
-  });
+  return res.json({ message: backgroundChatMessage(agent, draft, sessionId), jsonData: { chatId: sessionId, agent } });
 });
+
+function backgroundChatMessage(agent: "claude" | "codex", draft: boolean, sessionId: string): string {
+  if (agent === "codex") return `Spawned a new codex session (chatId ${sessionId}) auto-running the prompt.`;
+  if (draft) return `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`;
+  return `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`;
+}
 
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
@@ -2145,13 +2148,20 @@ function rememberCodexRollout(sessionId: string, root: string, before: Set<strin
     .catch(() => {});
 }
 
-function spawnCodexPty(sessionId: string, ws: WebSocket, resumeRolloutId: string | null, cwd: string, attachGuiMcp: boolean): PtyEntry {
+function spawnCodexPty(
+  sessionId: string,
+  ws: WebSocket | null,
+  resumeRolloutId: string | null,
+  cwd: string,
+  attachGuiMcp: boolean,
+  initialPrompt: string | null,
+): PtyEntry {
   const root = codexSessionsRoot();
   const before = snapshotSessions(root);
   // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
   // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
   const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
-  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl });
+  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl, initialPrompt });
   const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
   const via = tmux ? " via tmux" : "";
   const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
@@ -2178,7 +2188,7 @@ function startCodexEntry(
   attachGuiMcp: boolean,
 ): PtyEntry {
   if (live) return reattachPty(live, ws, sessionId);
-  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp);
+  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, null); // interactive: no seed
 }
 
 // codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs

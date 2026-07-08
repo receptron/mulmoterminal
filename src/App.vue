@@ -17,7 +17,7 @@ import SettingsModal from "./components/SettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { browseClose } from "./composables/useCollectionBrowse";
-import { registerChatOpener } from "./composables/useChatLauncher";
+import { registerChatOpener, setActiveChatAgent } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { useDirConfig } from "./composables/useDirConfig";
 import { useFaviconState } from "./composables/useFaviconState";
@@ -243,11 +243,15 @@ onUnmounted(() => clearTimeout(draftHintTimer));
 // A collection action spawned a new chat and wants it shown: close the browse overlay
 // (if open) and select the session so the terminal displays it. A draft also shows the
 // preparing hint until claude is ready for the prefilled text.
-registerChatOpener((id: string, opts?: { draft?: boolean }) => {
+registerChatOpener((id, opts) => {
   browseClose();
-  selectSession(id);
+  selectSession(id, opts?.agent ?? "claude");
   if (opts?.draft) showDraftHint();
 });
+
+// Keep the chat launcher's agent in sync so a collection action spawns the SAME agent the single
+// view is on (a codex action runs in codex, seeded as its auto-run first turn).
+watch(singleAgent, (a) => setActiveChatAgent(a), { immediate: true });
 
 function newSession() {
   singleAgent.value = "claude";

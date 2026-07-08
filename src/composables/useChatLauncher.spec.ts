@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { registerChatOpener, startCollectionChat } from "./useChatLauncher";
+import { registerChatOpener, startCollectionChat, setActiveChatAgent } from "./useChatLauncher";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
   const fn = vi.fn((url: string, init?: RequestInit) => {
@@ -12,7 +12,10 @@ function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; jso
 
 describe("startCollectionChat", () => {
   beforeEach(() => registerChatOpener(vi.fn()));
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setActiveChatAgent("claude"); // reset module state so the codex test doesn't leak
+  });
 
   it("spawns a chat seeded with the prompt and selects it (hidden=false)", async () => {
     const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-1" } }) }));
@@ -25,8 +28,20 @@ describe("startCollectionChat", () => {
     const [url, init] = fetchFn.mock.calls[0];
     expect(url).toBe("/api/plugin/spawnBackgroundChat");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false });
-    expect(opener).toHaveBeenCalledWith("sess-1", { draft: false });
+    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false, agent: "claude" });
+    expect(opener).toHaveBeenCalledWith("sess-1", { draft: false, agent: "claude" });
+  });
+
+  it("spawns a codex chat (auto-run, draft forced off) when the active agent is codex", async () => {
+    setActiveChatAgent("codex");
+    const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "cx-1", agent: "codex" } }) }));
+    const opener = vi.fn();
+    registerChatOpener(opener);
+
+    await startCollectionChat("summarize this", { draft: true }); // codex ignores draft — it auto-runs
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "summarize this", draft: false, agent: "codex" });
+    expect(opener).toHaveBeenCalledWith("cx-1", { draft: false, agent: "codex" });
   });
 
   it("sends draft:true so the prompt is prefilled but not auto-sent", async () => {
@@ -36,8 +51,8 @@ describe("startCollectionChat", () => {
 
     await startCollectionChat("track my tasks", { hidden: false, draft: true });
 
-    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "track my tasks", draft: true });
-    expect(opener).toHaveBeenCalledWith("sess-3", { draft: true }); // surfaced + flagged for the preparing hint
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "track my tasks", draft: true, agent: "claude" });
+    expect(opener).toHaveBeenCalledWith("sess-3", { draft: true, agent: "claude" }); // surfaced + flagged for the preparing hint
   });
 
   it("does NOT select when hidden=true (stays in the sidebar)", async () => {
