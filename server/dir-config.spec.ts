@@ -5,7 +5,19 @@ import path from "node:path";
 import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile } from "./dir-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-dircfg-"));
-const EMPTY = { name: null, badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, sound: null };
+const EMPTY = {
+  name: null,
+  badgeColor: null,
+  headerColor: null,
+  headerTextColor: null,
+  cellColor: null,
+  cellBorderColor: null,
+  dotColor: null,
+  buttonColor: null,
+  theme: null,
+  colors: null,
+  sound: null,
+};
 
 function withConfig(body: unknown): { dir: string; cleanup: () => void } {
   const dir = tmp();
@@ -92,6 +104,10 @@ describe("loadDirConfig", () => {
       badgeColor: "#CF222E",
       headerColor: "#190A23",
       headerTextColor: "#FFFFFF",
+      cellColor: "#101014",
+      cellBorderColor: "#2A2A4E",
+      dotColor: "#00E676",
+      buttonColor: "#C7CDF0",
       theme: "nord",
       sound: "./a.mp3",
     });
@@ -101,6 +117,10 @@ describe("loadDirConfig", () => {
       badgeColor: "#cf222e",
       headerColor: "#190a23",
       headerTextColor: "#ffffff",
+      cellColor: "#101014",
+      cellBorderColor: "#2a2a4e",
+      dotColor: "#00e676",
+      buttonColor: "#c7cdf0",
       theme: "nord",
       colors: null,
       sound: path.join(dir, "a.mp3"),
@@ -162,7 +182,19 @@ describe("publicDirConfig / dirSoundFile", () => {
   it("exposes hasSound but not the raw path", () => {
     const { dir, cleanup } = withConfig({ name: "x", sound: "./a.mp3" });
     writeFileSync(path.join(dir, "a.mp3"), "x");
-    expect(publicDirConfig(dir)).toEqual({ name: "x", badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, hasSound: true });
+    expect(publicDirConfig(dir)).toEqual({
+      name: "x",
+      badgeColor: null,
+      headerColor: null,
+      headerTextColor: null,
+      cellColor: null,
+      cellBorderColor: null,
+      dotColor: null,
+      buttonColor: null,
+      theme: null,
+      colors: null,
+      hasSound: true,
+    });
     expect(dirSoundFile(dir)).toBe(path.join(dir, "a.mp3"));
     cleanup();
   });

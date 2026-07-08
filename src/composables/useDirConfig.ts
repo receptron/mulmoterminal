@@ -12,13 +12,30 @@ export interface DirConfig {
   // to keep the theme default. Distinct from `colors` (the xterm palette).
   headerColor: string | null;
   headerTextColor: string | null;
+  // The cell frame + accents (body background, border, idle status dot, header buttons).
+  cellColor: string | null;
+  cellBorderColor: string | null;
+  dotColor: string | null;
+  buttonColor: string | null;
   theme: ThemeId | null;
   // Per-key xterm palette overrides applied on top of `theme` (or the app theme).
   colors: Partial<ITheme> | null;
   hasSound: boolean;
 }
 
-const EMPTY: DirConfig = { name: null, badgeColor: null, headerColor: null, headerTextColor: null, theme: null, colors: null, hasSound: false };
+const EMPTY: DirConfig = {
+  name: null,
+  badgeColor: null,
+  headerColor: null,
+  headerTextColor: null,
+  cellColor: null,
+  cellBorderColor: null,
+  dotColor: null,
+  buttonColor: null,
+  theme: null,
+  colors: null,
+  hasSound: false,
+};
 
 // The ITheme keys a dir may override; values arrive server-sanitized but are
 // re-checked here so a hand-rolled response can't widen the terminal options.
@@ -72,6 +89,10 @@ function parse(c: unknown): DirConfig {
     badgeColor: typeof c.badgeColor === "string" ? c.badgeColor : null,
     headerColor: typeof c.headerColor === "string" ? c.headerColor : null,
     headerTextColor: typeof c.headerTextColor === "string" ? c.headerTextColor : null,
+    cellColor: typeof c.cellColor === "string" ? c.cellColor : null,
+    cellBorderColor: typeof c.cellBorderColor === "string" ? c.cellBorderColor : null,
+    dotColor: typeof c.dotColor === "string" ? c.dotColor : null,
+    buttonColor: typeof c.buttonColor === "string" ? c.buttonColor : null,
     theme: isThemeId(c.theme) ? c.theme : null,
     colors: parseColors(c.colors),
     hasSound: c.hasSound === true,

@@ -1320,6 +1320,23 @@ describe("TerminalCell", () => {
     expect(style).toContain("--cell-header-fg: #ffffff");
   });
 
+  it("applies cellColor/cellBorderColor/dotColor/buttonColor as cell-root CSS vars", async () => {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/dir-config"))
+        return { ok: true, json: async () => ({ cellColor: "#101014", cellBorderColor: "#2a2a4e", dotColor: "#00e676", buttonColor: "#c7cdf0" }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/cell-accent" });
+    await flushPromises();
+    const style = w.find(".cell").attributes("style") ?? "";
+    expect(style).toContain("--cell-bg: #101014");
+    expect(style).toContain("--cell-border: #2a2a4e");
+    expect(style).toContain("--cell-dot: #00e676");
+    expect(style).toContain("--cell-btn: #c7cdf0");
+  });
+
   it("tints a preset chip whose dir already has a running session elsewhere", () => {
     const w = mountCell(null, {
       presets: [

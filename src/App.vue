@@ -318,6 +318,9 @@ function onSession(id: string) {
           :dir-colors="singleDirConfig.colors"
           :dir-name="singleDirConfig.name"
           :dir-badge-color="singleDirConfig.badgeColor"
+          :dir-header-color="singleDirConfig.headerColor"
+          :dir-header-text-color="singleDirConfig.headerTextColor"
+          :dir-button-color="singleDirConfig.buttonColor"
           run-menu
           @session="onSession"
           @cwd="(c) => (activeCwd = c)"

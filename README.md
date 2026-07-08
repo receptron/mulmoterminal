@@ -244,6 +244,10 @@ malformed file is ignored.
   "badgeColor": "#cf222e",              // badge color (hex #rrggbb)
   "headerColor": "#190a23",             // cell header background (hex #rrggbb)
   "headerTextColor": "#ffffff",         // cell header text color (hex #rrggbb)
+  "cellColor": "#101014",               // cell body background (hex #rrggbb)
+  "cellBorderColor": "#2a2a4e",         // cell border color (hex #rrggbb)
+  "dotColor": "#00e676",                // idle status dot (hex #rrggbb)
+  "buttonColor": "#c7cdf0",             // header icon buttons (hex #rrggbb)
   "theme": "nord",                      // terminal palette: midnight | nord | daylight | solarized
   "colors": { "background": "#190a23", "cursor": "#ff2e63" }, // per-key palette overrides
   "sound": "./.mulmoterminal/alert.mp3" // attention sound, RELATIVE to this directory
@@ -254,8 +258,12 @@ malformed file is ignored.
 | ------------ | ------- |
 | `name`       | Label shown as a badge in the terminal/cell header. |
 | `badgeColor` | Badge background color (`#rrggbb`); text auto-contrasts. |
-| `headerColor` | Cell header **background** color (`#rrggbb`). While a terminal is working/blocked the status tint still shows; the custom color applies when idle. |
-| `headerTextColor` | Cell header **text** color (`#rrggbb`) — the dir path and prompt. |
+| `headerColor` | Header **background** color (`#rrggbb`) — the grid cell's header row and the terminal's own header row (grid row 2 + single view). While a terminal is working/blocked the status tint still shows; the custom color applies when idle. |
+| `headerTextColor` | Header **text** color (`#rrggbb`) — the dir path, title, and prompt. |
+| `cellColor` | Cell **body background** color (`#rrggbb`) — the frame around the terminal. |
+| `cellBorderColor` | Cell **border** color (`#rrggbb`). The status frame (working/blocked) still overrides it while active. |
+| `dotColor` | **Idle** status-dot color (`#rrggbb`). The working/waiting colors are unchanged so the activity signal stays intact. |
+| `buttonColor` | Header **icon button** color (`#rrggbb`) — expand / close / attach / folder / etc., across both header rows. |
 | `theme`      | xterm palette for terminals in this directory (one of the built-in theme ids). |
 | `colors`     | Per-key xterm palette overrides applied on top of `theme` (or the app theme when `theme` is unset). Keys are xterm `ITheme` names (`background`, `foreground`, `cursor`, `selectionBackground`, the 16 ANSI colors, …); values are hex (`#rgb` / `#rrggbb` / `#rrggbbaa`). Unknown keys / bad values are dropped. |
 | `sound`      | Attention sound for this directory's sessions, a path **relative to the directory** (served at `GET /api/dir-sound`). |

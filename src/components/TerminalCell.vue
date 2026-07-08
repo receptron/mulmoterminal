@@ -6,7 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
-import { headerStyleFor } from "./cellHeaderStyle";
+import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
 import TimelineOverlay from "./TimelineOverlay.vue";
@@ -93,6 +93,9 @@ const cwd = ref<string | null>(props.initialCwd ?? props.defaultCwd);
 const { config: dirConfig } = useDirConfig(cwd);
 const dirBadgeStyle = computed(() => badgeStyleFor(dirConfig.value.badgeColor));
 const headerStyle = computed(() => headerStyleFor(dirConfig.value.headerColor, dirConfig.value.headerTextColor));
+const cellStyle = computed(() =>
+  cellStyleFor(dirConfig.value.cellColor, dirConfig.value.cellBorderColor, dirConfig.value.dotColor, dirConfig.value.buttonColor),
+);
 // Live git status (branch/dirty/ahead·behind) for the header chip. `refreshGit`
 // is called alongside loadDiff() so a finished turn's changes show immediately.
 const { status: gitStatus, refresh: refreshGit } = useGitStatus(cwd);
@@ -810,7 +813,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 </script>
 
 <template>
-  <div class="cell" :class="statusClass">
+  <div class="cell" :class="statusClass" :style="cellStyle">
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
@@ -863,6 +866,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :codex="agent === 'codex'"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
+        :dir-header-color="dirConfig.headerColor"
+        :dir-header-text-color="dirConfig.headerTextColor"
+        :dir-button-color="dirConfig.buttonColor"
         :hide-header="filmstrip"
         dev-terminal
         run-menu
@@ -1120,8 +1126,10 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-base);
-  border: 1px solid var(--border);
+  /* Per-dir overrides via .mulmoterminal.json (cellColor/cellBorderColor); the status
+     frame below still wins the border while working/blocked. */
+  background: var(--cell-bg, var(--bg-base));
+  border: 1px solid var(--cell-border, var(--border));
   border-radius: 6px;
   overflow: hidden;
 }
@@ -1179,7 +1187,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   width: 9px;
   height: 9px;
   border-radius: 50%;
-  background: var(--text-dim);
+  /* Custom color tints the idle dot; the status classes below override it while
+     working/waiting so the activity signal stays intact. */
+  background: var(--cell-dot, var(--text-dim));
 }
 .cell-dot.is-working {
   background: var(--accent);
@@ -1334,7 +1344,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   height: 26px;
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: var(--cell-btn, var(--text-secondary));
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
