@@ -186,10 +186,11 @@ describe("latestTurnContextFromJsonl", () => {
     expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-haiku-4", contextTokens: 42 });
   });
 
-  it("keeps a model even when the final turn carries no usage", () => {
+  it("zeroes context when the final turn carries no usage (no stale value from a prior turn)", () => {
     const raw = [assistant("claude-opus-4", { input_tokens: 300 }), line({ type: "assistant", message: { model: "claude-opus-4" } })].join("\n");
-    // model still resolves; contextTokens holds the last turn that HAD usage.
-    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-opus-4", contextTokens: 300 });
+    // Both fields come from the SAME final turn: the model resolves, but with no usage
+    // on that turn we report 0 rather than the previous turn's stale 300.
+    expect(latestTurnContextFromJsonl(raw)).toEqual({ model: "claude-opus-4", contextTokens: 0 });
   });
 
   it("is empty for an empty / promptless transcript", () => {
