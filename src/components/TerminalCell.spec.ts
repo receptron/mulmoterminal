@@ -1236,17 +1236,17 @@ describe("TerminalCell", () => {
     expect(w.find(".ccx-remove").text()).toContain("Discard");
   });
 
-  it("row 1 is info-only; the icon actions live on row 2 (the terminal header slot)", async () => {
+  it("keeps expand + close on row 1 (cell-header); the other icons live on row 2", async () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
     await flushPromises();
-    // Row 1 (cell-header) holds info: dir (clickable) + prompt, but NOT the action buttons.
+    // Row 1 (cell-header): dir + prompt + expand/close.
     const header = w.find(".cell-header");
     expect(header.find("button.cell-dir").exists()).toBe(true);
-    expect(header.find(".cell-close").exists()).toBe(false);
-    expect(header.find('[aria-label="Expand terminal"]').exists()).toBe(false);
-    // Row 2 (rendered via the TerminalView header-actions slot) holds the icon buttons.
-    expect(w.find(".cell-close").exists()).toBe(true);
-    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
+    expect(header.find(".cell-close").exists()).toBe(true);
+    expect(header.find('[aria-label="Expand terminal"]').exists()).toBe(true);
+    // The timeline / reorder / GitHub icons stay on row 2 (the TerminalView slot).
+    expect(header.find('[aria-label="Show activity timeline"]').exists()).toBe(false);
+    expect(w.find('[aria-label="Show activity timeline"]').exists()).toBe(true);
   });
 
   it("shows the restore label + icon when the cell is expanded", async () => {
@@ -1263,8 +1263,8 @@ describe("TerminalCell", () => {
     expect(w.find(".git-chip").exists()).toBe(false);
     expect(w.find(".cell-usage").exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
-    // Only the zoom button + dir + prompt remain.
-    expect(w.find(".cell-zoom-thumb").exists()).toBe(true);
+    // Row 1 keeps dir + prompt + the expand/close actions (row 2 is hidden).
+    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
     expect(w.find("button.cell-dir").exists()).toBe(true);
   });
 
