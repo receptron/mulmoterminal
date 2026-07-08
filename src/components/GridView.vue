@@ -101,6 +101,14 @@ const launchOpen = computed(() => cancelUid.value !== null);
 // live as background PTYs). A launcher uses this to warn before resuming a
 // session that's already open, since attaching would detach the other cell.
 const openSessionIds = computed(() => state.value.cells.map((c) => c.session).filter((s): s is string => s !== null));
+// Directories that already have a running session (a launched cell), so the launcher
+// can flag preset chips whose dir is in use elsewhere.
+const openCwds = computed(() =>
+  state.value.cells
+    .filter((c) => c.session)
+    .map((c) => c.cwd)
+    .filter((c): c is string => c !== null),
+);
 
 function onAddTerminal() {
   if (runningCount(state.value.cells) >= 81 && !launchOpen.value) return; // surfaced by the disabled button
@@ -181,6 +189,7 @@ function closeSettings() {
       :home="home"
       :reorderable="reorderable"
       :open-session-ids="openSessionIds"
+      :open-cwds="openCwds"
       @session="onSession"
       @agent="onAgent"
       @cwd="onCwd"

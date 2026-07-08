@@ -34,7 +34,7 @@ const cell = (uid: number, session: string | null = null, cwd: string | null = n
 const cmdCell = (uid: number, command: NonNullable<Cell["command"]>): Cell => ({ uid, session: null, cwd: null, command });
 const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: number | null = null, reorderable = false) =>
   mount(TerminalGrid, {
-    props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], launchers: [], home: "/work", openSessionIds: [], reorderable },
+    props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], launchers: [], home: "/work", openSessionIds: [], openCwds: [], reorderable },
   });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const commandCellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "CommandCell" });

@@ -46,6 +46,9 @@ const props = defineProps<{
   // Session ids open in other grid cells. Resuming one of them would detach that
   // cell, so the launcher flags such rows and confirms before opening.
   openSessionIds?: string[];
+  // Dirs with a running session in another cell, so the launcher can tint preset
+  // chips whose dir is already in use.
+  openCwds?: string[];
   // An added (not the sole entry) launcher: show a ✕ to dismiss it before launching.
   cancellable?: boolean;
   // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
@@ -424,6 +427,11 @@ watch([dirInput, () => props.defaultCwd], () => {
 // A session already live in another grid cell. Resuming it here detaches that
 // cell (the server supersedes the prior socket), so we warn before doing so.
 const sessionOpenElsewhere = (id: string): boolean => id !== sessionId.value && (props.openSessionIds ?? []).includes(id);
+
+// A preset dir that already has a running session in another cell — the launcher
+// tints its chip so the user can tell it's in use before double-launching there.
+const runningCwds = computed(() => new Set(props.openCwds ?? []));
+const isCwdRunning = (path: string): boolean => runningCwds.value.has(path);
 
 function resume(s: ResumableSession) {
   if (sessionOpenElsewhere(s.id) && !window.confirm(`"${s.title}" is already open in another terminal. Opening it here will detach that one. Continue?`))
@@ -948,8 +956,16 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         ✕
       </button>
       <div v-if="presets.length" class="cell-presets">
-        <span v-for="p in presets" :key="p.label + p.path" class="cell-chip">
-          <button type="button" class="cell-chip-main" :title="p.path" @click="selectPreset(p)">{{ p.label }}</button>
+        <span v-for="p in presets" :key="p.label + p.path" :class="['cell-chip', { 'is-running': isCwdRunning(p.path) }]">
+          <button
+            type="button"
+            class="cell-chip-main"
+            :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : p.path"
+            :aria-label="isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : undefined"
+            @click="selectPreset(p)"
+          >
+            <span v-if="isCwdRunning(p.path)" class="cell-chip-dot" aria-hidden="true" />{{ p.label }}
+          </button>
           <button
             type="button"
             class="cell-chip-fill"
@@ -1360,6 +1376,20 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   overflow: hidden;
   background: var(--bg-elevated);
 }
+/* A dir already running a session in another cell: tint the chip + show a dot. */
+.cell-chip.is-running {
+  border-color: color-mix(in srgb, #3b82f6 55%, var(--border));
+  background: color-mix(in srgb, #3b82f6 14%, var(--bg-elevated));
+}
+.cell-chip-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: #3b82f6;
+  vertical-align: middle;
+}
 .cell-chip-main {
   border: none;
   background: transparent;
@@ -1368,6 +1398,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   font-family: system-ui, sans-serif;
   font-size: 12px;
   padding: 4px 10px;
+}
+.cell-chip.is-running .cell-chip-main {
+  color: var(--text);
 }
 .cell-chip-fill {
   display: inline-flex;
