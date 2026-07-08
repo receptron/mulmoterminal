@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
+import { startCollectionChat } from "../composables/useChatLauncher";
 import type { CellStatus } from "./gridTabs";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
@@ -106,6 +107,18 @@ function closeSummary() {
   showSummary.value = false;
 }
 
+// "Continue in Claude": open a real Claude session in the command's dir, seeded with
+// an editable draft (command + summary) so the user can ask a follow-up or say "fix
+// it". The server flattens the draft to one line, so we keep it concise (the summary
+// distills the output); Claude can re-run the command for full detail if needed.
+function continueInClaude() {
+  const summary = summaryText.value.trim();
+  const prompt = summary
+    ? `About the output of \`${props.command.label}\` — summary: ${summary}. My follow-up: `
+    : `About the output of \`${props.command.label}\`: `;
+  startCollectionChat(prompt, { draft: true, cwd: props.command.cwd });
+}
+
 // Click the header background to zoom (switch to) this cell; buttons keep their action.
 function onHeaderClick(event: MouseEvent) {
   if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
@@ -157,6 +170,11 @@ function onHeaderClick(event: MouseEvent) {
         <template v-else>
           <pre class="cell-summary-text">{{ summaryText }}</pre>
           <p v-if="summaryTruncated" class="cell-summary-note">(long output — summarized the tail only)</p>
+          <div class="cell-summary-actions">
+            <button type="button" class="cell-summary-continue" title="Open a Claude session in this dir, seeded with this context" @click="continueInClaude">
+              ✦ Continue in Claude →
+            </button>
+          </div>
         </template>
       </div>
     </div>
@@ -353,5 +371,23 @@ function onHeaderClick(event: MouseEvent) {
   font-family: system-ui, sans-serif;
   font-size: 11px;
   color: #7f88ad;
+}
+.cell-summary-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+.cell-summary-continue {
+  border: 1px solid #3b4a7a;
+  background: #232a45;
+  color: #cdd6ff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cell-summary-continue:hover {
+  background: #2c355a;
 }
 </style>

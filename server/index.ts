@@ -801,6 +801,10 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
     return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
   }
   const draft = body.draft === true;
+  // Optional `cwd`: the new session runs in that dir (validated like other cwd routes),
+  // so "continue in Claude" from a command cell lands where the command ran and can fix
+  // its files. Absent/invalid → the workspace default.
+  const cwd = resolveWorkspace(typeof body.cwd === "string" ? body.cwd : null);
   const sessionId = randomUUID();
   if (body.hidden === true) hiddenSessions.add(sessionId);
   // ws is null: the session runs headless until the user opens it (reattach
@@ -808,8 +812,8 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   // surfaces it in the sidebar right away. A draft spawns with NO initial prompt
   // (so claude doesn't auto-run) and gets the text typed into its input box instead.
   try {
-    if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
-    else spawnClaudePty(sessionId, null, null, message);
+    if (draft) spawnClaudePty(sessionId, null, null, undefined, cwd, true, message);
+    else spawnClaudePty(sessionId, null, null, message, cwd);
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
     return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
