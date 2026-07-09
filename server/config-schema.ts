@@ -79,12 +79,13 @@ const paletteColor = z
 
 // ---- DSL item schemas (the writable shapes) -----------------------------------------------
 
-export const openTargetSchema = z.object({
+const openTargetShape = {
   url: z.string().optional(),
   reveal: z.string().optional(),
   files: z.string().optional(),
   view: viewTargetSchema.optional(),
-});
+};
+export const openTargetSchema = z.object(openTargetShape);
 export type OpenTarget = z.infer<typeof openTargetSchema>;
 
 export const headerButtonSchema = z.object({
@@ -153,6 +154,39 @@ export const dirColorsField = z
 // The WRITABLE per-dir shape (what a user types into `.mulmoterminal.json`), described strictly
 // so the skill can validate its output and drive structured generation. Distinct from the
 // lenient loader above, which tolerates junk; this documents the correct shape.
+//
+// Buttons/chips are STRICTER here than the flat item schemas used for types: the JSON Schema must
+// match what the runtime loader actually accepts, or the skill could emit a "valid" config that
+// sanitization silently drops (a no-op the user reads as success).
+
+// `open` requires at least one target (url/reveal/files/view), mirroring sanitizeOpen.
+const writableOpenTargetSchema = z.union([
+  z.object({ ...openTargetShape, url: z.string() }),
+  z.object({ ...openTargetShape, reveal: z.string() }),
+  z.object({ ...openTargetShape, files: z.string() }),
+  z.object({ ...openTargetShape, view: viewTargetSchema }),
+]);
+
+const commonButtonFields = {
+  id: z.string(),
+  label: z.string(),
+  emoji: z.string().optional(),
+  icon: z.string().optional(),
+  when: z.string().optional(),
+  order: z.number().optional(),
+};
+
+// Run-discriminated: each run type requires the payload the runtime needs (shell→cmd, input→text,
+// open→open), so the schema matches live acceptance instead of accepting no-op buttons.
+const writableHeaderButtonSchema = z.discriminatedUnion("run", [
+  z.object({ ...commonButtonFields, run: z.literal("shell"), cmd: z.string() }),
+  z.object({ ...commonButtonFields, run: z.literal("input"), text: z.string() }),
+  z.object({ ...commonButtonFields, run: z.literal("open"), open: writableOpenTargetSchema }),
+]);
+
+// The string branch is constrained to built-in chip ids — the runtime drops any other string.
+const writableHeaderChipSchema = z.union([builtinChipSchema, customChipSchema]);
+
 const writableDirConfigSchema = z.object({
   name: z.string().max(NAME_MAX_CHARS).optional(),
   badgeColor: z.string().regex(HEX_COLOR_RE).optional(),
@@ -165,8 +199,8 @@ const writableDirConfigSchema = z.object({
   theme: themeIdSchema.optional(),
   colors: z.record(z.enum(THEME_COLOR_KEYS), z.string().regex(PALETTE_COLOR_RE)).optional(),
   sound: z.string().optional(),
-  buttons: z.array(headerButtonSchema).optional(),
-  chips: z.array(headerChipSchema).optional(),
+  buttons: z.array(writableHeaderButtonSchema).optional(),
+  chips: z.array(writableHeaderChipSchema).optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {

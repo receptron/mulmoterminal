@@ -86,4 +86,12 @@ describe("dirConfigJsonSchema", () => {
     const props = isRecord(properties) ? Object.keys(properties) : [];
     expect(props).toEqual(expect.arrayContaining(["name", "badgeColor", "headerColor", "theme", "colors", "sound", "buttons", "chips"]));
   });
+
+  it("buttons require their run payload and chips constrain builtin ids (matches runtime)", () => {
+    const json = JSON.stringify(dirConfigJsonSchema());
+    expect(json).toContain('"required":["id","label","run","cmd"]'); // shell needs cmd
+    expect(json).toContain('"required":["id","label","run","text"]'); // input needs text
+    expect(json).toContain('"required":["id","label","run","open"]'); // open needs open
+    expect(json).toContain('"enum":["dir","git","ctx","usage","status","diff","tools"]'); // chip string = builtin ids only
+  });
 });
