@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, and header buttons/chips. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal in MulmoTerminal.
+description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, and header buttons/chips. Configures the current directory OR several of your recent MulmoTerminal directories at once. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal — for one project or across many.
 ---
 
 # Configure a MulmoTerminal directory
@@ -14,17 +14,37 @@ it if you need the exact shape; the rules below are authoritative and match it.
 
 ## Workflow
 
-1. **Target the current directory.** The file belongs at `<cwd>/.mulmoterminal.json` (the
-   directory this session is running in). Confirm the path with the user if it's ambiguous.
-2. **Read the existing file** if one is present, and treat this as an EDIT — preserve fields the
-   user isn't changing. Never blow away their buttons/chips/colors when they only asked to tweak one thing.
-3. **Ask what they want** — a name badge, a color scheme, terminal palette, a completion sound,
-   header buttons/chips. Offer concrete suggestions (see the examples). Keep it short.
-4. **Write the JSON**, following the schema below exactly.
-5. **Self-check** before finishing: every color is `#rrggbb`, `theme` is one of the four ids,
-   palette values are valid, each button has the payload its `run` requires, and no unknown
-   top-level keys are present. MulmoTerminal silently drops anything malformed, so an invalid
-   field just won't take effect — get it right so the user sees their change.
+### 1. Choose the target directory(ies)
+
+- **This directory** (default): write `<cwd>/.mulmoterminal.json` — the directory this session
+  is running in. Confirm the path if it's ambiguous.
+- **Several directories at once** — when the user asks to configure/color-code *multiple*
+  projects (e.g. "give each of my repos a distinct color"): read the user's recent MulmoTerminal
+  directories from `~/.mulmoterminal/config.json`, the `cwdPresets` array (`[{ "label", "path" }]`)
+  — the SAME list the New-terminal launcher offers. Show those directories and **ask which ones**
+  to configure (all, a subset, or one). Then ask whether to apply the **same** styling to every
+  chosen directory or to configure **each individually**. Only ever write to directories the user
+  picked. If that file is missing or has no `cwdPresets`, there's no history yet — tell the user
+  and ask them for the directory paths explicitly.
+
+### 2. Ask what they want
+
+A name badge, a color scheme, terminal palette, a completion sound, header buttons/chips. Offer
+concrete suggestions (see the examples). Keep it short. When color-coding **many** directories,
+give each a **visually distinct** hue so they're easy to tell apart in the grid — that's the point.
+
+### 3. For each target directory
+
+1. **Read the existing** `<dir>/.mulmoterminal.json` if present and treat this as an EDIT —
+   preserve fields the user isn't changing. Never blow away their buttons/chips/colors when they
+   only asked to tweak one thing.
+2. **Write the JSON**, following the schema below exactly.
+3. **Self-check**: every color is `#rrggbb`, `theme` is one of the four ids, palette values are
+   valid, each button has the payload its `run` requires, and no unknown top-level keys are
+   present. MulmoTerminal silently drops anything malformed, so an invalid field just won't take
+   effect — get it right so the user sees their change.
+
+Finish by confirming the list of files you wrote.
 
 ## Schema
 
