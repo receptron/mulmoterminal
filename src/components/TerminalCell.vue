@@ -10,6 +10,7 @@ import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
 import type { RunCommand } from "./runCommand";
+import { useHeaderButtons } from "../composables/useHeaderButtons";
 import TimelineOverlay from "./TimelineOverlay.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
@@ -146,6 +147,30 @@ interface SessionContext {
 }
 const context = ref<SessionContext | null>(null);
 const isContext = (c: unknown): c is SessionContext => typeof c === "object" && c !== null && "contextTokens" in c;
+
+// Configurable row-1 info chips (GET /api/header `chips`). `null` = unconfigured ⇒ the default order/set
+// below, so with no config the header is exactly as before. When configured, the built-ins listed here
+// (git/diff/ctx/usage) render in that order — others are hidden — and custom chips render as text. `dir`,
+// the project badge, the status dot/activity, and the row-2 tools timeline stay structural.
+const { chips: headerChips } = useHeaderButtons({ cwd, session: sessionId, agent, model: computed(() => context.value?.model ?? null) });
+const ROW1_BUILTIN_CHIPS = new Set(["git", "diff", "ctx", "usage"]);
+const DEFAULT_CELL_CHIP_IDS = ["git", "diff", "ctx", "usage"];
+interface CellChipView {
+  key: string;
+  builtin: string | null;
+  custom: { label: string; text: string } | null;
+}
+const cellChips = computed<CellChipView[]>(() => {
+  const configured = headerChips.value;
+  if (configured === null) return DEFAULT_CELL_CHIP_IDS.map((id) => ({ key: `b-${id}`, builtin: id, custom: null }));
+  const views: CellChipView[] = [];
+  // Key by index so a config that repeats a built-in (sanitizeChips allows duplicates) can't collide.
+  configured.forEach((chip, i) => {
+    if (chip.kind === "custom") views.push({ key: `c-${i}`, builtin: null, custom: { label: chip.label, text: chip.text } });
+    else if (ROW1_BUILTIN_CHIPS.has(chip.id)) views.push({ key: `b-${i}-${chip.id}`, builtin: chip.id, custom: null });
+  });
+  return views;
+});
 
 const { subscribe } = usePubSub();
 let unsubscribe: (() => void) | null = null;
@@ -833,13 +858,22 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
              thumbnail, leaving only dir + what it's doing + a zoom button. -->
         <template v-if="!filmstrip">
           <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
-          </button>
-          <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-          <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+          <template v-for="chip in cellChips" :key="chip.key">
+            <GitBranchChip v-if="chip.builtin === 'git'" :status="gitStatus" :hide-dirty="isWorktreeCell" />
+            <button
+              v-else-if="chip.builtin === 'diff' && showDiffBadge && diff"
+              type="button"
+              class="cell-wt-badge"
+              :title="`View changes vs ${diff.base ?? 'base'}`"
+              @click="openDiff"
+            >
+              <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+              <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+            </button>
+            <ModelContextBadge v-else-if="chip.builtin === 'ctx' && context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+            <span v-else-if="chip.builtin === 'usage' && showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+            <span v-else-if="chip.custom" class="cell-hdr-chip" :title="chip.custom.label || chip.custom.text">{{ chip.custom.text }}</span>
+          </template>
         </template>
         <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
         <!-- Expand/restore + close stay on row 1 (the info row); the other icons live on
@@ -1330,6 +1364,17 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   color: var(--text-dim);
   white-space: nowrap;
   letter-spacing: 0.02em;
+}
+
+/* A user-defined display-only chip (from the `chips` config). */
+.cell-hdr-chip {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--text-dim);
+  white-space: nowrap;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
 }
 
 .cell-actions {
