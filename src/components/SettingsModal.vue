@@ -233,15 +233,12 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         </button>
       </div>
 
-      <template v-if="sessionId">
-        <h3 class="section-title">Directory appearance</h3>
-        <p class="hint">
-          Style the current session's directory — name badge, colors, terminal palette, header buttons — via the
-          <code>mulmoterminal-config</code> skill. It runs in <strong>this session</strong>, and can configure just this directory or several of your recent
-          ones at once.
-        </p>
-        <button class="btn" type="button" @click="emit('configure-appearance')">🎨 Configure appearance…</button>
-      </template>
+      <h3 class="section-title">Directory appearance</h3>
+      <p class="hint">
+        Launch the <code>mulmoterminal-config</code> skill to style a directory — name badge, colors, terminal palette, header buttons. It configures the
+        focused session's directory, or lets you pick from your recent directories.
+      </p>
+      <button class="btn" type="button" @click="emit('configure-appearance')">🎨 Configure appearance…</button>
 
       <h3 class="section-title">Notification sound</h3>
       <p class="hint">Played when a session needs attention. Leave empty for the built-in chime, or point to your own audio file.</p>

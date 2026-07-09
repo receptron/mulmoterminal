@@ -17,7 +17,7 @@ import SettingsModal from "./components/SettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { browseClose } from "./composables/useCollectionBrowse";
-import { registerChatOpener } from "./composables/useChatLauncher";
+import { registerChatOpener, startCollectionChat } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { useDirConfig } from "./composables/useDirConfig";
 import { useFaviconState } from "./composables/useFaviconState";
@@ -194,10 +194,11 @@ function sendTextMessage(text: string): boolean {
   return terminalRef.value?.submitText(text) ?? false;
 }
 
-// Run the mulmoterminal-config skill IN the current session (submitText types + submits), so it
-// targets this session's directory. codex has no slash commands, so name the skill in prose instead.
+// Open a fresh session that auto-runs the mulmoterminal-config skill (rather than hijacking the
+// active session), and select it so it shows. The skill then asks which directory / batch. codex
+// rewriting is handled server-side (spawnBackgroundChat → codexifySkillSeed).
 function configureAppearance(): void {
-  sendTextMessage(singleAgent.value === "codex" ? 'Use the "mulmoterminal-config" skill.' : "/mulmoterminal-config");
+  void startCollectionChat("/mulmoterminal-config");
   showSettings.value = false;
 }
 
