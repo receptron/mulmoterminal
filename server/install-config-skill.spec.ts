@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { installOwnedSkill } from "./install-config-skill";
+import { installOwnedSkill, SCHEMA_ASSET_FILE } from "./install-config-skill";
 
 const NAME = "mulmoterminal-config";
 const MARKER = ".mt-owned";
@@ -54,5 +54,11 @@ describe("installOwnedSkill", () => {
   it("returns absent-source when the bundled skill is missing", () => {
     expect(installOwnedSkill(path.join(root, "nope"), destParent)).toBe("absent-source");
     expect(existsSync(path.join(destParent, NAME))).toBe(false);
+  });
+
+  // Regression: a skill dir holding a file named exactly `schema.json` is loaded by the
+  // collections engine as a user-scope collection, which then fails validation on every boot.
+  it("never ships the schema under the collections-reserved name", () => {
+    expect(SCHEMA_ASSET_FILE).not.toBe("schema.json");
   });
 });

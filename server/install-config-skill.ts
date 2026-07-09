@@ -12,6 +12,9 @@ import { dirConfigJsonSchema } from "./config-schema.js";
 
 const OWNER_MARKER = ".mt-owned";
 const OWNER_MARKER_BODY = "managed by mulmoterminal\n";
+// The generated JSON Schema shipped alongside SKILL.md. Must NOT be `schema.json` — that exact
+// name makes the collections engine load the skill dir as a (broken) user-scope collection.
+export const SCHEMA_ASSET_FILE = "dir-config.schema.json";
 
 function bundledSkillDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,7 +48,9 @@ export function installConfigSkill(): void {
   const source = bundledSkillDir();
   // A JSON Schema generated from config-schema.ts, shipped beside the skill so it validates
   // against the exact live shape rather than a hand-copied one that could drift.
-  const extras = { "schema.json": JSON.stringify(dirConfigJsonSchema(), null, 2) + "\n" };
+  // NOT named `schema.json`: the collections engine treats any skill dir holding that exact
+  // filename as a user-scope collection definition, and would log a validation failure for ours.
+  const extras = { [SCHEMA_ASSET_FILE]: JSON.stringify(dirConfigJsonSchema(), null, 2) + "\n" };
   for (const root of skillsRoots()) {
     try {
       mkdirSync(root, { recursive: true });

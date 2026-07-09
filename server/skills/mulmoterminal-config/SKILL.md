@@ -9,8 +9,8 @@ MulmoTerminal reads a per-directory file, `<project>/.mulmoterminal.json`, to st
 extend any terminal opened in that directory (grid cell + single view). This skill writes a
 **valid** config from a short conversation with the user. Every field is optional.
 
-A machine-readable JSON Schema for this file ships next to this skill as `schema.json` — read
-it if you need the exact shape; the rules below are authoritative and match it.
+A machine-readable JSON Schema for this file ships next to this skill as `dir-config.schema.json`
+— read it if you need the exact shape; the rules below are authoritative and match it.
 
 ## Workflow
 
