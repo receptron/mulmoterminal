@@ -44,7 +44,7 @@ const emit = defineEmits<{
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
 
-const gridStyle = computed(() => trackStyle(layoutForCount(props.cells.length), null));
+const gridStyle = computed(() => trackStyle(layoutForCount(props.cells.length)));
 // Hand the flip's timing to the stylesheet so the fade under it can't drift out of sync.
 const flipVars = { "--flip-ms": `${FLIP_MS}ms`, "--flip-ease": FLIP_EASING };
 

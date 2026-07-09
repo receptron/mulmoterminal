@@ -32,17 +32,9 @@ export function layoutForCount(count: number): Layout {
   return LAYOUTS.find((l) => dims(l).cellCount >= n) ?? "3x3";
 }
 
-// CSS grid track template for the layout, or — when a cell is zoomed — collapse
-// every other track to 0fr so that cell fills the area (animated by the caller).
-export function trackStyle(layout: Layout, expanded: number | null) {
+// CSS grid track template for the layout: equal tracks, one per cell.
+export function trackStyle(layout: Layout) {
   const { cols, rows } = dims(layout);
-  const tracks = (count: number, active: number) => Array.from({ length: count }, (_, n) => (active < 0 || n === active ? "1fr" : "0fr")).join(" ");
-  if (expanded === null) {
-    return { gridTemplateColumns: tracks(cols, -1), gridTemplateRows: tracks(rows, -1), gap: "6px" };
-  }
-  return {
-    gridTemplateColumns: tracks(cols, expanded % cols),
-    gridTemplateRows: tracks(rows, Math.floor(expanded / cols)),
-    gap: "0px",
-  };
+  const tracks = (count: number) => Array.from({ length: count }, () => "1fr").join(" ");
+  return { gridTemplateColumns: tracks(cols), gridTemplateRows: tracks(rows), gap: "6px" };
 }
