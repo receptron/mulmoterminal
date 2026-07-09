@@ -83,10 +83,16 @@ dot / button **colors** in each repo's `.mulmoterminal.json` so you can distingu
 ![Four projects color-coded boldly (Mondrian / Van Gogh / Picasso / Matisse)](../images/grid-colors.png)
 
 *Here: Mondrian (yellow + red), Van Gogh (night blue + yellow), Picasso (blue + red + yellow), Matisse (green + pink).
-The header, badge, and accents all change color — impossible to mix up.*
+Not just the header and badge — `colors` tints the **terminal itself (background + text)** too, so you can't mix them up.*
 
 ```json
-{ "name": "acme-web", "badgeColor": "#2563eb", "headerColor": "#0b2545", "headerTextColor": "#e6f0ff" }
+{
+  "name": "🌌 van-gogh",
+  "badgeColor": "#f5b301",
+  "headerColor": "#0b1a4a",
+  "headerTextColor": "#f2e29b",
+  "colors": { "background": "#0a1330", "foreground": "#f2e29b", "cursor": "#f5b301" }
+}
 ```
 
 ## 7. Add your frequent actions to the header

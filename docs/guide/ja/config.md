@@ -74,6 +74,23 @@ nav_order: 4
 
 すべて `#rrggbb`。作業中/要対応の状態色は、これらの背景色より優先されます（アイドル時に反映）。
 
+### ターミナル自体の色（xterm パレット）
+
+`headerColor` などが「**枠**（ヘッダー・セル）」の色なのに対し、**`colors`（と `theme`）は端末の中身（xterm）**を染めます。
+`colors` は xterm の ITheme——`background` / `foreground` / `cursor` や `red` `green` … の ANSI 16 色——を上書きできます。
+
+```json
+{
+  "name": "🌌 van-gogh",
+  "headerColor": "#0b1a4a",
+  "headerTextColor": "#f2e29b",
+  "colors": { "background": "#0a1330", "foreground": "#f2e29b", "cursor": "#f5b301" }
+}
+```
+
+`theme` に `midnight` / `nord` / `daylight` / `solarized-light` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
+[応用編 6](scenarios.html) の色分けスクショは、ヘッダー色と `colors` を組み合わせて**ヘッダーから端末の中身まで**プロジェクトごとに染めた例です。
+
 ### ヘッダーのカスタマイズ（ボタン / チップ） {#header}
 
 MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルのヘッダーを、**小さな DSL** で自分のワークフローに合わせて成形できます。

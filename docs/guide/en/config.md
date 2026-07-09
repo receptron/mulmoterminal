@@ -73,6 +73,25 @@ Place this at the project root to change the appearance, sound, and header of **
 
 All values are `#rrggbb`. The working / needs-you status colors take priority over these background colors (which show when idle).
 
+### The terminal itself (xterm palette)
+
+Where `headerColor` and friends tint the **chrome** (header / cell frame), **`colors` (and `theme`) tint the terminal
+itself (xterm)**. `colors` overrides xterm's ITheme — `background` / `foreground` / `cursor` and the 16 ANSI colors
+(`red`, `green`, …).
+
+```json
+{
+  "name": "🌌 van-gogh",
+  "headerColor": "#0b1a4a",
+  "headerTextColor": "#f2e29b",
+  "colors": { "background": "#0a1330", "foreground": "#f2e29b", "cursor": "#f5b301" }
+}
+```
+
+Set `theme` to `midnight` / `nord` / `daylight` / `solarized-light` for a preset palette; `colors` layers per-key
+overrides on top. The color-coding screenshot in [Scenario 6](scenarios.html) combines header colors with `colors` to
+paint each project — **from the header down to the terminal body**.
+
 ### Customizing the header (buttons / chips) {#header}
 
 This is where MulmoTerminal's **Extend** pillar lives. Shape the header of a running terminal to fit your workflow with **a small DSL**.
