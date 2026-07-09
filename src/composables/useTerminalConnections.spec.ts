@@ -121,13 +121,17 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     if (!ws) throw new Error("no socket created");
     ws.onopen?.(); // open so send() passes the readyState guard
 
-    const shiftEnter = { type: "keydown", key: "Enter", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false };
+    const preventDefault = vi.fn();
+    const shiftEnter = { type: "keydown", key: "Enter", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false, preventDefault };
     expect(mockKeyState.handler(shiftEnter)).toBe(false); // false => xterm won't also emit \r
     expect(ws.sent).toContain(JSON.stringify({ type: "input", data: conn.NEWLINE_SEQUENCE }));
+    expect(preventDefault).toHaveBeenCalled(); // cancels the default so no follow-up keypress leaks a \r
 
     // A plain Enter is left to xterm (returns true, sends nothing extra).
     ws.sent.length = 0;
-    expect(mockKeyState.handler({ type: "keydown", key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false })).toBe(true);
+    expect(
+      mockKeyState.handler({ type: "keydown", key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() }),
+    ).toBe(true);
     expect(ws.sent).toHaveLength(0);
     conn.release("cell-key");
   });
@@ -168,13 +172,14 @@ describe("isSystemClipboard", () => {
 });
 
 describe("shiftEnterNewline", () => {
-  const ev = (over: Partial<KeyboardEvent>): Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey"> => ({
+  const ev = (over: Partial<KeyboardEvent>): Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey" | "preventDefault"> => ({
     type: "keydown",
     key: "Enter",
     shiftKey: false,
     altKey: false,
     ctrlKey: false,
     metaKey: false,
+    preventDefault: () => {},
     ...over,
   });
 
@@ -197,11 +202,13 @@ describe("shiftEnterNewline", () => {
     }
   });
 
-  it("makeShiftEnterHandler sends the newline and cancels the default on Shift+Enter", () => {
+  it("makeShiftEnterHandler sends the newline, cancels the default, and preventDefaults on Shift+Enter", () => {
     const send = vi.fn();
+    const preventDefault = vi.fn();
     const handler = conn.makeShiftEnterHandler(send);
-    expect(handler(ev({ shiftKey: true }))).toBe(false); // false => xterm won't also send \r
+    expect(handler(ev({ shiftKey: true, preventDefault }))).toBe(false); // false => xterm won't also send \r
     expect(send).toHaveBeenCalledWith(conn.NEWLINE_SEQUENCE);
+    expect(preventDefault).toHaveBeenCalled(); // else the browser fires a keypress and xterm submits a bare \r
   });
 
   it("makeShiftEnterHandler passes plain Enter through (returns true, sends nothing)", () => {

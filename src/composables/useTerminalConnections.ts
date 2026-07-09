@@ -35,12 +35,17 @@ export function shiftEnterNewline(e: ModifierKeyEvent): string | null {
   return isShiftEnter ? NEWLINE_SEQUENCE : null;
 }
 
-// The xterm custom key handler: on Shift+Enter, `send` the newline and return false
-// (cancel xterm's default \r); otherwise return true so xterm handles the key normally.
-export function makeShiftEnterHandler(send: (data: string) => void): (e: ModifierKeyEvent) => boolean {
+// The xterm custom key handler: on Shift+Enter, `send` the newline and return false (cancel xterm's
+// default \r); otherwise return true so xterm handles the key normally. `preventDefault()` is essential:
+// xterm's _keyDown returns early on a false custom handler WITHOUT preventDefault, so the browser fires a
+// follow-up keypress that _keyPress turns into a bare \r — submitting the prompt. Cancelling the default
+// stops that keypress.
+type ShiftEnterEvent = ModifierKeyEvent & { preventDefault: () => void };
+export function makeShiftEnterHandler(send: (data: string) => void): (e: ShiftEnterEvent) => boolean {
   return (e) => {
     const newline = shiftEnterNewline(e);
     if (newline === null) return true;
+    e.preventDefault();
     send(newline);
     return false;
   };
