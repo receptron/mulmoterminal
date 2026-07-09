@@ -2,7 +2,9 @@ title: MulmoTerminal Guide
 description: >-
   User guide for MulmoTerminal — the grid view, everyday workflows, the full
   feature list, and configuration. 日本語 / English.
-remote_theme: just-the-docs/just-the-docs
+# Pinned to the last Jekyll-3-compatible release — GitHub Pages' legacy build runs Jekyll 3.9,
+# and just-the-docs >= 0.4 requires Jekyll 4 (its build hangs/fails on legacy Pages otherwise).
+remote_theme: just-the-docs/just-the-docs@v0.3.3
 
 # just-the-docs options
 search_enabled: true
