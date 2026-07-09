@@ -104,14 +104,14 @@ Any developer can turn their frequent actions into a single click and surface on
   "buttons": [
     { "id": "compact", "emoji": "🗜️", "label": "Compact", "run": "input", "text": "/compact", "when": "agent == claude" },
     { "id": "gh",      "emoji": "🌐", "label": "Open on GitHub", "run": "open", "open": { "url": "https://github.com/${repo}" }, "when": "isGitRepo" },
-    { "id": "reveal",  "emoji": "📁", "label": "Reveal in Finder", "run": "open", "open": { "reveal": "${dir}" } },
+    { "id": "reveal",  "emoji": "📁", "label": "Reveal folder", "run": "open", "open": { "reveal": "${dir}" } },
     { "id": "build",   "emoji": "🔨", "label": "Build", "run": "shell", "cmd": "yarn build" }
   ]
 }
 ```
 
 - `run: "input"` … send `text` to the running Claude/Codex (e.g. `/compact`).
-- `run: "open"` … `url` (browser, http/https only) / `reveal` (Finder) / `files` (in-app explorer) / `view` (`prs`/`wiki`/`collections`/`accounting`).
+- `run: "open"` … `url` (browser, http/https only) / `reveal` (OS file manager: Finder/Explorer/xdg-open) / `files` (in-app explorer) / `view` (`prs`/`wiki`/`collections`/`accounting`).
 - `run: "shell"` … run `cmd` in a command cell (the id is resolved server-side, `${variables}` are shell-escaped, and the command never reaches the browser).
 - `${variables}` … `dir` `branch` `repo` `ahead` `behind` `dirty` `agent` `model` `task`.
 - `when` … `isGitRepo` / `agent == …` / `repo == …` (`&&` / `||`, with `&&` taking precedence).
@@ -137,7 +137,7 @@ Your project's scripts that can run in a grid cell (dev server, tests, build, an
 
 | Variable | Default | Role |
 |---|---|---|
-| `CLAUDE_CWD` | `~/mulmoclaude` | The default working directory (the PTY's cwd) |
+| `CLAUDE_CWD` / `--cwd` | The directory you run `npx mulmoterminal` in (only `~/mulmoclaude` when the server is started directly) | The default working directory (the PTY's cwd); also set via `--cwd` |
 | `PORT` | `34567` | The server port |
 | `MULMOTERMINAL_HOME` | `~/.mulmoterminal` | The root for managed git worktrees |
 

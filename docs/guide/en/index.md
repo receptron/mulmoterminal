@@ -31,7 +31,7 @@ The bottleneck isn't the CPU or the terminal — it's **your attention**.
 | **Forget the instruction** | The cell header always shows the **latest instruction / what it's doing**; 🕘 shows the **tool-call history** (→ [Feature reference](features.html)) |
 | Want to **know it's done** | A finished / input-waiting cell turns **amber + plays a sound** — you know you're "called" |
 | Want the **session to survive** | **tmux persistence** keeps it alive across reload, reconnect, and server restart |
-| Open **git / a dir** quickly | A git status chip; open **Finder / the in-app files / a PR** in one click |
+| Open **git / a dir** quickly | A git status chip; open **the OS file manager (Finder/Explorer) / the in-app files / a PR** in one click |
 | Work with the **terminal as the hub** | All of the above on top of a terminal, and **extend it to your workflow with a DSL** (→ [Config](config.html#header)) |
 
 ## The four pillars behind it

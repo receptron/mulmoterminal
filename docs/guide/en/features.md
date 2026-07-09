@@ -51,7 +51,7 @@ MulmoTerminal's features, organized by the **four pillars** (Supervise / See / A
 
 | Feature | Description |
 |---|---|
-| Header action buttons | Add `input` (send text) / `open` (URL, Finder, in-app view) / `shell` (run a command) via `buttons`, with `${variables}` and `when` conditions |
+| Header action buttons | Add `input` (send text) / `open` (URL, file manager, in-app view) / `shell` (run a command) via `buttons`, with `${variables}` and `when` conditions |
 | Header display chips | Reorder / hide built-in chips plus custom chips via `chips` |
 | Name badge / colors | Per-directory name and per-element colors in `.mulmoterminal.json` |
 | Launchers / cwd presets / PR repos | Extend launch commands, working-directory suggestions, and cross-repo PR targets in settings |
