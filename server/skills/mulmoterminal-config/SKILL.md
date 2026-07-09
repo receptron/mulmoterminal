@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, and header buttons/chips. Walks a beginner through it: pick directories with checkboxes, start from a colour preset (warm / tropical / cool / bold), preview the real colours in the terminal, then refine. Configures the current directory OR several of your recent MulmoTerminal directories at once. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal — for one project or across many.
+description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, and header buttons/chips. Walks a beginner through it: pick directories with checkboxes, start from a colour preset (warm / tropical / cool / bold), apply it and look at the real cell, then refine. Configures the current directory OR several of your recent MulmoTerminal directories at once. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal — for one project or across many.
 ---
 
 # Configure a MulmoTerminal directory
@@ -48,36 +48,40 @@ Read `palettes.json`. Ask for the **vibe** first (four options, one question):
 
 **☀️ Warm** · **❄️ Cool** · **🎨 Bold** · **⚪ Neutral**
 
-Then **preview every preset in that vibe** (below) and ask which one they want. That's the big-picture
-decision; the details come after.
+Describe each preset in that vibe (below), ask which one they want, then apply it. That's the
+big-picture decision; the details come after.
 
-### 4. Preview the colours in the terminal
+### 4. How to show colours — the terminal is the only real preview
 
-Print the palette as **real colour**, so they can see it rather than imagine it. Convert each hex to
-`r;g;b` and use 24-bit ANSI escapes. Render a mini fake terminal — badge, prompt, an error line, a
-success line — because what matters is how *command output* will look against the background:
+**Do not try to paint swatches with ANSI escape codes.** Claude Code does not render colour in tool
+output, and a Bash child here has no controlling terminal (`/dev/tty` → `device not configured`), so
+the user sees nothing. Verified — don't waste a turn on it.
 
-```bash
-rgb() { printf '%d;%d;%d' 0x${1:1:2} 0x${1:3:2} 0x${1:5:2}; }
-BG=$(rgb '#171210'); FG=$(rgb '#ece2dc'); AC=$(rgb '#d97757'); ER=$(rgb '#e06c5a'); OK=$(rgb '#a3b565')
-printf '\033[48;2;%sm\033[38;2;%sm  ✳ my-project   ~/code/my-project   \033[0m\n' "$BG" "$AC"
-printf '\033[48;2;%sm\033[38;2;%sm  $ yarn build                       \033[0m\n' "$BG" "$FG"
-printf '\033[48;2;%sm\033[38;2;%sm  ✗ error: 2 problems                \033[0m\n' "$BG" "$ER"
-printf '\033[48;2;%sm\033[38;2;%sm  ✓ done in 1.2s                     \033[0m\n' "$BG" "$OK"
-```
+What to do instead:
 
-Always print the hex codes beside the swatches too, so it still reads if the terminal can't do
-truecolor. Re-run this preview after every change.
+1. **Name the colours.** For each candidate give its hex values and one line on how it feels
+   ("terracotta on near-black — cosy, low glare"). Optionally add a rough emoji swatch (🟫 🟦 🟩 ⬛)
+   so there's something to look at.
+2. **Apply, then look at the real thing.** Write the config and tell the user to **reload the browser
+   page** (⌘R / F5). MulmoTerminal reads `.mulmoterminal.json` once per page load — there is no live
+   watch — so a reload is what makes the colours appear. A **server restart is not needed.**
+3. Ask what to change, adjust, reload again. Two or three rounds is plenty.
+
+The cell they're looking at IS the preview, and it's exact — better than any approximation.
 
 ### 5. Refine, one axis at a time
 
-After the preset, offer small, concrete choices — never "what colour do you want?". Preview after each:
+After the preset, offer small, concrete choices — never "what colour do you want?". Apply and reload
+after each:
 
 - **Background** — darker / as-is / lighter
 - **Accent** (cursor, badge, status dot) — keep / warmer / cooler
 - **Header contrast** — subtle / strong
 
-Stop as soon as they're happy. Two or three refinements is plenty unless they ask for more.
+Stop as soon as they're happy.
+
+Note: the chrome colours only show while the cell is **idle** — the working/attention colours take
+over while a session is busy or waiting on the user.
 
 ### 6. Propose only buttons that actually work here
 
@@ -99,8 +103,8 @@ means "configured, hide every builtin", which is rarely what someone wants.
 ### 8. Write, then confirm
 
 For each target directory: **read the existing `.mulmoterminal.json` first and merge** — never drop
-fields the user didn't ask to change. Write the file, self-check it against the schema below, print
-the preview once more, and list the files you wrote.
+fields the user didn't ask to change. Write the file, self-check it against the schema below, list the
+files you wrote, and **tell the user to reload the page to see it** (no live watch; no server restart).
 
 Configuring **several** directories? Give each a visually distinct hue from the same vibe, so they're
 easy to tell apart at a glance in the grid — that's the whole point of colour-coding.
