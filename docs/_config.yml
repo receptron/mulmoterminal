@@ -1,0 +1,24 @@
+title: MulmoTerminal Guide
+description: >-
+  User guide for MulmoTerminal — the grid view, everyday workflows, the full
+  feature list, and configuration. 日本語 / English.
+remote_theme: just-the-docs/just-the-docs
+
+# just-the-docs options
+search_enabled: true
+color_scheme: dark
+heading_anchors: true
+aux_links:
+  "GitHub":
+    - "https://github.com/receptron/mulmoterminal"
+  "npm":
+    - "https://www.npmjs.com/package/mulmoterminal"
+
+plugins:
+  - jekyll-remote-theme
+
+# Keep the internal design docs out of the guide site's build/nav.
+exclude:
+  - collection-plugin-integration.md
+  - gui-protocol-spike.md
+  - spawn-architecture.md
