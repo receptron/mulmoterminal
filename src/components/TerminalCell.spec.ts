@@ -1318,6 +1318,20 @@ describe("TerminalCell", () => {
     expect(w.find('[aria-label="Show activity timeline"]').exists()).toBe(true);
   });
 
+  it("pins expand + close outside the info track so crowded header info can't push them off", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    // The info (dot / dir / chips / prompt) lives in the shrinkable, clipping track…
+    expect(w.find(".cell-header > .cell-header-main").exists()).toBe(true);
+    expect(w.find(".cell-header-main .cell-dir").exists()).toBe(true);
+    expect(w.find(".cell-header-main .cell-prompt").exists()).toBe(true);
+    // …while the actions are a SIBLING of it, so they can never be pushed out of the cell.
+    expect(w.find(".cell-header > .cell-actions").exists()).toBe(true);
+    expect(w.find(".cell-header-main .cell-actions").exists()).toBe(false);
+    expect(w.find('.cell-actions [aria-label="Expand terminal"]').exists()).toBe(true);
+    expect(w.find(".cell-actions .cell-close").exists()).toBe(true);
+  });
+
   it("shows the restore label + icon when the cell is expanded", async () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
     await flushPromises();
