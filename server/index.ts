@@ -655,6 +655,8 @@ function hookSettingsJson(host: string = "localhost") {
       UserPromptSubmit: entry,
       Stop: entry,
       Notification: entry,
+      // SessionStart fires with source "clear" on /clear — we use it to reset the header prompt.
+      SessionStart: entry,
       PreToolUse: toolEntry,
       PostToolUse: toolEntry,
       PostToolUseFailure: toolEntry,
@@ -1036,7 +1038,15 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
   lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
 }
 
-// Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
+// `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
+// (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
+// resurface) and publish; the next UserPromptSubmit sets the new query.
+function clearHeaderPrompt(sessionId: string): void {
+  lastPrompts.set(sessionId, "");
+  publishActivity(sessionId);
+}
+
+// Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
   const body = req.body || {};
@@ -1051,6 +1061,8 @@ app.post("/api/hook", async (req, res) => {
       const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
       await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
+    // `/clear` fires SessionStart with source "clear" — drop the stale header prompt (not "resume"/"compact").
+    if (event === "SessionStart" && body.source === "clear") clearHeaderPrompt(sessionId);
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
