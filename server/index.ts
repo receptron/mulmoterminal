@@ -36,7 +36,7 @@ import {
 } from "./sandbox.js";
 import { listPrsAcrossRepos } from "./prs.js";
 import { listIssuesAcrossRepos } from "./issues.js";
-import { publicDirConfig, dirSoundFile } from "./dir-config.js";
+import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -280,6 +280,10 @@ function isAllowedOrigin(origin?: string) {
 
 // Pub/sub channel the sidebar subscribes to for live session-activity changes.
 const SESSIONS_CHANNEL = "sessions";
+
+// Pub/sub channel telling the client a directory's .mulmoterminal.json changed, so it re-reads that
+// dir's config and recolours its cells without a page reload. Fed by the tool hooks, not a watcher.
+const DIR_CONFIG_CHANNEL = "dir-config";
 
 // Per-session pub/sub channel the GUI panel subscribes to. The MCP broker POSTs a
 // toolResult to /api/agent/toolResult, which stores it keyed by session id and
@@ -1029,6 +1033,12 @@ async function handleToolHook(sessionId: string, event: string, p: HookToolPaylo
       durationMs: p.duration_ms,
       status: event === "PostToolUseFailure" ? "failed" : "completed",
     });
+  }
+  // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
+  // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
+  if (event === "PostToolUse") {
+    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input);
+    if (cwd) pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd });
   }
 }
 

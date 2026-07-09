@@ -18,8 +18,8 @@ Two files ship next to this one:
 ## How to run this conversation
 
 **Ask one decision at a time, and always offer concrete options** — use `AskUserQuestion`, not open
-prose questions. A beginner should never have to invent a hex code. Show, don't describe: preview
-real colour in the terminal before asking them to commit to it.
+prose questions. A beginner should never have to invent a hex code. Show, don't describe: apply a
+preset and let them look at the real cell, which recolours the moment you write the file.
 
 ### 1. Pick the target directories — with checkboxes
 
@@ -62,17 +62,17 @@ What to do instead:
 1. **Name the colours.** For each candidate give its hex values and one line on how it feels
    ("terracotta on near-black — cosy, low glare"). Optionally add a rough emoji swatch (🟫 🟦 🟩 ⬛)
    so there's something to look at.
-2. **Apply, then look at the real thing.** Write the config and tell the user to **reload the browser
-   page** (⌘R / F5). MulmoTerminal reads `.mulmoterminal.json` once per page load — there is no live
-   watch — so a reload is what makes the colours appear. A **server restart is not needed.**
-3. Ask what to change, adjust, reload again. Two or three rounds is plenty.
+2. **Apply, then look at the real thing.** Write the config — the cells for that directory recolour
+   **immediately**, no page reload and no server restart. (Writing the file with your Write/Edit tool
+   is what tells MulmoTerminal to re-read it, so always write it rather than asking the user to.)
+3. Ask what to change, adjust, look again. Two or three rounds is plenty.
 
 The cell they're looking at IS the preview, and it's exact — better than any approximation.
 
 ### 5. Refine, one axis at a time
 
-After the preset, offer small, concrete choices — never "what colour do you want?". Apply and reload
-after each:
+After the preset, offer small, concrete choices — never "what colour do you want?". Apply and look
+after each — the change lands live:
 
 - **Background** — darker / as-is / lighter
 - **Accent** (cursor, badge, status dot) — keep / warmer / cooler
@@ -103,8 +103,8 @@ means "configured, hide every builtin", which is rarely what someone wants.
 ### 8. Write, then confirm
 
 For each target directory: **read the existing `.mulmoterminal.json` first and merge** — never drop
-fields the user didn't ask to change. Write the file, self-check it against the schema below, list the
-files you wrote, and **tell the user to reload the page to see it** (no live watch; no server restart).
+fields the user didn't ask to change. Write the file, self-check it against the schema below, and list
+the files you wrote. The cells recolour as soon as you write — nothing to reload.
 
 Configuring **several** directories? Give each a visually distinct hue from the same vibe, so they're
 easy to tell apart at a glance in the grid — that's the whole point of colour-coding.
