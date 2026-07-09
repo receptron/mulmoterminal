@@ -8,7 +8,7 @@ theme: just-the-docs
 
 # just-the-docs options
 search_enabled: true
-color_scheme: dark
+color_scheme: light
 heading_anchors: true
 aux_links:
   "GitHub":
