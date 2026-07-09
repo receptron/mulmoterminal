@@ -1062,7 +1062,11 @@ app.post("/api/hook", async (req, res) => {
       await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
     // `/clear` fires SessionStart with source "clear" — drop the stale header prompt (not "resume"/"compact").
-    if (event === "SessionStart" && body.source === "clear") clearHeaderPrompt(sessionId);
+    // Log source + whether the id maps to a live PTY, to confirm /clear keeps the launched --session-id.
+    if (event === "SessionStart") {
+      console.log(`[hook] SessionStart source=${body.source} id=${sessionId} livePty=${ptys.has(sessionId)}`);
+      if (body.source === "clear") clearHeaderPrompt(sessionId);
+    }
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
