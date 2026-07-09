@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { installOwnedSkill, SCHEMA_ASSET_FILE } from "./install-config-skill";
+import { loadDirConfig } from "./dir-config";
 
 const NAME = "mulmoterminal-config";
 const MARKER = ".mt-owned";
@@ -61,4 +62,42 @@ describe("installOwnedSkill", () => {
   it("never ships the schema under the collections-reserved name", () => {
     expect(SCHEMA_ASSET_FILE).not.toBe("schema.json");
   });
+});
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
+const CHROME_KEYS = ["badgeColor", "headerColor", "headerTextColor", "cellColor", "cellBorderColor", "dotColor", "buttonColor"] as const;
+const META_KEYS = ["id", "vibe", "label", "description"];
+
+// The skill offers these as starting points, so a typo'd hex would silently ship a colour the loader
+// drops — the user picks a preset and part of it just doesn't apply.
+describe("shipped colour presets (palettes.json)", () => {
+  const file = path.join(process.cwd(), "server", "skills", "mulmoterminal-config", "palettes.json");
+  const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+  const presets: unknown[] = isRecord(parsed) && Array.isArray(parsed.presets) ? parsed.presets : [];
+
+  it("ships at least one preset per vibe the skill asks about", () => {
+    expect(presets.map((p) => (isRecord(p) ? p.vibe : null))).toEqual(expect.arrayContaining(["warm", "cool", "bold", "neutral"]));
+  });
+
+  for (const preset of presets) {
+    const id = isRecord(preset) && typeof preset.id === "string" ? preset.id : "(unnamed)";
+    it(`preset ${id} survives the loader with nothing dropped`, () => {
+      expect(isRecord(preset)).toBe(true);
+      if (!isRecord(preset)) return;
+      const config: Record<string, unknown> = Object.fromEntries(Object.entries(preset).filter(([k]) => !META_KEYS.includes(k)));
+
+      const dir = mkdtempSync(path.join(tmpdir(), "mt-preset-"));
+      writeFileSync(path.join(dir, ".mulmoterminal.json"), JSON.stringify(config));
+      const loaded = loadDirConfig(dir);
+      rmSync(dir, { recursive: true, force: true });
+
+      expect(loaded.theme).toBe(config.theme); // theme id is a real one
+      // Sorted: the loader re-emits palette keys in ITheme order, not the file's order.
+      const wantedColors = isRecord(config.colors) ? Object.keys(config.colors).sort() : [];
+      expect(Object.keys(loaded.colors ?? {}).sort()).toEqual(wantedColors); // every palette key valid
+      CHROME_KEYS.forEach((key) => {
+        if (config[key] !== undefined) expect(loaded[key]).not.toBeNull();
+      });
+    });
+  }
 });
