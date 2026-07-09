@@ -24,7 +24,7 @@ Open it from the ⚙ in the toolbar.
 | Item | Description |
 |---|---|
 | **THEME** | Midnight / Nord / Daylight / Solarized Light |
-| **NOTIFICATION SOUND** | The sound played when a cell needs attention (empty for the built-in chime, or any audio file) |
+| **NOTIFICATION SOUND** | The sound played when a cell needs you (empty for the built-in chime, or any audio file) |
 | **PULL REQUEST REPOS** | The repos aggregated by the cross-repo PR/Issue view (`owner/repo`) |
 | **LAUNCH COMMANDS** | Commands you can launch besides Claude in a grid cell (`{ label, command }`) |
 | **MCP SERVERS** | Your own MCP servers to add to single-view sessions |
@@ -71,9 +71,12 @@ Place this at the project root to change the appearance, sound, and header of **
 }
 ```
 
-All values are `#rrggbb`. The working / needs-attention status colors take priority over these background colors (which show when idle).
+All values are `#rrggbb`. The working / needs-you status colors take priority over these background colors (which show when idle).
 
 ### Customizing the header (buttons / chips) {#header}
+
+This is where MulmoTerminal's **Extend** pillar lives. Shape the header of a running terminal to fit your workflow with **a small DSL**.
+Any developer can turn their frequent actions into a single click and surface only the information they want to see — that's what this is for.
 
 **Buttons** (`buttons`) — action buttons with emoji/labels that act on a running session. With none set, nothing is added, just as before.
 
