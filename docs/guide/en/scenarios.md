@@ -5,39 +5,43 @@ parent: English
 nav_order: 2
 ---
 
-# Scenarios — usage by user scenario
+# Scenarios — usage by scenario
 {: .no_toc }
 
 - TOC
 {:toc}
 
+MulmoTerminal's four pillars — **Supervise / See / Automate & investigate / Extend** — shown as real development workflows.
+
 ---
 
-## 1. Run several tasks in parallel
+## 1. Run several tasks in parallel (Supervise)
 
-This is the grid's core and headline use case.
+The grid's core and headline use case. This is the center of the **command post**.
 
-1. Add cells with `New terminal +` and launch Claude / Codex on a different task in each.
+1. Add cells with `New terminal ＋` and launch Claude / Codex on a different task in each.
 2. While one is thinking, move ahead with review or edits in another cell.
-3. Pick up only the cells that turn **needs attention (amber)** — you don't have to watch them all.
+3. Pick up only the cells that turn **needs you (amber)** — you don't have to watch them all.
 
 ![Terminals running in parallel](../images/grid-2x2.png)
 
-> Each cell's header shows what that session is currently doing, so you can tell which cell is working on what at a glance.
+> Each cell's header shows what that session is doing right now, so you can tell which cell is working on what at a glance.
 
 ## 2. Isolate work safely with a worktree
 
 When you want to try something *without polluting main*, isolate the work in a **git worktree**.
 
 1. In a cell whose working directory is a git repo, enter a task name (e.g. `fix-login`) under **OR ISOLATE IN A WORKTREE**.
-2. Click **+ New worktree** to create a worktree dedicated to that task and launch the session.
+2. Click **＋ New worktree** to create a worktree dedicated to that task and launch the session.
 3. As changes pile up, a diff badge appears in the cell header. From there it's one click to **push / create a PR**.
 
 ![Worktrees start from the launcher form](../images/grid-launch-form.png)
 
 ## 3. Work across multiple repositories
 
-You can point each cell at a **different working directory**. Open your frontend repo and your API repo in adjacent cells and make changes in one to match the other — cross-repo work that completes on a single screen. Register the directories you use often as *cwd presets* in [Configuration](config.html) so autocomplete kicks in.
+You can point each cell at a **different working directory**. Open your frontend repo and your API repo in adjacent
+cells and change one to match the other — cross-repo work that completes on a single screen. Register the directories
+you use often as *cwd presets* in [Configuration](config.html) so autocomplete kicks in.
 
 ## 4. Run a script and let AI summarize the failure
 
@@ -56,7 +60,8 @@ Just pick one with the toggle at launch; collection actions and mulmoclaude skil
 
 ## 6. Tell projects apart by color
 
-As you add cells, it gets harder to tell which one is which project. Set a **name badge** and a header **color** in each repo's `.mulmoterminal.json` so you can distinguish them at a glance in the grid (see [Configuration](config.html#per-dir)).
+As you add cells, it gets harder to tell which one is which project. Set a **name badge** and a header **color** in each
+repo's `.mulmoterminal.json` so you can distinguish them at a glance in the grid (see [Configuration](config.html#per-dir)).
 
 ```json
 { "name": "acme-web", "badgeColor": "#2563eb", "headerColor": "#0b2545", "headerTextColor": "#e6f0ff" }
@@ -64,7 +69,8 @@ As you add cells, it gets harder to tell which one is which project. Set a **nam
 
 ## 7. Add your frequent actions to the header
 
-Using `buttons` / `chips` in `.mulmoterminal.json`, you can add **your own buttons** (e.g. send `/compact`, open GitHub, run a build) and **display chips** to the header of a running terminal. For details, see [Configuration → Customizing the header](config.html#header).
+Using `buttons` / `chips` in `.mulmoterminal.json`, you can add **your own buttons** (e.g. send `/compact`, open GitHub,
+run a build) and **display chips** to the header of a running terminal. For details, see [Configuration → Customizing the header](config.html#header).
 
 ---
 

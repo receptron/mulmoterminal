@@ -5,7 +5,7 @@ parent: English
 nav_order: 1
 ---
 
-# Basics — what you can do in the grid
+# Basics — what you can do in the grid today
 {: .no_toc }
 
 - TOC
@@ -13,60 +13,66 @@ nav_order: 1
 
 ---
 
-## Single view and grid view
+## The grid is "a board of agents"
 
-MulmoTerminal has two display modes. Switch between them with the **chat / grid** icons in the top toolbar.
+The grid view is the screen for **supervising many AI agents in parallel**. Each cell is one independent
+agent (or terminal). While one is thinking, you push another cell forward and pick up **only the ones that
+turn amber (needs you)** — the goal is to run many agents solo instead of babysitting them all.
 
-- **Single view**: a screen for focusing on one session. A chat-style history on the left, and a GUI panel (diagrams, forms, images, documents) on the right.
-- **Grid view**: a screen where you tile several terminals and run them **at the same time**. This is the star of this guide.
+MulmoTerminal has two display modes; switch between them with the **chat / grid** icons in the top toolbar.
 
-![Single view](../images/single-view.png)
+- **Single view** — the screen for **focusing** on one agent (conversation on the left, a GUI panel on the right for diagrams, forms, images, and documents).
+- **Grid view** — the screen for **supervising many agents at once**, tiled side by side. This is the star of this guide.
 
-> Every cell in the grid is an independent PTY. While Claude is thinking in one cell, you can run a shell in another, drive Codex on a different project, or run tests — all at once.
+![Single view — focus on one agent](../images/single-view.png)
 
-## Launching a terminal (launcher form)
+## Launching an agent (launcher form)
 
-An empty grid cell shows a **launcher form**, where you choose how to start.
+Empty cells in the grid show a **launcher form**. This is where you choose **what** to run and **where**.
 
-![Launcher form in an empty cell](../images/grid-launch-form.png)
+![The launcher form in an empty cell](../images/grid-launch-form.png)
 
 | Part | Role |
 |---|---|
-| **Claude / Codex** toggle | Choose which agent runs in this cell |
-| **WORKING DIRECTORY** | Enter the working directory (start it with `▶`). Frequently used directories are autocompleted from the *cwd presets* in your settings |
-| **OR ISOLATE IN A WORKTREE** | In a git repo, enter a task name and click **+ New worktree**. This creates an isolated git worktree for the work and launches into it |
-| **OR LAUNCH** | A **launch command** other than Claude (e.g. `Shell`, `Node REPL`). The ones you registered in settings appear here |
+| **Claude / Codex** toggle | Choose the **agent** to run in this cell |
+| **WORKING DIRECTORY** | Enter the working directory (`▶` to launch). Frequently used directories autocomplete from *cwd presets* |
+| **OR ISOLATE IN A WORKTREE** | In a git repo, enter a task name and hit **＋ New worktree** to create an isolated worktree and launch there |
+| **OR LAUNCH** | Start a non-agent **launch command** (`Shell` / `codex` / anything) as a persistent terminal |
 
-## Reading a terminal cell
+## Reading a cell — "what each agent is doing and where"
 
-Once launched, the cell becomes a terminal. The header has two rows.
+The header of a running cell has two rows. Together they capture that agent's **status, location, and current work**.
 
-![A launched cell (two-row header)](../images/grid-one-cell.png)
+![A running cell (two-row header)](../images/grid-one-cell.png)
 
-- **Row 1 (info)**: status dot, directory, git chip (`⎇ branch ●change count`), model / context usage, what the session is currently doing, and expand / close.
-- **Row 2 (actions)**: connection status (`connected`), attachments, file browser, GitHub, timeline 🕘, and more.
+- **Row 1 (info):** status dot, directory, git chip (`⎇ branch ●changes`), **model / context size**,
+  what that agent is **doing right now**, and expand / close.
+- **Row 2 (controls):** connection status, attachments, file browser, GitHub, and the **timeline 🕘** (tool-call history).
 
-> You can also read the status by **color**. A bluish border means **working** (the agent is thinking), amber means **needs attention** (waiting for input, or there is output you haven't seen), and the default means idle.
+> **Status shows up as color.** A bluish border means **working** (thinking), amber means **needs you** (awaiting input,
+> or unread output), and neutral means idle. A sound plays too, so you know you've been **called without watching the screen**.
+> This is the heart of the grid.
 
-## Multiple cells and pages
+## Tiling many, pages, and reordering
 
-- Use **New terminal (+)** in the toolbar to add an empty cell. A page holds up to **9 cells**; when it overflows, a new page (tab) is created.
-- Enter reorder mode with **Toggle grid cell ordering**, then swap positions using the `◀ ▶` controls on each cell.
+- Add cells with **New terminal (＋)** in the toolbar. Up to **9 cells** per page; overflow moves to the next page (tab).
+- Enter reorder mode with **Toggle grid cell ordering**, then swap positions with each cell's `◀ ▶`.
 
-![2×2 parallel terminals](../images/grid-2x2.png)
+![Agents running in parallel](../images/grid-2x2.png)
 
-## Zooming into one cell (filmstrip)
+## Zooming into one (filmstrip)
 
-Press **⤢** (expand) on a cell to enlarge it; the other cells line up as thumbnails in the **filmstrip** along the bottom.
-Click the empty header area of a thumbnail to **switch** to that terminal. Press **⤡** to return to the full grid.
+Hit a cell's **⤢** (expand) to show that agent large while the others shrink into thumbnails in the **filmstrip**
+along the bottom. Click a thumbnail's header margin to **switch**, and **⤡** returns to the grid. You can jump quickly
+between surveying the whole board and zooming into one.
 
-![Zoomed in (filmstrip)](../images/grid-zoom.png)
+![Zoom (filmstrip)](../images/grid-zoom.png)
 
-## Claude and Codex
+## Mixing Claude and Codex
 
-Within the same grid, you can launch either **Claude** or **Codex** in each cell. Both share the same terminal experience, persistence, and GUI panel mechanics.
-Just pick one with the toggle at launch.
+In the same grid, you can launch **Claude** or **Codex** per cell. Both share the same terminal experience,
+persistence, GUI panel, and visibility machinery. Use each for its strengths, or throw the same task at both and compare.
 
 ---
 
-Next: [Scenarios — usage by user scenario](scenarios.html)
+Next: [Scenarios — usage by scenario](scenarios.html)

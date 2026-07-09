@@ -5,24 +5,36 @@ nav_order: 3
 has_children: true
 ---
 
-# MulmoTerminal Guide (English)
+# MulmoTerminal Guide
 
-MulmoTerminal is a workspace that runs **Claude Code** and **Codex** as *real terminals* in your browser.
-Each session runs in a PTY (pseudo-terminal) on the server and is streamed to an [xterm.js](https://xtermjs.org/) screen over WebSocket.
+## Concept — why this terminal
 
-This guide focuses on the **grid view** — the screen where you tile several terminals side by side and run them all at once — and covers what you can do today, how to use it in practice, the full feature list, and how to configure it.
+AI coding agents (**Claude Code** / **Codex**) take minutes to finish a single task. Babysit one and your hands
+sit idle the whole time. The bottleneck isn't the CPU or the terminal — it's **your attention**.
 
-![Four terminals running in parallel in the grid](../images/grid-2x2.png)
+That's where MulmoTerminal started. First, as —
 
-## Contents
+> **a command post that runs many agents in parallel, lets you triage by status, and step in only where you're needed.**
 
-1. [Basics — what you can do in the grid](basics.html)
-   What the grid is, launching terminals, working with cells, pages, and switching between Claude and Codex.
-2. [Scenarios — usage by user scenario](scenarios.html)
-   Working in parallel, isolating work in a worktree, spanning multiple repos, running scripts with AI summaries, color-coding, and more.
-3. [Feature reference](features.html)
-   A consolidated list of the features around the grid.
-4. [Configuration](config.html)
-   The settings modal, `config.json`, `.mulmoterminal.json`, `script.json`, and environment variables.
+From there it grew into something more than a parallel terminal: **a terminal-first, modern development environment**.
+
+### The four pillars
+
+1. **Supervise** — the grid is **a cockpit for your agents**. Send N agents at N tasks / worktrees, and go
+   only **to the cell that calls you**, guided by color and notifications — *working (blue) / needs you (amber)*.
+2. **See** — the **status, model, context size, git, tool-call timeline, and estimated cost** of every agent, at a glance.
+   You always know **what each agent is doing and where**.
+3. **Automate & investigate** — run scripts inside a cell, and when one fails, let **AI diagnose** the wall of logs in a few lines (cause, fix).
+4. **Extend (DSL)** — extend the header buttons / chips, launchers, and project settings with **a small DSL**.
+   Shape the terminal **to fit your own workflow** — which is why it fits any developer.
+
+![A board of AI agent terminals running in parallel](../images/grid-2x2.png)
+
+## How to read this guide
+
+1. [Basics — what you can do in the grid today](basics.html) The grid as a board of agents, triage by status, worktree isolation, launching, and controls.
+2. [Scenarios — usage by scenario](scenarios.html) Parallel supervision, visibility, automation, error investigation, and color-coding, shown as real workflows.
+3. [Feature reference](features.html) Every feature, organized by the four pillars.
+4. [Configuration](config.html) The settings modal, `config.json`, `.mulmoterminal.json`, and **DSL extensions (buttons / chips)**.
 
 > Looking for Japanese? See the [日本語ガイド](../ja/).
