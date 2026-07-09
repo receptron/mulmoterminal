@@ -645,8 +645,11 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
 // per-session tool-call history that the GUI's tools pane shows. A failed tool
 // fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
 // entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson(host: string = "localhost") {
-  const cmd = `curl -s -X POST http://${host}:${PORT}/api/hook ` + `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
+function hookSettingsJson(host: string, sessionId: string) {
+  // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own session_id
+  // on /clear and /compact, but the PTY — and the id the client tracks — stays this one, so attributing
+  // hooks by this header keeps activity / header prompt / tool history correlated across a clear.
+  const cmd = `curl -s -X POST http://${host}:${PORT}/api/hook ` + `-H 'content-type: application/json' -H 'x-mt-session: ${sessionId}' -d @- >/dev/null 2>&1`;
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
   // Tool hooks take a matcher; "" matches all tools.
   const toolEntry = [{ matcher: "", hooks: [{ type: "command", command: cmd }] }];
@@ -655,6 +658,8 @@ function hookSettingsJson(host: string = "localhost") {
       UserPromptSubmit: entry,
       Stop: entry,
       Notification: entry,
+      // SessionStart fires with source "clear" on /clear — we use it to reset the header prompt.
+      SessionStart: entry,
       PreToolUse: toolEntry,
       PostToolUse: toolEntry,
       PostToolUseFailure: toolEntry,
@@ -1036,11 +1041,23 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
   lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
 }
 
-// Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
+// `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
+// (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
+// resurface) and publish; the next UserPromptSubmit sets the new query.
+function clearHeaderPrompt(sessionId: string): void {
+  lastPrompts.set(sessionId, "");
+  publishActivity(sessionId);
+}
+
+// Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
   const body = req.body || {};
-  const sessionId = body.session_id;
+  // Prefer the stable mulmoterminal id from the x-mt-session header over Claude's own session_id, which it
+  // reissues on /clear and /compact — the PTY/client id is the one hooks must stay attributed to.
+  const mtHeader = req.headers["x-mt-session"];
+  const mt = typeof mtHeader === "string" && SESSION_ID_RE.test(mtHeader) ? mtHeader : null;
+  const sessionId = mt ?? body.session_id;
   const event = body.hook_event_name;
   if (sessionId) {
     const entry = ptys.get(sessionId);
@@ -1051,6 +1068,8 @@ app.post("/api/hook", async (req, res) => {
       const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
       await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
+    // `/clear` fires SessionStart with source "clear" — drop the stale header prompt (not "resume"/"compact").
+    if (event === "SessionStart" && body.source === "clear") clearHeaderPrompt(sessionId);
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
@@ -1804,7 +1823,7 @@ function spawnClaudePty(
     resume,
     canResume,
     // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost"),
+    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
     permissionMode: CLAUDE_PERMISSION_MODE,
     attachGuiMcp,
     mcpConfig: mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),
