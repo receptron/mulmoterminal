@@ -88,7 +88,7 @@ nav_order: 4
 }
 ```
 
-`theme` に `midnight` / `nord` / `daylight` / `solarized-light` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
+`theme` に `midnight` / `nord` / `daylight` / `solarized` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
 [応用編 6](scenarios.html) の色分けスクショは、ヘッダー色と `colors` を組み合わせて**ヘッダーから端末の中身まで**プロジェクトごとに染めた例です。
 
 ### ヘッダーのカスタマイズ（ボタン / チップ） {#header}
