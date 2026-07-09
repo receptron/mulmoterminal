@@ -2,9 +2,9 @@ title: MulmoTerminal Guide
 description: >-
   User guide for MulmoTerminal — the grid view, everyday workflows, the full
   feature list, and configuration. 日本語 / English.
-# Pinned to the last Jekyll-3-compatible release — GitHub Pages' legacy build runs Jekyll 3.9,
-# and just-the-docs >= 0.4 requires Jekyll 4 (its build hangs/fails on legacy Pages otherwise).
-remote_theme: just-the-docs/just-the-docs@v0.3.3
+# Built via GitHub Actions (see .github/workflows/pages.yml) with Jekyll 4 + the just-the-docs
+# gem (docs/Gemfile), so we can use the current theme instead of the legacy Pages Jekyll 3.9 builder.
+theme: just-the-docs
 
 # just-the-docs options
 search_enabled: true
@@ -15,9 +15,6 @@ aux_links:
     - "https://github.com/receptron/mulmoterminal"
   "npm":
     - "https://www.npmjs.com/package/mulmoterminal"
-
-plugins:
-  - jekyll-remote-theme
 
 # Keep the internal design docs out of the guide site's build/nav.
 exclude:
