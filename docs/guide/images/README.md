@@ -13,6 +13,7 @@ Captured from a **throwaway demo instance** (a fresh `HOME`, empty config seeded
 | `grid-2x2.png` | Four parallel terminals (2×2) |
 | `grid-zoom.png` | Expanded cell + filmstrip thumbnails |
 | `settings.png` | The Settings modal (theme / sound / PR repos / launch commands / MCP) |
+| `grid-colors.png` | Four projects color-coded via per-dir `.mulmoterminal.json` (Mondrian / Van Gogh / Picasso / Matisse). Real Claude cells in throwaway `/tmp` demo repos on untrusted dirs (so the trust prompt shows, no account/email leaks). |
 
 ## Not yet captured (need a live Claude/Codex session)
 

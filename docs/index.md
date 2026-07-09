@@ -44,6 +44,24 @@ lose a session**, and open git/dirs in **one click** — a **terminal-first mode
 **監督 (Supervise)** 並行エージェントのコックピット · **可視化 (See)** 状態と所在を一目 ·
 **自動化 & 調査 (Automate & investigate)** 実行と AI 診断 · **拡張 (Extend)** DSL でどんな開発者にも。
 
+## 🚀 起動 / Quick start
+
+**必要なもの:** [`claude`](https://claude.com/claude-code) CLI（Claude Code）が PATH にあること + **Node ≥ 22.9**。
+Claude Code が動く環境なら、あとはコマンド 1 つ。
+**あると便利:** `tmux`（セッション永続化）· `gh`（PR/Issue ビュー）· `codex`（Codex セッション）。
+
+```bash
+npx mulmoterminal@latest                       # → http://localhost:34567 が開く
+npx mulmoterminal@latest --cwd ./my-project    # 作業ディレクトリを指定（--port <n> も可）
+```
+
+**Prerequisites:** the [`claude`](https://claude.com/claude-code) CLI on your PATH + **Node ≥ 22.9** — if Claude Code
+runs, you're ready. **Recommended:** `tmux` (session persistence) · `gh` (PRs/Issues) · `codex` (Codex sessions).
+
+```bash
+npx mulmoterminal@latest                        # opens http://localhost:34567
+```
+
 ---
 
 ## 日本語

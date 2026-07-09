@@ -43,6 +43,15 @@ AI エージェントは 1 タスクに数分かかります。1 体を見張る
 
 ![並行するエージェント端末のボード](../images/grid-2x2.png)
 
+## 🚀 まずは起動
+
+[`claude`](https://claude.com/claude-code)（Claude Code）が動く環境 + **Node ≥ 22.9** があれば、コマンド 1 つで始められます
+（`tmux` があるとセッションが永続化されて理想的）。
+
+```bash
+npx mulmoterminal@latest    # → http://localhost:34567 が開く
+```
+
 ## このガイドの読み方
 
 1. [基本編 — グリッドで今できること](basics.html)

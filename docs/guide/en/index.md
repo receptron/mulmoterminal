@@ -43,6 +43,15 @@ The bottleneck isn't the CPU or the terminal — it's **your attention**.
 
 ![A board of parallel AI-agent terminals](../images/grid-2x2.png)
 
+## 🚀 Get started
+
+If the [`claude`](https://claude.com/claude-code) CLI (Claude Code) runs on your machine and you have **Node ≥ 22.9**,
+one command starts it (`tmux` is ideal for persistent sessions):
+
+```bash
+npx mulmoterminal@latest    # opens http://localhost:34567
+```
+
 ## How to read this guide
 
 1. [Basics — what you can do in the grid](basics.html)

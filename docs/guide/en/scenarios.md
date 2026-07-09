@@ -76,8 +76,14 @@ Just pick one with the toggle at launch; collection actions and mulmoclaude skil
 
 ## 6. Tell projects apart by color
 
-As you add cells, it gets harder to tell which one is which project. Set a **name badge** and a header **color** in each
-repo's `.mulmoterminal.json` so you can distinguish them at a glance in the grid (see [Configuration](config.html#per-dir)).
+As you add cells, it gets harder to tell which one is which project. Set a **name badge** and header / body / border /
+dot / button **colors** in each repo's `.mulmoterminal.json` so you can distinguish them at a glance in the grid (see
+[Configuration](config.html#per-dir)).
+
+![Four projects color-coded boldly (Mondrian / Van Gogh / Picasso / Matisse)](../images/grid-colors.png)
+
+*Here: Mondrian (yellow + red), Van Gogh (night blue + yellow), Picasso (blue + red + yellow), Matisse (green + pink).
+The header, badge, and accents all change color — impossible to mix up.*
 
 ```json
 { "name": "acme-web", "badgeColor": "#2563eb", "headerColor": "#0b2545", "headerTextColor": "#e6f0ff" }
