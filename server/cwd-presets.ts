@@ -2,11 +2,7 @@
 // from index.ts so the sanitize/load/save logic is unit-testable.
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-
-export interface CwdPreset {
-  label: string;
-  path: string;
-}
+import { type CwdPreset } from "./config-schema.js";
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const isPreset = (v: unknown): v is CwdPreset => isRecord(v) && typeof v.label === "string" && typeof v.path === "string";

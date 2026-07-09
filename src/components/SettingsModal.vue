@@ -19,7 +19,7 @@ const emit = defineEmits<{
   (e: "update-repos", repos: string[]): void;
   (e: "update-launchers", launchers: Launcher[]): void;
   (e: "update-user-mcp", servers: UserMcpServer[]): void;
-  (e: "close"): void;
+  (e: "configure-appearance" | "close"): void;
 }>();
 
 // Cross-repo PR view's repos ("owner/repo"). Editable list mirroring the saved value;
@@ -232,6 +232,13 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
           <span class="theme-label">{{ t.label }}</span>
         </button>
       </div>
+
+      <h3 class="section-title">Directory appearance</h3>
+      <p class="hint">
+        Launch the <code>mulmoterminal-config</code> skill to style a directory — name badge, colors, terminal palette, header buttons. It configures the
+        focused session's directory, or lets you pick from your recent directories.
+      </p>
+      <button class="btn" type="button" @click="emit('configure-appearance')">🎨 Configure appearance…</button>
 
       <h3 class="section-title">Notification sound</h3>
       <p class="hint">Played when a session needs attention. Leave empty for the built-in chime, or point to your own audio file.</p>

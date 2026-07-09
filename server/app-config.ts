@@ -4,25 +4,9 @@
 // from config-routes.ts so the sanitize/load/save logic is unit-testable.
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { sanitizePresets, type CwdPreset } from "./cwd-presets.js";
-import { sanitizeButtons, sanitizeChips, type HeaderButton, type HeaderChip } from "./header-config.js";
-
-// A named program a grid cell can launch instead of Claude (a plain shell, codex,
-// any interactive command). `command` is run on the user's own machine as an
-// interactive persistent PTY — it's their own config, so it's an intentional allowlist.
-export interface Launcher {
-  label: string;
-  command: string;
-}
-
-// A user-added HTTP MCP server the single-view Claude session should load. `id` becomes
-// the server name in --mcp-config (and the `mcp__<id>__*` tool prefix), `url` its
-// streamable-HTTP endpoint. In the Docker sandbox the URL's loopback host is rewritten
-// to host.docker.internal (see server/sandbox.ts).
-export interface UserMcpServer {
-  id: string;
-  url: string;
-}
+import { sanitizePresets } from "./cwd-presets.js";
+import { sanitizeButtons, sanitizeChips } from "./header-config.js";
+import { launcherSchema, userMcpServerSchema, type CwdPreset, type Launcher, type UserMcpServer, type HeaderButton, type HeaderChip } from "./config-schema.js";
 
 export interface AppConfig {
   cwdPresets: CwdPreset[];
@@ -54,10 +38,10 @@ export function sanitizeUserMcpServers(input: unknown): UserMcpServer[] {
   const seen = new Set<string>();
   const out: UserMcpServer[] = [];
   for (const v of input) {
-    if (!v || typeof v !== "object") continue;
-    const o = v as Record<string, unknown>;
-    const id = typeof o.id === "string" ? o.id.trim() : "";
-    const url = typeof o.url === "string" ? o.url.trim() : "";
+    const parsed = userMcpServerSchema.safeParse(v);
+    if (!parsed.success) continue;
+    const id = parsed.data.id.trim();
+    const url = parsed.data.url.trim();
     if (!MCP_ID_RE.test(id) || RESERVED_MCP_IDS.has(id) || !MCP_URL_RE.test(url) || seen.has(id)) continue;
     seen.add(id);
     out.push({ id, url });
@@ -78,10 +62,10 @@ export function sanitizeLaunchers(input: unknown): Launcher[] {
   const seen = new Set<string>();
   const out: Launcher[] = [];
   for (const v of input) {
-    if (!v || typeof v !== "object") continue;
-    const o = v as Record<string, unknown>;
-    const label = typeof o.label === "string" ? o.label.trim().slice(0, LAUNCHER_LABEL_MAX) : "";
-    const command = typeof o.command === "string" ? o.command.trim().slice(0, LAUNCHER_COMMAND_MAX) : "";
+    const parsed = launcherSchema.safeParse(v);
+    if (!parsed.success) continue;
+    const label = parsed.data.label.trim().slice(0, LAUNCHER_LABEL_MAX);
+    const command = parsed.data.command.trim().slice(0, LAUNCHER_COMMAND_MAX);
     if (!label || !command || seen.has(label)) continue;
     seen.add(label);
     out.push({ label, command });

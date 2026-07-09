@@ -72,6 +72,7 @@ import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
 import { initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
+import { installConfigSkill } from "./install-config-skill.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
@@ -184,6 +185,11 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 // workspace experience. Gated to the managed mulmoclaude workspace and
 // fault-isolated per step, so it never aborts boot (see workspaceSetup.ts).
 initWorkspaceSetup({ workspace: CLAUDE_CWD });
+
+// Install the mulmoterminal-config skill into the user's global skills roots so any
+// launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
+// Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
+installConfigSkill();
 
 // MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the
