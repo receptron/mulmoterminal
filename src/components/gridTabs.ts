@@ -1,3 +1,5 @@
+import type { RunCommand } from "./runCommand";
+
 // The grid is ONE flat, ordered list of terminal cells, split into pages of 9
 // (the tabs). Closing a cell reflows the whole list so later pages pack forward
 // into the gap (terminals flow across page boundaries); "+ Terminal" appends a
@@ -15,9 +17,9 @@ export interface Cell {
   uid: number;
   session: string | null;
   cwd: string | null;
-  // A running script.json command (from the cell launcher's "run a script"), with
-  // the directory it runs in. Ephemeral — command cells are never persisted.
-  command?: { index: number; label: string; cwd: string | null } | null;
+  // A running command cell (a script.json entry or a header shell button), with the
+  // directory it runs in. Ephemeral — command cells are never persisted.
+  command?: RunCommand | null;
   // A running launcher (shell/codex/custom). Persistent & reattachable like a session.
   launcher?: CellLauncher | null;
   // The agent this cell runs. "codex" reconnects via /ws/codex; absent = Claude (the default).

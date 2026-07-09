@@ -5,6 +5,7 @@ import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import type { Cell, CellStatus } from "./gridTabs";
+import type { RunCommand } from "./runCommand";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 
@@ -32,8 +33,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "session" | "cwd", uid: number, value: string): void;
   (e: "close" | "toggle-expand", uid: number): void;
-  (e: "run", uid: number, command: { index: number; label: string; cwd: string | null }): void;
-  (e: "runSpare", command: { index: number; label: string; cwd: string | null }): void;
+  (e: "run", uid: number, command: RunCommand): void;
+  (e: "runSpare", command: RunCommand): void;
   (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;

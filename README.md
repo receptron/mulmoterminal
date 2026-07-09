@@ -1,14 +1,21 @@
 # mulmoterminal
 
-A browser-based terminal for running [Claude Code](https://claude.com/claude-code)
-sessions, with a sidebar that lists the current project's chat sessions and shows
-live, hook-driven activity for each one.
+A browser-based terminal + GUI workspace for coding agents — [Claude Code](https://claude.com/claude-code)
+and OpenAI's **Codex** — with a sidebar that lists the current project's chat sessions
+and shows live, hook-driven activity for each one.
 
-Each session runs as a real PTY on the server (`claude` in a pseudo-terminal) and
+Each session runs as a real PTY on the server (the agent CLI in a pseudo-terminal) and
 is streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a
-WebSocket. A sidebar lists every Claude session for the project and reflects, in
-real time, which sessions are **working** (Claude is thinking) and which **need
-attention** (waiting for input, or finished with output you haven't seen).
+WebSocket. A sidebar lists every session for the project and reflects, in real time,
+which sessions are **working** (the agent is thinking) and which **need attention**
+(waiting for input, or finished with output you haven't seen).
+
+Around the terminal sit the things a coding session needs: a **grid** of parallel
+sessions, an optional **GUI panel** for rich tool output (documents, forms, images,
+charts), **git worktree** isolation with one-click **push / open PR**, a full-screen
+**file browser + editor**, per-session **cost & token** readouts, a cross-repo **PRs &
+Issues** view, and read-only **Wiki** and **Collections** browsers over the shared
+workspace.
 
 **Inserting a file path** — like a native terminal, you can put a file's absolute
 path into the prompt: **drag a file** onto the terminal (works where the browser
@@ -22,7 +29,10 @@ inserted at the cursor — it is not submitted, so you can review it first.
 ## Install & run
 
 Requires the [`claude`](https://claude.com/claude-code) CLI on your `PATH` and
-**Node ≥ 22.9**.
+**Node ≥ 22.9**. Optional but recommended: **`tmux`** so terminals survive a server
+restart (see [Session persistence (tmux)](#session-persistence-tmux)), the **`gh`** CLI
+logged in for the PRs/Issues view and one-click PR creation, and — for Codex sessions —
+the **`codex`** CLI on your `PATH`.
 
 ```bash
 npx mulmoterminal           # start on http://localhost:34567 and open the browser
@@ -54,16 +64,26 @@ server, and opens the browser. For local development from a clone, see
 
 - [Architecture](#architecture)
 - [Why a PTY?](#why-a-pty)
+- [Agents: Claude & Codex](#agents-claude--codex)
+- [Session persistence (tmux)](#session-persistence-tmux)
+- [Docker sandbox (experimental, single view)](#docker-sandbox-experimental-single-view)
 - [Tech stack](#tech-stack)
 - [Configuration](#configuration)
 - [Running](#running)
 - [Scripts (Run menu)](#scripts-run-menu)
+- [Files view (browse & edit)](#files-view-browse--edit)
+- [Git worktrees & pull requests](#git-worktrees--pull-requests)
+- [Cost & token usage](#cost--token-usage)
+- [Wiki, Collections & the GUI panel](#wiki-collections--the-gui-panel)
+- [More features](#more-features)
 - [Server API specification](#server-api-specification)
   - [HTTP: `GET /api/sessions`](#http-get-apisessions)
   - [HTTP: `GET /api/scripts`](#http-get-apiscripts)
   - [HTTP: `POST /api/command/summarize`](#http-post-apicommandsummarize)
   - [HTTP: `POST /api/hook`](#http-post-apihook)
+  - [More HTTP endpoints](#more-http-endpoints)
   - [WebSocket: `/ws` (terminal)](#websocket-ws-terminal)
+  - [More WebSocket endpoints](#more-websocket-endpoints)
   - [WebSocket: `/ws/run` (command terminal)](#websocket-wsrun-command-terminal)
   - [Socket.IO: `/ws/pubsub` (activity pub/sub)](#socketio-wspubsub-activity-pubsub)
 - [Session model](#session-model)
@@ -94,14 +114,15 @@ server, and opens the browser. For local development from a clone, see
 - **Session list** is fetched over HTTP (`/api/sessions`).
 - **Live activity** is pushed over a Socket.IO pub/sub channel (`/ws/pubsub`);
   the server learns of activity from **Claude hooks** that POST to `/api/hook`.
-- **Script commands** (`yarn dev`, tests, …), launched from a cell's directory
-  picker, run in their own ephemeral PTY over a separate WebSocket (`/ws/run`);
-  they are not Claude sessions. See [Scripts (Run menu)](#scripts-run-menu).
+- **Other terminals** run on their own raw WebSockets: **Codex** sessions on `/ws/codex`,
+  persistent **launch commands** on `/ws/launch`, and one-off **script commands**
+  (`yarn dev`, tests, …) on `/ws/run`. Only Claude/Codex are agent sessions with hooks;
+  see [Agents: Claude & Codex](#agents-claude--codex) and [Scripts (Run menu)](#scripts-run-menu).
 - In dev (`yarn dev`) the Vite dev server runs on its own port (`CLIENT_PORT`,
-  default `6856`) and proxies `/ws` (covers `/ws/run`), `/ws/pubsub`, and `/api` to
-  the backend (`PORT`, default `34567`) — so you open the Vite port (e.g.
-  `http://localhost:6856`). In production the backend serves the built client from
-  `dist/` on `PORT`, and you open that.
+  default `6856`) and proxies `/ws` (a prefix covering `/ws/codex`, `/ws/launch`, and
+  `/ws/run`), `/ws/pubsub`, `/api`, and `/artifacts` to the backend (`PORT`, default
+  `34567`) — so you open the Vite port (e.g. `http://localhost:6856`). In production the
+  backend serves the built client from `dist/` on `PORT`, and you open that.
 
 ---
 
@@ -122,6 +143,38 @@ SDK; we drive the real interactive CLI and relay its TTY over the WebSocket.
 
 ---
 
+## Agents: Claude & Codex
+
+MulmoTerminal drives **interactive coding-agent CLIs**, not just Claude. An
+`AgentAdapter` seam abstracts the per-agent bits (which binary to spawn, how it resumes)
+so the PTY, grid, persistence, and GUI-panel plumbing stay shared. Two adapters ship
+today — **Claude Code** (the default) and **Codex**.
+
+- **Claude** — spawned as `claude` (override with `CLAUDE_BIN`). The server passes
+  `--session-id <uuid>`, so it knows the live session's id even before its transcript
+  file exists, and injects activity hooks + the GUI MCP per spawn (see
+  [Claude hook injection](#claude-hook-injection)).
+- **Codex** — spawned as `codex` (override with `CODEX_BIN`; `CODEX_MODEL` sets
+  `--model`). Codex runs on its own WebSocket (`/ws/codex`) and its sessions appear in the
+  sidebar next to Claude's. Because Codex only mints its rollout id **after** the first
+  turn, the server watches `~/.codex/sessions/**/rollout-*.jsonl` (home overridable via
+  `CODEX_HOME`) and maps the new rollout to the session — attributed only when it's
+  unambiguous, never by "newest wins". Resume reattaches a live PTY, adopts a surviving
+  tmux session, or cold-resumes the rollout id.
+
+**Choosing an agent.** The single view has a **New Codex session** button; each grid
+cell's launch form and the Collections browser carry a **Claude / Codex** toggle (your
+choice is remembered).
+
+**Skills for Codex.** Codex has no `/<slug>` slash commands, so on session setup
+MulmoTerminal **mirrors the workspace's `.claude/skills` into `~/.codex/skills`** (each
+mirrored directory carries a `.mt-mirror` marker so a re-sync overwrites what MulmoTerminal
+owns and never clobbers Codex's own skills), and rewrites a collection's `/<slug> …` seed
+into a plain `Use the "<slug>" skill.` instruction. The same skills Claude uses then show
+up for Codex, loaded by description.
+
+---
+
 ## Session persistence (tmux)
 
 If **`tmux` is installed**, MulmoTerminal runs each Claude session and launcher inside
@@ -134,6 +187,18 @@ it never touches your personal tmux sessions or keybindings.
 **No tmux? No problem** — terminals fall back to plain (non-persistent) PTYs, exactly as
 before. An explicit close (a cell's ✕) ends the tmux session; a machine reboot does not
 survive (tmux itself is gone). Command-cell scripts are ephemeral and not persisted.
+
+**Installing tmux** (optional):
+
+```bash
+brew install tmux            # macOS (Homebrew)
+sudo apt install tmux        # Debian / Ubuntu
+sudo dnf install tmux        # Fedora
+```
+
+On Windows there's no native tmux, so sessions use the non-persistent fallback — run the
+server under **WSL** if you want persistence. Nothing else is required: MulmoTerminal
+detects `tmux` on `PATH` at startup and uses it automatically when present.
 
 ---
 
@@ -182,8 +247,9 @@ building the sandbox spawn, so they have no effect unless `MULMOTERMINAL_SANDBOX
 
 | Layer    | Technology |
 | -------- | ---------- |
-| Frontend | Vue 3 (`<script setup>` + TypeScript), Vite, xterm.js (`@xterm/*`), socket.io-client |
-| Backend  | Node (ESM, TypeScript run via `tsx`), Express 5, `ws` (terminal WebSocket), `node-pty`, socket.io |
+| Frontend | Vue 3 (`<script setup>` + TypeScript), Vue Router, Vite, xterm.js (`@xterm/*`), CodeMirror 6, socket.io-client |
+| Backend  | Node (ESM, TypeScript run via `tsx`), Express 5, `ws` (terminal WebSocket), `node-pty`, socket.io, `@modelcontextprotocol/sdk` (in-process GUI MCP) |
+| Plugins  | GUI-protocol Vue plugins (`@mulmoclaude/*`, `@mulmochat-plugin/*`): markdown, form, image, chart, HTML, collection, accounting |
 | Tests    | Vitest + @vue/test-utils + jsdom |
 
 Requires **Node ≥ 22.9** (uses `node --env-file-if-exists`) and the `claude` CLI on `PATH`.
@@ -203,6 +269,17 @@ the server runs without one.
 | `CLIENT_PORT` | `6856`         | Vite dev-server port (dev only: the URL you open with `yarn dev`). |
 | `CLAUDE_BIN` | `claude`       | The Claude Code binary to spawn. |
 | `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions the sidebar lists. Via `npx mulmoterminal` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). |
+| `CLAUDE_PERMISSION_MODE` | `auto` | Permission mode passed to each `claude` spawn. |
+| `CODEX_BIN`  | `codex`        | The Codex CLI binary to spawn. |
+| `CODEX_MODEL`| codex default  | Model passed to Codex as `--model` (unset = Codex's own default). |
+| `CODEX_HOME` | `~/.codex`     | Codex home — where its session rollouts and MulmoTerminal-mirrored skills live. |
+| `MULMOTERMINAL_HOME` | `~/.mulmoterminal` | Root for managed **git worktrees**. |
+| `WAIT_REAP_GRACE_MS` | `1800000` | How long a **waiting** background session is kept before it's auto-reaped (`0` or negative = never). |
+
+The Docker-sandbox variables (`MULMOTERMINAL_SANDBOX`, `MULMOTERMINAL_SANDBOX_IMAGE`,
+`SANDBOX_MOUNT_CONFIGS`, `SANDBOX_SSH_AGENT_FORWARD`) and the update-check opt-outs
+(`MULMOTERMINAL_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`) are covered in
+[Docker sandbox](#docker-sandbox-experimental-single-view) and [Install & run](#install--run).
 
 Example `.env` (gitignored):
 
@@ -380,6 +457,119 @@ the terminal is pointed at.
 
 ---
 
+## Git worktrees & pull requests
+
+When a terminal's directory is a git repo, its header shows a **branch chip**
+(`⎇ <branch>` with dirty / ahead / behind counts), fed by `GET /api/git-status` (polled
+while the view is visible). A **GitHub** menu links straight to the repo, its issues, and
+its pull requests.
+
+**Worktree isolation.** A grid cell's launch form offers **＋ New worktree**: name a task
+and the cell launches its agent inside a fresh
+[git worktree](https://git-scm.com/docs/git-worktree) on a new `agent/<slug>` branch — a
+separate working tree that shares the repo's `.git`, so several agents can work the same
+repo without colliding. Worktrees live under `~/.mulmoterminal/worktrees/` (override with
+`MULMOTERMINAL_HOME`), and existing ones are listed for reuse.
+
+A worktree cell's header carries a **diff badge** (`+<commits> ●<dirty>`); click it for a
+**Changes vs `<base>`** panel (file list + patch) with actions:
+
+- **✓ Commit** — hands the cell's own session a canned commit prompt.
+- **⬆ Push** — `git push -u origin <branch>` (`POST /api/worktrees/push`).
+- **⧉ Open PR** — pushes, then `gh pr create … --fill`; if `gh` is missing or unauthed it
+  falls back to opening the GitHub **compare** URL (`POST /api/worktrees/pr`).
+
+Closing a worktree cell asks whether to **keep** the worktree or **discard & remove** it
+(a dirty worktree is never removed unless you confirm).
+
+**PRs & Issues (cross-repo).** The toolbar's **Pull requests** button opens a full-screen
+view that aggregates open PRs **and** issues across the repos listed in Settings →
+**Pull request repos** (`prRepos`, `owner/repo` entries) via your server-side `gh` login.
+PRs show a CI-rollup / review-decision / draft badge; each repo lists its latest open
+issues. Rows are real links, per-repo errors don't sink the view, and the two lists load
+independently. Backed by `GET /api/prs` and `GET /api/issues`.
+
+---
+
+## Cost & token usage
+
+Each grid cell's header shows two badges for its session, refreshed when a turn finishes
+(from `GET /api/session/:id`):
+
+- **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
+  window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
+  current-gen Opus / Sonnet / Fable, **200k** otherwise; an unknown model shows the label
+  with no %).
+- **Token badge** — `⇡<in> ⇣<out>`: cumulative input (fresh + cache-read + cache-creation)
+  and output tokens for the session, k/M-formatted, with a full breakdown in the tooltip.
+
+The **Settings** modal (⚙) shows an **estimated $ cost** — Session / Today / Month — from
+`GET /api/cost`, using a built-in public per-model price table (cache reads billed at
+0.1×, cache writes at 1.25× input). It's an estimate: real billing differs, **flat-plan
+(Max) usage isn't reflected**, and turns on unpriced models are flagged and excluded.
+
+A separate, full **double-entry accounting** book (the `account_balance` toolbar button →
+`/accounting`) is provided by the bundled `@mulmoclaude/accounting-plugin` and stores its
+books under `<workspace>/data/accounting`. It's a bookkeeping app — unrelated to the LLM
+cost estimate above — and is also exposed to Claude as the `manageAccounting` GUI tool.
+
+---
+
+## Wiki, Collections & the GUI panel
+
+MulmoTerminal is also a **live view over the shared workspace** (`CLAUDE_CWD`, default
+`~/mulmoclaude`) that agents author into — never a snapshot, so it re-reads on entry.
+
+**GUI panel.** Beside the terminal, a **GUI panel** ("Canvas") renders the rich results of
+GUI-protocol tools the agent calls — documents (`presentDocument`), forms (`presentForm`),
+generated images, charts, HTML, and collection cards. Each result is drawn by its plugin's
+own Vue view inside a Shadow-DOM `PluginFrame` (so a plugin's bundled CSS can't leak),
+mirrors the active session, and replays history on re-select. Plugins reach the agent over
+an **in-process MCP server** served per session at `POST /api/mcp/:sessionId` (server name
+`mulmoterminal-gui`) — which works from the host *or* the Docker sandbox (over
+`host.docker.internal`). Which plugins load is gated by `plugins/plugins.json`; the shipped
+set includes markdown, form, image generation (needs `GEMINI_API_KEY`), chart, HTML, and
+collection views. You can also merge your **own HTTP MCP servers** into the single-view
+session via Settings → `userMcpServers`.
+
+**Wiki.** The toolbar **Wiki** button opens a read-only browser over `<workspace>/data/wiki/`
+— an **index** (tag-filterable page catalog), rendered **pages** with `[[wiki links]]` and
+backlinks, a **graph** view (pages ranked by references), and a **lint** report (orphans /
+broken links / tag drift). Read-only endpoints: `GET /api/wiki`, `/api/wiki/graph`,
+`/api/wiki/lint`.
+
+**Collections.** The toolbar **Collections** button browses the workspace's collection
+"cards" (`@mulmoclaude/collection-plugin`). Running a collection **action** fetches a seed
+prompt and spawns a fresh agent session for it — the **Launch with Claude / Codex** toggle
+decides which agent (and whether the seed auto-runs or drops in as an editable draft).
+Favorited collections get their own toolbar buttons.
+
+---
+
+## More features
+
+- **Grid of parallel sessions** — the ＋ Terminal / grid view runs many sessions at once,
+  auto-sizing by count across pages. Cell borders signal state at a glance — **working**
+  (pulsing blue), **blocked** (amber — needs a permission / answer), **done** (blue —
+  finished, output unreviewed), and **idle** — and the toolbar shows a tally across all
+  pages so you notice an off-screen cell that needs you.
+- **Timeline** (🕘) — a read-only per-session activity timeline (tools run, newest first),
+  from `GET /api/transcript/timeline`.
+- **Tools pane** — the available GUI tools plus a live tool-call history for the active
+  session.
+- **Notifications** (🔔) — a toolbar bell with an unread badge and a dropdown of active
+  notifications; click a row to jump to its session.
+- **Voice input** — dictate a prompt via on-device Whisper (`POST /api/transcribe`, macOS
+  only; the model downloads on first use).
+- **Remote host** — link MulmoTerminal to the companion phone client (Google sign-in) to
+  watch and start sessions from your phone.
+- **Themes** — four terminal palettes (midnight / nord / daylight / solarized), your pick
+  remembered; a project's `.mulmoterminal.json` can override per directory.
+- **Editing niceties** — **Shift+Enter** inserts a newline in the prompt, and on macOS
+  **Option** is treated as Meta so Claude's Alt-key bindings work.
+
+---
+
 ## Server API specification
 
 Base URL: `http://localhost:$PORT` (default `http://localhost:34567`).
@@ -492,6 +682,62 @@ Any resulting state change is published on the `sessions` pub/sub channel.
 
 **Response `200 application/json`**: `{ "ok": true }` (always, even for unknown events).
 
+### More HTTP endpoints
+
+The endpoints above are the core; the server exposes many more (all under
+`http://localhost:$PORT`; query params shown where relevant). Mutating endpoints are
+same-origin-guarded.
+
+**Sessions & agents**
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET /api/session/:id?cwd=` | One session's summary — cumulative `usage` and `context` (model + last-turn context tokens). Backs the cell token & ctx% badges. |
+| `GET /api/codex/sessions?cwd=` | Codex sessions for the project (from `~/.codex` rollouts), newest first. |
+| `GET /api/cost?cwd=&session=` | Estimated $ cost — session / today / month. |
+| `GET /api/transcript/timeline?session=&cwd=` | Per-session activity timeline (tools run). |
+
+**Git & worktrees**
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET /api/git-status?cwd=` | `{ repo, branch, detached, dirty, ahead, behind, upstream }`. |
+| `POST /api/git-remote` | The dir's GitHub repo URL (for the header GitHub menu). |
+| `GET /api/worktrees?cwd=` · `GET /api/worktrees/diff?cwd=` | List managed worktrees / diff one vs its base. |
+| `POST /api/worktrees/create` · `/remove` · `/push` · `/pr` | Create on `agent/<slug>`, remove (managed root only), push, open a PR (`gh`, else compare URL). |
+| `GET /api/prs` · `GET /api/issues` | Open PRs / issues across the configured `prRepos` (via `gh`). |
+
+**Workspace views**
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET /api/wiki` (`?slug=`) · `/api/wiki/graph` · `/api/wiki/lint` | Read-only wiki index / page / graph / lint. |
+| `GET /api/collections/…` · `/api/feeds` · `GET\|PUT /api/shortcuts` | Collections browser, feeds, favorites (see `docs/collection-plugin-integration.md`). |
+| `GET /api/files/browse/{list,text,md}` · `PUT /api/files/browse/write` | File tree / read / Markdown-render / write (contained within the project root). |
+| `GET /api/files/raw?path=` | Raw asset bytes (workspace-rooted). |
+
+**GUI panel / plugins / MCP**
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `POST /api/mcp/:sessionId` | Per-session GUI MCP server (Streamable HTTP; `GET`/`DELETE` → 405). |
+| `POST /api/plugin/:toolName` | GUI-plugin dispatch (incl. `spawnBackgroundChat`, `manageAccounting`, `presentHtml`). |
+| `GET /api/agent/toolResults/:id` · `POST /api/agent/toolResult` | GUI-panel result history / persist. |
+| `GET /api/tools` · `GET /api/tool-calls/:id` | Available tools / tool-call history. |
+| `POST /api/accounting` | Double-entry accounting (bundled plugin). |
+
+**Config, sound & misc**
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET\|POST /api/config` | User UI config (`cwdPresets`, `soundFile`, `prRepos`, `launchers`, `userMcpServers`). |
+| `GET /api/sound` · `/api/dir-sound?cwd=` · `/api/dir-config?cwd=` | Custom / per-directory attention sound + per-dir config. |
+| `GET /api/notifications`(`/history`) · `POST /api/notifications/:id/clear` | Notification feed. |
+| `POST /api/transcribe`(`/model`…) | Voice-input transcription (Whisper, macOS). |
+| `POST /api/translation` | Runtime UI-string translation. |
+| `GET /api/remote-host/status` · `POST /api/remote-host/{connect,disconnect}` | Companion phone-client link. |
+| `POST /api/open-dir` · `POST /api/pick-file` | Reveal a dir in Finder/Explorer; OS file-picker → path. |
+
 ### WebSocket: `/ws` (terminal)
 
 A raw WebSocket carrying the terminal stream for one session. One PTY per
@@ -526,6 +772,20 @@ A non-JSON frame is written to the PTY verbatim (fallback).
 **Disconnect** — when the socket closes, if Claude is still `working` the PTY is
 **kept alive** in the background; otherwise it's killed. See
 [Session lifecycle](#session-lifecycle).
+
+### More WebSocket endpoints
+
+Two more raw WebSockets share the `/ws` frame format (`output` / `input` / `resize` /
+`exit`):
+
+- **`/ws/codex?session=<id>&cwd=<dir>&gui=<0|1>`** — a **Codex** agent PTY (see
+  [Agents: Claude & Codex](#agents-claude--codex)). Like `/ws` it sends a `session` frame
+  with the id and reattaches to a live or tmux-backed session on resume. `gui=0` (grid
+  cells) omits the GUI MCP and keeps the session out of the sidebar.
+- **`/ws/launch?session=<id>&cwd=<dir>&launcher=<index>`** — a **launch command** PTY (a
+  plain shell, `codex`, or any command configured in Settings → Launch commands). Unlike a
+  Run-menu script it's **persistent and reattachable** (survives page switches /
+  reconnects), but it has no Claude hooks, so its dot only shows running vs. exited.
 
 ### WebSocket: `/ws/run` (command terminal)
 
@@ -692,29 +952,44 @@ appears, at which point the on-disk title takes over.
 
 ```
 server/
-  index.js        Express app, /api routes, terminal WebSocket, PTY lifecycle,
-                  session state, hook injection, session discovery; also
-                  /api/scripts + the /ws/run command-terminal relay
-  scripts.ts      Loads/validates script.json; resolves a Run-menu command by index
-  pubsub.js       createPubSub(server) — socket.io pub/sub at /ws/pubsub
-  fix-pty-perms.js  postinstall: fixes node-pty prebuilt binary permissions
+  index.ts        Express app, /api routes, upgrade routing, PTY lifecycle,
+                  session state, hook injection, session discovery, GUI-MCP mount
+  agents/         AgentAdapter seam — claude.ts, codex.ts, registry.ts
+  codex-*.ts      Codex sessions, args, rollout discovery, skill mirroring
+  tmux.ts         tmux-backed session persistence (own -L mulmoterminal server)
+  sandbox.ts      Docker sandbox spawn for the single-view Claude session
+  worktrees.ts, worktree-*.ts   git worktree create/list/diff/push/PR + routes
+  git-status.ts, gitRemote.ts, gh.ts, prs.ts, issues.ts   git & GitHub (via gh)
+  cost.ts, transcript.ts        cost estimate; usage/context from transcripts
+  files-browse.ts               file tree + read/write (contained to project root)
+  scripts.ts                    Run-menu script.json loader
+  command-summary.ts            POST /api/command/summarize (claude -p headless)
+  app-config.ts, config-routes.ts, dir-config.ts   user + per-directory config
+  plugins-registry.ts, mcp/     GUI plugin registry + per-session MCP broker
+  backends/                     wiki, collections, feeds, accounting, notifier,
+                                translation, whisper, remote-host, html, files
+  pubsub.ts                     socket.io pub/sub at /ws/pubsub
+  fix-pty-perms.js              postinstall: fixes node-pty binary permissions
 src/
-  App.vue         Layout (sidebar + terminal); owns the active session id
+  App.vue                       Layout; owns the active session + single/grid view
+  router/                       Vue Router routes (/, /terminals, /collections,
+                                /accounting, /prs, /files, /wiki, …)
   components/
-    Sidebar.vue       Session list; working dot + waiting bold; pub/sub driven
-    Sidebar.spec.ts   Vitest component tests
-    Terminal.vue      xterm.js terminal; /ws (or /ws/run); single-view ▶ Run menu
-    AppToolbar.vue    Shared header (single + grid); grid-only ＋ Terminal + ⇅/↔ cell-order toggle
-    GridView.vue      Grid view: auto-layout, pages, manual/auto cell order; runs handed-off scripts
-    RunMenu.vue       ▶ Run dropdown: lists a dir's script.json, emits the pick
-    TerminalCell.vue  A cell: Claude launcher (dir picker + resume + run-a-script); ◀▶ to reorder
-    TerminalGrid.vue  Grid of cells; auto-sizes by count; zoom lines up every tab
-    CommandCell.vue   A grid cell that runs a script.json command (ephemeral)
-  composables/
-    usePubSub.ts      socket.io-client pub/sub composable (subscribe/unsubscribe)
-    usePendingScript.ts  Hands a header-picked script to the grid to run
-    useUnloadGuard.ts  Confirm before closing/reloading the tab while a terminal is live
-vite.config.ts    Dev proxy for /ws (covers /ws/run), /ws/pubsub, /api
+    Sidebar.vue, SessionTabBar.vue           session list + tab bar (pub/sub driven)
+    Terminal.vue                             xterm.js terminal; /ws, /ws/codex, /ws/run
+    AppToolbar.vue                           shared header + toolbar buttons
+    GridView.vue, TerminalGrid.vue, TerminalCell.vue, CommandCell.vue, LauncherCell.vue
+    GuiPanel.vue, PluginFrame.vue            GUI panel (Canvas) + Shadow-DOM plugin host
+    FilesOverlay.vue                         file browser + CodeMirror editor
+    GitBranchChip.vue, ModelContextBadge.vue header chips / badges
+    PrsOverlay.vue                           cross-repo PRs & Issues
+    Wiki*View.vue, Collections*.vue, AccountingOverlay.vue   workspace views
+    TimelineOverlay.vue, ToolsPane.vue, NotificationBell.vue, RemoteHostControl.vue
+    SettingsModal.vue                        ⚙ settings
+  composables/                  useSessions, usePubSub, useGitStatus, useCost,
+                                useChatLauncher, useFilesView, useWikiBrowse,
+                                useCollectionBrowse, useNotifications, useVoiceInput, …
+vite.config.ts    Dev proxy for /ws (+ /ws/codex, /ws/launch, /ws/run), /ws/pubsub, /api, /artifacts
 vitest.config.ts  jsdom test environment
 ```
 

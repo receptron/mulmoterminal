@@ -21,22 +21,28 @@ export function buildTerminalWsUrl({ host, secure, sessionId, cwd, devTerminal }
   return `${proto}//${host}/ws${suffix}`;
 }
 
-export interface RunWsUrlInput {
-  host: string; // location.host
-  secure: boolean; // location.protocol === "https:"
-  index: number; // position in the directory's script.json (the server resolves it)
-  cwd?: string | null; // the directory whose script.json the index refers to
-}
+export type RunWsUrlInput = { host: string; secure: boolean; cwd?: string | null } & (
+  | { index: number } // position in the directory's script.json (the server resolves it)
+  | { buttonId: string; session: string | null; agent: "claude" | "codex"; model: string | null } // a header run:"shell" button, re-resolved server-side
+);
 
-// The command-terminal endpoint (a cell's launcher Run). The browser sends only the
-// script INDEX + its directory — the server reads <cwd>/script.json (the run
-// allowlist), resolves the command, and runs it in <cwd>.
-export function buildRunWsUrl({ host, secure, index, cwd }: RunWsUrlInput): string {
+// The command-terminal endpoint. The browser sends only a REFERENCE — a script INDEX
+// or a header button id (+ the session context to resolve it against) — never a raw
+// command; the server reads the allowlist (<cwd>/script.json or the merged header
+// config), resolves the command, and runs it in <cwd>.
+export function buildRunWsUrl(input: RunWsUrlInput): string {
   const params = new URLSearchParams();
-  params.set("index", String(index));
-  if (cwd) params.set("cwd", cwd);
-  const proto = secure ? "wss:" : "ws:";
-  return `${proto}//${host}/ws/run?${params.toString()}`;
+  if ("buttonId" in input) {
+    params.set("buttonId", input.buttonId);
+    if (input.session) params.set("session", input.session);
+    params.set("agent", input.agent);
+    if (input.model) params.set("model", input.model);
+  } else {
+    params.set("index", String(input.index));
+  }
+  if (input.cwd) params.set("cwd", input.cwd);
+  const proto = input.secure ? "wss:" : "ws:";
+  return `${proto}//${input.host}/ws/run?${params.toString()}`;
 }
 
 export interface LaunchWsUrlInput {

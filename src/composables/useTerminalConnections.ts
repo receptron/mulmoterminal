@@ -21,6 +21,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../components/wsUrl";
+import type { RunCommand } from "../components/runCommand";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -34,12 +35,17 @@ export function shiftEnterNewline(e: ModifierKeyEvent): string | null {
   return isShiftEnter ? NEWLINE_SEQUENCE : null;
 }
 
-// The xterm custom key handler: on Shift+Enter, `send` the newline and return false
-// (cancel xterm's default \r); otherwise return true so xterm handles the key normally.
-export function makeShiftEnterHandler(send: (data: string) => void): (e: ModifierKeyEvent) => boolean {
+// The xterm custom key handler: on Shift+Enter, `send` the newline and return false (cancel xterm's
+// default \r); otherwise return true so xterm handles the key normally. `preventDefault()` is essential:
+// xterm's _keyDown returns early on a false custom handler WITHOUT preventDefault, so the browser fires a
+// follow-up keypress that _keyPress turns into a bare \r — submitting the prompt. Cancelling the default
+// stops that keypress.
+type ShiftEnterEvent = ModifierKeyEvent & { preventDefault: () => void };
+export function makeShiftEnterHandler(send: (data: string) => void): (e: ShiftEnterEvent) => boolean {
   return (e) => {
     const newline = shiftEnterNewline(e);
     if (newline === null) return true;
+    e.preventDefault();
     send(newline);
     return false;
   };
@@ -51,7 +57,7 @@ export interface ConnTarget {
   sessionId: string | null;
   cwd: string | null;
   devTerminal: boolean;
-  command: { index: number } | null;
+  command: RunCommand | null;
   // A configured launcher (shell/codex/command). Unlike `command` this is a PERSISTENT
   // session — it reconnects on drop and reattaches by session id, like a Claude cell.
   launcher: { index: number } | null;
@@ -197,11 +203,19 @@ function scheduleReconnect(c: Conn) {
   }, delay);
 }
 
+// A command cell's endpoint: a script.json entry by index, or a header shell button by id (+ the session
+// context to re-resolve it server-side). Either way the browser sends a reference, never a raw command.
+function runCommandUrl(command: RunCommand, host: string, secure: boolean): string {
+  return command.source === "button"
+    ? buildRunWsUrl({ host, secure, cwd: command.cwd, buttonId: command.buttonId, session: command.session, agent: command.agent, model: command.model })
+    : buildRunWsUrl({ host, secure, cwd: command.cwd, index: command.index });
+}
+
 // Pick the endpoint for a target: a Run command (ephemeral), a launcher (persistent
 // shell/codex), or a Claude session (default). Kept flat to avoid a nested ternary.
 function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): string {
   const host = location.host;
-  if (target.command) return buildRunWsUrl({ host, secure, index: target.command.index, cwd: target.cwd });
+  if (target.command) return runCommandUrl(target.command, host, secure);
   if (target.launcher) return buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
   if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });

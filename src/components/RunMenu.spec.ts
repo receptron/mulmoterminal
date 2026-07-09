@@ -73,7 +73,7 @@ describe("RunMenu", () => {
     const w = await mountMenu();
     await w.find(".run-trigger").trigger("click");
     await w.findAll(".run-item")[1].trigger("click");
-    expect(w.emitted("run")?.[0]?.[0]).toEqual({ index: 1, label: "Unit tests", cwd: "/home/me/proj" });
+    expect(w.emitted("run")?.[0]?.[0]).toEqual({ source: "script", index: 1, label: "Unit tests", cwd: "/home/me/proj" });
     expect(w.find(".run-pop").exists()).toBe(false); // closed after picking
   });
 });

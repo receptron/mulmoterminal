@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import type { RunCommand } from "./runCommand";
 import {
   pageCount,
   pageSlice,
@@ -80,7 +81,7 @@ describe("addCell", () => {
 });
 
 describe("cancelableLaunchUid", () => {
-  const CMD = { index: 0, label: "Build", cwd: "/x" };
+  const CMD: RunCommand = { source: "script", index: 0, label: "Build", cwd: "/x" };
   it("is the trailing launch cell's uid when one is open beyond the entry cell", () => {
     expect(cancelableLaunchUid(make([...running(2), cell(7)]))).toBe(7);
   });
@@ -147,7 +148,7 @@ describe("switchPage", () => {
 });
 
 describe("runCommand (script command cells)", () => {
-  const CMD = { index: 0, label: "Build", cwd: "/x" };
+  const CMD: RunCommand = { source: "script", index: 0, label: "Build", cwd: "/x" };
   const cmdCell = (uid: number): Cell => ({ uid, session: null, cwd: null, command: CMD });
 
   it("attaches a command to a launch cell, turning it into a command cell", () => {
@@ -198,7 +199,7 @@ describe("launchInCell (persistent launcher cells)", () => {
 });
 
 describe("runScriptInNewCell (toolbar Run menu)", () => {
-  const CMD = { index: 1, label: "Dev server", cwd: "/x" };
+  const CMD: RunCommand = { source: "script", index: 1, label: "Dev server", cwd: "/x" };
 
   it("appends a new command cell and jumps to its page when all cells are occupied", () => {
     const s = runScriptInNewCell(make(running(2)), CMD);
@@ -274,7 +275,7 @@ describe("countByStatus", () => {
     expect(countByStatus(running(2), { 0: "working" })).toEqual({ blocked: 0, done: 0, working: 1, idle: 1 });
   });
   it("counts a command cell (occupied, no session)", () => {
-    const cmd = { uid: 0, session: null, cwd: null, command: { index: 0, label: "Build", cwd: "/x" } };
+    const cmd: Cell = { uid: 0, session: null, cwd: null, command: { source: "script", index: 0, label: "Build", cwd: "/x" } };
     expect(countByStatus([cmd], { 0: "working" })).toEqual({ blocked: 0, done: 0, working: 1, idle: 0 });
   });
 });

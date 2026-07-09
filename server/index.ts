@@ -15,7 +15,9 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers } from "./config-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
+import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
+import { resolveHeader, resolveButtonCommand } from "./header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
@@ -643,8 +645,11 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
 // per-session tool-call history that the GUI's tools pane shows. A failed tool
 // fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
 // entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson(host: string = "localhost") {
-  const cmd = `curl -s -X POST http://${host}:${PORT}/api/hook ` + `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
+function hookSettingsJson(host: string, sessionId: string) {
+  // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own session_id
+  // on /clear and /compact, but the PTY — and the id the client tracks — stays this one, so attributing
+  // hooks by this header keeps activity / header prompt / tool history correlated across a clear.
+  const cmd = `curl -s -X POST http://${host}:${PORT}/api/hook ` + `-H 'content-type: application/json' -H 'x-mt-session: ${sessionId}' -d @- >/dev/null 2>&1`;
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
   // Tool hooks take a matcher; "" matches all tools.
   const toolEntry = [{ matcher: "", hooks: [{ type: "command", command: cmd }] }];
@@ -653,6 +658,8 @@ function hookSettingsJson(host: string = "localhost") {
       UserPromptSubmit: entry,
       Stop: entry,
       Notification: entry,
+      // SessionStart fires with source "clear" on /clear — we use it to reset the header prompt.
+      SessionStart: entry,
       PreToolUse: toolEntry,
       PostToolUse: toolEntry,
       PostToolUseFailure: toolEntry,
@@ -1034,11 +1041,23 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
   lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
 }
 
-// Claude hooks (Stop / Notification / Pre|PostToolUse) POST their payload here so
+// `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
+// (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
+// resurface) and publish; the next UserPromptSubmit sets the new query.
+function clearHeaderPrompt(sessionId: string): void {
+  lastPrompts.set(sessionId, "");
+  publishActivity(sessionId);
+}
+
+// Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
   const body = req.body || {};
-  const sessionId = body.session_id;
+  // Prefer the stable mulmoterminal id from the x-mt-session header over Claude's own session_id, which it
+  // reissues on /clear and /compact — the PTY/client id is the one hooks must stay attributed to.
+  const mtHeader = req.headers["x-mt-session"];
+  const mt = typeof mtHeader === "string" && SESSION_ID_RE.test(mtHeader) ? mtHeader : null;
+  const sessionId = mt ?? body.session_id;
   const event = body.hook_event_name;
   if (sessionId) {
     const entry = ptys.get(sessionId);
@@ -1049,6 +1068,8 @@ app.post("/api/hook", async (req, res) => {
       const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
       await trackPromptForHeader(sessionId, body.prompt.trim().slice(0, LAST_PROMPT_CAP), cwd);
     }
+    // `/clear` fires SessionStart with source "clear" — drop the stale header prompt (not "resume"/"compact").
+    if (event === "SessionStart" && body.source === "clear") clearHeaderPrompt(sessionId);
     handleActivityHook(sessionId, event, foreground);
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
@@ -1239,6 +1260,19 @@ app.get("/api/dir-config", (req, res) => {
 app.get("/api/git-status", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await gitStatus(cwd));
+});
+
+// The resolved terminal-header config (buttons + chips) for a session: global config merged with the
+// dir's, with `when` evaluated and ${vars} substituted for this session's live context. `chips:null`
+// means unconfigured, so the client keeps its default header (see plans/feat-header-toolbar-config.md).
+app.get("/api/header", async (req, res) => {
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const session = typeof req.query.session === "string" && SESSION_ID_RE.test(req.query.session) ? req.query.session : null;
+  const agent = req.query.agent === "codex" ? "codex" : "claude";
+  const model = typeof req.query.model === "string" ? req.query.model : null;
+  const config = loadHeaderConfig(cwd, getHeaderConfig());
+  const context = await buildHeaderContext(cwd, { session, agent, model });
+  res.json(resolveHeader(config, context));
 });
 
 // The tool-activity timeline for a session (what the agent ran, newest last), so a
@@ -1789,7 +1823,7 @@ function spawnClaudePty(
     resume,
     canResume,
     // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost"),
+    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
     permissionMode: CLAUDE_PERMISSION_MODE,
     attachGuiMcp,
     mcpConfig: mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),
@@ -2077,45 +2111,61 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => handleClientClose(entry, ws, sessionId));
 });
 
-// Command terminal (?index=<n>&cwd=<dir>): resolve the script from <dir>'s
-// script.json by index (the browser never sends a raw command) and run it there in
-// a plain PTY. Ephemeral — when the socket closes, the process is killed.
+// Command terminal: resolve the command SERVER-SIDE (the browser never sends a raw command) and run it
+// in an ephemeral PTY. `?index=<n>&cwd=<dir>` runs <dir>/script.json[n]; `?buttonId=<id>&cwd&session&
+// agent&model` runs a header run:"shell" button, re-resolved from config against the session context with
+// shell-escaped ${vars}. When the socket closes, the process is killed.
 runWss.on("connection", (ws, req) => {
-  const url = new URL(req.url ?? "/", "http://localhost");
+  void startRunTerminal(ws, new URL(req.url ?? "/", "http://localhost"));
+});
+
+// POSIX/PowerShell single-arg quoting, so a substituted ${branch}/${repo}/${task} can't break out of the
+// command string. POSIX closes the quote, escapes the literal quote, reopens; PowerShell doubles quotes.
+function shellQuoteFor(platform: NodeJS.Platform): (value: string) => string {
+  if (platform === "win32") return (value) => `'${value.replace(/'/g, "''")}'`;
+  return (value) => `'${value.replace(/'/g, "'\\''")}'`;
+}
+
+async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
+  const buttonId = url.searchParams.get("buttonId");
+  if (!buttonId) return null;
+  const sessionRaw = url.searchParams.get("session");
+  const session = sessionRaw && SESSION_ID_RE.test(sessionRaw) ? sessionRaw : null;
+  const agent = url.searchParams.get("agent") === "codex" ? "codex" : "claude";
+  const config = loadHeaderConfig(cwd, getHeaderConfig());
+  const context = await buildHeaderContext(cwd, { session, agent, model: url.searchParams.get("model") });
+  const command = resolveButtonCommand(config, context, buttonId, shellQuoteFor(process.platform));
+  return command ? { command, cwd } : null;
+}
+
+async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: string } | null> {
+  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const byButton = await resolveButtonRun(url, cwd);
+  if (byButton) return byButton;
   const indexRaw = url.searchParams.get("index");
   const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
-  const resolved = resolveScript(cwd, index);
-  if (!resolved) {
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "error", message: "Script not found — check script.json." }));
-      ws.close();
-    }
-    return;
-  }
+  return resolveScript(cwd, index);
+}
 
+async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
+  const resolved = await resolveRunTarget(url);
+  if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
   let term: IPty;
   try {
     term = spawnCommandPty(resolved.command, resolved.cwd, ws);
   } catch (err) {
     console.error(`[ws/run] failed to start command: ${messageOf(err)}`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "error", message: "Failed to start the command." }));
-      ws.close();
-    }
-    return;
+    return closeWithError(ws, "Failed to start the command.");
   }
-
   ws.on("message", (raw) => handleCommandFrame(term, raw));
   ws.on("close", () => {
-    // Ephemeral: no reattach/grace window — the viewer is gone, so end the process.
     try {
-      term.kill();
+      term.kill(); // ephemeral: no reattach/grace window — the viewer is gone, so end the process
     } catch {
       // already exited — nothing to kill
     }
   });
-});
+}
 
 // Send a terminal error to the socket and close it (no reconnect on the client side).
 function closeWithError(ws: WebSocket, message: string): void {

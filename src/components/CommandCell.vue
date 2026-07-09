@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
+import type { RunCommand } from "./runCommand";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import type { CellStatus } from "./gridTabs";
@@ -14,7 +15,7 @@ const props = defineProps<{
   // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
   // (unless it's the zoomed one). Only then does a header-background click zoom it.
   zoomed?: boolean;
-  command: { index: number; label: string; cwd: string | null };
+  command: RunCommand;
   home: string | null;
   // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
   reorderable?: boolean;
