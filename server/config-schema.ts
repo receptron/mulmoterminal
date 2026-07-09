@@ -48,6 +48,10 @@ export const THEME_COLOR_KEYS = [
 ] as const;
 
 export const NAME_MAX_CHARS = 40;
+// Runtime caps (sanitizeButtons / sanitizeChips truncate past these), mirrored by the JSON Schema
+// so the skill can't emit a config whose tail is silently dropped at load time.
+export const MAX_BUTTONS = 32;
+export const MAX_CHIPS = 16;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 // xterm accepts #rgb / #rgba / #rrggbb / #rrggbbaa for palette colors.
 const PALETTE_COLOR_RE = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
@@ -159,36 +163,50 @@ export const dirColorsField = z
 // match what the runtime loader actually accepts, or the skill could emit a "valid" config that
 // sanitization silently drops (a no-op the user reads as success).
 
+// The runtime keeps only trimmed, non-empty strings (`str()` in header-config.ts), so a
+// whitespace-only value is dropped at load time. Reject it here too, or the skill can emit a
+// schema-valid button that silently vanishes.
+const nonEmptyText = z.string().min(1).regex(/\S/);
+
+const writableOpenTargetShape = {
+  url: nonEmptyText.optional(),
+  reveal: nonEmptyText.optional(),
+  files: nonEmptyText.optional(),
+  view: viewTargetSchema.optional(),
+};
+
 // `open` requires at least one target (url/reveal/files/view), mirroring sanitizeOpen.
 const writableOpenTargetSchema = z.union([
-  z.object({ ...openTargetShape, url: z.string() }),
-  z.object({ ...openTargetShape, reveal: z.string() }),
-  z.object({ ...openTargetShape, files: z.string() }),
-  z.object({ ...openTargetShape, view: viewTargetSchema }),
+  z.object({ ...writableOpenTargetShape, url: nonEmptyText }),
+  z.object({ ...writableOpenTargetShape, reveal: nonEmptyText }),
+  z.object({ ...writableOpenTargetShape, files: nonEmptyText }),
+  z.object({ ...writableOpenTargetShape, view: viewTargetSchema }),
 ]);
 
 const commonButtonFields = {
-  id: z.string(),
-  label: z.string(),
-  emoji: z.string().optional(),
-  icon: z.string().optional(),
-  when: z.string().optional(),
+  id: nonEmptyText,
+  label: nonEmptyText,
+  emoji: nonEmptyText.optional(),
+  icon: nonEmptyText.optional(),
+  when: nonEmptyText.optional(),
   order: z.number().optional(),
 };
 
 // Run-discriminated: each run type requires the payload the runtime needs (shell→cmd, input→text,
 // open→open), so the schema matches live acceptance instead of accepting no-op buttons.
 const writableHeaderButtonSchema = z.discriminatedUnion("run", [
-  z.object({ ...commonButtonFields, run: z.literal("shell"), cmd: z.string() }),
-  z.object({ ...commonButtonFields, run: z.literal("input"), text: z.string() }),
+  z.object({ ...commonButtonFields, run: z.literal("shell"), cmd: nonEmptyText }),
+  z.object({ ...commonButtonFields, run: z.literal("input"), text: nonEmptyText }),
   z.object({ ...commonButtonFields, run: z.literal("open"), open: writableOpenTargetSchema }),
 ]);
 
-// The string branch is constrained to built-in chip ids — the runtime drops any other string.
-const writableHeaderChipSchema = z.union([builtinChipSchema, customChipSchema]);
+// A builtin chip id (the runtime drops any other string), or a custom chip whose label/text the
+// runtime likewise requires to be non-empty.
+const writableCustomChipSchema = z.object({ label: nonEmptyText, text: nonEmptyText, when: nonEmptyText.optional() });
+const writableHeaderChipSchema = z.union([builtinChipSchema, writableCustomChipSchema]);
 
 const writableDirConfigSchema = z.object({
-  name: z.string().max(NAME_MAX_CHARS).optional(),
+  name: nonEmptyText.max(NAME_MAX_CHARS).optional(),
   badgeColor: z.string().regex(HEX_COLOR_RE).optional(),
   headerColor: z.string().regex(HEX_COLOR_RE).optional(),
   headerTextColor: z.string().regex(HEX_COLOR_RE).optional(),
@@ -198,9 +216,9 @@ const writableDirConfigSchema = z.object({
   buttonColor: z.string().regex(HEX_COLOR_RE).optional(),
   theme: themeIdSchema.optional(),
   colors: z.record(z.enum(THEME_COLOR_KEYS), z.string().regex(PALETTE_COLOR_RE)).optional(),
-  sound: z.string().optional(),
-  buttons: z.array(writableHeaderButtonSchema).optional(),
-  chips: z.array(writableHeaderChipSchema).optional(),
+  sound: nonEmptyText.optional(),
+  buttons: z.array(writableHeaderButtonSchema).max(MAX_BUTTONS).optional(),
+  chips: z.array(writableHeaderChipSchema).max(MAX_CHIPS).optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {

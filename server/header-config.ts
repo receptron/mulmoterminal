@@ -14,6 +14,8 @@ import {
   RUN_TYPES,
   VIEW_TARGETS,
   BUILTIN_CHIPS,
+  MAX_BUTTONS,
+  MAX_CHIPS,
   type RunType,
   type ViewTarget,
   type OpenTarget,
@@ -63,8 +65,6 @@ export interface ResolvedHeader {
 
 export const EMPTY_HEADER_CONFIG: HeaderConfig = { buttons: [], chips: null };
 
-const MAX_BUTTONS = 32;
-const MAX_CHIPS = 16;
 const RUN_TYPE_SET = new Set<string>(RUN_TYPES);
 const VIEW_SET = new Set<string>(VIEW_TARGETS);
 const BUILTIN_SET = new Set<string>(BUILTIN_CHIPS);

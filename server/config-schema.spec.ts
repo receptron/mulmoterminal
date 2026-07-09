@@ -9,6 +9,8 @@ import {
   cwdPresetSchema,
   dirConfigJsonSchema,
   NAME_MAX_CHARS,
+  MAX_BUTTONS,
+  MAX_CHIPS,
 } from "./config-schema";
 
 describe("dirNameField", () => {
@@ -93,5 +95,29 @@ describe("dirConfigJsonSchema", () => {
     expect(json).toContain('"required":["id","label","run","text"]'); // input needs text
     expect(json).toContain('"required":["id","label","run","open"]'); // open needs open
     expect(json).toContain('"enum":["dir","git","ctx","usage","status","diff","tools"]'); // chip string = builtin ids only
+  });
+
+  // The runtime truncates past these caps and drops whitespace-only strings, so a schema that
+  // allowed them would bless configs whose tail (or whose button) silently disappears on load.
+  it("mirrors the runtime array caps", () => {
+    const schema = dirConfigJsonSchema();
+    const props = isRecord(schema.properties) ? schema.properties : {};
+    const buttons = isRecord(props.buttons) ? props.buttons : {};
+    const chips = isRecord(props.chips) ? props.chips : {};
+    expect(buttons.maxItems).toBe(MAX_BUTTONS);
+    expect(chips.maxItems).toBe(MAX_CHIPS);
+  });
+
+  it("rejects whitespace-only strings the runtime would drop", () => {
+    const json = JSON.stringify(dirConfigJsonSchema());
+    // every free-text field carries minLength + a non-whitespace pattern
+    expect(json).not.toContain('"cmd":{"type":"string"}'); // i.e. never an unconstrained string
+    expect(json).toContain('"minLength":1,"pattern":"\\\\S"');
+    const schema = dirConfigJsonSchema();
+    const props = isRecord(schema.properties) ? schema.properties : {};
+    const name = isRecord(props.name) ? props.name : {};
+    expect(name.minLength).toBe(1);
+    expect(name.maxLength).toBe(NAME_MAX_CHARS);
+    expect(name.pattern).toBe("\\S");
   });
 });
