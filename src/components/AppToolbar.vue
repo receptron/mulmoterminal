@@ -10,7 +10,6 @@ import { useAccountingView, accountingViewOpen } from "../composables/useAccount
 import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
-import { startCollectionChat } from "../composables/useChatLauncher";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
 
@@ -76,12 +75,6 @@ function showWiki(): void {
 }
 function showPrs(): void {
   prsGotoIndex();
-}
-// Open a new Claude terminal prefilled (draft — not auto-sent) with the config skill, so the user
-// can style a directory (or several) without hand-writing .mulmoterminal.json. The skill asks
-// whether to configure this directory or a batch from their recent directories.
-function configureAppearance(): void {
-  void startCollectionChat("/mulmoterminal-config", { draft: true });
 }
 </script>
 
@@ -164,15 +157,6 @@ function configureAppearance(): void {
       @click="toggleSound"
     >
       <span class="material-symbols-outlined">{{ soundEnabled ? "notifications_active" : "notifications_off" }}</span>
-    </button>
-    <button
-      type="button"
-      class="launcher-btn"
-      title="Configure appearance (name, theme, colors, header buttons) — writes .mulmoterminal.json"
-      aria-label="Configure appearance"
-      @click="configureAppearance"
-    >
-      <span class="material-symbols-outlined">palette</span>
     </button>
     <button type="button" class="launcher-btn settings-btn" title="Settings" aria-label="Settings" @click="emit('settings')">
       <span class="material-symbols-outlined">settings</span>

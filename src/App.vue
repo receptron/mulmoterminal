@@ -194,6 +194,13 @@ function sendTextMessage(text: string): boolean {
   return terminalRef.value?.submitText(text) ?? false;
 }
 
+// Run the mulmoterminal-config skill IN the current session (submitText types + submits), so it
+// targets this session's directory. codex has no slash commands, so name the skill in prose instead.
+function configureAppearance(): void {
+  sendTextMessage(singleAgent.value === "codex" ? 'Use the "mulmoterminal-config" skill.' : "/mulmoterminal-config");
+  showSettings.value = false;
+}
+
 function selectSession(id: string, agent: "claude" | "codex" = "claude") {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
   singleAgent.value = agent; // resume the row's agent (codex rows reconnect via /ws/codex)
@@ -368,6 +375,7 @@ function onSession(id: string) {
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"
+      @configure-appearance="configureAppearance"
       @close="closeSettings"
     />
   </div>
