@@ -27,6 +27,10 @@ The grid's core and headline use case. This is the center of the **command post*
 
 > Each cell's header shows what that session is doing right now, so you can tell which cell is working on what at a glance.
 
+> 🔔 **You also hear when it's done.** When a session needs you, a notification **sound** plays — so you notice even without
+> watching the screen. Point it at **your own audio file** in [Configuration](config.html) — one developer rings a
+> **gong ("goooong")** on every completion.
+
 ## 2. Isolate work safely with a worktree
 
 When you want to try something *without polluting main*, isolate the work in a **git worktree**.
@@ -45,9 +49,21 @@ you use often as *cwd presets* in [Configuration](config.html) so autocomplete k
 
 ## 4. Run a script and let AI summarize the failure
 
-Grid cells aren't just for Claude — they can run your project's **scripts** (dev server, tests, builds) too.
+Grid cells aren't just for Claude — they can run your project's **scripts**, say `yarn dev` (dev server), `yarn test`,
+`yarn build`, or `yarn lint`.
 
-1. From an empty cell's launcher, pick a script defined in that directory's `script.json`.
+1. Define scripts in that directory's `script.json`, then pick one from an empty cell's launcher (or the **▶ Run** menu).
+
+   ```json
+   { "scripts": [
+     { "label": "dev",  "command": "yarn dev" },
+     { "label": "test", "command": "yarn test" },
+     { "label": "lint", "command": "yarn lint" }
+   ] }
+   ```
+
+   > **Another way, as of 0.8.0:** a **`run:"shell"` button** in `.mulmoterminal.json` (e.g. `{ "run": "shell", "cmd": "yarn build" }`)
+   > runs the same command as a command cell from a one-click header button. See [Configuration → Customizing the header](config.html#header).
 2. The script runs **inside that cell**, so you can watch the results right next to your Claude session.
 3. When a build or test fails and drowns you in logs, press **✦ Summarize** on the command cell.
    It passes the output to `claude -p` and returns a short summary of the **errors / warnings / cause / how to fix**.
