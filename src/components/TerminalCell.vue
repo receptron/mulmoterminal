@@ -818,31 +818,38 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
       <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" :style="headerStyle" @click="onHeaderClick">
-        <span class="cell-dot" :class="statusClass" :title="statusLabel" />
-        <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
-             header's job is to zoom (switch to this terminal), so the dir is inert text
-             and a click on it falls through to the header's zoom gesture. -->
-        <button v-if="headerDir && !filmstrip" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
-          <span class="cell-dir-path">{{ headerDir }}</span>
-        </button>
-        <span v-else-if="headerDir" class="cell-dir" :title="cwd ?? ''">
-          <span class="cell-dir-path">{{ headerDir }}</span>
-        </span>
-        <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
-             thumbnail, leaving only dir + what it's doing + a zoom button. -->
-        <template v-if="!filmstrip">
-          <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
-          <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
-          <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
-            <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-            <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+        <!-- All the info lives in one shrinkable, clipping track. Chips (badge / git /
+             model / tokens) don't shrink, so without this they would overflow and push
+             the actions past the cell's `overflow: hidden` edge — the buttons must stay
+             reachable no matter how much a dir's config crams in here. -->
+        <div class="cell-header-main">
+          <span class="cell-dot" :class="statusClass" :title="statusLabel" />
+          <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
+               header's job is to zoom (switch to this terminal), so the dir is inert text
+               and a click on it falls through to the header's zoom gesture. -->
+          <button v-if="headerDir && !filmstrip" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
+            <span class="cell-dir-path">{{ headerDir }}</span>
           </button>
-          <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-          <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
-        </template>
-        <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
-        <!-- Expand/restore + close stay on row 1 (the info row); the other icons live on
-             row 2. `.stop` so they don't trigger the header's click-to-zoom. -->
+          <span v-else-if="headerDir" class="cell-dir" :title="cwd ?? ''">
+            <span class="cell-dir-path">{{ headerDir }}</span>
+          </span>
+          <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
+               thumbnail, leaving only dir + what it's doing + a zoom button. -->
+          <template v-if="!filmstrip">
+            <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+            <GitBranchChip :status="gitStatus" :hide-dirty="isWorktreeCell" />
+            <button v-if="showDiffBadge && diff" type="button" class="cell-wt-badge" :title="`View changes vs ${diff.base ?? 'base'}`" @click="openDiff">
+              <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
+              <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+            </button>
+            <ModelContextBadge v-if="context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
+            <span v-if="showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
+          </template>
+          <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
+        </div>
+        <!-- Expand/restore + close stay on row 1 (the info row) and OUTSIDE the info
+             track, so they're always pinned top-right. `.stop` so they don't trigger the
+             header's click-to-zoom. -->
         <span class="cell-actions">
           <button
             class="cell-btn"
@@ -1331,6 +1338,18 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   letter-spacing: 0.02em;
 }
 
+/* The info track absorbs all the width pressure: it grows into the free space and,
+   crucially, is allowed to shrink below its content (min-width: 0) and clip. That keeps
+   the non-shrinking chips from pushing .cell-actions out of the cell. */
+.cell-header-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Never shrinks, never scrolls away: expand + close stay pinned at the top-right. */
 .cell-actions {
   flex: 0 0 auto;
   display: flex;
