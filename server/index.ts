@@ -1037,7 +1037,7 @@ async function handleToolHook(sessionId: string, event: string, p: HookToolPaylo
   // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
   // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
   if (event === "PostToolUse") {
-    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input);
+    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input, ptys.get(sessionId)?.cwd ?? null);
     if (cwd) pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd });
   }
 }

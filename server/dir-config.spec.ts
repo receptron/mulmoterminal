@@ -191,8 +191,19 @@ describe("dirConfigWriteTarget", () => {
     }
   });
 
-  it("resolves a relative path to an absolute directory", () => {
-    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" })).toBe(path.resolve("."));
+  it("resolves a relative path against the SESSION cwd, not the server's", () => {
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj");
+    expect(dirConfigWriteTarget("Write", { file_path: "sub/.mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj/sub");
+  });
+
+  it("publishes nothing for a relative path when the session cwd is unknown", () => {
+    // Resolving against process.cwd() would invalidate the wrong dir AND miss the real one.
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" })).toBeNull();
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, null)).toBeNull();
+  });
+
+  it("ignores the session cwd for an absolute path", () => {
+    expect(dirConfigWriteTarget("Write", { file_path: file }, "/somewhere/else")).toBe("/Users/me/proj");
   });
 
   it("ignores tools that don't write the file", () => {

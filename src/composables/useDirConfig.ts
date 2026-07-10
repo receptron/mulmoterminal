@@ -121,6 +121,11 @@ export function fetchDirConfig(cwd: string): Promise<DirConfig> {
 }
 
 // Reactive dir config for a (possibly changing) cwd. Resets to empty while no cwd is
+/** Test-only: how many directories currently have a bound cell (must not grow without bound). */
+export function boundDirCount(): number {
+  return bound.size;
+}
+
 /** Drop `cwd`'s cached config, re-read it, and push the result into every cell showing that dir. */
 export function invalidateDirConfig(cwd: string): void {
   cache.delete(cwd);
@@ -147,7 +152,12 @@ export function useDirConfig(cwd: Ref<string | null | undefined>) {
   let boundCwd: string | null = null;
   const apply = (next: DirConfig) => (config.value = next);
   const unbind = () => {
-    if (boundCwd) bound.get(boundCwd)?.delete(apply);
+    if (!boundCwd) return;
+    const targets = bound.get(boundCwd);
+    if (targets) {
+      targets.delete(apply);
+      if (!targets.size) bound.delete(boundCwd); // drop the key too, or dir switches grow it forever
+    }
     boundCwd = null;
   };
 
