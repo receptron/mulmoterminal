@@ -71,6 +71,36 @@ describe("useDirConfig live reload", () => {
     expect(config?.value.name).toBe("first");
   });
 
+  // Two writes in quick succession start overlapping requests; if the older response lands last it
+  // must not overwrite the newer config.
+  it("never lets a slow older response overwrite a newer one", async () => {
+    const plan = [
+      { name: "first", delay: 0 },
+      { name: "older", delay: 60 },
+      { name: "newer", delay: 5 },
+    ];
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        const { name, delay } = plan[call++];
+        return Promise.resolve({ ok: true, json: () => new Promise((r) => setTimeout(() => r({ name }), delay)) });
+      }),
+    );
+
+    const scope = effectScope();
+    const config = scope.run(() => useDirConfig(ref("/proj/race")).config);
+    await flush();
+    expect(config?.value.name).toBe("first");
+
+    invalidateDirConfig("/proj/race"); // write A -> slow response "older"
+    invalidateDirConfig("/proj/race"); // write B -> fast response "newer"
+    await new Promise((r) => setTimeout(r, 120)); // let BOTH settle, slow one last
+
+    expect(config?.value.name).toBe("newer");
+    scope.stop();
+  });
+
   it("releases the old directory when a cell switches cwd", async () => {
     const before = boundDirCount();
     const cwd = ref("/proj/one");

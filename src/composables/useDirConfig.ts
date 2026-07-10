@@ -86,6 +86,12 @@ const cache = new Map<string, Promise<DirConfig>>();
 // every cell showing that directory.
 const bound = new Map<string, Set<(config: DirConfig) => void>>();
 
+// Per-cwd generation counter. Two writes in quick succession start two overlapping
+// requests, and HTTP responses can land out of order — an older one must never
+// overwrite a newer config, so a fetch only applies while its generation is current.
+const generation = new Map<string, number>();
+const generationOf = (cwd: string): number => generation.get(cwd) ?? 0;
+
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 function parse(c: unknown): DirConfig {
@@ -131,7 +137,12 @@ export function invalidateDirConfig(cwd: string): void {
   cache.delete(cwd);
   const targets = bound.get(cwd);
   if (!targets?.size) return;
-  fetchDirConfig(cwd).then((config) => targets.forEach((apply) => apply(config)));
+  const seq = generationOf(cwd) + 1;
+  generation.set(cwd, seq);
+  fetchDirConfig(cwd).then((config) => {
+    if (generationOf(cwd) !== seq) return; // a newer invalidation superseded this response
+    targets.forEach((apply) => apply(config));
+  });
 }
 
 // One process-wide subscription, established by the first cell that asks for a dir config.
@@ -156,7 +167,11 @@ export function useDirConfig(cwd: Ref<string | null | undefined>) {
     const targets = bound.get(boundCwd);
     if (targets) {
       targets.delete(apply);
-      if (!targets.size) bound.delete(boundCwd); // drop the key too, or dir switches grow it forever
+      if (!targets.size) {
+        // Drop the keys too, or opening many directories grows both maps forever.
+        bound.delete(boundCwd);
+        generation.delete(boundCwd);
+      }
     }
     boundCwd = null;
   };
@@ -176,8 +191,11 @@ export function useDirConfig(cwd: Ref<string | null | undefined>) {
       }
       targets.add(apply);
       boundCwd = c;
+      const seq = generationOf(c);
       const resolved = await fetchDirConfig(c);
-      if (cwd.value === c) config.value = resolved; // ignore a stale resolve after a fast switch
+      // Ignore a stale resolve after a fast directory switch, or after an invalidation
+      // that raced this fetch — its own response is the newer one.
+      if (cwd.value === c && generationOf(c) === seq) config.value = resolved;
     },
     { immediate: true },
   );
