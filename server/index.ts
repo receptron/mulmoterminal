@@ -39,6 +39,7 @@ import { listIssuesAcrossRepos } from "./issues.js";
 import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
+import { resolveSession, type SessionResolution } from "./session-resolve.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -2043,14 +2044,14 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
 }
 
 // Pick the effective session id for a /ws connection: reattach a same-process live pty,
-// else a tmux session that outlived a restart (warm, no --resume), else `--resume` an
-// on-disk transcript (cold), else a fresh id. `resume` is set only for the cold case.
-function resolveClaudeSession(requested: string | null, cwd: string): { reattachId: string | null; resume: string | null; sessionId: string } {
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const tmuxAlive = !reattachId && !!requested && tmuxHasSession(requested);
-  const resume = !reattachId && !tmuxAlive && requested && sessionExistsOnDisk(requested, cwd) ? requested : null;
-  const sessionId = reattachId ?? (requested && (tmuxAlive || resume) ? requested : randomUUID());
-  return { reattachId, resume, sessionId };
+// resume an on-disk transcript, attach a live tmux session, else a fresh id. The flag
+// decision lives in resolveSession (pure/tested); this only gathers the live facts —
+// lazily, so a live pty short-circuits the tmux + disk probes.
+function resolveClaudeSession(requested: string | null, cwd: string): SessionResolution {
+  const hasLivePty = !!requested && ptys.has(requested);
+  const tmuxAlive = !hasLivePty && !!requested && tmuxHasSession(requested);
+  const onDisk = !hasLivePty && !!requested && sessionExistsOnDisk(requested, cwd);
+  return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk }, randomUUID);
 }
 
 wss.on("connection", (ws, req) => {
