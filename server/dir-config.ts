@@ -55,6 +55,23 @@ export interface PublicDirConfig {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
+// Claude's tool hooks already report every write, so they double as the live-reload signal — no
+// filesystem watchers (cwds are scattered, so a watcher can't be shared across terminals).
+const WRITE_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit"]);
+
+/** The directory whose `.mulmoterminal.json` a tool call just wrote, or null for anything else.
+ *  A relative `file_path` is relative to the SESSION's cwd, never the server process's — resolving
+ *  it against `process.cwd()` would invalidate a directory nobody is looking at AND miss the real
+ *  one, so without a known session cwd we publish nothing. */
+export function dirConfigWriteTarget(toolName: unknown, toolInput: unknown, sessionCwd: string | null = null): string | null {
+  if (typeof toolName !== "string" || !WRITE_TOOLS.has(toolName)) return null;
+  if (!isRecord(toolInput) || typeof toolInput.file_path !== "string") return null;
+  const file = toolInput.file_path;
+  if (path.basename(file) !== DIR_CONFIG_FILE) return null;
+  if (path.isAbsolute(file)) return path.dirname(path.resolve(file));
+  return sessionCwd ? path.dirname(path.resolve(sessionCwd, file)) : null;
+}
+
 const isInside = (base: string, target: string): boolean => target === base || target.startsWith(base + path.sep);
 
 // Confine the configured sound to a real file INSIDE cwd. Relative paths only;
