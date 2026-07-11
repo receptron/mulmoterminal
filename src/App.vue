@@ -279,8 +279,13 @@ function onSession(id: string) {
 </script>
 
 <template>
-  <GridView v-if="isGrid" />
-  <div v-else class="shell">
+  <!-- Keep the grid mounted across top-tab switches: leaving it deactivates (caches) the
+       component instead of unmounting it, so returning restores the exact same DOM — no
+       re-fetch of dir configs, no cell re-render, no re-fit — instead of rebuilding it. -->
+  <KeepAlive>
+    <GridView v-if="isGrid" />
+  </KeepAlive>
+  <div v-if="!isGrid" class="shell">
     <AppToolbar @settings="showSettings = true" />
     <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
       <Sidebar
