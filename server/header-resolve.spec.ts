@@ -134,9 +134,9 @@ describe("resolveButtonCommand", () => {
 describe("resolveHeader defaults + pickFile", () => {
   it("falls back to DEFAULT_BUTTONS when buttons is null (unconfigured), substituting ${dir}", () => {
     const out = resolveHeader({ buttons: null, chips: null }, ctx());
-    expect(out.buttons.map((b) => b.id)).toEqual(["pick-file", "files"]);
+    expect(out.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
     expect(out.buttons.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
-    expect(out.buttons.find((b) => b.id === "files")?.open).toEqual({ files: "/Users/x/myrepo" });
+    expect(out.buttons.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "/Users/x/myrepo" });
   });
 
   it("an explicit empty list replaces the defaults with nothing", () => {

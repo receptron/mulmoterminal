@@ -157,10 +157,10 @@ An array (≤ 32) of action buttons for a running session's header. Each:
 { "id": "build", "emoji": "🔨", "label": "Build", "run": "shell", "cmd": "yarn build", "when": "isGitRepo", "order": 10 }
 ```
 
-**Omit `buttons` entirely** to keep the built-in defaults (a file-path picker + the file explorer).
-Setting `buttons` — even to `[]` — **REPLACES** the defaults (it isn't merged on top), so the array
-you write is the whole button row; drop the file explorer by simply not listing it, and re-add the
-picker with `{ "run": "open", "open": { "pickFile": true } }` if you still want it.
+**Omit `buttons` entirely** to keep the built-in defaults (a file-path picker + an OS file-manager
+reveal). Setting `buttons` — even to `[]` — **REPLACES** the defaults (it isn't merged on top), so the
+array you write is the whole button row; re-add the file picker with `{ "run": "open", "open": { "pickFile": true } }`
+or the in-app file explorer with `{ "run": "open", "open": { "files": "${dir}" } }` if you want them.
 
 - `id` (required, unique), `label` (required), `run` (required): one of `"shell"` / `"input"` / `"open"`.
 - `emoji` or `icon` (a material-symbol name) — optional.

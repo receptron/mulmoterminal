@@ -306,8 +306,9 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 #### Header buttons
 
 Each terminal header shows configurable **action buttons**. Omitting `buttons` (globally or per-dir)
-keeps the built-in defaults — a **file-path picker** and the **📁 file explorer**. Setting `buttons`
-(at either level) **replaces** the defaults with your list, so you can drop, reorder, or swap them.
+keeps the built-in defaults — a **file-path picker** (📎) and an **OS file-manager reveal** (📂).
+Setting `buttons` (at either level) **replaces** the defaults with your list, so you can drop, reorder,
+or swap them — e.g. add the in-app **📁 file explorer** with `"open": { "files": "${dir}" }`.
 A button has an `id`, `label`, and a `run` of `"shell"` (run a command), `"input"` (send text to the
 agent), or `"open"`. An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
 (in-app explorer) / `view` (a built-in overlay) / `pickFile: true` (OS file dialog → insert the path).
@@ -458,8 +459,8 @@ the last 32 KB of output. See
 
 ## Files view (browse & edit)
 
-By default every terminal header carries a **📁 Files** button (one of the default header
-buttons — see [Header buttons](#header-buttons)) that opens a full-screen file explorer
+A terminal header can carry a **📁 Files** button — add it as a [header button](#header-buttons)
+(`"open": { "files": "${dir}" }`) — that opens a full-screen file explorer
 rooted at **that terminal's project directory** — so after Claude says "wrote `foo.md`"
 you can jump straight there to read or edit it. The left pane is a lazy-loaded directory
 tree; clicking a file opens it in a **CodeMirror** editor (Markdown / JS-TS / JSON

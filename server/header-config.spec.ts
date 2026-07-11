@@ -120,10 +120,10 @@ describe("mergeHeaderConfig", () => {
 });
 
 describe("DEFAULT_BUTTONS", () => {
-  it("is the file-path picker and the file explorer, as config buttons", () => {
-    expect(DEFAULT_BUTTONS.map((b) => b.id)).toEqual(["pick-file", "files"]);
+  it("is the file-path picker and the OS file-manager reveal, as config buttons", () => {
+    expect(DEFAULT_BUTTONS.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
     expect(DEFAULT_BUTTONS.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
-    expect(DEFAULT_BUTTONS.find((b) => b.id === "files")?.open).toEqual({ files: "${dir}" });
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "${dir}" });
   });
 });
 
