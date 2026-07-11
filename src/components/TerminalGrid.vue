@@ -45,6 +45,25 @@ const emit = defineEmits<{
 }>();
 
 const gridStyle = computed(() => trackStyle(layoutForCount(props.cells.length)));
+
+// The keyboard-focused cell, so it can lift + zoom slightly in place. `focusin` bubbles from the
+// xterm textarea up to the grid, so one delegated listener suffices. It's sticky: focus moving to
+// the toolbar doesn't reset it — only another cell taking focus moves the emphasis.
+const focusedUid = ref<number | null>(null);
+function onFocusIn(e: FocusEvent) {
+  const target = e.target;
+  if (!(target instanceof HTMLElement)) return;
+  const el = target.closest<HTMLElement>("[data-uid]");
+  if (el?.dataset.uid) focusedUid.value = Number(el.dataset.uid);
+}
+// Per-cell class: `flipping` drives the zoom FLIP, `focused` the in-place lift of the active cell —
+// suppressed while expanded or mid-flip so it never fights those animations.
+function cellClass(uid: number) {
+  return {
+    flipping: uid === flippingUid.value,
+    focused: uid === focusedUid.value && props.expandedUid === null && uid !== flippingUid.value,
+  };
+}
 // Hand the flip's timing to the stylesheet so the fade under it can't drift out of sync.
 const flipVars = { "--flip-ms": `${FLIP_MS}ms`, "--flip-ease": FLIP_EASING };
 
@@ -99,12 +118,12 @@ watch(
 <template>
   <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars">
     <div ref="zoomMain" class="zoom-main" />
-    <div class="grid" :style="gridStyle">
+    <div class="grid" :style="gridStyle" @focusin="onFocusIn">
       <Teleport v-for="cell in cells" :key="cell.uid" :to="zoomMain" :disabled="!(zoomed && cell.uid === expandedUid)">
         <CommandCell
           v-if="cell.command"
           :data-uid="cell.uid"
-          :class="{ flipping: cell.uid === flippingUid }"
+          :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :zoomed="zoomed"
           :command="cell.command"
@@ -119,7 +138,7 @@ watch(
           v-else-if="cell.launcher"
           :uid="cell.uid"
           :data-uid="cell.uid"
-          :class="{ flipping: cell.uid === flippingUid }"
+          :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :zoomed="zoomed"
           :launcher="cell.launcher"
@@ -137,7 +156,7 @@ watch(
           v-else
           :uid="cell.uid"
           :data-uid="cell.uid"
-          :class="{ flipping: cell.uid === flippingUid }"
+          :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :zoomed="zoomed"
           :initial-session-id="cell.session"
@@ -220,6 +239,25 @@ watch(
   flex: 0 0 260px;
   height: 100%;
   min-width: 0;
+}
+
+/* The keyboard-focused cell lifts and grows slightly, in place — tiled grid only, so it never
+   applies to a filmstrip thumbnail (.stage.zoomed) or a cell mid-FLIP. The transform doesn't change
+   the cell's layout size, so xterm isn't refit and the PTY isn't resized. */
+.stage:not(.zoomed) .grid > *:not(.flipping) {
+  transition:
+    transform 140ms ease,
+    box-shadow 140ms ease;
+}
+.stage:not(.zoomed) .grid > .focused {
+  transform: scale(1.045);
+  z-index: 5;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .stage:not(.zoomed) .grid > *:not(.flipping) {
+    transition: none;
+  }
 }
 
 /* A second click landing mid-flight would measure a transformed cell and flip from the
