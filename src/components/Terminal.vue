@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from "vue";
 import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
@@ -191,6 +191,20 @@ onMounted(() => {
   // Auto-resize: fit the slot's xterm to this container and push the size to the PTY.
   resizeObserver = new ResizeObserver(() => conn.fit(slotKey));
   resizeObserver.observe(container);
+});
+
+// This cell may live under <KeepAlive> (the grid): a top-tab switch DEACTIVATES it,
+// moving its DOM to the cache rather than unmounting. A detached element gets no
+// ResizeObserver callbacks, so — unlike display:none — the xterm is never fit to a zero
+// box and the PTY keeps its size. Still, stop observing while cached (hygiene) and force
+// a refit on return, so a window resize that happened while the grid was away is applied.
+onDeactivated(() => resizeObserver?.disconnect());
+onActivated(() => {
+  const container = terminalRef.value;
+  if (container) resizeObserver?.observe(container);
+  conn.fit(slotKey);
+  // Refocusing the right cell on return is driven centrally by TerminalGrid (which knows
+  // the last-focused cell) — a per-cell focus here would fight it across cells.
 });
 
 // Reconnect (resume a different session / start fresh) on every user action.
