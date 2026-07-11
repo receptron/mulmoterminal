@@ -220,14 +220,13 @@ let refocusTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
   () => props.expanded,
   (expanded) => {
+    // Cancel this cell's pending refocus FIRST, before the early return: a cell that just shrank
+    // (A → B) must drop its stale timer, or it fires ~FLIP_MS later and steals focus back. Clearing
+    // here means a surviving timer only ever reflects the cell's current, unchanged state.
+    clearTimeout(refocusTimer);
     if (!shouldRefocusOnZoomChange(!!expanded, props.zoomed)) return;
     nextTick(() => conn.focus(slotKey));
-    // A rapid zoom change (A → B → C) can leave an older cell's timer pending; cancel the previous
-    // one and re-check state when it fires, so a stale timer never steals focus back to an old cell.
-    clearTimeout(refocusTimer);
-    refocusTimer = setTimeout(() => {
-      if (shouldRefocusOnZoomChange(!!props.expanded, props.zoomed)) conn.focus(slotKey);
-    }, FLIP_MS + 30);
+    refocusTimer = setTimeout(() => conn.focus(slotKey), FLIP_MS + 30);
   },
 );
 onUnmounted(() => clearTimeout(refocusTimer));
