@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
@@ -16,6 +16,8 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  insertCellAfter,
+  shellCell,
   launchInCell,
   setSortMode,
   moveCell,
@@ -33,6 +35,7 @@ import {
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
+import { registerNewTerminalHandler } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -123,8 +126,8 @@ const onAgent = (uid: number, agent: "claude" | "codex") => (state.value = setCe
 const onClose = (uid: number) => (state.value = closeCell(state.value, uid));
 const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value, uid));
 const onRun = (uid: number, command: RunCommand) => (state.value = runCommand(state.value, uid, command));
-// A running cell's header Run menu: launch in a spare cell so the session survives.
-const onRunSpare = (command: RunCommand) => (state.value = runScriptInNewCell(state.value, command));
+// A running cell's header Run menu: launch in a spare cell (next to it) so the session survives.
+const onRunSpare = (uid: number, command: RunCommand) => (state.value = runScriptInNewCell(state.value, uid, command));
 // The empty cell launcher picked a configured program (shell/codex/…): turn it into a
 // persistent launcher cell. Its session id arrives later via onSession.
 const onLaunch = (uid: number, pick: { index: number; label: string; cwd: string | null }) =>
@@ -136,9 +139,21 @@ const switchTo = (page: number) => (state.value = switchPage(state.value, page))
 // A script the single view's terminal-header Run menu handed off: run it in a spare
 // cell now that the grid (where command cells live) is mounted.
 const { takePending } = usePendingScript();
+const NO_ORIGIN_UID = -1; // no triggering cell (uids are >= 0) → insertCellAfter appends at the end
 onMounted(() => {
   const command = takePending();
-  if (command) state.value = runScriptInNewCell(state.value, command);
+  if (command) state.value = runScriptInNewCell(state.value, NO_ORIGIN_UID, command);
+});
+
+// The header "new terminal" button ($SHELL) opens a cell next to the one that triggered it.
+const SLOT_UID_RE = /^cell-(\d+)$/;
+onMounted(() => {
+  const off = registerNewTerminalHandler(({ cwd, afterSlotKey }) => {
+    const match = afterSlotKey?.match(SLOT_UID_RE);
+    const afterUid = match ? Number(match[1]) : NO_ORIGIN_UID;
+    state.value = insertCellAfter(state.value, afterUid, shellCell(cwd));
+  });
+  onBeforeUnmount(off);
 });
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.

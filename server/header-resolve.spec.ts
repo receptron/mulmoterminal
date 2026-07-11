@@ -147,4 +147,9 @@ describe("resolveHeader defaults + pickFile", () => {
     const config: HeaderConfig = { buttons: [{ id: "p", label: "P", run: "open", open: { pickFile: true } }], chips: null };
     expect(resolveHeader(config, ctx()).buttons[0].open).toEqual({ pickFile: true });
   });
+
+  it("substitutes ${dir} in a terminal open target", () => {
+    const config: HeaderConfig = { buttons: [{ id: "t", label: "T", run: "open", open: { terminal: "${dir}" } }], chips: null };
+    expect(resolveHeader(config, ctx()).buttons[0].open).toEqual({ terminal: "/Users/x/myrepo" });
+  });
 });

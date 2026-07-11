@@ -71,6 +71,7 @@ function resolveOpen(open: OpenTarget, ctx: HeaderContext): OpenTarget {
   if (open.reveal) out.reveal = substitute(open.reveal, ctx);
   if (open.files) out.files = substitute(open.files, ctx);
   if (open.view) out.view = open.view;
+  if (open.terminal) out.terminal = substitute(open.terminal, ctx);
   if (open.pickFile) out.pickFile = true;
   return out;
 }

@@ -136,4 +136,9 @@ describe("sanitizeButtons open.pickFile", () => {
   it("drops pickFile when not exactly true, leaving no valid target", () => {
     expect(sanitizeButtons([{ id: "p", label: "P", run: "open", open: { pickFile: "yes" } }])).toEqual([]);
   });
+  it("keeps a run:open button whose target is a terminal dir", () => {
+    expect(sanitizeButtons([{ id: "t", label: "T", run: "open", open: { terminal: "${dir}" } }])).toEqual([
+      { id: "t", label: "T", run: "open", open: { terminal: "${dir}" } },
+    ]);
+  });
 });

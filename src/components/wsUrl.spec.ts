@@ -91,6 +91,13 @@ describe("buildLaunchWsUrl", () => {
     const url = buildLaunchWsUrl({ host: "h", secure: true, sessionId: null, launcher: 1 });
     expect(url.startsWith("wss://")).toBe(true);
   });
+
+  it("shell: sends shell=1 and no launcher index (the OS default shell)", () => {
+    const q = new URL(buildLaunchWsUrl({ host: "h", secure: false, sessionId: null, cwd: "/proj", shell: true })).searchParams;
+    expect(q.get("shell")).toBe("1");
+    expect(q.has("launcher")).toBe(false);
+    expect(q.get("cwd")).toBe("/proj");
+  });
 });
 
 describe("buildCodexWsUrl", () => {

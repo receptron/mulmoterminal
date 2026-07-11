@@ -8,6 +8,7 @@ import { wikiGotoIndex } from "./useWikiBrowse";
 import { browseGotoIndex } from "./useCollectionBrowse";
 import { accountingViewOpen } from "./useAccountingView";
 import { submitText, insertText } from "./useTerminalConnections";
+import { openTerminalAt } from "./useNewTerminal";
 import { toInsertText } from "../components/dropPaths";
 import type { HeaderButton, OpenTarget } from "./useHeaderButtons";
 
@@ -55,6 +56,7 @@ function dispatchOpen(open: OpenTarget, cwd: string | null, slotKey: string | nu
   else if (open.reveal) revealDir(open.reveal);
   else if (open.files) filesGotoIndex(open.files);
   else if (open.view) openView(open.view, cwd);
+  else if (open.terminal) openTerminalAt(open.terminal, slotKey);
   else if (open.pickFile) void pickFileInto(slotKey);
 }
 
