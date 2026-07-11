@@ -604,6 +604,20 @@ describe("TerminalCell", () => {
     expect(dotClass(w)).toContain("is-idle");
   });
 
+  it("prefers the AI title over the raw prompt in the header, and falls back when it clears", async () => {
+    const id = "66666666-6666-6666-6666-666666666666";
+    const w = mountCell(id);
+    await flushPromises();
+    captured?.({ id, working: false, waiting: false, lastPrompt: "2番目にして", aiTitle: "パーサー修正" });
+    await nextTick();
+    expect(promptText(w)).toBe("パーサー修正");
+
+    // Dropping the title (null) falls back to the raw prompt, not a stale title.
+    captured?.({ id, working: false, waiting: false, lastPrompt: "2番目にして", aiTitle: null });
+    await nextTick();
+    expect(promptText(w)).toBe("2番目にして");
+  });
+
   // The header's "open on GitHub" control: shown only when /api/git-remote
   // reports a repository URL for the cell's dir.
   function mockFetchWithGithub(githubUrl: string | null, ok = true) {

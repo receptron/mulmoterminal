@@ -9,6 +9,8 @@ import {
   sessionUsageFromJsonl,
   latestTurnContextFromJsonl,
   timelineFromJsonl,
+  aiTitleFromJsonl,
+  conversationTurnsFromJsonl,
 } from "./transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
@@ -246,5 +248,55 @@ describe("timelineFromJsonl", () => {
   it("uses an empty ts when the record has no timestamp", () => {
     const raw = line({ type: "assistant", message: { content: [bash("pwd")] } });
     expect(timelineFromJsonl(raw)[0].ts).toBe("");
+  });
+});
+
+describe("aiTitleFromJsonl", () => {
+  it("returns the last ai-title record's text", () => {
+    const raw = [line({ type: "ai-title", aiTitle: "old" }), line({ type: "ai-title", aiTitle: "newest" })].join("\n");
+    expect(aiTitleFromJsonl(raw)).toBe("newest");
+  });
+
+  it("returns null when there is no ai-title record", () => {
+    expect(aiTitleFromJsonl(line({ type: "user", message: { content: "hi" } }))).toBeNull();
+    expect(aiTitleFromJsonl("")).toBeNull();
+  });
+});
+
+describe("conversationTurnsFromJsonl", () => {
+  it("collects user and assistant text turns in order", () => {
+    const raw = [
+      line({ type: "user", message: { content: "fix the parser" } }),
+      line({ type: "assistant", message: { content: [{ type: "text", text: "Looking at it" }] } }),
+      line({ type: "user", message: { content: "2番目にして" } }),
+    ].join("\n");
+    expect(conversationTurnsFromJsonl(raw)).toEqual([
+      { role: "user", text: "fix the parser" },
+      { role: "assistant", text: "Looking at it" },
+      { role: "user", text: "2番目にして" },
+    ]);
+  });
+
+  it("skips slash/local-command user wrappers and tool-only assistant turns", () => {
+    const raw = [
+      line({ type: "user", message: { content: "<local-command>/clear</local-command>" } }),
+      line({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: {} }] } }),
+      line({ type: "user", message: { content: "real prompt" } }),
+    ].join("\n");
+    expect(conversationTurnsFromJsonl(raw)).toEqual([{ role: "user", text: "real prompt" }]);
+  });
+
+  it("joins multiple assistant text blocks and ignores tool_use blocks", () => {
+    const raw = line({
+      type: "assistant",
+      message: {
+        content: [
+          { type: "text", text: "part one" },
+          { type: "tool_use", name: "Read" },
+          { type: "text", text: "part two" },
+        ],
+      },
+    });
+    expect(conversationTurnsFromJsonl(raw)).toEqual([{ role: "assistant", text: "part one part two" }]);
   });
 });

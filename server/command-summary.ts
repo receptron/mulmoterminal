@@ -77,15 +77,17 @@ export interface ClaudeRunResult {
   code: number | null;
 }
 
-export type RunClaude = (params: { bin: string; prompt: string; input: string; timeoutMs: number }) => Promise<ClaudeRunResult>;
+export type RunClaude = (params: { bin: string; prompt: string; input: string; timeoutMs: number; model?: string }) => Promise<ClaudeRunResult>;
 
 // Default spawn: run `claude -p <prompt>`, feed the log on stdin, collect stdout.
 // Argv (no shell), so nothing in the log or prompt is re-interpreted by a shell. A
 // timeout kills a hung CLI so the request can't wait forever. Injected into
-// summarizeLog so tests mock it — no `claude` binary needed.
-export const runClaudeHeadless: RunClaude = ({ bin, prompt, input, timeoutMs }) =>
+// summarizeLog so tests mock it — no `claude` binary needed. `model` (when given) picks
+// a cheaper/faster model via `--model` — used by the header-title generator.
+export const runClaudeHeadless: RunClaude = ({ bin, prompt, input, timeoutMs, model }) =>
   new Promise((resolve, reject) => {
-    const child = spawn(bin, ["-p", prompt], { stdio: ["pipe", "pipe", "pipe"] });
+    const args = model ? ["-p", prompt, "--model", model] : ["-p", prompt];
+    const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     const timer = setTimeout(() => {
