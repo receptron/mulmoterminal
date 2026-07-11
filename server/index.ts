@@ -463,6 +463,7 @@ const aiTitles = new Map<string, string>(); // id -> AI title
 const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
 const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
 const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
+const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to void an in-flight generation
 
 // Live ptys keyed by session id. A pty outlives its WebSocket while the session
 // is still "working", so switching away doesn't interrupt Claude mid-turn; it
@@ -1075,11 +1076,14 @@ function clearHeaderPrompt(sessionId: string): void {
   publishActivity(sessionId);
 }
 
-// Drop all AI-title bookkeeping for a session (on /clear or teardown).
+// Drop all AI-title bookkeeping for a session (on /clear or teardown). Bumping the epoch
+// voids any in-flight generation started before this reset — its (now pre-clear) title
+// must not resurface after the header was cleared.
 function forgetTitle(sessionId: string): void {
   aiTitles.delete(sessionId);
   titleTurnCounts.delete(sessionId);
   titlePending.delete(sessionId);
+  titleEpoch.set(sessionId, (titleEpoch.get(sessionId) ?? 0) + 1);
 }
 
 // Count a user turn and flag the session for a title (re)generation at the next Stop when
@@ -1102,10 +1106,12 @@ async function maybeGenerateTitle(sessionId: string, cwd: string | undefined): P
   if (!cwd || !titlePending.has(sessionId) || titleInFlight.has(sessionId)) return;
   titlePending.delete(sessionId);
   titleInFlight.add(sessionId);
+  const epoch = titleEpoch.get(sessionId) ?? 0;
   try {
     const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${sessionId}.jsonl`), "utf8").catch(() => null);
     const title = raw ? await generateHeaderTitle(raw) : null;
-    if (title) {
+    // A /clear or teardown during generation bumps the epoch — drop this now-stale title.
+    if (title && (titleEpoch.get(sessionId) ?? 0) === epoch) {
       aiTitles.set(sessionId, title);
       titleTurnCounts.set(sessionId, 0);
       publishActivity(sessionId);

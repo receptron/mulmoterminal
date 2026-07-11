@@ -586,6 +586,7 @@ function teardown() {
   waiting.value = false;
   activityEvent.value = null;
   lastPrompt.value = null;
+  aiTitle.value = null;
   usage.value = null;
   context.value = null;
   cwd.value = props.defaultCwd;
