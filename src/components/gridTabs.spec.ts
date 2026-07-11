@@ -78,6 +78,19 @@ describe("addCell", () => {
     expect(runningCount(s.cells)).toBe(81);
     expect(s.cells).toHaveLength(81);
   });
+  it("zooms the new cell when a cell is currently zoomed", () => {
+    const s = addCell(make(running(3), { expanded: 1 }));
+    expect(s.cells).toHaveLength(4);
+    expect(s.expanded).toBe(s.cells[3].uid); // the freshly appended cell
+  });
+  it("leaves the grid un-zoomed when nothing was zoomed", () => {
+    expect(addCell(make(running(3))).expanded).toBeNull();
+  });
+  it("does not zoom the new cell when `expanded` is stale (points at no cell)", () => {
+    // zoomedUid treats a dangling `expanded` as not-zoomed, so a new cell must not inherit it.
+    const s = addCell(make(running(2), { expanded: 99 }));
+    expect(s.expanded).toBe(99); // unchanged; zoomedUid() still resolves it to null
+  });
 });
 
 describe("cancelableLaunchUid", () => {
