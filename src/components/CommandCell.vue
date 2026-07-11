@@ -173,7 +173,17 @@ function onHeaderClick(event: MouseEvent) {
         <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="emit('close')">✕</button>
       </span>
     </div>
-    <TerminalView ref="termRef" class="cell-term" :session-id="null" :connect-key="connectKey" :cwd="command.cwd" :command="command" @exit="onExit" />
+    <TerminalView
+      ref="termRef"
+      class="cell-term"
+      :session-id="null"
+      :connect-key="connectKey"
+      :cwd="command.cwd"
+      :command="command"
+      :expanded="expanded"
+      :zoomed="zoomed"
+      @exit="onExit"
+    />
     <div v-if="showSummary" class="cell-summary">
       <div class="cell-summary-head">
         <span class="cell-summary-title">✦ Summary</span>

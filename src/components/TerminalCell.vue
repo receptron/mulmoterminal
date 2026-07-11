@@ -912,6 +912,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :dir-header-text-color="dirConfig.headerTextColor"
         :dir-button-color="dirConfig.buttonColor"
         :hide-header="filmstrip"
+        :expanded="expanded"
+        :zoomed="zoomed"
         dev-terminal
         run-menu
         @session="onSession"
