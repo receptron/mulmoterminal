@@ -126,6 +126,10 @@ const waiting = ref(false);
 // into done (Stop) vs blocked (Notification) — see activityStatus.
 const activityEvent = ref<string | null>(null);
 const lastPrompt = ref<string | null>(null);
+// A cheap-model summary of the recent turns (issue #316). Preferred over lastPrompt in
+// the header because a raw follow-up prompt goes stale ("ok") or context-dependent once
+// the session is a back-and-forth. Null until the server generates/pushes one.
+const aiTitle = ref<string | null>(null);
 
 // Cumulative token usage for this session (from /api/session/:id, refreshed when a
 // turn finishes). Null until first fetched.
@@ -181,6 +185,7 @@ interface ActivityMsg {
   waiting?: boolean;
   event?: string | null;
   lastPrompt?: string | null;
+  aiTitle?: string | null;
 }
 const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" && d !== null && "id" in d;
 
@@ -188,9 +193,10 @@ function applyActivity(d: ActivityMsg) {
   working.value = d.working ?? false;
   waiting.value = d.waiting ?? false;
   if (d.event !== undefined) activityEvent.value = d.event;
-  // Apply lastPrompt whenever the field is present — including an explicit null,
-  // so a cleared/new session doesn't keep showing the previous prompt.
+  // Apply lastPrompt/aiTitle whenever the field is present — including an explicit null,
+  // so a cleared/new session doesn't keep showing the previous prompt or title.
   if (d.lastPrompt !== undefined) lastPrompt.value = d.lastPrompt;
+  if (d.aiTitle !== undefined) aiTitle.value = d.aiTitle;
 }
 
 async function loadInitial(id: string) {
@@ -686,7 +692,7 @@ const statusClass = computed(() => STATUS_CLASS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
 
-const headerText = computed(() => lastPrompt.value || (sessionId.value ? sessionId.value.slice(0, 8) : "starting…"));
+const headerText = computed(() => aiTitle.value || lastPrompt.value || (sessionId.value ? sessionId.value.slice(0, 8) : "starting…"));
 
 // Per-cell token usage badge: ⇡ total input (fresh + cache) · ⇣ output generated.
 function fmtTokens(n: number): string {
@@ -880,7 +886,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <span v-else-if="chip.custom" class="cell-hdr-chip" :title="chip.custom.label || chip.custom.text">{{ chip.custom.text }}</span>
             </template>
           </template>
-          <span class="cell-prompt" :title="lastPrompt ?? ''">{{ headerText }}</span>
+          <span class="cell-prompt" :title="lastPrompt || aiTitle || ''">{{ headerText }}</span>
         </div>
         <!-- Expand/restore + close stay on row 1 (the info row) and OUTSIDE the info
              track, so they're always pinned top-right. `.stop` so they don't trigger the
