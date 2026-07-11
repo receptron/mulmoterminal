@@ -33,6 +33,7 @@ import {
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
+import { usePubSub } from "../composables/usePubSub";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -96,6 +97,34 @@ const reorderable = computed(() => state.value.sortMode === "manual");
 // is zoomed, render EVERY cell so the filmstrip lines up all tabs' terminals (live).
 const displayCells = computed(() => visibleOrdered(state.value, statusForSort.value));
 const expandedUid = computed(() => zoomedUid(state.value));
+
+// PROTO (list-view): a central text list of every cell — dir + AI summary + last prompt +
+// status — so you can supervise past the 9-thumbnail grid and jump the expanded terminal
+// by picking a row. The server publishes lastPrompt/aiTitle on the "sessions" channel for
+// EVERY session (grid cells included, unlike /api/sessions), so subscribe here directly.
+const sessionMeta = reactive(new Map<string, { lastPrompt: string | null; aiTitle: string | null }>());
+onMounted(() =>
+  usePubSub().subscribe("sessions", (d: unknown) => {
+    if (!d || typeof d !== "object" || !("id" in d)) return;
+    const m = d as { id: string; lastPrompt?: string | null; aiTitle?: string | null };
+    const prev = sessionMeta.get(m.id) ?? { lastPrompt: null, aiTitle: null };
+    if ("lastPrompt" in m) prev.lastPrompt = m.lastPrompt ?? null;
+    if ("aiTitle" in m) prev.aiTitle = m.aiTitle ?? null;
+    sessionMeta.set(m.id, prev);
+  }),
+);
+const listRows = computed(() =>
+  state.value.cells.map((c) => {
+    const meta = c.session ? sessionMeta.get(c.session) : undefined;
+    return {
+      uid: c.uid,
+      cwd: c.cwd,
+      title: meta?.aiTitle || meta?.lastPrompt || (c.session ? c.session.slice(0, 8) : "new terminal"),
+      prompt: meta?.lastPrompt ?? null,
+      status: statusForSort.value[c.uid] ?? ("idle" as CellStatus),
+    };
+  }),
+);
 // The cancelable trailing launch cell's uid (null when there's nothing to cancel):
 // drives both the toolbar's cancel state and the launcher's in-cell ✕.
 const cancelUid = computed(() => cancelableLaunchUid(state.value));
@@ -193,6 +222,7 @@ function configureAppearance() {
       class="main"
       :cells="displayCells"
       :expanded-uid="expandedUid"
+      :list-rows="listRows"
       :cancel-uid="cancelUid"
       :default-cwd="defaultCwd"
       :presets="presets"

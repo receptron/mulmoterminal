@@ -6,6 +6,7 @@ import LauncherCell from "./LauncherCell.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
+import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import type { CwdPreset } from "./presets";
@@ -19,9 +20,18 @@ import type { Launcher, LaunchPick } from "./launchers";
 // zoomed, GridView passes EVERY cell (all tabs), so the strip shows them all live.
 // A cell carrying a `command` renders as a CommandCell (a running script.json
 // command) instead of the Claude launcher/terminal.
+export interface CockpitRow {
+  uid: number;
+  cwd: string | null;
+  title: string;
+  prompt: string | null;
+  status: CellStatus;
+}
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
+  // PROTO: a text row per cell for the cockpit list shown beside the expanded terminal.
+  listRows: CockpitRow[];
   cancelUid: number | null;
   defaultCwd: string | null;
   presets: CwdPreset[];
@@ -116,6 +126,9 @@ watch(
   (to, from) => {
     const uid = to ?? from;
     if (uid === null || uid === undefined) return;
+    // PROTO: swapping between two already-zoomed cells (cockpit list click) has no on-screen
+    // source to fly from — the incoming cell sits off-screen in `.grid` — so skip the FLIP.
+    if (to !== null && from !== null) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const el = cellEl(uid);
     if (!el) return;
@@ -127,6 +140,25 @@ watch(
 
 <template>
   <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
+    <!-- PROTO cockpit list: a dense text roster of every cell shown beside the expanded
+         terminal (only while zoomed). Click a row to swap which terminal is enlarged. -->
+    <aside v-if="zoomed" class="cockpit">
+      <button
+        v-for="row in listRows"
+        :key="row.uid"
+        type="button"
+        :class="['cockpit-row', `st-${row.status}`, { active: row.uid === expandedUid }]"
+        :title="row.prompt ?? row.title"
+        @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
+      >
+        <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
+        <span class="cockpit-body">
+          <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 40) || "—" }}</span>
+          <span class="cockpit-title">{{ row.title }}</span>
+          <span v-if="row.prompt && row.prompt !== row.title" class="cockpit-prompt">{{ row.prompt }}</span>
+        </span>
+      </button>
+    </aside>
     <div ref="zoomMain" class="zoom-main" />
     <div class="grid" :style="gridStyle">
       <Teleport v-for="cell in cells" :key="cell.uid" :to="zoomMain" :disabled="!(zoomed && cell.uid === expandedUid)">
@@ -222,13 +254,16 @@ watch(
   display: none;
 }
 
-/* Filmstrip: the zoomed cell (teleported here) fills the top. */
+/* PROTO cockpit layout: text roster on the left, the expanded terminal on the right. */
+.stage.zoomed {
+  flex-direction: row;
+}
 .stage.zoomed .zoom-main {
   display: flex;
   flex: 1;
   min-height: 0;
   min-width: 0;
-  padding: 6px 6px 0;
+  padding: 6px 6px 6px 0;
 }
 .zoom-main > * {
   flex: 1;
@@ -236,19 +271,99 @@ watch(
   min-height: 0;
 }
 
-/* The grid itself becomes the bottom strip: the remaining cells in a single row
-   that scrolls horizontally when they overflow. */
+/* Keep the non-expanded cells mounted (connections stay live, metadata keeps flowing) but
+   OFF the visible layout — the roster replaces the thumbnail filmstrip. A real off-screen
+   box means xterm never fits to zero. */
 .stage.zoomed .grid {
-  flex: 0 0 150px;
-  display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  position: absolute;
+  left: -99999px;
+  top: 0;
+  width: 900px;
+  height: 600px;
+  display: block;
+  overflow: hidden;
+  padding: 0;
 }
 .stage.zoomed .grid > * {
-  flex: 0 0 260px;
-  height: 100%;
+  width: 900px;
+  height: 600px;
+}
+
+.cockpit {
+  flex: 0 0 320px;
   min-width: 0;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-deep);
+}
+.cockpit-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.cockpit-row:hover {
+  filter: brightness(1.15);
+}
+.cockpit-row.active {
+  border-color: var(--accent, #4a9eff);
+  border-left-color: var(--accent, #4a9eff);
+}
+.cockpit-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #666;
+}
+.cockpit-dot.st-working {
+  background: #4a9eff;
+}
+.cockpit-dot.st-done {
+  background: #22c55e;
+}
+.cockpit-dot.st-blocked {
+  background: #f59e0b;
+}
+.cockpit-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cockpit-dir {
+  font-size: 11px;
+  color: var(--text-dim, #9ab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cockpit-title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cockpit-prompt {
+  font-size: 11px;
+  color: var(--text-dim, #9ab);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
 /* The keyboard-focused cell lifts and grows slightly, in place — tiled grid only, so it never
