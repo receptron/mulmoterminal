@@ -101,6 +101,23 @@ describe("useDirConfig live reload", () => {
     scope.stop();
   });
 
+  it("seeds a re-mounted cell from cache so it never flashes the default palette", async () => {
+    // First mount fetches and caches /proj/seed's config.
+    const s1 = effectScope();
+    const c1 = s1.run(() => useDirConfig(ref("/proj/seed")).config);
+    await flush();
+    expect(c1?.value.name).toBe("first");
+    s1.stop();
+
+    // A tab switch remounts the cell. The config must be present on the FIRST synchronous
+    // frame — before any fetch/await settles — so the terminal paints the dir palette
+    // immediately instead of the default one. (Pre-fix this was EMPTY until a flush.)
+    const s2 = effectScope();
+    const c2 = s2.run(() => useDirConfig(ref("/proj/seed")).config);
+    expect(c2?.value.name).toBe("first"); // no flush
+    s2.stop();
+  });
+
   it("releases the old directory when a cell switches cwd", async () => {
     const before = boundDirCount();
     const cwd = ref("/proj/one");

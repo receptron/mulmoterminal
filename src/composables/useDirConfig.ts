@@ -82,6 +82,13 @@ function parseColors(input: unknown): Partial<ITheme> | null {
 // config change recolours the cells live, with no filesystem watchers.
 const cache = new Map<string, Promise<DirConfig>>();
 
+// The last RESOLVED config per cwd. A re-mounted cell (e.g. after a top-tab switch that
+// unmounts the grid / single view) seeds `config` from this SYNCHRONOUSLY, so it paints
+// the directory's palette on the first frame instead of flashing the default theme until
+// the (already-cached) fetch settles a microtask later.
+const resolvedConfig = new Map<string, DirConfig>();
+const seedConfig = (cwd: string | null | undefined): DirConfig => (cwd ? (resolvedConfig.get(cwd) ?? EMPTY) : EMPTY);
+
 // Live `config` refs, keyed by the cwd they're bound to, so an invalidation reaches
 // every cell showing that directory.
 const bound = new Map<string, Set<(config: DirConfig) => void>>();
@@ -117,9 +124,11 @@ export function fetchDirConfig(cwd: string): Promise<DirConfig> {
   const pending = (async () => {
     try {
       const res = await fetch(`/api/dir-config?cwd=${encodeURIComponent(cwd)}`);
-      return res.ok ? parse(await res.json()) : EMPTY;
+      const parsed = res.ok ? parse(await res.json()) : EMPTY;
+      resolvedConfig.set(cwd, parsed); // remember the value so a re-mount seeds it synchronously
+      return parsed;
     } catch {
-      return EMPTY;
+      return EMPTY; // leave any prior cached value in place — don't record a transient failure
     }
   })();
   cache.set(cwd, pending);
@@ -157,7 +166,7 @@ function subscribeToDirConfigChanges(): void {
 
 // set so a cell that switches directories never shows a stale badge/theme.
 export function useDirConfig(cwd: Ref<string | null | undefined>) {
-  const config = ref<DirConfig>(EMPTY);
+  const config = ref<DirConfig>(seedConfig(cwd.value));
   subscribeToDirConfigChanges();
 
   let boundCwd: string | null = null;
@@ -191,6 +200,7 @@ export function useDirConfig(cwd: Ref<string | null | undefined>) {
       }
       targets.add(apply);
       boundCwd = c;
+      config.value = seedConfig(c); // paint the cached palette now; the fetch below refreshes it
       const seq = generationOf(c);
       const resolved = await fetchDirConfig(c);
       // Ignore a stale resolve after a fast directory switch, or after an invalidation
