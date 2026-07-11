@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { type ITheme } from "@xterm/xterm";
+import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { dropTextFromUriList, toInsertText } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
@@ -47,6 +48,10 @@ const props = defineProps<{
   // Hide this terminal's own header row (used when a grid cell is zoomed: the cell's
   // header already shows dir + activity, so the embedded header would just be clutter).
   hideHeader?: boolean;
+  // Grid zoom state, so the terminal can grab keyboard focus after an expand/collapse teleport
+  // (which blurs it). `expanded` = this cell is the big one; `zoomed` = SOME cell is expanded.
+  expanded?: boolean;
+  zoomed?: boolean;
   persistKey?: string | null;
   // Per-directory overrides from <cwd>/.mulmoterminal.json. `dirTheme` pins this
   // terminal's xterm palette (overriding the app-wide theme for this cell only);
@@ -205,6 +210,21 @@ watch(
 watch([themeId, () => props.dirTheme, () => props.dirColors], () => {
   conn.setTheme(slotKey, effectiveTermTheme());
 });
+
+// Expanding/collapsing a grid cell teleports it in the DOM, which blurs the xterm textarea — so the
+// user has to click before typing. Refocus the cell that should now be active: the one that became
+// big (expanded), or the one returning to the grid on a full collapse (`!zoomed`). On a switch to
+// ANOTHER cell (still zoomed) we skip, letting the newly-big cell claim focus. Refocus once after the
+// teleport (nextTick, covers reduced-motion) and again once the FLIP animation lands.
+watch(
+  () => props.expanded,
+  (expanded) => {
+    if (!shouldRefocusOnZoomChange(!!expanded, props.zoomed)) return;
+    const refocus = () => conn.focus(slotKey);
+    nextTick(refocus);
+    setTimeout(refocus, FLIP_MS + 30);
+  },
+);
 
 // Submit a GUI-originated message into the PTY (the GUI->LLM feedback path) and the
 // explicit ✕ close. Both delegate to the slot's durable runtime.
