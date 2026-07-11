@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
-import { dropTextFromUriList, toInsertText } from "./dropPaths";
+import { dropTextFromUriList } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
 import { terminalHeaderStyleFor } from "./cellHeaderStyle";
@@ -11,7 +11,6 @@ import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
 import GitBranchChip from "./GitBranchChip.vue";
-import { filesGotoIndex } from "../composables/useFilesView";
 import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderButtons";
 import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
@@ -271,25 +270,6 @@ function onDragOver(e: DragEvent) {
   dragOver.value = true;
 }
 
-// The file-icon button: the browser can't reveal a real path, so the local
-// server opens the OS file dialog and returns the chosen absolute path(s). Works
-// in every browser (the cross-browser path route, unlike file:// drag/drop).
-async function pickFile() {
-  try {
-    const res = await fetch("/api/pick-file", { method: "POST", headers: { "content-type": "application/json" } });
-    if (!res.ok) return;
-    const data: unknown = await res.json();
-    const paths = isRecord(data) && Array.isArray(data.paths) ? data.paths.filter((p): p is string => typeof p === "string") : [];
-    insertText(toInsertText(paths));
-  } catch {
-    // best-effort — the native dialog is unavailable or the user canceled
-  }
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
 onUnmounted(() => {
   resizeObserver?.disconnect();
   // Persisted slot: detach the view but KEEP the connection alive (the whole point —
@@ -331,18 +311,8 @@ onUnmounted(() => {
         >
           <span class="material-symbols-outlined">{{ voiceIcon() }}</span>
         </button>
-        <button type="button" class="icon-btn" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
-          <span class="material-symbols-outlined">attach_file</span>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="Browse & edit this project's files"
-          aria-label="Open the file explorer"
-          @click="filesGotoIndex(serverCwd)"
-        >
-          <span class="material-symbols-outlined">folder_open</span>
-        </button>
+        <!-- The file-path picker and file explorer are now DEFAULT_BUTTONS (server-resolved into
+             headerButtons above), so the user can drop/reorder/replace them via config. -->
         <!-- A grid cell injects its own actions (GitHub / timeline / reorder / zoom /
              close) here, so all the icon buttons live on this one header row. -->
         <slot name="header-actions" />

@@ -3,7 +3,7 @@
 // gathers the HeaderContext (cwd, git status, model, agent, …) from server state.
 
 import { BUILTIN_CHIPS, type BuiltinChip, type HeaderButton, type HeaderChip, type OpenTarget } from "./config-schema.js";
-import type { HeaderConfig, HeaderContext, ResolvedButton, ResolvedChip, ResolvedHeader } from "./header-config.js";
+import { DEFAULT_BUTTONS, type HeaderConfig, type HeaderContext, type ResolvedButton, type ResolvedChip, type ResolvedHeader } from "./header-config.js";
 
 const VAR_RE = /\$\{(\w+)\}/g;
 const BUILTINS = new Set<string>(BUILTIN_CHIPS);
@@ -71,6 +71,7 @@ function resolveOpen(open: OpenTarget, ctx: HeaderContext): OpenTarget {
   if (open.reveal) out.reveal = substitute(open.reveal, ctx);
   if (open.files) out.files = substitute(open.files, ctx);
   if (open.view) out.view = open.view;
+  if (open.pickFile) out.pickFile = true;
   return out;
 }
 
@@ -99,7 +100,7 @@ export function substituteShell(text: string, ctx: HeaderContext, quote: (value:
 // gate; it's a display-time visibility filter (applied in resolveHeader for /api/header). The security
 // boundary is "the command is in the user's config" + the same-origin guard on /ws/run.
 export function resolveButtonCommand(config: HeaderConfig, ctx: HeaderContext, buttonId: string, quote: (value: string) => string): string | null {
-  const button = config.buttons.find((b) => b.id === buttonId && b.run === "shell");
+  const button = (config.buttons ?? DEFAULT_BUTTONS).find((b) => b.id === buttonId && b.run === "shell");
   return button?.cmd ? substituteShell(button.cmd, ctx, quote) : null;
 }
 
@@ -109,7 +110,8 @@ function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null 
 }
 
 export function resolveHeader(config: HeaderConfig, ctx: HeaderContext): ResolvedHeader {
-  const buttons = config.buttons.filter((b) => evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
+  // null buttons == unconfigured → the built-in defaults; an explicit list (even empty) replaces them.
+  const buttons = (config.buttons ?? DEFAULT_BUTTONS).filter((b) => evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
   const chips = config.chips === null ? null : config.chips.map((c) => resolveChip(c, ctx)).filter((c): c is ResolvedChip => c !== null);
   return { buttons, chips };
 }

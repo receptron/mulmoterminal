@@ -32,7 +32,8 @@ export interface DirConfig {
   // configured path is absolute / escapes the directory / doesn't exist.
   sound: string | null;
   // Per-project terminal-header action buttons (merged over the global ones by id).
-  buttons: HeaderButton[];
+  // null = this dir doesn't configure buttons.
+  buttons: HeaderButton[] | null;
   // Per-project header display chips, or null when this dir doesn't configure them.
   chips: HeaderChip[] | null;
 }
@@ -107,7 +108,7 @@ const EMPTY: DirConfig = {
   theme: null,
   colors: null,
   sound: null,
-  buttons: [],
+  buttons: null,
   chips: null,
 };
 

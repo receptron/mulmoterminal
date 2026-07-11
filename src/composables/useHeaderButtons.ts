@@ -10,6 +10,7 @@ export interface OpenTarget {
   reveal?: string;
   files?: string;
   view?: string;
+  pickFile?: boolean;
 }
 export interface HeaderButton {
   id: string;

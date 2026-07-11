@@ -300,6 +300,20 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `prRepos`    | `owner/repo` entries whose open PRs/issues the cross-repo **PRs & Issues** view aggregates (via your `gh` login). |
 | `launchers`  | `{ label, command }` entries offered in a grid cell's launcher besides Claude — a plain shell, `codex`, any interactive command. |
 | `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the **single-view** Claude session's `--mcp-config` (a `localhost` URL is reached over `host.docker.internal` in the Docker sandbox). Takes effect on the next session. |
+| `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
+| `chips`      | Header info chips. Omit to keep the default set; `[]` hides all built-ins. |
+
+#### Header buttons
+
+Each terminal header shows configurable **action buttons**. Omitting `buttons` (globally or per-dir)
+keeps the built-in defaults — a **file-path picker** and the **📁 file explorer**. Setting `buttons`
+(at either level) **replaces** the defaults with your list, so you can drop, reorder, or swap them.
+A button has an `id`, `label`, and a `run` of `"shell"` (run a command), `"input"` (send text to the
+agent), or `"open"`. An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
+(in-app explorer) / `view` (a built-in overlay) / `pickFile: true` (OS file dialog → insert the path).
+`${dir}`, `${branch}`, `${repo}`, … substitute live context, and `when` (e.g. `"isGitRepo"`) gates
+visibility. The `/mulmoterminal-config` skill writes a valid config interactively; per-dir buttons
+merge over the global ones by `id`.
 
 **Attention sound.** The default chime is generated with the Web Audio API — **no
 audio file is bundled**, so the npm package stays light and has no media-licensing
@@ -444,7 +458,8 @@ the last 32 KB of output. See
 
 ## Files view (browse & edit)
 
-Every terminal header has a **📁 Files** button that opens a full-screen file explorer
+By default every terminal header carries a **📁 Files** button (one of the default header
+buttons — see [Header buttons](#header-buttons)) that opens a full-screen file explorer
 rooted at **that terminal's project directory** — so after Claude says "wrote `foo.md`"
 you can jump straight there to read or edit it. The left pane is a lazy-loaded directory
 tree; clicking a file opens it in a **CodeMirror** editor (Markdown / JS-TS / JSON

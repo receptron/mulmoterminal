@@ -88,6 +88,8 @@ const openTargetShape = {
   reveal: z.string().optional(),
   files: z.string().optional(),
   view: viewTargetSchema.optional(),
+  // No target string: open the OS file dialog and insert the chosen path(s) into the session.
+  pickFile: z.boolean().optional(),
 };
 export const openTargetSchema = z.object(openTargetShape);
 export type OpenTarget = z.infer<typeof openTargetSchema>;
@@ -173,14 +175,16 @@ const writableOpenTargetShape = {
   reveal: nonEmptyText.optional(),
   files: nonEmptyText.optional(),
   view: viewTargetSchema.optional(),
+  pickFile: z.literal(true).optional(),
 };
 
-// `open` requires at least one target (url/reveal/files/view), mirroring sanitizeOpen.
+// `open` requires at least one target (url/reveal/files/view/pickFile), mirroring sanitizeOpen.
 const writableOpenTargetSchema = z.union([
   z.object({ ...writableOpenTargetShape, url: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, reveal: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, files: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, view: viewTargetSchema }),
+  z.object({ ...writableOpenTargetShape, pickFile: z.literal(true) }),
 ]);
 
 const commonButtonFields = {
