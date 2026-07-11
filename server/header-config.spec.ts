@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeButtons, sanitizeChips, sanitizeHeaderConfig, mergeHeaderConfig, type HeaderConfig } from "./header-config.js";
+import { sanitizeButtons, sanitizeChips, sanitizeHeaderConfig, mergeHeaderConfig, DEFAULT_BUTTONS, type HeaderConfig } from "./header-config.js";
 
 describe("sanitizeButtons", () => {
   it("keeps a valid shell/input/open button with its matching payload", () => {
@@ -30,9 +30,13 @@ describe("sanitizeButtons", () => {
     expect(out[0].label).toBe("A");
   });
 
-  it("returns [] for non-array input", () => {
-    expect(sanitizeButtons(undefined)).toEqual([]);
-    expect(sanitizeButtons({})).toEqual([]);
+  it("returns null for non-array input (unconfigured = use DEFAULT_BUTTONS)", () => {
+    expect(sanitizeButtons(undefined)).toBeNull();
+    expect(sanitizeButtons({})).toBeNull();
+  });
+
+  it("keeps an empty array as configured-but-empty (replaces the defaults with nothing)", () => {
+    expect(sanitizeButtons([])).toEqual([]);
   });
 });
 
@@ -56,8 +60,8 @@ describe("sanitizeChips", () => {
 });
 
 describe("sanitizeHeaderConfig", () => {
-  it("assembles buttons + chips, defaulting a non-object to empty/null", () => {
-    expect(sanitizeHeaderConfig(null)).toEqual({ buttons: [], chips: null });
+  it("assembles buttons + chips, defaulting a non-object to null/null", () => {
+    expect(sanitizeHeaderConfig(null)).toEqual({ buttons: null, chips: null });
     expect(sanitizeHeaderConfig({ buttons: [{ id: "a", label: "A", run: "shell", cmd: "x" }], chips: ["dir"] })).toEqual({
       buttons: [{ id: "a", label: "A", run: "shell", cmd: "x" }],
       chips: ["dir"],
@@ -104,5 +108,32 @@ describe("mergeHeaderConfig", () => {
     expect(mergeHeaderConfig(g, { buttons: [], chips: ["ctx"] }).chips).toEqual(["ctx"]);
     expect(mergeHeaderConfig(g, { buttons: [], chips: null }).chips).toEqual(["dir", "git"]);
     expect(mergeHeaderConfig({ buttons: [], chips: null }, { buttons: [], chips: null }).chips).toBeNull();
+  });
+
+  it("keeps buttons null (unconfigured → defaults) only when BOTH levels are unconfigured", () => {
+    expect(mergeHeaderConfig({ buttons: null, chips: null }, { buttons: null, chips: null }).buttons).toBeNull();
+    const onlyGlobal = mergeHeaderConfig({ buttons: [{ id: "a", label: "A", run: "shell", cmd: "x" }], chips: null }, { buttons: null, chips: null });
+    expect(onlyGlobal.buttons).toEqual([{ id: "a", label: "A", run: "shell", cmd: "x" }]);
+    const onlyProject = mergeHeaderConfig({ buttons: null, chips: null }, { buttons: [{ id: "b", label: "B", run: "shell", cmd: "y" }], chips: null });
+    expect(onlyProject.buttons).toEqual([{ id: "b", label: "B", run: "shell", cmd: "y" }]);
+  });
+});
+
+describe("DEFAULT_BUTTONS", () => {
+  it("is the file-path picker and the OS file-manager reveal, as config buttons", () => {
+    expect(DEFAULT_BUTTONS.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "${dir}" });
+  });
+});
+
+describe("sanitizeButtons open.pickFile", () => {
+  it("keeps a run:open button whose only target is pickFile:true", () => {
+    expect(sanitizeButtons([{ id: "p", label: "P", run: "open", open: { pickFile: true } }])).toEqual([
+      { id: "p", label: "P", run: "open", open: { pickFile: true } },
+    ]);
+  });
+  it("drops pickFile when not exactly true, leaving no valid target", () => {
+    expect(sanitizeButtons([{ id: "p", label: "P", run: "open", open: { pickFile: "yes" } }])).toEqual([]);
   });
 });

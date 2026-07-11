@@ -130,3 +130,21 @@ describe("resolveButtonCommand", () => {
     expect(resolveButtonCommand(cfg(), ctx(), "open", posixQuote)).toBeNull();
   });
 });
+
+describe("resolveHeader defaults + pickFile", () => {
+  it("falls back to DEFAULT_BUTTONS when buttons is null (unconfigured), substituting ${dir}", () => {
+    const out = resolveHeader({ buttons: null, chips: null }, ctx());
+    expect(out.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
+    expect(out.buttons.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
+    expect(out.buttons.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "/Users/x/myrepo" });
+  });
+
+  it("an explicit empty list replaces the defaults with nothing", () => {
+    expect(resolveHeader({ buttons: [], chips: null }, ctx()).buttons).toEqual([]);
+  });
+
+  it("passes a pickFile open target through unchanged", () => {
+    const config: HeaderConfig = { buttons: [{ id: "p", label: "P", run: "open", open: { pickFile: true } }], chips: null };
+    expect(resolveHeader(config, ctx()).buttons[0].open).toEqual({ pickFile: true });
+  });
+});
