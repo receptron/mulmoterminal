@@ -216,15 +216,21 @@ watch([themeId, () => props.dirTheme, () => props.dirColors], () => {
 // big (expanded), or the one returning to the grid on a full collapse (`!zoomed`). On a switch to
 // ANOTHER cell (still zoomed) we skip, letting the newly-big cell claim focus. Refocus once after the
 // teleport (nextTick, covers reduced-motion) and again once the FLIP animation lands.
+let refocusTimer: ReturnType<typeof setTimeout> | undefined;
 watch(
   () => props.expanded,
   (expanded) => {
     if (!shouldRefocusOnZoomChange(!!expanded, props.zoomed)) return;
-    const refocus = () => conn.focus(slotKey);
-    nextTick(refocus);
-    setTimeout(refocus, FLIP_MS + 30);
+    nextTick(() => conn.focus(slotKey));
+    // A rapid zoom change (A → B → C) can leave an older cell's timer pending; cancel the previous
+    // one and re-check state when it fires, so a stale timer never steals focus back to an old cell.
+    clearTimeout(refocusTimer);
+    refocusTimer = setTimeout(() => {
+      if (shouldRefocusOnZoomChange(!!props.expanded, props.zoomed)) conn.focus(slotKey);
+    }, FLIP_MS + 30);
   },
 );
+onUnmounted(() => clearTimeout(refocusTimer));
 
 // Submit a GUI-originated message into the PTY (the GUI->LLM feedback path) and the
 // explicit ✕ close. Both delegate to the slot's durable runtime.
