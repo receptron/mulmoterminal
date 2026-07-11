@@ -3,6 +3,8 @@ import { ref, reactive, computed, watch, onMounted } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
+import { startCollectionChat } from "../composables/useChatLauncher";
+import { router } from "../router";
 import {
   initialState,
   addCell,
@@ -162,6 +164,14 @@ onMounted(loadConfig);
 function closeSettings() {
   showSettings.value = false;
 }
+
+// Launch the config skill in a new auto-running session and switch to the single view so it shows
+// (the grid has no single active session). The skill then asks which directory / batch.
+function configureAppearance() {
+  closeSettings();
+  router.push("/");
+  void startCollectionChat("/mulmoterminal-config");
+}
 </script>
 
 <template>
@@ -214,6 +224,7 @@ function closeSettings() {
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"
+      @configure-appearance="configureAppearance"
       @close="closeSettings"
     />
   </div>

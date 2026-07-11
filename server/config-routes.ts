@@ -8,18 +8,9 @@ import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
 import { sanitizePresets } from "./cwd-presets.js";
-import {
-  loadAppConfig,
-  saveAppConfig,
-  sanitizeSoundFile,
-  sanitizeRepos,
-  sanitizeLaunchers,
-  sanitizeUserMcpServers,
-  type AppConfig,
-  type Launcher,
-  type UserMcpServer,
-} from "./app-config.js";
+import { loadAppConfig, saveAppConfig, sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, sanitizeUserMcpServers, type AppConfig } from "./app-config.js";
 import { sanitizeButtons, sanitizeChips, type HeaderConfig } from "./header-config.js";
+import { type Launcher, type UserMcpServer } from "./config-schema.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);

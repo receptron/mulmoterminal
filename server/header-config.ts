@@ -2,36 +2,27 @@
 // AppConfig (~/.mulmoterminal/config.json) and the per-dir DirConfig (<cwd>/.mulmoterminal.json),
 // merged, then RESOLVED per session (evaluate `when`, substitute ${vars}) before the client renders.
 //
+// The button/chip SHAPES + types come from config-schema.ts (zod). This file owns the lenient
+// LOADERS (trim, drop-empty, payload-match, dedup, cap) and the per-session resolution types —
+// normalization policy that reads better imperatively than as a zod transform.
+//
 // Hard rule: absent config == today's header. `sanitizeChips` returns null when unconfigured, and the
 // resolver passes that through so the client keeps its hardcoded default chips; empty `buttons` means
 // only the built-in buttons show.
 
-export type RunType = "shell" | "input" | "open";
-export const VIEW_TARGETS = ["diff", "prs", "wiki", "collections", "accounting"] as const;
-export type ViewTarget = (typeof VIEW_TARGETS)[number];
-
-export interface OpenTarget {
-  url?: string; // browser (http/https)
-  reveal?: string; // dir path → Finder/OS file manager
-  files?: string; // dir path → in-app file explorer
-  view?: ViewTarget; // in-app overlay/route
-}
-
-export interface HeaderButton {
-  id: string;
-  emoji?: string;
-  icon?: string; // material-symbol, alternative to emoji
-  label: string;
-  run: RunType;
-  cmd?: string; // run: shell
-  text?: string; // run: input
-  open?: OpenTarget; // run: open
-  when?: string;
-  order?: number;
-}
-
-// A bare string is a built-in chip id; an object is a custom display-only chip.
-export type HeaderChip = string | { label: string; text: string; when?: string };
+import {
+  RUN_TYPES,
+  VIEW_TARGETS,
+  BUILTIN_CHIPS,
+  MAX_BUTTONS,
+  MAX_CHIPS,
+  type RunType,
+  type ViewTarget,
+  type OpenTarget,
+  type HeaderButton,
+  type HeaderChip,
+  type BuiltinChip,
+} from "./config-schema.js";
 
 export interface HeaderConfig {
   buttons: HeaderButton[];
@@ -55,9 +46,6 @@ export interface HeaderContext {
   isGitRepo: boolean;
 }
 
-export const BUILTIN_CHIPS = ["dir", "git", "ctx", "usage", "status", "diff", "tools"] as const;
-export type BuiltinChip = (typeof BUILTIN_CHIPS)[number];
-
 export type ResolvedChip = { kind: "builtin"; id: BuiltinChip } | { kind: "custom"; label: string; text: string };
 export interface ResolvedButton {
   id: string;
@@ -77,16 +65,14 @@ export interface ResolvedHeader {
 
 export const EMPTY_HEADER_CONFIG: HeaderConfig = { buttons: [], chips: null };
 
-const MAX_BUTTONS = 32;
-const MAX_CHIPS = 16;
-const RUN_TYPES = new Set<string>(["shell", "input", "open"]);
-const VIEWS = new Set<string>(VIEW_TARGETS);
-const BUILTINS = new Set<string>(BUILTIN_CHIPS);
+const RUN_TYPE_SET = new Set<string>(RUN_TYPES);
+const VIEW_SET = new Set<string>(VIEW_TARGETS);
+const BUILTIN_SET = new Set<string>(BUILTIN_CHIPS);
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | undefined => (typeof v === "string" && v.trim() ? v.trim() : undefined);
-const isRunType = (s: string): s is RunType => RUN_TYPES.has(s);
-const isViewTarget = (s: string): s is ViewTarget => VIEWS.has(s);
+const isRunType = (s: string): s is RunType => RUN_TYPE_SET.has(s);
+const isViewTarget = (s: string): s is ViewTarget => VIEW_SET.has(s);
 
 function sanitizeOpen(input: unknown): OpenTarget | undefined {
   if (!isRecord(input)) return undefined;
@@ -142,7 +128,7 @@ export function sanitizeButtons(input: unknown): HeaderButton[] {
 }
 
 function sanitizeChip(input: unknown): HeaderChip | null {
-  if (typeof input === "string") return BUILTINS.has(input.trim()) ? input.trim() : null;
+  if (typeof input === "string") return BUILTIN_SET.has(input.trim()) ? input.trim() : null;
   if (!isRecord(input)) return null;
   const label = str(input.label);
   const text = str(input.text);

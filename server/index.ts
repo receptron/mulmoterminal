@@ -36,9 +36,10 @@ import {
 } from "./sandbox.js";
 import { listPrsAcrossRepos } from "./prs.js";
 import { listIssuesAcrossRepos } from "./issues.js";
-import { publicDirConfig, dirSoundFile } from "./dir-config.js";
+import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
+import { resolveSession, type SessionResolution } from "./session-resolve.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -75,6 +76,7 @@ import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
 import { initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
+import { installConfigSkill } from "./install-config-skill.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
@@ -188,6 +190,11 @@ await fs.mkdir(CLAUDE_CWD, { recursive: true });
 // fault-isolated per step, so it never aborts boot (see workspaceSetup.ts).
 initWorkspaceSetup({ workspace: CLAUDE_CWD });
 
+// Install the mulmoterminal-config skill into the user's global skills roots so any
+// launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
+// Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
+installConfigSkill();
+
 // MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
 // history) lives here, keyed by sessionId (a global UUID) — NOT under the
 // workspace dir, so it stays valid regardless of which directory is active.
@@ -277,6 +284,10 @@ function isAllowedOrigin(origin?: string) {
 
 // Pub/sub channel the sidebar subscribes to for live session-activity changes.
 const SESSIONS_CHANNEL = "sessions";
+
+// Pub/sub channel telling the client a directory's .mulmoterminal.json changed, so it re-reads that
+// dir's config and recolours its cells without a page reload. Fed by the tool hooks, not a watcher.
+const DIR_CONFIG_CHANNEL = "dir-config";
 
 // Per-session pub/sub channel the GUI panel subscribes to. The MCP broker POSTs a
 // toolResult to /api/agent/toolResult, which stores it keyed by session id and
@@ -1048,6 +1059,12 @@ async function handleToolHook(sessionId: string, event: string, p: HookToolPaylo
       durationMs: p.duration_ms,
       status: event === "PostToolUseFailure" ? "failed" : "completed",
     });
+  }
+  // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
+  // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
+  if (event === "PostToolUse") {
+    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input, ptys.get(sessionId)?.cwd ?? null);
+    if (cwd) pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd });
   }
 }
 
@@ -2112,14 +2129,14 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
 }
 
 // Pick the effective session id for a /ws connection: reattach a same-process live pty,
-// else a tmux session that outlived a restart (warm, no --resume), else `--resume` an
-// on-disk transcript (cold), else a fresh id. `resume` is set only for the cold case.
-function resolveClaudeSession(requested: string | null, cwd: string): { reattachId: string | null; resume: string | null; sessionId: string } {
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const tmuxAlive = !reattachId && !!requested && tmuxHasSession(requested);
-  const resume = !reattachId && !tmuxAlive && requested && sessionExistsOnDisk(requested, cwd) ? requested : null;
-  const sessionId = reattachId ?? (requested && (tmuxAlive || resume) ? requested : randomUUID());
-  return { reattachId, resume, sessionId };
+// resume an on-disk transcript, attach a live tmux session, else a fresh id. The flag
+// decision lives in resolveSession (pure/tested); this only gathers the live facts —
+// lazily, so a live pty short-circuits the tmux + disk probes.
+function resolveClaudeSession(requested: string | null, cwd: string): SessionResolution {
+  const hasLivePty = !!requested && ptys.has(requested);
+  const tmuxAlive = !hasLivePty && !!requested && tmuxHasSession(requested);
+  const onDisk = !hasLivePty && !!requested && sessionExistsOnDisk(requested, cwd);
+  return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk }, randomUUID);
 }
 
 wss.on("connection", (ws, req) => {

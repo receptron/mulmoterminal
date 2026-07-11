@@ -9,6 +9,7 @@
 // mirrors NotificationBell (dark palette, material-symbols-outlined, dropdown).
 import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { renderSVG } from "uqr";
 
 import { auth } from "../config/firebase";
 
@@ -19,6 +20,8 @@ interface RemoteHostStatus {
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
 const MOBILE_URL = "https://mulmoserver.web.app";
+// Rendered to a data URL (uqr output is ASCII-only SVG) so no v-html is needed.
+const qrDataUrl = `data:image/svg+xml;base64,${btoa(renderSVG(MOBILE_URL))}`;
 
 const open = ref(false);
 const busy = ref(false);
@@ -170,6 +173,10 @@ onUnmounted(close);
           <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="rh-link">{{ MOBILE_URL }}</a>
           on your phone, signed in with the same Google account.
         </p>
+        <div class="rh-qr">
+          <img :src="qrDataUrl" alt="" aria-hidden="true" />
+          <p>Or scan this QR code with your phone's camera.</p>
+        </div>
       </div>
     </div>
   </div>
@@ -307,5 +314,19 @@ onUnmounted(close);
   font-family: ui-monospace, "JetBrains Mono", monospace;
   color: #6ea8fe;
   overflow-wrap: anywhere;
+}
+
+.rh-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 2px;
+}
+/* uqr's SVG carries its own white background, so it stays scannable on the dark panel. */
+.rh-qr img {
+  width: 128px;
+  height: 128px;
+  border-radius: 6px;
 }
 </style>

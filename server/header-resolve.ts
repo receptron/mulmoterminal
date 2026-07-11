@@ -2,18 +2,8 @@
 // and substitute ${vars} in commands / text / open targets / custom chip text. Pure — the caller
 // gathers the HeaderContext (cwd, git status, model, agent, …) from server state.
 
-import type {
-  BuiltinChip,
-  HeaderButton,
-  HeaderChip,
-  HeaderConfig,
-  HeaderContext,
-  OpenTarget,
-  ResolvedButton,
-  ResolvedChip,
-  ResolvedHeader,
-} from "./header-config.js";
-import { BUILTIN_CHIPS } from "./header-config.js";
+import { BUILTIN_CHIPS, type BuiltinChip, type HeaderButton, type HeaderChip, type OpenTarget } from "./config-schema.js";
+import type { HeaderConfig, HeaderContext, ResolvedButton, ResolvedChip, ResolvedHeader } from "./header-config.js";
 
 const VAR_RE = /\$\{(\w+)\}/g;
 const BUILTINS = new Set<string>(BUILTIN_CHIPS);

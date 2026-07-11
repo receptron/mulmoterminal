@@ -42,26 +42,30 @@ describe("gridLayout", () => {
     expect(layoutForCount(12)).toBe("3x3");
   });
 
-  it("trackStyle: full even tracks when nothing is zoomed", () => {
-    expect(trackStyle("3x2", null)).toEqual({
+  it("trackStyle: one equal track per cell", () => {
+    expect(trackStyle("3x2")).toEqual({
       gridTemplateColumns: "1fr 1fr 1fr",
       gridTemplateRows: "1fr 1fr",
       gap: "6px",
     });
+    expect(trackStyle("1")).toEqual({
+      gridTemplateColumns: "1fr",
+      gridTemplateRows: "1fr",
+      gap: "6px",
+    });
+    expect(trackStyle("3x3")).toEqual({
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gridTemplateRows: "1fr 1fr 1fr",
+      gap: "6px",
+    });
   });
 
-  it("trackStyle: collapses other tracks around the zoomed cell", () => {
-    // 3x3, expand index 4 (center): col 1, row 1.
-    expect(trackStyle("3x3", 4)).toEqual({
-      gridTemplateColumns: "0fr 1fr 0fr",
-      gridTemplateRows: "0fr 1fr 0fr",
-      gap: "0px",
-    });
-    // index 0 (top-left): col 0, row 0.
-    expect(trackStyle("3x3", 0)).toEqual({
-      gridTemplateColumns: "1fr 0fr 0fr",
-      gridTemplateRows: "1fr 0fr 0fr",
-      gap: "0px",
+  it("trackStyle: covers every layout", () => {
+    LAYOUTS.forEach((layout) => {
+      const { cols, rows } = dims(layout);
+      const style = trackStyle(layout);
+      expect(style.gridTemplateColumns.split(" ")).toHaveLength(cols);
+      expect(style.gridTemplateRows.split(" ")).toHaveLength(rows);
     });
   });
 });

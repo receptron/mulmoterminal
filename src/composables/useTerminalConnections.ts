@@ -19,6 +19,7 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
+import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../components/wsUrl";
 import type { RunCommand } from "../components/runCommand";
@@ -154,6 +155,15 @@ function ensure(key: string, target: ConnTarget): Conn {
   host.style.width = "100%";
   host.style.height = "100%";
   term.open(host);
+  // Render each glyph in its own cell (canvas) instead of the default DOM renderer, which flows text
+  // as inline runs. A full-width CJK glyph that isn't exactly 2× the Latin cell would otherwise let a
+  // long Japanese line drift right and spill its tail past the terminal's edge into the hidden area.
+  // Best-effort: if the canvas renderer can't initialise, xterm keeps the DOM renderer.
+  try {
+    term.loadAddon(new CanvasAddon());
+  } catch (err) {
+    console.warn("[terminal] canvas renderer unavailable — falling back to the DOM renderer", err);
+  }
 
   const c: Conn = {
     key,

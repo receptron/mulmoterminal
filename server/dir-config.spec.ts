@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile } from "./dir-config";
+import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-dircfg-"));
 const EMPTY = {
@@ -179,6 +179,48 @@ describe("loadDirConfig", () => {
     const arr = withConfig([1, 2, 3]);
     expect(loadDirConfig(arr.dir)).toEqual(EMPTY);
     arr.cleanup();
+  });
+});
+
+describe("dirConfigWriteTarget", () => {
+  const file = "/Users/me/proj/.mulmoterminal.json";
+
+  it("returns the directory for each file-writing tool", () => {
+    for (const tool of ["Write", "Edit", "MultiEdit"]) {
+      expect(dirConfigWriteTarget(tool, { file_path: file })).toBe("/Users/me/proj");
+    }
+  });
+
+  it("resolves a relative path against the SESSION cwd, not the server's", () => {
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj");
+    expect(dirConfigWriteTarget("Write", { file_path: "sub/.mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj/sub");
+  });
+
+  it("publishes nothing for a relative path when the session cwd is unknown", () => {
+    // Resolving against process.cwd() would invalidate the wrong dir AND miss the real one.
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" })).toBeNull();
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, null)).toBeNull();
+  });
+
+  it("ignores the session cwd for an absolute path", () => {
+    expect(dirConfigWriteTarget("Write", { file_path: file }, "/somewhere/else")).toBe("/Users/me/proj");
+  });
+
+  it("ignores tools that don't write the file", () => {
+    expect(dirConfigWriteTarget("Read", { file_path: file })).toBeNull();
+    expect(dirConfigWriteTarget("Bash", { command: `echo x > ${file}` })).toBeNull();
+  });
+
+  it("ignores writes to any other file", () => {
+    expect(dirConfigWriteTarget("Write", { file_path: "/Users/me/proj/package.json" })).toBeNull();
+    expect(dirConfigWriteTarget("Write", { file_path: "/Users/me/.mulmoterminal.json.bak" })).toBeNull();
+  });
+
+  it("returns null for malformed payloads", () => {
+    expect(dirConfigWriteTarget("Write", null)).toBeNull();
+    expect(dirConfigWriteTarget("Write", {})).toBeNull();
+    expect(dirConfigWriteTarget("Write", { file_path: 42 })).toBeNull();
+    expect(dirConfigWriteTarget(undefined, { file_path: file })).toBeNull();
   });
 });
 

@@ -88,7 +88,7 @@ itself (xterm)**. `colors` overrides xterm's ITheme — `background` / `foregrou
 }
 ```
 
-Set `theme` to `midnight` / `nord` / `daylight` / `solarized-light` for a preset palette; `colors` layers per-key
+Set `theme` to `midnight` / `nord` / `daylight` / `solarized` for a preset palette; `colors` layers per-key
 overrides on top. The color-coding screenshot in [Scenario 6](scenarios.html) combines header colors with `colors` to
 paint each project — **from the header down to the terminal body**.
 

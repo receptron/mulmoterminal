@@ -92,6 +92,8 @@ function relaunch() {
       :connect-key="connectKey"
       :cwd="cwd"
       :launcher="target"
+      :expanded="expanded"
+      :zoomed="zoomed"
       @session="onSession"
       @exit="onExit"
     />

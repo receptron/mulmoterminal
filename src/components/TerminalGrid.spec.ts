@@ -122,3 +122,38 @@ describe("TerminalGrid command cells", () => {
     expect(w.emitted("toggle-expand")?.[0]).toEqual([4]);
   });
 });
+
+describe("active-cell focus zoom", () => {
+  const focus = (w: ReturnType<typeof mount>, uid: number) => w.get(`[data-uid="${uid}"]`).element.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+  const cls = (w: ReturnType<typeof mount>, uid: number) => w.get(`[data-uid="${uid}"]`).classes();
+
+  it("marks only the focused cell, and moves the mark when another cell takes focus", async () => {
+    const w = mountGrid([cell(0, "s0"), cell(1, "s1")]);
+    focus(w, 0);
+    await nextTick();
+    expect(cls(w, 0)).toContain("focused");
+    expect(cls(w, 1)).not.toContain("focused");
+
+    focus(w, 1);
+    await nextTick();
+    expect(cls(w, 0)).not.toContain("focused"); // the emphasis is single-source-of-truth
+    expect(cls(w, 1)).toContain("focused");
+  });
+
+  it("stays sticky: focus leaving the grid does not clear it", async () => {
+    const w = mountGrid([cell(0, "s0"), cell(1, "s1")]);
+    focus(w, 0);
+    await nextTick();
+    // A focusin whose target is outside any cell (e.g. the toolbar) must not move the mark.
+    document.body.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
+    await nextTick();
+    expect(cls(w, 0)).toContain("focused");
+  });
+
+  it("does not zoom while a cell is expanded (filmstrip owns the emphasis)", async () => {
+    const w = mountGrid([cell(0, "s0"), cell(1, "s1")], 0);
+    focus(w, 1);
+    await nextTick();
+    expect(cls(w, 1)).not.toContain("focused");
+  });
+});

@@ -1,52 +1,15 @@
 // Per-directory overrides read from <cwd>/.mulmoterminal.json: a terminal opened in
 // a directory can carry its own xterm palette, a badge label/color, and an attention
 // sound. Every field is optional; a missing or malformed file yields all-null so the
-// terminal falls back to the global theme/sound. Extracted so the sanitize/confine
-// logic is unit-testable and the path-confinement check (the security surface) has a
-// clear home.
+// terminal falls back to the global theme/sound. Field validation lives in the zod
+// schemas of config-schema.ts; the path-confinement check for `sound` (the security
+// surface) stays here because it touches the filesystem.
 import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
-import { sanitizeButtons, sanitizeChips, type HeaderButton, type HeaderChip } from "./header-config.js";
-
-// Mirrors the theme ids in src/composables/useTheme.ts. The server can't import the
-// Vue composable, so the whitelist is duplicated here — keep the two in sync.
-export type ThemeId = "midnight" | "nord" | "daylight" | "solarized";
-const THEME_IDS: readonly ThemeId[] = ["midnight", "nord", "daylight", "solarized"];
+import { sanitizeButtons, sanitizeChips } from "./header-config.js";
+import { dirNameField, dirColorField, dirThemeField, dirColorsField, type ThemeId, type HeaderButton, type HeaderChip } from "./config-schema.js";
 
 const DIR_CONFIG_FILE = ".mulmoterminal.json";
-const NAME_MAX_CHARS = 40;
-const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-// xterm accepts #rgb / #rgba / #rrggbb / #rrggbbaa for palette colors.
-const PALETTE_COLOR_RE = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
-
-// The xterm ITheme keys a `colors` block may override (mirrors @xterm/xterm's
-// ITheme). Anything outside this set is dropped so an arbitrary JSON object can't
-// inject unexpected keys into the terminal options.
-const THEME_COLOR_KEYS: readonly string[] = [
-  "foreground",
-  "background",
-  "cursor",
-  "cursorAccent",
-  "selectionBackground",
-  "selectionForeground",
-  "selectionInactiveBackground",
-  "black",
-  "red",
-  "green",
-  "yellow",
-  "blue",
-  "magenta",
-  "cyan",
-  "white",
-  "brightBlack",
-  "brightRed",
-  "brightGreen",
-  "brightYellow",
-  "brightBlue",
-  "brightMagenta",
-  "brightCyan",
-  "brightWhite",
-];
 
 export interface DirConfig {
   name: string | null;
@@ -91,28 +54,22 @@ export interface PublicDirConfig {
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
-const isThemeId = (v: unknown): v is ThemeId => typeof v === "string" && THEME_IDS.some((id) => id === v);
 
-function sanitizeName(input: unknown): string | null {
-  if (typeof input !== "string") return null;
-  const trimmed = input.trim();
-  return trimmed ? trimmed.slice(0, NAME_MAX_CHARS) : null;
-}
+// Claude's tool hooks already report every write, so they double as the live-reload signal — no
+// filesystem watchers (cwds are scattered, so a watcher can't be shared across terminals).
+const WRITE_TOOLS: ReadonlySet<string> = new Set(["Write", "Edit", "MultiEdit"]);
 
-function sanitizeColor(input: unknown): string | null {
-  return typeof input === "string" && HEX_COLOR_RE.test(input.trim()) ? input.trim().toLowerCase() : null;
-}
-
-// Keep only known ITheme keys whose value is a valid palette color; drop the rest.
-// null when nothing valid remains, so an empty/garbage block behaves like "unset".
-function sanitizeColors(input: unknown): Record<string, string> | null {
-  if (!isRecord(input)) return null;
-  const out: Record<string, string> = {};
-  for (const key of THEME_COLOR_KEYS) {
-    const value = input[key];
-    if (typeof value === "string" && PALETTE_COLOR_RE.test(value.trim())) out[key] = value.trim().toLowerCase();
-  }
-  return Object.keys(out).length ? out : null;
+/** The directory whose `.mulmoterminal.json` a tool call just wrote, or null for anything else.
+ *  A relative `file_path` is relative to the SESSION's cwd, never the server process's — resolving
+ *  it against `process.cwd()` would invalidate a directory nobody is looking at AND miss the real
+ *  one, so without a known session cwd we publish nothing. */
+export function dirConfigWriteTarget(toolName: unknown, toolInput: unknown, sessionCwd: string | null = null): string | null {
+  if (typeof toolName !== "string" || !WRITE_TOOLS.has(toolName)) return null;
+  if (!isRecord(toolInput) || typeof toolInput.file_path !== "string") return null;
+  const file = toolInput.file_path;
+  if (path.basename(file) !== DIR_CONFIG_FILE) return null;
+  if (path.isAbsolute(file)) return path.dirname(path.resolve(file));
+  return sessionCwd ? path.dirname(path.resolve(sessionCwd, file)) : null;
 }
 
 const isInside = (base: string, target: string): boolean => target === base || target.startsWith(base + path.sep);
@@ -162,16 +119,16 @@ export function loadDirConfig(cwd: string): DirConfig {
     const raw: unknown = JSON.parse(readFileSync(file, "utf8"));
     if (!isRecord(raw)) return EMPTY;
     return {
-      name: sanitizeName(raw.name),
-      badgeColor: sanitizeColor(raw.badgeColor),
-      headerColor: sanitizeColor(raw.headerColor),
-      headerTextColor: sanitizeColor(raw.headerTextColor),
-      cellColor: sanitizeColor(raw.cellColor),
-      cellBorderColor: sanitizeColor(raw.cellBorderColor),
-      dotColor: sanitizeColor(raw.dotColor),
-      buttonColor: sanitizeColor(raw.buttonColor),
-      theme: isThemeId(raw.theme) ? raw.theme : null,
-      colors: sanitizeColors(raw.colors),
+      name: dirNameField.parse(raw.name),
+      badgeColor: dirColorField.parse(raw.badgeColor),
+      headerColor: dirColorField.parse(raw.headerColor),
+      headerTextColor: dirColorField.parse(raw.headerTextColor),
+      cellColor: dirColorField.parse(raw.cellColor),
+      cellBorderColor: dirColorField.parse(raw.cellBorderColor),
+      dotColor: dirColorField.parse(raw.dotColor),
+      buttonColor: dirColorField.parse(raw.buttonColor),
+      theme: dirThemeField.parse(raw.theme),
+      colors: dirColorsField.parse(raw.colors),
       sound: resolveDirSound(base, raw.sound),
       buttons: sanitizeButtons(raw.buttons),
       chips: sanitizeChips(raw.chips),

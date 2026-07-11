@@ -17,7 +17,7 @@ import SettingsModal from "./components/SettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { browseClose } from "./composables/useCollectionBrowse";
-import { registerChatOpener } from "./composables/useChatLauncher";
+import { registerChatOpener, startCollectionChat } from "./composables/useChatLauncher";
 import { useAppConfig } from "./composables/useAppConfig";
 import { useDirConfig } from "./composables/useDirConfig";
 import { useFaviconState } from "./composables/useFaviconState";
@@ -194,6 +194,14 @@ function sendTextMessage(text: string): boolean {
   return terminalRef.value?.submitText(text) ?? false;
 }
 
+// Open a fresh session that auto-runs the mulmoterminal-config skill (rather than hijacking the
+// active session), and select it so it shows. The skill then asks which directory / batch. codex
+// rewriting is handled server-side (spawnBackgroundChat → codexifySkillSeed).
+function configureAppearance(): void {
+  void startCollectionChat("/mulmoterminal-config");
+  showSettings.value = false;
+}
+
 function selectSession(id: string, agent: "claude" | "codex" = "claude") {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
   singleAgent.value = agent; // resume the row's agent (codex rows reconnect via /ws/codex)
@@ -368,6 +376,7 @@ function onSession(id: string) {
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"
+      @configure-appearance="configureAppearance"
       @close="closeSettings"
     />
   </div>

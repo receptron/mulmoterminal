@@ -11,6 +11,14 @@ export type Rect = Pick<DOMRect, "left" | "top" | "width" | "height">;
 export const FLIP_MS = 180;
 export const FLIP_EASING = "cubic-bezier(0.2, 0, 0, 1)";
 
+// After an expand/collapse teleports a cell (which blurs its xterm), should THIS cell grab keyboard
+// focus? Yes when it became the big one (`expanded`), or when the grid fully collapsed (`!zoomed`) so
+// it's the one returning to view. No when another cell is now the big one (still `zoomed`) — that
+// cell claims focus instead. `expanded` is the cell's new state; `zoomed` = some cell is expanded.
+export function shouldRefocusOnZoomChange(expanded: boolean, zoomed: boolean | undefined): boolean {
+  return expanded || !zoomed;
+}
+
 // Under these thresholds the move reads as static, and animating it would buy a repaint
 // and nothing else.
 const MIN_SHIFT_PX = 1;

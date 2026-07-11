@@ -80,8 +80,12 @@ export function addCell(state: GridState): GridState {
     return clampPage({ ...state, cells: state.cells.slice(0, -1) }); // cancel the open launch cell
   }
   if (runningCount(state.cells) >= MAX_TERMINALS) return state;
-  const cells = [...state.cells, { uid: state.nextUid, session: null, cwd: null }];
-  return { ...state, cells, nextUid: state.nextUid + 1, page: pageCount(cells.length) - 1 };
+  const uid = state.nextUid;
+  const cells = [...state.cells, { uid, session: null, cwd: null }];
+  // While a cell is zoomed, promote the new one into the enlarged view so the user
+  // launches it there rather than hunting for it in the filmstrip.
+  const expanded = zoomedUid(state) !== null ? uid : state.expanded;
+  return { ...state, cells, nextUid: state.nextUid + 1, page: pageCount(cells.length) - 1, expanded };
 }
 
 // The uid of the trailing launch cell that "+ Terminal" (and the launcher's own ✕)

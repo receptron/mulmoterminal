@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
+import { flipKeyframes, FLIP_MS, FLIP_EASING, shouldRefocusOnZoomChange } from "./cellFlip";
 
 const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
 
@@ -53,5 +53,18 @@ describe("cellFlip", () => {
   it("survives a destination larger than the viewport without losing precision", () => {
     const frames = flipKeyframes(rect(-50, -50, 260, 150), rect(0, 0, 2600, 1500));
     expect(frames?.[0].transform).toBe("translate(-50px, -50px) scale(0.1, 0.1)");
+  });
+
+  describe("shouldRefocusOnZoomChange (which cell grabs focus after an expand/collapse)", () => {
+    it("refocuses the cell that just became big", () => {
+      expect(shouldRefocusOnZoomChange(true, true)).toBe(true);
+    });
+    it("refocuses the cell returning to the grid on a full collapse", () => {
+      expect(shouldRefocusOnZoomChange(false, false)).toBe(true);
+      expect(shouldRefocusOnZoomChange(false, undefined)).toBe(true);
+    });
+    it("does NOT refocus a cell that shrank because another cell became big", () => {
+      expect(shouldRefocusOnZoomChange(false, true)).toBe(false);
+    });
   });
 });
