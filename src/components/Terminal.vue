@@ -203,9 +203,8 @@ onActivated(() => {
   const container = terminalRef.value;
   if (container) resizeObserver?.observe(container);
   conn.fit(slotKey);
-  // Returning to the grid: the zoomed cell's `expanded` didn't change (KeepAlive kept the
-  // zoom), so the expand-focus watch below never fired — put the cursor back in it here.
-  if (props.expanded) nextTick(() => conn.focus(slotKey));
+  // Refocusing the right cell on return is driven centrally by TerminalGrid (which knows
+  // the last-focused cell) — a per-cell focus here would fight it across cells.
 });
 
 // Reconnect (resume a different session / start fresh) on every user action.

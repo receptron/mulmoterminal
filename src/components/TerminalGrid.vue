@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onActivated, watch, nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
+import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import type { Cell, CellStatus } from "./gridTabs";
@@ -56,6 +57,15 @@ function onFocusIn(e: FocusEvent) {
   const el = target.closest<HTMLElement>("[data-uid]");
   if (el?.dataset.uid) focusedUid.value = Number(el.dataset.uid);
 }
+
+// Returning to the grid via a top-tab switch reactivates it under <KeepAlive>, which does
+// NOT re-run the cells' attach()/focus() — so nothing restores the cursor. Put it back in
+// whichever cell last held it (sticky `focusedUid`, tracked in both the grid and the
+// zoomed slot). Grid cells' durable connections are keyed `cell-<uid>`.
+onActivated(() => {
+  const uid = focusedUid.value;
+  if (uid !== null) nextTick(() => conn.focus(`cell-${uid}`));
+});
 // Per-cell class: `flipping` drives the zoom FLIP, `focused` the in-place lift of the active cell —
 // suppressed while expanded or mid-flip so it never fights those animations.
 function cellClass(uid: number) {
@@ -116,9 +126,9 @@ watch(
 </script>
 
 <template>
-  <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars">
+  <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
     <div ref="zoomMain" class="zoom-main" />
-    <div class="grid" :style="gridStyle" @focusin="onFocusIn">
+    <div class="grid" :style="gridStyle">
       <Teleport v-for="cell in cells" :key="cell.uid" :to="zoomMain" :disabled="!(zoomed && cell.uid === expandedUid)">
         <CommandCell
           v-if="cell.command"
