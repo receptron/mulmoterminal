@@ -117,36 +117,34 @@ onMounted(() =>
   }),
 );
 // The "sessions" channel only pushes FUTURE changes, so a resumed / already-running cell
-// would show nothing until its next turn. Seed each session once from its transcript.
-const seededIds = new Set<string>();
+// would show nothing until its next turn — and a session NOT managed by this MulmoTerminal
+// (e.g. a plain `claude` you resumed) never emits at all. So read each cell's meta straight
+// from its on-disk transcript (always current): once on appearance, then on a poll while the
+// roster is on screen (zoomed), since pub/sub can't be relied on to keep it fresh.
 async function seedMeta(id: string, cwd: string | null) {
   try {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
     const res = await fetch(`/api/session/${id}${query}`);
     if (!res.ok) return;
     const d = (await res.json()) as Partial<SessionMeta>;
-    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
-    sessionMeta.set(id, {
-      lastPrompt: d.lastPrompt ?? prev.lastPrompt,
-      aiTitle: d.aiTitle ?? prev.aiTitle,
-      lastResponse: d.lastResponse ?? prev.lastResponse,
-    });
+    sessionMeta.set(id, { lastPrompt: d.lastPrompt ?? null, aiTitle: d.aiTitle ?? null, lastResponse: d.lastResponse ?? null });
   } catch {
     // best-effort — the pub/sub still fills this in on the next turn
   }
 }
-watch(
-  () => state.value.cells.map((c) => c.session ?? "").join(","),
-  () => {
-    for (const c of state.value.cells) {
-      if (c.session && !seededIds.has(c.session)) {
-        seededIds.add(c.session);
-        void seedMeta(c.session, c.cwd);
-      }
-    }
-  },
-  { immediate: true },
-);
+const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
+watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
+const ROSTER_POLL_MS = 4000;
+let rosterTimer: ReturnType<typeof setInterval> | null = null;
+watch(expandedUid, (uid) => {
+  if (uid !== null && rosterTimer === null) {
+    refreshAllMeta();
+    rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
+  } else if (uid === null && rosterTimer !== null) {
+    clearInterval(rosterTimer);
+    rosterTimer = null;
+  }
+});
 
 // A cell with no session/prompt yet still gets a human label from what it IS running.
 const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "起動直後…" : "空きセル");
