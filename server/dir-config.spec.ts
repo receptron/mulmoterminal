@@ -17,7 +17,7 @@ const EMPTY = {
   theme: null,
   colors: null,
   sound: null,
-  buttons: [],
+  buttons: null,
   chips: null,
 };
 
@@ -126,7 +126,7 @@ describe("loadDirConfig", () => {
       theme: "nord",
       colors: null,
       sound: path.join(dir, "a.mp3"),
-      buttons: [],
+      buttons: null,
       chips: null,
     });
     cleanup();

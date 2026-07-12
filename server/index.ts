@@ -17,7 +17,8 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
-import { resolveHeader, resolveButtonCommand } from "./header-resolve.js";
+import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
+import { prUrlForBranch } from "./pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
@@ -1396,6 +1397,11 @@ app.get("/api/header", async (req, res) => {
   const model = typeof req.query.model === "string" ? req.query.model : null;
   const config = loadHeaderConfig(cwd, getHeaderConfig());
   const context = await buildHeaderContext(cwd, { session, agent, model });
+  // Resolve the branch's PR URL only when a `pr` button is present (a cached gh call); an open.pr
+  // button then opens that URL, or is dropped when there's no open PR.
+  if (headerHasPrButton(config) && context.repo && context.branch) {
+    context.prUrl = await prUrlForBranch(context.repo, context.branch);
+  }
   res.json(resolveHeader(config, context));
 });
 
@@ -2316,14 +2322,20 @@ function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | und
 // session (id kept, running program picked up via `tmux new-session -A`, command ignored),
 // or a fresh spawn of the indexed launcher command. Returns null when there's nothing to
 // reattach AND the index isn't a configured launcher.
-function resolveLaunchSession(requested: string | null, index: number): { sessionId: string; live: PtyEntry | undefined; command: string } | null {
+function resolveLaunchSession(
+  requested: string | null,
+  index: number,
+  shell: boolean,
+): { sessionId: string; live: PtyEntry | undefined; command: string } | null {
   const reattachId = requested && ptys.has(requested) ? requested : null;
   const live = reattachId ? ptys.get(reattachId) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
   // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
   // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
   const launcher = live || tmuxAlive ? null : resolveLauncher(index);
-  if (!live && !tmuxAlive && !launcher) return null;
+  // `shell` (the header "new terminal" button) runs the OS default shell with no configured
+  // index, so a fresh spawn is allowed without a resolvable launcher.
+  if (!live && !tmuxAlive && !launcher && !shell) return null;
   const sessionId = reattachId ?? (tmuxAlive && requested ? requested : randomUUID());
   return { sessionId, live, command: launcher?.command ?? DEFAULT_LAUNCH_CMD };
 }
@@ -2339,8 +2351,9 @@ runLaunchWss.on("connection", (ws, req) => {
   const cwd = resolveWorkspace(url.searchParams.get("cwd"));
   const indexRaw = url.searchParams.get("launcher");
   const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
+  const shell = url.searchParams.get("shell") === "1";
 
-  const resolved = resolveLaunchSession(requested, index);
+  const resolved = resolveLaunchSession(requested, index, shell);
   if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
   const { sessionId, live, command } = resolved;
   markDevTerminalSession(sessionId);

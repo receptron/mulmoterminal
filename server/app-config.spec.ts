@@ -77,7 +77,7 @@ describe("sanitizeUserMcpServers", () => {
 });
 
 describe("loadAppConfig / saveAppConfig", () => {
-  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: [], chips: null };
+  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
@@ -124,7 +124,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       prRepos: ["o/r"],
       launchers: [{ label: "S", command: "sh" }],
       userMcpServers: [{ id: "ok", url: "https://x/mcp" }],
-      buttons: [],
+      buttons: null,
       chips: null,
     });
     rmSync(dir, { recursive: true, force: true });

@@ -12,6 +12,8 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  insertCellAfter,
+  shellCell,
   launchInCell,
   setSortMode,
   moveCell,
@@ -211,33 +213,49 @@ describe("launchInCell (persistent launcher cells)", () => {
   });
 });
 
-describe("runScriptInNewCell (toolbar Run menu)", () => {
+describe("insertCellAfter", () => {
+  it("inserts a new cell right after the given uid, minting the next uid", () => {
+    const s = insertCellAfter(make(running(3)), 1, { session: null, cwd: "/x" });
+    expect(s.cells).toHaveLength(4);
+    expect(s.cells.map((c) => c.uid)).toEqual([0, 1, 3, 2]); // NEW (uid 3) lands after uid 1
+    expect(s.cells[2]).toMatchObject({ session: null, cwd: "/x", uid: 3 });
+  });
+  it("appends when the uid is not found (e.g. no triggering cell)", () => {
+    const s = insertCellAfter(make(running(2)), -1, { session: null, cwd: null });
+    expect(s.cells).toHaveLength(3);
+    expect(s.cells[2].uid).toBe(2);
+  });
+  it("jumps to the new cell's page when it lands on a later page", () => {
+    const s = insertCellAfter(make(running(9)), 8, { session: null, cwd: null }); // after index 8 -> index 9 -> page 1
+    expect(s.cells).toHaveLength(10);
+    expect(s.page).toBe(1);
+  });
+  it("is a no-op at the terminal cap", () => {
+    expect(insertCellAfter(make(running(81)), 0, { session: null, cwd: null }).cells).toHaveLength(81);
+  });
+});
+
+describe("runScriptInNewCell (Run button → adjacent spare cell)", () => {
   const CMD: RunCommand = { source: "script", index: 1, label: "Dev server", cwd: "/x" };
 
-  it("appends a new command cell and jumps to its page when all cells are occupied", () => {
-    const s = runScriptInNewCell(make(running(2)), CMD);
-    expect(s.cells).toHaveLength(3);
-    expect(s.cells[2]).toMatchObject({ session: null, command: CMD });
-    expect(s.page).toBe(0); // 3 cells -> still page 1
+  it("opens the command in a new cell right after the triggering cell", () => {
+    const s = runScriptInNewCell(make(running(3)), 0, CMD);
+    expect(s.cells).toHaveLength(4);
+    expect(s.cells[1]).toMatchObject({ session: null, command: CMD }); // after uid 0 (index 0)
   });
-  it("overflows onto a new page when the current page is full", () => {
-    const s = runScriptInNewCell(make(running(9)), CMD);
-    expect(s.cells).toHaveLength(10);
-    expect(s.page).toBe(1); // jumped to the new cell's page
-  });
-  it("reuses a trailing empty launcher instead of appending", () => {
-    const s = runScriptInNewCell(make([...running(2), cell(2)]), CMD); // trailing launch cell
+  it("appends when there is no triggering cell (afterUid -1)", () => {
+    const s = runScriptInNewCell(make(running(2)), -1, CMD);
     expect(s.cells).toHaveLength(3);
     expect(s.cells[2].command).toEqual(CMD);
   });
-  it("turns the sole entry launch cell into a command cell", () => {
-    const s = runScriptInNewCell(make([cell(0)]), CMD);
-    expect(s.cells).toHaveLength(1);
-    expect(s.cells[0].command).toEqual(CMD);
+  it("is a no-op at the terminal cap", () => {
+    expect(runScriptInNewCell(make(running(81)), 0, CMD).cells).toHaveLength(81);
   });
-  it("is a no-op at the terminal cap (no trailing launcher to reuse)", () => {
-    const s = runScriptInNewCell(make(running(81)), CMD);
-    expect(s.cells).toHaveLength(81);
+});
+
+describe("shellCell", () => {
+  it("is a launcher cell for the OS default shell ($SHELL)", () => {
+    expect(shellCell("/proj")).toEqual({ session: null, cwd: "/proj", launcher: { shell: true, label: "shell" } });
   });
 });
 

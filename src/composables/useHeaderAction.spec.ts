@@ -7,13 +7,16 @@ const m = vi.hoisted(() => ({
   browseGotoIndex: vi.fn(),
   accountingViewOpen: vi.fn(),
   submitText: vi.fn(),
+  insertText: vi.fn(),
+  openTerminalAt: vi.fn(),
 }));
 vi.mock("./useFilesView", () => ({ filesGotoIndex: m.filesGotoIndex }));
 vi.mock("./usePrsView", () => ({ prsGotoIndex: m.prsGotoIndex }));
 vi.mock("./useWikiBrowse", () => ({ wikiGotoIndex: m.wikiGotoIndex }));
 vi.mock("./useCollectionBrowse", () => ({ browseGotoIndex: m.browseGotoIndex }));
 vi.mock("./useAccountingView", () => ({ accountingViewOpen: m.accountingViewOpen }));
-vi.mock("./useTerminalConnections", () => ({ submitText: m.submitText }));
+vi.mock("./useTerminalConnections", () => ({ submitText: m.submitText, insertText: m.insertText }));
+vi.mock("./useNewTerminal", () => ({ openTerminalAt: m.openTerminalAt }));
 
 import { runHeaderButton } from "./useHeaderAction";
 import type { HeaderButton } from "./useHeaderButtons";
@@ -58,6 +61,29 @@ describe("runHeaderButton", () => {
     expect(m.prsGotoIndex).toHaveBeenCalled();
     runHeaderButton(btn({ run: "open", open: { view: "diff" } }), null, "/c");
     expect(m.filesGotoIndex).toHaveBeenLastCalledWith("/c");
+  });
+
+  it("open terminal → openTerminalAt with the dir and the triggering cell's slot key", () => {
+    runHeaderButton(btn({ run: "open", open: { terminal: "/proj" } }), "cell-4", "/proj");
+    expect(m.openTerminalAt).toHaveBeenCalledWith("/proj", "cell-4");
+  });
+
+  it("open pickFile → POST /api/pick-file, inserts the chosen path(s) into the slot", async () => {
+    const f = vi.fn(() => Promise.resolve({ ok: true, json: async () => ({ paths: ["/a/b.ts"] }) } as unknown as Response));
+    vi.stubGlobal("fetch", f);
+    runHeaderButton(btn({ run: "open", open: { pickFile: true } }), "single", null);
+    await vi.waitFor(() => expect(m.insertText).toHaveBeenCalled());
+    expect(f).toHaveBeenCalledWith("/api/pick-file", expect.objectContaining({ method: "POST" }));
+    expect(m.insertText).toHaveBeenCalledWith("single", expect.stringContaining("/a/b.ts"));
+    vi.unstubAllGlobals();
+  });
+
+  it("open pickFile without a slot key is a no-op (no dialog)", () => {
+    const f = vi.fn();
+    vi.stubGlobal("fetch", f);
+    runHeaderButton(btn({ run: "open", open: { pickFile: true } }), null, null);
+    expect(f).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   it("shell → defensive no-op warn (Terminal.vue emits `run` instead; server suppresses shell here)", () => {
