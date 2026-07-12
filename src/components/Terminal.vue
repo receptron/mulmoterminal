@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from "vue";
 import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
+import { terminalManagesAttention, terminalViewActive } from "./terminalViewActive";
 import { dropTextFromUriList } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
@@ -218,15 +219,23 @@ watch(
   },
 );
 
-// A grid (dev-terminal) cell is the user's actively-viewed pane only while zoomed;
-// tell the server so an unfocused cell can surface blocked/done and a zoomed one
-// clears. Single view (no devTerminal) relies on the server's attach default, so it
-// stays null and sends nothing. Re-sent on (re)connect since a grid cell reattaches
-// as inactive.
-const viewActive = computed<boolean | null>(() => (props.devTerminal ? !!props.expanded : null));
+// Report to the server whether this terminal is the user's actively-viewed pane, so
+// an unfocused grid cell can surface blocked/done and a viewed one stays suppressed.
+const managesAttention = computed(() => terminalManagesAttention(!!props.command, !!props.launcher));
+const viewActive = computed(() => terminalViewActive(!!props.devTerminal, !!props.expanded));
+function pushView(active: boolean) {
+  if (managesAttention.value) conn.sendView(slotKey, active);
+}
+// Send on (re)connect and whenever zoom changes. A persisted slot keeps its socket
+// open across deactivate/unmount (kept-alive grid page switch, single<->grid toggle),
+// so we MUST clear `active` when hidden — otherwise the server keeps suppressing
+// blocked/done for a session the user is no longer viewing. Re-assert on show.
 watch([status, viewActive], ([s, active]) => {
-  if (s === "connected" && active !== null) conn.sendView(slotKey, active);
+  if (s === "connected") pushView(active);
 });
+onDeactivated(() => pushView(false));
+onActivated(() => pushView(viewActive.value));
+onUnmounted(() => pushView(false));
 
 // xterm can't read CSS variables, so repaint its canvas palette when the theme
 // changes (keeps an already-open terminal in sync with the rest of the app). A
