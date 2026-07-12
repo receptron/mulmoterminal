@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
@@ -35,7 +35,7 @@ import {
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
-import { registerNewTerminalHandler } from "../composables/useNewTerminal";
+import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -146,14 +146,23 @@ onMounted(() => {
 });
 
 // The header "new terminal" button ($SHELL) opens a cell next to the one that triggered it.
-// Registered at setup scope (a plain callback, no DOM needed) so onBeforeUnmount attaches correctly.
+// GridView is cached by <KeepAlive>, so register the opener only while ACTIVE and drop it on
+// deactivate — otherwise a button press from the single view would silently mutate this hidden
+// grid instead of routing here. openTerminalAt then queues + navigates while we're deactivated.
 const SLOT_UID_RE = /^cell-(\d+)$/;
-const offNewTerminal = registerNewTerminalHandler(({ cwd, afterSlotKey }) => {
+let offNewTerminal: (() => void) | null = null;
+const openNewTerminal = ({ cwd, afterSlotKey }: NewTerminalRequest) => {
   const match = afterSlotKey?.match(SLOT_UID_RE);
   const afterUid = match ? Number(match[1]) : NO_ORIGIN_UID;
   state.value = insertCellAfter(state.value, afterUid, shellCell(cwd));
-});
-onBeforeUnmount(offNewTerminal);
+};
+const detachNewTerminal = () => {
+  offNewTerminal?.();
+  offNewTerminal = null;
+};
+onActivated(() => (offNewTerminal = registerNewTerminalHandler(openNewTerminal)));
+onDeactivated(detachNewTerminal);
+onBeforeUnmount(detachNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
 const {

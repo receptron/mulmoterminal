@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { defineComponent, h, KeepAlive, ref, nextTick, onActivated, onDeactivated } from "vue";
+import { mount } from "@vue/test-utils";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()) }));
 vi.mock("../router", () => ({ router: { push } }));
@@ -39,5 +41,40 @@ describe("useNewTerminal", () => {
     expect(h2).toHaveBeenCalled();
     expect(h1).not.toHaveBeenCalled();
     off2();
+  });
+
+  // Regression for the KeepAlive case (GridView is cached): while DEACTIVATED the opener must be
+  // unregistered so a single-view button press navigates to the grid instead of mutating hidden state.
+  it("register-on-activate / unregister-on-deactivate: deactivated → queue + navigate, reactivated → drain", async () => {
+    const handler = vi.fn();
+    const active = ref(true);
+    const Probe = defineComponent({
+      setup() {
+        let off: (() => void) | null = null;
+        onActivated(() => (off = registerNewTerminalHandler(handler)));
+        onDeactivated(() => {
+          off?.();
+          off = null;
+        });
+        return () => h("div");
+      },
+    });
+    const Host = defineComponent({ setup: () => () => h(KeepAlive, () => (active.value ? h(Probe) : null)) });
+    const wrapper = mount(Host);
+    await nextTick();
+
+    openTerminalAt("/a", "cell-1"); // active → handler runs, no navigation
+    expect(handler).toHaveBeenCalledWith({ cwd: "/a", afterSlotKey: "cell-1" });
+    expect(push).not.toHaveBeenCalled();
+
+    active.value = false; // KeepAlive deactivates the probe (not unmounted)
+    await nextTick();
+    openTerminalAt("/b", "single"); // no live handler → queue + navigate
+    expect(push).toHaveBeenCalledWith("/terminals");
+
+    active.value = true; // reactivate → re-register drains the queued request
+    await nextTick();
+    expect(handler).toHaveBeenCalledWith({ cwd: "/b", afterSlotKey: "single" });
+    wrapper.unmount();
   });
 });
