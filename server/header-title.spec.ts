@@ -38,9 +38,9 @@ describe("shouldRegenerateTitle", () => {
 });
 
 describe("shouldFreshenViewedTitle", () => {
-  const base = { hasTitle: false, lastTitledUserTurns: null as number | null, currentUserTurns: 4, regenEveryTurns: VIEW_TITLE_REGEN_TURNS };
+  const base = { lastTitledUserTurns: null as number | null, currentUserTurns: 4, regenEveryTurns: VIEW_TITLE_REGEN_TURNS };
 
-  it("titles an untitled session on first view", () => {
+  it("titles an untitled session (null baseline) on first view", () => {
     expect(shouldFreshenViewedTitle(base)).toBe(true);
   });
 
@@ -48,16 +48,16 @@ describe("shouldFreshenViewedTitle", () => {
     expect(shouldFreshenViewedTitle({ ...base, currentUserTurns: 0 })).toBe(false);
   });
 
-  it("does NOT re-title a /clear-blanked session (has an empty title, null baseline) from its frozen transcript", () => {
-    expect(shouldFreshenViewedTitle({ ...base, hasTitle: true })).toBe(false);
+  it("does NOT re-title at the same turn count as the last titling (guards /clear resurrection from a frozen transcript)", () => {
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 })).toBe(false);
   });
 
   it("re-titles once the transcript advances regenEveryTurns past the last titling", () => {
-    expect(shouldFreshenViewedTitle({ ...base, hasTitle: true, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS })).toBe(true);
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS })).toBe(true);
   });
 
   it("does NOT re-title within regenEveryTurns of the last titling", () => {
-    expect(shouldFreshenViewedTitle({ ...base, hasTitle: true, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS - 1 })).toBe(false);
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS - 1 })).toBe(false);
   });
 });
 

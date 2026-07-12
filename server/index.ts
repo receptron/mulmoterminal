@@ -496,6 +496,10 @@ const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to
 // /clear (dropped only on teardown) so a just-cleared session isn't re-titled from its frozen
 // pre-clear transcript.
 const lastTitledUserTurns = new Map<string, number>();
+// Wall-clock of the last view-triggered title attempt per session, so a session whose generation
+// keeps failing backs off instead of re-spawning the summarizer on every 4s roster poll.
+const lastTitleAttemptMs = new Map<string, number>();
+const VIEW_TITLE_RETRY_MS = 30_000;
 
 // Live ptys keyed by session id. A pty outlives its WebSocket while the session
 // is still "working", so switching away doesn't interrupt Claude mid-turn; it
@@ -620,6 +624,7 @@ function reap(id: string) {
   forgetTitle(id);
   titleInFlight.delete(id);
   lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
+  lastTitleAttemptMs.delete(id);
   const a = activity.get(id);
   if (!a || (!a.working && !a.waiting)) {
     activity.delete(id);
@@ -1116,14 +1121,14 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 
 // `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
 // (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
-// resurface) and publish; the next UserPromptSubmit sets the new query. The AI title and the cockpit's
-// last reply are blanked the same way (empty, published as a real value the roster's `?? prev` merge
-// won't skip) so a freshly-cleared session shows neither the pre-clear summary nor the pre-clear answer.
+// resurface) and publish; the next UserPromptSubmit sets the new query. `forgetTitle` drops the AI title
+// so it's regenerated fresh on the next turn (leaving it in `aiTitles` — even as "" — would read as
+// "already titled" and suppress that regeneration). The cockpit's last reply is blanked the same way as
+// the prompt (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
 function clearHeaderPrompt(sessionId: string): void {
   lastPrompts.set(sessionId, "");
   lastResponses.set(sessionId, "");
   forgetTitle(sessionId);
-  aiTitles.set(sessionId, ""); // after forgetTitle's delete: an empty title the client merge can't skip
   publishActivity(sessionId);
 }
 
@@ -1185,13 +1190,17 @@ async function maybeGenerateTitle(sessionId: string, cwd: string | undefined): P
 // (unmanaged / resumed / post-restart), so it never shows a stale externally-written title.
 // Fire-and-forget from the view; the freshened title lands on the next roster poll.
 function freshenRosterTitle(sessionId: string, cwd: string, currentUserTurns: number): void {
+  if (titleInFlight.has(sessionId)) return;
   const stale = shouldFreshenViewedTitle({
-    hasTitle: aiTitles.has(sessionId),
     lastTitledUserTurns: lastTitledUserTurns.get(sessionId) ?? null,
     currentUserTurns,
     regenEveryTurns: VIEW_TITLE_REGEN_TURNS,
   });
-  if (stale) void generateAndStoreTitle(sessionId, cwd);
+  if (!stale) return;
+  const now = Date.now();
+  if (now - (lastTitleAttemptMs.get(sessionId) ?? 0) < VIEW_TITLE_RETRY_MS) return;
+  lastTitleAttemptMs.set(sessionId, now);
+  void generateAndStoreTitle(sessionId, cwd);
 }
 
 // Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt

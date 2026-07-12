@@ -38,21 +38,16 @@ export function shouldRegenerateTitle(p: { hasTitle: boolean; promptIsTrivial: b
   return !p.hasTitle || p.promptIsTrivial || p.turnsSinceTitle >= p.maxTurns;
 }
 
-// Decide whether the roster should (re)summarize a viewed session on our side. Regenerate
-// when the session has no title at all (a stale externally-written title we ignore, or a
-// post-restart blank), or once the transcript has advanced `regenEveryTurns` user turns past
-// the last titling. `lastTitledUserTurns` is null until we first title it. `hasTitle` guards
-// the null-baseline path: a /clear blanks the title to "" (still `hasTitle`) while keeping the
-// baseline null, so this must NOT re-title it from the still-frozen pre-clear transcript. A
-// transcript with no user turn is skipped.
-export function shouldFreshenViewedTitle(p: {
-  hasTitle: boolean;
-  lastTitledUserTurns: number | null;
-  currentUserTurns: number;
-  regenEveryTurns: number;
-}): boolean {
+// Decide whether the roster should (re)summarize a viewed session on our side. Regenerate on
+// first view (never titled this server lifetime — `lastTitledUserTurns` still null), or once
+// the transcript has advanced `regenEveryTurns` user turns past the last titling. A transcript
+// with no user turn is skipped. /clear safety rides on this: `lastTitledUserTurns` is kept
+// across a clear (see the server), so a just-cleared session sits at delta 0 and isn't
+// re-titled from its still-frozen pre-clear transcript; a clear before the session was ever
+// titled leaves 0 user turns (the /clear line isn't a turn), also skipped.
+export function shouldFreshenViewedTitle(p: { lastTitledUserTurns: number | null; currentUserTurns: number; regenEveryTurns: number }): boolean {
   if (p.currentUserTurns === 0) return false;
-  if (p.lastTitledUserTurns === null) return !p.hasTitle;
+  if (p.lastTitledUserTurns === null) return true;
   return p.currentUserTurns - p.lastTitledUserTurns >= p.regenEveryTurns;
 }
 
