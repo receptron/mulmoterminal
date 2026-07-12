@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import TerminalGrid from "./TerminalGrid.vue";
+import TerminalGrid, { type CockpitRow } from "./TerminalGrid.vue";
 import type { Cell } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 
@@ -35,10 +35,50 @@ const cell = (uid: number, session: string | null = null, cwd: string | null = n
 const cmdCell = (uid: number, command: NonNullable<Cell["command"]>): Cell => ({ uid, session: null, cwd: null, command });
 const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: number | null = null, reorderable = false) =>
   mount(TerminalGrid, {
-    props: { cells, expandedUid, cancelUid, defaultCwd: "/work", presets: [], launchers: [], home: "/work", openSessionIds: [], openCwds: [], reorderable },
+    props: {
+      cells,
+      expandedUid,
+      listRows: [],
+      cancelUid,
+      defaultCwd: "/work",
+      presets: [],
+      launchers: [],
+      home: "/work",
+      openSessionIds: [],
+      openCwds: [],
+      reorderable,
+    },
   });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
 const commandCellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "CommandCell" });
+
+const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => ({
+  uid,
+  cwd: "/work",
+  agent: "claude",
+  status: "idle",
+  summary: null,
+  prompt: null,
+  response: null,
+  fallback: null,
+  ...over,
+});
+const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]) =>
+  mount(TerminalGrid, {
+    props: {
+      cells,
+      expandedUid,
+      listRows,
+      cancelUid: null,
+      defaultCwd: "/work",
+      presets: [],
+      launchers: [],
+      home: "/work",
+      openSessionIds: [],
+      openCwds: [],
+      reorderable: false,
+    },
+  });
 
 describe("TerminalGrid (page renderer)", () => {
   it("renders one TerminalCell per cell", () => {
@@ -155,5 +195,46 @@ describe("active-cell focus zoom", () => {
     focus(w, 1);
     await nextTick();
     expect(cls(w, 1)).not.toContain("focused");
+  });
+});
+
+describe("grid cockpit (list view)", () => {
+  it("toggles between the text roster and the thumbnail strip", async () => {
+    const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
+    await nextTick();
+    expect(w.find(".cockpit").exists()).toBe(true);
+    expect(w.find(".stage").classes()).toContain("listmode");
+    expect(w.findAll(".cockpit-row")).toHaveLength(2);
+
+    await w.get(".view-toggle").trigger("click");
+    expect(w.find(".cockpit").exists()).toBe(false); // roster gone
+    expect(w.find(".stage").classes()).not.toContain("listmode"); // filmstrip mode
+  });
+
+  it("emits list-mode as the roster is toggled off then on, so the parent can pause its poll", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0)]);
+    await nextTick();
+    await w.get(".view-toggle").trigger("click"); // roster -> strip
+    expect(w.emitted("list-mode")?.[0]).toEqual([false]);
+    await w.get(".view-toggle").trigger("click"); // strip -> roster
+    expect(w.emitted("list-mode")?.[1]).toEqual([true]);
+  });
+
+  it("emits toggle-expand when a NON-active row is clicked, and not for the active one", async () => {
+    const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
+    await nextTick();
+    const rows = w.findAll(".cockpit-row");
+    await rows[1].trigger("click"); // uid 1, not the expanded (0)
+    expect(w.emitted("toggle-expand")?.[0]).toEqual([1]);
+    await rows[0].trigger("click"); // uid 0 IS the expanded one — no-op
+    expect(w.emitted("toggle-expand")).toHaveLength(1);
+  });
+
+  it("falls back to the running program's label when a row has no prompt or summary", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { summary: null, prompt: null, fallback: "bash" })]);
+    await nextTick();
+    const lines = w.findAll(".cockpit-line").map((l) => l.text());
+    expect(lines.some((t) => t.includes("summary"))).toBe(false); // no summary line
+    expect(lines.some((t) => t.includes("prompt") && t.includes("bash"))).toBe(true); // fallback in the prompt line
   });
 });

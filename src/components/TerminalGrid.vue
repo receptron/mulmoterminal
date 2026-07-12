@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onActivated, watch, nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
+import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
+import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import type { CwdPreset } from "./presets";
@@ -18,9 +20,22 @@ import type { Launcher, LaunchPick } from "./launchers";
 // zoomed, GridView passes EVERY cell (all tabs), so the strip shows them all live.
 // A cell carrying a `command` renders as a CommandCell (a running script.json
 // command) instead of the Claude launcher/terminal.
+export interface CockpitRow {
+  uid: number;
+  cwd: string | null;
+  agent: string;
+  status: CellStatus;
+  summary: string | null; // AI title
+  prompt: string | null; // current user prompt
+  response: string | null; // tail of the agent's latest reply
+  fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
+}
+const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
+  // A text row per cell for the cockpit list shown beside the expanded terminal.
+  listRows: CockpitRow[];
   cancelUid: number | null;
   defaultCwd: string | null;
   presets: CwdPreset[];
@@ -34,12 +49,13 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: "session" | "cwd", uid: number, value: string): void;
   (e: "close" | "toggle-expand", uid: number): void;
-  (e: "run", uid: number, command: RunCommand): void;
-  (e: "runSpare", command: RunCommand): void;
+  (e: "run" | "runSpare", uid: number, command: RunCommand): void;
   (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
   (e: "agent", uid: number, value: "claude" | "codex"): void;
+  // Roster shown (true) / thumbnail strip (false), so the parent can pause the roster-only poll.
+  (e: "list-mode", on: boolean): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
@@ -56,6 +72,15 @@ function onFocusIn(e: FocusEvent) {
   const el = target.closest<HTMLElement>("[data-uid]");
   if (el?.dataset.uid) focusedUid.value = Number(el.dataset.uid);
 }
+
+// Returning to the grid via a top-tab switch reactivates it under <KeepAlive>, which does
+// NOT re-run the cells' attach()/focus() — so nothing restores the cursor. Put it back in
+// whichever cell last held it (sticky `focusedUid`, tracked in both the grid and the
+// zoomed slot). Grid cells' durable connections are keyed `cell-<uid>`.
+onActivated(() => {
+  const uid = focusedUid.value;
+  if (uid !== null) nextTick(() => conn.focus(`cell-${uid}`));
+});
 // Per-cell class: `flipping` drives the zoom FLIP, `focused` the in-place lift of the active cell —
 // suppressed while expanded or mid-flip so it never fights those animations.
 function cellClass(uid: number) {
@@ -73,6 +98,10 @@ const zoomMain = ref<HTMLElement | null>(null);
 const mounted = ref(false);
 onMounted(() => (mounted.value = true));
 const zoomed = computed(() => props.expandedUid !== null && mounted.value);
+// While zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
+const listMode = ref(true);
+// The roster is the only consumer of the parent's /api/session poll — tell it when we hide it.
+watch(listMode, (on) => emit("list-mode", on));
 
 const stage = ref<HTMLElement | null>(null);
 // The cell currently flying between slots. Also gates the stylesheet: the cells it
@@ -106,6 +135,9 @@ watch(
   (to, from) => {
     const uid = to ?? from;
     if (uid === null || uid === undefined) return;
+    // swapping between two already-zoomed cells (cockpit list click) has no on-screen
+    // source to fly from — the incoming cell sits off-screen in `.grid` — so skip the FLIP.
+    if (to !== null && from !== null) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const el = cellEl(uid);
     if (!el) return;
@@ -116,9 +148,41 @@ watch(
 </script>
 
 <template>
-  <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars">
+  <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
+    <!-- toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
+    <button
+      v-if="zoomed"
+      type="button"
+      class="view-toggle"
+      :title="listMode ? 'Show thumbnails' : 'Show list'"
+      :aria-label="listMode ? 'Switch to thumbnail strip' : 'Switch to list'"
+      @click="listMode = !listMode"
+    >
+      {{ listMode ? "▤" : "☰" }}
+    </button>
+    <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
+         reply). Click a row to swap which terminal is enlarged. -->
+    <aside v-if="zoomed && listMode" class="cockpit">
+      <button
+        v-for="row in listRows"
+        :key="row.uid"
+        type="button"
+        :class="['cockpit-row', `st-${row.status}`, { active: row.uid === expandedUid }]"
+        @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
+      >
+        <span class="cockpit-head">
+          <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
+          <span class="cockpit-badge" :class="`st-${row.status}`">{{ STATUS_WORD[row.status] }}</span>
+          <span v-if="row.agent === 'codex'" class="cockpit-agent">codex</span>
+          <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
+        </span>
+        <span v-if="row.summary" class="cockpit-line"><b>summary</b> {{ row.summary }}</span>
+        <span class="cockpit-line"><b>prompt</b> {{ row.prompt || row.fallback || "—" }}</span>
+        <span v-if="row.response" class="cockpit-line cockpit-response"><b>reply</b> {{ row.response }}</span>
+      </button>
+    </aside>
     <div ref="zoomMain" class="zoom-main" />
-    <div class="grid" :style="gridStyle" @focusin="onFocusIn">
+    <div class="grid" :style="gridStyle">
       <Teleport v-for="cell in cells" :key="cell.uid" :to="zoomMain" :disabled="!(zoomed && cell.uid === expandedUid)">
         <CommandCell
           v-if="cell.command"
@@ -177,7 +241,7 @@ watch(
           @record-cwd="(c) => emit('record-cwd', c)"
           @remove-preset="(path) => emit('remove-preset', path)"
           @run="(cmd) => emit('run', cell.uid, cmd)"
-          @run-spare="(cmd) => emit('runSpare', cmd)"
+          @run-spare="(cmd) => emit('runSpare', cell.uid, cmd)"
           @launch="(pick) => emit('launch', cell.uid, pick)"
           @close="emit('close', cell.uid)"
           @move="(dir) => emit('move', cell.uid, dir)"
@@ -212,33 +276,180 @@ watch(
   display: none;
 }
 
-/* Filmstrip: the zoomed cell (teleported here) fills the top. */
-.stage.zoomed .zoom-main {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  padding: 6px 6px 0;
-}
 .zoom-main > * {
   flex: 1;
   min-width: 0;
   min-height: 0;
 }
+.stage.zoomed .zoom-main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
 
-/* The grid itself becomes the bottom strip: the remaining cells in a single row
-   that scrolls horizontally when they overflow. */
-.stage.zoomed .grid {
+/* List mode: text roster on the left, the expanded terminal on the right. */
+.stage.zoomed.listmode {
+  flex-direction: row;
+}
+.stage.zoomed.listmode .zoom-main {
+  padding: 6px 6px 6px 0;
+}
+/* Keep the non-expanded cells mounted (connections + metadata stay live) but OFF the visible
+   layout. A real off-screen box means xterm never fits to zero. */
+.stage.zoomed.listmode .grid {
+  position: absolute;
+  left: -99999px;
+  top: 0;
+  width: 900px;
+  height: 600px;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+}
+.stage.zoomed.listmode .grid > * {
+  width: 900px;
+  height: 600px;
+}
+
+/* Strip mode (toggle): the original filmstrip — expanded terminal on top, thumbnails below. */
+.stage.zoomed:not(.listmode) {
+  flex-direction: column;
+}
+.stage.zoomed:not(.listmode) .zoom-main {
+  padding: 6px 6px 0;
+}
+.stage.zoomed:not(.listmode) .grid {
   flex: 0 0 150px;
   display: flex;
   gap: 6px;
   overflow-x: auto;
   overflow-y: hidden;
 }
-.stage.zoomed .grid > * {
+.stage.zoomed:not(.listmode) .grid > * {
   flex: 0 0 260px;
   height: 100%;
   min-width: 0;
+}
+
+.view-toggle {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 10;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.cockpit {
+  flex: 0 0 360px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--bg-deep);
+}
+.cockpit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: 8px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font: inherit;
+}
+.cockpit-row:hover {
+  filter: brightness(1.15);
+}
+.cockpit-row.active {
+  border-color: #4a9eff;
+  border-left-color: #4a9eff;
+}
+.cockpit-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.cockpit-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #666;
+}
+.cockpit-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #333;
+  color: #ddd;
+}
+.cockpit-dot.st-working,
+.cockpit-badge.st-working {
+  background: #4a9eff;
+  color: #04121f;
+}
+.cockpit-dot.st-done,
+.cockpit-badge.st-done {
+  background: #22c55e;
+  color: #04120a;
+}
+.cockpit-dot.st-blocked,
+.cockpit-badge.st-blocked {
+  background: #f59e0b;
+  color: #1f1300;
+}
+.cockpit-agent {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #9ab;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.cockpit-dir {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text-dim, #9ab);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cockpit-line {
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.cockpit-line b {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7a8aa0;
+  margin-right: 4px;
+}
+.cockpit-response {
+  color: var(--text-dim, #9ab);
+  -webkit-line-clamp: 3;
 }
 
 /* The keyboard-focused cell lifts and grows slightly, in place — tiled grid only, so it never

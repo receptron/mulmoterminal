@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watch, nextTick } from "vue";
 import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
-import { dropTextFromUriList, toInsertText } from "./dropPaths";
+import { dropTextFromUriList } from "./dropPaths";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
 import { terminalHeaderStyleFor } from "./cellHeaderStyle";
@@ -11,7 +11,6 @@ import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
 import GitBranchChip from "./GitBranchChip.vue";
-import { filesGotoIndex } from "../composables/useFilesView";
 import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderButtons";
 import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
@@ -39,9 +38,10 @@ const props = defineProps<{
   cwd?: string | null;
   devTerminal?: boolean;
   command?: RunCommand | null;
-  // A configured launcher (shell/codex/command) — persistent & reattachable, connects
-  // to /ws/launch instead of resuming a Claude session.
-  launcher?: { index: number } | null;
+  // A configured launcher (shell/codex/command) by index, or the OS default shell
+  // (`{ shell: true }`) — persistent & reattachable, connects to /ws/launch instead of
+  // resuming a Claude session.
+  launcher?: { index: number } | { shell: true } | null;
   // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
   codex?: boolean;
   runMenu?: boolean;
@@ -100,9 +100,9 @@ const { context: sessionContext } = useSessionContext(
   computed(() => props.sessionId),
   serverCwd,
 );
-// User-configured header action buttons for this session's dir (GET /api/header). Additive: with no
-// config the list is empty so the header is unchanged. They target the running agent session, so they're
-// suppressed on a command/launcher terminal — those embed Terminal without a session and don't handle `run`.
+// Resolved header action buttons for this session's dir (GET /api/header) — the user's config, or the
+// built-in defaults when unconfigured. They target the running agent session, so they're suppressed on a
+// command/launcher terminal — those embed Terminal without a session and don't handle `run`.
 const headerButtonsCwd = computed(() => (props.command || props.launcher ? null : serverCwd.value));
 const { buttons: headerButtons } = useHeaderButtons({
   cwd: headerButtonsCwd,
@@ -193,6 +193,20 @@ onMounted(() => {
   resizeObserver.observe(container);
 });
 
+// This cell may live under <KeepAlive> (the grid): a top-tab switch DEACTIVATES it,
+// moving its DOM to the cache rather than unmounting. A detached element gets no
+// ResizeObserver callbacks, so — unlike display:none — the xterm is never fit to a zero
+// box and the PTY keeps its size. Still, stop observing while cached (hygiene) and force
+// a refit on return, so a window resize that happened while the grid was away is applied.
+onDeactivated(() => resizeObserver?.disconnect());
+onActivated(() => {
+  const container = terminalRef.value;
+  if (container) resizeObserver?.observe(container);
+  conn.fit(slotKey);
+  // Refocusing the right cell on return is driven centrally by TerminalGrid (which knows
+  // the last-focused cell) — a per-cell focus here would fight it across cells.
+});
+
 // Reconnect (resume a different session / start fresh) on every user action.
 // A user action picks a new target, so point the slot at the new session/cwd and
 // reconnect (closing the previous socket, which falls back to the server's grace).
@@ -281,25 +295,6 @@ function onDragOver(e: DragEvent) {
   dragOver.value = true;
 }
 
-// The file-icon button: the browser can't reveal a real path, so the local
-// server opens the OS file dialog and returns the chosen absolute path(s). Works
-// in every browser (the cross-browser path route, unlike file:// drag/drop).
-async function pickFile() {
-  try {
-    const res = await fetch("/api/pick-file", { method: "POST", headers: { "content-type": "application/json" } });
-    if (!res.ok) return;
-    const data: unknown = await res.json();
-    const paths = isRecord(data) && Array.isArray(data.paths) ? data.paths.filter((p): p is string => typeof p === "string") : [];
-    insertText(toInsertText(paths));
-  } catch {
-    // best-effort — the native dialog is unavailable or the user canceled
-  }
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
-}
-
 onUnmounted(() => {
   resizeObserver?.disconnect();
   // Persisted slot: detach the view but KEEP the connection alive (the whole point —
@@ -341,18 +336,8 @@ onUnmounted(() => {
         >
           <span class="material-symbols-outlined">{{ voiceIcon() }}</span>
         </button>
-        <button type="button" class="icon-btn" title="Insert a file path" aria-label="Insert a file path" @click="pickFile">
-          <span class="material-symbols-outlined">attach_file</span>
-        </button>
-        <button
-          type="button"
-          class="icon-btn"
-          title="Browse & edit this project's files"
-          aria-label="Open the file explorer"
-          @click="filesGotoIndex(serverCwd)"
-        >
-          <span class="material-symbols-outlined">folder_open</span>
-        </button>
+        <!-- The file-path picker and file explorer are now DEFAULT_BUTTONS (server-resolved into
+             headerButtons above), so the user can drop/reorder/replace them via config. -->
         <!-- A grid cell injects its own actions (GitHub / timeline / reorder / zoom /
              close) here, so all the icon buttons live on this one header row. -->
         <slot name="header-actions" />

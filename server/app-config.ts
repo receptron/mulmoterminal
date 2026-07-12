@@ -20,7 +20,8 @@ export interface AppConfig {
   // User-added HTTP MCP servers merged into the single-view session's --mcp-config.
   userMcpServers: UserMcpServer[];
   // Global terminal-header action buttons; applied to every terminal (scoped with `when`).
-  buttons: HeaderButton[];
+  // null = unconfigured (the runtime falls back to DEFAULT_BUTTONS).
+  buttons: HeaderButton[] | null;
   // Global header display chips, or null when unconfigured (the client keeps its default set).
   chips: HeaderChip[] | null;
 }
@@ -99,7 +100,7 @@ export function sanitizeSoundFile(input: unknown): string | null {
 
 // Fresh object each call — callers hold and mutate the returned config in place, so a
 // shared default constant would be corrupted across loads.
-const emptyConfig = (): AppConfig => ({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: [], chips: null });
+const emptyConfig = (): AppConfig => ({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null });
 
 export function loadAppConfig(file: string): AppConfig {
   try {

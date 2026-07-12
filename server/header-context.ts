@@ -58,6 +58,7 @@ export async function buildHeaderContext(cwd: string, meta: SessionMeta): Promis
     behind: status.behind,
     task: worktreeTask(cwd),
     isGitRepo: status.repo,
+    prUrl: null, // resolved by the /api/header route only when a `pr` button is present
   };
 }
 

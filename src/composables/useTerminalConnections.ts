@@ -59,9 +59,10 @@ export interface ConnTarget {
   cwd: string | null;
   devTerminal: boolean;
   command: RunCommand | null;
-  // A configured launcher (shell/codex/command). Unlike `command` this is a PERSISTENT
-  // session — it reconnects on drop and reattaches by session id, like a Claude cell.
-  launcher: { index: number } | null;
+  // A configured launcher (shell/codex/command) by index, or the OS default shell
+  // (`{ shell: true }`, the header "new terminal" button). Unlike `command` this is a
+  // PERSISTENT session — it reconnects on drop and reattaches by session id, like a Claude cell.
+  launcher: { index: number } | { shell: true } | null;
   // A first-class codex session (/ws/codex) instead of a Claude one. Persistent &
   // reattachable like a Claude cell; the server discovers + resumes codex's own id.
   codex?: boolean;
@@ -226,7 +227,10 @@ function runCommandUrl(command: RunCommand, host: string, secure: boolean): stri
 function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): string {
   const host = location.host;
   if (target.command) return runCommandUrl(target.command, host, secure);
-  if (target.launcher) return buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
+  if (target.launcher)
+    return "shell" in target.launcher
+      ? buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, shell: true })
+      : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
   if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
 }

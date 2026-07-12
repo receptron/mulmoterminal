@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
@@ -16,6 +16,8 @@ import {
   switchPage,
   runCommand,
   runScriptInNewCell,
+  insertCellAfter,
+  shellCell,
   launchInCell,
   setSortMode,
   moveCell,
@@ -30,9 +32,11 @@ import {
   LEGACY_KEY,
   type GridState,
   type CellStatus,
+  type Cell,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
+import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -96,6 +100,82 @@ const reorderable = computed(() => state.value.sortMode === "manual");
 // is zoomed, render EVERY cell so the filmstrip lines up all tabs' terminals (live).
 const displayCells = computed(() => visibleOrdered(state.value, statusForSort.value));
 const expandedUid = computed(() => zoomedUid(state.value));
+
+// The zoomed grid's cockpit roster: a text row per cell — status + dir + AI summary +
+// current prompt + the agent's latest reply — so many parallel agents can be supervised
+// past the 9-thumbnail grid, and the enlarged terminal is switched by picking a row.
+type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null };
+const sessionMeta = reactive(new Map<string, SessionMeta>());
+// Single source of truth for the roster's prompt / summary / reply: each cell's on-disk
+// transcript, read via GET /api/session/:id (always current, and works for sessions this
+// MulmoTerminal doesn't manage — a plain `claude` you resumed emits nothing over pub/sub).
+// Seed on appearance, then poll while the roster is on screen. Merge, never overwrite: a
+// fetch that can't find the transcript (absent/mismatched cwd) returns nulls that must not
+// wipe a value already shown. (The status badge is separate — it rides `statusForSort`.)
+async function seedMeta(id: string, cwd: string | null) {
+  try {
+    const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
+    const res = await fetch(`/api/session/${id}${query}`);
+    if (!res.ok) return;
+    const d = (await res.json()) as Partial<SessionMeta>;
+    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
+    sessionMeta.set(id, {
+      lastPrompt: d.lastPrompt ?? prev.lastPrompt,
+      aiTitle: d.aiTitle ?? prev.aiTitle,
+      lastResponse: d.lastResponse ?? prev.lastResponse,
+    });
+  } catch {
+    // best-effort — the next poll retries
+  }
+}
+const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
+watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
+const ROSTER_POLL_MS = 4000;
+let rosterTimer: ReturnType<typeof setInterval> | null = null;
+// The roster is the sole consumer of this poll, and it's shown only while zoomed AND in list
+// mode (the grid can be zoomed into the thumbnail strip instead). Poll exactly when it's visible.
+const listModeOn = ref(true);
+const rosterVisible = () => expandedUid.value !== null && listModeOn.value;
+const startPoll = () => {
+  if (!rosterVisible() || rosterTimer !== null) return;
+  refreshAllMeta();
+  rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
+};
+const stopPoll = () => {
+  if (rosterTimer !== null) clearInterval(rosterTimer);
+  rosterTimer = null;
+};
+const syncPoll = () => (rosterVisible() ? startPoll() : stopPoll());
+// immediate: a reload that restores a zoomed grid sets expandedUid up front (no "change"
+// to react to), so start here too, or the roster would freeze at its first snapshot.
+watch(expandedUid, syncPoll, { immediate: true });
+const onListMode = (on: boolean) => {
+  listModeOn.value = on;
+  syncPoll();
+};
+// Under <KeepAlive>, leaving /terminals deactivates (doesn't unmount) this view — pause the
+// poll so it doesn't keep fetching in the background, and resume it on return.
+onActivated(startPoll);
+onDeactivated(stopPoll);
+onBeforeUnmount(stopPoll);
+
+// A cell with no session/prompt yet still gets a human label from what it IS running.
+const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "starting…" : "empty");
+const listRows = computed(() =>
+  state.value.cells.map((c) => {
+    const meta = c.session ? sessionMeta.get(c.session) : undefined;
+    return {
+      uid: c.uid,
+      cwd: c.cwd,
+      agent: c.agent ?? "claude",
+      status: statusForSort.value[c.uid] ?? ("idle" as CellStatus),
+      summary: meta?.aiTitle ?? null,
+      prompt: meta?.lastPrompt ?? null,
+      response: meta?.lastResponse ?? null,
+      fallback: fallbackLabel(c),
+    };
+  }),
+);
 // The cancelable trailing launch cell's uid (null when there's nothing to cancel):
 // drives both the toolbar's cancel state and the launcher's in-cell ✕.
 const cancelUid = computed(() => cancelableLaunchUid(state.value));
@@ -123,8 +203,8 @@ const onAgent = (uid: number, agent: "claude" | "codex") => (state.value = setCe
 const onClose = (uid: number) => (state.value = closeCell(state.value, uid));
 const onToggleExpand = (uid: number) => (state.value = toggleExpand(state.value, uid));
 const onRun = (uid: number, command: RunCommand) => (state.value = runCommand(state.value, uid, command));
-// A running cell's header Run menu: launch in a spare cell so the session survives.
-const onRunSpare = (command: RunCommand) => (state.value = runScriptInNewCell(state.value, command));
+// A running cell's header Run menu: launch in a spare cell (next to it) so the session survives.
+const onRunSpare = (uid: number, command: RunCommand) => (state.value = runScriptInNewCell(state.value, uid, command));
 // The empty cell launcher picked a configured program (shell/codex/…): turn it into a
 // persistent launcher cell. Its session id arrives later via onSession.
 const onLaunch = (uid: number, pick: { index: number; label: string; cwd: string | null }) =>
@@ -136,10 +216,30 @@ const switchTo = (page: number) => (state.value = switchPage(state.value, page))
 // A script the single view's terminal-header Run menu handed off: run it in a spare
 // cell now that the grid (where command cells live) is mounted.
 const { takePending } = usePendingScript();
+const NO_ORIGIN_UID = -1; // no triggering cell (uids are >= 0) → insertCellAfter appends at the end
 onMounted(() => {
   const command = takePending();
-  if (command) state.value = runScriptInNewCell(state.value, command);
+  if (command) state.value = runScriptInNewCell(state.value, NO_ORIGIN_UID, command);
 });
+
+// The header "new terminal" button ($SHELL) opens a cell next to the one that triggered it.
+// GridView is cached by <KeepAlive>, so register the opener only while ACTIVE and drop it on
+// deactivate — otherwise a button press from the single view would silently mutate this hidden
+// grid instead of routing here. openTerminalAt then queues + navigates while we're deactivated.
+const SLOT_UID_RE = /^cell-(\d+)$/;
+let offNewTerminal: (() => void) | null = null;
+const openNewTerminal = ({ cwd, afterSlotKey }: NewTerminalRequest) => {
+  const match = afterSlotKey?.match(SLOT_UID_RE);
+  const afterUid = match ? Number(match[1]) : NO_ORIGIN_UID;
+  state.value = insertCellAfter(state.value, afterUid, shellCell(cwd));
+};
+const detachNewTerminal = () => {
+  offNewTerminal?.();
+  offNewTerminal = null;
+};
+onActivated(() => (offNewTerminal = registerNewTerminalHandler(openNewTerminal)));
+onDeactivated(detachNewTerminal);
+onBeforeUnmount(detachNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
 const {
@@ -193,6 +293,7 @@ function configureAppearance() {
       class="main"
       :cells="displayCells"
       :expanded-uid="expandedUid"
+      :list-rows="listRows"
       :cancel-uid="cancelUid"
       :default-cwd="defaultCwd"
       :presets="presets"
@@ -213,6 +314,7 @@ function configureAppearance() {
       @launch="onLaunch"
       @move="onMove"
       @status="onStatus"
+      @list-mode="onListMode"
     />
     <SettingsModal
       v-if="showSettings"

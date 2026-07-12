@@ -52,6 +52,61 @@ export function latestUserPromptFromJsonl(raw: string): string | null {
   return prompts[prompts.length - 1] ?? lastPromptRecord;
 }
 
+// The externally-generated (MulmoClaude) session title record, if the transcript carries
+// one. Only READ here — this repo never writes "ai-title" lines into Claude's own file.
+export function aiTitleFromJsonl(raw: string): string | null {
+  let title: string | null = null;
+  for (const o of parseJsonl(raw)) {
+    if (o.type === "ai-title" && o.aiTitle) title = String(o.aiTitle);
+  }
+  return title;
+}
+
+export interface ConversationTurn {
+  role: "user" | "assistant";
+  text: string;
+}
+
+// The joined text of an assistant turn's content: only "text" blocks (tool_use blocks
+// carry no prose a title would use). A plain-string content is returned as-is.
+function assistantText(content: unknown): string | null {
+  if (typeof content === "string") return content.trim() || null;
+  if (!Array.isArray(content)) return null;
+  const parts = content.filter(isRecord).filter((b) => b.type === "text" && typeof b.text === "string");
+  const joined = parts
+    .map((b) => String(b.text).trim())
+    .filter(Boolean)
+    .join(" ");
+  return joined || null;
+}
+
+// Ordered user/assistant turns as plain text, skipping slash/local-command wrappers and
+// tool-only assistant turns. Feeds the header-title summarizer.
+export function conversationTurnsFromJsonl(raw: string): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  for (const o of parseJsonl(raw)) {
+    const content = isRecord(o.message) ? o.message.content : undefined;
+    if (o.type === "user") {
+      const text = userPromptText(content);
+      if (text) turns.push({ role: "user", text });
+    } else if (o.type === "assistant") {
+      const text = assistantText(content);
+      if (text) turns.push({ role: "assistant", text });
+    }
+  }
+  return turns;
+}
+
+// The most recent assistant prose turn (tool-only turns skipped), for the grid roster's
+// "what did the agent just say" line. Null when the session has no assistant text yet.
+export function latestAssistantTextFromJsonl(raw: string): string | null {
+  const turns = conversationTurnsFromJsonl(raw);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role === "assistant") return turns[i].text;
+  }
+  return null;
+}
+
 // A trivial prompt is an empty ack or a bare command ("ok", "merge", "はい") that
 // doesn't describe what a session is about. The cell header skips these so a short
 // follow-up doesn't hide the task. The explicit ack list is the primary signal —

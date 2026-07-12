@@ -25,9 +25,18 @@ import {
 } from "./config-schema.js";
 
 export interface HeaderConfig {
-  buttons: HeaderButton[];
+  buttons: HeaderButton[] | null; // null = unconfigured (falls back to DEFAULT_BUTTONS); [] = explicitly none
   chips: HeaderChip[] | null; // null = unconfigured (client uses its default)
 }
+
+// The header's action buttons when the user hasn't configured `buttons` — the file-path picker and an
+// OS-file-manager reveal, expressed as ordinary config buttons so the user can drop/reorder/replace them.
+// Configuring `buttons` at ANY level REPLACES this set (it isn't merged on top), so an explicit list is
+// the whole button row. The in-app file explorer (`open: { files }`) is available but not a default.
+export const DEFAULT_BUTTONS: HeaderButton[] = [
+  { id: "pick-file", icon: "attach_file", label: "Insert a file path", run: "open", open: { pickFile: true } },
+  { id: "reveal", emoji: "📂", label: "Reveal in the file manager", run: "open", open: { reveal: "${dir}" } },
+];
 
 // The live context a header is resolved against — all trusted server-side session state.
 export interface HeaderContext {
@@ -44,6 +53,9 @@ export interface HeaderContext {
   behind: number;
   task: string | null;
   isGitRepo: boolean;
+  // The current branch's open PR URL, or null. Resolved only when a `pr` button is present; an
+  // `open.pr` button resolves to this URL, or is dropped when it's null.
+  prUrl: string | null;
 }
 
 export type ResolvedChip = { kind: "builtin"; id: BuiltinChip } | { kind: "custom"; label: string; text: string };
@@ -63,7 +75,7 @@ export interface ResolvedHeader {
   chips: ResolvedChip[] | null;
 }
 
-export const EMPTY_HEADER_CONFIG: HeaderConfig = { buttons: [], chips: null };
+export const EMPTY_HEADER_CONFIG: HeaderConfig = { buttons: null, chips: null };
 
 const RUN_TYPE_SET = new Set<string>(RUN_TYPES);
 const VIEW_SET = new Set<string>(VIEW_TARGETS);
@@ -85,6 +97,10 @@ function sanitizeOpen(input: unknown): OpenTarget | undefined {
   if (reveal) target.reveal = reveal;
   if (files) target.files = files;
   if (view && isViewTarget(view)) target.view = view;
+  const terminal = str(input.terminal);
+  if (terminal) target.terminal = terminal;
+  if (input.pr === true) target.pr = true;
+  if (input.pickFile === true) target.pickFile = true;
   return Object.keys(target).length ? target : undefined;
 }
 
@@ -113,8 +129,10 @@ function withPayload(button: HeaderButton, input: Record<string, unknown>): Head
   return open ? { ...button, open } : null;
 }
 
-export function sanitizeButtons(input: unknown): HeaderButton[] {
-  if (!Array.isArray(input)) return [];
+// Returns null when `buttons` is absent/malformed — the signal for "unconfigured, use DEFAULT_BUTTONS".
+// An explicit array (even empty) is "configured" and replaces the defaults.
+export function sanitizeButtons(input: unknown): HeaderButton[] | null {
+  if (!Array.isArray(input)) return null;
   const seen = new Set<string>();
   const out: HeaderButton[] = [];
   for (const raw of input) {
@@ -157,15 +175,19 @@ export function sanitizeHeaderConfig(raw: unknown): HeaderConfig {
 
 // Merge global under project: buttons keyed by id (project overrides/adds), then ordered by `order`
 // (undefined last), stable within equal order. Chips: project wins outright; null passes through.
+// Buttons: null == unconfigured. When BOTH levels are unconfigured the result stays null (→ defaults);
+// once EITHER level configures a list, the merge produces a concrete array and the defaults are replaced.
 export function mergeHeaderConfig(globalConfig: HeaderConfig, projectConfig: HeaderConfig): HeaderConfig {
+  const chips = projectConfig.chips ?? globalConfig.chips;
+  if (globalConfig.buttons === null && projectConfig.buttons === null) return { buttons: null, chips };
   const byId = new Map<string, HeaderButton>();
-  for (const b of globalConfig.buttons) byId.set(b.id, b);
-  for (const b of projectConfig.buttons) byId.set(b.id, b);
+  for (const b of globalConfig.buttons ?? []) byId.set(b.id, b);
+  for (const b of projectConfig.buttons ?? []) byId.set(b.id, b);
   const buttons = [...byId.values()]
     .map((b, i) => ({ b, i }))
     .sort(byOrderThenInsertion)
     .map((x) => x.b);
-  return { buttons, chips: projectConfig.chips ?? globalConfig.chips };
+  return { buttons, chips };
 }
 
 const orderOf = (b: HeaderButton): number => (typeof b.order === "number" ? b.order : Number.POSITIVE_INFINITY);

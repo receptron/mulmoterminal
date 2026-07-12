@@ -9,9 +9,13 @@ import type { RunCommand } from "./runCommand";
 
 // A configured launch command (shell/codex/…) running in a cell. `index` is its
 // position in the user's launcher list (the server's allowlist); `label` is kept for
-// display and to re-launch after a server restart. Unlike a command, a launcher cell
-// IS persisted (it has a session and reconnects).
-export type CellLauncher = { index: number; label: string };
+// display and to re-launch after a server restart. `{ shell: true }` is the OS default
+// shell ($SHELL) opened by the header "new terminal" button — no configured index.
+// Unlike a command, a launcher cell IS persisted (it has a session and reconnects).
+export type CellLauncher = { index: number; label: string } | { shell: true; label: string };
+export const isShellLauncher = (l: CellLauncher): l is { shell: true; label: string } => "shell" in l;
+// A fresh OS-default-shell cell (session arrives from the server, then it persists/reconnects).
+export const shellCell = (cwd: string, label = "shell"): Omit<Cell, "uid"> => ({ session: null, cwd, launcher: { shell: true, label } });
 
 export interface Cell {
   uid: number;
@@ -126,18 +130,22 @@ export function launchInCell(state: GridState, uid: number, launcher: CellLaunch
   return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, launcher, cwd } : c)) };
 }
 
-// The toolbar Run menu ran a script with no target cell: reuse a trailing empty
-// launcher if there is one, otherwise append a fresh command cell (respecting the
-// cap), and jump to its page so it's visible.
-export function runScriptInNewCell(state: GridState, command: NonNullable<Cell["command"]>): GridState {
-  const last = state.cells[state.cells.length - 1];
-  if (isLaunchCell(last)) {
-    const cells = state.cells.map((c, i) => (i === state.cells.length - 1 ? { ...c, command } : c));
-    return { ...state, cells, page: pageCount(cells.length) - 1 };
-  }
+// Insert a brand-new cell immediately AFTER the cell that triggered it, so the header
+// "new terminal" button and the Run button open next to the current cell rather than at
+// the end. Falls back to appending when `afterUid` is gone. Jumps to the new cell's page.
+export function insertCellAfter(state: GridState, afterUid: number, cell: Omit<Cell, "uid">): GridState {
   if (runningCount(state.cells) >= MAX_TERMINALS) return state;
-  const cells = [...state.cells, { uid: state.nextUid, session: null, cwd: null, command }];
-  return { ...state, cells, nextUid: state.nextUid + 1, page: pageCount(cells.length) - 1 };
+  const idx = state.cells.findIndex((c) => c.uid === afterUid);
+  const at = idx >= 0 ? idx + 1 : state.cells.length;
+  const uid = state.nextUid;
+  const cells = [...state.cells.slice(0, at), { ...cell, uid }, ...state.cells.slice(at)];
+  const expanded = zoomedUid(state) !== null ? uid : state.expanded;
+  return { ...state, cells, nextUid: state.nextUid + 1, page: Math.floor(at / PAGE_SIZE), expanded };
+}
+
+// The Run button opened a script in a spare cell next to the cell that triggered it.
+export function runScriptInNewCell(state: GridState, afterUid: number, command: NonNullable<Cell["command"]>): GridState {
+  return insertCellAfter(state, afterUid, { session: null, cwd: null, command });
 }
 
 // Close a cell: drop it and reflow the list (later cells pack forward across
@@ -234,11 +242,11 @@ const isUuid = (s: unknown): s is string => typeof s === "string" && UUID_RE.tes
 const asSortMode = (v: unknown): SortMode => (v === "auto" ? "auto" : "manual");
 // Keep a persisted launcher only if well-formed; anything else drops to null so a
 // reloaded cell reconnects as a plain (Claude) session instead of a broken launcher.
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const asLauncher = (v: unknown): CellLauncher | null => {
-  const o = v as CellLauncher | null;
-  return o && typeof o.index === "number" && Number.isInteger(o.index) && o.index >= 0 && typeof o.label === "string"
-    ? { index: o.index, label: o.label }
-    : null;
+  if (!isRecord(v) || typeof v.label !== "string") return null;
+  if (v.shell === true) return { shell: true, label: v.label };
+  return typeof v.index === "number" && Number.isInteger(v.index) && v.index >= 0 ? { index: v.index, label: v.label } : null;
 };
 // A cell entry is kept if its session/cwd are well-formed; uid is validated only to
 // match the persisted `expanded` (it is renumbered below regardless).

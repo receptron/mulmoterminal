@@ -270,6 +270,7 @@ the server runs without one.
 | `CLAUDE_BIN` | `claude`       | The Claude Code binary to spawn. |
 | `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions the sidebar lists. Via `npx mulmoterminal` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). |
 | `CLAUDE_PERMISSION_MODE` | `auto` | Permission mode passed to each `claude` spawn. |
+| `MT_TITLE_MODEL` | `haiku` | Model used for the cell header's AI title (a cheap/fast model summarizing the recent turns). Accepts a `--model` alias or a full model id. |
 | `CODEX_BIN`  | `codex`        | The Codex CLI binary to spawn. |
 | `CODEX_MODEL`| codex default  | Model passed to Codex as `--model` (unset = Codex's own default). |
 | `CODEX_HOME` | `~/.codex`     | Codex home — where its session rollouts and MulmoTerminal-mirrored skills live. |
@@ -299,6 +300,23 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `prRepos`    | `owner/repo` entries whose open PRs/issues the cross-repo **PRs & Issues** view aggregates (via your `gh` login). |
 | `launchers`  | `{ label, command }` entries offered in a grid cell's launcher besides Claude — a plain shell, `codex`, any interactive command. |
 | `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the **single-view** Claude session's `--mcp-config` (a `localhost` URL is reached over `host.docker.internal` in the Docker sandbox). Takes effect on the next session. |
+| `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
+| `chips`      | Header info chips. Omit to keep the default set; `[]` hides all built-ins. |
+
+#### Header buttons
+
+Each terminal header shows configurable **action buttons**. Omitting `buttons` (globally or per-dir)
+keeps the built-in defaults — a **file-path picker** (📎) and an **OS file-manager reveal** (📂).
+Setting `buttons` (at either level) **replaces** the defaults with your list, so you can drop, reorder,
+or swap them — e.g. add the in-app **📁 file explorer** with `"open": { "files": "${dir}" }`.
+A button has an `id`, `label`, and a `run` of `"shell"` (run a command), `"input"` (send text to the
+agent), or `"open"`. An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
+(in-app explorer) / `view` (a built-in overlay) / `terminal` (a dir → a new cell running `$SHELL`,
+opened next to the current one) / `pr: true` (open the current branch's PR — the button is hidden when
+there's no open PR) / `pickFile: true` (OS file dialog → insert the path).
+`${dir}`, `${branch}`, `${repo}`, … substitute live context, and `when` (e.g. `"isGitRepo"`) gates
+visibility. The `/mulmoterminal-config` skill writes a valid config interactively; per-dir buttons
+merge over the global ones by `id`.
 
 **Attention sound.** The default chime is generated with the Web Audio API — **no
 audio file is bundled**, so the npm package stays light and has no media-licensing
@@ -443,7 +461,8 @@ the last 32 KB of output. See
 
 ## Files view (browse & edit)
 
-Every terminal header has a **📁 Files** button that opens a full-screen file explorer
+A terminal header can carry a **📁 Files** button — add it as a [header button](#header-buttons)
+(`"open": { "files": "${dir}" }`) — that opens a full-screen file explorer
 rooted at **that terminal's project directory** — so after Claude says "wrote `foo.md`"
 you can jump straight there to read or edit it. The left pane is a lazy-loaded directory
 tree; clicking a file opens it in a **CodeMirror** editor (Markdown / JS-TS / JSON
@@ -937,14 +956,30 @@ has its `/` and `.` characters replaced with `-` (e.g.
 A session's display **title** is derived by scanning its JSONL for, in order of
 preference:
 
-1. the latest `ai-title` record's `aiTitle`,
-2. else the latest `last-prompt` record's `lastPrompt`,
-3. else the first real user message (slash/local-command wrappers like
+1. a live **AI title** the server generated for the session this run (see below),
+2. else the latest `ai-title` record's `aiTitle` (e.g. written by MulmoClaude),
+3. else the latest `last-prompt` record's `lastPrompt`,
+4. else the first real user message (slash/local-command wrappers like
    `<local-command-…>` are skipped),
-4. else `"(untitled session)"`.
+5. else `"(untitled session)"`.
 
 In-memory sessions not yet persisted show as `"New session"` until their file
 appears, at which point the on-disk title takes over.
+
+### AI header title
+
+The raw last prompt is a poor cell-header label once a session becomes a
+back-and-forth: a follow-up is either a trivial ack (`ok`, `はい` — skipped, so the
+header keeps showing the now-stale opening task) or context-dependent (`2番目にして`
+— meaningless on its own). So the server summarizes the **recent turns** with a cheap
+model (`MT_TITLE_MODEL`, default `haiku`) into a short title and shows it in the cell
+header (falling back to the last prompt when there's no title yet).
+
+Generation is kept low-cost — it runs at a turn's `Stop` (when the reply is on disk)
+only when a title is **due**: none yet, the newest prompt was a trivial/context-dependent
+ack (so the raw last prompt would be stale), or every few turns to keep a long session's
+title current. The title lives in memory (never written into Claude's own transcript); a
+resumed session falls back to any on-disk `ai-title`.
 
 ---
 
@@ -964,6 +999,7 @@ server/
   files-browse.ts               file tree + read/write (contained to project root)
   scripts.ts                    Run-menu script.json loader
   command-summary.ts            POST /api/command/summarize (claude -p headless)
+  header-title.ts               cheap-model AI title for the cell header (recent turns)
   app-config.ts, config-routes.ts, dir-config.ts   user + per-directory config
   plugins-registry.ts, mcp/     GUI plugin registry + per-session MCP broker
   backends/                     wiki, collections, feeds, accounting, notifier,
