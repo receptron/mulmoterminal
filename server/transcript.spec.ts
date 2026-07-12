@@ -11,9 +11,35 @@ import {
   timelineFromJsonl,
   aiTitleFromJsonl,
   conversationTurnsFromJsonl,
+  latestAssistantTextFromJsonl,
 } from "./transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
+
+describe("latestAssistantTextFromJsonl", () => {
+  it("returns the most recent assistant prose turn", () => {
+    const raw = [
+      line({ type: "user", message: { content: "do X" } }),
+      line({ type: "assistant", message: { content: [{ type: "text", text: "first reply" }] } }),
+      line({ type: "user", message: { content: "then Y" } }),
+      line({ type: "assistant", message: { content: [{ type: "text", text: "second reply" }] } }),
+    ].join("\n");
+    expect(latestAssistantTextFromJsonl(raw)).toBe("second reply");
+  });
+
+  it("skips a tool-only assistant turn (no prose)", () => {
+    const raw = [
+      line({ type: "assistant", message: { content: [{ type: "text", text: "here goes" }] } }),
+      line({ type: "assistant", message: { content: [{ type: "tool_use", name: "Bash", input: {} }] } }),
+    ].join("\n");
+    expect(latestAssistantTextFromJsonl(raw)).toBe("here goes");
+  });
+
+  it("is null when there's no assistant text yet", () => {
+    expect(latestAssistantTextFromJsonl(line({ type: "user", message: { content: "hi" } }))).toBeNull();
+    expect(latestAssistantTextFromJsonl("")).toBeNull();
+  });
+});
 
 describe("latestUserPromptFromJsonl", () => {
   it("returns the last user-typed prompt (string content)", () => {

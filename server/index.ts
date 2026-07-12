@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -55,6 +55,7 @@ import {
   isTrivialPrompt,
   aiTitleFromJsonl,
   latestMeaningfulUserPromptFromJsonl,
+  latestAssistantTextFromJsonl,
   preferredHeaderPrompt,
   sessionUsageFromJsonl,
   latestTurnContextFromJsonl,
@@ -472,6 +473,19 @@ const LAST_PROMPT_CAP = 200;
 // model, it takes precedence over lastPrompt in the cell header. Kept in memory (never
 // written into Claude's transcript); a resumed session falls back to any on-disk title.
 const aiTitles = new Map<string, string>(); // id -> AI title
+// the last few lines of the agent's most recent reply, refreshed when
+// a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
+const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
+const LAST_RESPONSE_MAX = 400;
+function refreshLastResponse(id: string, cwd: string): void {
+  try {
+    const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
+    const text = latestAssistantTextFromJsonl(raw);
+    if (text) lastResponses.set(id, text.slice(0, LAST_RESPONSE_MAX));
+  } catch {
+    // no transcript yet / unreadable — leave any prior value
+  }
+}
 const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
 const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
 const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
@@ -596,6 +610,7 @@ function reap(id: string) {
   // visible via its on-disk record.
   knownSessions.delete(id);
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
+  lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);
   titleInFlight.delete(id);
   const a = activity.get(id);
@@ -623,17 +638,21 @@ function reap(id: string) {
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(id: string) {
   const a = activity.get(id) || {};
+  const cwd = ptys.get(id)?.cwd ?? null;
+  // A turn just ended (waiting) → capture the reply's tail for the roster.
+  if (a.waiting && cwd) refreshLastResponse(id, cwd);
   pubsub?.publish(SESSIONS_CHANNEL, {
     id,
     // The session's working dir, so the attention-sound player can pick up that
     // directory's custom sound (<cwd>/.mulmoterminal.json). Null for a session with
     // no live PTY (a reaped background worker).
-    cwd: ptys.get(id)?.cwd ?? null,
+    cwd,
     working: a.working ?? false,
     waiting: a.waiting ?? false,
     event: a.event ?? null,
     lastPrompt: lastPrompts.get(id) ?? null,
     aiTitle: aiTitles.get(id) ?? null,
+    lastResponse: lastResponses.get(id) ?? null,
   });
 }
 
@@ -759,6 +778,7 @@ const EMPTY_CONTEXT: LatestTurnContext = { model: null, contextTokens: 0 };
 interface SessionSummary {
   lastPrompt: string | null;
   aiTitle: string | null;
+  lastResponse: string | null;
   usage: SessionUsage;
   context: LatestTurnContext;
 }
@@ -771,11 +791,12 @@ async function readSessionSummary(cwd: string, id: string): Promise<SessionSumma
     return {
       lastPrompt: latestMeaningfulUserPromptFromJsonl(raw),
       aiTitle: aiTitleFromJsonl(raw),
+      lastResponse: latestAssistantTextFromJsonl(raw)?.slice(0, LAST_RESPONSE_MAX) ?? null,
       usage: sessionUsageFromJsonl(raw),
       context: latestTurnContextFromJsonl(raw),
     };
   } catch {
-    return { lastPrompt: null, aiTitle: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+    return { lastPrompt: null, aiTitle: null, lastResponse: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
   }
 }
 
@@ -1087,9 +1108,11 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 // `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
 // (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
 // resurface) and publish; the next UserPromptSubmit sets the new query. The AI title is dropped too so
-// the freshly-cleared session doesn't keep summarizing the old conversation.
+// the freshly-cleared session doesn't keep summarizing the old conversation, and the cockpit's last
+// reply is blanked the same way (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
 function clearHeaderPrompt(sessionId: string): void {
   lastPrompts.set(sessionId, "");
+  lastResponses.set(sessionId, "");
   forgetTitle(sessionId);
   publishActivity(sessionId);
 }
@@ -1333,9 +1356,10 @@ app.get("/api/session/:id", async (req, res) => {
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, aiTitle: transcriptTitle, usage, context } = await readSessionSummary(cwd, id);
+  const { lastPrompt: transcriptPrompt, aiTitle: transcriptTitle, lastResponse: transcriptResponse, usage, context } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
   const aiTitle = aiTitles.get(id) ?? transcriptTitle;
+  const lastResponse = lastResponses.get(id) ?? transcriptResponse;
   res.json({
     id,
     cwd,
@@ -1344,6 +1368,7 @@ app.get("/api/session/:id", async (req, res) => {
     event: a.event ?? null,
     lastPrompt,
     aiTitle,
+    lastResponse,
     usage,
     context,
   });

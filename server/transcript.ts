@@ -97,6 +97,16 @@ export function conversationTurnsFromJsonl(raw: string): ConversationTurn[] {
   return turns;
 }
 
+// The most recent assistant prose turn (tool-only turns skipped), for the grid roster's
+// "what did the agent just say" line. Null when the session has no assistant text yet.
+export function latestAssistantTextFromJsonl(raw: string): string | null {
+  const turns = conversationTurnsFromJsonl(raw);
+  for (let i = turns.length - 1; i >= 0; i--) {
+    if (turns[i].role === "assistant") return turns[i].text;
+  }
+  return null;
+}
+
 // A trivial prompt is an empty ack or a bare command ("ok", "merge", "はい") that
 // doesn't describe what a session is about. The cell header skips these so a short
 // follow-up doesn't hide the task. The explicit ack list is the primary signal —
