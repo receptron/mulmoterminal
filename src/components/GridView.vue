@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
 import SettingsModal from "./SettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
@@ -34,7 +34,6 @@ import {
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
-import { usePubSub } from "../composables/usePubSub";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -105,31 +104,18 @@ const expandedUid = computed(() => zoomedUid(state.value));
 // EVERY session (grid cells included, unlike /api/sessions), so subscribe here directly.
 type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null };
 const sessionMeta = reactive(new Map<string, SessionMeta>());
-onMounted(() =>
-  usePubSub().subscribe("sessions", (d: unknown) => {
-    if (!d || typeof d !== "object" || !("id" in d)) return;
-    const m = d as { id: string } & Partial<SessionMeta>;
-    const prev = sessionMeta.get(m.id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
-    if ("lastPrompt" in m) prev.lastPrompt = m.lastPrompt ?? null;
-    if ("aiTitle" in m) prev.aiTitle = m.aiTitle ?? null;
-    if ("lastResponse" in m) prev.lastResponse = m.lastResponse ?? null;
-    sessionMeta.set(m.id, prev);
-  }),
-);
-// The "sessions" channel only pushes FUTURE changes, so a resumed / already-running cell
-// would show nothing until its next turn — and a session NOT managed by this MulmoTerminal
-// (e.g. a plain `claude` you resumed) never emits at all. So read each cell's meta straight
-// from its on-disk transcript (always current): once on appearance, then on a poll while the
-// roster is on screen (zoomed), since pub/sub can't be relied on to keep it fresh.
+// Single source of truth for the roster's prompt / summary / reply: each cell's on-disk
+// transcript, read via GET /api/session/:id (always current, and works for sessions this
+// MulmoTerminal doesn't manage — a plain `claude` you resumed emits nothing over pub/sub).
+// Seed on appearance, then poll while the roster is on screen. Merge, never overwrite: a
+// fetch that can't find the transcript (absent/mismatched cwd) returns nulls that must not
+// wipe a value already shown. (The status badge is separate — it rides `statusForSort`.)
 async function seedMeta(id: string, cwd: string | null) {
   try {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
     const res = await fetch(`/api/session/${id}${query}`);
     if (!res.ok) return;
     const d = (await res.json()) as Partial<SessionMeta>;
-    // Merge, don't overwrite: a fetch that can't find the transcript (wrong/absent cwd for
-    // a session this instance doesn't manage) returns nulls, which must NOT wipe a value the
-    // pub/sub already delivered.
     const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
     sessionMeta.set(id, {
       lastPrompt: d.lastPrompt ?? prev.lastPrompt,
@@ -137,22 +123,32 @@ async function seedMeta(id: string, cwd: string | null) {
       lastResponse: d.lastResponse ?? prev.lastResponse,
     });
   } catch {
-    // best-effort — the pub/sub still fills this in on the next turn
+    // best-effort — the next poll retries
   }
 }
 const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
 watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
 const ROSTER_POLL_MS = 4000;
 let rosterTimer: ReturnType<typeof setInterval> | null = null;
-watch(expandedUid, (uid) => {
-  if (uid !== null && rosterTimer === null) {
-    refreshAllMeta();
-    rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
-  } else if (uid === null && rosterTimer !== null) {
-    clearInterval(rosterTimer);
-    rosterTimer = null;
-  }
-});
+const stopPoll = () => {
+  if (rosterTimer !== null) clearInterval(rosterTimer);
+  rosterTimer = null;
+};
+// immediate: a reload that restores a zoomed grid sets expandedUid up front (no "change" to
+// react to), so start the poll here too, or the roster would only ever show its first snapshot.
+watch(
+  expandedUid,
+  (uid) => {
+    if (uid !== null && rosterTimer === null) {
+      refreshAllMeta();
+      rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
+    } else if (uid === null) {
+      stopPoll();
+    }
+  },
+  { immediate: true },
+);
+onBeforeUnmount(stopPoll);
 
 // A cell with no session/prompt yet still gets a human label from what it IS running.
 const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "起動直後…" : "空きセル");
