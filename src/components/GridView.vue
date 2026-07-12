@@ -132,24 +132,23 @@ const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void 
 watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
 const ROSTER_POLL_MS = 4000;
 let rosterTimer: ReturnType<typeof setInterval> | null = null;
+const startPoll = () => {
+  if (expandedUid.value === null || rosterTimer !== null) return;
+  refreshAllMeta();
+  rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
+};
 const stopPoll = () => {
   if (rosterTimer !== null) clearInterval(rosterTimer);
   rosterTimer = null;
 };
-// immediate: a reload that restores a zoomed grid sets expandedUid up front (no "change" to
-// react to), so start the poll here too, or the roster would only ever show its first snapshot.
-watch(
-  expandedUid,
-  (uid) => {
-    if (uid !== null && rosterTimer === null) {
-      refreshAllMeta();
-      rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
-    } else if (uid === null) {
-      stopPoll();
-    }
-  },
-  { immediate: true },
-);
+// Poll only while the roster is actually on screen — zoomed AND this view is active.
+// immediate: a reload that restores a zoomed grid sets expandedUid up front (no "change"
+// to react to), so start here too, or the roster would freeze at its first snapshot.
+watch(expandedUid, (uid) => (uid !== null ? startPoll() : stopPoll()), { immediate: true });
+// Under <KeepAlive>, leaving /terminals deactivates (doesn't unmount) this view — pause the
+// poll so it doesn't keep fetching in the background, and resume it on return.
+onActivated(startPoll);
+onDeactivated(stopPoll);
 onBeforeUnmount(stopPoll);
 
 // A cell with no session/prompt yet still gets a human label from what it IS running.

@@ -610,6 +610,7 @@ function reap(id: string) {
   // visible via its on-disk record.
   knownSessions.delete(id);
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
+  lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);
   titleInFlight.delete(id);
   const a = activity.get(id);
