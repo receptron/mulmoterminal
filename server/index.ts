@@ -1108,9 +1108,11 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 // `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
 // (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
 // resurface) and publish; the next UserPromptSubmit sets the new query. The AI title is dropped too so
-// the freshly-cleared session doesn't keep summarizing the old conversation.
+// the freshly-cleared session doesn't keep summarizing the old conversation, and the cockpit's last
+// reply is blanked the same way (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
 function clearHeaderPrompt(sessionId: string): void {
   lastPrompts.set(sessionId, "");
+  lastResponses.set(sessionId, "");
   forgetTitle(sessionId);
   publishActivity(sessionId);
 }
