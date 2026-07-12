@@ -127,7 +127,15 @@ async function seedMeta(id: string, cwd: string | null) {
     const res = await fetch(`/api/session/${id}${query}`);
     if (!res.ok) return;
     const d = (await res.json()) as Partial<SessionMeta>;
-    sessionMeta.set(id, { lastPrompt: d.lastPrompt ?? null, aiTitle: d.aiTitle ?? null, lastResponse: d.lastResponse ?? null });
+    // Merge, don't overwrite: a fetch that can't find the transcript (wrong/absent cwd for
+    // a session this instance doesn't manage) returns nulls, which must NOT wipe a value the
+    // pub/sub already delivered.
+    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
+    sessionMeta.set(id, {
+      lastPrompt: d.lastPrompt ?? prev.lastPrompt,
+      aiTitle: d.aiTitle ?? prev.aiTitle,
+      lastResponse: d.lastResponse ?? prev.lastResponse,
+    });
   } catch {
     // best-effort — the pub/sub still fills this in on the next turn
   }
