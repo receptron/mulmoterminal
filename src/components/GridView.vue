@@ -146,15 +146,14 @@ onMounted(() => {
 });
 
 // The header "new terminal" button ($SHELL) opens a cell next to the one that triggered it.
+// Registered at setup scope (a plain callback, no DOM needed) so onBeforeUnmount attaches correctly.
 const SLOT_UID_RE = /^cell-(\d+)$/;
-onMounted(() => {
-  const off = registerNewTerminalHandler(({ cwd, afterSlotKey }) => {
-    const match = afterSlotKey?.match(SLOT_UID_RE);
-    const afterUid = match ? Number(match[1]) : NO_ORIGIN_UID;
-    state.value = insertCellAfter(state.value, afterUid, shellCell(cwd));
-  });
-  onBeforeUnmount(off);
+const offNewTerminal = registerNewTerminalHandler(({ cwd, afterSlotKey }) => {
+  const match = afterSlotKey?.match(SLOT_UID_RE);
+  const afterUid = match ? Number(match[1]) : NO_ORIGIN_UID;
+  state.value = insertCellAfter(state.value, afterUid, shellCell(cwd));
 });
+onBeforeUnmount(offNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
 const {
