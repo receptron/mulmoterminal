@@ -17,7 +17,8 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
-import { resolveHeader, resolveButtonCommand } from "./header-resolve.js";
+import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
+import { prUrlForBranch } from "./pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
@@ -1374,6 +1375,11 @@ app.get("/api/header", async (req, res) => {
   const model = typeof req.query.model === "string" ? req.query.model : null;
   const config = loadHeaderConfig(cwd, getHeaderConfig());
   const context = await buildHeaderContext(cwd, { session, agent, model });
+  // Resolve the branch's PR URL only when a `pr` button is present (a cached gh call); an open.pr
+  // button then opens that URL, or is dropped when there's no open PR.
+  if (headerHasPrButton(config) && context.repo && context.branch) {
+    context.prUrl = await prUrlForBranch(context.repo, context.branch);
+  }
   res.json(resolveHeader(config, context));
 });
 

@@ -53,6 +53,9 @@ export interface HeaderContext {
   behind: number;
   task: string | null;
   isGitRepo: boolean;
+  // The current branch's open PR URL, or null. Resolved only when a `pr` button is present; an
+  // `open.pr` button resolves to this URL, or is dropped when it's null.
+  prUrl: string | null;
 }
 
 export type ResolvedChip = { kind: "builtin"; id: BuiltinChip } | { kind: "custom"; label: string; text: string };
@@ -96,6 +99,7 @@ function sanitizeOpen(input: unknown): OpenTarget | undefined {
   if (view && isViewTarget(view)) target.view = view;
   const terminal = str(input.terminal);
   if (terminal) target.terminal = terminal;
+  if (input.pr === true) target.pr = true;
   if (input.pickFile === true) target.pickFile = true;
   return Object.keys(target).length ? target : undefined;
 }

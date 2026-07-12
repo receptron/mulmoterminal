@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand } from "./header-resolve.js";
+import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
 import type { HeaderConfig, HeaderContext } from "./header-config.js";
 
 // POSIX single-quote escaping, matching the server's shellQuoteFor(non-win32).
@@ -19,6 +19,7 @@ const ctx = (over: Partial<HeaderContext> = {}): HeaderContext => ({
   behind: 0,
   task: "foo",
   isGitRepo: true,
+  prUrl: null,
   ...over,
 });
 
@@ -151,5 +152,28 @@ describe("resolveHeader defaults + pickFile", () => {
   it("substitutes ${dir} in a terminal open target", () => {
     const config: HeaderConfig = { buttons: [{ id: "t", label: "T", run: "open", open: { terminal: "${dir}" } }], chips: null };
     expect(resolveHeader(config, ctx()).buttons[0].open).toEqual({ terminal: "/Users/x/myrepo" });
+  });
+
+  it("resolves a pr button to the branch's PR url when there's an open PR", () => {
+    const config: HeaderConfig = { buttons: [{ id: "pr", label: "PR", run: "open", open: { pr: true } }], chips: null };
+    const out = resolveHeader(config, ctx({ prUrl: "https://github.com/receptron/mulmoterminal/pull/9" }));
+    expect(out.buttons).toHaveLength(1);
+    expect(out.buttons[0].open).toEqual({ url: "https://github.com/receptron/mulmoterminal/pull/9" });
+  });
+
+  it("drops a pr button when there's no open PR (prUrl null)", () => {
+    const config: HeaderConfig = { buttons: [{ id: "pr", label: "PR", run: "open", open: { pr: true } }], chips: null };
+    expect(resolveHeader(config, ctx({ prUrl: null })).buttons).toEqual([]);
+  });
+});
+
+describe("headerHasPrButton", () => {
+  it("is true only when the effective buttons include an open.pr button", () => {
+    expect(headerHasPrButton({ buttons: [{ id: "pr", label: "PR", run: "open", open: { pr: true } }], chips: null })).toBe(true);
+    expect(headerHasPrButton({ buttons: [{ id: "u", label: "U", run: "open", open: { url: "https://x" } }], chips: null })).toBe(false);
+    expect(headerHasPrButton({ buttons: [], chips: null })).toBe(false);
+  });
+  it("checks DEFAULT_BUTTONS when unconfigured (they have no pr button)", () => {
+    expect(headerHasPrButton({ buttons: null, chips: null })).toBe(false);
   });
 });

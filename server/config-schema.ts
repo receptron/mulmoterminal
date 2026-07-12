@@ -90,6 +90,8 @@ const openTargetShape = {
   view: viewTargetSchema.optional(),
   // A directory: open a NEW terminal cell there, running the OS default shell ($SHELL).
   terminal: z.string().optional(),
+  // Open the current branch's PR in the browser. The button is hidden when no open PR exists.
+  pr: z.boolean().optional(),
   // No target string: open the OS file dialog and insert the chosen path(s) into the session.
   pickFile: z.boolean().optional(),
 };
@@ -178,16 +180,18 @@ const writableOpenTargetShape = {
   files: nonEmptyText.optional(),
   view: viewTargetSchema.optional(),
   terminal: nonEmptyText.optional(),
+  pr: z.literal(true).optional(),
   pickFile: z.literal(true).optional(),
 };
 
-// `open` requires at least one target (url/reveal/files/view/terminal/pickFile), mirroring sanitizeOpen.
+// `open` requires at least one target (url/reveal/files/view/terminal/pr/pickFile), mirroring sanitizeOpen.
 const writableOpenTargetSchema = z.union([
   z.object({ ...writableOpenTargetShape, url: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, reveal: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, files: nonEmptyText }),
   z.object({ ...writableOpenTargetShape, view: viewTargetSchema }),
   z.object({ ...writableOpenTargetShape, terminal: nonEmptyText }),
+  z.object({ ...writableOpenTargetShape, pr: z.literal(true) }),
   z.object({ ...writableOpenTargetShape, pickFile: z.literal(true) }),
 ]);
 
