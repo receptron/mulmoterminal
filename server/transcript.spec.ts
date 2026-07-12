@@ -11,6 +11,7 @@ import {
   timelineFromJsonl,
   aiTitleFromJsonl,
   conversationTurnsFromJsonl,
+  countUserTurnsFromJsonl,
   latestAssistantTextFromJsonl,
 } from "./transcript.js";
 
@@ -324,5 +325,21 @@ describe("conversationTurnsFromJsonl", () => {
       },
     });
     expect(conversationTurnsFromJsonl(raw)).toEqual([{ role: "assistant", text: "part one part two" }]);
+  });
+});
+
+describe("countUserTurnsFromJsonl", () => {
+  it("counts only user turns, skipping assistant turns and command wrappers", () => {
+    const raw = [
+      line({ type: "user", message: { content: "first" } }),
+      line({ type: "assistant", message: { content: [{ type: "text", text: "reply" }] } }),
+      line({ type: "user", message: { content: "<local-command>/clear</local-command>" } }),
+      line({ type: "user", message: { content: "second" } }),
+    ].join("\n");
+    expect(countUserTurnsFromJsonl(raw)).toBe(2);
+  });
+
+  it("is 0 for an empty transcript", () => {
+    expect(countUserTurnsFromJsonl("")).toBe(0);
   });
 });

@@ -54,6 +54,7 @@ import {
   userPromptText,
   isTrivialPrompt,
   aiTitleFromJsonl,
+  countUserTurnsFromJsonl,
   latestMeaningfulUserPromptFromJsonl,
   latestAssistantTextFromJsonl,
   preferredHeaderPrompt,
@@ -69,7 +70,7 @@ import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
 import { mountPickFileRoute } from "./pick-file.js";
 import { mountCommandSummaryRoute } from "./command-summary.js";
-import { generateHeaderTitle, shouldRegenerateTitle, TITLE_REGEN_EVERY_TURNS } from "./header-title.js";
+import { generateHeaderTitle, shouldRegenerateTitle, shouldFreshenViewedTitle, TITLE_REGEN_EVERY_TURNS, VIEW_TITLE_REGEN_TURNS } from "./header-title.js";
 import { mountCostRoute } from "./cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
@@ -490,6 +491,11 @@ const titleTurnCounts = new Map<string, number>(); // id -> user turns since las
 const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
 const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
 const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to void an in-flight generation
+// The transcript's user-turn count when we last titled a session, so the roster's view-triggered
+// re-titling knows when a session has advanced enough to be worth re-summarizing. Kept across
+// /clear (dropped only on teardown) so a just-cleared session isn't re-titled from its frozen
+// pre-clear transcript.
+const lastTitledUserTurns = new Map<string, number>();
 
 // Live ptys keyed by session id. A pty outlives its WebSocket while the session
 // is still "working", so switching away doesn't interrupt Claude mid-turn; it
@@ -613,6 +619,7 @@ function reap(id: string) {
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);
   titleInFlight.delete(id);
+  lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
   const a = activity.get(id);
   if (!a || (!a.working && !a.waiting)) {
     activity.delete(id);
@@ -779,6 +786,7 @@ interface SessionSummary {
   lastPrompt: string | null;
   aiTitle: string | null;
   lastResponse: string | null;
+  userTurns: number;
   usage: SessionUsage;
   context: LatestTurnContext;
 }
@@ -792,11 +800,12 @@ async function readSessionSummary(cwd: string, id: string): Promise<SessionSumma
       lastPrompt: latestMeaningfulUserPromptFromJsonl(raw),
       aiTitle: aiTitleFromJsonl(raw),
       lastResponse: latestAssistantTextFromJsonl(raw)?.slice(0, LAST_RESPONSE_MAX) ?? null,
+      userTurns: countUserTurnsFromJsonl(raw),
       usage: sessionUsageFromJsonl(raw),
       context: latestTurnContextFromJsonl(raw),
     };
   } catch {
-    return { lastPrompt: null, aiTitle: null, lastResponse: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+    return { lastPrompt: null, aiTitle: null, lastResponse: null, userTurns: 0, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
   }
 }
 
@@ -1107,13 +1116,14 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 
 // `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
 // (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
-// resurface) and publish; the next UserPromptSubmit sets the new query. The AI title is dropped too so
-// the freshly-cleared session doesn't keep summarizing the old conversation, and the cockpit's last
-// reply is blanked the same way (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
+// resurface) and publish; the next UserPromptSubmit sets the new query. The AI title and the cockpit's
+// last reply are blanked the same way (empty, published as a real value the roster's `?? prev` merge
+// won't skip) so a freshly-cleared session shows neither the pre-clear summary nor the pre-clear answer.
 function clearHeaderPrompt(sessionId: string): void {
   lastPrompts.set(sessionId, "");
   lastResponses.set(sessionId, "");
   forgetTitle(sessionId);
+  aiTitles.set(sessionId, ""); // after forgetTitle's delete: an empty title the client merge can't skip
   publishActivity(sessionId);
 }
 
@@ -1141,25 +1151,47 @@ function noteTitleTurn(sessionId: string, prompt: string): void {
   if (due) titlePending.add(sessionId);
 }
 
-// At Stop (the assistant's reply is now on disk), regenerate a pending title from the
-// recent turns and publish it. Fire-and-forget; a failure leaves the last prompt showing.
-async function maybeGenerateTitle(sessionId: string, cwd: string | undefined): Promise<void> {
-  if (!cwd || !titlePending.has(sessionId) || titleInFlight.has(sessionId)) return;
-  titlePending.delete(sessionId);
+// Read the transcript, summarize its recent turns into a title, and store + publish it.
+// Epoch-guarded: a /clear or teardown mid-generation bumps the epoch, so the now-stale
+// result is dropped. In-flight-guarded so overlapping triggers (a Stop hook and a roster
+// view) don't both summarize. Never throws — a failed/timed-out CLI just leaves the prior title.
+async function generateAndStoreTitle(sessionId: string, cwd: string): Promise<void> {
+  if (titleInFlight.has(sessionId)) return;
   titleInFlight.add(sessionId);
   const epoch = titleEpoch.get(sessionId) ?? 0;
   try {
     const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${sessionId}.jsonl`), "utf8").catch(() => null);
     const title = raw ? await generateHeaderTitle(raw) : null;
-    // A /clear or teardown during generation bumps the epoch — drop this now-stale title.
     if (title && (titleEpoch.get(sessionId) ?? 0) === epoch) {
       aiTitles.set(sessionId, title);
       titleTurnCounts.set(sessionId, 0);
+      lastTitledUserTurns.set(sessionId, raw ? countUserTurnsFromJsonl(raw) : 0);
       publishActivity(sessionId);
     }
   } finally {
     titleInFlight.delete(sessionId);
   }
+}
+
+// At Stop (the assistant's reply is now on disk), regenerate a pending title from the
+// recent turns and publish it. Fire-and-forget; a failure leaves the last prompt showing.
+async function maybeGenerateTitle(sessionId: string, cwd: string | undefined): Promise<void> {
+  if (!cwd || !titlePending.has(sessionId) || titleInFlight.has(sessionId)) return;
+  titlePending.delete(sessionId);
+  await generateAndStoreTitle(sessionId, cwd);
+}
+
+// The grid roster summarizes on our side even for sessions the hook path never runs on
+// (unmanaged / resumed / post-restart), so it never shows a stale externally-written title.
+// Fire-and-forget from the view; the freshened title lands on the next roster poll.
+function freshenRosterTitle(sessionId: string, cwd: string, currentUserTurns: number): void {
+  const stale = shouldFreshenViewedTitle({
+    hasTitle: aiTitles.has(sessionId),
+    lastTitledUserTurns: lastTitledUserTurns.get(sessionId) ?? null,
+    currentUserTurns,
+    regenEveryTurns: VIEW_TITLE_REGEN_TURNS,
+  });
+  if (stale) void generateAndStoreTitle(sessionId, cwd);
 }
 
 // Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt
@@ -1356,9 +1388,12 @@ app.get("/api/session/:id", async (req, res) => {
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, aiTitle: transcriptTitle, lastResponse: transcriptResponse, usage, context } = await readSessionSummary(cwd, id);
+  const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
-  const aiTitle = aiTitles.get(id) ?? transcriptTitle;
+  // The roster always shows OUR summary, never the external on-disk `ai-title` (MulmoClaude's).
+  // If we haven't titled it yet, kick off a summary and fall back to the prompt meanwhile.
+  freshenRosterTitle(id, cwd, userTurns);
+  const aiTitle = aiTitles.get(id) ?? null;
   const lastResponse = lastResponses.get(id) ?? transcriptResponse;
   res.json({
     id,

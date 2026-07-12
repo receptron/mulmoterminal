@@ -15,6 +15,10 @@ export const titleModel = (): string => process.env.MT_TITLE_MODEL || DEFAULT_TI
 // Regenerate at most every N user turns so a long session's title stays current without
 // a model call on every single turn.
 export const TITLE_REGEN_EVERY_TURNS = 5;
+// The grid roster re-titles on view (for sessions the hook path never runs on — unmanaged,
+// resumed, or post-restart). Tighter than the hook cadence since it only fires while the
+// roster is actually being watched.
+export const VIEW_TITLE_REGEN_TURNS = 3;
 const TITLE_TIMEOUT_MS = 30_000;
 // The USER's turns define what the session is about; a long agentic stretch can leave the
 // last N turns entirely assistant (no user intent), so the window is anchored on the last
@@ -32,6 +36,24 @@ const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0,
 // every `maxTurns` turns to keep a long session's title fresh.
 export function shouldRegenerateTitle(p: { hasTitle: boolean; promptIsTrivial: boolean; turnsSinceTitle: number; maxTurns: number }): boolean {
   return !p.hasTitle || p.promptIsTrivial || p.turnsSinceTitle >= p.maxTurns;
+}
+
+// Decide whether the roster should (re)summarize a viewed session on our side. Regenerate
+// when the session has no title at all (a stale externally-written title we ignore, or a
+// post-restart blank), or once the transcript has advanced `regenEveryTurns` user turns past
+// the last titling. `lastTitledUserTurns` is null until we first title it. `hasTitle` guards
+// the null-baseline path: a /clear blanks the title to "" (still `hasTitle`) while keeping the
+// baseline null, so this must NOT re-title it from the still-frozen pre-clear transcript. A
+// transcript with no user turn is skipped.
+export function shouldFreshenViewedTitle(p: {
+  hasTitle: boolean;
+  lastTitledUserTurns: number | null;
+  currentUserTurns: number;
+  regenEveryTurns: number;
+}): boolean {
+  if (p.currentUserTurns === 0) return false;
+  if (p.lastTitledUserTurns === null) return !p.hasTitle;
+  return p.currentUserTurns - p.lastTitledUserTurns >= p.regenEveryTurns;
 }
 
 // The summarizer window: the last few USER turns (they define the task) plus the most

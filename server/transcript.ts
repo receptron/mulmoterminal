@@ -97,6 +97,12 @@ export function conversationTurnsFromJsonl(raw: string): ConversationTurn[] {
   return turns;
 }
 
+// How many user turns the transcript holds, so the roster can tell whether a session has
+// advanced far enough since its last summary to be worth re-titling.
+export function countUserTurnsFromJsonl(raw: string): number {
+  return conversationTurnsFromJsonl(raw).filter((t) => t.role === "user").length;
+}
+
 // The most recent assistant prose turn (tool-only turns skipped), for the grid roster's
 // "what did the agent just say" line. Null when the session has no assistant text yet.
 export function latestAssistantTextFromJsonl(raw: string): string | null {
