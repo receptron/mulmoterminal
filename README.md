@@ -398,7 +398,9 @@ In dev, open the Vite URL; its proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
 
 ## Scripts (Run menu)
 
-An empty grid cell's launcher (the directory picker) offers a **run a script** row
+An empty grid cell's launcher sets the **Working directory** by typing, by a preset
+chip, or with the **📁 folder button** (a native OS folder dialog). It also offers a
+**run a script** row
 that launches project scripts (a dev server, tests, a build, …) **in that cell, in
 the directory the cell is pointed at** — so a whole workflow lives in one window
 alongside the Claude sessions. Scripts are **per-directory**: the cell reads the
@@ -755,7 +757,7 @@ same-origin-guarded.
 | `POST /api/transcribe`(`/model`…) | Voice-input transcription (Whisper, macOS). |
 | `POST /api/translation` | Runtime UI-string translation. |
 | `GET /api/remote-host/status` · `POST /api/remote-host/{connect,disconnect}` | Companion phone-client link. |
-| `POST /api/open-dir` · `POST /api/pick-file` | Reveal a dir in Finder/Explorer; OS file-picker → path. |
+| `POST /api/open-dir` · `POST /api/pick-file` | Reveal a dir in Finder/Explorer; OS file-picker → path (`{ directory: true }` opens the folder picker — used by the launcher's Working-directory 📁 button). |
 
 ### WebSocket: `/ws` (terminal)
 

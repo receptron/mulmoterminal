@@ -13,6 +13,25 @@ describe("pickFileCommand", () => {
   });
 });
 
+describe("pickFileCommand (directory mode)", () => {
+  it("macOS: osascript 'choose folder'", () => {
+    const { cmd, args } = pickFileCommand("darwin", true);
+    expect(cmd).toBe("osascript");
+    expect(args.join(" ")).toContain("choose folder");
+  });
+  it("Windows: FolderBrowserDialog", () => {
+    expect(pickFileCommand("win32", true).args.join(" ")).toContain("FolderBrowserDialog");
+  });
+  it("Linux: zenity --directory", () => {
+    expect(pickFileCommand("linux", true).args).toContain("--directory");
+  });
+  it("file mode (default) is unchanged", () => {
+    expect(pickFileCommand("darwin").args.join(" ")).toContain("choose file");
+    expect(pickFileCommand("win32").args.join(" ")).toContain("OpenFileDialog");
+    expect(pickFileCommand("linux").args).toContain("--multiple");
+  });
+});
+
 describe("parsePickerOutput", () => {
   it("splits newline-separated absolute paths", () => {
     expect(parsePickerOutput("/a/b.txt\n/c/d.txt")).toEqual(["/a/b.txt", "/c/d.txt"]);
