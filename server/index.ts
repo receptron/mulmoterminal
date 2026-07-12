@@ -42,6 +42,7 @@ import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
 import { activityHookEffects } from "./activity-hook.js";
+import { buildWaitingSnapshot, parseWaitingState } from "./waiting-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -463,10 +464,43 @@ async function recordToolCallEnd(
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
 const SESSION_LIST_LIMIT = 50;
+// Cap on ids per /api/activity request — a grid can't show more cells than this, and
+// it bounds the query string a client can make us parse.
+const ACTIVITY_IDS_LIMIT = 200;
 
 // Per-session "working" state, driven by Claude hooks (see /api/hook):
 // UserPromptSubmit => Claude started thinking; Stop => it finished.
 const activity = new Map<string, Activity>(); // id -> { working, event, at }
+
+// Restore the blocked/done (`waiting`) flags across a server restart, so a session
+// blocked on a permission prompt before the restart doesn't reattach as idle (Claude
+// won't re-fire Notification while already sitting at the prompt). `working` is NOT
+// persisted — a turn may have finished during downtime, so a restored working=true
+// could stick; the live hooks re-derive it. Keyed to `event` so blocked (Notification)
+// vs done (Stop) survives. Mirrors the dev-terminal-sessions persist/hydrate pattern.
+const WAITING_STATE_FILE = path.join(MULMOTERMINAL_HOME, "waiting-state.json");
+const waitingStateHydrated: Promise<void> = (async () => {
+  try {
+    const parsed = JSON.parse(await fs.readFile(WAITING_STATE_FILE, "utf8"));
+    for (const { id, event } of parseWaitingState(parsed, (x) => SESSION_ID_RE.test(x))) {
+      // Don't clobber a live update that already landed while hydration was in flight.
+      if (!activity.has(id)) activity.set(id, { waiting: true, working: false, event, at: Date.now() });
+    }
+  } catch {
+    // no file yet / unreadable => nothing to restore
+  }
+})();
+
+// Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
+// CURRENT waiting entries at write time, so the last link always writes the complete set.
+let waitingPersist: Promise<void> = Promise.resolve();
+function persistWaitingState(): void {
+  waitingPersist = waitingPersist
+    .then(() => waitingStateHydrated)
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.writeFile(WAITING_STATE_FILE, JSON.stringify(buildWaitingSnapshot(activity, (id) => hiddenSessions.has(id)))))
+    .catch((e) => console.error(`[waiting-state] failed to persist: ${messageOf(e)}`));
+}
 
 // Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
 // on the grid cell header so you can tell at a glance what each terminal is about. A
@@ -699,6 +733,8 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   if ((prev.waiting ?? false) === waiting) return;
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
+  // Persist the blocked/done set so it survives a server restart (see WAITING_STATE_FILE).
+  persistWaitingState();
 
   // A detached session that just started needing the user escalates from the short
   // idle grace to the long one — re-arm so it isn't reaped before they can return.
@@ -1417,6 +1453,24 @@ app.get("/api/session/:id", async (req, res) => {
     usage,
     context,
   });
+});
+
+// Attention state (working / waiting / event) for an explicit set of session ids.
+// The grid uses this to seed the status of its OFF-PAGE cells, which /api/sessions
+// can't serve: it hides dev-terminal sessions and is capped by the list limit. Reads
+// only the in-memory activity map (no disk), so it's cheap to call per grid render.
+app.get("/api/activity", (req, res) => {
+  const raw = typeof req.query.ids === "string" ? req.query.ids : "";
+  const ids = raw
+    .split(",")
+    .filter((id) => SESSION_ID_RE.test(id))
+    .slice(0, ACTIVITY_IDS_LIMIT);
+  const out: Record<string, { working: boolean; waiting: boolean; event: string | null }> = {};
+  for (const id of ids) {
+    const a = activity.get(id) || {};
+    out[id] = { working: a.working ?? false, waiting: a.waiting ?? false, event: a.event ?? null };
+  }
+  res.json(out);
 });
 
 // Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a

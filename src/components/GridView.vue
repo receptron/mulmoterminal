@@ -35,7 +35,7 @@ import {
   type Cell,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
-import { useSessions } from "../composables/useSessions";
+import { useGridActivity } from "../composables/useGridActivity";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
@@ -71,17 +71,18 @@ watch(
 const pages = computed(() => pageCount(state.value.cells.length));
 
 // The "auto" order needs every cell's status, including cells on pages that aren't
-// mounted. The server's session list is the authority for that (it covers all
-// sessions regardless of which page is on screen), so it drives the sort by session
-// id. The per-cell `statusByUid` (reported up while a cell is mounted) is the
-// fallback for cells the session list can't key: command cells (no session id) and a
-// just-launched cell before its id arrives.
-const { sessions } = useSessions();
+// mounted. useGridActivity tracks each cell session's live attention state by id —
+// including OFF-PAGE, dev-terminal cells that the /api/sessions list drops and its
+// limit would cap — so a waiting cell on any page floats forward. The per-cell
+// `statusByUid` (reported up while a cell is mounted) is the fallback for cells with
+// no session id (command cells) and a just-launched cell before its id arrives.
+const cellSessionIds = computed(() => state.value.cells.map((c) => c.session).filter((s): s is string => !!s));
+const { activity: gridActivity } = useGridActivity(cellSessionIds);
 const statusByUid = reactive<Record<number, CellStatus>>({});
 const onStatus = (uid: number, s: CellStatus) => (statusByUid[uid] = s);
 const sessionStatus = computed(() => {
   const m = new Map<string, CellStatus>();
-  for (const s of sessions.value) m.set(s.id, activityStatus(s.working, s.waiting, s.event));
+  for (const [id, a] of gridActivity) m.set(id, activityStatus(a.working, a.waiting, a.event));
   return m;
 });
 const statusForSort = computed<Record<number, CellStatus>>(() => {
