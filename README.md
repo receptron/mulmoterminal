@@ -312,7 +312,8 @@ or swap them — e.g. add the in-app **📁 file explorer** with `"open": { "fil
 A button has an `id`, `label`, and a `run` of `"shell"` (run a command), `"input"` (send text to the
 agent), or `"open"`. An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
 (in-app explorer) / `view` (a built-in overlay) / `terminal` (a dir → a new cell running `$SHELL`,
-opened next to the current one) / `pickFile: true` (OS file dialog → insert the path).
+opened next to the current one) / `pr: true` (open the current branch's PR — the button is hidden when
+there's no open PR) / `pickFile: true` (OS file dialog → insert the path).
 `${dir}`, `${branch}`, `${repo}`, … substitute live context, and `when` (e.g. `"isGitRepo"`) gates
 visibility. The `/mulmoterminal-config` skill writes a valid config interactively; per-dir buttons
 merge over the global ones by `id`.

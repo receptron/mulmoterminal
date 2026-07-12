@@ -141,4 +141,7 @@ describe("sanitizeButtons open.pickFile", () => {
       { id: "t", label: "T", run: "open", open: { terminal: "${dir}" } },
     ]);
   });
+  it("keeps a run:open button whose target is pr:true", () => {
+    expect(sanitizeButtons([{ id: "pr", label: "PR", run: "open", open: { pr: true } }])).toEqual([{ id: "pr", label: "PR", run: "open", open: { pr: true } }]);
+  });
 });

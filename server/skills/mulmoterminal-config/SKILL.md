@@ -173,6 +173,7 @@ or the in-app file explorer with `{ "run": "open", "open": { "files": "${dir}" }
     - `files` — a directory path → the in-app file explorer,
     - `view` — an in-app overlay: `"diff"` / `"prs"` / `"wiki"` / `"collections"` / `"accounting"`,
     - `terminal` — a directory → open a NEW grid cell running the OS default shell (`$SHELL`) there, next to the current cell,
+    - `pr: true` — open the current branch's PR in the browser (the button is hidden when there's no open PR),
     - `pickFile: true` — open the OS file dialog and insert the chosen path(s) into the session.
 - `when` (optional) visibility condition, `order` (optional) sort key (lower first, unset last).
 

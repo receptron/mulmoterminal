@@ -72,6 +72,9 @@ function resolveOpen(open: OpenTarget, ctx: HeaderContext): OpenTarget {
   if (open.files) out.files = substitute(open.files, ctx);
   if (open.view) out.view = open.view;
   if (open.terminal) out.terminal = substitute(open.terminal, ctx);
+  // `pr` resolves to the current branch's PR URL (a plain url open); buttons with no PR are dropped
+  // upstream in resolveHeader, so ctx.prUrl is set whenever we get here.
+  if (open.pr && ctx.prUrl) out.url = ctx.prUrl;
   if (open.pickFile) out.pickFile = true;
   return out;
 }
@@ -110,9 +113,18 @@ function resolveChip(chip: HeaderChip, ctx: HeaderContext): ResolvedChip | null 
   return evalWhen(chip.when, ctx) ? { kind: "custom", label: chip.label, text: substitute(chip.text, ctx) } : null;
 }
 
+// Whether the resolved config has any `pr` button — so the caller resolves ctx.prUrl (a gh call) only
+// when one is actually present, not on every /api/header fetch.
+export function headerHasPrButton(config: HeaderConfig): boolean {
+  return (config.buttons ?? DEFAULT_BUTTONS).some((b) => b.open?.pr === true);
+}
+
+// A `pr` button is shown only when the branch has an open PR (ctx.prUrl set); otherwise it's dropped.
+const isVisible = (b: HeaderButton, ctx: HeaderContext): boolean => evalWhen(b.when, ctx) && !(b.open?.pr && !ctx.prUrl);
+
 export function resolveHeader(config: HeaderConfig, ctx: HeaderContext): ResolvedHeader {
   // null buttons == unconfigured → the built-in defaults; an explicit list (even empty) replaces them.
-  const buttons = (config.buttons ?? DEFAULT_BUTTONS).filter((b) => evalWhen(b.when, ctx)).map((b) => resolveButton(b, ctx));
+  const buttons = (config.buttons ?? DEFAULT_BUTTONS).filter((b) => isVisible(b, ctx)).map((b) => resolveButton(b, ctx));
   const chips = config.chips === null ? null : config.chips.map((c) => resolveChip(c, ctx)).filter((c): c is ResolvedChip => c !== null);
   return { buttons, chips };
 }
