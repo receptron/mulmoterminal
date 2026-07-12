@@ -204,6 +204,16 @@ watch(
   },
 );
 
+// A grid (dev-terminal) cell is the user's actively-viewed pane only while zoomed;
+// tell the server so an unfocused cell can surface blocked/done and a zoomed one
+// clears. Single view (no devTerminal) relies on the server's attach default, so it
+// stays null and sends nothing. Re-sent on (re)connect since a grid cell reattaches
+// as inactive.
+const viewActive = computed<boolean | null>(() => (props.devTerminal ? !!props.expanded : null));
+watch([status, viewActive], ([s, active]) => {
+  if (s === "connected" && active !== null) conn.sendView(slotKey, active);
+});
+
 // xterm can't read CSS variables, so repaint its canvas palette when the theme
 // changes (keeps an already-open terminal in sync with the rest of the app). A
 // dir-pinned theme ignores the app-wide change; a change to the pin itself repaints.
