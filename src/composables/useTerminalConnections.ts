@@ -448,6 +448,15 @@ export function focus(key: string) {
   conns.get(key)?.term.focus();
 }
 
+// Tell the server whether this slot is the user's actively-viewed pane (a grid cell
+// zoomed to fill, vs. one tile among many). An active pane suppresses its attention
+// flag and marks it read; an inactive grid cell can surface blocked/done while
+// unfocused. No-op if the socket isn't open — Terminal.vue re-sends on (re)connect.
+export function sendView(key: string, active: boolean) {
+  const c = conns.get(key);
+  if (c?.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "view", active }));
+}
+
 // Read a slot's xterm buffer (scrollback + viewport) as plain text — used to hand a
 // command cell's captured output to the AI summariser. Each line is trailing-trimmed
 // by translateToString; trailing blank lines are dropped. "" for an unknown slot.

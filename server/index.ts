@@ -41,6 +41,7 @@ import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-confi
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
+import { activityHookEffects } from "./activity-hook.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -104,6 +105,12 @@ interface PtyEntry {
   ws: WebSocket | null;
   buffer: string;
   cwd: string; // the dir the PTY actually runs in (reported on reattach)
+  // True when this session is the user's actively-viewed pane: the single-view open
+  // session, or a focused/zoomed grid cell. Gates the attention flag — a socket being
+  // attached is NOT enough (every on-screen grid cell has one), so `ws != null` can't
+  // stand in for "the user is looking at THIS cell". Set at attach (by gui mode) and
+  // updated by the client's `view` frame.
+  active: boolean;
   // True when `term` is a tmux client (persistent): killing it only detaches, so reap
   // must kill the tmux session to actually end the program.
   tmux?: boolean;
@@ -1042,19 +1049,13 @@ app.use(express.static(path.join(__dirname, "../dist")));
 // prefix — see server/spa-fallback.ts for why that's sufficient.
 app.get(SPA_FALLBACK_RE, (_req, res) => res.sendFile(path.join(__dirname, "../dist/index.html")));
 
-// Activity hooks update a session's working / needs-attention flags.
-// `foreground` (a ws is attached => being viewed) suppresses the attention flag.
-function handleActivityHook(sessionId: string, event: string, foreground: boolean) {
-  if (event === "UserPromptSubmit") {
-    setWorking(sessionId, true, event);
-  } else if (event === "Stop") {
-    // A background session that finished a turn has output the user hasn't seen
-    // yet (and is ready for another message) — flag it for attention.
-    if (!foreground) setWaiting(sessionId, true, event);
-    setWorking(sessionId, false, event);
-  } else if (event === "Notification") {
-    // Background session waiting for input (permission / question / idle).
-    if (!foreground) setWaiting(sessionId, true, event);
+// Activity hooks update a session's working / needs-attention flags. `active` (this
+// session is the user's actively-viewed pane) suppresses the attention flag — see
+// activityHookEffects for why a mere attached socket doesn't count in the grid.
+function handleActivityHook(sessionId: string, event: string, active: boolean) {
+  for (const eff of activityHookEffects(event, active)) {
+    if (eff.kind === "working") setWorking(sessionId, eff.value, event);
+    else setWaiting(sessionId, eff.value, event);
   }
 }
 
@@ -1191,10 +1192,10 @@ app.post("/api/hook", async (req, res) => {
   const event = body.hook_event_name;
   if (sessionId) {
     const entry = ptys.get(sessionId);
-    const foreground = !!(entry && entry.ws);
+    const active = !!(entry && entry.active);
     const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
     await applyHeaderHooks(sessionId, event, body, cwd);
-    handleActivityHook(sessionId, event, foreground);
+    handleActivityHook(sessionId, event, active);
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
     // submitTranslation — fail it now rather than hang until the timeout. (When it DID
@@ -1835,7 +1836,7 @@ function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string,
     console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
   const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials), cwd);
   console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
-  return { term, ws, buffer: "", cwd, sandbox: true };
+  return { term, ws, buffer: "", cwd, sandbox: true, active: false };
 }
 
 // Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
@@ -1975,7 +1976,7 @@ function spawnClaudePty(
   } else {
     const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
     console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-    entry = { term, ws, buffer: "", cwd, tmux };
+    entry = { term, ws, buffer: "", cwd, tmux, active: false };
   }
   ptys.set(sessionId, entry);
 
@@ -2035,6 +2036,12 @@ function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, session
       // Explicit close (the cell's ✕) — reap now instead of waiting out the
       // disconnect grace window, so the session slot frees immediately.
       reap(sessionId);
+    } else if (msg.type === "view" && typeof msg.active === "boolean") {
+      // The user's focus moved onto/off this pane (a grid cell zoomed/opened, or
+      // blurred). An active pane suppresses the attention flag and marks it read;
+      // an inactive grid cell can surface blocked/done among its siblings.
+      entry.active = msg.active;
+      if (msg.active) setWaiting(sessionId, false);
     } else if (msg.type === "input" && typeof msg.data === "string") {
       entry.term.write(msg.data);
     } else if (
@@ -2098,7 +2105,7 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
   const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
   console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
 
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false };
   ptys.set(sessionId, entry);
 
   term.onData((data) => {
@@ -2152,6 +2159,11 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
   // Ignore if a newer client already reattached to this session.
   if (entry.ws !== ws) return;
   entry.ws = null;
+  // A session with no live socket is by definition not being viewed. Clear `active`
+  // so an UNCLEAN disconnect (crash / network drop / killed tab, where the client
+  // can't send `view active:false`) can't leave the attention flag suppressed until
+  // reconnect. A reattach re-asserts `active` (attach default + the client's view frame).
+  entry.active = false;
   // Keep a working session alive indefinitely, give a session that needs the user
   // the long grace, and reap a genuinely idle one after the short grace. A reload
   // reconnects in a moment and re-attaches (cancelling the reap) regardless.
@@ -2236,9 +2248,12 @@ wss.on("connection", (ws, req) => {
     return;
   }
 
-  // The session is now in the foreground (being viewed): clear any
-  // "waiting for input" flag so it stops showing as bold.
-  setWaiting(sessionId, false);
+  // Single view (gui) = the attached session IS the actively-viewed pane, so mark it
+  // read. A grid dev-terminal cell (gui=0) is only "viewed" once focused/zoomed (the
+  // client then sends a `view` frame), so it stays inactive here and can surface
+  // blocked/done while the user is on another cell or page.
+  entry.active = attachGuiMcp;
+  if (entry.active) setWaiting(sessionId, false);
 
   ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
   ws.on("close", () => handleClientClose(entry, ws, sessionId));
@@ -2443,7 +2458,7 @@ function spawnCodexPty(
   const via = tmux ? " via tmux" : "";
   const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
   console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false };
   ptys.set(sessionId, entry);
   if (resumeRolloutId) {
     codexRolloutIds.set(sessionId, resumeRolloutId);
