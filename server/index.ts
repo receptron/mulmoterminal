@@ -2159,6 +2159,11 @@ function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
   // Ignore if a newer client already reattached to this session.
   if (entry.ws !== ws) return;
   entry.ws = null;
+  // A session with no live socket is by definition not being viewed. Clear `active`
+  // so an UNCLEAN disconnect (crash / network drop / killed tab, where the client
+  // can't send `view active:false`) can't leave the attention flag suppressed until
+  // reconnect. A reattach re-asserts `active` (attach default + the client's view frame).
+  entry.active = false;
   // Keep a working session alive indefinitely, give a session that needs the user
   // the long grace, and reap a genuinely idle one after the short grace. A reload
   // reconnects in a moment and re-attaches (cancelling the reap) regardless.
