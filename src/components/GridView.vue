@@ -116,6 +116,38 @@ onMounted(() =>
     sessionMeta.set(m.id, prev);
   }),
 );
+// The "sessions" channel only pushes FUTURE changes, so a resumed / already-running cell
+// would show nothing until its next turn. Seed each session once from its transcript.
+const seededIds = new Set<string>();
+async function seedMeta(id: string, cwd: string | null) {
+  try {
+    const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
+    const res = await fetch(`/api/session/${id}${query}`);
+    if (!res.ok) return;
+    const d = (await res.json()) as Partial<SessionMeta>;
+    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
+    sessionMeta.set(id, {
+      lastPrompt: d.lastPrompt ?? prev.lastPrompt,
+      aiTitle: d.aiTitle ?? prev.aiTitle,
+      lastResponse: d.lastResponse ?? prev.lastResponse,
+    });
+  } catch {
+    // best-effort — the pub/sub still fills this in on the next turn
+  }
+}
+watch(
+  () => state.value.cells.map((c) => c.session ?? "").join(","),
+  () => {
+    for (const c of state.value.cells) {
+      if (c.session && !seededIds.has(c.session)) {
+        seededIds.add(c.session);
+        void seedMeta(c.session, c.cwd);
+      }
+    }
+  },
+  { immediate: true },
+);
+
 // A cell with no session/prompt yet still gets a human label from what it IS running.
 const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "起動直後…" : "空きセル");
 const listRows = computed(() =>

@@ -776,6 +776,7 @@ const EMPTY_CONTEXT: LatestTurnContext = { model: null, contextTokens: 0 };
 interface SessionSummary {
   lastPrompt: string | null;
   aiTitle: string | null;
+  lastResponse: string | null;
   usage: SessionUsage;
   context: LatestTurnContext;
 }
@@ -788,11 +789,12 @@ async function readSessionSummary(cwd: string, id: string): Promise<SessionSumma
     return {
       lastPrompt: latestMeaningfulUserPromptFromJsonl(raw),
       aiTitle: aiTitleFromJsonl(raw),
+      lastResponse: latestAssistantTextFromJsonl(raw)?.slice(0, LAST_RESPONSE_MAX) ?? null,
       usage: sessionUsageFromJsonl(raw),
       context: latestTurnContextFromJsonl(raw),
     };
   } catch {
-    return { lastPrompt: null, aiTitle: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+    return { lastPrompt: null, aiTitle: null, lastResponse: null, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
   }
 }
 
@@ -1350,9 +1352,10 @@ app.get("/api/session/:id", async (req, res) => {
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, aiTitle: transcriptTitle, usage, context } = await readSessionSummary(cwd, id);
+  const { lastPrompt: transcriptPrompt, aiTitle: transcriptTitle, lastResponse: transcriptResponse, usage, context } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
   const aiTitle = aiTitles.get(id) ?? transcriptTitle;
+  const lastResponse = lastResponses.get(id) ?? transcriptResponse;
   res.json({
     id,
     cwd,
@@ -1361,6 +1364,7 @@ app.get("/api/session/:id", async (req, res) => {
     event: a.event ?? null,
     lastPrompt,
     aiTitle,
+    lastResponse,
     usage,
     context,
   });
