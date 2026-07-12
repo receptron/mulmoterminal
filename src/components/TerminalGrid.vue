@@ -23,10 +23,14 @@ import type { Launcher, LaunchPick } from "./launchers";
 export interface CockpitRow {
   uid: number;
   cwd: string | null;
-  title: string;
-  prompt: string | null;
+  agent: string;
   status: CellStatus;
+  summary: string | null; // AI title
+  prompt: string | null; // current user prompt
+  response: string | null; // tail of the agent's latest reply
+  fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
 }
+const STATUS_WORD: Record<CellStatus, string> = { working: "実行中", blocked: "入力待ち", done: "完了", idle: "待機" };
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
@@ -93,6 +97,8 @@ const zoomMain = ref<HTMLElement | null>(null);
 const mounted = ref(false);
 onMounted(() => (mounted.value = true));
 const zoomed = computed(() => props.expandedUid !== null && mounted.value);
+// PROTO: while zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
+const listMode = ref(true);
 
 const stage = ref<HTMLElement | null>(null);
 // The cell currently flying between slots. Also gates the stylesheet: the cells it
@@ -139,24 +145,30 @@ watch(
 </script>
 
 <template>
-  <div ref="stage" class="stage" :class="{ zoomed, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
-    <!-- PROTO cockpit list: a dense text roster of every cell shown beside the expanded
-         terminal (only while zoomed). Click a row to swap which terminal is enlarged. -->
-    <aside v-if="zoomed" class="cockpit">
+  <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
+    <!-- PROTO: toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
+    <button v-if="zoomed" type="button" class="view-toggle" :title="listMode ? 'サムネイル表示に切替' : 'リスト表示に切替'" @click="listMode = !listMode">
+      {{ listMode ? "▤" : "☰" }}
+    </button>
+    <!-- PROTO cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
+         reply). Click a row to swap which terminal is enlarged. -->
+    <aside v-if="zoomed && listMode" class="cockpit">
       <button
         v-for="row in listRows"
         :key="row.uid"
         type="button"
         :class="['cockpit-row', `st-${row.status}`, { active: row.uid === expandedUid }]"
-        :title="row.prompt ?? row.title"
         @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
       >
-        <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
-        <span class="cockpit-body">
-          <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 40) || "—" }}</span>
-          <span class="cockpit-title">{{ row.title }}</span>
-          <span v-if="row.prompt && row.prompt !== row.title" class="cockpit-prompt">{{ row.prompt }}</span>
+        <span class="cockpit-head">
+          <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
+          <span class="cockpit-badge" :class="`st-${row.status}`">{{ STATUS_WORD[row.status] }}</span>
+          <span v-if="row.agent === 'codex'" class="cockpit-agent">codex</span>
+          <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
         </span>
+        <span v-if="row.summary" class="cockpit-line"><b>要約</b> {{ row.summary }}</span>
+        <span class="cockpit-line"><b>入力</b> {{ row.prompt || row.fallback || "—" }}</span>
+        <span v-if="row.response" class="cockpit-line cockpit-response"><b>応答</b> {{ row.response }}</span>
       </button>
     </aside>
     <div ref="zoomMain" class="zoom-main" />
@@ -254,27 +266,28 @@ watch(
   display: none;
 }
 
-/* PROTO cockpit layout: text roster on the left, the expanded terminal on the right. */
-.stage.zoomed {
-  flex-direction: row;
+.zoom-main > * {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
 }
 .stage.zoomed .zoom-main {
   display: flex;
   flex: 1;
   min-height: 0;
   min-width: 0;
-  padding: 6px 6px 6px 0;
-}
-.zoom-main > * {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
 }
 
-/* Keep the non-expanded cells mounted (connections stay live, metadata keeps flowing) but
-   OFF the visible layout — the roster replaces the thumbnail filmstrip. A real off-screen
-   box means xterm never fits to zero. */
-.stage.zoomed .grid {
+/* PROTO list mode: text roster on the left, the expanded terminal on the right. */
+.stage.zoomed.listmode {
+  flex-direction: row;
+}
+.stage.zoomed.listmode .zoom-main {
+  padding: 6px 6px 6px 0;
+}
+/* Keep the non-expanded cells mounted (connections + metadata stay live) but OFF the visible
+   layout. A real off-screen box means xterm never fits to zero. */
+.stage.zoomed.listmode .grid {
   position: absolute;
   left: -99999px;
   top: 0;
@@ -284,25 +297,61 @@ watch(
   overflow: hidden;
   padding: 0;
 }
-.stage.zoomed .grid > * {
+.stage.zoomed.listmode .grid > * {
   width: 900px;
   height: 600px;
 }
 
+/* Strip mode (toggle): the original filmstrip — expanded terminal on top, thumbnails below. */
+.stage.zoomed:not(.listmode) {
+  flex-direction: column;
+}
+.stage.zoomed:not(.listmode) .zoom-main {
+  padding: 6px 6px 0;
+}
+.stage.zoomed:not(.listmode) .grid {
+  flex: 0 0 150px;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.stage.zoomed:not(.listmode) .grid > * {
+  flex: 0 0 260px;
+  height: 100%;
+  min-width: 0;
+}
+
+.view-toggle {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 10;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
 .cockpit {
-  flex: 0 0 320px;
+  flex: 0 0 360px;
   min-width: 0;
   overflow-y: auto;
   padding: 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   background: var(--bg-deep);
 }
 .cockpit-row {
   display: flex;
-  gap: 8px;
-  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
   text-align: left;
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -317,53 +366,80 @@ watch(
   filter: brightness(1.15);
 }
 .cockpit-row.active {
-  border-color: var(--accent, #4a9eff);
-  border-left-color: var(--accent, #4a9eff);
+  border-color: #4a9eff;
+  border-left-color: #4a9eff;
+}
+.cockpit-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
 }
 .cockpit-dot {
   flex: 0 0 auto;
   width: 8px;
   height: 8px;
-  margin-top: 5px;
   border-radius: 50%;
   background: #666;
 }
-.cockpit-dot.st-working {
+.cockpit-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #333;
+  color: #ddd;
+}
+.cockpit-dot.st-working,
+.cockpit-badge.st-working {
   background: #4a9eff;
+  color: #04121f;
 }
-.cockpit-dot.st-done {
+.cockpit-dot.st-done,
+.cockpit-badge.st-done {
   background: #22c55e;
+  color: #04120a;
 }
-.cockpit-dot.st-blocked {
+.cockpit-dot.st-blocked,
+.cockpit-badge.st-blocked {
   background: #f59e0b;
+  color: #1f1300;
 }
-.cockpit-body {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.cockpit-agent {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #9ab;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 4px;
 }
 .cockpit-dir {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 11px;
   color: var(--text-dim, #9ab);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.cockpit-title {
-  font-size: 13px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cockpit-prompt {
-  font-size: 11px;
-  color: var(--text-dim, #9ab);
+.cockpit-line {
+  font-size: 12px;
+  line-height: 1.35;
   overflow: hidden;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
+}
+.cockpit-line b {
+  font-size: 10px;
+  font-weight: 700;
+  color: #7a8aa0;
+  margin-right: 4px;
+}
+.cockpit-response {
+  color: var(--text-dim, #9ab);
+  -webkit-line-clamp: 3;
 }
 
 /* The keyboard-focused cell lifts and grows slightly, in place — tiled grid only, so it never

@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, statSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -54,6 +54,7 @@ import {
   isTrivialPrompt,
   aiTitleFromJsonl,
   latestMeaningfulUserPromptFromJsonl,
+  latestAssistantTextFromJsonl,
   preferredHeaderPrompt,
   sessionUsageFromJsonl,
   latestTurnContextFromJsonl,
@@ -471,6 +472,19 @@ const LAST_PROMPT_CAP = 200;
 // model, it takes precedence over lastPrompt in the cell header. Kept in memory (never
 // written into Claude's transcript); a resumed session falls back to any on-disk title.
 const aiTitles = new Map<string, string>(); // id -> AI title
+// PROTO (grid roster): the last few lines of the agent's most recent reply, refreshed when
+// a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
+const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
+const LAST_RESPONSE_MAX = 400;
+function refreshLastResponse(id: string, cwd: string): void {
+  try {
+    const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
+    const text = latestAssistantTextFromJsonl(raw);
+    if (text) lastResponses.set(id, text.slice(0, LAST_RESPONSE_MAX));
+  } catch {
+    // no transcript yet / unreadable — leave any prior value
+  }
+}
 const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
 const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
 const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
@@ -622,17 +636,21 @@ function reap(id: string) {
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(id: string) {
   const a = activity.get(id) || {};
+  const cwd = ptys.get(id)?.cwd ?? null;
+  // A turn just ended (waiting) → capture the reply's tail for the roster.
+  if (a.waiting && cwd) refreshLastResponse(id, cwd);
   pubsub?.publish(SESSIONS_CHANNEL, {
     id,
     // The session's working dir, so the attention-sound player can pick up that
     // directory's custom sound (<cwd>/.mulmoterminal.json). Null for a session with
     // no live PTY (a reaped background worker).
-    cwd: ptys.get(id)?.cwd ?? null,
+    cwd,
     working: a.working ?? false,
     waiting: a.waiting ?? false,
     event: a.event ?? null,
     lastPrompt: lastPrompts.get(id) ?? null,
     aiTitle: aiTitles.get(id) ?? null,
+    lastResponse: lastResponses.get(id) ?? null,
   });
 }
 

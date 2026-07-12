@@ -30,6 +30,7 @@ import {
   LEGACY_KEY,
   type GridState,
   type CellStatus,
+  type Cell,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { useSessions } from "../composables/useSessions";
@@ -102,26 +103,33 @@ const expandedUid = computed(() => zoomedUid(state.value));
 // status — so you can supervise past the 9-thumbnail grid and jump the expanded terminal
 // by picking a row. The server publishes lastPrompt/aiTitle on the "sessions" channel for
 // EVERY session (grid cells included, unlike /api/sessions), so subscribe here directly.
-const sessionMeta = reactive(new Map<string, { lastPrompt: string | null; aiTitle: string | null }>());
+type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null };
+const sessionMeta = reactive(new Map<string, SessionMeta>());
 onMounted(() =>
   usePubSub().subscribe("sessions", (d: unknown) => {
     if (!d || typeof d !== "object" || !("id" in d)) return;
-    const m = d as { id: string; lastPrompt?: string | null; aiTitle?: string | null };
-    const prev = sessionMeta.get(m.id) ?? { lastPrompt: null, aiTitle: null };
+    const m = d as { id: string } & Partial<SessionMeta>;
+    const prev = sessionMeta.get(m.id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
     if ("lastPrompt" in m) prev.lastPrompt = m.lastPrompt ?? null;
     if ("aiTitle" in m) prev.aiTitle = m.aiTitle ?? null;
+    if ("lastResponse" in m) prev.lastResponse = m.lastResponse ?? null;
     sessionMeta.set(m.id, prev);
   }),
 );
+// A cell with no session/prompt yet still gets a human label from what it IS running.
+const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "起動直後…" : "空きセル");
 const listRows = computed(() =>
   state.value.cells.map((c) => {
     const meta = c.session ? sessionMeta.get(c.session) : undefined;
     return {
       uid: c.uid,
       cwd: c.cwd,
-      title: meta?.aiTitle || meta?.lastPrompt || (c.session ? c.session.slice(0, 8) : "new terminal"),
-      prompt: meta?.lastPrompt ?? null,
+      agent: c.agent ?? "claude",
       status: statusForSort.value[c.uid] ?? ("idle" as CellStatus),
+      summary: meta?.aiTitle ?? null,
+      prompt: meta?.lastPrompt ?? null,
+      response: meta?.lastResponse ?? null,
+      fallback: fallbackLabel(c),
     };
   }),
 );
