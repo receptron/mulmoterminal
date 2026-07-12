@@ -153,7 +153,7 @@ watch(
 onBeforeUnmount(stopPoll);
 
 // A cell with no session/prompt yet still gets a human label from what it IS running.
-const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "起動直後…" : "空きセル");
+const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "starting…" : "empty");
 const listRows = computed(() =>
   state.value.cells.map((c) => {
     const meta = c.session ? sessionMeta.get(c.session) : undefined;

@@ -30,7 +30,7 @@ export interface CockpitRow {
   response: string | null; // tail of the agent's latest reply
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
 }
-const STATUS_WORD: Record<CellStatus, string> = { working: "実行中", blocked: "入力待ち", done: "完了", idle: "待機" };
+const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
@@ -146,7 +146,14 @@ watch(
 <template>
   <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
     <!-- toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
-    <button v-if="zoomed" type="button" class="view-toggle" :title="listMode ? 'サムネイル表示に切替' : 'リスト表示に切替'" @click="listMode = !listMode">
+    <button
+      v-if="zoomed"
+      type="button"
+      class="view-toggle"
+      :title="listMode ? 'Show thumbnails' : 'Show list'"
+      :aria-label="listMode ? 'Switch to thumbnail strip' : 'Switch to list'"
+      @click="listMode = !listMode"
+    >
       {{ listMode ? "▤" : "☰" }}
     </button>
     <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
@@ -165,9 +172,9 @@ watch(
           <span v-if="row.agent === 'codex'" class="cockpit-agent">codex</span>
           <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
         </span>
-        <span v-if="row.summary" class="cockpit-line"><b>要約</b> {{ row.summary }}</span>
-        <span class="cockpit-line"><b>入力</b> {{ row.prompt || row.fallback || "—" }}</span>
-        <span v-if="row.response" class="cockpit-line cockpit-response"><b>応答</b> {{ row.response }}</span>
+        <span v-if="row.summary" class="cockpit-line"><b>summary</b> {{ row.summary }}</span>
+        <span class="cockpit-line"><b>prompt</b> {{ row.prompt || row.fallback || "—" }}</span>
+        <span v-if="row.response" class="cockpit-line cockpit-response"><b>reply</b> {{ row.response }}</span>
       </button>
     </aside>
     <div ref="zoomMain" class="zoom-main" />
