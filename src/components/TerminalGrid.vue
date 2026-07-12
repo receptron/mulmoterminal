@@ -270,6 +270,15 @@ watch(
   padding: 6px;
   box-sizing: border-box;
 }
+/* The focused cell grows via `transform: scale` (see `.focused`). That growth is a fraction
+   of the cell's size, which for a wide/tall edge cell can push its edge past the viewport's
+   `overflow:hidden` and clip the outermost characters. Inset the tiled grid by an amount that
+   tracks the cell size on each axis — % of width horizontally, vh vertically — so the reserved
+   room matches the scale at any window size and the zoom always stays on screen. (Scoped to the
+   non-zoomed grid so the zoomed filmstrip keeps its own padding.) */
+.stage:not(.zoomed) .grid {
+  padding: calc(6px + 1.5vh) calc(6px + 1.6%);
+}
 
 /* Inert until a cell is zoomed. */
 .zoom-main {
@@ -461,7 +470,7 @@ watch(
     box-shadow 140ms ease;
 }
 .stage:not(.zoomed) .grid > .focused {
-  transform: scale(1.045);
+  transform: scale(1.03);
   z-index: 5;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
