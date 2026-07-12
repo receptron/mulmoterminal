@@ -462,6 +462,9 @@ async function recordToolCallEnd(
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
 const SESSION_LIST_LIMIT = 50;
+// Cap on ids per /api/activity request — a grid can't show more cells than this, and
+// it bounds the query string a client can make us parse.
+const ACTIVITY_IDS_LIMIT = 200;
 
 // Per-session "working" state, driven by Claude hooks (see /api/hook):
 // UserPromptSubmit => Claude started thinking; Stop => it finished.
@@ -1373,6 +1376,24 @@ app.get("/api/session/:id", async (req, res) => {
     usage,
     context,
   });
+});
+
+// Attention state (working / waiting / event) for an explicit set of session ids.
+// The grid uses this to seed the status of its OFF-PAGE cells, which /api/sessions
+// can't serve: it hides dev-terminal sessions and is capped by the list limit. Reads
+// only the in-memory activity map (no disk), so it's cheap to call per grid render.
+app.get("/api/activity", (req, res) => {
+  const raw = typeof req.query.ids === "string" ? req.query.ids : "";
+  const ids = raw
+    .split(",")
+    .filter((id) => SESSION_ID_RE.test(id))
+    .slice(0, ACTIVITY_IDS_LIMIT);
+  const out: Record<string, { working: boolean; waiting: boolean; event: string | null }> = {};
+  for (const id of ids) {
+    const a = activity.get(id) || {};
+    out[id] = { working: a.working ?? false, waiting: a.waiting ?? false, event: a.event ?? null };
+  }
+  res.json(out);
 });
 
 // Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a
