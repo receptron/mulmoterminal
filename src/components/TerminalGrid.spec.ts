@@ -211,6 +211,15 @@ describe("grid cockpit (list view)", () => {
     expect(w.find(".stage").classes()).not.toContain("listmode"); // filmstrip mode
   });
 
+  it("emits list-mode as the roster is toggled off then on, so the parent can pause its poll", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0)]);
+    await nextTick();
+    await w.get(".view-toggle").trigger("click"); // roster -> strip
+    expect(w.emitted("list-mode")?.[0]).toEqual([false]);
+    await w.get(".view-toggle").trigger("click"); // strip -> roster
+    expect(w.emitted("list-mode")?.[1]).toEqual([true]);
+  });
+
   it("emits toggle-expand when a NON-active row is clicked, and not for the active one", async () => {
     const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
     await nextTick();

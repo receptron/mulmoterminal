@@ -54,6 +54,8 @@ const emit = defineEmits<{
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
   (e: "agent", uid: number, value: "claude" | "codex"): void;
+  // Roster shown (true) / thumbnail strip (false), so the parent can pause the roster-only poll.
+  (e: "list-mode", on: boolean): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
@@ -98,6 +100,8 @@ onMounted(() => (mounted.value = true));
 const zoomed = computed(() => props.expandedUid !== null && mounted.value);
 // While zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
 const listMode = ref(true);
+// The roster is the only consumer of the parent's /api/session poll — tell it when we hide it.
+watch(listMode, (on) => emit("list-mode", on));
 
 const stage = ref<HTMLElement | null>(null);
 // The cell currently flying between slots. Also gates the stylesheet: the cells it
