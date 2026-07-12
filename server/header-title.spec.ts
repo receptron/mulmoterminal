@@ -1,12 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import {
   shouldRegenerateTitle,
+  shouldFreshenViewedTitle,
   buildTitlePrompt,
   parseTitleOutput,
   renderTurns,
   titleWindow,
   generateHeaderTitle,
   TITLE_REGEN_EVERY_TURNS,
+  VIEW_TITLE_REGEN_TURNS,
   MAX_TITLE_CHARS,
 } from "./header-title.js";
 import type { RunClaude } from "./command-summary.js";
@@ -32,6 +34,30 @@ describe("shouldRegenerateTitle", () => {
 
   it("does NOT regenerate for a fresh meaningful prompt within the window", () => {
     expect(shouldRegenerateTitle(base)).toBe(false);
+  });
+});
+
+describe("shouldFreshenViewedTitle", () => {
+  const base = { lastTitledUserTurns: null as number | null, currentUserTurns: 4, regenEveryTurns: VIEW_TITLE_REGEN_TURNS };
+
+  it("titles an untitled session (null baseline) on first view", () => {
+    expect(shouldFreshenViewedTitle(base)).toBe(true);
+  });
+
+  it("does NOT title a session with no user turns yet", () => {
+    expect(shouldFreshenViewedTitle({ ...base, currentUserTurns: 0 })).toBe(false);
+  });
+
+  it("does NOT re-title at the same turn count as the last titling (guards /clear resurrection from a frozen transcript)", () => {
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 })).toBe(false);
+  });
+
+  it("re-titles once the transcript advances regenEveryTurns past the last titling", () => {
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS })).toBe(true);
+  });
+
+  it("does NOT re-title within regenEveryTurns of the last titling", () => {
+    expect(shouldFreshenViewedTitle({ ...base, lastTitledUserTurns: 4, currentUserTurns: 4 + VIEW_TITLE_REGEN_TURNS - 1 })).toBe(false);
   });
 });
 
