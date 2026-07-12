@@ -98,10 +98,9 @@ const reorderable = computed(() => state.value.sortMode === "manual");
 const displayCells = computed(() => visibleOrdered(state.value, statusForSort.value));
 const expandedUid = computed(() => zoomedUid(state.value));
 
-// PROTO (list-view): a central text list of every cell — dir + AI summary + last prompt +
-// status — so you can supervise past the 9-thumbnail grid and jump the expanded terminal
-// by picking a row. The server publishes lastPrompt/aiTitle on the "sessions" channel for
-// EVERY session (grid cells included, unlike /api/sessions), so subscribe here directly.
+// The zoomed grid's cockpit roster: a text row per cell — status + dir + AI summary +
+// current prompt + the agent's latest reply — so many parallel agents can be supervised
+// past the 9-thumbnail grid, and the enlarged terminal is switched by picking a row.
 type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null };
 const sessionMeta = reactive(new Map<string, SessionMeta>());
 // Single source of truth for the roster's prompt / summary / reply: each cell's on-disk

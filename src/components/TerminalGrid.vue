@@ -34,7 +34,7 @@ const STATUS_WORD: Record<CellStatus, string> = { working: "実行中", blocked:
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
-  // PROTO: a text row per cell for the cockpit list shown beside the expanded terminal.
+  // A text row per cell for the cockpit list shown beside the expanded terminal.
   listRows: CockpitRow[];
   cancelUid: number | null;
   defaultCwd: string | null;
@@ -97,7 +97,7 @@ const zoomMain = ref<HTMLElement | null>(null);
 const mounted = ref(false);
 onMounted(() => (mounted.value = true));
 const zoomed = computed(() => props.expandedUid !== null && mounted.value);
-// PROTO: while zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
+// While zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
 const listMode = ref(true);
 
 const stage = ref<HTMLElement | null>(null);
@@ -132,7 +132,7 @@ watch(
   (to, from) => {
     const uid = to ?? from;
     if (uid === null || uid === undefined) return;
-    // PROTO: swapping between two already-zoomed cells (cockpit list click) has no on-screen
+    // swapping between two already-zoomed cells (cockpit list click) has no on-screen
     // source to fly from — the incoming cell sits off-screen in `.grid` — so skip the FLIP.
     if (to !== null && from !== null) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -146,11 +146,11 @@ watch(
 
 <template>
   <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
-    <!-- PROTO: toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
+    <!-- toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
     <button v-if="zoomed" type="button" class="view-toggle" :title="listMode ? 'サムネイル表示に切替' : 'リスト表示に切替'" @click="listMode = !listMode">
       {{ listMode ? "▤" : "☰" }}
     </button>
-    <!-- PROTO cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
+    <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
          reply). Click a row to swap which terminal is enlarged. -->
     <aside v-if="zoomed && listMode" class="cockpit">
       <button
@@ -278,7 +278,7 @@ watch(
   min-width: 0;
 }
 
-/* PROTO list mode: text roster on the left, the expanded terminal on the right. */
+/* List mode: text roster on the left, the expanded terminal on the right. */
 .stage.zoomed.listmode {
   flex-direction: row;
 }

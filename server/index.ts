@@ -472,7 +472,7 @@ const LAST_PROMPT_CAP = 200;
 // model, it takes precedence over lastPrompt in the cell header. Kept in memory (never
 // written into Claude's transcript); a resumed session falls back to any on-disk title.
 const aiTitles = new Map<string, string>(); // id -> AI title
-// PROTO (grid roster): the last few lines of the agent's most recent reply, refreshed when
+// the last few lines of the agent's most recent reply, refreshed when
 // a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
 const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
 const LAST_RESPONSE_MAX = 400;
