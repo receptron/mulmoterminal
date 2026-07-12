@@ -42,6 +42,7 @@ import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
 import { activityHookEffects } from "./activity-hook.js";
+import { buildWaitingSnapshot, parseWaitingState } from "./waiting-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -470,6 +471,36 @@ const ACTIVITY_IDS_LIMIT = 200;
 // UserPromptSubmit => Claude started thinking; Stop => it finished.
 const activity = new Map<string, Activity>(); // id -> { working, event, at }
 
+// Restore the blocked/done (`waiting`) flags across a server restart, so a session
+// blocked on a permission prompt before the restart doesn't reattach as idle (Claude
+// won't re-fire Notification while already sitting at the prompt). `working` is NOT
+// persisted — a turn may have finished during downtime, so a restored working=true
+// could stick; the live hooks re-derive it. Keyed to `event` so blocked (Notification)
+// vs done (Stop) survives. Mirrors the dev-terminal-sessions persist/hydrate pattern.
+const WAITING_STATE_FILE = path.join(MULMOTERMINAL_HOME, "waiting-state.json");
+const waitingStateHydrated: Promise<void> = (async () => {
+  try {
+    const parsed = JSON.parse(await fs.readFile(WAITING_STATE_FILE, "utf8"));
+    for (const { id, event } of parseWaitingState(parsed, (x) => SESSION_ID_RE.test(x))) {
+      // Don't clobber a live update that already landed while hydration was in flight.
+      if (!activity.has(id)) activity.set(id, { waiting: true, working: false, event, at: Date.now() });
+    }
+  } catch {
+    // no file yet / unreadable => nothing to restore
+  }
+})();
+
+// Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
+// CURRENT waiting entries at write time, so the last link always writes the complete set.
+let waitingPersist: Promise<void> = Promise.resolve();
+function persistWaitingState(): void {
+  waitingPersist = waitingPersist
+    .then(() => waitingStateHydrated)
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.writeFile(WAITING_STATE_FILE, JSON.stringify(buildWaitingSnapshot(activity, (id) => hiddenSessions.has(id)))))
+    .catch((e) => console.error(`[waiting-state] failed to persist: ${messageOf(e)}`));
+}
+
 // Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
 // on the grid cell header so you can tell at a glance what each terminal is about. A
 // trivial ack ("ok", "merge") doesn't replace it (see the hook handler), so a short
@@ -690,6 +721,8 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   if ((prev.waiting ?? false) === waiting) return;
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
+  // Persist the blocked/done set so it survives a server restart (see WAITING_STATE_FILE).
+  persistWaitingState();
 
   // A detached session that just started needing the user escalates from the short
   // idle grace to the long one — re-arm so it isn't reaped before they can return.
