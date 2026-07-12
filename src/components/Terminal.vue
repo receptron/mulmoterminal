@@ -38,9 +38,10 @@ const props = defineProps<{
   cwd?: string | null;
   devTerminal?: boolean;
   command?: RunCommand | null;
-  // A configured launcher (shell/codex/command) — persistent & reattachable, connects
-  // to /ws/launch instead of resuming a Claude session.
-  launcher?: { index: number } | null;
+  // A configured launcher (shell/codex/command) by index, or the OS default shell
+  // (`{ shell: true }`) — persistent & reattachable, connects to /ws/launch instead of
+  // resuming a Claude session.
+  launcher?: { index: number } | { shell: true } | null;
   // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
   codex?: boolean;
   runMenu?: boolean;
@@ -99,9 +100,9 @@ const { context: sessionContext } = useSessionContext(
   computed(() => props.sessionId),
   serverCwd,
 );
-// User-configured header action buttons for this session's dir (GET /api/header). Additive: with no
-// config the list is empty so the header is unchanged. They target the running agent session, so they're
-// suppressed on a command/launcher terminal — those embed Terminal without a session and don't handle `run`.
+// Resolved header action buttons for this session's dir (GET /api/header) — the user's config, or the
+// built-in defaults when unconfigured. They target the running agent session, so they're suppressed on a
+// command/launcher terminal — those embed Terminal without a session and don't handle `run`.
 const headerButtonsCwd = computed(() => (props.command || props.launcher ? null : serverCwd.value));
 const { buttons: headerButtons } = useHeaderButtons({
   cwd: headerButtonsCwd,

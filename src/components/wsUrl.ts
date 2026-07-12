@@ -50,17 +50,19 @@ export interface LaunchWsUrlInput {
   secure: boolean;
   sessionId: string | null; // reattach this persistent launcher session; null => fresh
   cwd?: string | null;
-  launcher: number; // position in the configured launcher list (the server resolves it)
+  launcher?: number; // position in the configured launcher list (the server resolves it)
+  shell?: boolean; // run the OS default shell ($SHELL) — no configured index (the header "new terminal" button)
 }
 
-// The launcher-terminal endpoint (a configured shell/codex/command). Persistent &
-// reattachable like /ws: the browser sends the launcher INDEX (config is the allowlist)
-// plus the session id to reattach. On a cold spawn the server resolves the index.
-export function buildLaunchWsUrl({ host, secure, sessionId, cwd, launcher }: LaunchWsUrlInput): string {
+// The launcher-terminal endpoint (a configured shell/codex/command, or the OS default shell).
+// Persistent & reattachable like /ws: the browser sends the launcher INDEX (config is the allowlist)
+// — or `shell=1` for the OS default shell, which needs no index — plus the session id to reattach.
+export function buildLaunchWsUrl({ host, secure, sessionId, cwd, launcher, shell }: LaunchWsUrlInput): string {
   const params = new URLSearchParams();
   if (sessionId) params.set("session", sessionId);
   if (cwd) params.set("cwd", cwd);
-  params.set("launcher", String(launcher));
+  if (shell) params.set("shell", "1");
+  else params.set("launcher", String(launcher));
   const proto = secure ? "wss:" : "ws:";
   return `${proto}//${host}/ws/launch?${params.toString()}`;
 }

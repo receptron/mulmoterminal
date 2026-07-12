@@ -172,6 +172,7 @@ or the in-app file explorer with `{ "run": "open", "open": { "files": "${dir}" }
     - `reveal` — a directory path → the OS file manager (Finder/Explorer/xdg-open),
     - `files` — a directory path → the in-app file explorer,
     - `view` — an in-app overlay: `"diff"` / `"prs"` / `"wiki"` / `"collections"` / `"accounting"`,
+    - `terminal` — a directory → open a NEW grid cell running the OS default shell (`$SHELL`) there, next to the current cell,
     - `pickFile: true` — open the OS file dialog and insert the chosen path(s) into the session.
 - `when` (optional) visibility condition, `order` (optional) sort key (lower first, unset last).
 

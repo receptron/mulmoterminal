@@ -94,6 +94,8 @@ function sanitizeOpen(input: unknown): OpenTarget | undefined {
   if (reveal) target.reveal = reveal;
   if (files) target.files = files;
   if (view && isViewTarget(view)) target.view = view;
+  const terminal = str(input.terminal);
+  if (terminal) target.terminal = terminal;
   if (input.pickFile === true) target.pickFile = true;
   return Object.keys(target).length ? target : undefined;
 }

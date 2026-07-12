@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   accountingViewOpen: vi.fn(),
   submitText: vi.fn(),
   insertText: vi.fn(),
+  openTerminalAt: vi.fn(),
 }));
 vi.mock("./useFilesView", () => ({ filesGotoIndex: m.filesGotoIndex }));
 vi.mock("./usePrsView", () => ({ prsGotoIndex: m.prsGotoIndex }));
@@ -15,6 +16,7 @@ vi.mock("./useWikiBrowse", () => ({ wikiGotoIndex: m.wikiGotoIndex }));
 vi.mock("./useCollectionBrowse", () => ({ browseGotoIndex: m.browseGotoIndex }));
 vi.mock("./useAccountingView", () => ({ accountingViewOpen: m.accountingViewOpen }));
 vi.mock("./useTerminalConnections", () => ({ submitText: m.submitText, insertText: m.insertText }));
+vi.mock("./useNewTerminal", () => ({ openTerminalAt: m.openTerminalAt }));
 
 import { runHeaderButton } from "./useHeaderAction";
 import type { HeaderButton } from "./useHeaderButtons";
@@ -59,6 +61,11 @@ describe("runHeaderButton", () => {
     expect(m.prsGotoIndex).toHaveBeenCalled();
     runHeaderButton(btn({ run: "open", open: { view: "diff" } }), null, "/c");
     expect(m.filesGotoIndex).toHaveBeenLastCalledWith("/c");
+  });
+
+  it("open terminal → openTerminalAt with the dir and the triggering cell's slot key", () => {
+    runHeaderButton(btn({ run: "open", open: { terminal: "/proj" } }), "cell-4", "/proj");
+    expect(m.openTerminalAt).toHaveBeenCalledWith("/proj", "cell-4");
   });
 
   it("open pickFile → POST /api/pick-file, inserts the chosen path(s) into the slot", async () => {

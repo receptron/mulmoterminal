@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
-import type { CellStatus, CellLauncher } from "./gridTabs";
+import { isShellLauncher, type CellStatus, type CellLauncher } from "./gridTabs";
 
 // A grid cell running a configured launch command (a plain shell, codex, any
 // interactive program) instead of Claude. Unlike CommandCell this is PERSISTENT: it
@@ -45,7 +45,7 @@ const connectKey = ref(0);
 const finished = ref(false);
 
 const dirDisplay = computed(() => formatCwd(props.cwd, props.home));
-const target = computed(() => ({ index: props.launcher.index }));
+const target = computed(() => (isShellLauncher(props.launcher) ? { shell: true as const } : { index: props.launcher.index }));
 
 // Running counts as "working"; once the process exits it's idle (never "waiting").
 watch(finished, (done) => emit("status", done ? "idle" : "working"), { immediate: true });
