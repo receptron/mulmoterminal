@@ -24,6 +24,9 @@ export interface AppConfig {
   buttons: HeaderButton[] | null;
   // Global header display chips, or null when unconfigured (the client keeps its default set).
   chips: HeaderChip[] | null;
+  // Send a Web Push (sendPush Cloud Function) when a task finishes. Off by default; only
+  // fires while the RemoteHost channel is connected (that's what supplies the Firebase auth).
+  pushEnabled: boolean;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -98,9 +101,22 @@ export function sanitizeSoundFile(input: unknown): string | null {
   return trimmed && path.isAbsolute(trimmed) ? trimmed : null;
 }
 
+export function sanitizePushEnabled(input: unknown): boolean {
+  return input === true;
+}
+
 // Fresh object each call — callers hold and mutate the returned config in place, so a
 // shared default constant would be corrupted across loads.
-const emptyConfig = (): AppConfig => ({ cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null });
+const emptyConfig = (): AppConfig => ({
+  cwdPresets: [],
+  soundFile: null,
+  prRepos: [],
+  launchers: [],
+  userMcpServers: [],
+  buttons: null,
+  chips: null,
+  pushEnabled: false,
+});
 
 export function loadAppConfig(file: string): AppConfig {
   try {
@@ -114,6 +130,7 @@ export function loadAppConfig(file: string): AppConfig {
       userMcpServers: sanitizeUserMcpServers(raw?.userMcpServers),
       buttons: sanitizeButtons(raw?.buttons),
       chips: sanitizeChips(raw?.chips),
+      pushEnabled: sanitizePushEnabled(raw?.pushEnabled),
     };
   } catch {
     return emptyConfig();
@@ -134,6 +151,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     userMcpServers: body.userMcpServers !== undefined ? sanitizeUserMcpServers(body.userMcpServers) : base.userMcpServers,
     buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : base.buttons,
     chips: body.chips !== undefined ? sanitizeChips(body.chips) : base.chips,
+    pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : base.pushEnabled,
   };
 }
 
@@ -150,6 +168,7 @@ export function saveAppConfig(file: string, config: AppConfig): boolean {
       userMcpServers: config.userMcpServers,
       buttons: config.buttons,
       chips: config.chips,
+      pushEnabled: config.pushEnabled,
     };
     writeFileSync(file, JSON.stringify(payload, null, 2));
     return true;

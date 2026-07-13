@@ -7,6 +7,7 @@ import {
   sanitizeRepos,
   sanitizeLaunchers,
   sanitizeUserMcpServers,
+  sanitizePushEnabled,
   loadAppConfig,
   saveAppConfig,
   mergeConfigUpdate,
@@ -28,6 +29,17 @@ describe("sanitizeSoundFile", () => {
     expect(sanitizeSoundFile("relative/path.wav")).toBeNull();
     expect(sanitizeSoundFile("./a.wav")).toBeNull();
     expect(sanitizeSoundFile("../a.wav")).toBeNull();
+  });
+});
+
+describe("sanitizePushEnabled", () => {
+  it("is true only for the boolean true; everything else is false", () => {
+    expect(sanitizePushEnabled(true)).toBe(true);
+    expect(sanitizePushEnabled(false)).toBe(false);
+    expect(sanitizePushEnabled("true")).toBe(false);
+    expect(sanitizePushEnabled(1)).toBe(false);
+    expect(sanitizePushEnabled(null)).toBe(false);
+    expect(sanitizePushEnabled(undefined)).toBe(false);
   });
 });
 
@@ -86,7 +98,7 @@ describe("sanitizeUserMcpServers", () => {
 });
 
 describe("loadAppConfig / saveAppConfig", () => {
-  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null };
+  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null, pushEnabled: false };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
@@ -98,6 +110,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       userMcpServers: [{ id: "weather", url: "http://localhost:9000/mcp" }],
       buttons: [{ id: "pr", label: "PR", run: "shell" as const, cmd: "gh pr create" }],
       chips: ["dir", "git"],
+      pushEnabled: true,
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -135,6 +148,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       userMcpServers: [{ id: "ok", url: "https://x/mcp" }],
       buttons: null,
       chips: null,
+      pushEnabled: false,
     });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -165,6 +179,7 @@ describe("mergeConfigUpdate", () => {
     userMcpServers: [],
     buttons: [{ id: "reveal", label: "Reveal in the file manager", run: "open", emoji: "📂", open: { reveal: "${dir}" } }],
     chips: ["git", "diff", "ctx", "usage"],
+    pushEnabled: false,
     ...over,
   });
 
@@ -175,6 +190,11 @@ describe("mergeConfigUpdate", () => {
   it("keeps fields the body omits — a chips-only update must NOT wipe buttons", () => {
     const base = baseConfig();
     expect(mergeConfigUpdate(base, { chips: ["git"] }).buttons).toEqual(base.buttons);
+  });
+
+  it("applies pushEnabled from the body and keeps it when omitted", () => {
+    expect(mergeConfigUpdate(baseConfig(), { pushEnabled: true }).pushEnabled).toBe(true);
+    expect(mergeConfigUpdate(baseConfig({ pushEnabled: true }), { chips: ["git"] }).pushEnabled).toBe(true);
   });
 
   it("merging on a RE-READ disk base preserves another instance's write (the clobber fix)", () => {
