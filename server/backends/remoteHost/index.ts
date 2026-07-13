@@ -20,7 +20,7 @@ import { createRemoteHostHandlers } from "./handlers.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
-import { currentFirestore, currentStorage, currentUid, exportSession, restore, RemoteHostSessionExpiredError, signIn, signOut } from "./session.js";
+import { currentFirestore, currentStorage, currentUid, exportSession, reconnectErrorStatus, restore, signIn, signOut } from "./session.js";
 
 const HOST_ID = "mulmoterminal";
 const PREFIX = "[remote-host]";
@@ -68,17 +68,21 @@ interface StatusResponse {
   // The session blob the browser parks in localStorage; null when disconnected.
   session: string | null;
 }
+interface ErrorResponse {
+  error: string;
+}
+type RemoteHostResponse = StatusResponse | ErrorResponse;
 
 // Every response carries the current session blob so the browser can keep its
 // localStorage copy fresh (the refresh token can rotate); null when disconnected.
-const respond = (res: Response<StatusResponse>, status: RemoteHostStatus): Response => res.json({ status, session: exportSession() });
+const respond = (res: Response<RemoteHostResponse>, status: RemoteHostStatus): Response => res.json({ status, session: exportSession() });
 
 export interface RemoteHostRouteOptions {
   isAllowedOrigin: (origin?: string) => boolean;
 }
 
 export function mountRemoteHostRoutes(app: Express, { isAllowedOrigin }: RemoteHostRouteOptions): void {
-  const guard = (req: Request, res: Response): boolean => {
+  const guard = (req: Request, res: Response<RemoteHostResponse>): boolean => {
     if (!isAllowedOrigin(req.headers.origin)) {
       res.status(403).json({ error: "forbidden origin" });
       return false;
@@ -91,14 +95,14 @@ export function mountRemoteHostRoutes(app: Express, { isAllowedOrigin }: RemoteH
   };
 
   // GET status — connected + uid + the current session blob.
-  app.get("/api/remote-host/status", (req: Request, res: Response<StatusResponse>) => {
+  app.get("/api/remote-host/status", (req: Request, res: Response<RemoteHostResponse>) => {
     if (!guard(req, res) || !lifecycle) return;
     respond(res, lifecycle.status());
   });
 
   // POST connect { idToken } — sign in as the user + start the runner. The idToken
   // is a secret: never logged, accepted over the local origin only.
-  app.post("/api/remote-host/connect", async (req: Request, res: Response<StatusResponse>) => {
+  app.post("/api/remote-host/connect", async (req: Request, res: Response<RemoteHostResponse>) => {
     if (!guard(req, res) || !lifecycle) return;
     const idToken = isRecord(req.body) && typeof req.body.idToken === "string" ? req.body.idToken : "";
     if (!idToken) {
@@ -115,7 +119,7 @@ export function mountRemoteHostRoutes(app: Express, { isAllowedOrigin }: RemoteH
   // POST reconnect { session } — popup-free restore from a browser-parked blob. A
   // genuinely expired/invalid blob is 401 (client drops it, falls back to connect);
   // transient failures are 5xx so the client KEEPS the blob and can retry later.
-  app.post("/api/remote-host/reconnect", async (req: Request, res: Response<StatusResponse>) => {
+  app.post("/api/remote-host/reconnect", async (req: Request, res: Response<RemoteHostResponse>) => {
     if (!guard(req, res) || !lifecycle) return;
     const session = isRecord(req.body) && typeof req.body.session === "string" ? req.body.session : "";
     if (!session) {
@@ -125,16 +129,14 @@ export function mountRemoteHostRoutes(app: Express, { isAllowedOrigin }: RemoteH
     try {
       respond(res, await lifecycle.reconnect(session));
     } catch (err) {
-      if (err instanceof RemoteHostSessionExpiredError) {
-        res.status(401).json({ error: "remote-host session could not be restored" });
-        return;
-      }
-      res.status(500).json({ error: errorText(err) });
+      // 401 = the blob is genuinely expired/invalid (client drops it, falls back to
+      // Connect); 5xx = transient (client keeps the blob and can retry later).
+      res.status(reconnectErrorStatus(err)).json({ error: errorText(err) });
     }
   });
 
   // POST disconnect — stop the runner + sign out.
-  app.post("/api/remote-host/disconnect", async (req: Request, res: Response<StatusResponse>) => {
+  app.post("/api/remote-host/disconnect", async (req: Request, res: Response<RemoteHostResponse>) => {
     if (!guard(req, res) || !lifecycle) return;
     try {
       respond(res, await lifecycle.disconnect());

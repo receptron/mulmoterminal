@@ -12,35 +12,9 @@ import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { renderSVG } from "uqr";
 
 import { auth } from "../config/firebase";
-
-interface RemoteHostStatus {
-  connected: boolean;
-  uid: string | null;
-}
-
-// The server's Firebase session blob (refresh token included). We park it in
-// localStorage so a server restart can reconnect without a Google popup (case A',
-// mulmoserver#50). Same-machine (localhost) trust model. Wrapped so a
-// storage-disabled context (private mode) degrades to "no persistence".
-const SESSION_KEY = "remoteHost.session";
-// Reconnect HTTP status that means "this blob is expired/invalid" (vs a transient
-// failure) — only then do we drop the parked session.
-const UNAUTHORIZED = 401;
-const loadStoredSession = (): string | null => {
-  try {
-    return localStorage.getItem(SESSION_KEY);
-  } catch {
-    return null;
-  }
-};
-const persistSession = (blob: string | null): void => {
-  try {
-    if (blob) localStorage.setItem(SESSION_KEY, blob);
-    else localStorage.removeItem(SESSION_KEY);
-  } catch {
-    // storage unavailable — reconnect just won't survive a restart
-  }
-};
+// Session parking (localStorage) + reconnect-outcome decision live in a plain module
+// so they're unit-testable without mounting this Firebase-importing component.
+import { loadStoredSession, persistSession, reconnectAction, type FetchResult, type RemoteHostStatus } from "./remoteHostSession";
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
 const MOBILE_URL = "https://mulmoserver.web.app";
@@ -54,8 +28,6 @@ const status = ref<RemoteHostStatus>({ connected: false, uid: null });
 const rootRef = useTemplateRef<HTMLElement>("root");
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-
-type FetchResult = { ok: true; status: RemoteHostStatus; session: string | null } | { ok: false; error: string; httpStatus: number };
 
 async function fetchStatus(url: string, method: "GET" | "POST", body?: unknown): Promise<FetchResult> {
   try {
@@ -96,12 +68,10 @@ async function tryAutoReconnect() {
   const blob = loadStoredSession();
   if (!blob) return;
   const res = await fetchStatus("/api/remote-host/reconnect", "POST", { session: blob });
-  if (res.ok) {
-    status.value = res.status;
-    persistSession(res.session);
-  } else if (res.httpStatus === UNAUTHORIZED) {
-    persistSession(null);
-  }
+  if (res.ok) status.value = res.status;
+  const action = reconnectAction(res);
+  if (action === "park" && res.ok) persistSession(res.session);
+  else if (action === "drop") persistSession(null);
 }
 
 function onOutside(event: PointerEvent) {

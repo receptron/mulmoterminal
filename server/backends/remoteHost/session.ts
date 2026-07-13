@@ -27,6 +27,11 @@ export class RemoteHostSessionExpiredError extends Error {
   }
 }
 
+// Map a reconnect failure to an HTTP status: 401 for a genuinely expired/invalid blob
+// (the client drops the parked session), 500 for a transient failure (the client keeps
+// it and can retry later — a blip must not force a re-login).
+export const reconnectErrorStatus = (err: unknown): 401 | 500 => (err instanceof RemoteHostSessionExpiredError ? 401 : 500);
+
 const uidOf = (opened: RemoteHostSessionHandles): string => {
   const uid = opened.auth.currentUser?.uid;
   if (!uid) throw new Error("remote-host session opened without an authenticated user");
