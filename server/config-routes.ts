@@ -8,7 +8,16 @@ import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
 import { sanitizePresets } from "./cwd-presets.js";
-import { loadAppConfig, saveAppConfig, sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, sanitizeUserMcpServers, type AppConfig } from "./app-config.js";
+import {
+  loadAppConfig,
+  saveAppConfig,
+  sanitizeSoundFile,
+  sanitizeRepos,
+  sanitizeLaunchers,
+  sanitizeUserMcpServers,
+  sanitizePushEnabled,
+  type AppConfig,
+} from "./app-config.js";
 import { sanitizeButtons, sanitizeChips, type HeaderConfig } from "./header-config.js";
 import { type Launcher, type UserMcpServer } from "./config-schema.js";
 
@@ -37,6 +46,12 @@ export function getUserMcpServers(): UserMcpServer[] {
 // change on the next fetch without a restart.
 export function getHeaderConfig(): HeaderConfig {
   return { buttons: config.buttons, chips: config.chips };
+}
+
+// Whether to send a Web Push when a task finishes — read live at the Stop hook so a
+// settings toggle takes effect without a restart.
+export function getPushEnabled(): boolean {
+  return config.pushEnabled;
 }
 
 // Body fields that must be an array when present (a partial POST /api/config may omit any).
@@ -70,6 +85,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     userMcpServers: config.userMcpServers,
     buttons: config.buttons,
     chips: config.chips,
+    pushEnabled: config.pushEnabled,
   });
 
   app.get("/api/config", (_req, res) => {
@@ -92,6 +108,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
       userMcpServers: body.userMcpServers !== undefined ? sanitizeUserMcpServers(body.userMcpServers) : config.userMcpServers,
       buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : config.buttons,
       chips: body.chips !== undefined ? sanitizeChips(body.chips) : config.chips,
+      pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : config.pushEnabled,
     };
     // Stage, persist, commit in-memory only on success — a failed write must not
     // leave GET exposing values that won't survive a restart.

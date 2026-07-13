@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, sanitizeUserMcpServers, loadAppConfig, saveAppConfig } from "./app-config";
+import { sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, sanitizeUserMcpServers, sanitizePushEnabled, loadAppConfig, saveAppConfig } from "./app-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-appcfg-"));
 
@@ -19,6 +19,17 @@ describe("sanitizeSoundFile", () => {
     expect(sanitizeSoundFile("relative/path.wav")).toBeNull();
     expect(sanitizeSoundFile("./a.wav")).toBeNull();
     expect(sanitizeSoundFile("../a.wav")).toBeNull();
+  });
+});
+
+describe("sanitizePushEnabled", () => {
+  it("is true only for the boolean true; everything else is false", () => {
+    expect(sanitizePushEnabled(true)).toBe(true);
+    expect(sanitizePushEnabled(false)).toBe(false);
+    expect(sanitizePushEnabled("true")).toBe(false);
+    expect(sanitizePushEnabled(1)).toBe(false);
+    expect(sanitizePushEnabled(null)).toBe(false);
+    expect(sanitizePushEnabled(undefined)).toBe(false);
   });
 });
 
@@ -77,7 +88,7 @@ describe("sanitizeUserMcpServers", () => {
 });
 
 describe("loadAppConfig / saveAppConfig", () => {
-  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null };
+  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null, pushEnabled: false };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
@@ -89,6 +100,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       userMcpServers: [{ id: "weather", url: "http://localhost:9000/mcp" }],
       buttons: [{ id: "pr", label: "PR", run: "shell" as const, cmd: "gh pr create" }],
       chips: ["dir", "git"],
+      pushEnabled: true,
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -126,6 +138,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       userMcpServers: [{ id: "ok", url: "https://x/mcp" }],
       buttons: null,
       chips: null,
+      pushEnabled: false,
     });
     rmSync(dir, { recursive: true, force: true });
   });

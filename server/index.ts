@@ -15,7 +15,8 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig } from "./config-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled } from "./config-routes.js";
+import { sendWebPush } from "./web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
 import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
 import { prUrlForBranch } from "./pr-for-branch.js";
@@ -1107,6 +1108,24 @@ function handleActivityHook(sessionId: string, event: string, active: boolean) {
     if (eff.kind === "working") setWorking(sessionId, eff.value, event);
     else setWaiting(sessionId, eff.value, event);
   }
+  // A background turn just ended (same attention-flag semantics as the beep: not the pane
+  // the user is viewing) → push once. Stop is one event per finished turn, so this fires
+  // once even though a background Stop publishes twice (waiting + working).
+  if (event === "Stop" && !active) notifyTaskFinished(sessionId);
+}
+
+const PUSH_TITLE_MAX = 80;
+const PUSH_BODY_MAX = 160;
+// Notify the user's devices that a background task finished, when Web Push is enabled.
+// Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
+function notifyTaskFinished(sessionId: string): void {
+  if (!getPushEnabled()) return;
+  const cwd = ptys.get(sessionId)?.cwd ?? null;
+  const where = cwd ? path.basename(cwd) : "session";
+  const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  const title = `✅ ${where}`.slice(0, PUSH_TITLE_MAX);
+  const body = (what || "タスクが完了しました").slice(0, PUSH_BODY_MAX);
+  void sendWebPush(title, body);
 }
 
 interface HookToolPayload {

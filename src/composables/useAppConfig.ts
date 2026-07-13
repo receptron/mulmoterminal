@@ -9,6 +9,11 @@ import type { UserMcpServer } from "../components/userMcp";
 // other (each useAppConfig() otherwise has its own local refs).
 const soundFile = ref<string | null>(null);
 
+// Whether the server sends a Web Push when a task finishes — a SINGLETON like the
+// others so the settings toggle (openable from either view) reflects the saved state.
+// The actual sending is server-side; the client only reads/writes this flag.
+const pushEnabled = ref(false);
+
 // Cross-repo PR list's repos — also a SINGLETON, so the settings modal (openable from
 // either view) and any future reader share one list; a save in one view is seen by the
 // other instead of each useAppConfig() keeping a divergent copy.
@@ -161,6 +166,12 @@ async function saveSound(file: string | null): Promise<boolean> {
   if (r.ok) soundFile.value = typeof r.value === "string" ? r.value : null;
   return r.ok;
 }
+// Persist the "send a Web Push on task finish" toggle (partial update).
+async function savePushEnabled(on: boolean): Promise<boolean> {
+  const r = await postConfigField<unknown>("pushEnabled", on);
+  if (r.ok) pushEnabled.value = r.value === true;
+  return r.ok;
+}
 // Persist the cross-repo PR list's repos (partial update, other fields untouched).
 async function savePrRepos(next: string[]): Promise<boolean> {
   const r = await postConfigField<string[]>("prRepos", next);
@@ -202,6 +213,7 @@ export function useAppConfig() {
       home.value = c.home ?? null;
       adoptServerPresets(c.cwdPresets, version);
       soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
+      pushEnabled.value = c.pushEnabled === true;
       prRepos.value = Array.isArray(c.prRepos) ? c.prRepos : [];
       launchers.value = Array.isArray(c.launchers) ? c.launchers : [];
       userMcpServers.value = Array.isArray(c.userMcpServers) ? c.userMcpServers : [];
@@ -219,6 +231,7 @@ export function useAppConfig() {
     launchers,
     userMcpServers,
     soundFile,
+    pushEnabled,
     saving,
     error,
     loadConfig,
@@ -226,6 +239,7 @@ export function useAppConfig() {
     recordPreset,
     removePreset,
     saveSound,
+    savePushEnabled,
     savePrRepos,
     saveLaunchers,
     saveUserMcpServers,
