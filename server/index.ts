@@ -43,7 +43,7 @@ import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
 import { activityHookEffects } from "./activity-hook.js";
-import { buildWaitingSnapshot, parseWaitingState } from "./waiting-state.js";
+import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./codex-args.js";
@@ -473,19 +473,20 @@ const ACTIVITY_IDS_LIMIT = 200;
 // UserPromptSubmit => Claude started thinking; Stop => it finished.
 const activity = new Map<string, Activity>(); // id -> { working, event, at }
 
-// Restore the blocked/done (`waiting`) flags across a server restart, so a session
-// blocked on a permission prompt before the restart doesn't reattach as idle (Claude
-// won't re-fire Notification while already sitting at the prompt). `working` is NOT
-// persisted — a turn may have finished during downtime, so a restored working=true
-// could stick; the live hooks re-derive it. Keyed to `event` so blocked (Notification)
-// vs done (Stop) survives. Mirrors the dev-terminal-sessions persist/hydrate pattern.
-const WAITING_STATE_FILE = path.join(MULMOTERMINAL_HOME, "waiting-state.json");
-const waitingStateHydrated: Promise<void> = (async () => {
+// Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a
+// --watch hot reload), so a live session doesn't reattach as idle. `waiting` matters because
+// Claude won't re-fire Notification while already sitting at a prompt; `working` because a
+// turn usually outlives the ~1s restart and its later Stop hook self-corrects a stale flag
+// (the only stale case is a turn that finished DURING the restart window — corrected on the
+// user's next turn). Read paths await hydration (see /api/activity, /api/session) so a
+// reconnect re-fetch can't race it back to idle. Mirrors the dev-terminal-sessions pattern.
+const ACTIVITY_STATE_FILE = path.join(MULMOTERMINAL_HOME, "activity-state.json");
+const activityStateHydrated: Promise<void> = (async () => {
   try {
-    const parsed = JSON.parse(await fs.readFile(WAITING_STATE_FILE, "utf8"));
-    for (const { id, event } of parseWaitingState(parsed, (x) => SESSION_ID_RE.test(x))) {
+    const parsed = JSON.parse(await fs.readFile(ACTIVITY_STATE_FILE, "utf8"));
+    for (const { id, working, waiting, event } of parseActivityState(parsed, (x) => SESSION_ID_RE.test(x))) {
       // Don't clobber a live update that already landed while hydration was in flight.
-      if (!activity.has(id)) activity.set(id, { waiting: true, working: false, event, at: Date.now() });
+      if (!activity.has(id)) activity.set(id, { working, waiting, event, at: Date.now() });
     }
   } catch {
     // no file yet / unreadable => nothing to restore
@@ -493,14 +494,14 @@ const waitingStateHydrated: Promise<void> = (async () => {
 })();
 
 // Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
-// CURRENT waiting entries at write time, so the last link always writes the complete set.
-let waitingPersist: Promise<void> = Promise.resolve();
-function persistWaitingState(): void {
-  waitingPersist = waitingPersist
-    .then(() => waitingStateHydrated)
+// CURRENT working/waiting entries at write time, so the last link always writes the complete set.
+let activityPersist: Promise<void> = Promise.resolve();
+function persistActivityState(): void {
+  activityPersist = activityPersist
+    .then(() => activityStateHydrated)
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(WAITING_STATE_FILE, JSON.stringify(buildWaitingSnapshot(activity, (id) => hiddenSessions.has(id)))))
-    .catch((e) => console.error(`[waiting-state] failed to persist: ${messageOf(e)}`));
+    .then(() => fs.writeFile(ACTIVITY_STATE_FILE, JSON.stringify(buildActivitySnapshot(activity, (id) => hiddenSessions.has(id)))))
+    .catch((e) => console.error(`[activity-state] failed to persist: ${messageOf(e)}`));
 }
 
 // Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
@@ -717,6 +718,8 @@ function setWorking(id: string, working: boolean, event?: string) {
   if ((prev.working ?? false) === working) return;
   activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
+  // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
+  persistActivityState();
 
   // A background session (no attached client) that just finished a turn is no
   // longer `working`. Don't kill it outright — if it ended its turn to ask the
@@ -734,8 +737,8 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   if ((prev.waiting ?? false) === waiting) return;
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
-  // Persist the blocked/done set so it survives a server restart (see WAITING_STATE_FILE).
-  persistWaitingState();
+  // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
+  persistActivityState();
 
   // A detached session that just started needing the user escalates from the short
   // idle grace to the long one — re-arm so it isn't reaped before they can return.
@@ -1455,6 +1458,7 @@ app.get("/api/session/:id", async (req, res) => {
   const { id } = req.params;
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  await activityStateHydrated; // a reconnect re-fetch must see the restored working/waiting, not idle
   const a = activity.get(id) || {};
   const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
@@ -1481,7 +1485,8 @@ app.get("/api/session/:id", async (req, res) => {
 // The grid uses this to seed the status of its OFF-PAGE cells, which /api/sessions
 // can't serve: it hides dev-terminal sessions and is capped by the list limit. Reads
 // only the in-memory activity map (no disk), so it's cheap to call per grid render.
-app.get("/api/activity", (req, res) => {
+app.get("/api/activity", async (req, res) => {
+  await activityStateHydrated; // the grid re-seeds this on reconnect — must not race hydration back to idle
   const raw = typeof req.query.ids === "string" ? req.query.ids : "";
   const ids = raw
     .split(",")
@@ -1597,6 +1602,7 @@ function collectPendingSessions(onDisk: Set<string>, includePending: boolean): P
 // newly-created sessions that aren't persisted to disk yet.
 app.get("/api/sessions", async (req, res) => {
   try {
+    await activityStateHydrated; // list working/waiting from the restored state, not a racing idle
     // Optional ?cwd= scopes the list to that project's on-disk sessions (the grid
     // cell's resume picker). Without it, the classic single view's behavior is
     // unchanged: CLAUDE_CWD + in-memory pending sessions.
