@@ -303,6 +303,8 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
 | `chips`      | Header info chips. Omit to keep the default set; `[]` hides all built-ins. |
 | `pushEnabled` | `true` to send a **Web Push** to your registered devices when a background task finishes. Off by default; only sends while the **RemoteHost** channel is connected (see below). |
+| `worklogEnabled` | `true` to run the built-in **dev worklog** batch (see below). Off by default (each run spawns an LLM session, so it costs tokens). |
+| `worklogIntervalHours` | Worklog cadence in hours (default `6`, clamped to `1`–`168`). |
 
 #### Header buttons
 
@@ -333,6 +335,19 @@ panes you're not watching. Delivery is handled by the separate `mulmoserver` `se
 Cloud Function; MulmoTerminal only makes the call, and only while the **RemoteHost**
 channel is connected (its Google sign-in supplies the notification auth). With RemoteHost
 disconnected, or with no device registered, the toggle is a no-op.
+
+**Dev worklog (cross-clone).** Enable `worklogEnabled` to register a built-in scheduled
+task that, every `worklogIntervalHours` (default 6), spawns a Claude session which
+summarizes the work you did across **all your saved working dirs** (`cwdPresets`) since it
+last ran — grouped by repository, so multiple clones/worktrees of the same repo (e.g.
+`myapp`, `myapp2`) collapse into one entry — and appends it to a **weekly wiki page**
+(`data/wiki/pages/dev-log-YYYY-Www.md`). It reads `vision.md` / `milestones.md` (creating
+empty ones if absent) and notes progress against your milestones so a long-running goal
+isn't forgotten. The run window is **since the last run** (not a fixed 6 h), so a
+missed/slept run doesn't drop work. Off by default because each run costs tokens; watch
+the cost readout and tune the cadence. Takes effect on the next server start (the
+scheduler reads tasks at boot). Run the batch on a single "hub" instance — running it in
+several instances sharing one workspace double-fires it.
 
 ### Per-directory settings (`<project>/.mulmoterminal.json`)
 

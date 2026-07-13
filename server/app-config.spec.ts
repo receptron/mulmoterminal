@@ -8,6 +8,7 @@ import {
   sanitizeLaunchers,
   sanitizeUserMcpServers,
   sanitizePushEnabled,
+  sanitizeWorklogIntervalHours,
   loadAppConfig,
   saveAppConfig,
   mergeConfigUpdate,
@@ -97,8 +98,32 @@ describe("sanitizeUserMcpServers", () => {
   });
 });
 
+describe("sanitizeWorklogIntervalHours", () => {
+  it("clamps to whole hours in [1,168]; non-positive / non-number => default 6", () => {
+    expect(sanitizeWorklogIntervalHours(6)).toBe(6);
+    expect(sanitizeWorklogIntervalHours(24)).toBe(24);
+    expect(sanitizeWorklogIntervalHours(1000)).toBe(168); // clamp max
+    expect(sanitizeWorklogIntervalHours(2.6)).toBe(3); // round
+    expect(sanitizeWorklogIntervalHours(0)).toBe(6); // non-positive => default
+    expect(sanitizeWorklogIntervalHours(-5)).toBe(6);
+    expect(sanitizeWorklogIntervalHours("x")).toBe(6);
+    expect(sanitizeWorklogIntervalHours(undefined)).toBe(6);
+  });
+});
+
 describe("loadAppConfig / saveAppConfig", () => {
-  const base = { cwdPresets: [], soundFile: null, prRepos: [], launchers: [], userMcpServers: [], buttons: null, chips: null, pushEnabled: false };
+  const base = {
+    cwdPresets: [],
+    soundFile: null,
+    prRepos: [],
+    launchers: [],
+    userMcpServers: [],
+    buttons: null,
+    chips: null,
+    pushEnabled: false,
+    worklogEnabled: false,
+    worklogIntervalHours: 6,
+  };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
     const file = path.join(dir, "nested", "config.json"); // nested → mkdir is exercised
@@ -111,6 +136,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       buttons: [{ id: "pr", label: "PR", run: "shell" as const, cmd: "gh pr create" }],
       chips: ["dir", "git"],
       pushEnabled: true,
+      worklogEnabled: true,
+      worklogIntervalHours: 12,
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -149,6 +176,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       buttons: null,
       chips: null,
       pushEnabled: false,
+      worklogEnabled: false,
+      worklogIntervalHours: 6,
     });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -180,6 +209,8 @@ describe("mergeConfigUpdate", () => {
     buttons: [{ id: "reveal", label: "Reveal in the file manager", run: "open", emoji: "📂", open: { reveal: "${dir}" } }],
     chips: ["git", "diff", "ctx", "usage"],
     pushEnabled: false,
+    worklogEnabled: false,
+    worklogIntervalHours: 6,
     ...over,
   });
 
@@ -195,6 +226,14 @@ describe("mergeConfigUpdate", () => {
   it("applies pushEnabled from the body and keeps it when omitted", () => {
     expect(mergeConfigUpdate(baseConfig(), { pushEnabled: true }).pushEnabled).toBe(true);
     expect(mergeConfigUpdate(baseConfig({ pushEnabled: true }), { chips: ["git"] }).pushEnabled).toBe(true);
+  });
+
+  it("applies worklog settings from the body and keeps them when omitted", () => {
+    const next = mergeConfigUpdate(baseConfig(), { worklogEnabled: true, worklogIntervalHours: 12 });
+    expect(next.worklogEnabled).toBe(true);
+    expect(next.worklogIntervalHours).toBe(12);
+    // a chips-only update must not reset worklog
+    expect(mergeConfigUpdate(baseConfig({ worklogEnabled: true }), { chips: ["git"] }).worklogEnabled).toBe(true);
   });
 
   it("merging on a RE-READ disk base preserves another instance's write (the clobber fix)", () => {
