@@ -1120,6 +1120,9 @@ const PUSH_BODY_MAX = 160;
 // Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
 function notifyTaskFinished(sessionId: string): void {
   if (!getPushEnabled()) return;
+  // Internal helper turns flow through /api/hook with active=false too — hidden background
+  // workers and translation workers aren't real user tasks, so never push for them.
+  if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = cwd ? path.basename(cwd) : "session";
   const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
