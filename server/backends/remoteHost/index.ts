@@ -1,23 +1,27 @@
-// Remote-host lifecycle + routes for MulmoTerminal.
+// Remote-host lifecycle + route wiring for MulmoTerminal.
 //
 // Binds MulmoTerminal's Firebase deps + hostId to the shared createRemoteHost
 // factory (@mulmoclaude/core/remote-host/server) so connecting from the toolbar
-// signs in as the user and starts the Firestore command loop + presence
-// heartbeat; disconnecting stops both. The transport engine lives in core; this
-// module only supplies host specifics (hostId, handler table, firestore-bound
-// runner, logger) and the connect/disconnect/status routes.
+// signs in as the user and starts the Firestore command loop + presence heartbeat;
+// disconnecting stops both. The transport engine lives in core; this module only
+// supplies host specifics (hostId, handler table, session-backed runner, logger)
+// and wires the module's lifecycle/session into the injectable routes (routes.ts).
 //
 // Single-account, single-host (HOST_ID = "mulmoterminal", distinct from the
-// MulmoClaude host so the two never compete for the same command queue),
-// in-memory session: a server restart drops the session and needs a re-connect.
-import type { Express, Request } from "express";
-import { createRemoteHost, createRemoteHostAuth, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
+// MulmoClaude host so the two never compete for the same command queue). The
+// Firebase session is parked in the browser (case A', mulmoserver#50), so a server
+// restart doesn't force a re-login: the client reconnects from its stored blob. The
+// runner reads the CURRENT session's firestore/storage (both change on each
+// (re)connect — see session.ts).
+import type { Express } from "express";
+import { createRemoteHost, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
 
-import { auth, firestore, storage } from "./firebase.js";
 import { createRemoteHostHandlers } from "./handlers.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
+import { currentFirestore, currentStorage, currentUid, exportSession, reconnectErrorStatus, restore, signIn, signOut } from "./session.js";
+import { mountRemoteHostRoutes as mountRoutes } from "./routes.js";
 
 const HOST_ID = "mulmoterminal";
 const PREFIX = "[remote-host]";
@@ -31,18 +35,19 @@ export interface RemoteHostBackendDeps {
 }
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
-  const authHelpers = createRemoteHostAuth(auth);
   // Ingest pulls the phone's staged uploads (Firebase Storage, signed in as the
-  // user) into data/attachments/ and hands startChat path-only attachments.
-  const ingest = buildIngestAttachments({ storage, uid: authHelpers.currentUid, saveAttachment: createSaveAttachment(deps.workspace) });
+  // user) into data/attachments/ and hands startChat path-only attachments. Reads
+  // the LIVE session's storage/uid (both change per (re)connect — see session.ts).
+  const ingest = buildIngestAttachments({ storage: currentStorage, uid: currentUid, saveAttachment: createSaveAttachment(deps.workspace) });
   lifecycle = createRemoteHost({
     hostId: HOST_ID,
-    signIn: authHelpers.signInHost,
-    signOut: authHelpers.signOutHost,
-    currentUid: authHelpers.currentUid,
-    startRunner: (channel, handlers, options) => startHostRunner(firestore, channel, handlers, options),
-    // Expired offline-queued startChat commands: delete the phone's staged
-    // Storage uploads before the runner removes the doc (protocol v2 offline queue).
+    signIn,
+    restore,
+    signOut,
+    currentUid,
+    startRunner: (channel, handlers, options) => startHostRunner(currentFirestore(), channel, handlers, options),
+    // Expired offline-queued startChat commands: delete the phone's staged Storage
+    // uploads before the runner removes the doc (protocol v2 offline queue).
     onExpire,
     handlers: createRemoteHostHandlers({ workspace: deps.workspace, spawnChat: deps.spawnChat, ingest }),
     log: {
@@ -53,46 +58,10 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-
 export interface RemoteHostRouteOptions {
   isAllowedOrigin: (origin?: string) => boolean;
 }
 
 export function mountRemoteHostRoutes(app: Express, { isAllowedOrigin }: RemoteHostRouteOptions): void {
-  // GET status — connected + uid.
-  app.get("/api/remote-host/status", (req: Request, res) => {
-    if (!isAllowedOrigin(req.headers.origin)) return res.status(403).json({ error: "forbidden origin" });
-    if (!lifecycle) return res.status(503).json({ error: "remote host not initialized" });
-    return res.json({ status: lifecycle.status() });
-  });
-
-  // POST connect { idToken } — sign in as the user + start the runner. The
-  // idToken is a secret: never logged, accepted over the local origin only.
-  app.post("/api/remote-host/connect", async (req: Request, res) => {
-    if (!isAllowedOrigin(req.headers.origin)) return res.status(403).json({ error: "forbidden origin" });
-    if (!lifecycle) return res.status(503).json({ error: "remote host not initialized" });
-    const idToken = isRecord(req.body) && typeof req.body.idToken === "string" ? req.body.idToken : "";
-    if (!idToken) return res.status(400).json({ error: "idToken is required" });
-    try {
-      return res.json({ status: await lifecycle.connect(idToken) });
-    } catch (err) {
-      return res.status(500).json({ error: errorText(err) });
-    }
-  });
-
-  // POST disconnect — stop the runner + sign out.
-  app.post("/api/remote-host/disconnect", async (req: Request, res) => {
-    if (!isAllowedOrigin(req.headers.origin)) return res.status(403).json({ error: "forbidden origin" });
-    if (!lifecycle) return res.status(503).json({ error: "remote host not initialized" });
-    try {
-      return res.json({ status: await lifecycle.disconnect() });
-    } catch (err) {
-      return res.status(500).json({ error: errorText(err) });
-    }
-  });
+  mountRoutes(app, { isAllowedOrigin, getLifecycle: () => lifecycle, exportSession, reconnectErrorStatus });
 }

@@ -12,11 +12,9 @@ import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { renderSVG } from "uqr";
 
 import { auth } from "../config/firebase";
-
-interface RemoteHostStatus {
-  connected: boolean;
-  uid: string | null;
-}
+// Session parking (localStorage) + reconnect-outcome decision live in a plain module
+// so they're unit-testable without mounting this Firebase-importing component.
+import { loadStoredSession, persistSession, reconnectAction, type FetchResult, type RemoteHostStatus } from "./remoteHostSession";
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
 const MOBILE_URL = "https://mulmoserver.web.app";
@@ -31,11 +29,7 @@ const rootRef = useTemplateRef<HTMLElement>("root");
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
-async function fetchStatus(
-  url: string,
-  method: "GET" | "POST",
-  body?: unknown,
-): Promise<{ ok: true; status: RemoteHostStatus } | { ok: false; error: string }> {
+async function fetchStatus(url: string, method: "GET" | "POST", body?: unknown): Promise<FetchResult> {
   try {
     const res = await fetch(url, {
       method,
@@ -44,12 +38,12 @@ async function fetchStatus(
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => null);
-      return { ok: false, error: (detail && typeof detail.error === "string" && detail.error) || `HTTP ${res.status}` };
+      return { ok: false, error: (detail && typeof detail.error === "string" && detail.error) || `HTTP ${res.status}`, httpStatus: res.status };
     }
-    const data = (await res.json()) as { status: RemoteHostStatus };
-    return { ok: true, status: data.status };
+    const data = (await res.json()) as { status: RemoteHostStatus; session: string | null };
+    return { ok: true, status: data.status, session: data.session ?? null };
   } catch (err) {
-    return { ok: false, error: errorText(err) };
+    return { ok: false, error: errorText(err), httpStatus: 0 };
   }
 }
 
@@ -57,10 +51,27 @@ async function refreshStatus() {
   const result = await fetchStatus("/api/remote-host/status", "GET");
   if (result.ok) {
     status.value = result.status;
+    // Keep the parked blob fresh (the refresh token can rotate) — but never clear
+    // it on a disconnected status, so an auto-reconnect still has it.
+    if (result.session) persistSession(result.session);
     error.value = null;
   } else {
     error.value = result.error;
   }
+}
+
+// On load, if the server is disconnected but we have a parked session, restore it
+// without a popup. A 401 means the blob is genuinely expired/invalid → drop it;
+// transient failures KEEP it so a later retry/restart can still reconnect.
+async function tryAutoReconnect() {
+  if (status.value.connected) return;
+  const blob = loadStoredSession();
+  if (!blob) return;
+  const res = await fetchStatus("/api/remote-host/reconnect", "POST", { session: blob });
+  if (res.ok) status.value = res.status;
+  const action = reconnectAction(res);
+  if (action === "park" && res.ok) persistSession(res.session);
+  else if (action === "drop") persistSession(null);
 }
 
 function onOutside(event: PointerEvent) {
@@ -101,6 +112,7 @@ async function onConnect() {
       return;
     }
     status.value = res.status;
+    persistSession(res.session); // park the session for popup-free reconnect after a restart
     close();
   } catch (err) {
     error.value = errorText(err);
@@ -115,6 +127,7 @@ async function onDisconnect() {
   const res = await fetchStatus("/api/remote-host/disconnect", "POST");
   if (res.ok) {
     status.value = res.status;
+    persistSession(null); // forget the parked session on an explicit disconnect
     close();
   } else {
     error.value = res.error;
@@ -122,10 +135,12 @@ async function onDisconnect() {
   busy.value = false;
 }
 
-// Fetch once on mount so the toolbar icon reflects the real connection state
-// after a page reload — not the default "disconnected" until the first click.
+// On mount, reflect the real connection state (not the default "disconnected"),
+// then auto-reconnect popup-free from a parked session if the server restarted.
 onMounted(() => {
-  refreshStatus().catch(() => undefined);
+  refreshStatus()
+    .then(tryAutoReconnect)
+    .catch(() => undefined);
 });
 onUnmounted(close);
 </script>

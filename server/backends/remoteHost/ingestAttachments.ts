@@ -78,14 +78,17 @@ export const createIngestAttachments =
 // Wire the real Firebase-Storage deps to createIngestAttachments. `getBytes`
 // (not the browser-only `getBlob`) returns an ArrayBuffer that works on Node.
 export interface StorageIngestDeps {
-  storage: FirebaseStorage;
+  // A getter, not a fixed instance: the session controller opens a fresh Firebase
+  // app (hence Storage) per (re)connect, so ingest must read the LIVE one at
+  // fetch/delete time rather than capture a stale handle (case A', mulmoserver#50).
+  storage: () => FirebaseStorage;
   uid: () => string | null;
   saveAttachment: (base64: string, mimeType: string) => Promise<{ relativePath: string; mimeType: string }>;
 }
 
 export function buildIngestAttachments(deps: StorageIngestDeps) {
   const fetchObject = async (storagePath: string) => {
-    const objectRef = ref(deps.storage, storagePath);
+    const objectRef = ref(deps.storage(), storagePath);
     const [bytes, metadata] = await Promise.all([getBytes(objectRef, MAX_DOWNLOAD_BYTES), getMetadata(objectRef)]);
     return { base64: Buffer.from(bytes).toString("base64"), contentType: metadata.contentType ?? "application/octet-stream" };
   };
@@ -93,6 +96,6 @@ export function buildIngestAttachments(deps: StorageIngestDeps) {
     uid: deps.uid,
     fetchObject,
     saveAttachment: deps.saveAttachment,
-    deleteObject: (storagePath) => deleteObject(ref(deps.storage, storagePath)),
+    deleteObject: (storagePath) => deleteObject(ref(deps.storage(), storagePath)),
   });
 }

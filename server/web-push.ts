@@ -3,7 +3,7 @@
 // devices are resolved server-side from the signed-in user's uid, and registration /
 // delivery / dead-token pruning are the server's job. Auth comes from the RemoteHost
 // channel's Firebase sign-in, so this no-ops whenever RemoteHost isn't connected.
-import { auth } from "./backends/remoteHost/firebase.js";
+import { currentIdToken } from "./backends/remoteHost/session.js";
 
 // asia-northeast1 onCall endpoint for the `mulmoserver` project. Mirrors the firebase
 // config in backends/remoteHost/firebase.ts — keep in sync if the project id changes.
@@ -35,12 +35,11 @@ export function parseSendPushResult(json: unknown): SendPushResult | null {
 // result, or null when nothing was sent (not signed in / network / timeout / non-2xx).
 // Never throws — a failed push must not disturb the hook that triggered it.
 export async function sendWebPush(title: string, body: string): Promise<SendPushResult | null> {
-  const user = auth.currentUser;
-  if (!user) return null; // RemoteHost not connected → no auth → nothing to send with
+  const idToken = await currentIdToken();
+  if (!idToken) return null; // RemoteHost not connected → no auth → nothing to send with
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEND_PUSH_TIMEOUT_MS);
   try {
-    const idToken = await user.getIdToken();
     const res = await fetch(SEND_PUSH_URL, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${idToken}` },
