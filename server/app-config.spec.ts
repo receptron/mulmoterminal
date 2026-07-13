@@ -2,7 +2,16 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sanitizeSoundFile, sanitizeRepos, sanitizeLaunchers, sanitizeUserMcpServers, loadAppConfig, saveAppConfig } from "./app-config";
+import {
+  sanitizeSoundFile,
+  sanitizeRepos,
+  sanitizeLaunchers,
+  sanitizeUserMcpServers,
+  loadAppConfig,
+  saveAppConfig,
+  mergeConfigUpdate,
+  type AppConfig,
+} from "./app-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-appcfg-"));
 
@@ -144,5 +153,44 @@ describe("loadAppConfig / saveAppConfig", () => {
     writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }] }));
     expect(loadAppConfig(file)).toEqual({ ...base, cwdPresets: [{ label: "a", path: "/a" }] });
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("mergeConfigUpdate", () => {
+  const baseConfig = (over: Partial<AppConfig> = {}): AppConfig => ({
+    cwdPresets: [],
+    soundFile: null,
+    prRepos: [],
+    launchers: [],
+    userMcpServers: [],
+    buttons: [{ id: "reveal", label: "Reveal in the file manager", run: "open", emoji: "📂", open: { reveal: "${dir}" } }],
+    chips: ["git", "diff", "ctx", "usage"],
+    ...over,
+  });
+
+  it("applies a field present in the body", () => {
+    expect(mergeConfigUpdate(baseConfig(), { chips: ["git", "diff"] }).chips).toEqual(["git", "diff"]);
+  });
+
+  it("keeps fields the body omits — a chips-only update must NOT wipe buttons", () => {
+    const base = baseConfig();
+    expect(mergeConfigUpdate(base, { chips: ["git"] }).buttons).toEqual(base.buttons);
+  });
+
+  it("merging on a RE-READ disk base preserves another instance's write (the clobber fix)", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    try {
+      // "Another instance" persisted a full config (buttons + chips) to the shared file.
+      saveAppConfig(file, baseConfig());
+      // A stale instance handles a chips-only POST: base must come from the re-read disk,
+      // not its boot-time memory — so the disk's buttons survive.
+      const disk = loadAppConfig(file);
+      const next = mergeConfigUpdate(disk, { chips: ["git", "diff"] });
+      expect(next.buttons).toEqual(disk.buttons);
+      expect(next.chips).toEqual(["git", "diff"]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
