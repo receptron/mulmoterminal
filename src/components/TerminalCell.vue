@@ -300,6 +300,20 @@ function fillDir(path: string) {
   loadWorktrees();
 }
 
+// The 📁 button: the browser can't open a native folder chooser, so the local server does
+// (POST /api/pick-file { directory: true }). Fill the Working-directory field with the pick.
+async function pickDir() {
+  try {
+    const res = await fetch("/api/pick-file", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ directory: true }) });
+    if (!res.ok) return;
+    const data = await res.json();
+    const dir = Array.isArray(data?.paths) ? data.paths.find((p: unknown): p is string => typeof p === "string") : undefined;
+    if (dir) fillDir(dir);
+  } catch {
+    // best-effort — the native dialog is unavailable or the user canceled
+  }
+}
+
 // Existing sessions for the dir in the form, so an empty cell can resume one
 // instead of starting fresh.
 interface ResumableSession {
@@ -1105,6 +1119,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             @input="dirTouched = true"
             @keydown.enter="launch"
           />
+          <button type="button" class="cell-dir-pick" title="Choose a folder…" aria-label="Choose the working directory" @click="pickDir">
+            <span class="material-symbols-outlined">folder_open</span>
+          </button>
           <button
             type="button"
             class="cell-dir-go"
@@ -1617,7 +1634,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   flex: 1 1 auto;
   min-width: 0;
 }
-.cell-dir-go {
+.cell-dir-go,
+.cell-dir-pick {
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
@@ -1629,7 +1647,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   color: var(--text-secondary);
   cursor: pointer;
 }
-.cell-dir-go:hover:not(:disabled) {
+.cell-dir-go:hover:not(:disabled),
+.cell-dir-pick:hover {
   background: var(--bg-hover);
   color: var(--text);
   border-color: var(--accent);
@@ -1638,7 +1657,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   opacity: 0.4;
   cursor: default;
 }
-.cell-dir-go .material-symbols-outlined {
+.cell-dir-go .material-symbols-outlined,
+.cell-dir-pick .material-symbols-outlined {
   font-size: 18px;
 }
 .cell-start {

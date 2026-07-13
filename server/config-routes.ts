@@ -7,18 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
-import { sanitizePresets } from "./cwd-presets.js";
-import {
-  loadAppConfig,
-  saveAppConfig,
-  sanitizeSoundFile,
-  sanitizeRepos,
-  sanitizeLaunchers,
-  sanitizeUserMcpServers,
-  sanitizePushEnabled,
-  type AppConfig,
-} from "./app-config.js";
-import { sanitizeButtons, sanitizeChips, type HeaderConfig } from "./header-config.js";
+import { loadAppConfig, saveAppConfig, mergeConfigUpdate, type AppConfig } from "./app-config.js";
+import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type UserMcpServer } from "./config-schema.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
@@ -100,16 +90,11 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     if (badField) return res.status(400).json({ error: `${badField} must be an array` });
     const badNullableField = badNullableArrayField(body);
     if (badNullableField) return res.status(400).json({ error: `${badNullableField} must be an array or null` });
-    const next: AppConfig = {
-      cwdPresets: body.cwdPresets !== undefined ? sanitizePresets(body.cwdPresets) : config.cwdPresets,
-      soundFile: body.soundFile !== undefined ? sanitizeSoundFile(body.soundFile) : config.soundFile,
-      prRepos: body.prRepos !== undefined ? sanitizeRepos(body.prRepos) : config.prRepos,
-      launchers: body.launchers !== undefined ? sanitizeLaunchers(body.launchers) : config.launchers,
-      userMcpServers: body.userMcpServers !== undefined ? sanitizeUserMcpServers(body.userMcpServers) : config.userMcpServers,
-      buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : config.buttons,
-      chips: body.chips !== undefined ? sanitizeChips(body.chips) : config.chips,
-      pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : config.pushEnabled,
-    };
+    // Merge onto the CURRENT disk config, re-read now — not this instance's cached
+    // `config`, which may be stale (another mulmoterminal instance sharing this file
+    // could have written since we booted). Using the stale copy for omitted fields
+    // would clobber those edits (e.g. a chips-only POST wiping another's buttons).
+    const next = mergeConfigUpdate(loadAppConfig(CONFIG_FILE), body);
     // Stage, persist, commit in-memory only on success — a failed write must not
     // leave GET exposing values that won't survive a restart.
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });

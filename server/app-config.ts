@@ -137,6 +137,24 @@ export function loadAppConfig(file: string): AppConfig {
   }
 }
 
+// Apply a partial POST /api/config body onto a BASE config: fields the body omits keep
+// the base's value. The caller MUST pass a freshly-loaded-from-disk base (not a cached
+// in-memory config) — multiple mulmoterminal instances share one config.json, and a
+// stale in-memory copy would otherwise write back its boot-time values for the omitted
+// fields, clobbering whatever another instance persisted since (e.g. wiping buttons).
+export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>): AppConfig {
+  return {
+    cwdPresets: body.cwdPresets !== undefined ? sanitizePresets(body.cwdPresets) : base.cwdPresets,
+    soundFile: body.soundFile !== undefined ? sanitizeSoundFile(body.soundFile) : base.soundFile,
+    prRepos: body.prRepos !== undefined ? sanitizeRepos(body.prRepos) : base.prRepos,
+    launchers: body.launchers !== undefined ? sanitizeLaunchers(body.launchers) : base.launchers,
+    userMcpServers: body.userMcpServers !== undefined ? sanitizeUserMcpServers(body.userMcpServers) : base.userMcpServers,
+    buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : base.buttons,
+    chips: body.chips !== undefined ? sanitizeChips(body.chips) : base.chips,
+    pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : base.pushEnabled,
+  };
+}
+
 // Persist the whole config; returns false on any write failure so the caller can
 // surface it instead of reporting a false success.
 export function saveAppConfig(file: string, config: AppConfig): boolean {
