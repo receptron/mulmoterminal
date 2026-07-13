@@ -348,6 +348,12 @@ export function attach(key: string, target: ConnTarget, handlers: ConnHandlers, 
   if (c.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "resize", cols: c.term.cols, rows: c.term.rows }));
   c.term.scrollToBottom();
   c.term.focus();
+  // The persisted xterm was just re-parented into a new host. The sync fit() above can no-op (same size)
+  // or run before layout, leaving the canvas renderer blank until a scroll. Re-fit + force a repaint next
+  // frame, once the host is laid out. Guarded so a slot that detached/re-attached meanwhile is left alone.
+  requestAnimationFrame(() => {
+    if (c.attachedEl === el) fit(key);
+  });
 }
 
 // Unmount a view but KEEP the slot alive (socket stays open, PTY stays alive). The
@@ -480,6 +486,10 @@ export function fit(key: string) {
   if (c.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "resize", cols: c.term.cols, rows: c.term.rows }));
   // Reflow after a resize can leave the viewport scrolled up; stick to the bottom.
   c.term.scrollToBottom();
+  // Force the canvas renderer to repaint. `fit()` only redraws when cols/rows actually change, so a
+  // re-parent / KeepAlive reactivation with the SAME size (attach, onActivated) would otherwise leave
+  // the viewport blank until a scroll. The buffer is intact — this just repaints it.
+  if (c.term.rows > 0) c.term.refresh(0, c.term.rows - 1);
 }
 
 export function setTheme(key: string, theme: ITheme) {
