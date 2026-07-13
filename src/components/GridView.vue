@@ -248,6 +248,7 @@ const {
   home,
   presets,
   soundFile,
+  pushEnabled,
   prRepos,
   launchers,
   userMcpServers,
@@ -255,6 +256,7 @@ const {
   recordPreset,
   removePreset,
   saveSound,
+  savePushEnabled,
   savePrRepos,
   saveLaunchers,
   saveUserMcpServers,
@@ -320,10 +322,12 @@ function configureAppearance() {
     <SettingsModal
       v-if="showSettings"
       :sound-file="soundFile"
+      :push-enabled="pushEnabled"
       :pr-repos="prRepos"
       :launchers="launchers"
       :user-mcp-servers="userMcpServers"
       @update-sound="saveSound"
+      @update-push-enabled="savePushEnabled"
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"

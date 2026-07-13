@@ -45,6 +45,21 @@ describe("SettingsModal", () => {
     expect(w.emitted("update-sound")?.at(-1)?.[0]).toBeNull(); // back to the chime
   });
 
+  it("reflects pushEnabled and emits update-push-enabled on toggle", async () => {
+    const w = mountModal({ pushEnabled: true });
+    const box = w.find<HTMLInputElement>(".push-row input");
+    expect(box.element.checked).toBe(true);
+    await box.setValue(false);
+    expect(w.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(false);
+
+    // Defaults to unchecked when the prop is unset, and emits true when toggled on.
+    const w2 = mountModal({});
+    const box2 = w2.find<HTMLInputElement>(".push-row input");
+    expect(box2.element.checked).toBe(false);
+    await box2.setValue(true);
+    expect(w2.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(true);
+  });
+
   it("Browse fills the sound path from the OS file picker and applies it", async () => {
     globalThis.fetch = (async () => ({ ok: true, json: async () => ({ paths: ["/picked/sound.ogg"] }) })) as unknown as typeof fetch;
     const w = mountModal({ soundFile: null });
