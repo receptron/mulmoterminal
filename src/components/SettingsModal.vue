@@ -8,6 +8,7 @@ import type { UserMcpServer } from "./userMcp";
 
 const props = defineProps<{
   soundFile?: string | null;
+  pushEnabled?: boolean;
   prRepos?: string[];
   launchers?: Launcher[];
   userMcpServers?: UserMcpServer[];
@@ -16,6 +17,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update-sound", file: string | null): void;
+  (e: "update-push-enabled", on: boolean): void;
   (e: "update-repos", repos: string[]): void;
   (e: "update-launchers", launchers: Launcher[]): void;
   (e: "update-user-mcp", servers: UserMcpServer[]): void;
@@ -119,6 +121,10 @@ function applySound() {
 function clearSound() {
   soundPath.value = "";
   emit("update-sound", null);
+}
+// Web Push toggle — stateless: reflects props.pushEnabled, emits the new value up (App persists it).
+function onPushToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) emit("update-push-enabled", e.target.checked);
 }
 async function browseSound() {
   try {
@@ -258,6 +264,16 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         <button class="btn" type="button" title="Play the current sound" @click="testSound">▶ Test</button>
         <button class="btn" type="button" :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</button>
       </div>
+
+      <h3 class="section-title">Web Push notifications</h3>
+      <p class="hint">
+        Send a push to your registered devices when a background task finishes. Requires the <strong>RemoteHost</strong> connection — its sign-in provides the
+        notification auth, so pushes only send while it's connected.
+      </p>
+      <label class="push-row">
+        <input type="checkbox" :checked="props.pushEnabled ?? false" aria-label="Send a Web Push when a task finishes" @change="onPushToggle" />
+        <span>Notify my devices when a task finishes</span>
+      </label>
 
       <h3 class="section-title">Pull request repos</h3>
       <p class="hint">
@@ -551,6 +567,15 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+.push-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+.push-row input {
+  cursor: pointer;
 }
 .cost-grid {
   display: flex;

@@ -302,6 +302,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the **single-view** Claude session's `--mcp-config` (a `localhost` URL is reached over `host.docker.internal` in the Docker sandbox). Takes effect on the next session. |
 | `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
 | `chips`      | Header info chips. Omit to keep the default set; `[]` hides all built-ins. |
+| `pushEnabled` | `true` to send a **Web Push** to your registered devices when a background task finishes. Off by default; only sends while the **RemoteHost** channel is connected (see below). |
 
 #### Header buttons
 
@@ -324,6 +325,14 @@ concerns. To use your own sound, set `soundFile` in Settings (Browse / Test / Us
 chime) or in the config file; the server streams that file at `GET /api/sound` and
 the client decodes it (falling back to the chime if it's missing or not audio). It's
 your own local file referenced by absolute path — nothing is added to the package.
+
+**Web Push on task finish.** Enable `pushEnabled` in Settings to have the server send a
+push (title = the project dir, body = the last prompt) to your registered devices each
+time a **background** task finishes — the same signal as the attention chime, but for the
+panes you're not watching. Delivery is handled by the separate `mulmoserver` `sendPush`
+Cloud Function; MulmoTerminal only makes the call, and only while the **RemoteHost**
+channel is connected (its Google sign-in supplies the notification auth). With RemoteHost
+disconnected, or with no device registered, the toggle is a no-op.
 
 ### Per-directory settings (`<project>/.mulmoterminal.json`)
 

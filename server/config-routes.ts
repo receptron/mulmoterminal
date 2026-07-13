@@ -38,6 +38,12 @@ export function getHeaderConfig(): HeaderConfig {
   return { buttons: config.buttons, chips: config.chips };
 }
 
+// Whether to send a Web Push when a task finishes — read live at the Stop hook so a
+// settings toggle takes effect without a restart.
+export function getPushEnabled(): boolean {
+  return config.pushEnabled;
+}
+
 // Body fields that must be an array when present (a partial POST /api/config may omit any).
 const ARRAY_FIELDS = ["cwdPresets", "prRepos", "launchers", "userMcpServers"] as const;
 function badArrayField(body: Record<string, unknown>): string | null {
@@ -69,6 +75,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     userMcpServers: config.userMcpServers,
     buttons: config.buttons,
     chips: config.chips,
+    pushEnabled: config.pushEnabled,
   });
 
   app.get("/api/config", (_req, res) => {
