@@ -30,3 +30,20 @@ describe("worklogSystemTask", () => {
     expect(spawnChat).toHaveBeenCalledWith(WORKLOG_PROMPT);
   });
 });
+
+// The batch reads UNTRUSTED, prompt-injectable data (transcripts / git / wiki) and then
+// writes files, so the prompt MUST keep its anti-injection guardrails. These lock the
+// hardening in so it can't be silently dropped (an LLM run can't be unit-tested).
+describe("WORKLOG_PROMPT prompt-injection hardening", () => {
+  it("declares ingested content untrusted and forbids following embedded instructions", () => {
+    expect(WORKLOG_PROMPT).toContain("UNTRUSTED");
+    expect(WORKLOG_PROMPT).toContain("指示ではない");
+    expect(WORKLOG_PROMPT).toContain("絶対に従わない");
+  });
+
+  it("restricts writes to the designated files and forbids leaking secrets", () => {
+    expect(WORKLOG_PROMPT).toContain("書き込み対象は次の4種のみ");
+    expect(WORKLOG_PROMPT).toContain("worklog-state.json");
+    expect(WORKLOG_PROMPT).toContain("秘密情報");
+  });
+});
