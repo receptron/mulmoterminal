@@ -484,11 +484,14 @@ async function removeWorktree(w: Worktree) {
 
 // Refresh the resume list and the runnable scripts when the target dir changes.
 watch([dirInput, () => props.defaultCwd], () => {
+  // Cancel any pending debounced reload FIRST — whether we skip (a fillDir just loaded
+  // immediately) or reschedule (typing), a stale timer from a prior change (e.g. a type
+  // then a preset click) must not fire a duplicate load afterwards.
+  if (resumableTimer) clearTimeout(resumableTimer);
   if (skipDirWatch) {
-    skipDirWatch = false; // a fillDir() already loaded these immediately — don't double-fetch
+    skipDirWatch = false; // a fillDir() already loaded these immediately — don't schedule another
     return;
   }
-  if (resumableTimer) clearTimeout(resumableTimer);
   resumableTimer = setTimeout(() => {
     loadResumable();
     loadScripts();

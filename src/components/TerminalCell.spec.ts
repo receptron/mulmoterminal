@@ -374,6 +374,34 @@ describe("TerminalCell", () => {
     }
   });
 
+  it("a preset fill cancels a pending typed-dir debounce (type-then-click doesn't double-fetch)", async () => {
+    vi.useFakeTimers();
+    try {
+      const w = mountCell(null, { defaultCwd: "/def", presets: [{ label: "x", path: "/x" }] });
+      await flushPromises();
+      const sessionCalls = () =>
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
+
+      await w.find(".cell-dir-input").setValue("/typed"); // schedules a 300ms debounced load
+      const before = sessionCalls();
+
+      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      if (!main) throw new Error("preset chip not found");
+      await main.trigger("click"); // fillDir → immediate load + must cancel the pending /typed debounce
+      await flushPromises();
+      const afterClick = sessionCalls() - before;
+
+      await vi.advanceTimersByTimeAsync(400); // the stale /typed debounce would fire here if not cancelled
+      await flushPromises();
+      const total = sessionCalls() - before;
+
+      expect(afterClick).toBe(1); // the fill's own immediate load
+      expect(total).toBe(1); // the pending typed-dir debounce was cancelled — no second fetch
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("emits record-cwd with the server-confirmed cwd of a fresh launch", async () => {
     // A fresh launch + the server confirming the effective cwd asks the parent to
     // auto-record that dir as a preset (the parent persists it to config).
