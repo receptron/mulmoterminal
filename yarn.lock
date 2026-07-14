@@ -1380,6 +1380,11 @@
     zod "^3.25 || ^4.0"
     zod-to-json-schema "^3.25.1"
 
+"@mulmobridge/web-push@^0.1.0":
+  version "0.1.0"
+  resolved "https://registry.yarnpkg.com/@mulmobridge/web-push/-/web-push-0.1.0.tgz#c7a6ec6dd0362b85facd460d87c54e331dfda2fe"
+  integrity sha512-pbNptXumkQuK68Hy91MDrvoQ4+CgdjM/MIOyfkEfXj65yyxMi6XtkNAWjnRwI/f6fNmbiZnWeM3QOAso6zw55w==
+
 "@mulmochat-plugin/generate-image@^0.5.0":
   version "0.5.0"
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/generate-image/-/generate-image-0.5.0.tgz#520ab5342c4c71d6c4adc7bceabf9a19829f0c92"

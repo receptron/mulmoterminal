@@ -1,6 +1,6 @@
 {
   "name": "mulmoterminal",
-  "version": "0.9.3",
+  "version": "1.0.0",
   "description": "MulmoTerminal — browser terminal + GUI panel for Claude Code. One command to start.",
   "type": "module",
   "license": "MIT",
@@ -55,6 +55,7 @@
     "@google/genai": "^2.10.0",
     "@marp-team/marp-core": "^4.3.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mulmobridge/web-push": "^0.1.0",
     "@mulmochat-plugin/generate-image": "^0.5.0",
     "@mulmochat-plugin/ui-image": "^0.4.0",
     "@mulmoclaude/accounting-plugin": "^0.3.2",

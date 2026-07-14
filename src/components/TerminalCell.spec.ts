@@ -303,7 +303,7 @@ describe("TerminalCell", () => {
     await nextTick(); // mount → fetch #1 (dir A) in flight
     const chipB = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "B");
     if (!chipB) throw new Error("preset B not found");
-    await chipB.find(".cell-chip-fill").trigger("click"); // fillDir → fetch #2 (dir B)
+    await chipB.find(".cell-chip-main").trigger("click"); // main click = fillDir → fetch #2 (dir B)
 
     second.resolve({ ok: true, json: async () => ({ cwd: "/B", sessions: [{ id: "b-id", title: "B-sess", mtime: 1 }] }) });
     await flushPromises();
@@ -326,26 +326,80 @@ describe("TerminalCell", () => {
     expect(w.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/resolved");
   });
 
-  it("clicking a preset chip launches a fresh session in its dir", async () => {
+  it("clicking a preset chip's main button fills the dir WITHOUT launching (so the user can resume or start)", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
     const main = w.findAll(".cell-chip-main").find((b) => b.text() === "proj");
     if (!main) throw new Error("preset chip not found");
     await main.trigger("click");
+    // No terminal — the main click only selects the directory (fill, not launch).
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+  });
+
+  it("the chip's ▶ launch button quick-starts a fresh session in its dir", async () => {
+    const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
+    await flushPromises();
+    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    if (!chip) throw new Error("preset chip not found");
+    await chip.find(".cell-chip-launch").trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/work/proj");
   });
 
-  it("a chip's fill button sets the dir WITHOUT launching (so the user can resume)", async () => {
-    const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
-    await flushPromises();
-    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
-    if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-fill").trigger("click");
-    // No terminal — the fill button only selects the directory.
-    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+  it("filling a dir from a preset loads its sessions once — the debounced watch doesn't double-fetch", async () => {
+    vi.useFakeTimers();
+    try {
+      const w = mountCell(null, { defaultCwd: "/def", presets: [{ label: "x", path: "/x" }] });
+      await flushPromises(); // settle the mount's own (immediate) load
+      const sessionCalls = () =>
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
+      const before = sessionCalls();
+
+      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      if (!main) throw new Error("preset chip not found");
+      await main.trigger("click"); // fillDir → one immediate /api/sessions load
+      await flushPromises();
+      const immediate = sessionCalls() - before;
+
+      await vi.advanceTimersByTimeAsync(400); // let any debounced watch fire
+      await flushPromises();
+      const total = sessionCalls() - before;
+
+      expect(immediate).toBe(1); // loaded immediately on click
+      expect(total).toBe(1); // and the 300ms watch did NOT re-fetch
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("a preset fill cancels a pending typed-dir debounce (type-then-click doesn't double-fetch)", async () => {
+    vi.useFakeTimers();
+    try {
+      const w = mountCell(null, { defaultCwd: "/def", presets: [{ label: "x", path: "/x" }] });
+      await flushPromises();
+      const sessionCalls = () =>
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
+
+      await w.find(".cell-dir-input").setValue("/typed"); // schedules a 300ms debounced load
+      const before = sessionCalls();
+
+      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      if (!main) throw new Error("preset chip not found");
+      await main.trigger("click"); // fillDir → immediate load + must cancel the pending /typed debounce
+      await flushPromises();
+      const afterClick = sessionCalls() - before;
+
+      await vi.advanceTimersByTimeAsync(400); // the stale /typed debounce would fire here if not cancelled
+      await flushPromises();
+      const total = sessionCalls() - before;
+
+      expect(afterClick).toBe(1); // the fill's own immediate load
+      expect(total).toBe(1); // the pending typed-dir debounce was cancelled — no second fetch
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("emits record-cwd with the server-confirmed cwd of a fresh launch", async () => {
@@ -1465,10 +1519,11 @@ describe("TerminalCell", () => {
     const idle = chips.find((c) => c.text().includes("proj-b"));
     expect(running?.classes()).toContain("is-running");
     expect(running?.find(".cell-chip-dot").exists()).toBe(true);
-    // a11y: the running state is exposed in text, not just color/hover
-    expect(running?.find(".cell-chip-main").attributes("aria-label")).toContain("already running");
+    // a11y: the running state is exposed in text (on the ▶ launch button — the action that
+    // would actually double-launch there), not just color/hover.
+    expect(running?.find(".cell-chip-launch").attributes("aria-label")).toContain("already running");
     expect(idle?.classes()).not.toContain("is-running");
     expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
-    expect(idle?.find(".cell-chip-main").attributes("aria-label")).toBeUndefined();
+    expect(idle?.find(".cell-chip-launch").attributes("aria-label")).not.toContain("already running");
   });
 });
