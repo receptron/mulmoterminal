@@ -42,7 +42,7 @@ describe("WORKLOG_PROMPT prompt-injection hardening", () => {
   });
 
   it("restricts writes to the designated files and forbids leaking secrets", () => {
-    expect(WORKLOG_PROMPT).toContain("書き込み対象は次の4種のみ");
+    expect(WORKLOG_PROMPT).toContain("書き込み対象は次のファイルに限定");
     expect(WORKLOG_PROMPT).toContain("worklog-state.json");
     expect(WORKLOG_PROMPT).toContain("秘密情報");
   });
