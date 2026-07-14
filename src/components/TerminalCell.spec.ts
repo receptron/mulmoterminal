@@ -303,7 +303,7 @@ describe("TerminalCell", () => {
     await nextTick(); // mount → fetch #1 (dir A) in flight
     const chipB = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "B");
     if (!chipB) throw new Error("preset B not found");
-    await chipB.find(".cell-chip-fill").trigger("click"); // fillDir → fetch #2 (dir B)
+    await chipB.find(".cell-chip-main").trigger("click"); // main click = fillDir → fetch #2 (dir B)
 
     second.resolve({ ok: true, json: async () => ({ cwd: "/B", sessions: [{ id: "b-id", title: "B-sess", mtime: 1 }] }) });
     await flushPromises();
@@ -326,26 +326,26 @@ describe("TerminalCell", () => {
     expect(w.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/resolved");
   });
 
-  it("clicking a preset chip launches a fresh session in its dir", async () => {
+  it("clicking a preset chip's main button fills the dir WITHOUT launching (so the user can resume or start)", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
     const main = w.findAll(".cell-chip-main").find((b) => b.text() === "proj");
     if (!main) throw new Error("preset chip not found");
     await main.trigger("click");
-    const term = w.findComponent({ name: "TerminalView" });
-    expect(term.exists()).toBe(true);
-    expect(term.props("cwd")).toBe("/work/proj");
+    // No terminal — the main click only selects the directory (fill, not launch).
+    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
+    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
   });
 
-  it("a chip's fill button sets the dir WITHOUT launching (so the user can resume)", async () => {
+  it("the chip's ▶ launch button quick-starts a fresh session in its dir", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
     const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
     if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-fill").trigger("click");
-    // No terminal — the fill button only selects the directory.
-    expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+    await chip.find(".cell-chip-launch").trigger("click");
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("cwd")).toBe("/work/proj");
   });
 
   it("emits record-cwd with the server-confirmed cwd of a fresh launch", async () => {
@@ -1465,10 +1465,11 @@ describe("TerminalCell", () => {
     const idle = chips.find((c) => c.text().includes("proj-b"));
     expect(running?.classes()).toContain("is-running");
     expect(running?.find(".cell-chip-dot").exists()).toBe(true);
-    // a11y: the running state is exposed in text, not just color/hover
-    expect(running?.find(".cell-chip-main").attributes("aria-label")).toContain("already running");
+    // a11y: the running state is exposed in text (on the ▶ launch button — the action that
+    // would actually double-launch there), not just color/hover.
+    expect(running?.find(".cell-chip-launch").attributes("aria-label")).toContain("already running");
     expect(idle?.classes()).not.toContain("is-running");
     expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
-    expect(idle?.find(".cell-chip-main").attributes("aria-label")).toBeUndefined();
+    expect(idle?.find(".cell-chip-launch").attributes("aria-label")).not.toContain("already running");
   });
 });
