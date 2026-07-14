@@ -26,3 +26,12 @@ export function activityHookEffects(event: string, active: boolean): ActivityEff
   if (event === "Notification") return active ? [] : [{ kind: "waiting", value: true }];
   return [];
 }
+
+// Whether a finished turn should fire a task-finished Web Push. Unlike the attention beep
+// (activityHookEffects, which stays quiet on the actively-viewed pane), the push fires for
+// EVERY finished turn regardless of `active` — the user wants a phone notification even for
+// the session they're currently looking at. The pushEnabled / hidden / translation gates
+// are applied by the caller.
+export function shouldNotifyTaskFinished(event: string): boolean {
+  return event === "Stop";
+}

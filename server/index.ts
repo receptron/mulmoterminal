@@ -42,7 +42,7 @@ import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-confi
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
-import { activityHookEffects } from "./activity-hook.js";
+import { activityHookEffects, shouldNotifyTaskFinished } from "./activity-hook.js";
 import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
@@ -1113,10 +1113,10 @@ function handleActivityHook(sessionId: string, event: string, active: boolean) {
     if (eff.kind === "working") setWorking(sessionId, eff.value, event);
     else setWaiting(sessionId, eff.value, event);
   }
-  // A background turn just ended (same attention-flag semantics as the beep: not the pane
-  // the user is viewing) → push once. Stop is one event per finished turn, so this fires
-  // once even though a background Stop publishes twice (waiting + working).
-  if (event === "Stop" && !active) notifyTaskFinished(sessionId);
+  // Every finished turn fires a Web Push (see shouldNotifyTaskFinished) — regardless of
+  // whether it's the actively-viewed pane, unlike the attention beep. Stop is one event per
+  // finished turn, so this fires once even though a background Stop publishes twice.
+  if (shouldNotifyTaskFinished(event)) notifyTaskFinished(sessionId);
 }
 
 const PUSH_TITLE_MAX = 80;
