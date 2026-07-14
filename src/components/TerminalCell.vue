@@ -290,11 +290,20 @@ function selectPreset(p: CwdPreset) {
   launchIn(p.path);
 }
 
+// A programmatic dir change (fillDir) loads the lists immediately, so the dirInput watch
+// below must skip the debounced reload it would otherwise ALSO fire — or every preset
+// click / folder pick would fetch the lists twice.
+let skipDirWatch = false;
+
 // The chip's main click (and the 📁 folder picker): fill the field WITHOUT launching,
 // and refresh the resume / script / worktree lists for that dir so the user can pick a
 // session to resume — or start fresh — instead of launching immediately.
 function fillDir(path: string) {
   dirTouched.value = true;
+  // Set the skip only when the value actually changes (so the watch will fire and consume
+  // it) — a same-value click doesn't fire the watch and would leave a stale flag that
+  // swallows the next real reload.
+  if (dirInput.value !== path) skipDirWatch = true;
   dirInput.value = path;
   loadResumable();
   loadScripts();
@@ -475,6 +484,10 @@ async function removeWorktree(w: Worktree) {
 
 // Refresh the resume list and the runnable scripts when the target dir changes.
 watch([dirInput, () => props.defaultCwd], () => {
+  if (skipDirWatch) {
+    skipDirWatch = false; // a fillDir() already loaded these immediately — don't double-fetch
+    return;
+  }
   if (resumableTimer) clearTimeout(resumableTimer);
   resumableTimer = setTimeout(() => {
     loadResumable();

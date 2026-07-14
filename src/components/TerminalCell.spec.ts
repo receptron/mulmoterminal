@@ -348,6 +348,32 @@ describe("TerminalCell", () => {
     expect(term.props("cwd")).toBe("/work/proj");
   });
 
+  it("filling a dir from a preset loads its sessions once — the debounced watch doesn't double-fetch", async () => {
+    vi.useFakeTimers();
+    try {
+      const w = mountCell(null, { defaultCwd: "/def", presets: [{ label: "x", path: "/x" }] });
+      await flushPromises(); // settle the mount's own (immediate) load
+      const sessionCalls = () =>
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
+      const before = sessionCalls();
+
+      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      if (!main) throw new Error("preset chip not found");
+      await main.trigger("click"); // fillDir → one immediate /api/sessions load
+      await flushPromises();
+      const immediate = sessionCalls() - before;
+
+      await vi.advanceTimersByTimeAsync(400); // let any debounced watch fire
+      await flushPromises();
+      const total = sessionCalls() - before;
+
+      expect(immediate).toBe(1); // loaded immediately on click
+      expect(total).toBe(1); // and the 300ms watch did NOT re-fetch
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("emits record-cwd with the server-confirmed cwd of a fresh launch", async () => {
     // A fresh launch + the server confirming the effective cwd asks the parent to
     // auto-record that dir as a preset (the parent persists it to config).
