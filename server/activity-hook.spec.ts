@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects } from "./activity-hook.js";
+import { activityHookEffects, shouldNotifyTaskFinished } from "./activity-hook.js";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {
@@ -33,5 +33,20 @@ describe("activityHookEffects", () => {
   it("ignores unrelated events", () => {
     expect(activityHookEffects("PreToolUse", false)).toEqual([]);
     expect(activityHookEffects("SessionStart", true)).toEqual([]);
+  });
+});
+
+describe("shouldNotifyTaskFinished", () => {
+  it("fires on every finished turn — unlike the beep, the actively-viewed pane is NOT exempt", () => {
+    // The push takes no `active` argument by design: a Stop notifies whether or not the user
+    // is looking at that pane. This regression-guards against re-adding an active-pane gate.
+    expect(shouldNotifyTaskFinished("Stop")).toBe(true);
+  });
+
+  it("does not fire on non-Stop events (a paused turn / prompt / tool use is not a finish)", () => {
+    expect(shouldNotifyTaskFinished("Notification")).toBe(false);
+    expect(shouldNotifyTaskFinished("UserPromptSubmit")).toBe(false);
+    expect(shouldNotifyTaskFinished("PreToolUse")).toBe(false);
+    expect(shouldNotifyTaskFinished("SessionStart")).toBe(false);
   });
 });
