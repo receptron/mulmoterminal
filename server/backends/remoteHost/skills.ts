@@ -15,6 +15,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { userSkillsDir, projectSkillsDir } from "../collections.js";
+import { SLUG_RE } from "../../codex-skills.js";
 
 const SKILL_FILE = "SKILL.md";
 
@@ -80,7 +81,11 @@ const collectSkills = async (root: string): Promise<DiscoveredSkill[]> => {
   }
   const skills: DiscoveredSkill[] = [];
   for (const name of entries) {
-    if (name.startsWith(".")) continue; // .DS_Store, .gitkeep, …
+    // Only accept safe slugs. This drops hidden entries (.DS_Store, .gitkeep) AND
+    // names with whitespace/quotes/newlines — a malformed slug reaches the client as
+    // /<slug> typed into the session, so validate at the discovery source (menu + API
+    // + the .mulmoterminal.json allowlist all read from here).
+    if (!SLUG_RE.test(name)) continue;
     const dir = resolve(root, name);
     try {
       // stat (not lstat) follows symlinks, so `ln -s target skills/name` works.

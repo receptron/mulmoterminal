@@ -123,6 +123,17 @@ describe("discoverSkills", () => {
     writeSkill(ws, "good", SKILL_MD);
     expect(await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).toEqual([{ slug: "good", description: "does a thing" }]);
   });
+
+  // A malformed slug is typed verbatim into the session as /<slug>, so a name with
+  // whitespace/quotes (e.g. from an untrusted repo's .claude/skills) must never be
+  // discovered — even with valid frontmatter.
+  it("rejects dir names that aren't safe slugs (whitespace/quotes/leading dash)", async () => {
+    writeSkill(ws, "bad name", SKILL_MD); // space
+    writeSkill(ws, 'q"uote', SKILL_MD); // quote
+    writeSkill(ws, "-lead", SKILL_MD); // non-alnum start
+    writeSkill(ws, "safe-slug_1", SKILL_MD); // the only valid one
+    expect((await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).map((s) => s.slug)).toEqual(["safe-slug_1"]);
+  });
 });
 
 describe("applySkillFilter", () => {
