@@ -283,15 +283,16 @@ function launchProgram(index: number, l: Launcher) {
   emit("launch", { index, label: l.label, cwd: dirInput.value.trim() || props.defaultCwd });
 }
 
-// A preset chip is a one-click action: fill the field and jump straight into a
-// fresh session in that dir.
+// The chip's ▶ button: a one-click quick launch — fill the field and jump straight
+// into a fresh session in that dir.
 function selectPreset(p: CwdPreset) {
   dirInput.value = p.path;
   launchIn(p.path);
 }
 
-// The chip's tiny end button: fill the field WITHOUT launching, and refresh the
-// resume / script / worktree lists for that dir so the user can resume there.
+// The chip's main click (and the 📁 folder picker): fill the field WITHOUT launching,
+// and refresh the resume / script / worktree lists for that dir so the user can pick a
+// session to resume — or start fresh — instead of launching immediately.
 function fillDir(path: string) {
   dirTouched.value = true;
   dirInput.value = path;
@@ -1059,20 +1060,22 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button
             type="button"
             class="cell-chip-main"
-            :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : p.path"
-            :aria-label="isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : undefined"
-            @click="selectPreset(p)"
+            :title="p.path"
+            :aria-label="`Use ${p.label} — fill the field to browse / resume here (without launching)`"
+            @click="fillDir(p.path)"
           >
             <span v-if="isCwdRunning(p.path)" class="cell-chip-dot" aria-hidden="true" />{{ p.label }}
           </button>
           <button
             type="button"
-            class="cell-chip-fill"
-            :title="`Use ${p.path} without launching (browse / resume here)`"
-            :aria-label="`Use ${p.path} without launching`"
-            @click="fillDir(p.path)"
+            class="cell-chip-launch"
+            :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : `Launch a new terminal in ${p.path} now`"
+            :aria-label="
+              isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : `Launch a new terminal in ${p.label} now`
+            "
+            @click="selectPreset(p)"
           >
-            <span class="material-symbols-outlined">edit</span>
+            <span class="material-symbols-outlined">play_arrow</span>
           </button>
           <button
             type="button"
@@ -1535,7 +1538,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 .cell-chip.is-running .cell-chip-main {
   color: var(--text);
 }
-.cell-chip-fill {
+.cell-chip-launch {
   display: inline-flex;
   align-items: center;
   border: none;
@@ -1545,7 +1548,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   cursor: pointer;
   padding: 0 5px;
 }
-.cell-chip-fill .material-symbols-outlined {
+.cell-chip-launch .material-symbols-outlined {
   font-size: 14px;
 }
 .cell-chip-del {
@@ -1558,7 +1561,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   padding: 0 7px;
 }
 .cell-chip-main:hover,
-.cell-chip-fill:hover {
+.cell-chip-launch:hover {
   background: var(--bg-hover);
   color: var(--text);
 }
