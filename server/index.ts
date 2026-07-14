@@ -38,7 +38,7 @@ import {
 } from "./sandbox.js";
 import { listPrsAcrossRepos } from "./prs.js";
 import { listIssuesAcrossRepos } from "./issues.js";
-import { publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "./dir-config.js";
+import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } from "./dir-config.js";
 import { loadScripts, resolveScript } from "./scripts.js";
 import { buildClaudeArgs } from "./claude-args.js";
 import { resolveSession, type SessionResolution } from "./session-resolve.js";
@@ -50,6 +50,7 @@ import { buildCodexArgs } from "./codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
 import { listCodexSessions, codexRolloutExists } from "./codex-sessions.js";
 import { codexifySkillSeed } from "./codex-skills.js";
+import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { stripTerminalQueries } from "./terminal-replay.js";
 import {
   isRecord,
@@ -1417,6 +1418,18 @@ app.get("/api/issues", async (_req, res) => {
 app.get("/api/scripts", (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json({ cwd, scripts: loadScripts(cwd).map((s, index) => ({ index, label: s.label, command: s.command, cwd: s.cwd })) });
+});
+
+// The `.claude/skills` (user + project scope) discoverable for ?cwd=<dir>, so the
+// terminal header's Skill menu can list them — working-dir skills first. Mirrors
+// /api/scripts: the picked skill is invoked in the running session by typing its
+// /<slug> (agent-side), so the browser only needs the slug + a description tooltip.
+// A per-dir `.mulmoterminal.json` `skills` allowlist narrows/orders the list;
+// absent => show all.
+app.get("/api/skills", async (req, res) => {
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const skills = applySkillFilter(await discoverSkills({ workspaceRoot: cwd }), loadDirConfig(cwd).skills);
+  res.json({ cwd, skills });
 });
 
 // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the

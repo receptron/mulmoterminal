@@ -71,6 +71,7 @@ server, and opens the browser. For local development from a clone, see
 - [Configuration](#configuration)
 - [Running](#running)
 - [Scripts (Run menu)](#scripts-run-menu)
+- [Skills (Skill menu)](#skills-skill-menu)
 - [Files view (browse & edit)](#files-view-browse--edit)
 - [Git worktrees & pull requests](#git-worktrees--pull-requests)
 - [Cost & token usage](#cost--token-usage)
@@ -495,6 +496,39 @@ the last 32 KB of output. See
 
 ---
 
+## Skills (Skill menu)
+
+Next to the **▶ Run ▾** dropdown, every running terminal's header has a **⚡ Skill ▾**
+dropdown — in both the single view and each grid cell, and **only when the open
+project has skills** (nothing discovered, no button). It lists the
+[Claude skills](https://docs.claude.com/en/docs/claude-code/skills) discoverable for
+that terminal's directory — both **project scope** (`<dir>/.claude/skills`) and **user
+scope** (`~/.claude/skills`), the same skills Claude sees — and, on pick, **runs the
+skill in that session**: it types the skill's invocation into the terminal and submits
+it (for Claude, its `/<slug>` command; for Codex, which has no slash command, a plain
+`Use the "<slug>" skill.` instruction). Unlike **▶ Run** — which launches a
+`script.json` shell command in a spare cell — a skill runs **in the session you
+picked it from**, continuing that conversation.
+
+**Ordering:** working-dir (project) skills come **first**, then user-scope ones,
+alphabetical within each group; a project skill of the same slug shadows the user one.
+
+**Filtering:** add a `skills` array to the directory's
+[`.mulmoterminal.json`](#per-directory-settings-projectmulmoterminaljson) to narrow the menu —
+an allowlist of slugs that also sets the order (only those show, in that order). Omit
+it to show everything.
+
+```jsonc
+// <dir>/.mulmoterminal.json
+{ "skills": ["review-diff", "commit-msg"] }
+```
+
+Each menu item shows the skill's id, with its `SKILL.md` `description` as the hover
+tooltip. A directory (or workspace) without any `.claude/skills` simply shows no
+button. Skills are discovered read-only; the menu never creates or edits them.
+
+---
+
 ## Files view (browse & edit)
 
 A terminal header can carry a **📁 Files** button — add it as a [header button](#header-buttons)
@@ -682,6 +716,30 @@ position the client sends back to `/ws/run`).
 
 A missing or invalid `script.json` is **not** an error — it yields an empty
 `scripts` array.
+
+### HTTP: `GET /api/skills`
+
+The Claude skills discoverable for a terminal's chosen directory (`?cwd=<dir>`,
+falling back to `CLAUDE_CWD`) — project scope (`<cwd>/.claude/skills`) plus user scope
+(`~/.claude/skills`), deduped by slug (project shadows user), **working-dir skills
+first**; see [Skills (Skill menu)](#skills-skill-menu). A `skills` allowlist in that
+directory's `.mulmoterminal.json` narrows and reorders the result; absent → all. The
+resolved `cwd` is echoed back. Each entry carries its `slug` (the skill invoked as
+`/<slug>`) and the `SKILL.md` `description` (the menu tooltip).
+
+```jsonc
+// GET /api/skills?cwd=/Users/me/proj
+{
+  "cwd": "/Users/me/proj",
+  "skills": [
+    { "slug": "commit", "description": "Write a commit message" },
+    { "slug": "review", "description": "Review the current diff" }
+  ]
+}
+```
+
+A directory without any discoverable skills is **not** an error — it yields an empty
+`skills` array.
 
 ### HTTP: `POST /api/command/summarize`
 

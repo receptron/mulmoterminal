@@ -160,6 +160,19 @@ export const dirColorsField = z
   .nullable()
   .catch(null);
 
+// A per-dir allowlist for the header Skill menu: which skill slugs to show, in this
+// order. Trimmed, deduped, capped. null when unset/garbage/empty — which means
+// "no filter, show every discovered skill" (absent config == show all).
+export const MAX_SKILL_FILTER = 100;
+export const dirSkillsField = z
+  .array(z.string())
+  .transform((arr) => {
+    const cleaned = [...new Set(arr.map((s) => s.trim()).filter(Boolean))].slice(0, MAX_SKILL_FILTER);
+    return cleaned.length ? cleaned : null;
+  })
+  .nullable()
+  .catch(null);
+
 // ---- JSON Schema for the config skill -----------------------------------------------------
 // The WRITABLE per-dir shape (what a user types into `.mulmoterminal.json`), described strictly
 // so the skill can validate its output and drive structured generation. Distinct from the
@@ -231,6 +244,8 @@ const writableDirConfigSchema = z.object({
   sound: nonEmptyText.optional(),
   buttons: z.array(writableHeaderButtonSchema).max(MAX_BUTTONS).optional(),
   chips: z.array(writableHeaderChipSchema).max(MAX_CHIPS).optional(),
+  // Header Skill-menu allowlist: show only these skill slugs, in this order. Omit to show all.
+  skills: z.array(nonEmptyText).max(MAX_SKILL_FILTER).optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {
