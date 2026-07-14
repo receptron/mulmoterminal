@@ -15,7 +15,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-regis
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled } from "./config-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config-routes.js";
 import { sendWebPush } from "./web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
 import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
@@ -88,6 +88,8 @@ import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
 import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
+import { worklogSystemTask } from "./backends/worklog.js";
+import type { TaskDefinition } from "@mulmoclaude/core/scheduler";
 import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountTranslationRoutes } from "./backends/translation.js";
@@ -1752,10 +1754,16 @@ try {
   // host is already configured above (initFeedsBackend), so refreshDue can run. When both
   // apps run on the shared workspace, the engine's shared `lastFetchedAt` soft-dedups —
   // whoever refreshes first stamps it, the other's isFeedDue skips (plan: soft-dedup v1).
+  // Built-in system tasks: the shared feed-refresh, plus the opt-in dev worklog
+  // (registered only when worklog.enabled). null (worklog off) is filtered out.
+  const systemTasks: TaskDefinition[] = [
+    feedRefreshTaskDef({ workspaceRoot: CLAUDE_CWD }),
+    worklogSystemTask({ ...getWorklogConfig(), spawnChat: spawnScheduledChat }),
+  ].filter((task): task is TaskDefinition => task !== null);
   initUserTaskScheduler({
     workspace: CLAUDE_CWD,
     spawnChat: spawnScheduledChat,
-    systemTasks: [feedRefreshTaskDef({ workspaceRoot: CLAUDE_CWD })],
+    systemTasks,
   });
 } catch (err) {
   console.error("[scheduler] init failed (non-fatal)", err);

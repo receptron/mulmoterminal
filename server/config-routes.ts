@@ -44,6 +44,12 @@ export function getPushEnabled(): boolean {
   return config.pushEnabled;
 }
 
+// The periodic dev-work-log settings — read live so a toggle takes effect on the next
+// scheduler wiring (a restart, currently). Off by default.
+export function getWorklogConfig(): { enabled: boolean; intervalHours: number } {
+  return { enabled: config.worklogEnabled, intervalHours: config.worklogIntervalHours };
+}
+
 // Body fields that must be an array when present (a partial POST /api/config may omit any).
 const ARRAY_FIELDS = ["cwdPresets", "prRepos", "launchers", "userMcpServers"] as const;
 function badArrayField(body: Record<string, unknown>): string | null {
@@ -76,6 +82,8 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     buttons: config.buttons,
     chips: config.chips,
     pushEnabled: config.pushEnabled,
+    worklogEnabled: config.worklogEnabled,
+    worklogIntervalHours: config.worklogIntervalHours,
   });
 
   app.get("/api/config", (_req, res) => {

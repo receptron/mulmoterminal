@@ -27,6 +27,11 @@ export interface AppConfig {
   // Send a Web Push (sendPush Cloud Function) when a task finishes. Off by default; only
   // fires while the RemoteHost channel is connected (that's what supplies the Firebase auth).
   pushEnabled: boolean;
+  // Periodic dev-work log: a built-in scheduled task that summarizes recent work across
+  // the saved working dirs into weekly wiki pages. Off by default (it spawns an LLM
+  // session on each run, so it costs tokens). `worklogIntervalHours` is the cadence.
+  worklogEnabled: boolean;
+  worklogIntervalHours: number;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -105,6 +110,20 @@ export function sanitizePushEnabled(input: unknown): boolean {
   return input === true;
 }
 
+export const DEFAULT_WORKLOG_INTERVAL_HOURS = 6;
+const MIN_WORKLOG_INTERVAL_HOURS = 1;
+const MAX_WORKLOG_INTERVAL_HOURS = 168; // one week
+
+export function sanitizeWorklogEnabled(input: unknown): boolean {
+  return input === true;
+}
+
+// Positive whole hours, clamped to [1, 168]. Anything else falls back to the default.
+export function sanitizeWorklogIntervalHours(input: unknown): number {
+  if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) return DEFAULT_WORKLOG_INTERVAL_HOURS;
+  return Math.min(MAX_WORKLOG_INTERVAL_HOURS, Math.max(MIN_WORKLOG_INTERVAL_HOURS, Math.round(input)));
+}
+
 // Fresh object each call — callers hold and mutate the returned config in place, so a
 // shared default constant would be corrupted across loads.
 const emptyConfig = (): AppConfig => ({
@@ -116,6 +135,8 @@ const emptyConfig = (): AppConfig => ({
   buttons: null,
   chips: null,
   pushEnabled: false,
+  worklogEnabled: false,
+  worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
 });
 
 export function loadAppConfig(file: string): AppConfig {
@@ -131,6 +152,8 @@ export function loadAppConfig(file: string): AppConfig {
       buttons: sanitizeButtons(raw?.buttons),
       chips: sanitizeChips(raw?.chips),
       pushEnabled: sanitizePushEnabled(raw?.pushEnabled),
+      worklogEnabled: sanitizeWorklogEnabled(raw?.worklogEnabled),
+      worklogIntervalHours: sanitizeWorklogIntervalHours(raw?.worklogIntervalHours),
     };
   } catch {
     return emptyConfig();
@@ -152,6 +175,8 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     buttons: body.buttons !== undefined ? sanitizeButtons(body.buttons) : base.buttons,
     chips: body.chips !== undefined ? sanitizeChips(body.chips) : base.chips,
     pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : base.pushEnabled,
+    worklogEnabled: body.worklogEnabled !== undefined ? sanitizeWorklogEnabled(body.worklogEnabled) : base.worklogEnabled,
+    worklogIntervalHours: body.worklogIntervalHours !== undefined ? sanitizeWorklogIntervalHours(body.worklogIntervalHours) : base.worklogIntervalHours,
   };
 }
 
@@ -169,6 +194,8 @@ export function saveAppConfig(file: string, config: AppConfig): boolean {
       buttons: config.buttons,
       chips: config.chips,
       pushEnabled: config.pushEnabled,
+      worklogEnabled: config.worklogEnabled,
+      worklogIntervalHours: config.worklogIntervalHours,
     };
     writeFileSync(file, JSON.stringify(payload, null, 2));
     return true;
