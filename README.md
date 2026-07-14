@@ -336,18 +336,28 @@ Cloud Function; MulmoTerminal only makes the call, and only while the **RemoteHo
 channel is connected (its Google sign-in supplies the notification auth). With RemoteHost
 disconnected, or with no device registered, the toggle is a no-op.
 
-**Dev worklog (cross-clone).** Enable `worklogEnabled` to register a built-in scheduled
-task that, every `worklogIntervalHours` (default 6), spawns a Claude session which
-summarizes the work you did across **all your saved working dirs** (`cwdPresets`) since it
-last ran — grouped by repository, so multiple clones/worktrees of the same repo (e.g.
-`myapp`, `myapp2`) collapse into one entry — and appends it to a **weekly wiki page**
-(`data/wiki/pages/dev-log-YYYY-Www.md`). It reads `vision.md` / `milestones.md` (creating
-empty ones if absent) and notes progress against your milestones so a long-running goal
-isn't forgotten. The run window is **since the last run** (not a fixed 6 h), so a
-missed/slept run doesn't drop work. Off by default because each run costs tokens; watch
-the cost readout and tune the cadence. Takes effect on the next server start (the
-scheduler reads tasks at boot). Run the batch on a single "hub" instance — running it in
-several instances sharing one workspace double-fires it.
+**Dev worklog (cross-clone).** Set `worklogEnabled: true` in
+`~/.mulmoterminal/config.json` (and **restart** — the scheduler reads its tasks at boot)
+to register a built-in scheduled task. Every `worklogIntervalHours` (default 6) it spawns
+a Claude session that reviews the work you did across **all your saved working dirs**
+(`cwdPresets`) since it last ran, and writes it up as a short manager-style report.
+Multiple clones/worktrees of the same repo (e.g. `myapp`, `myapp2`) are **merged into one
+per-repository section**, each covering what problem was addressed, what got solved, what's
+still in progress, and — mined from the transcripts — decisions that were only *discussed
+and not built*. The window is **since the last run** (tracked in
+`config/scheduler/worklog-state.json`), not a fixed 6 h, so a missed/slept run doesn't drop
+work. It reads and reconciles progress against `vision.md` / `milestones.md` (creating
+empty ones if absent) so a long-running goal isn't forgotten.
+
+Output lands in the wiki: one **weekly page** per ISO week
+(`data/wiki/pages/dev-log-YYYY-www.md` — filenames are lowercase, or the wiki can't open
+them), each tagged `worklog`. To browse them, open the **作業ログ 一覧** hub page
+(`worklog`), which links every week, or click the **`#worklog`** tag in the wiki index.
+
+Off by default because each run costs tokens — watch the cost readout and tune the cadence.
+Run it on a single "hub" instance; running it in several instances sharing one workspace
+double-fires it. The batch treats everything it reads (transcripts, git, wiki) as untrusted
+data and only writes the worklog / hub / `vision` / `milestones` pages.
 
 ### Per-directory settings (`<project>/.mulmoterminal.json`)
 
