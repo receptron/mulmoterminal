@@ -184,6 +184,18 @@ An array (≤ 16) of display chips, or **omit** the key entirely to keep the def
 - a builtin id string: `"dir"` `"git"` `"ctx"` `"usage"` `"status"` `"diff"` `"tools"` (shown in the order listed; omit to hide), or
 - a custom read-only chip: `{ "label": "env", "text": "⎇ ${branch}", "when": "isGitRepo" }`.
 
+### Skill menu — `skills`
+
+The header's **⚡ Skill ▾** dropdown lists this directory's Claude skills (`.claude/skills`,
+user + project scope) and runs the picked one in the session. `skills` is an **allowlist
+that also sets the order**: an array (≤ 100) of skill slugs — only these appear, in this
+order. **Omit `skills`** to show every discovered skill (working-dir skills first). Slugs
+that don't resolve to a real skill are simply ignored.
+
+```json
+{ "skills": ["review-diff", "commit-msg"] }
+```
+
 ### `${var}` substitution (in `cmd` / `text` / `open` / custom chip `text`)
 
 `${dir}` `${dirName}` `${branch}` `${repo}` `${model}` `${agent}` `${session}` `${remoteUrl}`

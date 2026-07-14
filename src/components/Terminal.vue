@@ -11,6 +11,8 @@ import { useVoiceInput } from "../composables/useVoiceInput";
 import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
 import RunMenu from "./RunMenu.vue";
+import SkillMenu from "./SkillMenu.vue";
+import { skillSeed } from "./skillSeed";
 import GitBranchChip from "./GitBranchChip.vue";
 import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderButtons";
 import { useSessionContext } from "../composables/useSessionContext";
@@ -28,7 +30,9 @@ import type { RunCommand } from "./runCommand";
 // it connects to /ws/run with the script index instead of resuming a Claude
 // session, and never auto-reconnects (the ephemeral process can't be resumed).
 // `runMenu` adds a ▶ Run dropdown to the header (the single view) that lists the
-// open project's script.json and emits the picked command for the parent to run.
+// open project's script.json and emits the picked command for the parent to run,
+// plus a ⚡ Skill dropdown that lists the project's .claude/skills and invokes the
+// picked one in this session (types its /<slug>).
 // `persistKey` opts this terminal into a durable connection (kept alive across
 // unmount via useTerminalConnections, keyed by this stable slot id — the grid cell's
 // uid or the single view). Absent => an ephemeral slot torn down on unmount (command
@@ -130,6 +134,12 @@ function onHeaderButton(button: HeaderButton): void {
   };
   emit("run", command);
 }
+// A skill picked from the header Skill menu runs IN this session (not a spare cell
+// like a script): type its invocation and submit, exactly like a `run:"input"` button.
+function onSkill(slug: string): void {
+  conn.submitText(slotKey, skillSeed(slug, props.codex ?? false));
+}
+
 // Git status chip — single view only. In the grid the embedding TerminalCell shows
 // its own chip, so null the cwd here to skip redundant polling (status stays null).
 const gitCwd = computed(() => (props.devTerminal ? null : serverCwd.value));
@@ -322,6 +332,7 @@ onUnmounted(() => {
       <GitBranchChip :status="gitStatus" />
       <span :class="['status', status]">{{ status }}</span>
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
+      <SkillMenu v-if="runMenu" :cwd="serverCwd" @skill="onSkill" />
       <div class="header-actions">
         <button
           v-for="b in headerButtons"

@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { discoverSkillNames } from "./skills.js";
+import { discoverSkillNames, discoverSkills, applySkillFilter } from "./skills.js";
 
 // Write `<root>/.claude/skills/<name>/SKILL.md` with the given contents.
 const writeSkill = (root: string, name: string, contents: string): void => {
@@ -78,5 +78,73 @@ describe("discoverSkillNames", () => {
 
   it("returns an empty list when neither root exists", async () => {
     expect(await discoverSkillNames({ workspaceRoot: ws, userDir: userDir() })).toEqual([]);
+  });
+});
+
+describe("discoverSkills", () => {
+  let userHome: string;
+  let ws: string;
+
+  beforeEach(() => {
+    userHome = mkdtempSync(path.join(tmpdir(), "mt-skills-user-"));
+    ws = mkdtempSync(path.join(tmpdir(), "mt-skills-ws-"));
+  });
+  afterEach(() => {
+    rmSync(userHome, { recursive: true, force: true });
+    rmSync(ws, { recursive: true, force: true });
+  });
+
+  const userDir = () => path.join(userHome, ".claude", "skills");
+
+  it("lists working-dir (project) skills first, then user skills (alpha within each)", async () => {
+    writeSkill(userHome, "alpha", "---\ndescription: a user skill\n---\n\nbody");
+    writeSkill(userHome, "beta", "---\ndescription: another user skill\n---\n\nbody");
+    writeSkill(ws, "zed", "---\ndescription: a project skill\n---\n\nbody");
+    writeSkill(ws, "mid", "---\ndescription: another project skill\n---\n\nbody");
+    // project (mid, zed) lead — alpha-ordered within — then user (alpha, beta), even
+    // though a global alpha sort would interleave them.
+    expect((await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).map((s) => s.slug)).toEqual(["mid", "zed", "alpha", "beta"]);
+  });
+
+  it("strips surrounding quotes from a quoted description", async () => {
+    writeSkill(ws, "quoted", '---\ndescription: "quoted, with a comma"\n---\n\nbody');
+    expect(await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).toEqual([{ slug: "quoted", description: "quoted, with a comma" }]);
+  });
+
+  it("lets a project skill's description shadow the user one of the same slug", async () => {
+    writeSkill(userHome, "shared", "---\ndescription: user version\n---\n\nbody");
+    writeSkill(ws, "shared", "---\ndescription: project version\n---\n\nbody");
+    expect(await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).toEqual([{ slug: "shared", description: "project version" }]);
+  });
+
+  it("skips dirs whose SKILL.md lacks frontmatter or a description", async () => {
+    writeSkill(ws, "no-frontmatter", "# just a heading\n\nbody");
+    writeSkill(ws, "unterminated", "---\ndescription: x\n\nbody");
+    writeSkill(ws, "good", SKILL_MD);
+    expect(await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).toEqual([{ slug: "good", description: "does a thing" }]);
+  });
+});
+
+describe("applySkillFilter", () => {
+  const skills = [
+    { slug: "commit", description: "c" },
+    { slug: "review", description: "r" },
+    { slug: "deploy", description: "d" },
+  ];
+
+  it("returns the skills unchanged when the filter is null (no config → show all)", () => {
+    expect(applySkillFilter(skills, null)).toBe(skills);
+  });
+
+  it("keeps only the listed slugs, in the filter's order", () => {
+    expect(applySkillFilter(skills, ["review", "commit"]).map((s) => s.slug)).toEqual(["review", "commit"]);
+  });
+
+  it("drops a filter slug that isn't discovered", () => {
+    expect(applySkillFilter(skills, ["review", "ghost", "commit"]).map((s) => s.slug)).toEqual(["review", "commit"]);
+  });
+
+  it("yields an empty list when the filter matches nothing", () => {
+    expect(applySkillFilter(skills, ["nope"])).toEqual([]);
   });
 });

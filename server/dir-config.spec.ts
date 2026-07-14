@@ -19,6 +19,7 @@ const EMPTY = {
   sound: null,
   buttons: null,
   chips: null,
+  skills: null,
 };
 
 function withConfig(body: unknown): { dir: string; cleanup: () => void } {
@@ -112,6 +113,7 @@ describe("loadDirConfig", () => {
       buttonColor: "#C7CDF0",
       theme: "nord",
       sound: "./a.mp3",
+      skills: ["  review  ", "commit", "review", ""],
     });
     writeFileSync(path.join(dir, "a.mp3"), "x");
     expect(loadDirConfig(dir)).toEqual({
@@ -128,8 +130,21 @@ describe("loadDirConfig", () => {
       sound: path.join(dir, "a.mp3"),
       buttons: null,
       chips: null,
+      skills: ["review", "commit"], // trimmed, deduped, empties dropped
     });
     cleanup();
+  });
+
+  it("nulls the skills filter when absent, empty, or not an array of strings", () => {
+    const absent = withConfig({ name: "x" });
+    expect(loadDirConfig(absent.dir).skills).toBeNull();
+    absent.cleanup();
+    const empty = withConfig({ skills: ["", "  "] });
+    expect(loadDirConfig(empty.dir).skills).toBeNull();
+    empty.cleanup();
+    const garbage = withConfig({ skills: "review" });
+    expect(loadDirConfig(garbage.dir).skills).toBeNull();
+    garbage.cleanup();
   });
 
   it("drops malformed header colors (hex #rrggbb only)", () => {

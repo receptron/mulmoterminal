@@ -7,7 +7,16 @@
 import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { sanitizeButtons, sanitizeChips } from "./header-config.js";
-import { dirNameField, dirColorField, dirThemeField, dirColorsField, type ThemeId, type HeaderButton, type HeaderChip } from "./config-schema.js";
+import {
+  dirNameField,
+  dirColorField,
+  dirThemeField,
+  dirColorsField,
+  dirSkillsField,
+  type ThemeId,
+  type HeaderButton,
+  type HeaderChip,
+} from "./config-schema.js";
 
 const DIR_CONFIG_FILE = ".mulmoterminal.json";
 
@@ -36,6 +45,9 @@ export interface DirConfig {
   buttons: HeaderButton[] | null;
   // Per-project header display chips, or null when this dir doesn't configure them.
   chips: HeaderChip[] | null;
+  // Header Skill-menu allowlist: show only these skill slugs, in this order. null =
+  // this dir doesn't filter, so the menu shows every discovered skill.
+  skills: string[] | null;
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
@@ -110,6 +122,7 @@ const EMPTY: DirConfig = {
   sound: null,
   buttons: null,
   chips: null,
+  skills: null,
 };
 
 export function loadDirConfig(cwd: string): DirConfig {
@@ -133,6 +146,7 @@ export function loadDirConfig(cwd: string): DirConfig {
       sound: resolveDirSound(base, raw.sound),
       buttons: sanitizeButtons(raw.buttons),
       chips: sanitizeChips(raw.chips),
+      skills: dirSkillsField.parse(raw.skills),
     };
   } catch {
     return EMPTY;
