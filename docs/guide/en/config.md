@@ -125,6 +125,22 @@ Any developer can turn their frequent actions into a single click and surface on
 - Built-in `git` / `diff` / `ctx` / `usage` … shown in the order you list them; omit one to hide it.
 - Custom `{ label, text, when }` … read-only text (`text` expands `${variables}`).
 
+### ⚡ Skill menu filter (`skills`)
+
+The header's **⚡ Skill ▾** lists the skills available in that directory
+(`<project>/.claude/skills` and `~/.claude/skills`). Working-dir (project) skills come
+first, then user-scope ones. Picking one runs the skill **in the current session**
+(Claude: `/<slug>`; Codex: `Use the "<slug>" skill.`).
+
+Set `skills` to an allowlist to show **only those slugs, in that order**. **Omit it to
+show everything.**
+
+```json
+{ "skills": ["review-diff", "commit-msg"] }
+```
+
+- Skill names (slugs) must start alphanumeric and contain only `a-z 0-9 - _`; a slug that doesn't resolve is ignored.
+
 ## Scripts `<project>/script.json`
 
 Your project's scripts that can run in a grid cell (dev server, tests, build, and so on).
