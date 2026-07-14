@@ -15,6 +15,8 @@ import { auth } from "../config/firebase";
 // Session parking (localStorage) + reconnect-outcome decision live in a plain module
 // so they're unit-testable without mounting this Firebase-importing component.
 import { loadStoredSession, persistSession, reconnectAction, type FetchResult, type RemoteHostStatus } from "./remoteHostSession";
+import { registerRemoteHostSelfHeal } from "./remoteHostSelfHeal";
+import { usePubSub } from "../composables/usePubSub";
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
 const MOBILE_URL = "https://mulmoserver.web.app";
@@ -135,14 +137,27 @@ async function onDisconnect() {
   busy.value = false;
 }
 
-// On mount, reflect the real connection state (not the default "disconnected"),
-// then auto-reconnect popup-free from a parked session if the server restarted.
-onMounted(() => {
-  refreshStatus()
+// Re-check the real connection state and, if the server dropped our parked session
+// (e.g. it restarted while this tab stayed open), re-push it popup-free.
+function selfHeal() {
+  return refreshStatus()
     .then(tryAutoReconnect)
     .catch(() => undefined);
+}
+
+// On mount: heal once. Then keep healing on the signals that mean the server may
+// have come back or we returned to the tab — without this a server restart leaves
+// the UI showing "connected" while every Web Push silently no-ops.
+const pubsub = usePubSub();
+let stopSelfHeal: (() => void) | null = null;
+onMounted(() => {
+  void selfHeal();
+  stopSelfHeal = registerRemoteHostSelfHeal(() => void selfHeal(), pubsub.onReconnect);
 });
-onUnmounted(close);
+onUnmounted(() => {
+  close();
+  stopSelfHeal?.();
+});
 </script>
 
 <template>
