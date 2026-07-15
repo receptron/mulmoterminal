@@ -34,11 +34,11 @@ describe("LauncherCell header zoom", () => {
     expect(w.emitted("close")).toHaveLength(1);
   });
 
-  it("does not zoom on a header-background click in the normal grid (only the ⤢ button)", async () => {
-    const w = mountCell(); // zoomed: undefined → normal grid
-    expect(w.find(".cell-header").classes()).not.toContain("is-zoomable");
+  it("zooms on a header-background click in the normal grid (mirrors clicking the body)", async () => {
+    const w = mountCell(); // expanded: false, zoomed: undefined → tiled grid
+    expect(w.find(".cell-header").classes()).toContain("is-zoomable");
     await w.find(".cell-header").trigger("click");
-    expect(w.emitted("toggle-expand")).toBeUndefined();
+    expect(w.emitted("toggle-expand")).toHaveLength(1);
   });
 
   it("zooms on a header-background click when it's a filmstrip thumbnail", async () => {
@@ -46,5 +46,12 @@ describe("LauncherCell header zoom", () => {
     expect(w.find(".cell-header").classes()).toContain("is-zoomable");
     await w.find(".cell-header").trigger("click");
     expect(w.emitted("toggle-expand")).toHaveLength(1);
+  });
+
+  it("does not zoom on a header-background click while expanded (restore via the ⤡ button)", async () => {
+    const w = mountCell({ expanded: true });
+    expect(w.find(".cell-header").classes()).not.toContain("is-zoomable");
+    await w.find(".cell-header").trigger("click");
+    expect(w.emitted("toggle-expand")).toBeUndefined();
   });
 });

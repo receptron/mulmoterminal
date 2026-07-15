@@ -149,11 +149,26 @@ export function runScriptInNewCell(state: GridState, afterUid: number, command: 
 }
 
 // Close a cell: drop it and reflow the list (later cells pack forward across
-// pages), un-zoom if it was zoomed, keep an entry cell, and clamp the page.
-export function closeCell(state: GridState, uid: number): GridState {
+// pages), keep an entry cell, and clamp the page. If the CLOSED cell was the zoomed
+// one, STAY zoomed on its neighbour in the on-screen `order` — the previous cell, or
+// the next one when the closed cell was first — so closing walks the expand along the
+// filmstrip instead of collapsing to the grid. Falls back to un-zooming when there's
+// no surviving neighbour (the last cell) or no `order` is supplied.
+export function closeCell(state: GridState, uid: number, order?: number[]): GridState {
   const cells = state.cells.filter((c) => c.uid !== uid);
-  const expanded = state.expanded === uid ? null : state.expanded;
+  const expanded = state.expanded === uid ? expandNeighbour(order, uid, cells) : state.expanded;
   return ensureEntry(clampPage({ ...state, cells, expanded }));
+}
+
+// The uid to keep zoomed after closing the zoomed `uid`: the cell before it in the
+// on-screen `order`, or the one after when it was first. null (collapse to the grid)
+// when there's no surviving neighbour or no order was given.
+function expandNeighbour(order: number[] | undefined, uid: number, remaining: Cell[]): number | null {
+  if (!order) return null;
+  const idx = order.indexOf(uid);
+  if (idx < 0) return null;
+  const neighbour = idx > 0 ? order[idx - 1] : order[idx + 1];
+  return neighbour !== undefined && remaining.some((c) => c.uid === neighbour) ? neighbour : null;
 }
 
 export function toggleExpand(state: GridState, uid: number): GridState {

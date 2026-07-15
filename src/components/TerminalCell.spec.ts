@@ -1455,14 +1455,22 @@ describe("TerminalCell", () => {
     expect(urls).not.toContain("/api/open-dir"); // dir was NOT opened
   });
 
-  it("does not zoom on a header-background click in the normal grid (only the ⤢ button zooms)", async () => {
+  it("zooms on a header-background click in the normal grid (mirrors clicking the body)", async () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find(".cell-header").classes()).toContain("is-zoomable");
+    await w.find(".cell-header").trigger("click");
+    expect(w.emitted("toggle-expand")).toHaveLength(1);
+  });
+
+  it("does not zoom on a header-background click while expanded (restore via the ⤡ button)", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", expanded: true });
     await flushPromises();
     expect(w.find(".cell-header").classes()).not.toContain("is-zoomable");
     await w.find(".cell-header").trigger("click");
     expect(w.emitted("toggle-expand")).toBeUndefined();
-    // The dedicated button still works.
-    await w.find('[aria-label="Expand terminal"]').trigger("click");
+    // The dedicated restore button still works.
+    await w.find('[aria-label="Restore terminal"]').trigger("click");
     expect(w.emitted("toggle-expand")).toHaveLength(1);
   });
 

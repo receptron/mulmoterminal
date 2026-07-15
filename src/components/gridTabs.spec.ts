@@ -128,9 +128,25 @@ describe("closeCell reflows across pages", () => {
     expect(after.cells).toHaveLength(1);
     expect(after.cells[0].session).toBeNull();
   });
-  it("un-zooms when the zoomed cell is closed", () => {
+  it("un-zooms when the zoomed cell is closed with no on-screen order (fallback)", () => {
     const after = closeCell(make(running(2), { expanded: 0 }), 0);
     expect(after.expanded).toBeNull();
+  });
+  it("stays zoomed on the PREVIOUS cell when the zoomed cell is closed", () => {
+    const after = closeCell(make(running(3), { expanded: 1 }), 1, [0, 1, 2]);
+    expect(after.expanded).toBe(0);
+  });
+  it("stays zoomed on the NEXT cell when the FIRST (front) cell is closed", () => {
+    const after = closeCell(make(running(3), { expanded: 0 }), 0, [0, 1, 2]);
+    expect(after.expanded).toBe(1);
+  });
+  it("un-zooms when the last remaining cell is closed (no neighbour)", () => {
+    const after = closeCell(make(running(1), { expanded: 0 }), 0, [0]);
+    expect(after.expanded).toBeNull();
+  });
+  it("leaves the zoom untouched when a NON-zoomed cell is closed", () => {
+    const after = closeCell(make(running(3), { expanded: 2 }), 0, [0, 1, 2]);
+    expect(after.expanded).toBe(2);
   });
 });
 

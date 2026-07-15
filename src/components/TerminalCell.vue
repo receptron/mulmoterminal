@@ -19,12 +19,11 @@ import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
-// Clicking the header background zooms this cell ONLY when it's a filmstrip thumbnail
-// (another cell is zoomed) — the easy "switch to this terminal" gesture. In the normal
-// grid the header is inert; the ⤢ button is the only way to zoom. Header buttons keep
-// their action.
+// Clicking the header background zooms this cell (mirrors clicking the terminal body) —
+// in the tiled grid and as a filmstrip thumbnail alike. Only the already-expanded cell
+// stays inert (restore via the ⤡ button). Header buttons keep their action.
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, filmstrip.value)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
 }
 
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns
@@ -885,7 +884,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
-      <div class="cell-header" :class="[statusClass, { 'is-zoomable': filmstrip }]" :style="headerStyle" @click="onHeaderClick">
+      <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" :style="headerStyle" @click="onHeaderClick">
         <!-- All the info lives in one shrinkable, clipping track. The chips (badge / git /
              model / tokens / custom) don't shrink, so without this they would overflow and
              push the actions past the cell's `overflow: hidden` edge — the buttons must

@@ -33,11 +33,10 @@ const emit = defineEmits<{
   (e: "session", id: string): void;
 }>();
 
-// A filmstrip thumbnail zooms (switches to) this cell on a header-background click;
-// in the normal grid the header is inert (only the ⤢ button zooms). Buttons keep their action.
-const filmstrip = computed(() => !!props.zoomed && !props.expanded);
+// Clicking the header background zooms (switches to) this cell, except the already-
+// expanded one. Buttons keep their action.
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, filmstrip.value)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
 }
 
 // connectKey bump re-launches after the process exits (relaunch button).
@@ -64,7 +63,7 @@ function relaunch() {
 
 <template>
   <div class="cell">
-    <div class="cell-header" :class="{ 'is-zoomable': filmstrip }" @click="onHeaderClick">
+    <div class="cell-header" :class="{ 'is-zoomable': !expanded }" @click="onHeaderClick">
       <span class="cell-dot" :class="finished ? 'is-idle' : 'is-working'" :title="finished ? 'Exited' : 'Running…'" />
       <span v-if="dirDisplay" class="cell-dir" :title="cwd ?? ''"
         ><span class="cell-dir-path">{{ dirDisplay }}</span></span
