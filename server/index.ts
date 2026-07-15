@@ -10,20 +10,20 @@ import { randomUUID } from "crypto";
 import { existsSync, statSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createPubSub } from "./pubsub.js";
-import { mountAllRoutes, allowedToolNames, toolSummaries } from "./plugins-registry.js";
+import { createPubSub } from "./infra/pubsub.js";
+import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins-registry.js";
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config-routes.js";
-import { sendWebPush } from "./web-push.js";
-import { buildHeaderContext, loadHeaderConfig } from "./header-context.js";
-import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header-resolve.js";
-import { prUrlForBranch } from "./pr-for-branch.js";
-import { mountFilesBrowseRoutes } from "./files-browse.js";
-import { gitStatus } from "./git-status.js";
-import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./tmux.js";
-import { mountTmuxRoutes } from "./tmux-routes.js";
+import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import { sendWebPush } from "./infra/web-push.js";
+import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
+import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config/header-resolve.js";
+import { prUrlForBranch } from "./git/pr-for-branch.js";
+import { mountFilesBrowseRoutes } from "./files/files-browse.js";
+import { gitStatus } from "./git/git-status.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./infra/tmux.js";
+import { mountTmuxRoutes } from "./infra/tmux-routes.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -36,23 +36,23 @@ import {
   cleanupSandbox,
   rewriteLoopbackForDocker,
   SANDBOX_HOST,
-} from "./sandbox.js";
-import { listPrsAcrossRepos } from "./prs.js";
-import { listIssuesAcrossRepos } from "./issues.js";
-import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } from "./dir-config.js";
-import { loadScripts, resolveScript } from "./scripts.js";
-import { buildClaudeArgs } from "./claude-args.js";
-import { resolveSession, type SessionResolution } from "./session-resolve.js";
-import { activityHookEffects, shouldNotifyTaskFinished } from "./activity-hook.js";
-import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
+} from "./infra/sandbox.js";
+import { listPrsAcrossRepos } from "./git/prs.js";
+import { listIssuesAcrossRepos } from "./git/issues.js";
+import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } from "./config/dir-config.js";
+import { loadScripts, resolveScript } from "./files/scripts.js";
+import { buildClaudeArgs } from "./agents/claude-args.js";
+import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
+import { activityHookEffects, shouldNotifyTaskFinished } from "./session/activity-hook.js";
+import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
-import { buildCodexArgs } from "./codex-args.js";
-import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./codex-session.js";
-import { listCodexSessions, codexRolloutExists } from "./codex-sessions.js";
-import { codexifySkillSeed } from "./codex-skills.js";
+import { buildCodexArgs } from "./agents/codex-args.js";
+import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
+import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
+import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
-import { stripTerminalQueries } from "./terminal-replay.js";
+import { stripTerminalQueries } from "./session/terminal-replay.js";
 import {
   isRecord,
   parseJsonl,
@@ -72,15 +72,21 @@ import {
   type SessionUsage,
   type LatestTurnContext,
   type TimelineEvent,
-} from "./transcript.js";
-import { createFileCache, type FileStamp } from "./file-cache.js";
-import { mountOpenDirRoute } from "./open-dir.js";
-import { mountGitRemoteRoute } from "./gitRemote.js";
-import { mountWorktreeRoutes } from "./worktree-routes.js";
-import { mountPickFileRoute } from "./pick-file.js";
-import { mountCommandSummaryRoute } from "./command-summary.js";
-import { generateHeaderTitle, shouldRegenerateTitle, shouldFreshenViewedTitle, TITLE_REGEN_EVERY_TURNS, VIEW_TITLE_REGEN_TURNS } from "./header-title.js";
-import { mountCostRoute } from "./cost.js";
+} from "./session/transcript.js";
+import { createFileCache, type FileStamp } from "./session/file-cache.js";
+import { mountOpenDirRoute } from "./files/open-dir.js";
+import { mountGitRemoteRoute } from "./git/gitRemote.js";
+import { mountWorktreeRoutes } from "./git/worktree-routes.js";
+import { mountPickFileRoute } from "./files/pick-file.js";
+import { mountCommandSummaryRoute } from "./session/command-summary.js";
+import {
+  generateHeaderTitle,
+  shouldRegenerateTitle,
+  shouldFreshenViewedTitle,
+  TITLE_REGEN_EVERY_TURNS,
+  VIEW_TITLE_REGEN_TURNS,
+} from "./config/header-title.js";
+import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
@@ -88,7 +94,7 @@ import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
 import { initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
-import { installConfigSkill } from "./install-config-skill.js";
+import { installConfigSkill } from "./infra/install-config-skill.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
 import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
@@ -100,7 +106,7 @@ import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountTranslationRoutes } from "./backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
-import { SPA_FALLBACK_RE } from "./spa-fallback.js";
+import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 interface Activity {

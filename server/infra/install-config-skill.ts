@@ -7,8 +7,8 @@ import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { codexSkillsRoot } from "./codex-skills.js";
-import { dirConfigJsonSchema } from "./config-schema.js";
+import { codexSkillsRoot } from "../agents/codex-skills.js";
+import { dirConfigJsonSchema } from "../config/config-schema.js";
 
 const OWNER_MARKER = ".mt-owned";
 const OWNER_MARKER_BODY = "managed by mulmoterminal\n";

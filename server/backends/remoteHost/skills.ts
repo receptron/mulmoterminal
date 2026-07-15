@@ -15,7 +15,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import { userSkillsDir, projectSkillsDir } from "../collections.js";
-import { SLUG_RE } from "../../codex-skills.js";
+import { SLUG_RE } from "../../agents/codex-skills.js";
 
 const SKILL_FILE = "SKILL.md";
 

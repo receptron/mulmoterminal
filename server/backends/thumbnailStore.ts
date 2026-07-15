@@ -13,7 +13,7 @@ import { readFile, realpath, stat } from "node:fs/promises";
 
 import { getWorkspaceRoot } from "@mulmoclaude/core/collection/server";
 
-import { containedPath, realContainedWithin } from "../files-browse.js";
+import { containedPath, realContainedWithin } from "../files/files-browse.js";
 
 /** Decode → downscale to fit `maxEdge` (never enlarge) → re-encode JPEG.
  *  Injected so tests exercise the resolver without the native `sharp` binary. */

@@ -3,9 +3,9 @@
 // "2番目にして"). Instead we summarize the recent turns with a cheap model into a short
 // title. Pure helpers (decision / prompt / parse / render) are unit-testable without the
 // `claude` CLI; generateHeaderTitle wires them to the shared headless-spawn helper.
-import { runClaudeHeadless, type RunClaude } from "./command-summary.js";
-import { claudeAdapter } from "./agents/claude.js";
-import { conversationTurnsFromJsonl, type ConversationTurn } from "./transcript.js";
+import { runClaudeHeadless, type RunClaude } from "../session/command-summary.js";
+import { claudeAdapter } from "../agents/claude.js";
+import { conversationTurnsFromJsonl, type ConversationTurn } from "../session/transcript.js";
 
 // A title needs no frontier quality and runs on many turns, so default to a small/fast
 // model. Overridable per deploy (e.g. a full model id) via MT_TITLE_MODEL.

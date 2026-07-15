@@ -8,7 +8,7 @@ import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { configureNotifier, setNotifierFilePaths, listAll, listHistory, clear } from "@mulmoclaude/core/notifier";
-import type { createPubSub } from "../pubsub.js";
+import type { createPubSub } from "../infra/pubsub.js";
 
 type PubSub = ReturnType<typeof createPubSub>;
 

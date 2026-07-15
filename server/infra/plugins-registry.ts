@@ -22,9 +22,9 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
-import { generateImage } from "./backends/image-gen.js";
-import { markdownHostApp } from "./backends/markdown.js";
-import { artifactsFileOps } from "./backends/artifacts.js";
+import { generateImage } from "../backends/image-gen.js";
+import { markdownHostApp } from "../backends/markdown.js";
+import { artifactsFileOps } from "../backends/artifacts.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

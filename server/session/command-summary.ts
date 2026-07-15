@@ -5,7 +5,7 @@
 // without an HTTP server or the `claude` CLI.
 import type { Express, Request } from "express";
 import { spawn } from "node:child_process";
-import { claudeAdapter } from "./agents/claude.js";
+import { claudeAdapter } from "../agents/claude.js";
 
 const BYTES_PER_KB = 1024;
 // Cap the log we send to claude. The tail is what matters (errors + the exit line
