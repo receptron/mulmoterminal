@@ -23,6 +23,7 @@ import { prUrlForBranch } from "./pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./tmux.js";
+import { mountTmuxRoutes } from "./tmux-routes.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -1694,46 +1695,22 @@ app.get("/api/sessions", async (req, res) => {
   }
 });
 
-// Explicit close (the cell's ✕): reap the session NOW — kill the pty AND its tmux
-// session — instead of leaving it for the disconnect grace. Over HTTP so it works even
-// when the WS is down, and it kills a tmux orphaned by a prior server restart (reap()
-// alone is a no-op without a live entry). Navigation / disconnect keep tmux, as before.
-app.post("/api/session/:id/terminate", (req, res) => {
-  if (!isAllowedOrigin(req.headers.origin)) {
-    res.status(403).json({ error: "forbidden origin" });
-    return;
-  }
-  const id = req.params.id;
-  if (!SESSION_ID_RE.test(id)) {
-    res.status(400).json({ error: "invalid session id" });
-    return;
-  }
-  reap(id); // live entry → kills pty + tmux + cleanup
-  if (tmuxHasSession(id)) tmuxKillSession(id); // orphan (e.g. post-restart) → kill directly
-  res.json({ ok: true });
-});
-
-// One-shot cleanup of orphaned tmux sessions: reap any mt-<id> that is neither live nor
-// resumable (a persisted grid session, or a Claude/Codex transcript on disk). These
-// accumulate across server restarts, which the in-memory reap bookkeeping can't reach.
-// A resumable session is never touched.
-app.post("/api/tmux/cleanup-orphans", async (req, res) => {
-  if (!isAllowedOrigin(req.headers.origin)) {
-    res.status(403).json({ error: "forbidden origin" });
-    return;
-  }
-  await devTerminalSessionsHydrated;
-  const live = new Set(ptys.keys());
-  const claudeOnDisk = claudeOnDiskSessionIds();
-  const codexRoot = codexSessionsRoot();
-  const codexOnDisk = (id: string) => codexRolloutExists(codexRoot, id);
-  const killed: string[] = [];
-  for (const id of tmuxListSessionIds()) {
-    if (isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, codexOnDisk)) continue;
-    tmuxKillSession(id);
-    killed.push(id);
-  }
-  res.json({ killed, killedCount: killed.length });
+// Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
+// module so the origin guard / id validation / orphan-selection boundary are testable.
+mountTmuxRoutes(app, {
+  isAllowedOrigin,
+  isValidSessionId: (id) => SESSION_ID_RE.test(id),
+  reapSession: reap,
+  hasTmux: tmuxHasSession,
+  killTmux: tmuxKillSession,
+  listTmuxIds: tmuxListSessionIds,
+  resumablePredicate: async () => {
+    await devTerminalSessionsHydrated;
+    const live = new Set(ptys.keys());
+    const claudeOnDisk = claudeOnDiskSessionIds();
+    const codexRoot = codexSessionsRoot();
+    return (id) => isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, (i) => codexRolloutExists(codexRoot, i));
+  },
 });
 
 // codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
