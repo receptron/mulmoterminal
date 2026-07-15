@@ -38,8 +38,7 @@ npx mulmoterminal        # starts on http://localhost:34567 and opens your brows
   `staging` in amber), a configurable header (buttons + info chips), custom attention sounds,
   and Run / Skill menus to launch a project's scripts and `.claude/skills` right inside a cell.
 
-<details>
-<summary><strong>What it is, under the hood</strong></summary>
+### What it is, under the hood
 
 Each session runs as a real PTY on the server (the agent CLI in a pseudo-terminal) and is
 streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a WebSocket. A
@@ -53,8 +52,6 @@ the prompt: **drag a file** onto the terminal (works where the browser exposes t
 asks the local server to open the OS file dialog and inserts the chosen path (works in every
 browser, including Chrome). The path is inserted at the cursor — it is not submitted, so you
 can review it first.
-
-</details>
 
 ---
 
