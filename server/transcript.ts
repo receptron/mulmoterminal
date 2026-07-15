@@ -30,11 +30,15 @@ export function parseJsonl(raw: string): Record<string, unknown>[] {
   return out;
 }
 
+// Every `*FromParsed` helper takes an already-parsed transcript so a caller that needs
+// several of them (readSessionSummary) parses the .jsonl ONCE. The `*FromJsonl` wrappers
+// (parse-then-derive) stay for one-off callers and existing tests.
+
 // Ordered user-typed prompts in a transcript + the "last-prompt" fallback record.
-function collectPrompts(raw: string): { prompts: string[]; lastPromptRecord: string | null } {
+function collectPrompts(records: Record<string, unknown>[]): { prompts: string[]; lastPromptRecord: string | null } {
   const prompts: string[] = [];
   let lastPromptRecord: string | null = null;
-  for (const o of parseJsonl(raw)) {
+  for (const o of records) {
     if (o.type === "user") {
       const prompt = userPromptText(isRecord(o.message) ? o.message.content : undefined);
       if (prompt) prompts.push(prompt);
@@ -47,20 +51,22 @@ function collectPrompts(raw: string): { prompts: string[]; lastPromptRecord: str
 
 // The most recent user-typed prompt in a transcript: the last "user" line with real
 // text, falling back to a "last-prompt" record if there are no user lines.
-export function latestUserPromptFromJsonl(raw: string): string | null {
-  const { prompts, lastPromptRecord } = collectPrompts(raw);
+export function latestUserPromptFromParsed(records: Record<string, unknown>[]): string | null {
+  const { prompts, lastPromptRecord } = collectPrompts(records);
   return prompts[prompts.length - 1] ?? lastPromptRecord;
 }
+export const latestUserPromptFromJsonl = (raw: string): string | null => latestUserPromptFromParsed(parseJsonl(raw));
 
 // The externally-generated (MulmoClaude) session title record, if the transcript carries
 // one. Only READ here — this repo never writes "ai-title" lines into Claude's own file.
-export function aiTitleFromJsonl(raw: string): string | null {
+export function aiTitleFromParsed(records: Record<string, unknown>[]): string | null {
   let title: string | null = null;
-  for (const o of parseJsonl(raw)) {
+  for (const o of records) {
     if (o.type === "ai-title" && o.aiTitle) title = String(o.aiTitle);
   }
   return title;
 }
+export const aiTitleFromJsonl = (raw: string): string | null => aiTitleFromParsed(parseJsonl(raw));
 
 export interface ConversationTurn {
   role: "user" | "assistant";
@@ -82,9 +88,9 @@ function assistantText(content: unknown): string | null {
 
 // Ordered user/assistant turns as plain text, skipping slash/local-command wrappers and
 // tool-only assistant turns. Feeds the header-title summarizer.
-export function conversationTurnsFromJsonl(raw: string): ConversationTurn[] {
+export function conversationTurnsFromParsed(records: Record<string, unknown>[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
-  for (const o of parseJsonl(raw)) {
+  for (const o of records) {
     const content = isRecord(o.message) ? o.message.content : undefined;
     if (o.type === "user") {
       const text = userPromptText(content);
@@ -96,22 +102,24 @@ export function conversationTurnsFromJsonl(raw: string): ConversationTurn[] {
   }
   return turns;
 }
+export const conversationTurnsFromJsonl = (raw: string): ConversationTurn[] => conversationTurnsFromParsed(parseJsonl(raw));
 
 // How many user turns the transcript holds, so the roster can tell whether a session has
 // advanced far enough since its last summary to be worth re-titling.
-export function countUserTurnsFromJsonl(raw: string): number {
-  return conversationTurnsFromJsonl(raw).filter((t) => t.role === "user").length;
-}
+export const countUserTurnsFromParsed = (records: Record<string, unknown>[]): number =>
+  conversationTurnsFromParsed(records).filter((t) => t.role === "user").length;
+export const countUserTurnsFromJsonl = (raw: string): number => countUserTurnsFromParsed(parseJsonl(raw));
 
 // The most recent assistant prose turn (tool-only turns skipped), for the grid roster's
 // "what did the agent just say" line. Null when the session has no assistant text yet.
-export function latestAssistantTextFromJsonl(raw: string): string | null {
-  const turns = conversationTurnsFromJsonl(raw);
+export function latestAssistantTextFromParsed(records: Record<string, unknown>[]): string | null {
+  const turns = conversationTurnsFromParsed(records);
   for (let i = turns.length - 1; i >= 0; i--) {
     if (turns[i].role === "assistant") return turns[i].text;
   }
   return null;
 }
+export const latestAssistantTextFromJsonl = (raw: string): string | null => latestAssistantTextFromParsed(parseJsonl(raw));
 
 // A trivial prompt is an empty ack or a bare command ("ok", "merge", "はい") that
 // doesn't describe what a session is about. The cell header skips these so a short
@@ -216,13 +224,14 @@ export function preferredHeaderPrompt(current: string | null, incoming: string):
 // SUBSTANTIAL prompt, so a resumed session's header shows the task instead of a
 // one-word follow-up. Falls back to the latest prompt (then the record) if every
 // prompt is trivial.
-export function latestMeaningfulUserPromptFromJsonl(raw: string): string | null {
-  const { prompts, lastPromptRecord } = collectPrompts(raw);
+export function latestMeaningfulUserPromptFromParsed(records: Record<string, unknown>[]): string | null {
+  const { prompts, lastPromptRecord } = collectPrompts(records);
   for (let i = prompts.length - 1; i >= 0; i--) {
     if (!isTrivialPrompt(prompts[i])) return prompts[i];
   }
   return prompts[prompts.length - 1] ?? lastPromptRecord;
 }
+export const latestMeaningfulUserPromptFromJsonl = (raw: string): string | null => latestMeaningfulUserPromptFromParsed(parseJsonl(raw));
 
 // Cumulative token usage for a session — summed across every assistant turn's
 // `message.usage`. Each turn re-sends the growing context, so summing reflects the
@@ -237,9 +246,9 @@ export interface SessionUsage {
 
 const usageNum = (u: Record<string, unknown>, key: string): number => (typeof u[key] === "number" ? (u[key] as number) : 0);
 
-export function sessionUsageFromJsonl(raw: string): SessionUsage {
+export function sessionUsageFromParsed(records: Record<string, unknown>[]): SessionUsage {
   const total: SessionUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-  for (const o of parseJsonl(raw)) {
+  for (const o of records) {
     if (o.type !== "assistant" || !isRecord(o.message)) continue;
     const u = o.message.usage;
     if (!isRecord(u)) continue;
@@ -250,6 +259,7 @@ export function sessionUsageFromJsonl(raw: string): SessionUsage {
   }
   return total;
 }
+export const sessionUsageFromJsonl = (raw: string): SessionUsage => sessionUsageFromParsed(parseJsonl(raw));
 
 // The CURRENT context size + running model for a session, from the LAST assistant
 // turn. `contextTokens` is that turn's fresh input plus both cache buckets — the
@@ -264,11 +274,11 @@ export interface LatestTurnContext {
 const contextTokensOf = (u: Record<string, unknown>): number =>
   usageNum(u, "input_tokens") + usageNum(u, "cache_read_input_tokens") + usageNum(u, "cache_creation_input_tokens");
 
-export function latestTurnContextFromJsonl(raw: string): LatestTurnContext {
+export function latestTurnContextFromParsed(records: Record<string, unknown>[]): LatestTurnContext {
   // Both fields come from the SAME final assistant turn, so a new model is never
   // shown with a prior turn's context tokens. Usage absent on that turn → 0.
   let lastMessage: Record<string, unknown> | null = null;
-  for (const o of parseJsonl(raw)) {
+  for (const o of records) {
     if (o.type === "assistant" && isRecord(o.message)) lastMessage = o.message;
   }
   if (!lastMessage) return { model: null, contextTokens: 0 };
@@ -276,6 +286,7 @@ export function latestTurnContextFromJsonl(raw: string): LatestTurnContext {
   const contextTokens = isRecord(lastMessage.usage) ? contextTokensOf(lastMessage.usage) : 0;
   return { model, contextTokens };
 }
+export const latestTurnContextFromJsonl = (raw: string): LatestTurnContext => latestTurnContextFromParsed(parseJsonl(raw));
 
 // A single tool the agent ran, for the activity timeline. `summary` is a 1-line
 // description drawn from the tool's most salient input (a command, a file path, …).
