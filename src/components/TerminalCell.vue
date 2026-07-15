@@ -609,7 +609,11 @@ onUnmounted(() => document.removeEventListener("mousedown", onGhOutside));
 // remounted (stable key), so the dir/diff state is reset explicitly — otherwise the
 // launch form would still show the closed session's directory.
 function teardown() {
+  const id = sessionId.value; // capture before the reset below nulls it
   termRef.value?.terminate();
+  // Reap on the server over HTTP too — the WS `terminate` only reaches the server while
+  // the socket is open, so a disconnected cell's ✕ would otherwise leave its tmux alive.
+  if (id) fetch(`/api/session/${encodeURIComponent(id)}/terminate`, { method: "POST" }).catch(() => {});
   launched.value = false;
   recordNextCwd = false; // drop any pending fresh-launch record from a torn-down session
   sessionId.value = null;

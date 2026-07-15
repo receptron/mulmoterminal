@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, readFileSync } from "node:fs";
+import { existsSync, statSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -22,7 +22,8 @@ import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header
 import { prUrlForBranch } from "./pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
-import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./tmux.js";
+import { mountTmuxRoutes } from "./tmux-routes.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -807,6 +808,30 @@ function projectSessionsDir(cwd: string) {
 // first prompt) in the given workspace. Determines whether `--resume` will work.
 function sessionExistsOnDisk(id: string, cwd: string): boolean {
   return existsSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`));
+}
+
+// readdirSync that yields [] instead of throwing on a missing / unreadable dir.
+function safeReaddir(dir: string): string[] {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+// Every session id with a Claude transcript on disk, across ALL project dirs — so the
+// orphan-tmux cleanup can tell a resumable session from a pure orphan (per-cwd
+// sessionExistsOnDisk can't, since a tmux orphan carries no cwd). A non-dir entry under
+// the projects root reads as empty, so it's harmlessly skipped.
+function claudeOnDiskSessionIds(): Set<string> {
+  const ids = new Set<string>();
+  const root = path.join(os.homedir(), ".claude", "projects");
+  for (const project of safeReaddir(root)) {
+    for (const f of safeReaddir(path.join(root, project))) {
+      if (f.endsWith(".jsonl")) ids.add(f.slice(0, -".jsonl".length));
+    }
+  }
+  return ids;
 }
 
 // Validate a client-supplied workspace dir: must be an absolute, existing
@@ -1668,6 +1693,24 @@ app.get("/api/sessions", async (req, res) => {
     console.error("[api] /api/sessions failed:", err);
     res.status(500).json({ error: String(err) });
   }
+});
+
+// Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
+// module so the origin guard / id validation / orphan-selection boundary are testable.
+mountTmuxRoutes(app, {
+  isAllowedOrigin,
+  isValidSessionId: (id) => SESSION_ID_RE.test(id),
+  reapSession: reap,
+  hasTmux: tmuxHasSession,
+  killTmux: tmuxKillSession,
+  listTmuxIds: tmuxListSessionIds,
+  resumablePredicate: async () => {
+    await devTerminalSessionsHydrated;
+    const live = new Set(ptys.keys());
+    const claudeOnDisk = claudeOnDiskSessionIds();
+    const codexRoot = codexSessionsRoot();
+    return (id) => isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, (i) => codexRolloutExists(codexRoot, i));
+  },
 });
 
 // codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
