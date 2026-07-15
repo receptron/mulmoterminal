@@ -9,7 +9,7 @@
 // the plugin-scoped channels are published.
 import path from "node:path";
 import { configureFileChangePublisher, publishFileChange } from "@mulmoclaude/core/file-change";
-import type { createPubSub } from "../pubsub.js";
+import type { createPubSub } from "../infra/pubsub.js";
 
 type PubSub = ReturnType<typeof createPubSub>;
 

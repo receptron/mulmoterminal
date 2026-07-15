@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { installOwnedSkill, SCHEMA_ASSET_FILE } from "./install-config-skill";
-import { loadDirConfig } from "./dir-config";
+import { loadDirConfig } from "../config/dir-config";
 
 const NAME = "mulmoterminal-config";
 const MARKER = ".mt-owned";

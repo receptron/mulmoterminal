@@ -2,7 +2,7 @@ import type { Express, Request } from "express";
 import { spawn } from "node:child_process";
 import { statSync } from "node:fs";
 import path from "node:path";
-import { isRecord } from "./transcript.js";
+import { isRecord } from "../session/transcript.js";
 
 // The native file-manager opener for a platform. The command is a fixed
 // allowlist (never built from input); the directory is passed as a separate argv

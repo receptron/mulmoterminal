@@ -7,8 +7,8 @@ import { existsSync, mkdirSync, cpSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
-import { codexSkillsRoot } from "./codex-skills.js";
-import { dirConfigJsonSchema } from "./config-schema.js";
+import { codexSkillsRoot } from "../agents/codex-skills.js";
+import { dirConfigJsonSchema } from "../config/config-schema.js";
 
 const OWNER_MARKER = ".mt-owned";
 const OWNER_MARKER_BODY = "managed by mulmoterminal\n";
@@ -18,7 +18,8 @@ export const SCHEMA_ASSET_FILE = "dir-config.schema.json";
 
 function bundledSkillDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(here, "skills", "mulmoterminal-config");
+  // ".." climbs server/infra/ → server/, where the bundled skills/ dir lives.
+  return path.join(here, "..", "skills", "mulmoterminal-config");
 }
 
 const isOurs = (dir: string): boolean => existsSync(path.join(dir, OWNER_MARKER));

@@ -1083,22 +1083,26 @@ resumed session falls back to any on-disk `ai-title`.
 server/
   index.ts        Express app, /api routes, upgrade routing, PTY lifecycle,
                   session state, hook injection, session discovery, GUI-MCP mount
-  agents/         AgentAdapter seam — claude.ts, codex.ts, registry.ts
-  codex-*.ts      Codex sessions, args, rollout discovery, skill mirroring
-  tmux.ts         tmux-backed session persistence (own -L mulmoterminal server)
-  sandbox.ts      Docker sandbox spawn for the single-view Claude session
-  worktrees.ts, worktree-*.ts   git worktree create/list/diff/push/PR + routes
-  git-status.ts, gitRemote.ts, gh.ts, prs.ts, issues.ts   git & GitHub (via gh)
-  cost.ts, transcript.ts        cost estimate; usage/context from transcripts
-  files-browse.ts               file tree + read/write (contained to project root)
-  scripts.ts                    Run-menu script.json loader
-  command-summary.ts            POST /api/command/summarize (claude -p headless)
-  header-title.ts               cheap-model AI title for the cell header (recent turns)
-  app-config.ts, config-routes.ts, dir-config.ts   user + per-directory config
-  plugins-registry.ts, mcp/     GUI plugin registry + per-session MCP broker
-  backends/                     wiki, collections, feeds, accounting, notifier,
-                                translation, whisper, remote-host, html, files
-  pubsub.ts                     socket.io pub/sub at /ws/pubsub
+  agents/         AgentAdapter seam + per-agent args/sessions: claude.ts,
+                  codex.ts, registry.ts, claude-args.ts, codex-args.ts,
+                  codex-session(s).ts, codex-skills.ts
+  config/         user + per-directory + header config: app-config.ts,
+                  config-routes.ts, config-schema.ts, dir-config.ts,
+                  cwd-presets.ts, header-*.ts
+  session/        per-session transcript/activity/cost: transcript.ts,
+                  session-resolve.ts, activity-*.ts, cost.ts,
+                  command-summary.ts, terminal-replay.ts, file-cache.ts
+  git/            git & GitHub (via gh) + worktrees: git-status.ts, gitRemote.ts,
+                  gh.ts, prs.ts, issues.ts, pr-for-branch.ts, worktrees.ts, worktree-*.ts
+  files/          files-browse.ts (contained tree read/write), pick-file.ts,
+                  open-dir.ts, scripts.ts (Run-menu script.json loader)
+  infra/          process/transport/misc: tmux.ts, tmux-routes.ts, sandbox.ts,
+                  pubsub.ts (socket.io /ws/pubsub), spa-fallback.ts, host-tools.ts,
+                  plugins-registry.ts, web-push.ts, install-config-skill.ts, accounting-tool.ts
+  mcp/            per-session MCP broker
+  backends/       wiki, collections, feeds, accounting, notifier,
+                  translation, whisper, remote-host, html, files
+  skills/         bundled mulmoterminal-config skill assets
   fix-pty-perms.js              postinstall: fixes node-pty binary permissions
 src/
   App.vue                       Layout; owns the active session + single/grid view

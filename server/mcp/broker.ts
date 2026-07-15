@@ -26,7 +26,7 @@
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import { randomUUID } from "node:crypto";
-import { toolDefinitions } from "../plugins-registry.js";
+import { toolDefinitions } from "../infra/plugins-registry.js";
 
 // Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
 // whether a toolResult is published to the GUI; the rest is narration/metadata.

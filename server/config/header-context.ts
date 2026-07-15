@@ -3,9 +3,9 @@
 
 import path from "node:path";
 import os from "node:os";
-import { gitStatus } from "./git-status.js";
-import { git } from "./worktrees.js";
-import { parseGithubWebUrl } from "./gitRemote.js";
+import { gitStatus } from "../git/git-status.js";
+import { git } from "../git/worktrees.js";
+import { parseGithubWebUrl } from "../git/gitRemote.js";
 import { mergeHeaderConfig, type HeaderConfig, type HeaderContext } from "./header-config.js";
 import { loadDirConfig } from "./dir-config.js";
 
