@@ -1686,6 +1686,10 @@ app.get("/api/sessions", async (req, res) => {
 // when the WS is down, and it kills a tmux orphaned by a prior server restart (reap()
 // alone is a no-op without a live entry). Navigation / disconnect keep tmux, as before.
 app.post("/api/session/:id/terminate", (req, res) => {
+  if (!isAllowedOrigin(req.headers.origin)) {
+    res.status(403).json({ error: "forbidden origin" });
+    return;
+  }
   const id = req.params.id;
   if (!SESSION_ID_RE.test(id)) {
     res.status(400).json({ error: "invalid session id" });
@@ -1700,7 +1704,11 @@ app.post("/api/session/:id/terminate", (req, res) => {
 // resumable (a persisted grid session, or a Claude/Codex transcript on disk). These
 // accumulate across server restarts, which the in-memory reap bookkeeping can't reach.
 // A resumable session is never touched.
-app.post("/api/tmux/cleanup-orphans", async (_req, res) => {
+app.post("/api/tmux/cleanup-orphans", async (req, res) => {
+  if (!isAllowedOrigin(req.headers.origin)) {
+    res.status(403).json({ error: "forbidden origin" });
+    return;
+  }
   await devTerminalSessionsHydrated;
   const live = new Set(ptys.keys());
   const claudeOnDisk = claudeOnDiskSessionIds();
