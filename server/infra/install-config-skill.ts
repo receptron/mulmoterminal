@@ -18,7 +18,8 @@ export const SCHEMA_ASSET_FILE = "dir-config.schema.json";
 
 function bundledSkillDir(): string {
   const here = path.dirname(fileURLToPath(import.meta.url));
-  return path.join(here, "skills", "mulmoterminal-config");
+  // ".." climbs server/infra/ → server/, where the bundled skills/ dir lives.
+  return path.join(here, "..", "skills", "mulmoterminal-config");
 }
 
 const isOurs = (dir: string): boolean => existsSync(path.join(dir, OWNER_MARKER));

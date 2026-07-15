@@ -28,7 +28,8 @@ import { artifactsFileOps } from "../backends/artifacts.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PLUGINS_DIR = path.join(__dirname, "..", "plugins");
+// ../.. climbs server/infra/ → server/ → package root, where plugins/ lives.
+const PLUGINS_DIR = path.join(__dirname, "..", "..", "plugins");
 
 const MCP_SERVER_NAME = "mulmoterminal-gui";
 

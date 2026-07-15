@@ -69,7 +69,8 @@ export function dockerAvailable(): boolean {
 // The Dockerfile shipped with the package (package.json `files`), resolved relative to
 // this module like plugins-registry.ts does: <pkg>/server/sandbox.ts → <pkg>/Dockerfile.sandbox.
 // Works in dev and in an npm install.
-const DOCKERFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "Dockerfile.sandbox");
+// ../.. climbs server/infra/ → server/ → package root, where Dockerfile.sandbox lives.
+const DOCKERFILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "Dockerfile.sandbox");
 // The Dockerfile's sha256 is stored as an image label so a changed Dockerfile rebuilds.
 const IMAGE_SHA_LABEL = "mulmoterminal.dockerfile.sha256";
 
