@@ -113,3 +113,16 @@ export function tmuxListSessionIds(): string[] {
     .filter((n) => n.startsWith(SESSION_PREFIX))
     .map((n) => n.slice(SESSION_PREFIX.length));
 }
+
+// A tmux `mt-<id>` is resumable — an orphan cleanup must NOT reap it — when it's live
+// (an attached pty), a persisted grid session, or has a Claude/Codex transcript on disk.
+// Pure so the safe-cleanup rule ("never kill a resumable session") is unit-testable.
+export function isResumableTmuxSession(
+  id: string,
+  live: ReadonlySet<string>,
+  grid: ReadonlySet<string>,
+  claudeOnDisk: ReadonlySet<string>,
+  codexOnDisk: (id: string) => boolean,
+): boolean {
+  return live.has(id) || grid.has(id) || claudeOnDisk.has(id) || codexOnDisk(id);
+}

@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, readFileSync } from "node:fs";
+import { existsSync, statSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./pubsub.js";
@@ -22,7 +22,7 @@ import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./header
 import { prUrlForBranch } from "./pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files-browse.js";
 import { gitStatus } from "./git-status.js";
-import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds } from "./tmux.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./tmux.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -806,6 +806,30 @@ function projectSessionsDir(cwd: string) {
 // first prompt) in the given workspace. Determines whether `--resume` will work.
 function sessionExistsOnDisk(id: string, cwd: string): boolean {
   return existsSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`));
+}
+
+// readdirSync that yields [] instead of throwing on a missing / unreadable dir.
+function safeReaddir(dir: string): string[] {
+  try {
+    return readdirSync(dir);
+  } catch {
+    return [];
+  }
+}
+
+// Every session id with a Claude transcript on disk, across ALL project dirs — so the
+// orphan-tmux cleanup can tell a resumable session from a pure orphan (per-cwd
+// sessionExistsOnDisk can't, since a tmux orphan carries no cwd). A non-dir entry under
+// the projects root reads as empty, so it's harmlessly skipped.
+function claudeOnDiskSessionIds(): Set<string> {
+  const ids = new Set<string>();
+  const root = path.join(os.homedir(), ".claude", "projects");
+  for (const project of safeReaddir(root)) {
+    for (const f of safeReaddir(path.join(root, project))) {
+      if (f.endsWith(".jsonl")) ids.add(f.slice(0, -".jsonl".length));
+    }
+  }
+  return ids;
 }
 
 // Validate a client-supplied workspace dir: must be an absolute, existing
@@ -1655,6 +1679,40 @@ app.get("/api/sessions", async (req, res) => {
     console.error("[api] /api/sessions failed:", err);
     res.status(500).json({ error: String(err) });
   }
+});
+
+// Explicit close (the cell's ✕): reap the session NOW — kill the pty AND its tmux
+// session — instead of leaving it for the disconnect grace. Over HTTP so it works even
+// when the WS is down, and it kills a tmux orphaned by a prior server restart (reap()
+// alone is a no-op without a live entry). Navigation / disconnect keep tmux, as before.
+app.post("/api/session/:id/terminate", (req, res) => {
+  const id = req.params.id;
+  if (!SESSION_ID_RE.test(id)) {
+    res.status(400).json({ error: "invalid session id" });
+    return;
+  }
+  reap(id); // live entry → kills pty + tmux + cleanup
+  if (tmuxHasSession(id)) tmuxKillSession(id); // orphan (e.g. post-restart) → kill directly
+  res.json({ ok: true });
+});
+
+// One-shot cleanup of orphaned tmux sessions: reap any mt-<id> that is neither live nor
+// resumable (a persisted grid session, or a Claude/Codex transcript on disk). These
+// accumulate across server restarts, which the in-memory reap bookkeeping can't reach.
+// A resumable session is never touched.
+app.post("/api/tmux/cleanup-orphans", async (_req, res) => {
+  await devTerminalSessionsHydrated;
+  const live = new Set(ptys.keys());
+  const claudeOnDisk = claudeOnDiskSessionIds();
+  const codexRoot = codexSessionsRoot();
+  const codexOnDisk = (id: string) => codexRolloutExists(codexRoot, id);
+  const killed: string[] = [];
+  for (const id of tmuxListSessionIds()) {
+    if (isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, codexOnDisk)) continue;
+    tmuxKillSession(id);
+    killed.push(id);
+  }
+  res.json({ killed, killedCount: killed.length });
 });
 
 // codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
