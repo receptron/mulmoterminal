@@ -1,28 +1,57 @@
 # mulmoterminal
 
-A browser-based terminal + GUI workspace for coding agents — [Claude Code](https://claude.com/claude-code)
-and OpenAI's **Codex** — with a sidebar that lists the current project's chat sessions
-and shows live, hook-driven activity for each one.
+**Run a whole team of coding agents from your browser — and actually keep up with them.**
 
-Each session runs as a real PTY on the server (the agent CLI in a pseudo-terminal) and
-is streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a
-WebSocket. A sidebar lists every session for the project and reflects, in real time,
-which sessions are **working** (the agent is thinking) and which **need attention**
-(waiting for input, or finished with output you haven't seen).
+MulmoTerminal turns [Claude Code](https://claude.com/claude-code) (and OpenAI's **Codex**)
+into a parallel, observable workspace: many agent sessions at once in a grid, each one
+color-coded so you see at a glance which are **working**, which **need you**, and which are
+**done** — plus rich GUI output, git worktrees with one-click PRs, cost readouts, and a
+ping to your phone when a task finishes. One `npx` command, no Electron, no config.
 
-Around the terminal sit the things a coding session needs: a **grid** of parallel
-sessions, an optional **GUI panel** for rich tool output (documents, forms, images,
-charts), **git worktree** isolation with one-click **push / open PR**, a full-screen
-**file browser + editor**, per-session **cost & token** readouts, a cross-repo **PRs &
-Issues** view, and read-only **Wiki** and **Collections** browsers over the shared
-workspace.
+```bash
+npx mulmoterminal        # starts on http://localhost:34567 and opens your browser
+```
 
-**Inserting a file path** — like a native terminal, you can put a file's absolute
-path into the prompt: **drag a file** onto the terminal (works where the browser
-exposes the path via `file://` — Firefox/Safari), or click the **📎 file button**
-in the terminal header, which asks the local server to open the OS file dialog and
-inserts the chosen path (works in every browser, including Chrome). The path is
-inserted at the cursor — it is not submitted, so you can review it first.
+## Why you'll want it
+
+- **See every agent at once.** A grid of live sessions, each cell color-coded by state —
+  **working** (blue), **blocked / needs a permission** (amber), **done, unreviewed** (blue),
+  **idle** — with an attention chime and a toolbar tally, so an off-screen agent that's stuck
+  never slips past you. Stop babysitting one terminal; supervise ten.
+- **A GUI for your agents, not just a terminal.** Beside the terminal, a **Canvas** panel
+  renders what an agent produces over MCP — **documents, forms, charts, generated images,
+  HTML, collection cards** — each drawn by its own plugin. The agent doesn't just print
+  text; it hands you an interface.
+- **Get pulled back from anywhere.** A finished background task sends a **Web Push to your
+  phone**, and the **RemoteHost** companion lets you watch and start sessions from the phone
+  itself — walk away, get pinged, jump back in.
+- **Nothing is lost on a restart.** With `tmux`, every session survives a server crash,
+  restart, or `node --watch` reload — a mid-turn agent, a long build, a dev server all keep
+  running and reattach when you come back.
+- **Ship without leaving the grid.** Each repo cell shows a **git branch chip**, isolates
+  work in a one-click **git worktree**, opens a **diff** panel, and does **commit / push /
+  open PR** — so several agents can work the same repo without colliding.
+- **Know what it's costing.** Per-session **context %**, **token**, and **estimated $**
+  readouts, an **activity timeline** of tool calls, and **AI-summarized** cell titles and
+  command-output explanations — so a wall of parallel agents stays legible.
+- **Make it yours.** Per-directory **themes, colors, and name badges** (`prod` in red,
+  `staging` in amber), a configurable header (buttons + info chips), custom attention sounds,
+  and Run / Skill menus to launch a project's scripts and `.claude/skills` right inside a cell.
+
+### What it is, under the hood
+
+Each session runs as a real PTY on the server (the agent CLI in a pseudo-terminal) and is
+streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a WebSocket. A
+sidebar lists every session for the project and reflects, in real time, which are **working**
+(the agent is thinking) and which **need attention** (waiting for input, or finished with
+output you haven't seen) — driven by Claude/Codex activity hooks the server injects per spawn.
+
+**Inserting a file path** — like a native terminal, you can put a file's absolute path into
+the prompt: **drag a file** onto the terminal (works where the browser exposes the path via
+`file://` — Firefox/Safari), or click the **📎 file button** in the terminal header, which
+asks the local server to open the OS file dialog and inserts the chosen path (works in every
+browser, including Chrome). The path is inserted at the cursor — it is not submitted, so you
+can review it first.
 
 ---
 
