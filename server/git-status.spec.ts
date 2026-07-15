@@ -42,8 +42,7 @@ describe("gitStatus", () => {
     rmSync(outside, { recursive: true, force: true });
   });
 
-  it("reports branch and a clean tree", async () => {
-    if (!hasGit) return;
+  it.skipIf(!hasGit)("reports branch and a clean tree", async () => {
     const s = await gitStatus(repo);
     expect(s.repo).toBe(true);
     expect(s.branch).toBe("main");
@@ -52,8 +51,7 @@ describe("gitStatus", () => {
     expect(s.upstream).toBe(false); // no remote in the test repo
   });
 
-  it("shows the branch on an unborn branch (git init, no commit yet)", async () => {
-    if (!hasGit) return;
+  it.skipIf(!hasGit)("shows the branch on an unborn branch (git init, no commit yet)", async () => {
     const fresh = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-unborn-")));
     g(fresh, "init", "-b", "main"); // no commit — unborn HEAD
     const s = await gitStatus(fresh);
@@ -63,16 +61,14 @@ describe("gitStatus", () => {
     rmSync(fresh, { recursive: true, force: true });
   });
 
-  it("counts dirty entries (modified + untracked)", async () => {
-    if (!hasGit) return;
+  it.skipIf(!hasGit)("counts dirty entries (modified + untracked)", async () => {
     writeFileSync(path.join(repo, "README.md"), "changed\n"); // modify tracked
     writeFileSync(path.join(repo, "new.txt"), "new\n"); // untracked
     const s = await gitStatus(repo);
     expect(s.dirty).toBe(2);
   });
 
-  it("reports detached HEAD", async () => {
-    if (!hasGit) return;
+  it.skipIf(!hasGit)("reports detached HEAD", async () => {
     writeFileSync(path.join(repo, "b.txt"), "b\n");
     g(repo, "add", "-A");
     g(repo, "commit", "-m", "second");
@@ -82,8 +78,7 @@ describe("gitStatus", () => {
     expect(s.branch).toBeNull();
   });
 
-  it("reports ahead vs a local upstream", async () => {
-    if (!hasGit) return;
+  it.skipIf(!hasGit)("reports ahead vs a local upstream", async () => {
     // A second clone acting as the "remote" so HEAD has an upstream to be ahead of.
     const remote = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-remote-")));
     g(repo, "clone", "--bare", repo, remote);
