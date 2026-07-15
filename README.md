@@ -462,9 +462,10 @@ In dev, open the Vite URL; its proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
 
 ## Scripts (Run menu)
 
-An empty grid cell's launcher sets the **Working directory** by typing, by a preset
-chip, or with the **📁 folder button** (a native OS folder dialog). It also offers a
-**run a script** row
+An empty grid cell's launcher sets the **Working directory** by typing, by clicking a
+**preset chip** (which fills the field and lists that dir's **resumable sessions** to pick
+up — the chip's **▶** quick-launches a fresh one instead), or with the **📁 folder button**
+(a native OS folder dialog). It also offers a **run a script** row
 that launches project scripts (a dev server, tests, a build, …) **in that cell, in
 the directory the cell is pointed at** — so a whole workflow lives in one window
 alongside the Claude sessions. Scripts are **per-directory**: the cell reads the
@@ -838,6 +839,8 @@ same-origin-guarded.
 | `GET /api/codex/sessions?cwd=` | Codex sessions for the project (from `~/.codex` rollouts), newest first. |
 | `GET /api/cost?cwd=&session=` | Estimated $ cost — session / today / month. |
 | `GET /api/transcript/timeline?session=&cwd=` | Per-session activity timeline (tools run). |
+| `POST /api/session/:id/terminate` | Explicit close: reap the session **now** — kill its PTY and tmux — even when the WS is down or it was orphaned by a prior server restart. |
+| `POST /api/tmux/cleanup-orphans` | Sweep orphaned tmux sessions that are neither live nor **resumable** (a persisted grid session, or a Claude/Codex transcript on disk); a resumable session is never touched. |
 
 **Git & worktrees**
 
