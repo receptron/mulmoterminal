@@ -43,6 +43,7 @@ MulmoTerminal's features, organized by the **four pillars** (Supervise / See / A
 | Feature | Description |
 |---|---|
 | Script execution | Run a command from that directory's `script.json` **inside the cell** |
+| ⚡ Skill menu | Lists the skills available in that directory (`.claude/skills`); picking one runs its `/<slug>` **in the current session**. Working-dir skills show first; narrow the list with `skills` in `.mulmoterminal.json` |
 | ✦ Summarize / Explain | Pass terminal output to `claude -p` and summarize **errors / warnings / cause / how to fix** |
 | ⧉ Copy as prompt | Copy command + directory + summary + follow-up and paste it into any session |
 | Launch commands | Start something other than Claude (`Shell` / `codex` / anything) as a **persistent terminal** |

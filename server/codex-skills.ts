@@ -5,7 +5,10 @@ import os from "node:os";
 // Marks a codex skill dir mulmoterminal owns, so a re-sync overwrites OURS but never clobbers
 // codex's own curated/system skills.
 const MIRROR_MARKER = ".mt-mirror";
-const SLUG_RE = /^[a-z0-9][\w-]*$/i;
+// A safe skill slug: alnum start, then letters/digits/underscore/hyphen. Shared with
+// skill discovery so a directory whose name isn't a clean slug (whitespace, quotes,
+// newlines) never becomes a runnable skill and can't alter the /<slug> we inject.
+export const SLUG_RE = /^[a-z0-9][\w-]*$/i;
 
 export function codexSkillsRoot(): string {
   const home = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");

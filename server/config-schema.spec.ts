@@ -11,6 +11,7 @@ import {
   NAME_MAX_CHARS,
   MAX_BUTTONS,
   MAX_CHIPS,
+  MAX_SKILL_FILTER,
 } from "./config-schema";
 
 describe("dirNameField", () => {
@@ -86,7 +87,14 @@ describe("dirConfigJsonSchema", () => {
     expect(schema.type).toBe("object");
     const { properties } = schema;
     const props = isRecord(properties) ? Object.keys(properties) : [];
-    expect(props).toEqual(expect.arrayContaining(["name", "badgeColor", "headerColor", "theme", "colors", "sound", "buttons", "chips"]));
+    expect(props).toEqual(expect.arrayContaining(["name", "badgeColor", "headerColor", "theme", "colors", "sound", "buttons", "chips", "skills"]));
+  });
+
+  it("caps the skills allowlist at MAX_SKILL_FILTER", () => {
+    const schema = dirConfigJsonSchema();
+    const props = isRecord(schema.properties) ? schema.properties : {};
+    const skills = isRecord(props.skills) ? props.skills : {};
+    expect(skills.maxItems).toBe(MAX_SKILL_FILTER);
   });
 
   it("buttons require their run payload and chips constrain builtin ids (matches runtime)", () => {
