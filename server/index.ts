@@ -58,18 +58,22 @@ import {
   parseJsonl,
   userPromptText,
   isTrivialPrompt,
-  aiTitleFromJsonl,
+  aiTitleFromParsed,
   countUserTurnsFromJsonl,
+  countUserTurnsFromParsed,
   latestMeaningfulUserPromptFromJsonl,
+  latestMeaningfulUserPromptFromParsed,
   latestAssistantTextFromJsonl,
+  latestAssistantTextFromParsed,
   preferredHeaderPrompt,
-  sessionUsageFromJsonl,
-  latestTurnContextFromJsonl,
+  sessionUsageFromParsed,
+  latestTurnContextFromParsed,
   timelineFromJsonl,
   type SessionUsage,
   type LatestTurnContext,
   type TimelineEvent,
 } from "./transcript.js";
+import { createFileCache, type FileStamp } from "./file-cache.js";
 import { mountOpenDirRoute } from "./open-dir.js";
 import { mountGitRemoteRoute } from "./gitRemote.js";
 import { mountWorktreeRoutes } from "./worktree-routes.js";
@@ -870,23 +874,42 @@ interface SessionSummary {
   usage: SessionUsage;
   context: LatestTurnContext;
 }
-// One read of a session's transcript → its latest prompt, any on-disk AI title,
-// cumulative token usage, and current-turn context, so /api/session/:id doesn't parse
-// the .jsonl more than once.
+const EMPTY_SUMMARY: SessionSummary = { lastPrompt: null, aiTitle: null, lastResponse: null, userTurns: 0, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+
+// Transcripts are append-only and can be hundreds of MB; /api/session/:id is hit on every
+// window focus and by each grid cell as turns finish, so re-reading + re-parsing the whole
+// .jsonl each time blocked the event loop and janked the terminals. Memoize by (mtime,size):
+// an unchanged transcript returns instantly, and a changed one is read + parsed ONCE (the six
+// derived values share one parse pass, vs. one parse per helper before).
+const sessionSummaryCache = createFileCache<SessionSummary>();
+
 async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
+  const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
+  let stamp: FileStamp;
   try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    return {
-      lastPrompt: latestMeaningfulUserPromptFromJsonl(raw),
-      aiTitle: aiTitleFromJsonl(raw),
-      lastResponse: latestAssistantTextFromJsonl(raw)?.slice(0, LAST_RESPONSE_MAX) ?? null,
-      userTurns: countUserTurnsFromJsonl(raw),
-      usage: sessionUsageFromJsonl(raw),
-      context: latestTurnContextFromJsonl(raw),
-    };
+    const st = await fs.stat(file);
+    stamp = { mtimeMs: st.mtimeMs, size: st.size };
   } catch {
-    return { lastPrompt: null, aiTitle: null, lastResponse: null, userTurns: 0, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+    return EMPTY_SUMMARY; // no transcript on disk yet
   }
+  const cached = sessionSummaryCache.get(file, stamp);
+  if (cached) return cached;
+  let records: Record<string, unknown>[];
+  try {
+    records = parseJsonl(await fs.readFile(file, "utf8"));
+  } catch {
+    return EMPTY_SUMMARY;
+  }
+  const summary: SessionSummary = {
+    lastPrompt: latestMeaningfulUserPromptFromParsed(records),
+    aiTitle: aiTitleFromParsed(records),
+    lastResponse: latestAssistantTextFromParsed(records)?.slice(0, LAST_RESPONSE_MAX) ?? null,
+    userTurns: countUserTurnsFromParsed(records),
+    usage: sessionUsageFromParsed(records),
+    context: latestTurnContextFromParsed(records),
+  };
+  sessionSummaryCache.set(file, stamp, summary);
+  return summary;
 }
 
 // The tool-activity timeline for a session, capped to the most recent events so the

@@ -13,6 +13,12 @@ import {
   conversationTurnsFromJsonl,
   countUserTurnsFromJsonl,
   latestAssistantTextFromJsonl,
+  latestMeaningfulUserPromptFromParsed,
+  aiTitleFromParsed,
+  latestAssistantTextFromParsed,
+  countUserTurnsFromParsed,
+  sessionUsageFromParsed,
+  latestTurnContextFromParsed,
 } from "./transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
@@ -189,6 +195,45 @@ describe("sessionUsageFromJsonl", () => {
   });
   it("is all-zero for an empty / promptless transcript", () => {
     expect(sessionUsageFromJsonl("")).toEqual({ inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 });
+  });
+});
+
+// readSessionSummary parses the transcript ONCE and derives every field from that single
+// array; these lock the *FromParsed variants to their *FromJsonl wrappers so the shared
+// parse can't silently drift from the per-helper parse.
+describe("*FromParsed matches *FromJsonl on one shared parse", () => {
+  const raw = [
+    line({ type: "user", message: { content: "Build the thing" } }),
+    line({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 100, output_tokens: 20, cache_read_input_tokens: 5, cache_creation_input_tokens: 3 },
+        content: [{ type: "text", text: "On it." }],
+      },
+    }),
+    line({ type: "user", message: { content: "ok" } }),
+    line({ type: "ai-title", aiTitle: "Thing builder" }),
+    line({
+      type: "assistant",
+      message: {
+        model: "claude-opus-4-8",
+        usage: { input_tokens: 200, output_tokens: 40, cache_read_input_tokens: 50, cache_creation_input_tokens: 0 },
+        content: [{ type: "text", text: "Done." }],
+      },
+    }),
+  ].join("\n");
+  const records = parseJsonl(raw);
+
+  it("derives the same six summary fields from the parsed array", () => {
+    expect(latestMeaningfulUserPromptFromParsed(records)).toBe(latestMeaningfulUserPromptFromJsonl(raw));
+    expect(latestMeaningfulUserPromptFromParsed(records)).toBe("Build the thing"); // "ok" is trivial → skipped
+    expect(aiTitleFromParsed(records)).toBe(aiTitleFromJsonl(raw));
+    expect(latestAssistantTextFromParsed(records)).toBe(latestAssistantTextFromJsonl(raw));
+    expect(countUserTurnsFromParsed(records)).toBe(countUserTurnsFromJsonl(raw));
+    expect(sessionUsageFromParsed(records)).toEqual(sessionUsageFromJsonl(raw));
+    expect(latestTurnContextFromParsed(records)).toEqual(latestTurnContextFromJsonl(raw));
+    expect(latestTurnContextFromParsed(records)).toEqual({ model: "claude-opus-4-8", contextTokens: 250 }); // last turn: 200+50+0
   });
 });
 
