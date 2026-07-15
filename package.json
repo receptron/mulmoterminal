@@ -119,7 +119,7 @@
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.64.0",
     "vite": "^8.0.12",
-    "vitest": "^4.1.9",
+    "vitest": "^4.1.10",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.7"
   }
