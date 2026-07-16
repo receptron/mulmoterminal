@@ -32,15 +32,19 @@ function isDir(p: string): boolean {
   }
 }
 
-// Read just the head of a (possibly large) transcript.
+// Read just the head of a (possibly large) transcript. Best-effort: an unreadable file
+// yields "" (→ no cwd) instead of aborting the whole scan.
 function readHead(file: string): string {
-  const fd = openSync(file, "r");
+  let fd: number | undefined;
   try {
+    fd = openSync(file, "r");
     const buf = Buffer.alloc(HEAD_BYTES);
     const n = readSync(fd, buf, 0, HEAD_BYTES, 0);
     return buf.subarray(0, n).toString("utf8");
+  } catch {
+    return "";
   } finally {
-    closeSync(fd);
+    if (fd !== undefined) closeSync(fd);
   }
 }
 

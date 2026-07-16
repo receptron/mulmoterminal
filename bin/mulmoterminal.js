@@ -102,27 +102,29 @@ async function runInit(initArgs) {
 
   // Config half: derive working-dir presets from Claude history + write config.json.
   console.log("");
-  await new Promise((res) => {
+  const initExit = await new Promise((res) => {
     const child = spawn(process.execPath, ["--import", "tsx", join(PKG_DIR, "server", "cli-init.ts"), ...initArgs], {
       cwd: PKG_DIR,
       env: { ...process.env },
       stdio: "inherit",
     });
-    child.on("exit", (code) => {
-      if (code) process.exitCode = code;
-      res();
-    });
+    child.on("exit", (code) => res(code ?? 0));
   });
-
-  if (hasClaude) {
-    if (await promptYesNo("\nConfigure interactively now with the /mulmoterminal-config skill? [y/N] ")) {
-      log("Launching Claude — use  /mulmoterminal-config  (or just ask it to configure MulmoTerminal).");
-      // eslint-disable-next-line sonarjs/no-os-command-from-path
-      spawn("claude", ["Use the mulmoterminal-config skill to configure MulmoTerminal."], { stdio: "inherit" });
-      return;
-    }
-    log("Later: run `claude` in any project and use  /mulmoterminal-config");
+  if (initExit) {
+    process.exitCode = initExit;
+    error("Setup did not complete — see the error above.");
+    return;
   }
+
+  // Offer the interactive skill only in a real terminal; a non-TTY run (CI / piped input)
+  // must never block waiting on stdin.
+  if (hasClaude && process.stdin.isTTY && (await promptYesNo("\nConfigure interactively now with the /mulmoterminal-config skill? [y/N] "))) {
+    log("Launching Claude — use  /mulmoterminal-config  (or just ask it to configure MulmoTerminal).");
+    // eslint-disable-next-line sonarjs/no-os-command-from-path
+    spawn("claude", ["Use the mulmoterminal-config skill to configure MulmoTerminal."], { stdio: "inherit" });
+    return;
+  }
+  if (hasClaude) log("Later: run `claude` in any project and use  /mulmoterminal-config");
   log("Setup done. Start MulmoTerminal:  npx mulmoterminal");
 }
 
