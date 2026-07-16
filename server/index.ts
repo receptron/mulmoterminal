@@ -88,6 +88,7 @@ import {
 } from "./config/header-title.js";
 import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { manageCollectionHandler } from "./infra/collection-tool.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
@@ -1038,6 +1039,25 @@ app.post("/api/plugin/manageAccounting", async (req, res) => {
   } catch (err) {
     console.error(`[manageAccounting] dispatch failed: ${messageOf(err)}`);
     return res.json({ message: `accounting dispatch failed: ${messageOf(err)}` });
+  }
+});
+
+// Host tool: manageCollection — the shared collection data plane
+// (@mulmoclaude/core/collection/server, bound in server/infra/collection-tool.ts).
+// The engine runs in-process against the workspace configured by
+// initCollectionsBackend below, so the route calls the handler directly. The
+// result string (JSON for the read/write actions) narrates to claude via the
+// envelope `message`; no `data`, so nothing publishes to the GUI — same as
+// MulmoClaude. Errors surface as narration, not thrown tool calls, so the
+// agent can read and retry. Registered BEFORE mountAllRoutes so it wins over
+// /api/plugin/:toolName.
+app.post("/api/plugin/manageCollection", async (req, res) => {
+  try {
+    const message = await manageCollectionHandler(isRecord(req.body) ? req.body : {});
+    return res.json({ message });
+  } catch (err) {
+    console.error(`[manageCollection] dispatch failed: ${messageOf(err)}`);
+    return res.json({ message: `manageCollection failed: ${messageOf(err)}` });
   }
 });
 

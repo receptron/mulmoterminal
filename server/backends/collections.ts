@@ -9,9 +9,10 @@
 // mulmoclaude/server/workspace/{skills,feeds}/paths.ts + skills-preset.ts) so
 // discovery finds the same collection skills both apps share on disk.
 //
-// Only the read side is wired here (list + detail). Write routes (CRUD / actions /
-// custom views) and the manageCollection MCP tool are deferred to the interactive
-// tier.
+// Read routes (list + detail), write routes (CRUD / actions / custom views), and
+// the registry Discover routes all live here. The manageCollection MCP tool (the
+// agent's data plane over the same engine) is a host tool — see
+// server/infra/collection-tool.ts + the dispatch route in server/index.ts.
 import path from "node:path";
 import os from "node:os";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
