@@ -39,8 +39,11 @@ import {
   deleteCollection,
   deleteCollectionRefusalMessage,
   deleteCustomView,
+  applyMutateAction,
+  type LoadedCollection,
   type RecordIssue,
 } from "@mulmoclaude/core/collection/server";
+import type { CollectionMutateAction } from "@mulmoclaude/core/collection";
 // CollectionItem + actionVisible live in the isomorphic core entry.
 import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
 // Curated-registry engine (Discover tab): merged catalog fetch + bundle import.
@@ -418,6 +421,41 @@ const itemDeleteHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
 //    to startChat, which spawns a visible chat. The records are edited by that
 //    agent session directly (the intended model). ──
 
+// Execute a `kind: "mutate"` action: validate the mini-form params, merge the
+// resolved `set` over the record through the standard write gate, and answer
+// with the written record so the client updates the open panel in place. The
+// engine work lives in `applyMutateAction` (core); this maps its outcome to
+// HTTP, mirroring MulmoClaude's host.
+const respondForMutateAction = async (
+  res: Response,
+  collection: LoadedCollection,
+  action: CollectionMutateAction,
+  itemId: string,
+  body: { params?: unknown } | undefined,
+): Promise<void> => {
+  const raw = body?.params;
+  const params = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const outcome = await applyMutateAction(collection, action, itemId, params);
+  if (!outcome.ok) {
+    // `itemId` is caller-controlled (a route param) — strip CR/LF so a crafted
+    // id can't forge log lines.
+    log.info("collections", "mutate action refused", {
+      slug: collection.slug,
+      itemId: itemId.replace(/[\r\n]/g, " "),
+      actionId: action.id,
+      status: outcome.status,
+      problem: outcome.problem,
+    });
+    if (outcome.status === "not-found") res.status(404).json({ error: outcome.problem });
+    else if (outcome.status === "require-unmet") res.status(409).json({ error: outcome.problem });
+    else if (outcome.status === "write-refused") res.status(500).json({ error: outcome.problem });
+    else res.status(400).json({ error: outcome.problem });
+    return;
+  }
+  log.info("collections", "mutate action applied", { slug: collection.slug, itemId: itemId.replace(/[\r\n]/g, " "), actionId: action.id });
+  res.json({ written: true, itemId, item: outcome.item });
+};
+
 // Per-record action (e.g. Repair / enrich this record).
 const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId: string }> = async (req, res) => {
   const collection = await loadCollection(req.params.slug);
@@ -440,6 +478,13 @@ const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId
     // out-of-state buttons, but a stale/crafted request could still target one.
     if (!actionVisible(action, record)) {
       res.status(409).json({ error: `action '${action.id}' is not available for item '${req.params.itemId}' in its current state` });
+      return;
+    }
+    // `kind: "mutate"` needs no template / seed / LLM — the host applies the
+    // declarative write itself (`when` was just enforced above, same
+    // visibility-is-authorization rule as the seeded kinds).
+    if (action.kind === "mutate") {
+      await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
       return;
     }
     const template = await readSkillTemplate(collection.skillDir, action.template);
@@ -472,6 +517,12 @@ const collectionActionHandler: RequestHandler<{ slug: string; actionId: string }
   const action = collection.schema.collectionActions?.find((entry) => entry.id === req.params.actionId);
   if (!action) {
     res.status(404).json({ error: `collection action '${req.params.actionId}' not found on collection '${collection.slug}'` });
+    return;
+  }
+  // Schema validation already rejects mutate in `collectionActions` (no record
+  // to write); this is the defensive twin that also narrows the type.
+  if (action.kind === "mutate") {
+    res.status(400).json({ error: `collection action '${action.id}' has kind "mutate" — mutate actions are record-level only` });
     return;
   }
   try {
