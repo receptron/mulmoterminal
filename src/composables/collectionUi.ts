@@ -226,12 +226,13 @@ configureCollectionUi({
   //    a collection, or drop a feed's registry entry. ──
   deleteCollection: (slug) => apiDelete(`/api/collections/${encodeURIComponent(slug)}`),
   deleteFeed: (slug) => apiDelete(`/api/feeds/${encodeURIComponent(slug)}`),
-  // ── actions (kind: "chat"): fetch the seed prompt + role; CollectionView feeds it
-  //    to startChat (→ a visible chat). ──
-  runItemAction: (slug, itemId, actionId) =>
+  // ── actions: kind "chat"/"agent" fetch the seed prompt + role (CollectionView
+  //    feeds it to startChat → a visible chat); kind "mutate" carries the
+  //    mini-form values as `params` and the server applies the write itself. ──
+  runItemAction: (slug, itemId, actionId, params) =>
     apiPost<CollectionActionResult>(
       `/api/collections/${encodeURIComponent(slug)}/items/${encodeURIComponent(itemId)}/actions/${encodeURIComponent(actionId)}`,
-      {},
+      params ? { params } : {},
     ),
   runCollectionAction: (slug, actionId) =>
     apiPost<CollectionActionResult>(`/api/collections/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}`, {}),
