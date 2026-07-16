@@ -38,3 +38,41 @@ export function savePresets(file: string, presets: CwdPreset[]): boolean {
     return false;
   }
 }
+
+// A working dir discovered from a Claude session, with the session's mtime for recency.
+export interface CwdRecord {
+  cwd: string;
+  mtimeMs: number;
+}
+
+// The working directory a session ran in, read from its transcript. Claude records `cwd`
+// on its JSONL lines — return the first one found. (The project-dir NAME can't be decoded:
+// `/`, `.`, and a literal `-` all encode to `-`, so `my-app` would decode to `my/app`.)
+export function extractCwdFromTranscript(raw: string): string | null {
+  for (const line of raw.split("\n")) {
+    if (!line) continue;
+    try {
+      const cwd = (JSON.parse(line) as { cwd?: unknown }).cwd;
+      if (typeof cwd === "string" && cwd) return cwd;
+    } catch {
+      // a partial / non-JSON line (e.g. a truncated head read) — keep scanning
+    }
+  }
+  return null;
+}
+
+// Turn discovered session cwds into launch-form presets, newest first: drop dirs that no
+// longer exist (via `exists`, so no bogus preset ever lands), dedupe by path keeping the
+// newest mtime, then cap at `max`. Pure so the derivation rule is unit-testable.
+export function deriveCwdPresets(records: readonly CwdRecord[], exists: (dir: string) => boolean, max = 10): CwdPreset[] {
+  const newestByPath = new Map<string, number>();
+  for (const { cwd, mtimeMs } of records) {
+    if (!cwd || !exists(cwd)) continue;
+    const prev = newestByPath.get(cwd);
+    if (prev === undefined || mtimeMs > prev) newestByPath.set(cwd, mtimeMs);
+  }
+  return [...newestByPath.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, max)
+    .map(([dir]) => ({ label: path.basename(dir) || dir, path: dir }));
+}
