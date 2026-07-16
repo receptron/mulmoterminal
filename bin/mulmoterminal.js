@@ -128,6 +128,23 @@ async function runInit(initArgs) {
   log("Setup done. Start MulmoTerminal:  npx mulmoterminal");
 }
 
+// `npx mulmoterminal google <command>` — Google account linking. Consent needs a
+// loopback listener on this machine, so it can't be driven from the web UI (a phone
+// browser can't reach 127.0.0.1 here); the flow lives in the tsx-run server/cli-google.ts.
+function runGoogle(googleArgs) {
+  return new Promise((res) => {
+    const child = spawn(process.execPath, ["--import", "tsx", join(PKG_DIR, "server", "cli-google.ts"), ...googleArgs], {
+      cwd: PKG_DIR,
+      env: { ...process.env },
+      stdio: "inherit",
+    });
+    child.on("exit", (code) => {
+      process.exitCode = code ?? 0;
+      res();
+    });
+  });
+}
+
 function pickOpenCommand() {
   if (process.platform === "darwin") return "open";
   if (process.platform === "win32") return "start";
@@ -304,6 +321,8 @@ Commands:
   init              First-run setup: check your environment, seed working-directory
                     presets from your Claude Code history, and write
                     ~/.mulmoterminal/config.json (idempotent — safe to re-run)
+  google login      Link a Google account (browser consent, on this machine) so the
+                    Calendar tool and the phone's google.calendar.* commands can run
 
 Options:
   --cwd <dir>       Working directory claude runs in (default: current directory; relative paths allowed)
@@ -319,6 +338,11 @@ async function main() {
 
   if (args[0] === "init") {
     await runInit(args.slice(1));
+    return;
+  }
+
+  if (args[0] === "google") {
+    await runGoogle(args.slice(1));
     return;
   }
 

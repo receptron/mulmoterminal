@@ -88,6 +88,8 @@ import {
 } from "./config/header-title.js";
 import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
+import { initGoogleBackend } from "./backends/google.js";
+import { initPluginRuntime } from "./infra/pluginRuntime.js";
 import { manageCollectionHandler } from "./infra/collection-tool.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
@@ -1799,6 +1801,18 @@ initArtifactsBackend({ workspace: CLAUDE_CWD });
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
 initCollectionsBackend({ workspace: CLAUDE_CWD });
+
+// Give factory-style gui-chat-protocol plugins their scoped runtime (per-package
+// data/config under <workspace>, namespaced pub/sub, prefixed log) — see
+// infra/pluginRuntime.ts. This necessarily lands AFTER the plugin registry built
+// those runtimes (it calls the factories from a top-level await, so it finishes
+// while this module's imports evaluate); the runtime tolerates that by resolving
+// the workspace per operation rather than capturing it at construction.
+initPluginRuntime({ workspace: CLAUDE_CWD, publish: (channel, data) => pubsub?.publish(channel, data) });
+
+// Bind @mulmoclaude/core/google's logger. Token/secret storage is core's own and is
+// shared with MulmoClaude (~/.config/mulmo, ~/.secrets), so a machine links once.
+initGoogleBackend();
 
 // Configure the accounting engine against the shared workspace + pub/sub. Books live
 // under <workspace>/data/accounting; the publisher drives the View's live-refresh.

@@ -6,7 +6,7 @@ the two hosts can't drift. This doc records where that effort stands: which
 subsystems are shared today, which are deliberately **not**, and what picking
 up each remaining item would involve.
 
-Status date: **2026-07-16** (core `0.19.0`, collection-plugin `0.11.1`).
+Status date: **2026-07-17** (core `0.20.1`, collection-plugin `0.11.1`).
 
 ---
 
@@ -23,10 +23,16 @@ Each of these runs the same engine as MulmoClaude, with host specifics injected:
 | Notifier + collection completion watchers (bell UI) | `@mulmoclaude/core/notifier`, `/collection-watchers` | `server/backends/notifier.ts`, `collectionWatchers.ts` (#124) |
 | Scheduler engine + user cron tasks (`config/scheduler/tasks.json` → spawn a visible chat) | `@mulmoclaude/core/scheduler` | `server/backends/scheduler.ts` (#125) |
 | RSS/JSON feed refresh (system task) | `@mulmoclaude/core/feeds(/server)` | `server/backends/feeds.ts` + `feedRefreshTaskDef` registration in `server/index.ts` |
+| Google account (loopback OAuth) + Calendar | `@mulmoclaude/core/google` | `server/backends/google.ts`, `remoteHost/googleCalendar.ts`, `server/cli-google.ts` (#386) |
 
 The two workspaces are interchangeable: both apps read and write the same
 on-disk layout (`data/`, `.claude/skills/`, `config/`), and cross-app invariants
 (e.g. the notification adapter shape both apps dedupe on) are pinned by tests.
+
+The Google link is shared *outside* the workspace too: core owns the token
+(`~/.config/mulmo/google-token.json`) and the OAuth client secret
+(`~/.secrets/client_secret_*.json`), both host-neutral since core `0.20.1`, so
+linking once on a machine serves both apps.
 
 ---
 

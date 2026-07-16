@@ -77,6 +77,13 @@ It's **idempotent** — re-run it any time to refresh the presets; it overwrites
 and keeps your other settings. When `claude` is installed it can hand off to the
 `/mulmoterminal-config` skill for interactive tweaks.
 
+**Google account (optional).** `npx mulmoterminal google login` links a Google account, which
+enables the chat's `google` tool and the phone's `google.calendar.*` commands (read and create
+Calendar events). It needs a Desktop OAuth client JSON saved as `~/.secrets/client_secret_*.json`;
+the refresh token lands in `~/.config/mulmo/google-token.json`. Consent runs a loopback listener
+on **this machine**, so run it where the server runs — a remote browser can't complete it. The
+token is **shared with MulmoClaude**, so one link per machine covers both apps.
+
 A global install isn't auto-updated, so on startup MulmoTerminal checks npm and
 prints a one-line notice when a newer version is available (`npm i -g mulmoterminal`
 to update). Disable with `MULMOTERMINAL_NO_UPDATE_CHECK=1` (or `NO_UPDATE_NOTIFIER=1`).

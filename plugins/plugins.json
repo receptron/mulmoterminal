@@ -5,7 +5,8 @@
     "@mulmochat-plugin/generate-image",
     "@mulmoclaude/chart-plugin",
     "@mulmoclaude/core/collection",
-    "@mulmoclaude/html-plugin"
+    "@mulmoclaude/html-plugin",
+    "@mulmoclaude/google-plugin"
   ],
   "servers": ["@mulmoclaude/x-plugin"],
   "local": []
