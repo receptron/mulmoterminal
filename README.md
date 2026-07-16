@@ -70,6 +70,13 @@ npm install -g mulmoterminal
 mulmoterminal
 ```
 
+**First-run setup (optional).** `npx mulmoterminal init` checks your environment (Node ≥ 22.9,
+the `claude` CLI, plus optional `tmux` / `gh` / `codex`), seeds the launcher's **directory
+presets** from the projects in your Claude Code history, and writes `~/.mulmoterminal/config.json`.
+It's **idempotent** — re-run it any time to refresh the presets; it overwrites the managed parts
+and keeps your other settings. When `claude` is installed it can hand off to the
+`/mulmoterminal-config` skill for interactive tweaks.
+
 A global install isn't auto-updated, so on startup MulmoTerminal checks npm and
 prints a one-line notice when a newer version is available (`npm i -g mulmoterminal`
 to update). Disable with `MULMOTERMINAL_NO_UPDATE_CHECK=1` (or `NO_UPDATE_NOTIFIER=1`).

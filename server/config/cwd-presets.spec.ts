@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sanitizePresets, loadPresets, savePresets } from "./cwd-presets";
+import { sanitizePresets, loadPresets, savePresets, extractCwdFromTranscript, deriveCwdPresets } from "./cwd-presets";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-presets-"));
 
@@ -50,5 +50,47 @@ describe("savePresets / loadPresets", () => {
     // mkdir(`<file>/sub`) fails because the parent is a file → save reports false.
     expect(savePresets(path.join(asFile, "sub", "config.json"), [{ label: "x", path: "/x" }])).toBe(false);
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("extractCwdFromTranscript", () => {
+  it("returns the first cwd found across JSONL lines", () => {
+    const raw = ['{"type":"summary"}', '{"cwd":"/Users/me/proj","role":"user"}', '{"cwd":"/other"}'].join("\n");
+    expect(extractCwdFromTranscript(raw)).toBe("/Users/me/proj");
+  });
+
+  it("skips blank / non-JSON / partial lines", () => {
+    expect(extractCwdFromTranscript(["", "not json {", '{"role":"user"}', '{"cwd":"/p"}'].join("\n"))).toBe("/p");
+  });
+
+  it("returns null when no line carries a cwd", () => {
+    expect(extractCwdFromTranscript('{"a":1}\n{"b":2}')).toBeNull();
+    expect(extractCwdFromTranscript("")).toBeNull();
+  });
+});
+
+describe("deriveCwdPresets", () => {
+  const exists = (p: string) => p !== "/gone";
+
+  it("keeps existing dirs, newest first, deduped by path, capped", () => {
+    const records = [
+      { cwd: "/a", mtimeMs: 100 },
+      { cwd: "/b", mtimeMs: 300 },
+      { cwd: "/a", mtimeMs: 200 }, // newer duplicate of /a
+      { cwd: "/gone", mtimeMs: 999 }, // filtered — doesn't exist
+      { cwd: "/c", mtimeMs: 50 },
+    ];
+    expect(deriveCwdPresets(records, exists, 2)).toEqual([
+      { label: "b", path: "/b" }, // 300
+      { label: "a", path: "/a" }, // duplicate collapsed to its newest (200)
+    ]);
+  });
+
+  it("labels with the trailing segment (handles hyphenated dir names)", () => {
+    expect(deriveCwdPresets([{ cwd: "/x/my-app", mtimeMs: 1 }], () => true)).toEqual([{ label: "my-app", path: "/x/my-app" }]);
+  });
+
+  it("is empty when nothing exists", () => {
+    expect(deriveCwdPresets([{ cwd: "/gone", mtimeMs: 1 }], () => false)).toEqual([]);
   });
 });

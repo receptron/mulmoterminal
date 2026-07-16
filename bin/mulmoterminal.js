@@ -11,6 +11,7 @@ import { get as httpGet } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchLatestVersion, isNewerVersion } from "./update-check.js";
 
@@ -46,16 +47,83 @@ function checkForUpdate() {
     });
 }
 
-function claudeInstalled() {
+// Detect a CLI on the user's PATH by asking for its version. Intentionally resolves from
+// PATH — detecting the user's installed tools is the whole point of the pre-flight /
+// `init` checks.
+function hasCommand(cmd, versionArg = "--version") {
   try {
-    // Intentionally resolves `claude` from the user's PATH — detecting their
-    // Claude Code CLI install is the whole point of this pre-flight check.
     // eslint-disable-next-line sonarjs/no-os-command-from-path
-    execSync("claude --version", { stdio: "pipe" });
+    execSync(`${cmd} ${versionArg}`, { stdio: "pipe" });
     return true;
   } catch {
     return false;
   }
+}
+
+function claudeInstalled() {
+  return hasCommand("claude");
+}
+
+function promptYesNo(question) {
+  return new Promise((res) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => {
+      rl.close();
+      res(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+// `npx mulmoterminal init` — idempotent first-run setup. Environment/CLI checks + the
+// optional interactive-config launch live here (PATH-command detection); the config
+// derivation + write is the tsx-run server/cli-init.ts.
+async function runInit(initArgs) {
+  log("Setting up MulmoTerminal…\n");
+
+  const [maj, min] = process.versions.node.split(".").map((n) => Number.parseInt(n, 10));
+  const nodeOk = maj > 22 || (maj === 22 && min >= 9);
+  console.log(nodeOk ? `  ✓ Node ${process.versions.node}` : `  ✗ Node ${process.versions.node} — MulmoTerminal needs ≥ 22.9`);
+
+  const hasClaude = claudeInstalled();
+  if (hasClaude) {
+    console.log("  ✓ Claude Code CLI");
+  } else {
+    console.log("  ✗ Claude Code CLI — not found");
+    console.log("      → npm install -g @anthropic-ai/claude-code   (then run `claude` and log in)");
+  }
+
+  for (const [cmd, versionArg, why, hint] of [
+    ["tmux", "-V", "sessions survive a restart", "brew install tmux  ·  apt install tmux"],
+    ["gh", "--version", "PRs & Issues view + one-click PRs", "https://cli.github.com  (then: gh auth login)"],
+    ["codex", "--version", "run OpenAI Codex as an agent", "npm install -g @openai/codex"],
+  ]) {
+    console.log(hasCommand(cmd, versionArg) ? `  ✓ ${cmd} — ${why}` : `  ○ ${cmd} — optional (${why})\n      → ${hint}`);
+  }
+
+  // Config half: derive working-dir presets from Claude history + write config.json.
+  console.log("");
+  await new Promise((res) => {
+    const child = spawn(process.execPath, ["--import", "tsx", join(PKG_DIR, "server", "cli-init.ts"), ...initArgs], {
+      cwd: PKG_DIR,
+      env: { ...process.env },
+      stdio: "inherit",
+    });
+    child.on("exit", (code) => {
+      if (code) process.exitCode = code;
+      res();
+    });
+  });
+
+  if (hasClaude) {
+    if (await promptYesNo("\nConfigure interactively now with the /mulmoterminal-config skill? [y/N] ")) {
+      log("Launching Claude — use  /mulmoterminal-config  (or just ask it to configure MulmoTerminal).");
+      // eslint-disable-next-line sonarjs/no-os-command-from-path
+      spawn("claude", ["Use the mulmoterminal-config skill to configure MulmoTerminal."], { stdio: "inherit" });
+      return;
+    }
+    log("Later: run `claude` in any project and use  /mulmoterminal-config");
+  }
+  log("Setup done. Start MulmoTerminal:  npx mulmoterminal");
 }
 
 function pickOpenCommand() {
@@ -225,12 +293,15 @@ function runServer(port, noOpen, cwd, onChild) {
   });
 }
 
-async function main() {
-  const args = process.argv.slice(2);
+function printHelp() {
+  console.log(`
+Usage: npx mulmoterminal [command] [options]
 
-  if (args.includes("--help") || args.includes("-h")) {
-    console.log(`
-Usage: npx mulmoterminal [options]
+Commands:
+  (none)            Start the server (default)
+  init              First-run setup: check your environment, seed working-directory
+                    presets from your Claude Code history, and write
+                    ~/.mulmoterminal/config.json (idempotent — safe to re-run)
 
 Options:
   --cwd <dir>       Working directory claude runs in (default: current directory; relative paths allowed)
@@ -239,6 +310,18 @@ Options:
   --version         Show version
   --help            Show this help
 `);
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (args[0] === "init") {
+    await runInit(args.slice(1));
+    return;
+  }
+
+  if (args.includes("--help") || args.includes("-h")) {
+    printHelp();
     return;
   }
   if (args.includes("--version")) {
