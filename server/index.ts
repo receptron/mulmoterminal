@@ -15,7 +15,16 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import {
+  mountConfigRoutes,
+  getPrRepos,
+  getLaunchers,
+  getUserMcpServers,
+  getHeaderConfig,
+  getPushEnabled,
+  getRateLimitsEnabled,
+  getWorklogConfig,
+} from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
 import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config/header-resolve.js";
@@ -24,6 +33,8 @@ import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import { gitStatus } from "./git/git-status.js";
 import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
+import { statusLineConfigured, statusLineCommand, type RateLimits } from "./agents/statusline.js";
+import { mountRateLimitRoutes } from "./agents/rate-limit-routes.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -766,7 +777,34 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
 // per-session tool-call history that the GUI's tools pane shows. A failed tool
 // fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
 // entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson(host: string, sessionId: string) {
+// The settings layers Claude Code merges for a session, user first then project. Read
+// best-effort: an unreadable layer simply contributes no statusLine.
+function claudeSettingsLayers(cwd: string): string[] {
+  const files = [
+    path.join(os.homedir(), ".claude", "settings.json"),
+    path.join(cwd, ".claude", "settings.json"),
+    path.join(cwd, ".claude", "settings.local.json"),
+  ];
+  return files.map((file) => {
+    try {
+      return readFileSync(file, "utf8");
+    } catch {
+      return "";
+    }
+  });
+}
+
+// Claude Code allows one statusLine per session, and it is the only source for the
+// subscription rate-limit windows (see agents/statusline.ts). Opt-in, because Claude Code
+// renders a row for it and ours prints nothing — every cell pays a blank line. Take the
+// slot only when it is free: a user with their own statusLine already sees those numbers
+// there, and replacing it would cost them the rest of their status line.
+function statusLineSetting(host: string, sessionId: string, cwd: string) {
+  if (!getRateLimitsEnabled() || statusLineConfigured(claudeSettingsLayers(cwd))) return {};
+  return { statusLine: { type: "command", command: statusLineCommand(host, PORT, sessionId) } };
+}
+
+function hookSettingsJson(host: string, sessionId: string, cwd: string) {
   // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own session_id
   // on /clear and /compact, but the PTY — and the id the client tracks — stays this one, so attributing
   // hooks by this header keeps activity / header prompt / tool history correlated across a clear.
@@ -785,6 +823,7 @@ function hookSettingsJson(host: string, sessionId: string) {
       PostToolUse: toolEntry,
       PostToolUseFailure: toolEntry,
     },
+    ...statusLineSetting(host, sessionId, cwd),
   });
 }
 
@@ -1742,6 +1781,18 @@ mountTmuxRoutes(app, {
   },
 });
 
+// The subscription's 5h / 7d rate-limit windows, reported by the statusLine we inject.
+// One value for the whole app: the budget is per-account, shared by every session — which
+// is exactly why running a grid of them burns it fastest.
+let latestRateLimits: RateLimits | null = null;
+mountRateLimitRoutes(app, {
+  isAllowedOrigin,
+  setRateLimits: (limits) => {
+    latestRateLimits = limits;
+  },
+  getRateLimits: () => latestRateLimits,
+});
+
 // codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
 // the single view's sidebar lists these so past codex conversations are switchable + resumable.
 app.get("/api/codex/sessions", async (req, res) => {
@@ -2176,7 +2227,7 @@ function spawnClaudePty(
     resume,
     canResume,
     // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
+    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, cwd),
     permissionMode: CLAUDE_PERMISSION_MODE,
     attachGuiMcp,
     mcpConfig: mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),

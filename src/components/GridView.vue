@@ -264,6 +264,8 @@ const {
   removePreset,
   saveSound,
   savePushEnabled,
+  rateLimitsEnabled,
+  saveRateLimitsEnabled,
   savePrRepos,
   saveLaunchers,
   saveUserMcpServers,
@@ -330,11 +332,13 @@ function configureAppearance() {
       v-if="showSettings"
       :sound-file="soundFile"
       :push-enabled="pushEnabled"
+      :rate-limits-enabled="rateLimitsEnabled"
       :pr-repos="prRepos"
       :launchers="launchers"
       :user-mcp-servers="userMcpServers"
       @update-sound="saveSound"
       @update-push-enabled="savePushEnabled"
+      @update-rate-limits-enabled="saveRateLimitsEnabled"
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"

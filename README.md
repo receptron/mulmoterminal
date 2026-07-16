@@ -342,6 +342,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `pushEnabled` | `true` to send a **Web Push** to your registered devices when a background task finishes. Off by default; only sends while the **RemoteHost** channel is connected (see below). |
 | `worklogEnabled` | `true` to run the built-in **dev worklog** batch (see below). Off by default (each run spawns an LLM session, so it costs tokens). |
 | `worklogIntervalHours` | Worklog cadence in hours (default `6`, clamped to `1`–`168`). |
+| `rateLimitsEnabled` | `true` to show how much of your subscription's **5-hour / 7-day** rate-limit windows is spent, as a header chip. Off by default — it costs one terminal row per cell (see below). |
 
 #### Header buttons
 
@@ -372,6 +373,21 @@ panes you're not watching. Delivery is handled by the separate `mulmoserver` `se
 Cloud Function; MulmoTerminal only makes the call, and only while the **RemoteHost**
 channel is connected (its Google sign-in supplies the notification auth). With RemoteHost
 disconnected, or with no device registered, the toggle is a no-op.
+
+**Rate-limit windows.** Enable `rateLimitsEnabled` in Settings to show a header chip with
+how much of your Claude subscription's **5-hour** and **7-day** windows is spent — the
+budget every session shares, which is why a grid burns it fastest. The chip reports the
+fuller of the two windows and names both (plus their reset times) on hover.
+
+Those windows are only readable through Claude Code's **status line**, so MulmoTerminal
+injects one into each `claude` it spawns; it prints nothing and just reports the numbers
+back. That is the cost of the feature, and why it's off by default: Claude Code renders a
+row for the status line either way, so enabling it spends **one terminal row per cell**. A
+terminal whose own settings already define a `statusLine` is skipped — Claude Code allows
+one, and yours already shows these numbers. Requires a **Claude Pro/Max** subscription
+(API-key billing has no such window), and the numbers appear only once a session has had
+its first response — only sessions that are working report, which is why every session
+gets the status line rather than one.
 
 **Dev worklog (cross-clone).** Set `worklogEnabled: true` in
 `~/.mulmoterminal/config.json` (and **restart** — the scheduler reads its tasks at boot)

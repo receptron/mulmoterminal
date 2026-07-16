@@ -9,6 +9,7 @@ import type { UserMcpServer } from "./userMcp";
 const props = defineProps<{
   soundFile?: string | null;
   pushEnabled?: boolean;
+  rateLimitsEnabled?: boolean;
   prRepos?: string[];
   launchers?: Launcher[];
   userMcpServers?: UserMcpServer[];
@@ -17,7 +18,7 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{
   (e: "update-sound", file: string | null): void;
-  (e: "update-push-enabled", on: boolean): void;
+  (e: "update-push-enabled" | "update-rate-limits-enabled", on: boolean): void;
   (e: "update-repos", repos: string[]): void;
   (e: "update-launchers", launchers: Launcher[]): void;
   (e: "update-user-mcp", servers: UserMcpServer[]): void;
@@ -125,6 +126,10 @@ function clearSound() {
 // Web Push toggle — stateless: reflects props.pushEnabled, emits the new value up (App persists it).
 function onPushToggle(e: Event) {
   if (e.target instanceof HTMLInputElement) emit("update-push-enabled", e.target.checked);
+}
+// Rate-limit windows toggle — stateless like the push one; App persists it.
+function onRateLimitsToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) emit("update-rate-limits-enabled", e.target.checked);
 }
 async function browseSound() {
   try {
@@ -273,6 +278,17 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
       <label class="push-row">
         <input type="checkbox" :checked="props.pushEnabled ?? false" aria-label="Send a Web Push when a task finishes" @change="onPushToggle" />
         <span>Notify my devices when a task finishes</span>
+      </label>
+
+      <h3 class="section-title">Rate limit windows</h3>
+      <p class="hint">
+        Show how much of your Claude subscription's <strong>5-hour</strong> and <strong>7-day</strong> windows is spent — the budget every session shares, so a
+        grid burns it fastest. Claude Pro/Max only; the numbers appear once a session gets its first response. Costs one terminal row per cell: the windows are
+        only readable through a status line, which Claude Code renders. Skipped for terminals whose settings already define one.
+      </p>
+      <label class="push-row">
+        <input type="checkbox" :checked="props.rateLimitsEnabled ?? false" aria-label="Show rate limit window usage" @change="onRateLimitsToggle" />
+        <span>Show 5h / 7d window usage in the header</span>
       </label>
 
       <h3 class="section-title">Pull request repos</h3>

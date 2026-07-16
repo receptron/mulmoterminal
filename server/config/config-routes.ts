@@ -44,6 +44,12 @@ export function getPushEnabled(): boolean {
   return config.pushEnabled;
 }
 
+// Whether to inject the statusLine that reports the 5h / 7d windows — read live at spawn,
+// so a settings toggle applies to the next session opened rather than needing a restart.
+export function getRateLimitsEnabled(): boolean {
+  return config.rateLimitsEnabled;
+}
+
 // The periodic dev-work-log settings — read live so a toggle takes effect on the next
 // scheduler wiring (a restart, currently). Off by default.
 export function getWorklogConfig(): { enabled: boolean; intervalHours: number } {
@@ -84,6 +90,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     pushEnabled: config.pushEnabled,
     worklogEnabled: config.worklogEnabled,
     worklogIntervalHours: config.worklogIntervalHours,
+    rateLimitsEnabled: config.rateLimitsEnabled,
   });
 
   app.get("/api/config", (_req, res) => {

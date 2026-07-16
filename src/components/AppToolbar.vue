@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, watch, onUnmounted } from "vue";
 import { useRoute } from "vue-router";
 import { router } from "../router";
 import NotificationBell from "./NotificationBell.vue";
@@ -10,6 +10,8 @@ import { useAccountingView, accountingViewOpen } from "../composables/useAccount
 import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
+import { useRateLimits } from "../composables/useRateLimits";
+import { useAppConfig } from "../composables/useAppConfig";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
 
@@ -43,6 +45,43 @@ const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = usePrsView();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
+
+// The subscription's 5h / 7d windows. Account-wide (every session draws on the same
+// budget), so one chip serves both views — that's why it lives here and not in a cell.
+// Opt-in: reporting them costs a terminal row per cell, so poll only while enabled.
+const { rateLimitsEnabled } = useAppConfig();
+const { limits: rateLimits, start: startRateLimits, stop: stopRateLimits } = useRateLimits();
+watch(rateLimitsEnabled, (on) => (on ? startRateLimits() : stopRateLimits()), { immediate: true });
+onUnmounted(() => stopRateLimits());
+
+// Percent for the fuller of the two windows — the one that will bite first.
+const rateLimitPeak = computed(() => {
+  const l = rateLimits.value;
+  if (!l) return null;
+  return Math.max(l.fiveHour?.usedPercentage ?? 0, l.sevenDay?.usedPercentage ?? 0);
+});
+const RATE_LIMIT_WARN_PCT = 75;
+const rateLimitTitle = computed(() => {
+  const l = rateLimits.value;
+  if (!l) return "";
+  const parts: string[] = [];
+  if (l.fiveHour) parts.push(`5h ${Math.round(l.fiveHour.usedPercentage)}% used${resetSuffix(l.fiveHour.resetsAt_sec)}`);
+  if (l.sevenDay) parts.push(`7d ${Math.round(l.sevenDay.usedPercentage)}% used${resetSuffix(l.sevenDay.resetsAt_sec)}`);
+  return `Rate limit — ${parts.join(" · ")}`;
+});
+
+const MS_PER_SEC = 1000;
+const SEC_PER_MIN = 60;
+const MIN_PER_HOUR = 60;
+function resetSuffix(resetsAt_sec: number | null): string {
+  if (resetsAt_sec === null) return "";
+  const remaining_min = Math.round((resetsAt_sec * MS_PER_SEC - Date.now()) / MS_PER_SEC / SEC_PER_MIN);
+  if (remaining_min <= 0) return "";
+  const h = Math.floor(remaining_min / MIN_PER_HOUR);
+  const m = remaining_min % MIN_PER_HOUR;
+  const hours = h ? `${h}h ` : "";
+  return `, resets in ${hours}${m}m`;
+}
 
 const inGrid = computed(() => route.name === "terminals");
 const inSingle = computed(() => !inGrid.value);
@@ -144,6 +183,17 @@ function showPrs(): void {
         <span v-if="statusCounts.done" class="gs gs-done" aria-hidden="true">{{ statusCounts.done }}</span>
         <span v-if="statusCounts.working" class="gs gs-working" aria-hidden="true">{{ statusCounts.working }}</span>
       </span>
+      <span
+        v-if="rateLimitPeak !== null"
+        class="rate-limits"
+        :class="{ 'rl-warn': rateLimitPeak >= RATE_LIMIT_WARN_PCT }"
+        role="img"
+        :aria-label="rateLimitTitle"
+        :title="rateLimitTitle"
+      >
+        <span class="material-symbols-outlined rl-icon" aria-hidden="true">avg_pace</span>
+        <span aria-hidden="true">{{ Math.round(rateLimitPeak) }}%</span>
+      </span>
     </nav>
     <NotificationBell class="toolbar-bell" />
     <RemoteHostControl />
@@ -234,6 +284,26 @@ function showPrs(): void {
   margin-left: 6px;
   padding-left: 10px;
   border-left: 1px solid var(--border);
+}
+/* The account-wide 5h/7d budget: informational until it's nearly spent, so it stays muted
+   and only takes a warning colour near the cap. */
+.rate-limits {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  margin-left: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+.rl-icon {
+  font-size: 14px;
+}
+.rate-limits.rl-warn {
+  color: var(--warning, #d29922);
 }
 .gs {
   display: inline-flex;

@@ -32,6 +32,11 @@ export interface AppConfig {
   // session on each run, so it costs tokens). `worklogIntervalHours` is the cadence.
   worklogEnabled: boolean;
   worklogIntervalHours: number;
+  // Report the subscription's 5h / 7d rate-limit windows to the header. Off by default:
+  // the only source is a statusLine injected into each `claude`, and Claude Code renders
+  // a row for it — so enabling costs one terminal line per cell. Only sessions that are
+  // working report, which is why every session gets the statusLine rather than one.
+  rateLimitsEnabled: boolean;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -110,6 +115,10 @@ export function sanitizePushEnabled(input: unknown): boolean {
   return input === true;
 }
 
+export function sanitizeRateLimitsEnabled(input: unknown): boolean {
+  return input === true;
+}
+
 export const DEFAULT_WORKLOG_INTERVAL_HOURS = 6;
 const MIN_WORKLOG_INTERVAL_HOURS = 1;
 const MAX_WORKLOG_INTERVAL_HOURS = 168; // one week
@@ -137,6 +146,7 @@ const emptyConfig = (): AppConfig => ({
   pushEnabled: false,
   worklogEnabled: false,
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
+  rateLimitsEnabled: false,
 });
 
 export function loadAppConfig(file: string): AppConfig {
@@ -154,6 +164,7 @@ export function loadAppConfig(file: string): AppConfig {
       pushEnabled: sanitizePushEnabled(raw?.pushEnabled),
       worklogEnabled: sanitizeWorklogEnabled(raw?.worklogEnabled),
       worklogIntervalHours: sanitizeWorklogIntervalHours(raw?.worklogIntervalHours),
+      rateLimitsEnabled: sanitizeRateLimitsEnabled(raw?.rateLimitsEnabled),
     };
   } catch {
     return emptyConfig();
@@ -177,6 +188,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : base.pushEnabled,
     worklogEnabled: body.worklogEnabled !== undefined ? sanitizeWorklogEnabled(body.worklogEnabled) : base.worklogEnabled,
     worklogIntervalHours: body.worklogIntervalHours !== undefined ? sanitizeWorklogIntervalHours(body.worklogIntervalHours) : base.worklogIntervalHours,
+    rateLimitsEnabled: body.rateLimitsEnabled !== undefined ? sanitizeRateLimitsEnabled(body.rateLimitsEnabled) : base.rateLimitsEnabled,
   };
 }
 
@@ -196,6 +208,7 @@ export function saveAppConfig(file: string, config: AppConfig): boolean {
       pushEnabled: config.pushEnabled,
       worklogEnabled: config.worklogEnabled,
       worklogIntervalHours: config.worklogIntervalHours,
+      rateLimitsEnabled: config.rateLimitsEnabled,
     };
     writeFileSync(file, JSON.stringify(payload, null, 2));
     return true;

@@ -150,8 +150,21 @@ onMounted(() => window.addEventListener("resize", onViewportResize));
 
 // Settings (theme + notification sound), shared with the grid view via useAppConfig
 // and opened from the toolbar's gear button.
-const { defaultCwd, loadConfig, saveSound, pushEnabled, savePushEnabled, prRepos, savePrRepos, launchers, saveLaunchers, userMcpServers, saveUserMcpServers } =
-  useAppConfig();
+const {
+  defaultCwd,
+  loadConfig,
+  saveSound,
+  pushEnabled,
+  savePushEnabled,
+  rateLimitsEnabled,
+  saveRateLimitsEnabled,
+  prRepos,
+  savePrRepos,
+  launchers,
+  saveLaunchers,
+  userMcpServers,
+  saveUserMcpServers,
+} = useAppConfig();
 // Drive the single view's dir overrides off the dir the terminal ACTUALLY runs in
 // (reported by the server, which may resolve/fall back), not the static default — so
 // the badge/theme/colors always track the active session. Falls back to the default
@@ -374,6 +387,7 @@ function onSession(id: string) {
       v-if="showSettings"
       :sound-file="soundFile"
       :push-enabled="pushEnabled"
+      :rate-limits-enabled="rateLimitsEnabled"
       :pr-repos="prRepos"
       :launchers="launchers"
       :user-mcp-servers="userMcpServers"
@@ -381,6 +395,7 @@ function onSession(id: string) {
       :session-id="activeId"
       @update-sound="saveSound"
       @update-push-enabled="savePushEnabled"
+      @update-rate-limits-enabled="saveRateLimitsEnabled"
       @update-repos="savePrRepos"
       @update-launchers="saveLaunchers"
       @update-user-mcp="saveUserMcpServers"

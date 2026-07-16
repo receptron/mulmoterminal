@@ -14,6 +14,10 @@ const soundFile = ref<string | null>(null);
 // The actual sending is server-side; the client only reads/writes this flag.
 const pushEnabled = ref(false);
 
+// Report the subscription's 5h / 7d rate-limit windows in the header. SINGLETON like
+// pushEnabled; the reporting is server-side, the client only reads/writes the flag.
+const rateLimitsEnabled = ref(false);
+
 // Cross-repo PR list's repos — also a SINGLETON, so the settings modal (openable from
 // either view) and any future reader share one list; a save in one view is seen by the
 // other instead of each useAppConfig() keeping a divergent copy.
@@ -172,6 +176,14 @@ async function savePushEnabled(on: boolean): Promise<boolean> {
   if (r.ok) pushEnabled.value = r.value === true;
   return r.ok;
 }
+// Persist the "report the rate-limit windows" toggle (partial update). Applies to the
+// next session opened — the statusLine that reports them is injected at spawn.
+async function saveRateLimitsEnabled(on: boolean): Promise<boolean> {
+  const r = await postConfigField<unknown>("rateLimitsEnabled", on);
+  if (r.ok) rateLimitsEnabled.value = r.value === true;
+  return r.ok;
+}
+
 // Persist the cross-repo PR list's repos (partial update, other fields untouched).
 async function savePrRepos(next: string[]): Promise<boolean> {
   const r = await postConfigField<string[]>("prRepos", next);
@@ -214,6 +226,7 @@ export function useAppConfig() {
       adoptServerPresets(c.cwdPresets, version);
       soundFile.value = typeof c.soundFile === "string" ? c.soundFile : null;
       pushEnabled.value = c.pushEnabled === true;
+      rateLimitsEnabled.value = c.rateLimitsEnabled === true;
       prRepos.value = Array.isArray(c.prRepos) ? c.prRepos : [];
       launchers.value = Array.isArray(c.launchers) ? c.launchers : [];
       userMcpServers.value = Array.isArray(c.userMcpServers) ? c.userMcpServers : [];
@@ -232,6 +245,7 @@ export function useAppConfig() {
     userMcpServers,
     soundFile,
     pushEnabled,
+    rateLimitsEnabled,
     saving,
     error,
     loadConfig,
@@ -240,6 +254,7 @@ export function useAppConfig() {
     removePreset,
     saveSound,
     savePushEnabled,
+    saveRateLimitsEnabled,
     savePrRepos,
     saveLaunchers,
     saveUserMcpServers,
