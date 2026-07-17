@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/collection-tool.js";
 import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/host-tools.js";
-import { initCollectionsBackend } from "../../../server/infra/backends/collections.js";
+import { initCollectionsBackend } from "../../../../server/backends/collections.js";
 
 const SCHEMA = {
   title: "Tool Fixture",
