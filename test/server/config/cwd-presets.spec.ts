@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { sanitizePresets, loadPresets, savePresets, extractCwdFromTranscript, deriveCwdPresets } from "../../../server/config/cwd-presets";
+import { describe, it, expect } from "vitest.js";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { sanitizePresets, loadPresets, savePresets, extractCwdFromTranscript, deriveCwdPresets } from "../../../server/config/cwd-presets.js";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-presets-"));
 

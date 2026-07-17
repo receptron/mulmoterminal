@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest.js";
 import {
   mintViewToken,
   verifyViewToken,
@@ -7,8 +7,8 @@ import {
   requireViewToken,
   VIEW_TOKEN_TTL_MS,
   type ViewCapability,
-} from "../../../server/backends/viewToken";
-import type { Request, Response, NextFunction } from "express";
+} from "../../../server/backends/viewToken.js";
+import type { Request, Response, NextFunction } from "express.js";
 
 describe("viewToken mint/verify", () => {
   it("round-trips a minted token", () => {

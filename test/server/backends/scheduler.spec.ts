@@ -1,13 +1,13 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import express from "express";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { SCHEDULE_TYPES } from "@receptron/task-scheduler";
-import type { Server } from "node:http";
-import type { TaskDefinition } from "@mulmoclaude/core/scheduler";
-import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "../../../server/backends/scheduler";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { SCHEDULE_TYPES } from "@receptron/task-scheduler.js";
+import type { Server } from "node:http.js";
+import type { TaskDefinition } from "@mulmoclaude/core/scheduler.js";
+import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "../../../server/backends/scheduler.js";
 
 // Mock the shared task-manager so initUserTaskScheduler's registration + start calls
 // are observable without starting real interval timers.

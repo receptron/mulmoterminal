@@ -1,11 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import type { Express } from "express";
-import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { mountWorktreeRoutes } from "../../../server/git/worktree-routes";
-import { createWorktree, worktreesRoot } from "../../../server/git/worktrees";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import type { Express } from "express.js";
+import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs.js";
+import { execFileSync } from "node:child_process.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { mountWorktreeRoutes } from "../../../server/git/worktree-routes.js";
+import { createWorktree, worktreesRoot } from "../../../server/git/worktrees.js";
 
 interface FakeRes {
   statusCode: number;

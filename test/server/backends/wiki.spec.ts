@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import express from "express";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { mountWikiRoutes } from "../../../server/backends/wiki";
+import { describe, it, expect, beforeAll, afterAll } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { mountWikiRoutes } from "../../../server/backends/wiki.js";
 
 // A minimal wiki laid out at core's canonical location (wikiDirs):
 //   <ws>/data/wiki/index.md       — the index (two bullet [[links]])

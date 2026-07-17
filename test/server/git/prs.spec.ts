@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { rollupCiState, normalizePr } from "../../../server/git/prs";
+import { describe, it, expect } from "vitest.js";
+import { rollupCiState, normalizePr } from "../../../server/git/prs.js";
 
 describe("rollupCiState", () => {
   it("is none for an empty / non-array rollup", () => {

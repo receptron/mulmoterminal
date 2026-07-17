@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeAll } from "vitest.js";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { initCollectionsBackend } from "../../../server/backends/collections";
-import { createThumbnailResolver, clearThumbnailCache } from "../../../server/backends/thumbnailStore";
+import { initCollectionsBackend } from "../../../server/backends/collections.js";
+import { createThumbnailResolver, clearThumbnailCache } from "../../../server/backends/thumbnailStore.js";
 
 // A stub resize so the test needs no native sharp binary — echoes a marker
 // derived from the input so we can assert the pipeline ran.

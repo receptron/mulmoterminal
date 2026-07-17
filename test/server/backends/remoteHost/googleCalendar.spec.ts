@@ -1,16 +1,16 @@
 // @vitest-environment node
 // Unit tests for the google.calendar.* command handlers: param validation,
 // clamping, and wiring — the Google engine is stubbed (no network, no token).
-import { describe, it, expect } from "vitest";
-import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "@mulmoclaude/core/google";
-import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "@mulmoclaude/core/google";
-import type { JsonObject } from "@mulmoclaude/core/remote-host";
+import { describe, it, expect } from "vitest.js";
+import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "@mulmoclaude/core/google.js";
+import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "@mulmoclaude/core/google.js";
+import type { JsonObject } from "@mulmoclaude/core/remote-host.js";
 
 import {
   createGoogleCalendarCreateEvent,
   createGoogleCalendarListEvents,
   type GoogleCalendarDeps,
-} from "../../../../server/backends/remoteHost/googleCalendar";
+} from "../../../../server/backends/remoteHost/googleCalendar.js";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",

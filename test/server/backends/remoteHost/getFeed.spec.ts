@@ -5,14 +5,14 @@
 // real on-disk dataDir, mocking only listFeeds so the test needn't stand up the
 // full feed-discovery/host stack. Kept in its own file so the module-level
 // listFeeds mock can't reach handlers.spec's real-collection-host listSkills test.
-import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from "vitest.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { listFeeds } from "@mulmoclaude/core/feeds/server";
-import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers";
-import { initCollectionsBackend } from "../../../../server/backends/collections";
+import { listFeeds } from "@mulmoclaude/core/feeds/server.js";
+import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers.js";
+import { initCollectionsBackend } from "../../../../server/backends/collections.js";
 
 // Only listFeeds is stubbed; listItems/toDetail/deriveItems/pageResult stay real.
 vi.mock("@mulmoclaude/core/feeds/server", () => ({ listFeeds: vi.fn(), readFeedState: vi.fn() }));

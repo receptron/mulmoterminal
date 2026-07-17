@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { createWorktree } from "../../../server/git/worktrees";
-import { compareUrl, pushWorktree, createOrOpenPR } from "../../../server/git/worktree-pr";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs.js";
+import { execFileSync } from "node:child_process.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { createWorktree } from "../../../server/git/worktrees.js";
+import { compareUrl, pushWorktree, createOrOpenPR } from "../../../server/git/worktree-pr.js";
 
 describe("compareUrl", () => {
   it("builds the GitHub compare/open-PR url, keeping the branch slash raw", () => {

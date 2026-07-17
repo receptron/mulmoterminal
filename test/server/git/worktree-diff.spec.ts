@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { createWorktree } from "../../../server/git/worktrees";
-import { worktreeDiff } from "../../../server/git/worktree-diff";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs.js";
+import { execFileSync } from "node:child_process.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { createWorktree } from "../../../server/git/worktrees.js";
+import { worktreeDiff } from "../../../server/git/worktree-diff.js";
 
 describe("worktreeDiff", () => {
   let repo: string;

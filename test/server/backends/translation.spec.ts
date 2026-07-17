@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import express from "express";
-import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
 import {
   splitHitMiss,
   mergeTranslations,
@@ -12,7 +12,7 @@ import {
   validateRequest,
   TranslationInputError,
   mountTranslationRoutes,
-} from "../../../server/backends/translation";
+} from "../../../server/backends/translation.js";
 
 describe("splitHitMiss", () => {
   const dict = { sentences: { Hello: { ja: "こんにちは" }, Bye: { ja: "さようなら" } } };

@@ -1,11 +1,11 @@
 // @vitest-environment node
 // Route-level tests for the Settings modal's Google link. The auth flow, token store,
 // and unlink are stubbed — no browser, no loopback listener, no real token.
-import { describe, it, expect, beforeEach, vi } from "vitest";
-import express from "express";
-import request from "supertest";
+import { describe, it, expect, beforeEach, vi } from "vitest.js";
+import express from "express.js";
+import request from "supertest.js";
 
-import { mountGoogleRoutes, type GoogleRouteDeps } from "../../../server/backends/google";
+import { mountGoogleRoutes, type GoogleRouteDeps } from "../../../server/backends/google.js";
 
 const stubDeps = (over: Partial<GoogleRouteDeps> = {}) => {
   const deps: GoogleRouteDeps = {

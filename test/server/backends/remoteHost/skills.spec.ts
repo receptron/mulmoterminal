@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { discoverSkillNames, discoverSkills, applySkillFilter } from "../../../../server/backends/remoteHost/skills";
+import { discoverSkillNames, discoverSkills, applySkillFilter } from "../../../../server/backends/remoteHost/skills.js";
 
 // Write `<root>/.claude/skills/<name>/SKILL.md` with the given contents.
 const writeSkill = (root: string, name: string, contents: string): void => {

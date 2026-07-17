@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { gitStatus } from "../../../server/git/git-status";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs.js";
+import { execFileSync } from "node:child_process.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { gitStatus } from "../../../server/git/git-status.js";
 
 describe("gitStatus", () => {
   let repo: string;

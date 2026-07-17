@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { containedPath, realContainedWithin, resolveBase, listEntries, mdToHtmlDoc } from "../../../server/files/files-browse";
+import { describe, it, expect } from "vitest.js";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { containedPath, realContainedWithin, resolveBase, listEntries, mdToHtmlDoc } from "../../../server/files/files-browse.js";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-files-"));
 

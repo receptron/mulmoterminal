@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import express from "express";
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { normalizeShortcuts, mountShortcutsRoutes } from "../../../server/backends/shortcuts";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { normalizeShortcuts, mountShortcutsRoutes } from "../../../server/backends/shortcuts.js";
 
 describe("normalizeShortcuts", () => {
   it("drops malformed entries and dedupes on (kind, slug)", () => {

@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
-import type { Express } from "express";
-import { mkdtempSync, rmSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { parseGithubWebUrl, resolveGithubUrl, mountGitRemoteRoute } from "../../../server/git/gitRemote";
+import { describe, it, expect } from "vitest.js";
+import type { Express } from "express.js";
+import { mkdtempSync, rmSync } from "node:fs.js";
+import os from "node:os.js";
+import path from "node:path.js";
+import { parseGithubWebUrl, resolveGithubUrl, mountGitRemoteRoute } from "../../../server/git/gitRemote.js";
 
 const REPO = "https://github.com/owner/repo";
 

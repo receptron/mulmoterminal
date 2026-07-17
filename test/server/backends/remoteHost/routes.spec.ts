@@ -1,8 +1,8 @@
-import { describe, it, expect, vi } from "vitest";
-import express, { type Express } from "express";
-import request from "supertest";
-import type { RemoteHostLifecycle, RemoteHostStatus } from "@mulmoclaude/core/remote-host/server";
-import { mountRemoteHostRoutes, type RemoteHostRouteDeps } from "../../../../server/backends/remoteHost/routes";
+import { describe, it, expect, vi } from "vitest.js";
+import express, { type Express } from "express.js";
+import request from "supertest.js";
+import type { RemoteHostLifecycle, RemoteHostStatus } from "@mulmoclaude/core/remote-host/server.js";
+import { mountRemoteHostRoutes, type RemoteHostRouteDeps } from "../../../../server/backends/remoteHost/routes.js";
 
 const CONNECTED: RemoteHostStatus = { connected: true, uid: "u1" };
 const DISCONNECTED: RemoteHostStatus = { connected: false, uid: null };

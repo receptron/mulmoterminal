@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs";
-import { tmpdir, homedir } from "node:os";
-import path from "node:path";
-import { isManagedWorkspace, initWorkspaceSetup } from "../../../server/backends/workspaceSetup";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, existsSync, readdirSync } from "node:fs.js";
+import { tmpdir, homedir } from "node:os.js";
+import path from "node:path.js";
+import { isManagedWorkspace, initWorkspaceSetup } from "../../../server/backends/workspaceSetup.js";
 
 // Save/restore MULMOCLAUDE_WORKSPACE_PATH so a test can mark a temp dir as the
 // managed workspace without leaking into sibling tests.

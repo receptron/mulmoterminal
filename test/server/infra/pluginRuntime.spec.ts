@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest.js";
+import { mkdtempSync, rmSync } from "node:fs.js";
+import { readFile } from "node:fs/promises.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { initPluginRuntime, createPluginRuntime } from "../../../server/infra/pluginRuntime";
-import { initArtifactsBackend, artifactsRoot } from "../../../../server/backends/artifacts";
+import { initPluginRuntime, createPluginRuntime } from "../../../server/infra/pluginRuntime.js";
+import { initArtifactsBackend, artifactsRoot } from "../../../../server/backends/artifacts.js";
 
 const PKG = "@scope/demo-plugin";
 

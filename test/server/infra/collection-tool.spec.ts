@@ -5,13 +5,13 @@
 // the workspace binding through the configured collection host, and the
 // bundledHelpsDir injection that keeps schemaDocs working on a workspace
 // that was never seeded with config/helps.
-import { describe, it, expect, beforeAll } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/collection-tool";
-import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/host-tools";
-import { initCollectionsBackend } from "../../../../server/backends/collections";
+import { describe, it, expect, beforeAll } from "vitest.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/collection-tool.js";
+import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/host-tools.js";
+import { initCollectionsBackend } from "../../../../server/backends/collections.js";
 
 const SCHEMA = {
   title: "Tool Fixture",

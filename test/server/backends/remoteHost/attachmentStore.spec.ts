@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, afterEach } from "vitest";
-import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { createSaveAttachment } from "../../../../server/backends/remoteHost/attachmentStore";
+import { createSaveAttachment } from "../../../../server/backends/remoteHost/attachmentStore.js";
 
 describe("createSaveAttachment", () => {
   let ws = "";

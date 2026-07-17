@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync, symlinkSync } from "node:fs";
-import { execFileSync } from "node:child_process";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync, symlinkSync } from "node:fs.js";
+import { execFileSync } from "node:child_process.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 import {
   slugify,
   parseWorktreeList,
@@ -13,7 +13,7 @@ import {
   listWorktrees,
   isDirty,
   removeWorktree,
-} from "../../../server/git/worktrees";
+} from "../../../server/git/worktrees.js";
 
 describe("slugify", () => {
   it("makes a filesystem-safe slug, with a fallback", () => {

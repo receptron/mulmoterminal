@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest.js";
 import {
   dirNameField,
   dirColorField,
@@ -12,7 +12,7 @@ import {
   MAX_BUTTONS,
   MAX_CHIPS,
   MAX_SKILL_FILTER,
-} from "../../../server/config/config-schema";
+} from "../../../server/config/config-schema.js";
 
 describe("dirNameField", () => {
   it("trims and caps at NAME_MAX_CHARS", () => {

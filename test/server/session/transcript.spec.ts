@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest.js";
 import {
   latestUserPromptFromJsonl,
   latestMeaningfulUserPromptFromJsonl,
@@ -19,7 +19,7 @@ import {
   countUserTurnsFromParsed,
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
-} from "../../../server/session/transcript";
+} from "../../../server/session/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 

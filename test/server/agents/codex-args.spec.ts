@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { buildCodexArgs } from "../../../server/agents/codex-args";
+import { describe, it, expect } from "vitest.js";
+import { buildCodexArgs } from "../../../server/agents/codex-args.js";
 
 const base = { resume: null, model: null, guiMcpUrl: null };
 

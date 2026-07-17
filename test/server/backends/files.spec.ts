@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import express from "express";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { mountFilesRoutes } from "../../../server/backends/files";
+import { describe, it, expect, beforeAll, afterAll } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { mountFilesRoutes } from "../../../server/backends/files.js";
 
 let server: Server;
 let base: string;

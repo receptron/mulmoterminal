@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "../../../server/config/dir-config";
+import { describe, it, expect } from "vitest.js";
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "../../../server/config/dir-config.js";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-dircfg-"));
 const EMPTY = {

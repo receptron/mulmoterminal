@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { RemoteHostSessionExpiredError, reconnectErrorStatus } from "../../../../server/backends/remoteHost/session";
+import { describe, it, expect } from "vitest.js";
+import { RemoteHostSessionExpiredError, reconnectErrorStatus } from "../../../../server/backends/remoteHost/session.js";
 
 describe("reconnectErrorStatus", () => {
   it("maps an expired/invalid session to 401 (client drops the blob)", () => {

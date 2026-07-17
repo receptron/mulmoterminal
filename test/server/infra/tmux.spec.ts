@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES, isResumableTmuxSession } from "../../../server/infra/tmux";
+import { describe, it, expect } from "vitest.js";
+import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES, isResumableTmuxSession } from "../../../server/infra/tmux.js";
 
 describe("tmuxSessionName", () => {
   it("prefixes the session id", () => {

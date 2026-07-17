@@ -1,10 +1,10 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
 
-import { createFileOps } from "../../../server/backends/fileOps";
+import { createFileOps } from "../../../server/backends/fileOps.js";
 
 describe("createFileOps", () => {
   let base: string;

@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import express from "express";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { publish, resetNotifier } from "@mulmoclaude/core/notifier";
-import { initNotifier, mountNotificationRoutes, NOTIFIER_CHANNEL } from "../../../server/backends/notifier";
+import { describe, it, expect, beforeEach, afterEach } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { publish, resetNotifier } from "@mulmoclaude/core/notifier.js";
+import { initNotifier, mountNotificationRoutes, NOTIFIER_CHANNEL } from "../../../server/backends/notifier.js";
 
 interface Published {
   channel: string;

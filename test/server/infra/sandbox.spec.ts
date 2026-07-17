@@ -1,7 +1,7 @@
-import { describe, it, expect, afterEach } from "vitest";
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs";
-import os from "node:os";
-import path from "node:path";
+import { describe, it, expect, afterEach } from "vitest.js";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync } from "node:fs.js";
+import os from "node:os.js";
+import path from "node:path.js";
 import {
   rewriteLoopbackForDocker,
   sandboxContainerName,
@@ -13,7 +13,7 @@ import {
   cleanupSandbox,
   parseMountConfigNames,
   resolveSandboxAuthArgs,
-} from "../../../server/infra/sandbox";
+} from "../../../server/infra/sandbox.js";
 
 describe("rewriteLoopbackForDocker", () => {
   it("rewrites localhost / 127.0.0.1 to host.docker.internal", () => {

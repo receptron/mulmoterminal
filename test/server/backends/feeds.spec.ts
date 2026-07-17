@@ -1,11 +1,11 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import express from "express";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { initFeedsBackend, mountFeedsRoutes } from "../../../server/backends/feeds";
-import { listFeeds, readFeedState, removeFeed } from "@mulmoclaude/core/feeds/server";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest.js";
+import express from "express.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { initFeedsBackend, mountFeedsRoutes } from "../../../server/backends/feeds.js";
+import { listFeeds, readFeedState, removeFeed } from "@mulmoclaude/core/feeds/server.js";
 
 // The feeds engine reads the workspace + fetches sources — mock it so the route
 // tests run offline and we assert the host glue (FeedSummary shaping, status).

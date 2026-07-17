@@ -3,9 +3,9 @@
 // here IS the end-to-end check that every configured package still loads. The factory
 // path matters most: @mulmoclaude/google-plugin exports only TOOL_DEFINITION + a
 // definePlugin default, so a regression in loadFactoryPackage drops the tool entirely.
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest.js";
 
-import { plugins, toolDefinitions, allowedToolNames } from "../../../server/infra/plugins-registry";
+import { plugins, toolDefinitions, allowedToolNames } from "../../../server/infra/plugins-registry.js";
 
 describe("plugins registry", () => {
   it("normalizes a factory-shaped package into { toolName, definition, execute }", () => {

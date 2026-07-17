@@ -1,13 +1,13 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest";
-import express from "express";
-import sharp from "sharp";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { initCollectionsBackend, mountCollectionRoutes } from "../../../server/backends/collections";
-import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
+import { describe, it, expect, beforeAll, afterAll, beforeEach, vi } from "vitest.js";
+import express from "express.js";
+import sharp from "sharp.js";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { initCollectionsBackend, mountCollectionRoutes } from "../../../server/backends/collections.js";
+import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server.js";
 
 // The registry engine fetches remote index.json / bundles — mock it so the route
 // tests run offline and we can assert the host glue (status passthrough, args).
@@ -23,7 +23,7 @@ vi.mock("@mulmoclaude/core/collection/registry/server", () => ({
 // inject a crafted collection: a collection-level `kind: "mutate"` action can't
 // exist on disk (the schema refine rejects it), yet the route's defensive 400
 // must still be covered.
-import { deleteCollection, deleteCustomView, loadCollection } from "@mulmoclaude/core/collection/server";
+import { deleteCollection, deleteCustomView, loadCollection } from "@mulmoclaude/core/collection/server.js";
 vi.mock("@mulmoclaude/core/collection/server", async (importOriginal) => {
   const orig = await importOriginal<typeof import("@mulmoclaude/core/collection/server")>();
   return { ...orig, deleteCollection: vi.fn(), deleteCustomView: vi.fn(), loadCollection: vi.fn(orig.loadCollection) };

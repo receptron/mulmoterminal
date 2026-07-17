@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest.js";
 import {
   truncateLog,
   buildSummaryPrompt,
@@ -7,7 +7,7 @@ import {
   summarizeLog,
   MAX_LOG_KB,
   type RunClaude,
-} from "../../../server/session/command-summary";
+} from "../../../server/session/command-summary.js";
 
 const KB = 1024;
 const ok = (stdout: string): RunClaude => vi.fn(async () => ({ stdout, stderr: "", code: 0 }));

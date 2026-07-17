@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import express from "express";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import type { Server } from "node:http";
-import { initArtifactsBackend } from "../../../server/backends/artifacts";
-import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "../../../server/backends/html";
+import { describe, it, expect, beforeAll, afterAll } from "vitest.js";
+import express from "express.js";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs.js";
+import { tmpdir } from "node:os.js";
+import path from "node:path.js";
+import type { Server } from "node:http.js";
+import { initArtifactsBackend } from "../../../server/backends/artifacts.js";
+import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "../../../server/backends/html.js";
 
 let server: Server;
 let base: string;

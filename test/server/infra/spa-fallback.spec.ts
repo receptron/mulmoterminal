@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { isClientRoute } from "../../../server/infra/spa-fallback";
+import { describe, it, expect } from "vitest.js";
+import { isClientRoute } from "../../../server/infra/spa-fallback.js";
 
 describe("SPA fallback matcher", () => {
   it("serves the SPA shell for client routes", () => {
