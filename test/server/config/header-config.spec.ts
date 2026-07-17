@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeButtons, sanitizeChips, sanitizeHeaderConfig, mergeHeaderConfig, DEFAULT_BUTTONS, type HeaderConfig } from "./header-config.js";
+import {
+  sanitizeButtons,
+  sanitizeChips,
+  sanitizeHeaderConfig,
+  mergeHeaderConfig,
+  DEFAULT_BUTTONS,
+  type HeaderConfig,
+} from "../../../server/config/header-config.js";
 
 describe("sanitizeButtons", () => {
   it("keeps a valid shell/input/open button with its matching payload", () => {
