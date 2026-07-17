@@ -13,7 +13,7 @@ import {
   cleanupSandbox,
   parseMountConfigNames,
   resolveSandboxAuthArgs,
-} from "./sandbox";
+} from "../../../server/infra/sandbox";
 
 describe("rewriteLoopbackForDocker", () => {
   it("rewrites localhost / 127.0.0.1 to host.docker.internal", () => {

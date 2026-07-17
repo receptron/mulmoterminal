@@ -5,7 +5,7 @@
 // definePlugin default, so a regression in loadFactoryPackage drops the tool entirely.
 import { describe, it, expect } from "vitest";
 
-import { plugins, toolDefinitions, allowedToolNames } from "./plugins-registry.js";
+import { plugins, toolDefinitions, allowedToolNames } from "../../../server/infra/plugins-registry.js";
 
 describe("plugins registry", () => {
   it("normalizes a factory-shaped package into { toolName, definition, execute }", () => {

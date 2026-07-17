@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { sendWebPush } from "./web-push";
+import { sendWebPush } from "../../../server/infra/web-push";
 
 // The envelope/parse/timeout logic is unit-tested in @mulmobridge/web-push; here we only
 // verify the wiring — that our RemoteHost token provider is injected into the shared sender.
