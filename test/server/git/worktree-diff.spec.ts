@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createWorktree } from "./worktrees.js";
-import { worktreeDiff } from "./worktree-diff.js";
+import { createWorktree } from "../../../server/git/worktrees.js";
+import { worktreeDiff } from "../../../server/git/worktree-diff.js";
 
 describe("worktreeDiff", () => {
   let repo: string;

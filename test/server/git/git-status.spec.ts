@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { gitStatus } from "./git-status.js";
+import { gitStatus } from "../../../server/git/git-status.js";
 
 describe("gitStatus", () => {
   let repo: string;
