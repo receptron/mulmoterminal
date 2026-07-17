@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { parsePrUrl, prUrlForBranch, clearPrUrlCache } from "../../server/pr-for-branch.js";
+import { parsePrUrl, prUrlForBranch, clearPrUrlCache } from "../../server/../server/pr-for-branch.js";
 
 const ok = (stdout: string) => vi.fn(async () => ({ ok: true, stdout, stderr: "", code: 0 }));
 

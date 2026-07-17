@@ -13,7 +13,7 @@ import {
   conversationTurnsFromJsonl,
   countUserTurnsFromJsonl,
   latestAssistantTextFromJsonl,
-} from "../../server/transcript.js";
+} from "../../server/../server/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 

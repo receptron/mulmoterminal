@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import TerminalCell from "../../../src/components/TerminalCell.vue";
+import TerminalCell from "../../../src/components/../../src/components/TerminalCell.vue";
 
 // Capture the "sessions" pub/sub callback so tests can push activity directly.
 let captured: ((data: unknown) => void) | null = null;

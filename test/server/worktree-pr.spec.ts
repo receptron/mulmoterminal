@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createWorktree } from "../../server/worktrees.js";
-import { compareUrl, pushWorktree, createOrOpenPR } from "../../server/worktree-pr.js";
+import { createWorktree } from "../../server/../server/worktrees.js";
+import { compareUrl, pushWorktree, createOrOpenPR } from "../../server/../server/worktree-pr.js";
 
 describe("compareUrl", () => {
   it("builds the GitHub compare/open-PR url, keeping the branch slash raw", () => {

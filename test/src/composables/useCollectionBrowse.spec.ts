@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { createApp, defineComponent } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { router } from "../router";
+import { router } from "../../../src/composables/router";
 import {
   useCollectionBrowse,
   browseGotoIndex,
@@ -12,7 +12,7 @@ import {
   browseRouteSelectedId,
   browseIsFeedRoute,
   browseClose,
-} from "../../../src/composables/useCollectionBrowse";
+} from "../../../src/composables/../../src/composables/useCollectionBrowse";
 
 // Install the singleton router into a throwaway app so currentRoute tracks pushes.
 beforeAll(async () => {

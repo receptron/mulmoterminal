@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../../../src/components/wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../../../src/components/../../src/components/wsUrl";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {

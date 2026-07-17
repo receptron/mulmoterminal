@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSessionActivityPayload } from "../../../src/composables/sessionActivity";
+import { parseSessionActivityPayload } from "../../../src/composables/../../src/composables/sessionActivity";
 
 describe("parseSessionActivityPayload", () => {
   it("parses a normal activity push", () => {

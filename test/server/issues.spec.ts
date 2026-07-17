@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeIssue, ISSUE_LIMIT } from "../../server/issues";
+import { normalizeIssue, ISSUE_LIMIT } from "../../server/../server/issues";
 
 describe("normalizeIssue", () => {
   it("normalizes a gh issue json object", () => {

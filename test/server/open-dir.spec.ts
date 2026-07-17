@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { openCommand } from "../../server/open-dir.js";
+import { openCommand } from "../../server/../server/open-dir.js";
 
 describe("openCommand", () => {
   it("uses `open` on macOS", () => {

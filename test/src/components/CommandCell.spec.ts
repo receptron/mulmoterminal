@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import CommandCell from "../../../src/components/CommandCell.vue";
-import type { RunCommand } from "../../../src/components/runCommand";
+import CommandCell from "../../../src/components/../../src/components/CommandCell.vue";
+import type { RunCommand } from "../../../src/components/../../src/components/runCommand";
 
 // Stub the terminal so no xterm/WebSocket is needed; it forwards the props the cell
 // passes (command/connectKey), can emit "exit" to drive the re-run UI, and exposes

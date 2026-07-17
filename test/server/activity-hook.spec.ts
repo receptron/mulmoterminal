@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects } from "../../server/activity-hook.js";
+import { activityHookEffects } from "../../server/../server/activity-hook.js";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {

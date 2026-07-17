@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildClaudeArgs, type ClaudeArgsInput } from "../../server/claude-args.js";
+import { buildClaudeArgs, type ClaudeArgsInput } from "../../server/../server/claude-args.js";
 
 const base: ClaudeArgsInput = {
   sessionId: "11111111-1111-1111-1111-111111111111",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { homeRelative, truncateFront, formatCwd, worktreeLabel } from "../../../src/components/cwdDisplay";
+import { homeRelative, truncateFront, formatCwd, worktreeLabel } from "../../../src/components/../../src/components/cwdDisplay";
 
 describe("homeRelative", () => {
   it("anchors a path under home on ~", () => {

@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { splitHitMiss, mergeTranslations, assembleResult, validateRequest, TranslationInputError, mountTranslationRoutes } from "../../../server/backends/translation.js";
+import { splitHitMiss, mergeTranslations, assembleResult, validateRequest, TranslationInputError, mountTranslationRoutes } from "../../../server/backends/../../server/backends/translation.js";
 
 describe("splitHitMiss", () => {
   const dict = { sentences: { Hello: { ja: "こんにちは" }, Bye: { ja: "さようなら" } } };

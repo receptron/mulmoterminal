@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers.js";
-import { initCollectionsBackend } from "../collections.js";
+import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/../../../server/backends/remoteHost/handlers.js";
+import { initCollectionsBackend } from "../../../../server/backends/remoteHost/collections.js";
 
 describe("createRemoteHostHandlers", () => {
   let ws: string;

@@ -11,7 +11,7 @@ import {
   NAME_MAX_CHARS,
   MAX_BUTTONS,
   MAX_CHIPS,
-} from "../../server/config-schema";
+} from "../../server/../server/config-schema";
 
 describe("dirNameField", () => {
   it("trims and caps at NAME_MAX_CHARS", () => {

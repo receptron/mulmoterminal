@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createSaveAttachment } from "../../../../server/backends/remoteHost/attachmentStore.js";
+import { createSaveAttachment } from "../../../../server/backends/remoteHost/../../../server/backends/remoteHost/attachmentStore.js";
 
 describe("createSaveAttachment", () => {
   let ws = "";

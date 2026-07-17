@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "../../server/dir-config";
+import { resolveDirSound, loadDirConfig, publicDirConfig, dirSoundFile, dirConfigWriteTarget } from "../../server/../server/dir-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-dircfg-"));
 const EMPTY = {

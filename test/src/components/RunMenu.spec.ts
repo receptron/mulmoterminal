@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import RunMenu from "../../../src/components/RunMenu.vue";
+import RunMenu from "../../../src/components/../../src/components/RunMenu.vue";
 
 type Script = { index: number; label: string; command: string };
 

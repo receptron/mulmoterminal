@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { containedPath, realContainedWithin, resolveBase, listEntries, mdToHtmlDoc } from "../../server/files-browse";
+import { containedPath, realContainedWithin, resolveBase, listEntries, mdToHtmlDoc } from "../../server/../server/files-browse";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-files-"));
 

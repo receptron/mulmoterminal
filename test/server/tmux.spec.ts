@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES } from "../../server/tmux";
+import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES } from "../../server/../server/tmux";
 
 describe("tmuxSessionName", () => {
   it("prefixes the session id", () => {

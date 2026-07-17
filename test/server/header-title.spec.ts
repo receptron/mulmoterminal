@@ -10,9 +10,9 @@ import {
   TITLE_REGEN_EVERY_TURNS,
   VIEW_TITLE_REGEN_TURNS,
   MAX_TITLE_CHARS,
-} from "../../server/header-title.js";
-import type { RunClaude } from "../../server/command-summary.js";
-import type { ConversationTurn } from "../../server/transcript.js";
+} from "../../server/../server/header-title.js";
+import type { RunClaude } from "../../server/../server/command-summary.js";
+import type { ConversationTurn } from "../../server/../server/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 const ok = (stdout: string): RunClaude => vi.fn(async () => ({ stdout, stderr: "", code: 0 }));

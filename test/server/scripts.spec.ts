@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { sanitizeScripts, loadScripts, resolveScript } from "../../server/scripts";
+import { sanitizeScripts, loadScripts, resolveScript } from "../../server/../server/scripts";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-scripts-"));
 const writeScripts = (dir: string, content: string) => writeFileSync(path.join(dir, "script.json"), content);

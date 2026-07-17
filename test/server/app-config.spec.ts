@@ -12,7 +12,7 @@ import {
   saveAppConfig,
   mergeConfigUpdate,
   type AppConfig,
-} from "../../server/app-config";
+} from "../../server/../server/app-config";
 
 const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-appcfg-"));
 

@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import TerminalGrid, { type CockpitRow } from "../../../src/components/TerminalGrid.vue";
-import type { Cell } from "../../../src/components/gridTabs";
-import type { RunCommand } from "../../../src/components/runCommand";
+import TerminalGrid, { type CockpitRow } from "../../../src/components/../../src/components/TerminalGrid.vue";
+import type { Cell } from "../../../src/components/../../src/components/gridTabs";
+import type { RunCommand } from "../../../src/components/../../src/components/runCommand";
 
 // Stub the cells so the page renderer can be tested without Terminal/xterm/pub-sub.
 vi.mock("./TerminalCell.vue", () => ({

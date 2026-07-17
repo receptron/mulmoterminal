@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveSession, type SessionFacts } from "../../server/session-resolve.js";
+import { resolveSession, type SessionFacts } from "../../server/../server/session-resolve.js";
 
 const FIXED = "fresh-minted-id";
 const mint = () => FIXED;

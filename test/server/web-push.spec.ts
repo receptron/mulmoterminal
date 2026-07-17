@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { buildSendPushBody, parseSendPushResult, sendWebPush } from "../../server/web-push";
+import { buildSendPushBody, parseSendPushResult, sendWebPush } from "../../server/../server/web-push";
 
 describe("buildSendPushBody", () => {
   it("wraps title/body in the onCall `data` envelope", () => {

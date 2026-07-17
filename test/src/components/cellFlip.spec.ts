@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { flipKeyframes, FLIP_MS, FLIP_EASING, shouldRefocusOnZoomChange } from "../../../src/components/cellFlip";
+import { flipKeyframes, FLIP_MS, FLIP_EASING, shouldRefocusOnZoomChange } from "../../../src/components/../../src/components/cellFlip";
 
 const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height });
 

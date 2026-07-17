@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseFileUris, toShellArg, toInsertText, dropTextFromUriList } from "../../../src/components/dropPaths";
+import { parseFileUris, toShellArg, toInsertText, dropTextFromUriList } from "../../../src/components/../../src/components/dropPaths";
 
 describe("parseFileUris", () => {
   it("parses a single file:// URI into an absolute path", () => {

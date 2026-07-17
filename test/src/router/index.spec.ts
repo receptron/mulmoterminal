@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { createRouter, createMemoryHistory } from "vue-router";
-import { router, routes } from "../../../src/router/index";
+import { router, routes } from "../../../src/router/../../src/router/index";
 
 describe("router route table", () => {
   it("resolves the top-level surfaces to their names", () => {
