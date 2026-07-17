@@ -513,10 +513,10 @@ describe("action routes (seed prompts)", () => {
   });
 });
 
-// TODO: mutate actions (kind: "mutate") — schema refine doesn't support mutate
+// NOTE: mutate actions (kind: "mutate") — schema refine doesn't support mutate
 // on disk, only via injection like the collection-level test below. The route
 // handlers work, but integration tests await schema support for item-level mutate.
-// Ref: test at line 600 (collection-level mutate route defense).
+// See collection-level test below for defensive route coverage.
 
 describe("collection-level mutate action defense", () => {
   const post = (url: string, body: unknown = {}) =>
