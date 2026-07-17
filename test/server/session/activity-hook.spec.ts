@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects, shouldNotifyTaskFinished } from "../../../server/session/activity-hook.js";
+import { activityHookEffects, shouldNotifyTaskFinished } from "../../../server/session/activity-hook";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {

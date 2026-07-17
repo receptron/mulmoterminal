@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 
-import { createIngestAttachments, type IngestDeps } from "../../../../server/backends/remoteHost/ingestAttachments.js";
+import { createIngestAttachments, type IngestDeps } from "../../../../server/backends/remoteHost/ingestAttachments";
 
 // Base stub deps: signed in as u1, fetch returns a jpeg, save echoes a path.
 const baseDeps = (): IngestDeps => ({

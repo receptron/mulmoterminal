@@ -10,7 +10,7 @@ import {
   createGoogleCalendarCreateEvent,
   createGoogleCalendarListEvents,
   type GoogleCalendarDeps,
-} from "../../../../server/backends/remoteHost/googleCalendar.js";
+} from "../../../../server/backends/remoteHost/googleCalendar";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",

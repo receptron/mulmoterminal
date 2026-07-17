@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { mountFilesRoutes } from "../../../server/backends/files.js";
+import { mountFilesRoutes } from "../../../server/backends/files";
 
 let server: Server;
 let base: string;

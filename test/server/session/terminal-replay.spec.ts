@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stripTerminalQueries } from "../../../server/session/terminal-replay.js";
+import { stripTerminalQueries } from "../../../server/session/terminal-replay";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);

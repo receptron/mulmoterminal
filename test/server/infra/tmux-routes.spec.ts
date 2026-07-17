@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { Express } from "express";
-import { mountTmuxRoutes, type TmuxRouteDeps } from "../../../server/infra/tmux-routes.js";
+import { mountTmuxRoutes, type TmuxRouteDeps } from "../../../server/infra/tmux-routes";
 
 interface FakeRes {
   statusCode: number;

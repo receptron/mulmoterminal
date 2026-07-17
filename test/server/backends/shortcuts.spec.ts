@@ -5,7 +5,7 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, rmSync } from "nod
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { normalizeShortcuts, mountShortcutsRoutes } from "../../../server/backends/shortcuts.js";
+import { normalizeShortcuts, mountShortcutsRoutes } from "../../../server/backends/shortcuts";
 
 describe("normalizeShortcuts", () => {
   it("drops malformed entries and dedupes on (kind, slug)", () => {

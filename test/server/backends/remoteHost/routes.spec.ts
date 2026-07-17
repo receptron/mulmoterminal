@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import express, { type Express } from "express";
 import request from "supertest";
 import type { RemoteHostLifecycle, RemoteHostStatus } from "@mulmoclaude/core/remote-host/server";
-import { mountRemoteHostRoutes, type RemoteHostRouteDeps } from "../../../../server/backends/remoteHost/routes.js";
+import { mountRemoteHostRoutes, type RemoteHostRouteDeps } from "../../../../server/backends/remoteHost/routes";
 
 const CONNECTED: RemoteHostStatus = { connected: true, uid: "u1" };
 const DISCONNECTED: RemoteHostStatus = { connected: false, uid: null };

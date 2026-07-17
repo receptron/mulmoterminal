@@ -7,7 +7,7 @@ import {
   requireViewToken,
   VIEW_TOKEN_TTL_MS,
   type ViewCapability,
-} from "../../../server/backends/viewToken.js";
+} from "../../../server/backends/viewToken";
 import type { Request, Response, NextFunction } from "express";
 
 describe("viewToken mint/verify", () => {

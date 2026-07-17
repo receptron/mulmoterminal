@@ -11,8 +11,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { listFeeds } from "@mulmoclaude/core/feeds/server";
-import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers.js";
-import { initCollectionsBackend } from "../../../../server/backends/collections.js";
+import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers";
+import { initCollectionsBackend } from "../../../../server/backends/collections";
 
 // Only listFeeds is stubbed; listItems/toDetail/deriveItems/pageResult stay real.
 vi.mock("@mulmoclaude/core/feeds/server", () => ({ listFeeds: vi.fn(), readFeedState: vi.fn() }));

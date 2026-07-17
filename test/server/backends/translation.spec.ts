@@ -12,7 +12,7 @@ import {
   validateRequest,
   TranslationInputError,
   mountTranslationRoutes,
-} from "../../../server/backends/translation.js";
+} from "../../../server/backends/translation";
 
 describe("splitHitMiss", () => {
   const dict = { sentences: { Hello: { ja: "こんにちは" }, Bye: { ja: "さようなら" } } };

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildActivitySnapshot, parseActivityState, type RestartActivity } from "../../../server/session/activity-state.js";
+import { buildActivitySnapshot, parseActivityState, type RestartActivity } from "../../../server/session/activity-state";
 
 const never = () => false;
 const anyId = () => true;

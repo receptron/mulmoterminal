@@ -4,8 +4,8 @@ import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { mountWorktreeRoutes } from "../../../server/git/worktree-routes.js";
-import { createWorktree, worktreesRoot } from "../../../server/git/worktrees.js";
+import { mountWorktreeRoutes } from "../../../server/git/worktree-routes";
+import { createWorktree, worktreesRoot } from "../../../server/git/worktrees";
 
 interface FakeRes {
   statusCode: number;

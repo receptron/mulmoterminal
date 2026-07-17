@@ -6,7 +6,7 @@ import {
   mergeHeaderConfig,
   DEFAULT_BUTTONS,
   type HeaderConfig,
-} from "../../../server/config/header-config.js";
+} from "../../../server/config/header-config";
 
 describe("sanitizeButtons", () => {
   it("keeps a valid shell/input/open button with its matching payload", () => {

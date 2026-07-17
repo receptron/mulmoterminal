@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pickFileCommand, parsePickerOutput } from "../../../server/files/pick-file.js";
+import { pickFileCommand, parsePickerOutput } from "../../../server/files/pick-file";
 
 describe("pickFileCommand", () => {
   it("uses osascript on macOS", () => {

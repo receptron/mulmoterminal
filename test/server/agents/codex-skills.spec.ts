@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { syncCodexSkills, codexifySkillSeed } from "../../../server/agents/codex-skills.js";
+import { syncCodexSkills, codexifySkillSeed } from "../../../server/agents/codex-skills";
 
 describe("codexifySkillSeed", () => {
   it("rewrites a /<slug> <msg> chat seed to name the skill in natural language", () => {
