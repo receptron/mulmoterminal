@@ -29,6 +29,12 @@ export default [
     },
   },
   {
+    files: ["test/**/*.spec.ts"],
+    rules: {
+      "vue/one-component-per-file": "off",
+    },
+  },
+  {
     files: ["server/**/*.js", "bin/**/*.js", "scripts/**/*.{js,mjs}"],
     languageOptions: {
       globals: {
