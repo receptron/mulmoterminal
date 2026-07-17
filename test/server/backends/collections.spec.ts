@@ -526,10 +526,10 @@ describe('record-level mutate actions (kind: "mutate")', () => {
       slug: "mutatecol",
       schema: {
         fields: { id: { type: "string", label: "ID", primary: true, required: true }, status: { type: "enum", label: "Status", values: ["open", "closed"] } },
-        actions: [{ id: "close", label: "Close", kind: "mutate" as any, set: { status: "closed" } }],
+        actions: [{ id: "close", label: "Close", kind: "mutate" as unknown as "chat" | "agent" | "mutate", set: { status: "closed" } }],
       },
-      dataDir: "/tmp/mutatecol/items",
-      skillDir: "/tmp/skills/mutatecol",
+      dataDir: "/data/mutatecol/items",
+      skillDir: "/data/skills/mutatecol",
     } as never);
     const res = await post("/api/collections/mutatecol/items/ghost/actions/close");
     expect(res.status).toBe(404);
