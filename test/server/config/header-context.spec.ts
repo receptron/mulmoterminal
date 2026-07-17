@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { repoFromWebUrl } from "./header-context.js";
+import { repoFromWebUrl } from "../../../../server/../../server/config/header-context.js";
 
 describe("repoFromWebUrl", () => {
   it("extracts owner/repo from a github web url", () => {

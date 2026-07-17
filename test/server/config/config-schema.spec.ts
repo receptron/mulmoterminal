@@ -12,7 +12,7 @@ import {
   MAX_BUTTONS,
   MAX_CHIPS,
   MAX_SKILL_FILTER,
-} from "./config-schema";
+} from "../../../../server/../../server/config/config-schema";
 
 describe("dirNameField", () => {
   it("trims and caps at NAME_MAX_CHARS", () => {
