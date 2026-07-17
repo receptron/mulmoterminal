@@ -1,8 +1,0 @@
-{
-  "scripts": [
-    { "label": "Lint", "command": "yarn lint" },
-    { "label": "Build", "command": "yarn build" },
-    { "label": "Test", "command": "yarn test" },
-    { "label": "Format check", "command": "yarn format:check" }
-  ]
-}
