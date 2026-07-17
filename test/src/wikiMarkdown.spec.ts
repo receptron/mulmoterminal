@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { renderWikiHtml, stripFrontmatter } from "./wikiMarkdown";
+import { renderWikiHtml, stripFrontmatter } from "../../src/wikiMarkdown.js";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
