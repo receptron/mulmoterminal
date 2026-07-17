@@ -52,7 +52,6 @@ function checkForUpdate() {
 // `init` checks.
 function hasCommand(cmd, versionArg = "--version") {
   try {
-    // eslint-disable-next-line sonarjs/no-os-command-from-path
     execSync(`${cmd} ${versionArg}`, { stdio: "pipe" });
     return true;
   } catch {
