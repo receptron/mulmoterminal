@@ -5,7 +5,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
-import { mountGoogleRoutes, type GoogleRouteDeps } from "./google.js";
+import { mountGoogleRoutes, type GoogleRouteDeps } from "../../../server/backends/google.js";
 
 const stubDeps = (over: Partial<GoogleRouteDeps> = {}) => {
   const deps: GoogleRouteDeps = {

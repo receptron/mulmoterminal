@@ -4,8 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { initCollectionsBackend } from "./collections.js";
-import { createThumbnailResolver, clearThumbnailCache } from "./thumbnailStore.js";
+import { initCollectionsBackend } from "../../../server/backends/collections.js";
+import { createThumbnailResolver, clearThumbnailCache } from "../../../server/backends/thumbnailStore.js";
 
 // A stub resize so the test needs no native sharp binary — echoes a marker
 // derived from the input so we can assert the pipeline ran.

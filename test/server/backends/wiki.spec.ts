@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { mountWikiRoutes } from "./wiki.js";
+import { mountWikiRoutes } from "../../../server/backends/wiki.js";
 
 // A minimal wiki laid out at core's canonical location (wikiDirs):
 //   <ws>/data/wiki/index.md       — the index (two bullet [[links]])

@@ -4,7 +4,7 @@ import express from "express";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { initFeedsBackend, mountFeedsRoutes } from "./feeds.js";
+import { initFeedsBackend, mountFeedsRoutes } from "../../../server/backends/feeds.js";
 import { listFeeds, readFeedState, removeFeed } from "@mulmoclaude/core/feeds/server";
 
 // The feeds engine reads the workspace + fetches sources — mock it so the route

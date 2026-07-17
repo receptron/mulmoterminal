@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { createFileOps } from "./fileOps.js";
+import { createFileOps } from "../../../server/backends/fileOps.js";
 
 describe("createFileOps", () => {
   let base: string;
