@@ -102,3 +102,22 @@ describe("mulmoscript backend", () => {
     await request(app).get("/api/mulmoscript/media").query({ pdfPath: "/etc/passwd" }).expect(400);
   });
 });
+
+// Re-inits the module-level backend, so this describe must run AFTER the ones
+// above (vitest runs describes in file order within a file).
+describe("autoGenerateMovie without ffmpeg", () => {
+  it("saves the script but reports that movie generation was not started", async () => {
+    const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "mt-mulmoscript-noffmpeg-"));
+    initArtifactsBackend({ workspace });
+    initMulmoScriptBackend({ workspace, pubsub: null, isFfmpegAvailable: () => false });
+    const app = makeApp();
+
+    const res = await request(app).post("/api/plugin/presentMulmoScript").send({ script: VALID_SCRIPT, autoGenerateMovie: true }).expect(200);
+    expect(res.body.data.filePath).toMatch(/^stories\/.*\.json$/);
+    expect(res.body.message).toContain("movie generation was NOT started");
+    expect(res.body.message).toContain("ffmpeg");
+    // The doomed background job must not have run: no error sidecar next to the script.
+    const sidecar = path.join(workspace, "artifacts", `${res.body.data.filePath}.error.txt`);
+    expect(fs.existsSync(sidecar)).toBe(false);
+  });
+});

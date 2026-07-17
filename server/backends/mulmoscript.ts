@@ -71,13 +71,14 @@ async function writeFileAtomic(absolutePath: string, data: string | Uint8Array):
 
 /** Create the ops instance against the workspace + pubsub. Call once at boot
  *  (server/index.ts), after initArtifactsBackend — the routes below 503 until
- *  then. */
-export function initMulmoScriptBackend(deps: { workspace: string; pubsub: PubSubLike | null }): void {
+ *  then. `isFfmpegAvailable` is overridable for tests; the default is the
+ *  async PATH probe above. */
+export function initMulmoScriptBackend(deps: { workspace: string; pubsub: PubSubLike | null; isFfmpegAvailable?: () => boolean | undefined }): void {
   ops = createMulmoScriptServerOps({
     storiesDir: path.resolve(deps.workspace, "artifacts", "stories"),
     artifacts: artifactsFileOps,
     writeFileAtomic,
-    isFfmpegAvailable: () => ffmpegAvailable,
+    isFfmpegAvailable: deps.isFfmpegAvailable ?? (() => ffmpegAvailable),
     // Edge-triggered by the package's tracker; MulmoTerminal has no per-session
     // generation indicator, so the plugin channel (View spinners +
     // reload-on-finish) is the only consumer.
@@ -91,7 +92,7 @@ export function initMulmoScriptBackend(deps: { workspace: string; pubsub: PubSub
     },
   });
   dispatchHandler = createMulmoScriptDispatchHandler(ops);
-  probeFfmpeg();
+  if (!deps.isFfmpegAvailable) probeFfmpeg();
 }
 
 function messageOf(err: unknown): string {
@@ -125,15 +126,27 @@ async function handleToolCall(body: Record<string, unknown>, res: Response, inst
     res.json({ message: outcome.error, instructions: "Acknowledge the error and retry with a valid `script` (new) or an existing `filePath`." });
     return;
   }
+  // The save succeeded either way; `movieNote` tells the agent whether the
+  // requested background generation actually started. The package only
+  // applies ffmpegGuard on the FOREGROUND generate ops — the background
+  // trigger bypasses it — so gate here rather than kick off a job that is
+  // doomed to fail encoding (Codex P2 on this route).
+  let movieNote = "";
   if (body.autoGenerateMovie === true) {
-    const resolved = instance.resolveStory(outcome.filePath);
-    if (resolved.ok) {
-      instance.triggerAutoBackgroundMovie(resolved.absolutePath, outcome.filePath, undefined);
+    const ffmpeg = instance.ffmpegGuard();
+    if (ffmpeg) {
+      movieNote = ` (movie generation was NOT started: ${ffmpeg.error})`;
+    } else {
+      const resolved = instance.resolveStory(outcome.filePath);
+      if (resolved.ok) {
+        instance.triggerAutoBackgroundMovie(resolved.absolutePath, outcome.filePath, undefined);
+        movieNote = " (movie generation started in the background)";
+      }
     }
   }
   res.json({
     data: { script: outcome.script, filePath: outcome.filePath },
-    message: outcome.message,
+    message: `${outcome.message}${movieNote}`,
     instructions: "Display the storyboard to the user.",
   });
 }
