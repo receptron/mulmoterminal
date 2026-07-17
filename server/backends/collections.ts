@@ -61,15 +61,12 @@ import {
   remoteViewItemsFailureMessage,
 } from "./remoteView.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
+import { hostLogger } from "./hostLogger.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
-// (prefix, message, optional structured data).
-const log = {
-  error: (prefix: string, message: string, data?: Record<string, unknown>) => console.error(`[${prefix}] ${message}`, data ?? ""),
-  warn: (prefix: string, message: string, data?: Record<string, unknown>) => console.warn(`[${prefix}] ${message}`, data ?? ""),
-  info: (prefix: string, message: string, data?: Record<string, unknown>) => console.log(`[${prefix}] ${message}`, data ?? ""),
-  debug: (prefix: string, message: string, data?: Record<string, unknown>) => console.debug(`[${prefix}] ${message}`, data ?? ""),
-};
+// (prefix, message, optional structured data) — shared with the other engines'
+// `configure*Host({ log })` bindings.
+const log = hostLogger;
 
 // Skill roots — the single source of truth for where skills live on disk, shared
 // with the collection engine (below) AND the remote-host listSkills scanner

@@ -14,6 +14,7 @@ import { listBooks } from "@mulmoclaude/accounting-plugin/server";
 import type { CommandHandlers, JsonObject, JsonValue } from "@mulmoclaude/core/remote-host";
 
 import { readShortcuts } from "../shortcuts.js";
+import { googleCalendarCreateEvent, googleCalendarListEvents } from "./googleCalendar.js";
 import { discoverSkillNames } from "./skills.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
 import {
@@ -131,6 +132,13 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     getRemoteView,
     getRemoteViewItems,
     mutateRemoteViewItem,
+
+    // Google Calendar, run host-side against the locally linked account. These
+    // are advertised as capabilities unconditionally: linking is a host-machine
+    // action (`mulmoterminal google login`), so a not-linked error is the only
+    // way the phone can learn it needs to be run.
+    "google.calendar.createEvent": googleCalendarCreateEvent,
+    "google.calendar.listEvents": googleCalendarListEvents,
 
     // Feed registry with retrieval kind / schedule / last-fetch time (read-only).
     listFeeds: async () => {

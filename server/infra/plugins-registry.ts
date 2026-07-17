@@ -4,7 +4,9 @@
 //   - packages: gui-chat-protocol plugin packages (e.g. @gui-chat-plugin/markdown).
 //       Their core entry exports a ToolPluginCore { toolDefinition, execute } plus
 //       TOOL_DEFINITION. These are shared VERBATIM with MulmoClaude — one source of
-//       truth, loaded as an npm dependency.
+//       truth, loaded as an npm dependency. Newer ones (e.g. @mulmoclaude/google-plugin)
+//       instead default-export a `definePlugin` FACTORY taking a PluginRuntime; both
+//       shapes are packages, and loadPackage picks the right adapter per module.
 //   - servers:  server-only MCP-tool packages (e.g. @mulmoclaude/x-plugin) that
 //       export one or more `XTool`-shaped objects ({ definition, requiredEnv,
 //       prompt, handler }) — pure agent tools with NO GUI view. Each is adapted
@@ -22,9 +24,12 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
+import { isPluginFactory } from "gui-chat-protocol";
+import type { PluginRuntime, PluginFactoryResult } from "gui-chat-protocol";
 import { generateImage } from "../backends/image-gen.js";
 import { markdownHostApp } from "../backends/markdown.js";
 import { artifactsFileOps } from "../backends/artifacts.js";
+import { createPluginRuntime } from "./pluginRuntime.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -59,12 +64,31 @@ function loadConfig() {
   };
 }
 
+// A FACTORY-style gui-chat-protocol package (authored with `definePlugin`, e.g.
+// @mulmoclaude/google-plugin): the default export takes a PluginRuntime and returns
+// `{ TOOL_DEFINITION, async <TOOL_DEFINITION.name>(args) }` — the executor is a method
+// named after the tool, so there's no bare `execute` for loadPackage to find. Build the
+// package's scoped runtime, call the factory once at load, and adapt the result.
+// `isPluginFactory` is the protocol's own detector, so this tracks the spec.
+function loadFactoryPackage(name: string, factory: (runtime: PluginRuntime) => PluginFactoryResult) {
+  const plugin = factory(createPluginRuntime(name));
+  const definition = plugin.TOOL_DEFINITION;
+  const execute = plugin[definition.name];
+  if (typeof execute !== "function") {
+    throw new Error(`Plugin factory "${name}" exports no "${definition.name}" executor matching its TOOL_DEFINITION.`);
+  }
+  // A factory's executor takes only args — its host capabilities came from the runtime.
+  return { toolName: definition.name, definition, execute: (args?: unknown) => execute(args ?? {}) };
+}
+
 // A gui-chat-protocol package. The core entry exposes TOOL_DEFINITION (a JSON-schema
 // ToolDefinition) and a ToolPluginCore whose execute(context, args) returns the
 // result envelope. We invoke it in-process when the broker dispatches, passing the
-// host backends as context.app (image generation, etc.).
+// host backends as context.app (image generation, etc.). Factory-style packages are
+// a different shape entirely, so they branch off to loadFactoryPackage first.
 async function loadPackage(name: string) {
   const mod = await import(name);
+  if (isPluginFactory(mod.default)) return loadFactoryPackage(name, mod.default);
   const definition = mod.TOOL_DEFINITION ?? mod.pluginCore?.toolDefinition;
   // Some packages (e.g. @mulmoclaude/core/collection) export their executor under
   // a descriptive name like `executePresentCollection` rather than a bare `execute`,

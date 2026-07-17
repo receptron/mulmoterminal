@@ -9,10 +9,10 @@
 // <workspace>/artifacts/<rel>. The workspace is injected lazily at boot
 // (initArtifactsBackend, called from server/index.ts) — the plugins-registry
 // closures capture `artifactsFileOps` at import time, so every op resolves the
-// path on call, not at module load.
-import fs from "fs/promises";
+// path on call, not at module load. The rooting + traversal guard live in
+// createFileOps (backends/fileOps.ts), shared with the per-plugin data/config areas.
 import path from "path";
-import type { FileOps } from "gui-chat-protocol";
+import { createFileOps } from "./fileOps.js";
 
 const ARTIFACTS_DIR = "artifacts";
 
@@ -22,46 +22,9 @@ export function initArtifactsBackend(deps: { workspace: string }): void {
   workspace = deps.workspace;
 }
 
-// Resolve an artifacts-root-relative path to an absolute one, rejecting traversal
-// or absolute inputs so a plugin can never escape <workspace>/artifacts.
-function absFor(rel: string): string {
+export function artifactsRoot(): string {
   if (!workspace) throw new Error("artifacts backend not initialised (missing workspace)");
-  const root = path.resolve(workspace, ARTIFACTS_DIR);
-  const abs = path.resolve(root, rel);
-  if (abs !== root && !abs.startsWith(root + path.sep)) {
-    throw new Error(`artifacts path escapes the artifacts root: ${rel}`);
-  }
-  return abs;
+  return path.resolve(workspace, ARTIFACTS_DIR);
 }
 
-export const artifactsFileOps: FileOps = {
-  async read(rel) {
-    return fs.readFile(absFor(rel), "utf8");
-  },
-  async readBytes(rel) {
-    return new Uint8Array(await fs.readFile(absFor(rel)));
-  },
-  async write(rel, content) {
-    const abs = absFor(rel);
-    await fs.mkdir(path.dirname(abs), { recursive: true });
-    await fs.writeFile(abs, content);
-  },
-  async readDir(rel) {
-    return fs.readdir(absFor(rel));
-  },
-  async stat(rel) {
-    const s = await fs.stat(absFor(rel));
-    return { mtimeMs: s.mtimeMs, size: s.size };
-  },
-  async exists(rel) {
-    try {
-      await fs.access(absFor(rel));
-      return true;
-    } catch {
-      return false;
-    }
-  },
-  async unlink(rel) {
-    await fs.rm(absFor(rel), { force: true });
-  },
-};
+export const artifactsFileOps = createFileOps(artifactsRoot, "artifacts");
