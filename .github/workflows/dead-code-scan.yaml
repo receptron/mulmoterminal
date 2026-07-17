@@ -22,13 +22,18 @@ on:
   pull_request:
     branches: [main]
     # Dead exports can only change when an analyzed input changes. Keep in sync with
-    # knip.json's entry/project globs and tsconfig (which drives module resolution).
+    # knip.json's entry/project globs and tsconfig (module resolution). package.json
+    # and yarn.lock are included too: knip auto-detects entry points from package.json
+    # (bin/scripts/main) and resolves imports through the installed dependency graph,
+    # so a PR touching only those can still orphan code.
     paths:
       - "**/*.ts"
       - "**/*.vue"
       - "**/*.js"
       - "**/tsconfig*.json"
       - "knip.json"
+      - "package.json"
+      - "yarn.lock"
       - ".github/workflows/dead-code-scan.yaml"
   workflow_dispatch:
 
