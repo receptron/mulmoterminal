@@ -5,8 +5,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { initArtifactsBackend } from "./artifacts.js";
-import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./html.js";
+import { initArtifactsBackend } from "../../../../server/../../server/backends/artifacts.js";
+import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "../../../../server/../../server/backends/html.js";
 
 let server: Server;
 let base: string;

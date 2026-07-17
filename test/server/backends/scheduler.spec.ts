@@ -7,7 +7,7 @@ import path from "node:path";
 import { SCHEDULE_TYPES } from "@receptron/task-scheduler";
 import type { Server } from "node:http";
 import type { TaskDefinition } from "@mulmoclaude/core/scheduler";
-import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "./scheduler.js";
+import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "../../../../server/../../server/backends/scheduler.js";
 
 // Mock the shared task-manager so initUserTaskScheduler's registration + start calls
 // are observable without starting real interval timers.

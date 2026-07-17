@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { initCollectionsBackend, mountCollectionRoutes } from "./collections.js";
+import { initCollectionsBackend, mountCollectionRoutes } from "../../../../server/../../server/backends/collections.js";
 import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
 
 // The registry engine fetches remote index.json / bundles — mock it so the route
