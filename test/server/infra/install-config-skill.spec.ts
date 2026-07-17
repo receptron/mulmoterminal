@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { installOwnedSkill, SCHEMA_ASSET_FILE } from "../../../server/infra/install-config-skill.js";
-import { loadDirConfig } from "../../server/config/dir-config.js";
+import { installOwnedSkill, SCHEMA_ASSET_FILE } from "../../../server/infra/install-config-skill";
+import { loadDirConfig } from "../../server/config/dir-config";
 
 const NAME = "mulmoterminal-config";
 const MARKER = ".mt-owned";
