@@ -1660,7 +1660,7 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.20.2", "@mulmoclaude/core@^0.22.1":
+"@mulmoclaude/core@^0.22.0", "@mulmoclaude/core@^0.22.1":
   version "0.22.1"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.22.1.tgz#56eecd90399b8dc3581eb1549beb923fa8504f39"
   integrity sha512-BctuyJQOpCdiiz2z4RhAS6Ky4JDqw3+7R72E4O4x/2iFU1Q03w2pO0xDbU2/Pmbb9J+jhMau7AwXyjIWbiYadw==
@@ -1675,12 +1675,12 @@
   resolved "https://npm.flatt.tech/@mulmoclaude/form-plugin/-/form-plugin-0.1.4.tgz#64e8f9dc0537148156cbfc1235d5a68baf64cdf3"
   integrity sha512-dgqEiAazyMzLgNv0V3ewQxSPU5dI0eXecRYZ5rXe0Fu9CWZkCb1GOwJDjYHKDZnzMyYMQLzXnyt5gwHNW+QD+w==
 
-"@mulmoclaude/google-plugin@^0.1.2":
-  version "0.1.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/google-plugin/-/google-plugin-0.1.2.tgz#f3611e22c331266bf9e6a5a63ff4a72be6413775"
-  integrity sha512-k3upvsI+6jp70xjjSm7BXW4Xhls0nN2hf40GCII08Rp9ROZ044BUN+5hDdrMA5glumFQf/ZuRy5UXCklhr0HzQ==
+"@mulmoclaude/google-plugin@^0.2.1":
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/google-plugin/-/google-plugin-0.2.1.tgz#60a74fe555ed8ed472a28f028d7fac45ae818f53"
+  integrity sha512-ZHhSsp4/iAFtKNoiZDzRmu2FOokr9lakNp7O7FZi7CcvcJmIMDnOv9XGQ2/a7Clnr4T0Olf7Id+HY6SIBLcAgg==
   dependencies:
-    "@mulmoclaude/core" "^0.20.2"
+    "@mulmoclaude/core" "^0.22.0"
 
 "@mulmoclaude/html-plugin@^0.2.5":
   version "0.2.5"
