@@ -513,10 +513,28 @@ describe("action routes (seed prompts)", () => {
   });
 });
 
-// NOTE: mutate actions (kind: "mutate") — schema refine doesn't support mutate
-// on disk, only via injection like the collection-level test below. The route
-// handlers work, but integration tests await schema support for item-level mutate.
-// See collection-level test below for defensive route coverage.
+// Mutate actions (kind: "mutate") — schema refine doesn't support mutate on disk,
+// so we inject crafted collections per-test. This covers the route's status mapping
+// for item-level mutate handlers (itemActionHandler, respondForMutateAction).
+
+describe('record-level mutate actions (kind: "mutate")', () => {
+  const post = (url: string, body: unknown = {}) =>
+    fetch(`${base}${url}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+
+  it("404s on missing record", async () => {
+    vi.mocked(loadCollection).mockResolvedValueOnce({
+      slug: "mutatecol",
+      schema: {
+        fields: { id: { type: "string", label: "ID", primary: true, required: true }, status: { type: "enum", label: "Status", values: ["open", "closed"] } },
+        actions: [{ id: "close", label: "Close", kind: "mutate" as any, set: { status: "closed" } }],
+      },
+      dataDir: "/tmp/mutatecol/items",
+      skillDir: "/tmp/skills/mutatecol",
+    } as never);
+    const res = await post("/api/collections/mutatecol/items/ghost/actions/close");
+    expect(res.status).toBe(404);
+  });
+});
 
 describe("collection-level mutate action defense", () => {
   const post = (url: string, body: unknown = {}) =>
