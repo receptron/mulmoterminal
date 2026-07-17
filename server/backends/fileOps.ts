@@ -17,17 +17,31 @@ import fs from "fs/promises";
 import path from "path";
 import type { FileOps } from "gui-chat-protocol";
 
+const MAX_SYMLINK_DEPTH = 40;
+
+async function readlinkOrNull(p: string): Promise<string | null> {
+  try {
+    return await fs.readlink(p);
+  } catch {
+    return null;
+  }
+}
+
 // realpath, but tolerant of a not-yet-created leaf/dir: resolve the deepest existing
-// ancestor's real path, then re-append the missing tail lexically. A missing tail can't
-// hide a symlink (it doesn't exist yet), so this is enough to catch every symlinked
-// component that DOES exist.
-async function realpathAllowingMissing(p: string): Promise<string> {
+// ancestor's real path, then re-append the missing tail lexically. `fs.realpath`
+// throws on a BROKEN symlink (existing link, missing target), so that case is handled
+// explicitly by following the link's target — treating it as a plain missing file would
+// let a dangling symlink pointing outside the root slip past the containment check.
+async function realpathAllowingMissing(p: string, depth = 0): Promise<string> {
+  if (depth > MAX_SYMLINK_DEPTH) throw new Error("too many symlink levels");
   try {
     return await fs.realpath(p);
   } catch {
+    const link = await readlinkOrNull(p);
+    if (link !== null) return realpathAllowingMissing(path.resolve(path.dirname(p), link), depth + 1);
     const parent = path.dirname(p);
     if (parent === p) return p;
-    return path.join(await realpathAllowingMissing(parent), path.basename(p));
+    return path.join(await realpathAllowingMissing(parent, depth), path.basename(p));
   }
 }
 

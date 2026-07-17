@@ -132,5 +132,19 @@ describe("createFileOps", () => {
       symlinkSync(path.join(root, "real.txt"), path.join(root, "alias.txt"));
       expect(await ops.read("alias.txt")).toBe("inside");
     });
+
+    // Broken (dangling) symlink: fs.realpath throws because the target is missing, so
+    // the guard must follow the link itself — otherwise a write would follow it and
+    // create the file OUTSIDE the root.
+    it("refuses to write through a dangling symlink that points outside the root", async () => {
+      symlinkSync(path.join(base, "does-not-exist-yet.txt"), path.join(root, "dangling.txt"));
+      await expect(ops.write("dangling.txt", "x")).rejects.toThrow(/escapes its root via symlink/);
+    });
+
+    it("allows a dangling symlink whose (missing) target is inside the root", async () => {
+      symlinkSync(path.join(root, "notyet.txt"), path.join(root, "inside-dangling.txt"));
+      await ops.write("inside-dangling.txt", "created");
+      expect(await ops.read("notyet.txt")).toBe("created");
+    });
   });
 });
