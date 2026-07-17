@@ -5,7 +5,7 @@ import TerminalCell from "./TerminalCell.vue";
 
 // Capture the "sessions" pub/sub callback so tests can push activity directly.
 let captured: ((data: unknown) => void) | null = null;
-vi.mock("../composables/usePubSub", () => ({
+vi.mock("../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (_channel: string, cb: (data: unknown) => void) => {
       captured = cb;
