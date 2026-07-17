@@ -229,7 +229,7 @@ configureCollectionUi({
   // ── actions: kind "chat"/"agent" fetch the seed prompt + role (CollectionView
   //    feeds it to startChat → a visible chat); kind "mutate" carries the
   //    mini-form values as `params` and the server applies the write itself. ──
-  runItemAction: (slug, itemId, actionId, params) =>
+  runItemAction: (slug: string, itemId: string, actionId: string, params?: Record<string, unknown>) =>
     apiPost<CollectionActionResult>(
       `/api/collections/${encodeURIComponent(slug)}/items/${encodeURIComponent(itemId)}/actions/${encodeURIComponent(actionId)}`,
       params ? { params } : {},
