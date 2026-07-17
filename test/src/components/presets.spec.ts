@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { presetLabel } from "./presets";
+import { presetLabel } from "../../src/components/presets.js";
 
 describe("presetLabel", () => {
   it("uses the trailing path segment (basename)", () => {

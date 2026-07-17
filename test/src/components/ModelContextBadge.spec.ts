@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
-import ModelContextBadge from "./ModelContextBadge.vue";
+import ModelContextBadge from "../../src/components/ModelContextBadge.vue.js";
 
 function mountBadge(props: { agent?: "claude" | "codex"; model: string | null; contextTokens?: number }) {
   return mount(ModelContextBadge, {

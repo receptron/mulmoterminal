@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
-import SettingsModal from "./SettingsModal.vue";
+import SettingsModal from "../../src/components/SettingsModal.vue.js";
 
 const mountModal = (props: Record<string, unknown> = {}) => mount(SettingsModal, { props });
 
