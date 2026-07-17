@@ -1660,10 +1660,10 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.20.2":
-  version "0.20.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.20.2.tgz#b3a7016668250c324e70d624588e5072d3ed9501"
-  integrity sha512-1GOeXcmRFWR+Wlrz336TbE0ece18IstBeBiY/a68UW2e56qTZr+YqsoK/D8U/3XbgYvBIKIXioK8k7eCXPay+Q==
+"@mulmoclaude/core@^0.20.2", "@mulmoclaude/core@^0.22.1":
+  version "0.22.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.22.1.tgz#56eecd90399b8dc3581eb1549beb923fa8504f39"
+  integrity sha512-BctuyJQOpCdiiz2z4RhAS6Ky4JDqw3+7R72E4O4x/2iFU1Q03w2pO0xDbU2/Pmbb9J+jhMau7AwXyjIWbiYadw==
   dependencies:
     fast-xml-parser "^5.10.1"
     google-auth-library "^10.9.0"
@@ -1697,10 +1697,10 @@
     marked "^18.0.5"
     mermaid "^11.16.0"
 
-"@mulmoclaude/mulmoscript-plugin@^0.2.0":
-  version "0.2.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.0.tgz#27e27ac3416c50b6e7fcbd43023e14092e167aa3"
-  integrity sha512-WdRPTacBlEhmMI3xp58ezKpxDvJy2mTWzV32l9lq3fiY9E8rjm+ITS3HeIwehH8QXIVX3OnPIxksbgu12+57HA==
+"@mulmoclaude/mulmoscript-plugin@^0.2.1":
+  version "0.2.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.1.tgz#a3ed4f4590b6942f976e28566c5257476b005b79"
+  integrity sha512-kLNMM9llVMlxmbXHVVNF+pFugfgSvdOtYpCgYfL1SRg505c4fDCAPjXbin04Rcidbmm9PFwmlbmhULIIemBVsw==
 
 "@mulmoclaude/x-plugin@^0.1.2":
   version "0.1.2"
