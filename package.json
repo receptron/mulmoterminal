@@ -65,7 +65,7 @@
     "@mulmoclaude/collection-plugin": "^0.11.1",
     "@mulmoclaude/core": "^0.22.1",
     "@mulmoclaude/form-plugin": "^0.1.4",
-    "@mulmoclaude/google-plugin": "^0.1.2",
+    "@mulmoclaude/google-plugin": "^0.2.1",
     "@mulmoclaude/html-plugin": "^0.2.5",
     "@mulmoclaude/markdown-plugin": "^0.1.10",
     "@mulmoclaude/mulmoscript-plugin": "^0.2.1",
