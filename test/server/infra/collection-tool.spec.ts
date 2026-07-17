@@ -9,9 +9,9 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MANAGE_COLLECTION, manageCollectionHandler } from "./collection-tool.js";
-import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
-import { initCollectionsBackend } from "../backends/collections.js";
+import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/collection-tool";
+import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/host-tools";
+import { initCollectionsBackend } from "../../../server/backends/collections";
 
 const SCHEMA = {
   title: "Tool Fixture",
