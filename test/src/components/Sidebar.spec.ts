@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
-import Sidebar from "../../src/components/Sidebar.vue";
-import type { Session, Filter } from "../../src/composables/useSessions";
+import Sidebar from "../../../src/components/Sidebar.vue";
+import type { Session, Filter } from "../../../src/composables/useSessions";
 
 // Sidebar is now presentational: App.vue owns the list + filter and passes them
 // in. These tests drive it purely through props/emits.

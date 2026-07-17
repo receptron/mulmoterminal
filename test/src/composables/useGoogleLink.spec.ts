@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
-import { useGoogleLink } from "./useGoogleLink";
+import { useGoogleLink } from "../../../src/composables/useGoogleLink";
 
 const jsonResponse = (body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body }) as Response;
 

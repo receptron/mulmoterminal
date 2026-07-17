@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import TerminalGrid, { type CockpitRow } from "../../src/components/TerminalGrid.vue";
-import type { Cell } from "../../src/components/gridTabs.js";
-import type { RunCommand } from "../../src/components/runCommand.js";
+import TerminalGrid, { type CockpitRow } from "../../../src/components/TerminalGrid.vue";
+import type { Cell } from "../../../src/components/gridTabs.js";
+import type { RunCommand } from "../../../src/components/runCommand.js";
 
 // Stub the cells so the page renderer can be tested without Terminal/xterm/pub-sub.
-vi.mock("./TerminalCell.vue", () => ({
+vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
     props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home", "openSessionIds", "cancellable", "reorderable"],
@@ -14,7 +14,7 @@ vi.mock("./TerminalCell.vue", () => ({
     template: '<div class="stub-cell" />',
   },
 }));
-vi.mock("./CommandCell.vue", () => ({
+vi.mock("../../../src/components/CommandCell.vue", () => ({
   default: {
     name: "CommandCell",
     props: ["expanded", "command", "home", "reorderable"],
@@ -22,7 +22,7 @@ vi.mock("./CommandCell.vue", () => ({
     template: '<div class="stub-command-cell" />',
   },
 }));
-vi.mock("./LauncherCell.vue", () => ({
+vi.mock("../../../src/components/LauncherCell.vue", () => ({
   default: {
     name: "LauncherCell",
     props: ["uid", "expanded", "launcher", "session", "cwd", "home", "reorderable"],

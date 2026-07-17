@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { RunCommand } from "../../src/components/runCommand.js";
+import type { RunCommand } from "../../../src/components/runCommand.js";
 import {
   pageCount,
   pageSlice,
@@ -30,7 +30,7 @@ import {
   type CellStatus,
   type GridState,
   type Cell,
-} from "../../src/components/gridTabs.js";
+} from "../../../src/components/gridTabs.js";
 
 const U = (n: number) => `${String(n % 10).repeat(8)}-aaaa-aaaa-aaaa-aaaaaaaaaaaa`;
 const cell = (uid: number, session: string | null = null, cwd: string | null = null): Cell => ({ uid, session, cwd });

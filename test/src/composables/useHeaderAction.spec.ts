@@ -10,16 +10,16 @@ const m = vi.hoisted(() => ({
   insertText: vi.fn(),
   openTerminalAt: vi.fn(),
 }));
-vi.mock("./useFilesView", () => ({ filesGotoIndex: m.filesGotoIndex }));
-vi.mock("./usePrsView", () => ({ prsGotoIndex: m.prsGotoIndex }));
-vi.mock("./useWikiBrowse", () => ({ wikiGotoIndex: m.wikiGotoIndex }));
-vi.mock("./useCollectionBrowse", () => ({ browseGotoIndex: m.browseGotoIndex }));
-vi.mock("./useAccountingView", () => ({ accountingViewOpen: m.accountingViewOpen }));
-vi.mock("./useTerminalConnections", () => ({ submitText: m.submitText, insertText: m.insertText }));
-vi.mock("./useNewTerminal", () => ({ openTerminalAt: m.openTerminalAt }));
+vi.mock("../../../src/composables/useFilesView", () => ({ filesGotoIndex: m.filesGotoIndex }));
+vi.mock("../../../src/composables/usePrsView", () => ({ prsGotoIndex: m.prsGotoIndex }));
+vi.mock("../../../src/composables/useWikiBrowse", () => ({ wikiGotoIndex: m.wikiGotoIndex }));
+vi.mock("../../../src/composables/useCollectionBrowse", () => ({ browseGotoIndex: m.browseGotoIndex }));
+vi.mock("../../../src/composables/useAccountingView", () => ({ accountingViewOpen: m.accountingViewOpen }));
+vi.mock("../../../src/composables/useTerminalConnections", () => ({ submitText: m.submitText, insertText: m.insertText }));
+vi.mock("../../../src/composables/useNewTerminal", () => ({ openTerminalAt: m.openTerminalAt }));
 
-import { runHeaderButton } from "./useHeaderAction";
-import type { HeaderButton } from "./useHeaderButtons";
+import { runHeaderButton } from "../../../src/composables/useHeaderAction";
+import type { HeaderButton } from "../../../src/composables/useHeaderButtons";
 
 const btn = (over: Partial<HeaderButton>): HeaderButton => ({ id: "x", label: "X", run: "open", ...over });
 
