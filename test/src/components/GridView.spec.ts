@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 
 // The grid subscribes to the pub/sub socket on mount — stub it so no real socket opens.
-vi.mock("../composables/usePubSub", () => ({
+vi.mock("../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
 }));
 
@@ -45,7 +45,7 @@ const SettingsStub = {
 const ToolbarStub = { name: "AppToolbar", emits: ["settings"], template: '<button class="open-settings" @click="$emit(\'settings\')" />' };
 
 const mountGrid = async () => {
-  const w = mount((await import("./GridView.vue")).default, {
+  const w = mount((await import("../../src/components/GridView.vue")).default, {
     global: { stubs: { TerminalGrid: true, AppToolbar: ToolbarStub, SettingsModal: SettingsStub } },
   });
   await flushPromises(); // onMounted loadConfig

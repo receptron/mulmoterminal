@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { skillSeed } from "./skillSeed";
+import { skillSeed } from "../../src/components/skillSeed.js";
 
 describe("skillSeed", () => {
   it("uses claude's /<slug> command for claude", () => {

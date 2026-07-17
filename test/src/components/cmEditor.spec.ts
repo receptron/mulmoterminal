@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { langKindForFilename } from "./cmEditor";
+import { langKindForFilename } from "../../src/components/cmEditor.js";
 
 describe("langKindForFilename", () => {
   it("maps markdown extensions", () => {

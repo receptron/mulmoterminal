@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
-import LauncherCell from "./LauncherCell.vue";
+import LauncherCell from "../../src/components/LauncherCell.vue";
 
 // Stub the terminal so no xterm/WebSocket is needed; it just forwards the props the
 // cell passes and can emit session/exit.

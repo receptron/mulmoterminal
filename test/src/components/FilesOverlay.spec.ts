@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import FilesOverlay from "./FilesOverlay.vue";
+import FilesOverlay from "../../src/components/FilesOverlay.vue";
 
 // The view is route-driven; stub useFilesView so the overlay is "open" without a router.
 // A shared cwd ref lets a test drive a route-root change; filesGotoIndex mutates it too
@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => ({
   setCwd: (() => {}) as (v: string | null) => void,
   setOpen: (() => {}) as (v: boolean) => void,
 }));
-vi.mock("../composables/useFilesView", async () => {
+vi.mock("../../src/composables/useFilesView", async () => {
   const { ref: r } = await import("vue");
   const cwd = r<string | null>("/proj");
   const isOpen = r(true);
