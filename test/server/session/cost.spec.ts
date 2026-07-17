@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rateForModel, costForUsage, costFromJsonl } from "../../../server/session/../../server/session/cost.js";
+import { rateForModel, costForUsage, costFromJsonl } from "../../../server/session/cost.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 const assistant = (model: string, usage: Record<string, number>) => line({ type: "assistant", message: { model, usage } });

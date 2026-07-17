@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, symlinkSync, rmSync } from "node
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { discoverSkillNames, discoverSkills, applySkillFilter } from "../../../../server/backends/remoteHost/../../../server/backends/remoteHost/skills.js";
+import { discoverSkillNames, discoverSkills, applySkillFilter } from "../../../../server/backends/remoteHost/skills.js";
 
 // Write `<root>/.claude/skills/<name>/SKILL.md` with the given contents.
 const writeSkill = (root: string, name: string, contents: string): void => {

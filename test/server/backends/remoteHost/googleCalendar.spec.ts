@@ -6,7 +6,7 @@ import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "@mulmoclaude/core/go
 import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "@mulmoclaude/core/google";
 import type { JsonObject } from "@mulmoclaude/core/remote-host";
 
-import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../../../server/backends/remoteHost/../../../server/backends/remoteHost/googleCalendar.js";
+import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "../../../../server/backends/remoteHost/googleCalendar.js";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",

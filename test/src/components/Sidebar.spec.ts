@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
-import Sidebar from "../../../src/components/../../src/components/Sidebar.vue";
+import Sidebar from "../../../src/components/Sidebar.vue";
 import type { Session, Filter } from "../../../src/components/composables/useSessions";
 
 // Sidebar is now presentational: App.vue owns the list + filter and passes them

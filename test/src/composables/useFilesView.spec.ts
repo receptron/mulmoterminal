@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { flushPromises } from "@vue/test-utils";
 import { router } from "../../../src/composables/router";
-import { filesGotoIndex, filesClose, useFilesView } from "../../../src/composables/../../src/composables/useFilesView";
+import { filesGotoIndex, filesClose, useFilesView } from "../../../src/composables/useFilesView";
 
 // Drives the real singleton router (jsdom web-history) — the composables are bound to
 // it. Each test starts from chat, then navigates to the origin under test.

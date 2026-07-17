@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { createApp, defineComponent, ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { useSessionContext } from "../../../src/composables/../../src/composables/useSessionContext";
+import { useSessionContext } from "../../../src/composables/useSessionContext";
 
 function withSetup<T>(composable: () => T): { result: T; unmount: () => void } {
   let result!: T;

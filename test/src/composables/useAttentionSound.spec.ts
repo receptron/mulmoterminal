@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { needsAttention } from "../../../src/composables/../../src/composables/useAttentionSound";
+import { needsAttention } from "../../../src/composables/useAttentionSound";
 
 const msg = (id: string, working?: boolean, waiting?: boolean) => ({ id, working, waiting });
 

@@ -19,7 +19,7 @@ import {
   countUserTurnsFromParsed,
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
-} from "../../../server/session/../../server/session/transcript.js";
+} from "../../../server/session/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 

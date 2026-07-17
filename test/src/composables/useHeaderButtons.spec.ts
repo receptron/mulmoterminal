@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { createApp, defineComponent, ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { useHeaderButtons } from "../../../src/composables/../../src/composables/useHeaderButtons";
+import { useHeaderButtons } from "../../../src/composables/useHeaderButtons";
 
 function withSetup<T>(composable: () => T): { result: T; unmount: () => void } {
   let result!: T;

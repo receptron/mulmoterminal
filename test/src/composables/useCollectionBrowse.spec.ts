@@ -12,7 +12,7 @@ import {
   browseRouteSelectedId,
   browseIsFeedRoute,
   browseClose,
-} from "../../../src/composables/../../src/composables/useCollectionBrowse";
+} from "../../../src/composables/useCollectionBrowse";
 
 // Install the singleton router into a throwaway app so currentRoute tracks pushes.
 beforeAll(async () => {

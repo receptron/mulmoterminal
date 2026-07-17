@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { headerStyleFor, cellStyleFor, terminalHeaderStyleFor } from "../../../src/components/../../src/components/cellHeaderStyle";
+import { headerStyleFor, cellStyleFor, terminalHeaderStyleFor } from "../../../src/components/cellHeaderStyle";
 
 describe("headerStyleFor", () => {
   it("maps a background + text color to the header CSS variables", () => {

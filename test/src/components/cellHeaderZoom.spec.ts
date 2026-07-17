@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { shouldZoomOnHeaderClick } from "../../../src/components/../../src/components/cellHeaderZoom";
+import { shouldZoomOnHeaderClick } from "../../../src/components/cellHeaderZoom";
 
 describe("shouldZoomOnHeaderClick", () => {
   it("zooms when a non-expanded cell's header background (a non-button element) is clicked", () => {

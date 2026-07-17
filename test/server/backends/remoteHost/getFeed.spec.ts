@@ -11,7 +11,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { listFeeds } from "@mulmoclaude/core/feeds/server";
-import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/../../../server/backends/remoteHost/handlers.js";
+import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers.js";
 import { initCollectionsBackend } from "../../../../server/backends/remoteHost/collections.js";
 
 // Only listFeeds is stubbed; listItems/toDetail/deriveItems/pageResult stay real.

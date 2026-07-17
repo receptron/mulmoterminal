@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { resetFileChangePublisher } from "@mulmoclaude/core/file-change";
-import { initFileChangePublisher, publishFileChange } from "../../../server/backends/../../server/backends/fileChange.js";
+import { initFileChangePublisher, publishFileChange } from "../../../server/backends/fileChange.js";
 
 // Capture every pubsub publish the binding makes.
 interface Published {

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { installOwnedSkill, SCHEMA_ASSET_FILE } from "../../../server/infra/../../server/infra/install-config-skill";
+import { installOwnedSkill, SCHEMA_ASSET_FILE } from "../../../server/infra/install-config-skill";
 import { loadDirConfig } from "../../../server/infra/config/dir-config";
 
 const NAME = "mulmoterminal-config";

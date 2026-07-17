@@ -74,7 +74,7 @@ class FakeWebSocket {
   }
 }
 
-import * as conn from "../../../src/composables/../../src/composables/useTerminalConnections";
+import * as conn from "../../../src/composables/useTerminalConnections";
 
 const target = (sessionId: string | null) => ({ sessionId, cwd: "/typed", devTerminal: false, command: null, launcher: null });
 

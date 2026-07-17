@@ -10,7 +10,7 @@ import {
   TITLE_REGEN_EVERY_TURNS,
   VIEW_TITLE_REGEN_TURNS,
   MAX_TITLE_CHARS,
-} from "../../../server/config/../../server/config/header-title.js";
+} from "../../../server/config/header-title.js";
 import type { RunClaude } from "../../../server/config/session/command-summary.js";
 import type { ConversationTurn } from "../../../server/config/session/transcript.js";
 

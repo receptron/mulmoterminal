@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { usePendingScript } from "../../../src/composables/../../src/composables/usePendingScript";
+import { usePendingScript } from "../../../src/composables/usePendingScript";
 import type { RunCommand } from "../../../src/composables/components/runCommand";
 
 const CMD: RunCommand = { source: "script", index: 1, label: "Build", cwd: "/proj" };

@@ -12,7 +12,7 @@ vi.mock("./usePubSub", () => ({
   }),
 }));
 
-import { useDirConfig, boundDirCount, invalidateDirConfig } from "../../../src/composables/../../src/composables/useDirConfig";
+import { useDirConfig, boundDirCount, invalidateDirConfig } from "../../../src/composables/useDirConfig";
 
 let served = "first";
 const flush = async () => {

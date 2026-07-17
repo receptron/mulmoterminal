@@ -9,8 +9,8 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/../../server/infra/collection-tool.js";
-import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/../../server/infra/host-tools.js";
+import { MANAGE_COLLECTION, manageCollectionHandler } from "../../../server/infra/collection-tool.js";
+import { HOST_TOOL_DEFINITIONS } from "../../../server/infra/host-tools.js";
 import { initCollectionsBackend } from "../../../server/infra/backends/collections.js";
 
 const SCHEMA = {

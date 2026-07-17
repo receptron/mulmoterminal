@@ -5,7 +5,7 @@ import { readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { initPluginRuntime, createPluginRuntime } from "../../../server/infra/../../server/infra/pluginRuntime.js";
+import { initPluginRuntime, createPluginRuntime } from "../../../server/infra/pluginRuntime.js";
 import { initArtifactsBackend, artifactsRoot } from "../../../server/infra/backends/artifacts.js";
 
 const PKG = "@scope/demo-plugin";

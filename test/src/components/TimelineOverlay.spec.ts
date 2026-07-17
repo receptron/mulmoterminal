@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import TimelineOverlay from "../../../src/components/../../src/components/TimelineOverlay.vue";
+import TimelineOverlay from "../../../src/components/TimelineOverlay.vue";
 
 const events = [
   { ts: "2026-06-29T04:42:01.468Z", tool: "Bash", summary: "git status" },

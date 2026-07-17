@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCustomViewSrcdoc } from "../../../src/utils/../../src/utils/customViewSrcdoc";
+import { buildCustomViewSrcdoc } from "../../../src/utils/customViewSrcdoc";
 
 const boot = { slug: "watchlist", token: "tok", dataUrl: "/api/collections/watchlist/view-data", origin: "http://localhost:5173" };
 

@@ -18,8 +18,8 @@ vi.mock("./useAccountingView", () => ({ accountingViewOpen: m.accountingViewOpen
 vi.mock("./useTerminalConnections", () => ({ submitText: m.submitText, insertText: m.insertText }));
 vi.mock("./useNewTerminal", () => ({ openTerminalAt: m.openTerminalAt }));
 
-import { runHeaderButton } from "../../../src/composables/../../src/composables/useHeaderAction";
-import type { HeaderButton } from "../../../src/composables/../../src/composables/useHeaderButtons";
+import { runHeaderButton } from "../../../src/composables/useHeaderAction";
+import type { HeaderButton } from "../../../src/composables/useHeaderButtons";
 
 const btn = (over: Partial<HeaderButton>): HeaderButton => ({ id: "x", label: "X", run: "open", ...over });
 

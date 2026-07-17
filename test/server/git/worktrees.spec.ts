@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync, symlinkSy
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { slugify, parseWorktreeList, worktreesRoot, isManagedWorktree, gitTopLevel, createWorktree, listWorktrees, isDirty, removeWorktree } from "../../../server/git/../../server/git/worktrees";
+import { slugify, parseWorktreeList, worktreesRoot, isManagedWorktree, gitTopLevel, createWorktree, listWorktrees, isDirty, removeWorktree } from "../../../server/git/worktrees";
 
 describe("slugify", () => {
   it("makes a filesystem-safe slug, with a fallback", () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { terminalManagesAttention, terminalViewActive } from "../../../src/components/../../src/components/terminalViewActive";
+import { terminalManagesAttention, terminalViewActive } from "../../../src/components/terminalViewActive";
 
 describe("terminalManagesAttention", () => {
   it("a Claude/Codex session terminal manages attention", () => {

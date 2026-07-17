@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import FilesOverlay from "../../../src/components/../../src/components/FilesOverlay.vue";
+import FilesOverlay from "../../../src/components/FilesOverlay.vue";
 
 // The view is route-driven; stub useFilesView so the overlay is "open" without a router.
 // A shared cwd ref lets a test drive a route-root change; filesGotoIndex mutates it too

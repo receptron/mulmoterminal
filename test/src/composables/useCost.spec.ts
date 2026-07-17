@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { useCost } from "../../../src/composables/../../src/composables/useCost";
+import { useCost } from "../../../src/composables/useCost";
 
 const realFetch = globalThis.fetch;
 afterEach(() => {

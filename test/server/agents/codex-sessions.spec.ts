@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { parseCodexRolloutHead, listCodexSessions, codexRolloutExists } from "../../../server/agents/../../server/agents/codex-sessions.js";
+import { parseCodexRolloutHead, listCodexSessions, codexRolloutExists } from "../../../server/agents/codex-sessions.js";
 
 const UUID_A = "019f251d-001c-7542-b13e-9a627effce52";
 const UUID_B = "019db01d-aaa3-7ba2-b597-b29a7fca488f";

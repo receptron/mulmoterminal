@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mergeStable, isUnread, type Session } from "../../../src/composables/../../src/composables/useSessions";
+import { mergeStable, isUnread, type Session } from "../../../src/composables/useSessions";
 
 function row(id: string): Session {
   return { id, title: id, mtime: 1, working: false, waiting: false };

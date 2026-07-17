@@ -3,7 +3,7 @@ import type { Express } from "express";
 import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { parseGithubWebUrl, resolveGithubUrl, mountGitRemoteRoute } from "../../../server/git/../../server/git/gitRemote.js";
+import { parseGithubWebUrl, resolveGithubUrl, mountGitRemoteRoute } from "../../../server/git/gitRemote.js";
 
 const REPO = "https://github.com/owner/repo";
 

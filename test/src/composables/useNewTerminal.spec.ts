@@ -5,7 +5,7 @@ import { mount } from "@vue/test-utils";
 const { push } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()) }));
 vi.mock("../router", () => ({ router: { push } }));
 
-import { registerNewTerminalHandler, openTerminalAt } from "../../../src/composables/../../src/composables/useNewTerminal";
+import { registerNewTerminalHandler, openTerminalAt } from "../../../src/composables/useNewTerminal";
 
 describe("useNewTerminal", () => {
   beforeEach(() => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { useAppConfig } from "../../../src/composables/../../src/composables/useAppConfig";
+import { useAppConfig } from "../../../src/composables/useAppConfig";
 
 // Echo the posted cwdPresets back as the server would, so presets.value reflects
 // each save. useAppConfig's presets ref is per-call (not a singleton), so every
