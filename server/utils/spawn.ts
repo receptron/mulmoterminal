@@ -8,19 +8,12 @@ interface SpawnResult {
 }
 
 // Unified spawn wrapper to reduce duplication across git utilities
-export const spawnGit = async (
-  cwd: string | undefined,
-  args: string[],
-): Promise<SpawnResult> => {
+export const spawnGit = async (cwd: string | undefined, args: string[]): Promise<SpawnResult> => {
   const gitArgs = cwd ? ["-C", cwd, ...args] : args;
   return spawnCommand("git", gitArgs, { stdio: ["ignore", "pipe", "pipe"] });
 };
 
-export const spawnCommand = async (
-  cmd: string,
-  args: string[],
-  opts?: SpawnOptions,
-): Promise<SpawnResult> => {
+export const spawnCommand = async (cmd: string, args: string[], opts?: SpawnOptions): Promise<SpawnResult> => {
   return new Promise((resolve) => {
     const child = nodeSpawn(cmd, args, opts);
     let stdout = "";
