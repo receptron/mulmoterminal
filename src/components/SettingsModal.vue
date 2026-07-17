@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
 import { useCost } from "../composables/useCost";
+import { useGoogleLink } from "../composables/useGoogleLink";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
 
@@ -150,6 +151,38 @@ function testSound() {
 const { themeId, themes, setTheme } = useTheme();
 const themesEl = ref<HTMLElement>();
 
+// Google account link. The modal is v-if'd, so a fresh load on mount also picks up
+// out-of-band changes (`mulmoterminal google login`, a deleted token file).
+const {
+  status: googleStatus,
+  busy: googleBusy,
+  error: googleError,
+  refresh: refreshGoogle,
+  connect: connectGoogle,
+  unlink: unlinkGoogle,
+  dispose: disposeGoogle,
+} = useGoogleLink();
+
+const googleStatusText = computed(() => {
+  if (!googleStatus.value) return "Checking…";
+  if (googleStatus.value.pending) return "Waiting for consent in your browser…";
+  return googleStatus.value.linked ? "Linked" : "Not linked";
+});
+
+// Consent can't start without an OAuth client secret on disk, and the two bad
+// states need different fixes, so they're reported separately.
+const googleSecretHint = computed(() => {
+  const presence = googleStatus.value?.clientSecret;
+  if (presence === "missing") return "No OAuth client secret found in ~/.secrets. Add a Desktop client's client_secret_*.json there to enable sign-in.";
+  if (presence === "ambiguous") return "Multiple client_secret_*.json files in ~/.secrets — keep exactly one.";
+  return "";
+});
+
+async function onUnlinkGoogle() {
+  if (!window.confirm("Unlink this Google account? MulmoTerminal will lose Calendar access until you sign in again.")) return;
+  await unlinkGoogle();
+}
+
 // ARIA radiogroup keyboard contract: arrows move selection (and focus) within
 // the group, wrapping at the ends; only the checked radio is tabbable (roving
 // tabindex), so Tab enters/leaves the group as one stop.
@@ -203,9 +236,13 @@ onMounted(() => {
   document.addEventListener("keydown", onKeydown);
   nextTick(() => modalEl.value?.querySelector<HTMLElement>("input, button")?.focus());
   refreshCost();
+  refreshGoogle();
 });
 watch([() => props.cwd, () => props.sessionId], refreshCost);
-onUnmounted(() => document.removeEventListener("keydown", onKeydown));
+onUnmounted(() => {
+  document.removeEventListener("keydown", onKeydown);
+  disposeGoogle();
+});
 </script>
 
 <template>
@@ -274,6 +311,28 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
         <input type="checkbox" :checked="props.pushEnabled ?? false" aria-label="Send a Web Push when a task finishes" @change="onPushToggle" />
         <span>Notify my devices when a task finishes</span>
       </label>
+
+      <h3 class="section-title">Google account</h3>
+      <p class="hint">
+        Link a Google account so the <code>google</code> tool and your phone can read and create <strong>Calendar</strong> events. Sign-in opens in a new tab
+        and finishes on <strong>this machine</strong>, so use a browser here — over a remote connection, run
+        <code>npx mulmoterminal google login</code> instead. The link is shared with MulmoClaude.
+      </p>
+      <p v-if="googleSecretHint" class="hint google-warn">{{ googleSecretHint }}</p>
+      <div class="google-row">
+        <span class="google-status" :class="{ linked: googleStatus?.linked }">{{ googleStatusText }}</span>
+        <button
+          v-if="!googleStatus?.linked"
+          class="btn"
+          type="button"
+          :disabled="googleBusy || googleStatus?.pending || googleStatus?.clientSecret !== 'found'"
+          @click="connectGoogle"
+        >
+          Sign in with Google
+        </button>
+        <button v-else class="btn" type="button" :disabled="googleBusy" @click="onUnlinkGoogle">Unlink</button>
+      </div>
+      <p v-if="googleError" class="hint google-warn" role="alert">{{ googleError }}</p>
 
       <h3 class="section-title">Pull request repos</h3>
       <p class="hint">
@@ -514,6 +573,22 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
   display: flex;
   gap: 8px;
   align-items: center;
+}
+.google-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.google-status {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.google-status.linked {
+  color: var(--ok);
+}
+.google-warn {
+  color: var(--danger);
 }
 .sound-field {
   flex: 1 1 auto;

@@ -23,7 +23,7 @@ Each of these runs the same engine as MulmoClaude, with host specifics injected:
 | Notifier + collection completion watchers (bell UI) | `@mulmoclaude/core/notifier`, `/collection-watchers` | `server/backends/notifier.ts`, `collectionWatchers.ts` (#124) |
 | Scheduler engine + user cron tasks (`config/scheduler/tasks.json` → spawn a visible chat) | `@mulmoclaude/core/scheduler` | `server/backends/scheduler.ts` (#125) |
 | RSS/JSON feed refresh (system task) | `@mulmoclaude/core/feeds(/server)` | `server/backends/feeds.ts` + `feedRefreshTaskDef` registration in `server/index.ts` |
-| Google account (loopback OAuth) + Calendar | `@mulmoclaude/core/google` | `server/backends/google.ts`, `remoteHost/googleCalendar.ts`, `server/cli-google.ts` (#386) |
+| Google account (loopback OAuth) + Calendar, incl. the settings-UI link routes | `@mulmoclaude/core/google` | `server/backends/google.ts` (shim + `/api/google/*`), `remoteHost/googleCalendar.ts`, `server/cli-google.ts` (#386) |
 
 The two workspaces are interchangeable: both apps read and write the same
 on-disk layout (`data/`, `.claude/skills/`, `config/`), and cross-app invariants

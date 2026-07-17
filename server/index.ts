@@ -88,7 +88,7 @@ import {
 } from "./config/header-title.js";
 import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
-import { initGoogleBackend } from "./backends/google.js";
+import { initGoogleBackend, mountGoogleRoutes } from "./backends/google.js";
 import { initPluginRuntime } from "./infra/pluginRuntime.js";
 import { manageCollectionHandler } from "./infra/collection-tool.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
@@ -1539,6 +1539,12 @@ mountCostRoute(app, { resolveCwd: resolveWorkspace });
 // Firestore host loop from the toolbar Connect control. Same-origin guarded like
 // the other local-only routes; the connect idToken is never logged.
 mountRemoteHostRoutes(app, { isAllowedOrigin });
+
+// GET /api/google/status + POST /api/google/authorize|unlink — the Settings modal's
+// Google account link. Consent needs a browser on THIS machine (loopback listener),
+// which is exactly the local-browser case; `mulmoterminal google login` is the
+// fallback for remote setups. Same-origin guarded; tokens never reach a response.
+mountGoogleRoutes(app, { isAllowedOrigin });
 
 // GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
 // can render its header immediately (live updates then arrive via the "sessions"
