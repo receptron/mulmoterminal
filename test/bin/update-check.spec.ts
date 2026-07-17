@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { isNewerVersion, fetchLatestVersion } from "./update-check.js";
+import { isNewerVersion, fetchLatestVersion } from "../../bin/update-check.js";
 
 describe("isNewerVersion", () => {
   const cases: [string, string, boolean][] = [
