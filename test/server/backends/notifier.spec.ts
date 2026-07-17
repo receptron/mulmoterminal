@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
 import { publish, resetNotifier } from "@mulmoclaude/core/notifier";
-import { initNotifier, mountNotificationRoutes, NOTIFIER_CHANNEL } from "../../../../server/../../server/backends/notifier.js";
+import { initNotifier, mountNotificationRoutes, NOTIFIER_CHANNEL } from "../../../server/backends/notifier.js";
 
 interface Published {
   channel: string;
