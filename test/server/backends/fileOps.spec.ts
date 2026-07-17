@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -96,6 +96,55 @@ describe("createFileOps", () => {
 
     it("allows the root itself", async () => {
       await expect(ops.readDir("")).resolves.toEqual([]);
+    });
+  });
+
+  // FileOps can't create a symlink itself, but one planted by another process or a
+  // dependency must not become an escape hatch out of the sandbox.
+  describe("symlink guard", () => {
+    it("refuses to read through a symlink that points outside the root", async () => {
+      const secret = path.join(base, "secret.txt");
+      writeFileSync(secret, "top secret");
+      symlinkSync(secret, path.join(root, "leak.txt"));
+      await expect(ops.read("leak.txt")).rejects.toThrow(/escapes its root via symlink/);
+    });
+
+    it("refuses to write through a symlinked directory that points outside the root", async () => {
+      const outside = path.join(base, "outside");
+      mkdirSync(outside);
+      symlinkSync(outside, path.join(root, "escape"));
+      await expect(ops.write(path.join("escape", "planted.txt"), "x")).rejects.toThrow(/escapes its root via symlink/);
+    });
+
+    it("applies the symlink guard to every operation", async () => {
+      const secret = path.join(base, "secret.txt");
+      writeFileSync(secret, "s");
+      symlinkSync(secret, path.join(root, "leak.txt"));
+      const rel = "leak.txt";
+      await expect(ops.readBytes(rel)).rejects.toThrow(/via symlink/);
+      await expect(ops.stat(rel)).rejects.toThrow(/via symlink/);
+      await expect(ops.unlink(rel)).rejects.toThrow(/via symlink/);
+      await expect(ops.exists(rel)).rejects.toThrow(/via symlink/);
+    });
+
+    it("allows a symlink that stays inside the root", async () => {
+      await ops.write("real.txt", "inside");
+      symlinkSync(path.join(root, "real.txt"), path.join(root, "alias.txt"));
+      expect(await ops.read("alias.txt")).toBe("inside");
+    });
+
+    // Broken (dangling) symlink: fs.realpath throws because the target is missing, so
+    // the guard must follow the link itself — otherwise a write would follow it and
+    // create the file OUTSIDE the root.
+    it("refuses to write through a dangling symlink that points outside the root", async () => {
+      symlinkSync(path.join(base, "does-not-exist-yet.txt"), path.join(root, "dangling.txt"));
+      await expect(ops.write("dangling.txt", "x")).rejects.toThrow(/escapes its root via symlink/);
+    });
+
+    it("allows a dangling symlink whose (missing) target is inside the root", async () => {
+      symlinkSync(path.join(root, "notyet.txt"), path.join(root, "inside-dangling.txt"));
+      await ops.write("inside-dangling.txt", "created");
+      expect(await ops.read("notyet.txt")).toBe("created");
     });
   });
 });
