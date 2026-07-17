@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { getAgentAdapter } from "./registry.js";
-import { claudeAdapter } from "./claude.js";
-import { codexAdapter } from "./codex.js";
+import { getAgentAdapter } from "../../../../server/../../server/agents/registry.js";
+import { claudeAdapter } from "../../../../server/../../server/agents/claude.js";
+import { codexAdapter } from "../../../../server/../../server/agents/codex.js";
 
 function restoreEnv(key: string, value: string | undefined): void {
   if (value === undefined) Reflect.deleteProperty(process.env, key);
