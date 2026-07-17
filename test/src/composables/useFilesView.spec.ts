@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { flushPromises } from "@vue/test-utils";
-import { router } from "../router";
+import { router } from "../../src/router";
 import { filesGotoIndex, filesClose, useFilesView } from "./useFilesView";
 
 // Drives the real singleton router (jsdom web-history) — the composables are bound to

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { createApp, defineComponent } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { router } from "../router";
+import { router } from "../../src/router";
 import {
   useCollectionBrowse,
   browseGotoIndex,
