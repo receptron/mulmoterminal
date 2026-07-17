@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand, headerHasPrButton } from "../../../../server/../../server/config/header-resolve.js";
-import type { HeaderConfig, HeaderContext } from "../../../../server/../../server/config/header-config.js";
+import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand, headerHasPrButton } from "../../../server/config/header-resolve.js";
+import type { HeaderConfig, HeaderContext } from "../../../server/config/header-config.js";
 
 // POSIX single-quote escaping, matching the server's shellQuoteFor(non-win32).
 const posixQuote = (value: string) => `'${value.replace(/'/g, "'\\''")}'`;
