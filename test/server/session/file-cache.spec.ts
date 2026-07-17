@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createFileCache } from "./file-cache.js";
+import { createFileCache } from "../../../server/session/file-cache.js";
 
 const stamp = (mtimeMs: number, size: number) => ({ mtimeMs, size });
 
