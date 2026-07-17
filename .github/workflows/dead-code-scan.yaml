@@ -1,0 +1,74 @@
+name: dead-code-scan
+
+# Unused-export / unused-file detection (knip), reported to the PR job summary.
+# The gap this fills: eslint's `no-unused-vars` only sees WITHIN a file, and the
+# duplication scan only sees copy/paste — neither catches an export nobody imports
+# or a helper whose last caller was removed (exactly the class of orphan a refactor
+# leaves behind when it deletes the only call site in another module).
+#
+# Reports only — this workflow NEVER fails the build (`continue-on-error`), mirroring
+# duplication-scan.yaml:
+#   1. knip can't infer every entry point (CLI subcommands spawned via tsx, codegen),
+#      so a few false positives are expected. Blocking on day one would just train
+#      people to add `// knip-ignore` reflexively.
+#   2. knip has no base-branch diffing, so the report is the FULL current inventory,
+#      not this PR's delta. It's a review aid — a human decides whether a finding is
+#      real and whether this PR made it worse — not a gate. Revisit gating once the
+#      config is tuned enough to be trustworthy.
+#
+# Config lives in `knip.json`; run it locally with `yarn knip`.
+
+on:
+  pull_request:
+    branches: [main]
+    # Dead exports can only change when an analyzed input changes. Keep in sync with
+    # knip.json's entry/project globs and tsconfig (module resolution). package.json
+    # and yarn.lock are included too: knip auto-detects entry points from package.json
+    # (bin/scripts/main) and resolves imports through the installed dependency graph,
+    # so a PR touching only those can still orphan code.
+    paths:
+      - "**/*.ts"
+      - "**/*.vue"
+      - "**/*.js"
+      - "**/tsconfig*.json"
+      - "knip.json"
+      - "package.json"
+      - "yarn.lock"
+      - ".github/workflows/dead-code-scan.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dead-code-scan:
+    name: Dead Code Scan (knip)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # knip resolves imports through the real dependency graph, so node_modules has
+      # to be installed. `--frozen-lockfile` keeps CI honest against yarn.lock.
+      - run: yarn install --frozen-lockfile --network-timeout 120000
+
+      # `|| true`: knip exits non-zero when it finds anything, and this workflow is
+      # report-only. The report goes to the PR job summary.
+      - name: Run knip
+        run: |
+          set -uo pipefail
+          {
+            printf '## Dead code scan (knip)\n\n'
+            printf 'Unused exports / files below. Report-only — a human decides what is\n'
+            printf 'real. See .github/workflows/dead-code-scan.yaml.\n\n'
+            printf '```\n'
+            yarn --silent knip --reporter compact 2>&1 || true
+            printf '```\n'
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["server/cli-init.ts", "server/cli-google.ts", "bin/update-check.js", "test/**/*.spec.ts", "*.config.ts"],
+  "project": ["server/**/*.ts", "src/**/*.{ts,vue}", "bin/**/*.js"],
+  "ignore": ["**/dist/**", "**/*.d.ts", "**/logs/**"],
+  "ignoreDependencies": [".*"],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": false,
+  "rules": {
+    "files": "off",
+    "dependencies": "off",
+    "devDependencies": "off",
+    "unlisted": "off",
+    "unresolved": "off",
+    "binaries": "off",
+    "exports": "warn",
+    "types": "warn",
+    "nsExports": "off",
+    "nsTypes": "off",
+    "enumMembers": "off",
+    "duplicates": "off"
+  }
+}
