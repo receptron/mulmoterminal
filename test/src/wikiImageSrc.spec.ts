@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { rewriteWikiImageSrc } from "./wikiImageSrc";
+import { rewriteWikiImageSrc } from "../../src/wikiImageSrc.js";
 
 describe("rewriteWikiImageSrc", () => {
   it("leaves external + inlined refs untouched", () => {
