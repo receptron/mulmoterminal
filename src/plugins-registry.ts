@@ -4,7 +4,7 @@
 //       `plugin` carrying a viewComponent. Shared VERBATIM with MulmoClaude.
 //   - local:    in-tree plugins under plugins/<name>/index.ts (REGISTRATION export).
 // Mirrors MulmoClaude's src/tools/index.ts getPlugin().
-import type { Component } from "vue";
+import { defineComponent, h, markRaw, provide, type Component } from "vue";
 import config from "../plugins/plugins.json";
 import { plugin as markdownPlugin } from "@mulmoclaude/markdown-plugin/vue";
 import { plugin as formPlugin } from "@mulmoclaude/form-plugin/vue";
@@ -12,6 +12,7 @@ import { plugin as chartPlugin } from "@mulmoclaude/chart-plugin/vue";
 import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
+import { plugin as mulmoScriptPlugin, MULMOSCRIPT_HOST_ADAPTER_KEY, type MulmoScriptHostAdapter } from "@mulmoclaude/mulmoscript-plugin/vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
@@ -23,6 +24,7 @@ import markdownCss from "@mulmoclaude/markdown-plugin/style.css?inline";
 import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
 import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
+import mulmoScriptCss from "@mulmoclaude/mulmoscript-plugin/style.css?inline";
 import { collectionShadowCss } from "./collectionShadowCss";
 // The accounting package ships its own self-contained Tailwind in style.css (its
 // content scan can't reach node_modules), imported as a STRING for shadow-DOM
@@ -33,6 +35,34 @@ import accountingCss from "@mulmoclaude/accounting-plugin/style.css?inline";
 // against those packages' dists (see src/plugin-tailwind.css), supplying the
 // utilities their components use.
 import mulmochatPluginCss from "./plugin-tailwind.css?inline";
+
+// Movie/PDF bytes for the mulmoscript View's download / clip-play UI. A plain
+// <video src> can't ride the dispatch envelope, so the package asks the host for
+// bytes via this adapter capability; the server route realpath-contains the wire
+// path (see server/backends/mulmoscript.ts).
+async function fetchMulmoMediaBlob(query: { moviePath?: string; pdfPath?: string }): Promise<Blob> {
+  const params = new URLSearchParams(query.pdfPath ? { pdfPath: query.pdfPath } : { moviePath: query.moviePath ?? "" });
+  const res = await fetch(`/api/mulmoscript/media?${params}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+
+// Provide the mulmoscript package's host-adapter injection around its View.
+// MulmoTerminal has no per-session generation indicator, so only fetchMediaBlob
+// is supplied; chatSessionId degrades gracefully (no session tagging).
+function withMulmoScriptHostAdapter(inner: Component): Component {
+  const adapter: MulmoScriptHostAdapter = { fetchMediaBlob: fetchMulmoMediaBlob };
+  return markRaw(
+    defineComponent({
+      name: "MulmoScriptHostAdapter",
+      inheritAttrs: false,
+      setup(_props, { attrs, slots }) {
+        provide(MULMOSCRIPT_HOST_ADAPTER_KEY, adapter);
+        return () => h(inner, attrs, slots);
+      },
+    }),
+  );
+}
 
 interface Registration {
   toolName: string;
@@ -84,6 +114,23 @@ const PACKAGES: Record<string, Registration> = {
     // ?? "en"), so it renders standalone. Its style.css is self-contained Tailwind.
     viewComponent: chartPlugin.viewComponent as Component,
     css: chartCss,
+  },
+  "@mulmoclaude/mulmoscript-plugin": {
+    toolName: mulmoScriptPlugin.toolDefinition.name,
+    // The storyboard View uses useRuntime() (dispatch kind router + generation
+    // pubsub). scope "mulmoScript" matches the server's generation channel
+    // (plugin:mulmoScript:generation); dispatch targets /api/plugin/
+    // presentMulmoScript, where server/backends/mulmoscript.ts routes by kind.
+    // The host adapter supplies authenticated-media fetch (movie/PDF bytes).
+    viewComponent: wrapWithPluginRuntime(
+      "mulmoScript",
+      mulmoScriptPlugin.toolDefinition.name,
+      withMulmoScriptHostAdapter(mulmoScriptPlugin.viewComponent as unknown as Component),
+    ),
+    css: mulmoScriptCss,
+    // Full storyboard editor with an internal h-full layout — give it a definite
+    // frame height (like the collection/html cards) so that chain resolves.
+    height: "80vh",
   },
   // Keyed by the plugins.json `packages` entry (the cfg.packages loop below looks up
   // PACKAGES[name]). The collection engine + presentCollection tool moved to
