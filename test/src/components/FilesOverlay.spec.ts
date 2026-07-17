@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => ({
   setCwd: (() => {}) as (v: string | null) => void,
   setOpen: (() => {}) as (v: boolean) => void,
 }));
-vi.mock("../composables/useFilesView", async () => {
+vi.mock("../../src/composables/useFilesView", async () => {
   const { ref: r } = await import("vue");
   const cwd = r<string | null>("/proj");
   const isOpen = r(true);

@@ -4,7 +4,7 @@ import { mount, flushPromises } from "@vue/test-utils";
 import PrsOverlay from "../../src/components/PrsOverlay.vue";
 
 // The view is route-driven; stub usePrsView so the overlay is "open" without a router.
-vi.mock("../composables/usePrsView", () => ({
+vi.mock("../../src/composables/usePrsView", () => ({
   usePrsView: () => ({ isOpen: ref(true), close: vi.fn() }),
 }));
 
