@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SESSION_KEY, loadStoredSession, persistSession, reconnectAction, type FetchResult } from "../../src/components/remoteHostSession.js";
+import { SESSION_KEY, loadStoredSession, persistSession, reconnectAction, type FetchResult } from "../../../src/components/remoteHostSession.js";
 
 const okStatus = { connected: true, uid: "u1" };
 

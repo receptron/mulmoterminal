@@ -3,7 +3,7 @@ import { ref, effectScope, nextTick } from "vue";
 
 // Capture the `dir-config` subscriber the composable registers, so a test can play the server.
 let publish: ((data: unknown) => void) | null = null;
-vi.mock("./usePubSub", () => ({
+vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (_channel: string, callback: (data: unknown) => void) => {
       publish = callback;
@@ -12,7 +12,7 @@ vi.mock("./usePubSub", () => ({
   }),
 }));
 
-import { useDirConfig, boundDirCount, invalidateDirConfig } from "./useDirConfig";
+import { useDirConfig, boundDirCount, invalidateDirConfig } from "../../../src/composables/useDirConfig";
 
 let served = "first";
 const flush = async () => {

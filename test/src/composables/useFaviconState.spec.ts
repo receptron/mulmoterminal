@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { deriveFaviconState } from "./useFaviconState";
+import { deriveFaviconState } from "../../../src/composables/useFaviconState";
 
 const a = (working: boolean, waiting: boolean) => ({ working, waiting });
 

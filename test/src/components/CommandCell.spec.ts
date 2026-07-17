@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
-import CommandCell from "../../src/components/CommandCell.vue";
-import type { RunCommand } from "../../src/components/runCommand.js";
+import CommandCell from "../../../src/components/CommandCell.vue";
+import type { RunCommand } from "../../../src/components/runCommand.js";
 
 // Stub the terminal so no xterm/WebSocket is needed; it forwards the props the cell
 // passes (command/connectKey), can emit "exit" to drive the re-run UI, and exposes
 // readOutput() so the summarize action has captured output to send.
 const CAPTURED_OUTPUT = "npm ERR! cannot find module foo";
-vi.mock("./Terminal.vue", () => ({
+vi.mock("../../../src/components/Terminal.vue", () => ({
   default: {
     name: "TerminalView",
     props: ["sessionId", "connectKey", "cwd", "command"],

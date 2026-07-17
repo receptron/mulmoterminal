@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { nextTick } from "vue";
-import { registerChatOpener, startCollectionChat, launchAgent } from "./useChatLauncher";
+import { registerChatOpener, startCollectionChat, launchAgent } from "../../../src/composables/useChatLauncher";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
   const fn = vi.fn((url: string, init?: RequestInit) => {
