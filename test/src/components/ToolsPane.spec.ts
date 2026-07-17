@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import ToolsPane from "../../src/components/ToolsPane.vue";
+import ToolsPane from "../../../src/components/ToolsPane.vue";
 
 // Capture the pub/sub callback so tests can simulate a server push without a
 // real socket (mirrors Sidebar.spec.ts).
 let captured: ((data: unknown) => void) | null = null;
-vi.mock("../../src/composables/usePubSub", () => ({
+vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (_channel: string, cb: (data: unknown) => void) => {
       captured = cb;

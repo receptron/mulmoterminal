@@ -3,9 +3,9 @@ import { defineComponent, h, KeepAlive, ref, nextTick, onActivated, onDeactivate
 import { mount } from "@vue/test-utils";
 
 const { push } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()) }));
-vi.mock("../router", () => ({ router: { push } }));
+vi.mock("../../../src/router/index", () => ({ router: { push } }));
 
-import { registerNewTerminalHandler, openTerminalAt } from "./useNewTerminal";
+import { registerNewTerminalHandler, openTerminalAt } from "../../../src/composables/useNewTerminal";
 
 describe("useNewTerminal", () => {
   beforeEach(() => {

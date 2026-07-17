@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { registerRemoteHostSelfHeal } from "../../src/components/remoteHostSelfHeal.js";
+import { registerRemoteHostSelfHeal } from "../../../src/components/remoteHostSelfHeal.js";
 
 describe("registerRemoteHostSelfHeal", () => {
   it("heals on socket reconnect, window online, and return-to-visible; cleanup stops all", () => {

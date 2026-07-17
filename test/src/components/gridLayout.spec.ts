@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { LAYOUTS, isLayout, dims, trackStyle, layoutForCount } from "../../src/components/gridLayout.js";
+import { LAYOUTS, isLayout, dims, trackStyle, layoutForCount } from "../../../src/components/gridLayout.js";
 
 describe("gridLayout", () => {
   it("exposes the layouts smallest→largest", () => {

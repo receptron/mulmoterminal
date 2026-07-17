@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { defineComponent } from "vue";
 import { mount } from "@vue/test-utils";
-import { useUnloadGuard, reportActiveTerminals, suppressNextUnloadGuard } from "./useUnloadGuard";
+import { useUnloadGuard, reportActiveTerminals, suppressNextUnloadGuard } from "../../../src/composables/useUnloadGuard";
 
 // Mount a bare host so the composable's onMounted/onUnmounted run (and the
 // beforeunload listener is registered/removed) on a real lifecycle.

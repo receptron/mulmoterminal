@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { createApp, defineComponent } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { router } from "../../src/../src/router";
-import { useWikiBrowse, wikiGotoIndex, wikiGotoPage, wikiGotoGraph, wikiGotoLint, wikiRouteSlug, wikiClose } from "./useWikiBrowse";
+import { router } from "../../../src/router/index";
+import { useWikiBrowse, wikiGotoIndex, wikiGotoPage, wikiGotoGraph, wikiGotoLint, wikiRouteSlug, wikiClose } from "../../../src/composables/useWikiBrowse";
 
 // Install the singleton router into a throwaway app so currentRoute tracks pushes.
 beforeAll(async () => {

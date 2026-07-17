@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCollectionTarget } from "./useNotifications";
+import { parseCollectionTarget } from "../../../src/composables/useNotifications";
 
 describe("parseCollectionTarget", () => {
   it("parses slug + selected itemId", () => {
