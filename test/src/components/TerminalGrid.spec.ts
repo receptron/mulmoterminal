@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import { nextTick } from "vue";
-import TerminalGrid, { type CockpitRow } from "../../src/components/TerminalGrid.vue.js";
+import TerminalGrid, { type CockpitRow } from "../../src/components/TerminalGrid.vue";
 import type { Cell } from "../../src/components/gridTabs.js";
 import type { RunCommand } from "../../src/components/runCommand.js";
 

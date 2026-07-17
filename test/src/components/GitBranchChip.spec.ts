@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { mount } from "@vue/test-utils";
-import GitBranchChip from "../../src/components/GitBranchChip.vue.js";
+import GitBranchChip from "../../src/components/GitBranchChip.vue";
 import type { GitStatus } from "../../src/composables/useGitStatus";
 
 const base: GitStatus = { repo: true, branch: "main", detached: false, dirty: 0, ahead: 0, behind: 0, upstream: false };

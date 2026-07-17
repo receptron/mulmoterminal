@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import SkillMenu from "../../src/components/SkillMenu.vue.js";
+import SkillMenu from "../../src/components/SkillMenu.vue";
 
 type Skill = { slug: string; description: string };
 

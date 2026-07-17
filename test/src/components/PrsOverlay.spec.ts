@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { ref } from "vue";
 import { mount, flushPromises } from "@vue/test-utils";
-import PrsOverlay from "../../src/components/PrsOverlay.vue.js";
+import PrsOverlay from "../../src/components/PrsOverlay.vue";
 
 // The view is route-driven; stub usePrsView so the overlay is "open" without a router.
 vi.mock("../composables/usePrsView", () => ({
