@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createRemoteHostHandlers } from "../../../../server/backends/remoteHost/handlers.js";
-import { initCollectionsBackend } from "../../../../server/backends/remoteHost/collections.js";
+import { initCollectionsBackend } from "../../../../server/backends/collections.js";
 
 describe("createRemoteHostHandlers", () => {
   let ws: string;
