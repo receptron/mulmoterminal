@@ -6,7 +6,8 @@
     "@mulmoclaude/chart-plugin",
     "@mulmoclaude/core/collection",
     "@mulmoclaude/html-plugin",
-    "@mulmoclaude/google-plugin"
+    "@mulmoclaude/google-plugin",
+    "@mulmoclaude/mulmoscript-plugin"
   ],
   "servers": ["@mulmoclaude/x-plugin"],
   "local": []

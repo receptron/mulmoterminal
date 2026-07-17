@@ -109,6 +109,7 @@ import { mountFilesRoutes } from "./backends/files.js";
 import { mountShortcutsRoutes } from "./backends/shortcuts.js";
 import { mountTranslationRoutes } from "./backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
+import { initMulmoScriptBackend, mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "./backends/mulmoscript.js";
 import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
@@ -1017,6 +1018,13 @@ function backgroundChatMessage(agent: "claude" | "codex", draft: boolean, sessio
 // catch-all (which handles the tool-call); a request without `kind` falls through.
 mountHtmlDispatchRoute(app);
 
+// presentMulmoScript: the View's dispatch (kind router) AND the tool-call both
+// handled by the mulmoscript backend (realpath guard + autoGenerateMovie trigger
+// the generic catch-all lacks). MUST precede mountAllRoutes. The media route
+// (movie/PDF bytes for the View's fetchMediaBlob) has its own path.
+mountMulmoScriptDispatchRoute(app);
+mountMulmoScriptMediaRoute(app);
+
 // Host tool: manageAccounting. The accounting package exposes no gui-chat-protocol
 // `.` core (just the Vue View + the /api/accounting router), so — like MulmoClaude's
 // host-side passthrough execute — this route bridges the GUI MCP tool to that router.
@@ -1803,6 +1811,11 @@ initMarkdownBackend({ workspace: CLAUDE_CWD });
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.
 initArtifactsBackend({ workspace: CLAUDE_CWD });
+
+// Create the mulmoScript server ops (stories dir under <workspace>/artifacts,
+// generation fan-out on the plugin pubsub channel). After initArtifactsBackend —
+// the ops' save/update kinds run against the artifacts FileOps.
+initMulmoScriptBackend({ workspace: CLAUDE_CWD, pubsub });
 
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
