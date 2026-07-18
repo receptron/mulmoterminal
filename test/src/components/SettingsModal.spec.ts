@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { mount } from "@vue/test-utils";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mount, flushPromises } from "@vue/test-utils";
 import SettingsModal from "../../../src/components/SettingsModal.vue";
 
 const mountModal = (props: Record<string, unknown> = {}) => mount(SettingsModal, { props });
@@ -86,5 +86,69 @@ describe("SettingsModal", () => {
 
     await cards()[checked()].trigger("keydown", { key: "ArrowLeft" });
     expect(checked()).toBe(start); // back to where we started
+  });
+
+  describe("Google account link (broker support)", () => {
+    beforeEach(() => {
+      vi.stubGlobal("fetch", vi.fn());
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("disables sign-in when client secret is missing and broker is unavailable", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: false, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
+      expect(signInBtn?.attributes("disabled")).toBe("");
+    });
+
+    it("enables sign-in when client secret is missing but broker is available", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: true, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
+      expect(signInBtn?.attributes("disabled")).toBeUndefined();
+    });
+
+    it("hides the client secret warning when broker is available", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: true, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const warning = w.find(".google-warn");
+      expect(warning.exists()).toBe(false);
+    });
+
+    it("shows the client secret warning when broker is unavailable and secret is missing", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: false, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const warning = w.find(".google-warn");
+      expect(warning.exists()).toBe(true);
+      expect(warning.text()).toContain("client_secret");
+    });
   });
 });
