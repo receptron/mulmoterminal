@@ -1,7 +1,8 @@
 // The workflow phase of a branch's pull request, for the grid's cockpit roster: is this
 // cell's work sitting in the PR review loop, ready to merge, already merged, or has no PR
-// yet? One `gh pr list --head`, cached briefly per (repo, branch) so a per-cell roster poll
-// doesn't shell out to gh every tick. Pure parse + derivation keep it unit-testable.
+// yet? An open-first `gh pr list --head` (one call, or a second `--state all` only when
+// there's no open PR), cached briefly per (repo, branch) so a per-cell roster poll doesn't
+// shell out to gh every tick. Pure parse + derivation keep it unit-testable.
 //
 // The cwd → (repo, branch) resolution lives at the route (server/index.ts), same as the
 // header's PR button — this module takes an already-resolved repo/branch so it stays free
