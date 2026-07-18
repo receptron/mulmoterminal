@@ -2,14 +2,9 @@
 // prs.ts. One `gh issue list` per repo in parallel; a failing repo yields a per-repo
 // error instead of sinking the view. The pure normalize helper is unit-tested.
 import { runGh } from "./gh";
+import { normalizeGhItemBase, type GhItemBase } from "./ghItem";
 
-export interface IssueItem {
-  number: number;
-  title: string;
-  author: string;
-  updatedAt: string;
-  url: string;
-}
+export type IssueItem = GhItemBase;
 
 export interface RepoIssues {
   repo: string;
@@ -26,19 +21,8 @@ export interface RepoIssues {
 // click away on GitHub (unlike the PR view, which is the primary place PRs are read).
 export const ISSUE_LIMIT = 20;
 
-export function normalizeIssue(raw: unknown): IssueItem | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (typeof o.number !== "number" || typeof o.url !== "string") return null;
-  const authorObj = o.author && typeof o.author === "object" ? (o.author as Record<string, unknown>) : null;
-  return {
-    number: o.number,
-    title: typeof o.title === "string" ? o.title : "",
-    author: authorObj && typeof authorObj.login === "string" ? authorObj.login : "",
-    updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
-    url: o.url,
-  };
-}
+// An issue row carries exactly the shared base fields.
+export const normalizeIssue = normalizeGhItemBase;
 
 const GH_FIELDS = "number,title,author,updatedAt,url";
 

@@ -75,8 +75,6 @@ export interface ResolvedHeader {
   chips: ResolvedChip[] | null;
 }
 
-export const EMPTY_HEADER_CONFIG: HeaderConfig = { buttons: null, chips: null };
-
 const RUN_TYPE_SET = new Set<string>(RUN_TYPES);
 const VIEW_SET = new Set<string>(VIEW_TARGETS);
 const BUILTIN_SET = new Set<string>(BUILTIN_CHIPS);

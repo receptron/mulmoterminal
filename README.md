@@ -78,12 +78,18 @@ and keeps your other settings. When `claude` is installed it can hand off to the
 `/mulmoterminal-config` skill for interactive tweaks.
 
 **Google account (optional).** Link a Google account to enable the chat's `google` tool and the
-phone's `google.calendar.*` commands (read and create Calendar events). Sign in from
+phone's `google.calendar.*` commands: read/create events on any calendar (not just your primary),
+list the calendars you've subscribed to, and read the colour palettes. Sign in from
 **Settings → Google account**, or run `npx mulmoterminal google login` — the CLI is the fallback
 for when you're driving MulmoTerminal from another machine, since consent finishes on a loopback
 listener and needs a browser **on the host**. Either way it needs a Desktop OAuth client JSON saved
 as `~/.secrets/client_secret_*.json`; the refresh token lands in `~/.config/mulmo/google-token.json`
 and is **shared with MulmoClaude**, so one link per machine covers both apps.
+
+> **Already linked before the calendar-list / colour features?** They need a read scope your existing
+> link doesn't have, so `listCalendars` (and, in practice, `colors`) fail with an insufficient-scope
+> 403 until you re-authorize: **Settings → Google account → Unlink**, then sign in again (or re-run
+> `google login`). Reading/creating events on your primary calendar keeps working without re-linking.
 
 A global install isn't auto-updated, so on startup MulmoTerminal checks npm and
 prints a one-line notice when a newer version is available (`npm i -g mulmoterminal`

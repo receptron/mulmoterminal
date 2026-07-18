@@ -3,10 +3,16 @@
 // clamping, and wiring — the Google engine is stubbed (no network, no token).
 import { describe, it, expect } from "vitest";
 import { DEFAULT_LIST_MAX_RESULTS, MAX_LIST_RESULTS } from "@mulmoclaude/core/google";
-import type { CalendarEventInput, CalendarEventSummary, ListEventsInput } from "@mulmoclaude/core/google";
+import type { CalendarColors, CalendarEventInput, CalendarEventSummary, CalendarSummary, ListEventsInput } from "@mulmoclaude/core/google";
 import type { JsonObject } from "@mulmoclaude/core/remote-host";
 
-import { createGoogleCalendarCreateEvent, createGoogleCalendarListEvents, type GoogleCalendarDeps } from "./googleCalendar.js";
+import {
+  createGoogleCalendarColors,
+  createGoogleCalendarCreateEvent,
+  createGoogleCalendarListCalendars,
+  createGoogleCalendarListEvents,
+  type GoogleCalendarDeps,
+} from "./googleCalendar.js";
 
 const sampleEvent: CalendarEventSummary = {
   id: "ev1",
@@ -15,16 +21,35 @@ const sampleEvent: CalendarEventSummary = {
   end: "2026-07-17T09:15:00+09:00",
   htmlLink: "https://calendar.google.com/event?eid=ev1",
   status: "confirmed",
+  colorId: "",
+};
+
+const sampleCalendar: CalendarSummary = {
+  id: "team@group.calendar.google.com",
+  summary: "Team",
+  description: "shared",
+  primary: false,
+  accessRole: "reader",
+  backgroundColor: "#16a765",
+  foregroundColor: "#1d1d1d",
+  colorId: "8",
+};
+
+const sampleColors: CalendarColors = {
+  event: { "1": { background: "#a4bdfc", foreground: "#1d1d1d" } },
+  calendar: { "8": { background: "#16a765", foreground: "#1d1d1d" } },
 };
 
 interface StubCalls {
   createInputs: CalendarEventInput[];
   listInputs: ListEventsInput[];
   tokenRequests: number;
+  listCalendarsCalls: number;
+  getColorsCalls: number;
 }
 
 const stubDeps = (): { deps: GoogleCalendarDeps; calls: StubCalls } => {
-  const calls: StubCalls = { createInputs: [], listInputs: [], tokenRequests: 0 };
+  const calls: StubCalls = { createInputs: [], listInputs: [], tokenRequests: 0, listCalendarsCalls: 0, getColorsCalls: 0 };
   const deps: GoogleCalendarDeps = {
     getAccessToken: async () => {
       calls.tokenRequests += 1;
@@ -37,6 +62,14 @@ const stubDeps = (): { deps: GoogleCalendarDeps; calls: StubCalls } => {
     listEvents: async (_token, input = {}) => {
       calls.listInputs.push(input);
       return [sampleEvent];
+    },
+    listCalendars: async () => {
+      calls.listCalendarsCalls += 1;
+      return [sampleCalendar];
+    },
+    getColors: async () => {
+      calls.getColorsCalls += 1;
+      return sampleColors;
     },
   };
   return { deps, calls };
@@ -98,6 +131,30 @@ describe("createGoogleCalendarCreateEvent", () => {
     await expect(Promise.resolve(createGoogleCalendarCreateEvent(deps)({}))).rejects.toThrow();
     expect(calls.tokenRequests).toBe(0);
   });
+
+  it("passes calendarId and colorId through when given (trimmed)", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarCreateEvent(deps)({ ...validParams, calendarId: "  team@group.calendar.google.com  ", colorId: "5" });
+    expect(calls.createInputs[0]?.calendarId).toBe("team@group.calendar.google.com");
+    expect(calls.createInputs[0]?.colorId).toBe("5");
+  });
+
+  it("leaves calendarId and colorId undefined when omitted", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarCreateEvent(deps)({ ...validParams });
+    expect(calls.createInputs[0]?.calendarId).toBeUndefined();
+    expect(calls.createInputs[0]?.colorId).toBeUndefined();
+  });
+
+  it.each([
+    ["a blank calendarId", "calendarId", "   "],
+    ["a non-string colorId", "colorId", 5],
+  ])("rejects %s", async (_label, key, given) => {
+    const { deps } = stubDeps();
+    await expect(Promise.resolve(createGoogleCalendarCreateEvent(deps)({ ...validParams, [key]: given }))).rejects.toThrow(
+      new RegExp(`${key} must be a non-empty string`),
+    );
+  });
 });
 
 describe("createGoogleCalendarListEvents", () => {
@@ -139,5 +196,32 @@ describe("createGoogleCalendarListEvents", () => {
     const params: JsonObject = given === undefined ? {} : { maxResults: given };
     await createGoogleCalendarListEvents(deps)(params);
     expect(calls.listInputs[0]?.maxResults).toBe(expected);
+  });
+
+  it("passes calendarId through (default primary when omitted)", async () => {
+    const { deps, calls } = stubDeps();
+    await createGoogleCalendarListEvents(deps)({ calendarId: "team@group.calendar.google.com" });
+    expect(calls.listInputs[0]?.calendarId).toBe("team@group.calendar.google.com");
+    await createGoogleCalendarListEvents(deps)({});
+    expect(calls.listInputs[1]?.calendarId).toBeUndefined();
+  });
+});
+
+describe("createGoogleCalendarListCalendars", () => {
+  it("returns the user's calendars under { calendars }", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarListCalendars(deps)({});
+    expect(result).toEqual({ calendars: [sampleCalendar] });
+    expect(calls.listCalendarsCalls).toBe(1);
+    expect(calls.tokenRequests).toBe(1);
+  });
+});
+
+describe("createGoogleCalendarColors", () => {
+  it("returns the event/calendar colour palettes under { colors }", async () => {
+    const { deps, calls } = stubDeps();
+    const result = await createGoogleCalendarColors(deps)({});
+    expect(result).toEqual({ colors: sampleColors });
+    expect(calls.getColorsCalls).toBe(1);
   });
 });

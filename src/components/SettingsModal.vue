@@ -169,11 +169,13 @@ const googleStatusText = computed(() => {
   return googleStatus.value.linked ? "Linked" : "Not linked";
 });
 
-// Consent can't start without an OAuth client secret on disk, and the two bad
-// states need different fixes, so they're reported separately.
+// Broker (GCP settings-free link) removes the client secret requirement. When a broker is available,
+// consent can flow through it; otherwise, a Desktop client's secret on disk is needed.
 const googleSecretHint = computed(() => {
+  if (googleStatus.value?.brokerAvailable) return "";
   const presence = googleStatus.value?.clientSecret;
-  if (presence === "missing") return "No OAuth client secret found in ~/.secrets. Add a Desktop client's client_secret_*.json there to enable sign-in.";
+  if (presence === "missing")
+    return "No OAuth client secret found in ~/.secrets. Add a Desktop client's client_secret_*.json there to enable sign-in, or use the GCP-settings-free broker link if available.";
   if (presence === "ambiguous") return "Multiple client_secret_*.json files in ~/.secrets — keep exactly one.";
   return "";
 });
@@ -325,7 +327,7 @@ onUnmounted(() => {
           v-if="!googleStatus?.linked"
           class="btn"
           type="button"
-          :disabled="googleBusy || googleStatus?.pending || googleStatus?.clientSecret !== 'found'"
+          :disabled="googleBusy || googleStatus?.pending || (googleStatus?.clientSecret !== 'found' && !googleStatus?.brokerAvailable)"
           @click="connectGoogle"
         >
           Sign in with Google

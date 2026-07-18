@@ -1,0 +1,154 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { mount, flushPromises } from "@vue/test-utils";
+import SettingsModal from "../../../src/components/SettingsModal.vue";
+
+const mountModal = (props: Record<string, unknown> = {}) => mount(SettingsModal, { props });
+
+function clickBtn(w: ReturnType<typeof mount>, match: (text: string) => boolean) {
+  const btn = w.findAll(".btn").find((b) => match(b.text()));
+  if (!btn) throw new Error("button not found");
+  return btn.trigger("click");
+}
+
+describe("SettingsModal", () => {
+  it("no longer renders the directory-presets editor (presets are auto-managed)", () => {
+    const w = mountModal();
+    expect(w.find(".label-field").exists()).toBe(false);
+    expect(w.find(".path-field").exists()).toBe(false);
+    expect(w.findAll(".row")).toHaveLength(0);
+    expect(w.text()).not.toContain("Directory presets");
+  });
+
+  it("emits close on the Close button", async () => {
+    const w = mountModal();
+    await clickBtn(w, (t) => t === "Close");
+    expect(w.emitted("close")).toBeTruthy();
+  });
+
+  it("emits close on Escape", async () => {
+    const w = mountModal();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    expect(w.emitted("close")).toBeTruthy();
+    w.unmount();
+  });
+
+  it("shows the configured custom sound and emits update-sound on edit / clear", async () => {
+    const w = mountModal({ soundFile: "/snd/alert.wav" });
+    const field = w.find(".sound-field");
+    expect((field.element as HTMLInputElement).value).toBe("/snd/alert.wav");
+
+    await field.setValue("  /snd/new.mp3  ");
+    await field.trigger("change");
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBe("/snd/new.mp3"); // trimmed
+
+    await clickBtn(w, (t) => t.includes("chime"));
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBeNull(); // back to the chime
+  });
+
+  it("reflects pushEnabled and emits update-push-enabled on toggle", async () => {
+    const w = mountModal({ pushEnabled: true });
+    const box = w.find<HTMLInputElement>(".push-row input");
+    expect(box.element.checked).toBe(true);
+    await box.setValue(false);
+    expect(w.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(false);
+
+    // Defaults to unchecked when the prop is unset, and emits true when toggled on.
+    const w2 = mountModal({});
+    const box2 = w2.find<HTMLInputElement>(".push-row input");
+    expect(box2.element.checked).toBe(false);
+    await box2.setValue(true);
+    expect(w2.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(true);
+  });
+
+  it("Browse fills the sound path from the OS file picker and applies it", async () => {
+    globalThis.fetch = (async () => ({ ok: true, json: async () => ({ paths: ["/picked/sound.ogg"] }) })) as unknown as typeof fetch;
+    const w = mountModal({ soundFile: null });
+    await clickBtn(w, (t) => t.includes("Browse"));
+    await Promise.resolve();
+    expect((w.find(".sound-field").element as HTMLInputElement).value).toBe("/picked/sound.ogg");
+    expect(w.emitted("update-sound")?.at(-1)?.[0]).toBe("/picked/sound.ogg");
+  });
+
+  it("theme picker honors the radiogroup keyboard contract (arrows + roving tabindex)", async () => {
+    const w = mountModal();
+    const cards = () => w.findAll(".theme-card");
+    const n = cards().length;
+    expect(n).toBeGreaterThanOrEqual(2);
+    const checked = () => cards().findIndex((c) => c.attributes("aria-checked") === "true");
+
+    const start = checked();
+    // roving tabindex: only the checked radio is tabbable
+    expect(cards()[start].attributes("tabindex")).toBe("0");
+    expect(cards()[(start + 1) % n].attributes("tabindex")).toBe("-1");
+
+    await cards()[start].trigger("keydown", { key: "ArrowRight" });
+    expect(checked()).toBe((start + 1) % n); // advances, wrapping at the end
+
+    await cards()[checked()].trigger("keydown", { key: "ArrowLeft" });
+    expect(checked()).toBe(start); // back to where we started
+  });
+
+  describe("Google account link (broker support)", () => {
+    beforeEach(() => {
+      vi.stubGlobal("fetch", vi.fn());
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("disables sign-in when client secret is missing and broker is unavailable", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: false, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
+      expect(signInBtn?.attributes("disabled")).toBe("");
+    });
+
+    it("enables sign-in when client secret is missing but broker is available", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: true, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
+      expect(signInBtn?.attributes("disabled")).toBeUndefined();
+    });
+
+    it("hides the client secret warning when broker is available", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: true, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const warning = w.find(".google-warn");
+      expect(warning.exists()).toBe(false);
+    });
+
+    it("shows the client secret warning when broker is unavailable and secret is missing", async () => {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ linked: false, pending: false, clientSecret: "missing", brokerAvailable: false, lastError: null }),
+      }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      const w = mountModal();
+      await flushPromises();
+      const warning = w.find(".google-warn");
+      expect(warning.exists()).toBe(true);
+      expect(warning.text()).toContain("client_secret");
+    });
+  });
+});

@@ -9,6 +9,7 @@ export interface GoogleStatus {
   linked: boolean;
   pending: boolean;
   clientSecret: ClientSecretPresence;
+  brokerAvailable: boolean;
   lastError: string | null;
 }
 
@@ -26,6 +27,7 @@ function parseStatus(data: unknown): GoogleStatus | null {
     linked: data.linked === true,
     pending: data.pending === true,
     clientSecret: isPresence(data.clientSecret) ? data.clientSecret : "found",
+    brokerAvailable: data.brokerAvailable === true,
     lastError: typeof data.lastError === "string" ? data.lastError : null,
   };
 }
