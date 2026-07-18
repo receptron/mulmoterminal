@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from "vitest";
 
-import { derivePrPhase, parsePrList, selectCurrentPr, phaseForRepoBranch, clearPrPhaseCache, type ParsedPr } from "../../../server/git/prPhase.js";
+import { derivePrPhase, parsePrList, phaseForRepoBranch, clearPrPhaseCache, type ParsedPr } from "../../../server/git/prPhase.js";
 
 const pr = (over: Partial<ParsedPr> = {}): ParsedPr => ({ state: "OPEN", isDraft: false, reviewDecision: "", ci: "passing", url: null, ...over });
 
@@ -80,78 +80,66 @@ describe("parsePrList", () => {
   });
 });
 
-describe("selectCurrentPr", () => {
-  it("returns null for an empty list", () => {
-    expect(selectCurrentPr([])).toBeNull();
-  });
-
-  // Branch reuse: an OPEN PR must win over a stale merged/closed one for the same head,
-  // even when the open PR isn't the newest entry gh returns.
-  it("prefers the open PR over historical merged/closed PRs", () => {
-    expect(selectCurrentPr([pr({ state: "MERGED", url: "old" }), pr({ state: "OPEN", url: "new" })])?.url).toBe("new");
-  });
-
-  it("falls back to the newest (first) entry when none is open", () => {
-    expect(selectCurrentPr([pr({ state: "CLOSED", url: "c" }), pr({ state: "MERGED", url: "m" })])?.url).toBe("c");
-  });
-});
-
 describe("phaseForRepoBranch", () => {
   beforeEach(() => clearPrPhaseCache());
 
-  const stubGh =
-    (stdout: string, ok = true) =>
-    async () => ({ ok, stdout, stderr: "" });
-
-  const countingGh = (stdout: string) => {
+  // gh stub keyed by the `--state` in the args (open-first, then all).
+  const ghByState = (byState: { open?: string; all?: string }, ok = true) => {
     let calls = 0;
-    const fn = async () => {
+    const states: string[] = [];
+    const fn = async (args: string[]) => {
       calls += 1;
-      return { ok: true, stdout, stderr: "" };
+      const state = args[args.indexOf("--state") + 1];
+      states.push(state);
+      return { ok, stdout: (state === "open" ? byState.open : byState.all) ?? "[]", stderr: "" };
     };
-    return { fn, calls: () => calls };
+    return { fn, calls: () => calls, states: () => states };
   };
 
-  it("derives the phase and url from gh output", async () => {
-    const stdout = JSON.stringify([{ state: "OPEN", isDraft: false, statusCheckRollup: [{ conclusion: "SUCCESS" }], url: "https://github.com/o/r/pull/1" }]);
-    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: stubGh(stdout) });
-    expect(result).toEqual({ phase: "ready", url: "https://github.com/o/r/pull/1" });
-  });
+  const openPr = JSON.stringify([{ state: "OPEN", isDraft: false, statusCheckRollup: [{ conclusion: "SUCCESS" }], url: "https://github.com/o/r/pull/2" }]);
 
-  it("queries --state all so a merged branch reads as merged, not none", async () => {
-    let args: string[] = [];
-    const runGh = async (a: string[]) => {
-      args = a;
-      return { ok: true, stdout: JSON.stringify([{ state: "MERGED", url: "u" }]), stderr: "" };
-    };
-    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh });
-    expect(result.phase).toBe("merged");
-    expect(args).toContain("all");
-  });
-
-  it("picks the open PR over a stale merged one for a reused head branch", async () => {
-    const stdout = JSON.stringify([
-      { state: "MERGED", url: "https://github.com/o/r/pull/1" },
-      { state: "OPEN", isDraft: false, statusCheckRollup: [{ conclusion: "SUCCESS" }], url: "https://github.com/o/r/pull/2" },
-    ]);
-    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: stubGh(stdout) });
+  it("derives phase and url from the open PR (one query, no fallback)", async () => {
+    const gh = ghByState({ open: openPr });
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn });
     expect(result).toEqual({ phase: "ready", url: "https://github.com/o/r/pull/2" });
+    expect(gh.states()).toEqual(["open"]); // never fell through to --state all
+  });
+
+  it("falls back to --state all for a merged branch (no open PR)", async () => {
+    const gh = ghByState({ open: "[]", all: JSON.stringify([{ state: "MERGED", url: "u" }]) });
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn });
+    expect(result).toEqual({ phase: "merged", url: "u" });
+    expect(gh.states()).toEqual(["open", "all"]);
+  });
+
+  // Codex iter-1/2: an open PR must never be masked by a stale merged/closed same-head PR,
+  // even with many historical PRs — querying --state open first guarantees it.
+  it("returns the open PR without consulting merged history for a reused head branch", async () => {
+    const gh = ghByState({ open: openPr, all: JSON.stringify([{ state: "MERGED", url: "old" }]) });
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn });
+    expect(result.url).toBe("https://github.com/o/r/pull/2");
+    expect(gh.states()).toEqual(["open"]);
   });
 
   it("resolves to none when gh fails", async () => {
-    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: stubGh("", false) });
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: ghByState({}, false).fn });
     expect(result).toEqual({ phase: "none", url: null });
   });
 
-  it("caches within the TTL (one gh call for two lookups)", async () => {
-    const gh = countingGh(JSON.stringify([{ state: "OPEN", statusCheckRollup: [], url: "u" }]));
+  it("resolves to none when there is no PR at all", async () => {
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: ghByState({ open: "[]", all: "[]" }).fn });
+    expect(result).toEqual({ phase: "none", url: null });
+  });
+
+  it("caches within the TTL (one lookup's queries serve a second lookup)", async () => {
+    const gh = ghByState({ open: openPr });
     await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn, now: () => 1000, ttlMs: 30_000 });
     await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn, now: () => 1000, ttlMs: 30_000 });
     expect(gh.calls()).toBe(1);
   });
 
   it("re-queries once the TTL has elapsed", async () => {
-    const gh = countingGh(JSON.stringify([{ state: "OPEN", statusCheckRollup: [], url: "u" }]));
+    const gh = ghByState({ open: openPr });
     let t = 1000;
     await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn, now: () => t, ttlMs: 30_000 });
     t = 1000 + 31_000;

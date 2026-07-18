@@ -43,14 +43,6 @@ export function parsePrList(stdout: string): ParsedPr[] {
   return Array.isArray(arr) ? arr.filter(isRecord).map(toParsedPr) : [];
 }
 
-// The PR that represents the branch's CURRENT state: an OPEN PR always wins over a
-// historical merged/closed one (a head branch can be reused, so `--state all` may also
-// list stale PRs). With no open PR, the newest entry (gh lists newest-first) gives the
-// merged/closed result.
-export function selectCurrentPr(prs: ParsedPr[]): ParsedPr | null {
-  return prs.find((p) => p.state.toUpperCase() === "OPEN") ?? prs[0] ?? null;
-}
-
 // Pure lifecycle mapping. For an OPEN PR the order encodes what needs attention first:
 // still a draft → CI failing → review asked for changes → CI still running → otherwise
 // green and unblocked (ready to merge).
@@ -72,10 +64,7 @@ export interface PrPhaseResult {
 }
 
 const CACHE_TTL_MS = 30_000;
-// `--state all` (with an open-first selection) so a just-merged branch reads as `merged`,
-// not `none`; the limit lets an open PR outrank stale same-head PRs from branch reuse.
 const GH_FIELDS = "state,isDraft,reviewDecision,statusCheckRollup,url";
-const GH_LIMIT = "10";
 interface CacheEntry {
   result: PrPhaseResult;
   at: number;
@@ -88,7 +77,19 @@ export interface PrPhaseDeps {
   ttlMs?: number;
 }
 
-// The PR phase for `branch` in `repo`. Never throws — a gh failure resolves to `none`.
+// The newest PR for `branch` in `repo` in `state`, or null. Never throws.
+async function listPr(run: typeof runGh, repo: string, branch: string, state: "open" | "all"): Promise<ParsedPr | null> {
+  try {
+    const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", state, "--json", GH_FIELDS, "--limit", "1"]);
+    return res.ok ? (parsePrList(res.stdout)[0] ?? null) : null;
+  } catch {
+    return null;
+  }
+}
+
+// The PR phase for `branch`. An OPEN PR (there's at most one per head branch) is the current
+// state, queried first so it can't be masked by stale merged/closed PRs from a reused head —
+// only when there's none do we look at `--state all` for the merged/closed result.
 export async function phaseForRepoBranch(repo: string, branch: string, deps: PrPhaseDeps = {}): Promise<PrPhaseResult> {
   const run = deps.runGh ?? runGh;
   const now = deps.now ?? Date.now;
@@ -96,16 +97,8 @@ export async function phaseForRepoBranch(repo: string, branch: string, deps: PrP
   const key = `${repo}:${branch}`;
   const hit = cache.get(key);
   if (hit && now() - hit.at < ttlMs) return hit.result;
-  let result: PrPhaseResult = { phase: "none", url: null };
-  try {
-    const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", "all", "--json", GH_FIELDS, "--limit", GH_LIMIT]);
-    if (res.ok) {
-      const pr = selectCurrentPr(parsePrList(res.stdout));
-      result = { phase: derivePrPhase(pr), url: pr?.url ?? null };
-    }
-  } catch {
-    result = { phase: "none", url: null };
-  }
+  const pr = (await listPr(run, repo, branch, "open")) ?? (await listPr(run, repo, branch, "all"));
+  const result: PrPhaseResult = { phase: derivePrPhase(pr), url: pr?.url ?? null };
   cache.set(key, { result, at: now() });
   return result;
 }
