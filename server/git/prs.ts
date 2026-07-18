@@ -3,16 +3,12 @@
 // (missing, no access, gh not installed) yields a per-repo error instead of failing
 // the whole view. The pure normalize/rollup helpers are unit-tested without gh.
 import { runGh } from "./gh";
+import { isRecord, normalizeGhItemBase, type GhItemBase } from "./ghItem";
 
 export type CiState = "passing" | "failing" | "pending" | "none";
 
-export interface PrItem {
-  number: number;
-  title: string;
-  author: string;
-  updatedAt: string;
+export interface PrItem extends GhItemBase {
   isDraft: boolean;
-  url: string;
   review: string | null; // gh reviewDecision (APPROVED / CHANGES_REQUESTED / REVIEW_REQUIRED / null)
   ci: CiState;
 }
@@ -51,19 +47,15 @@ export function rollupCiState(checks: unknown): CiState {
 }
 
 export function normalizePr(raw: unknown): PrItem | null {
-  if (!raw || typeof raw !== "object") return null;
-  const o = raw as Record<string, unknown>;
-  if (typeof o.number !== "number" || typeof o.url !== "string") return null;
-  const authorObj = o.author && typeof o.author === "object" ? (o.author as Record<string, unknown>) : null;
+  const base = normalizeGhItemBase(raw);
+  // isRecord(raw) is implied by a non-null base; it re-narrows raw for the extra fields
+  // without an `as` cast.
+  if (!base || !isRecord(raw)) return null;
   return {
-    number: o.number,
-    title: typeof o.title === "string" ? o.title : "",
-    author: authorObj && typeof authorObj.login === "string" ? authorObj.login : "",
-    updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : "",
-    isDraft: o.isDraft === true,
-    url: o.url,
-    review: typeof o.reviewDecision === "string" && o.reviewDecision ? o.reviewDecision : null,
-    ci: rollupCiState(o.statusCheckRollup),
+    ...base,
+    isDraft: raw.isDraft === true,
+    review: typeof raw.reviewDecision === "string" && raw.reviewDecision ? raw.reviewDecision : null,
+    ci: rollupCiState(raw.statusCheckRollup),
   };
 }
 
