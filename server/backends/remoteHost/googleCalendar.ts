@@ -10,17 +10,22 @@
 import {
   createCalendarEvent,
   DEFAULT_LIST_MAX_RESULTS,
+  getCalendarColors,
   getGoogleAccessToken,
   isIsoDateTimeWithOffset,
   listCalendarEvents,
+  listCalendars,
   MAX_LIST_RESULTS,
+  type CalendarColorEntry,
 } from "@mulmoclaude/core/google";
-import type { CommandHandler, JsonObject } from "@mulmoclaude/core/remote-host";
+import type { CommandHandler, JsonObject, JsonValue } from "@mulmoclaude/core/remote-host";
 
 export interface GoogleCalendarDeps {
   getAccessToken: typeof getGoogleAccessToken;
   createEvent: typeof createCalendarEvent;
   listEvents: typeof listCalendarEvents;
+  listCalendars: typeof listCalendars;
+  getColors: typeof getCalendarColors;
 }
 
 const MIN_LIST_RESULTS = 1;
@@ -31,6 +36,23 @@ const requiredString = (params: JsonObject, key: string): string => {
   if (typeof value !== "string" || value.trim() === "") throw new Error(`${key} must be a non-empty string`);
   return value;
 };
+
+// Optional string param, trimmed so whitespace can't reach the Google API (matches the
+// plugin's Zod .trim()). A present-but-non-string / blank value is a hard error, not a
+// silent fallback — an intended calendarId/colorId that's malformed should surface.
+const optionalString = (params: JsonObject, key: string): string | undefined => {
+  const value = params[key];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string" || value.trim() === "") throw new Error(`${key} must be a non-empty string`);
+  return value.trim();
+};
+
+// Spread rebuilds an anonymous object type — the named CalendarColorEntry interface (no
+// index signature) can't satisfy the channel's structural JsonValue directly.
+const toColorMapJson = (map: Record<string, CalendarColorEntry>): JsonObject =>
+  Object.fromEntries(
+    Object.entries(map).map(([colorId, entry]): [string, JsonValue] => [colorId, { background: entry.background, foreground: entry.foreground }]),
+  );
 
 // Calendar rejects date-only or offset-less values with an opaque 400, so the
 // offset is enforced here where the remote still gets an actionable message.
@@ -59,6 +81,8 @@ export const createGoogleCalendarCreateEvent =
       startDateTime: asDateTime(requiredString(params, "start"), "start"),
       endDateTime: asDateTime(requiredString(params, "end"), "end"),
       description: typeof params.description === "string" ? params.description : undefined,
+      calendarId: optionalString(params, "calendarId"),
+      colorId: optionalString(params, "colorId"),
     };
     const event = await deps.createEvent(await deps.getAccessToken(), input);
     // Spread rebuilds an anonymous object type — CalendarEventSummary has no
@@ -71,10 +95,37 @@ export const createGoogleCalendarListEvents =
   async (params: JsonObject) => {
     const timeMin = optionalDateTime(params, "timeMin");
     const maxResults = clampMaxResults(params.maxResults);
-    const events = await deps.listEvents(await deps.getAccessToken(), { timeMin, maxResults });
+    const calendarId = optionalString(params, "calendarId");
+    const events = await deps.listEvents(await deps.getAccessToken(), { timeMin, maxResults, calendarId });
     return { events: events.map((event) => ({ ...event })) };
   };
 
-const liveDeps: GoogleCalendarDeps = { getAccessToken: getGoogleAccessToken, createEvent: createCalendarEvent, listEvents: listCalendarEvents };
+// The calendars the user has added/subscribed to (primary + secondary + shared). Needs the
+// calendar-list read scope, which existing links lack until the user re-authorizes.
+export const createGoogleCalendarListCalendars =
+  (deps: GoogleCalendarDeps): CommandHandler =>
+  async () => {
+    const calendars = await deps.listCalendars(await deps.getAccessToken());
+    return { calendars: calendars.map((calendar) => ({ ...calendar })) };
+  };
+
+// The event/calendar colour palettes (colorId → hex), so the phone can render the colours
+// an event or calendar references.
+export const createGoogleCalendarColors =
+  (deps: GoogleCalendarDeps): CommandHandler =>
+  async () => {
+    const colors = await deps.getColors(await deps.getAccessToken());
+    return { colors: { event: toColorMapJson(colors.event), calendar: toColorMapJson(colors.calendar) } };
+  };
+
+const liveDeps: GoogleCalendarDeps = {
+  getAccessToken: getGoogleAccessToken,
+  createEvent: createCalendarEvent,
+  listEvents: listCalendarEvents,
+  listCalendars,
+  getColors: getCalendarColors,
+};
 export const googleCalendarCreateEvent = createGoogleCalendarCreateEvent(liveDeps);
 export const googleCalendarListEvents = createGoogleCalendarListEvents(liveDeps);
+export const googleCalendarListCalendars = createGoogleCalendarListCalendars(liveDeps);
+export const googleCalendarColors = createGoogleCalendarColors(liveDeps);

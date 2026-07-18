@@ -47,6 +47,8 @@ describe("createRemoteHostHandlers", () => {
       "mutateRemoteViewItem",
       "google.calendar.createEvent",
       "google.calendar.listEvents",
+      "google.calendar.listCalendars",
+      "google.calendar.colors",
     ]) {
       expect(typeof handlers[name]).toBe("function");
     }
