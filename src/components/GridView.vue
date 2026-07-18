@@ -35,6 +35,7 @@ import {
   type Cell,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
+import { isPrPhase, type PrPhase } from "./rosterPhase";
 import { useGridActivity } from "../composables/useGridActivity";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
@@ -131,6 +132,29 @@ async function seedMeta(id: string, cwd: string | null) {
 }
 const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
 watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
+
+// The PR workflow phase per directory (GET /api/pr-phase), shown in the roster beside the
+// agent status. Keyed by cwd, not session — the phase is the branch's, so cells sharing a dir
+// share one fetch. Best-effort and cached server-side, so the roster poll can re-fetch cheaply.
+const phaseByCwd = reactive(new Map<string, PrPhase>());
+async function seedPhase(cwd: string) {
+  try {
+    const res = await fetch(`/api/pr-phase?cwd=${encodeURIComponent(cwd)}`);
+    if (!res.ok) return;
+    const d = (await res.json()) as { phase?: unknown };
+    if (isPrPhase(d.phase)) phaseByCwd.set(cwd, d.phase);
+  } catch {
+    // best-effort — the next poll retries
+  }
+}
+const refreshAllPhases = () => {
+  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  cwds.forEach((cwd) => void seedPhase(cwd));
+};
+const refreshRoster = () => {
+  refreshAllMeta();
+  refreshAllPhases();
+};
 const ROSTER_POLL_MS = 4000;
 let rosterTimer: ReturnType<typeof setInterval> | null = null;
 // The roster is the sole consumer of this poll, and it's shown only while zoomed AND in list
@@ -139,8 +163,8 @@ const listModeOn = ref(true);
 const rosterVisible = () => expandedUid.value !== null && listModeOn.value;
 const startPoll = () => {
   if (!rosterVisible() || rosterTimer !== null) return;
-  refreshAllMeta();
-  rosterTimer = setInterval(refreshAllMeta, ROSTER_POLL_MS);
+  refreshRoster();
+  rosterTimer = setInterval(refreshRoster, ROSTER_POLL_MS);
 };
 const stopPoll = () => {
   if (rosterTimer !== null) clearInterval(rosterTimer);
@@ -174,6 +198,7 @@ const listRows = computed(() =>
       prompt: meta?.lastPrompt ?? null,
       response: meta?.lastResponse ?? null,
       fallback: fallbackLabel(c),
+      phase: (c.cwd ? phaseByCwd.get(c.cwd) : undefined) ?? ("none" as PrPhase),
     };
   }),
 );

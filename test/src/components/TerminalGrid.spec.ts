@@ -61,6 +61,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   prompt: null,
   response: null,
   fallback: null,
+  phase: "none",
   ...over,
 });
 const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]) =>
@@ -236,5 +237,20 @@ describe("grid cockpit (list view)", () => {
     const lines = w.findAll(".cockpit-line").map((l) => l.text());
     expect(lines.some((t) => t.includes("summary"))).toBe(false); // no summary line
     expect(lines.some((t) => t.includes("prompt") && t.includes("bash"))).toBe(true); // fallback in the prompt line
+  });
+
+  it("renders a PR-phase badge with the phase label and class", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "ready" })]);
+    await nextTick();
+    const badge = w.find(".cockpit-phase");
+    expect(badge.exists()).toBe(true);
+    expect(badge.text()).toBe("ready");
+    expect(badge.classes()).toContain("ph-ready");
+  });
+
+  it("shows no phase badge for a cell with no PR yet (phase none)", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "none" })]);
+    await nextTick();
+    expect(w.find(".cockpit-phase").exists()).toBe(false);
   });
 });

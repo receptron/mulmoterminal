@@ -9,6 +9,7 @@ import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
+import { phaseDisplay, type PrPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 
@@ -29,6 +30,7 @@ export interface CockpitRow {
   prompt: string | null; // current user prompt
   response: string | null; // tail of the agent's latest reply
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
+  phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
 }
 const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
 const props = defineProps<{
@@ -173,6 +175,9 @@ watch(
         <span class="cockpit-head">
           <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
           <span class="cockpit-badge" :class="`st-${row.status}`">{{ STATUS_WORD[row.status] }}</span>
+          <span v-if="phaseDisplay(row.phase)" class="cockpit-phase" :class="`ph-${row.phase}`" :title="phaseDisplay(row.phase)?.title">
+            {{ phaseDisplay(row.phase)?.label }}
+          </span>
           <span v-if="row.agent === 'codex'" class="cockpit-agent">codex</span>
           <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
         </span>
@@ -424,6 +429,34 @@ watch(
 .cockpit-badge.st-blocked {
   background: #f59e0b;
   color: #1f1300;
+}
+/* The PR workflow phase — an OUTLINED pill, so it reads as a distinct signal from the
+   filled agent-status badge next to it. Coloured by lifecycle: blue in-progress, red
+   failing, amber needs-attention, green ready, violet merged, grey draft/closed. */
+.cockpit-phase {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  color: #9aa4b2;
+  white-space: nowrap;
+}
+.cockpit-phase.ph-ci-running {
+  color: #4a9eff;
+}
+.cockpit-phase.ph-ci-failing {
+  color: #f87171;
+}
+.cockpit-phase.ph-changes-requested {
+  color: #f59e0b;
+}
+.cockpit-phase.ph-ready {
+  color: #22c55e;
+}
+.cockpit-phase.ph-merged {
+  color: #a78bfa;
 }
 .cockpit-agent {
   flex: 0 0 auto;
