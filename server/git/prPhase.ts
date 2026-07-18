@@ -19,26 +19,36 @@ export interface ParsedPr {
   isDraft: boolean;
   reviewDecision: string; // APPROVED | CHANGES_REQUESTED | REVIEW_REQUIRED | ""
   ci: CiState; // passing | failing | pending | none
+  url: string | null;
 }
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
-// The first PR in `gh pr list --json ...` output, or null (no PR / malformed).
-export function parsePrView(stdout: string): ParsedPr | null {
+const toParsedPr = (o: Record<string, unknown>): ParsedPr => ({
+  state: typeof o.state === "string" ? o.state : "",
+  isDraft: o.isDraft === true,
+  reviewDecision: typeof o.reviewDecision === "string" ? o.reviewDecision : "",
+  ci: rollupCiState(o.statusCheckRollup),
+  url: typeof o.url === "string" ? o.url : null,
+});
+
+// Every PR in `gh pr list --json ...` output (empty on malformed / no PRs).
+export function parsePrList(stdout: string): ParsedPr[] {
   let arr: unknown;
   try {
     arr = JSON.parse(stdout);
   } catch {
-    return null;
+    return [];
   }
-  if (!Array.isArray(arr) || arr.length === 0 || !isRecord(arr[0])) return null;
-  const o = arr[0];
-  return {
-    state: typeof o.state === "string" ? o.state : "",
-    isDraft: o.isDraft === true,
-    reviewDecision: typeof o.reviewDecision === "string" ? o.reviewDecision : "",
-    ci: rollupCiState(o.statusCheckRollup),
-  };
+  return Array.isArray(arr) ? arr.filter(isRecord).map(toParsedPr) : [];
+}
+
+// The PR that represents the branch's CURRENT state: an OPEN PR always wins over a
+// historical merged/closed one (a head branch can be reused, so `--state all` may also
+// list stale PRs). With no open PR, the newest entry (gh lists newest-first) gives the
+// merged/closed result.
+export function selectCurrentPr(prs: ParsedPr[]): ParsedPr | null {
+  return prs.find((p) => p.state.toUpperCase() === "OPEN") ?? prs[0] ?? null;
 }
 
 // Pure lifecycle mapping. For an OPEN PR the order encodes what needs attention first:
@@ -62,7 +72,10 @@ export interface PrPhaseResult {
 }
 
 const CACHE_TTL_MS = 30_000;
+// `--state all` (with an open-first selection) so a just-merged branch reads as `merged`,
+// not `none`; the limit lets an open PR outrank stale same-head PRs from branch reuse.
 const GH_FIELDS = "state,isDraft,reviewDecision,statusCheckRollup,url";
+const GH_LIMIT = "10";
 interface CacheEntry {
   result: PrPhaseResult;
   at: number;
@@ -75,18 +88,7 @@ export interface PrPhaseDeps {
   ttlMs?: number;
 }
 
-const urlOf = (stdout: string): string | null => {
-  try {
-    const arr: unknown = JSON.parse(stdout);
-    if (Array.isArray(arr) && isRecord(arr[0]) && typeof arr[0].url === "string") return arr[0].url;
-  } catch {
-    // malformed → no url
-  }
-  return null;
-};
-
-// The PR phase for `branch` in `repo`. Includes MERGED/CLOSED (`--state all`) so a just-merged
-// branch reads as `merged`, not `none`. Never throws — a gh failure resolves to `none`.
+// The PR phase for `branch` in `repo`. Never throws — a gh failure resolves to `none`.
 export async function phaseForRepoBranch(repo: string, branch: string, deps: PrPhaseDeps = {}): Promise<PrPhaseResult> {
   const run = deps.runGh ?? runGh;
   const now = deps.now ?? Date.now;
@@ -96,8 +98,11 @@ export async function phaseForRepoBranch(repo: string, branch: string, deps: PrP
   if (hit && now() - hit.at < ttlMs) return hit.result;
   let result: PrPhaseResult = { phase: "none", url: null };
   try {
-    const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", "all", "--json", GH_FIELDS, "--limit", "1"]);
-    if (res.ok) result = { phase: derivePrPhase(parsePrView(res.stdout)), url: urlOf(res.stdout) };
+    const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", "all", "--json", GH_FIELDS, "--limit", GH_LIMIT]);
+    if (res.ok) {
+      const pr = selectCurrentPr(parsePrList(res.stdout));
+      result = { phase: derivePrPhase(pr), url: pr?.url ?? null };
+    }
   } catch {
     result = { phase: "none", url: null };
   }

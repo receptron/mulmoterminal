@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach } from "vitest";
 
-import { derivePrPhase, parsePrView, phaseForRepoBranch, clearPrPhaseCache, type ParsedPr } from "../../../server/git/prPhase.js";
+import { derivePrPhase, parsePrList, selectCurrentPr, phaseForRepoBranch, clearPrPhaseCache, type ParsedPr } from "../../../server/git/prPhase.js";
 
-const pr = (over: Partial<ParsedPr> = {}): ParsedPr => ({ state: "OPEN", isDraft: false, reviewDecision: "", ci: "passing", ...over });
+const pr = (over: Partial<ParsedPr> = {}): ParsedPr => ({ state: "OPEN", isDraft: false, reviewDecision: "", ci: "passing", url: null, ...over });
 
 describe("derivePrPhase", () => {
   it("returns none when there is no PR", () => {
@@ -52,31 +52,47 @@ describe("derivePrPhase", () => {
   });
 });
 
-describe("parsePrView", () => {
-  it("parses the first PR and rolls up its CI", () => {
-    const stdout = JSON.stringify([{ state: "OPEN", isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [{ conclusion: "SUCCESS" }] }]);
-    expect(parsePrView(stdout)).toEqual({ state: "OPEN", isDraft: false, reviewDecision: "APPROVED", ci: "passing" });
+describe("parsePrList", () => {
+  it("parses each PR and rolls up its CI", () => {
+    const stdout = JSON.stringify([{ state: "OPEN", isDraft: false, reviewDecision: "APPROVED", statusCheckRollup: [{ conclusion: "SUCCESS" }], url: "u1" }]);
+    expect(parsePrList(stdout)).toEqual([{ state: "OPEN", isDraft: false, reviewDecision: "APPROVED", ci: "passing", url: "u1" }]);
   });
 
   it("rolls a mixed check set with a failure to failing", () => {
     const stdout = JSON.stringify([{ state: "OPEN", statusCheckRollup: [{ conclusion: "SUCCESS" }, { conclusion: "FAILURE" }] }]);
-    expect(parsePrView(stdout)?.ci).toBe("failing");
+    expect(parsePrList(stdout)[0]?.ci).toBe("failing");
   });
 
   it("returns none-CI for an empty rollup", () => {
-    expect(parsePrView(JSON.stringify([{ state: "OPEN", statusCheckRollup: [] }]))?.ci).toBe("none");
+    expect(parsePrList(JSON.stringify([{ state: "OPEN", statusCheckRollup: [] }]))[0]?.ci).toBe("none");
   });
 
   it.each([
     ["an empty array", "[]"],
     ["malformed JSON", "{ not json"],
     ["a non-array", '{"state":"OPEN"}'],
-  ])("returns null for %s", (_label, stdout) => {
-    expect(parsePrView(stdout)).toBeNull();
+  ])("returns an empty list for %s", (_label, stdout) => {
+    expect(parsePrList(stdout)).toEqual([]);
   });
 
-  it("defaults missing string fields", () => {
-    expect(parsePrView(JSON.stringify([{}]))).toEqual({ state: "", isDraft: false, reviewDecision: "", ci: "none" });
+  it("defaults missing fields", () => {
+    expect(parsePrList(JSON.stringify([{}]))).toEqual([{ state: "", isDraft: false, reviewDecision: "", ci: "none", url: null }]);
+  });
+});
+
+describe("selectCurrentPr", () => {
+  it("returns null for an empty list", () => {
+    expect(selectCurrentPr([])).toBeNull();
+  });
+
+  // Branch reuse: an OPEN PR must win over a stale merged/closed one for the same head,
+  // even when the open PR isn't the newest entry gh returns.
+  it("prefers the open PR over historical merged/closed PRs", () => {
+    expect(selectCurrentPr([pr({ state: "MERGED", url: "old" }), pr({ state: "OPEN", url: "new" })])?.url).toBe("new");
+  });
+
+  it("falls back to the newest (first) entry when none is open", () => {
+    expect(selectCurrentPr([pr({ state: "CLOSED", url: "c" }), pr({ state: "MERGED", url: "m" })])?.url).toBe("c");
   });
 });
 
@@ -111,6 +127,15 @@ describe("phaseForRepoBranch", () => {
     const result = await phaseForRepoBranch("o/r", "feat/x", { runGh });
     expect(result.phase).toBe("merged");
     expect(args).toContain("all");
+  });
+
+  it("picks the open PR over a stale merged one for a reused head branch", async () => {
+    const stdout = JSON.stringify([
+      { state: "MERGED", url: "https://github.com/o/r/pull/1" },
+      { state: "OPEN", isDraft: false, statusCheckRollup: [{ conclusion: "SUCCESS" }], url: "https://github.com/o/r/pull/2" },
+    ]);
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh: stubGh(stdout) });
+    expect(result).toEqual({ phase: "ready", url: "https://github.com/o/r/pull/2" });
   });
 
   it("resolves to none when gh fails", async () => {
