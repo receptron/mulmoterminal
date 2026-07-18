@@ -38,7 +38,7 @@ describe("mountGoogleRoutes", () => {
     it("reports linked when a refresh token is stored, without leaking it", async () => {
       const res = await request(appWith(deps)).get("/api/google/status");
       expect(res.status).toBe(200);
-      expect(res.body).toEqual({ linked: true, pending: false, clientSecret: "found", lastError: null });
+      expect(res.body).toEqual({ linked: true, pending: false, clientSecret: "found", brokerAvailable: true, lastError: null });
       expect(JSON.stringify(res.body)).not.toContain("secret-refresh-token");
     });
 

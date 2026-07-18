@@ -14,6 +14,7 @@
 // (server/cli-google.ts) covers the setups where it can't — a remote/phone browser.
 import type { Express, Request, Response } from "express";
 import {
+  brokerBaseUrl,
   clientSecretPresence,
   configureGoogleHost,
   googleAuthFlow,
@@ -32,6 +33,7 @@ export interface GoogleStatus {
   linked: boolean;
   pending: boolean;
   clientSecret: ClientSecretPresence;
+  brokerAvailable: boolean;
   lastError: string | null;
 }
 
@@ -66,7 +68,13 @@ const failed = (res: Response, cause: unknown, fallback: string): void => {
 async function readStatus(deps: GoogleRouteDeps): Promise<GoogleStatus> {
   const [tokens, clientSecret] = await Promise.all([deps.loadTokens(), deps.secretPresence()]);
   const flow = deps.authFlow.status();
-  return { linked: Boolean(tokens?.refresh_token), pending: flow.pending, clientSecret, lastError: flow.lastError };
+  return {
+    linked: Boolean(tokens?.refresh_token),
+    pending: flow.pending,
+    clientSecret,
+    brokerAvailable: Boolean(brokerBaseUrl()),
+    lastError: flow.lastError,
+  };
 }
 
 // Same-origin guarded like the other local-action routes (files/pick-file.ts): without
