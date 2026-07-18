@@ -17,7 +17,7 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
-import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
+import { buildHeaderContext, loadHeaderConfig, repoFromWebUrl } from "./config/header-context.js";
 import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config/header-resolve.js";
 import { prUrlForBranch } from "./git/pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
@@ -75,7 +75,8 @@ import {
 } from "./session/transcript.js";
 import { createFileCache, type FileStamp } from "./session/file-cache.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
-import { mountGitRemoteRoute } from "./git/gitRemote.js";
+import { mountGitRemoteRoute, resolveGithubUrl } from "./git/gitRemote.js";
+import { phaseForRepoBranch } from "./git/prPhase.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
 import { mountPickFileRoute } from "./files/pick-file.js";
 import { mountCommandSummaryRoute } from "./session/command-summary.js";
@@ -1619,6 +1620,18 @@ app.get("/api/dir-config", (req, res) => {
 app.get("/api/git-status", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await gitStatus(cwd));
+});
+
+// GRID-ONLY: the workflow phase of a cell's branch — no PR yet / in the review loop / ready
+// to merge / merged (server/git/prPhase.ts). The cockpit roster shows it alongside the agent
+// status. Resolves the branch's repo here (same as the header's PR button); a non-repo dir,
+// detached HEAD, or non-GitHub remote yields `none`. Read-only; the gh call is cached.
+app.get("/api/pr-phase", async (req, res) => {
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const status = await gitStatus(cwd);
+  const repo = status.repo && status.branch ? repoFromWebUrl(await resolveGithubUrl(cwd)) : null;
+  if (!repo || !status.branch) return res.json({ phase: "none", url: null });
+  res.json(await phaseForRepoBranch(repo, status.branch));
 });
 
 // The resolved terminal-header config (buttons + chips) for a session: global config merged with the
