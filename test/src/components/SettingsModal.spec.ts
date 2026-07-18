@@ -106,6 +106,7 @@ describe("SettingsModal", () => {
       const w = mountModal();
       await flushPromises();
       const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
       expect(signInBtn?.attributes("disabled")).toBe("");
     });
 
@@ -119,6 +120,7 @@ describe("SettingsModal", () => {
       const w = mountModal();
       await flushPromises();
       const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      expect(signInBtn).toBeTruthy();
       expect(signInBtn?.attributes("disabled")).toBeUndefined();
     });
 
