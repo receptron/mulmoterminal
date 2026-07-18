@@ -328,15 +328,24 @@ export function timelineFromJsonl(raw: string): TimelineEvent[] {
   return events;
 }
 
-// The last `limit` tool names the agent ran, oldest→newest (for the work-phase classifier).
-// Works on already-parsed records so it shares readSessionSummary's single parse.
-export function recentToolNamesFromParsed(records: Record<string, unknown>[], limit: number): string[] {
-  const names: string[] = [];
+// The tool names the agent ran in the CURRENT turn — since the last real user prompt —
+// oldest→newest, for the work-phase classifier. Scoping to the turn (rather than a fixed
+// last-N window over the whole transcript) is what keeps a prior turn's Edit from leaking
+// into a new turn that's only reading, AND keeps the phase stable within a turn: an edit
+// early in the turn still reads as "implementing" even after many later verification reads.
+// A fresh user prompt resets; tool-result user turns don't (userPromptText is null for them).
+// Reuses readSessionSummary's single parse.
+export function currentTurnToolNamesFromParsed(records: Record<string, unknown>[]): string[] {
+  let names: string[] = [];
   for (const o of records) {
+    if (o.type === "user" && userPromptText(isRecord(o.message) ? o.message.content : undefined) !== null) {
+      names = []; // a fresh user prompt starts a new turn
+      continue;
+    }
     if (o.type !== "assistant" || !isRecord(o.message) || !Array.isArray(o.message.content)) continue;
     for (const block of o.message.content) {
       if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") names.push(block.name);
     }
   }
-  return names.slice(-limit);
+  return names;
 }

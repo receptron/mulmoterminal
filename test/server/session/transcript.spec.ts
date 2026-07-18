@@ -19,7 +19,7 @@ import {
   countUserTurnsFromParsed,
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
-  recentToolNamesFromParsed,
+  currentTurnToolNamesFromParsed,
 } from "../../../server/session/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
@@ -390,31 +390,41 @@ describe("countUserTurnsFromJsonl", () => {
   });
 });
 
-describe("recentToolNamesFromParsed", () => {
+describe("currentTurnToolNamesFromParsed", () => {
   const toolTurn = (...names: string[]) => line({ type: "assistant", message: { content: names.map((name) => ({ type: "tool_use", name, input: {} })) } });
+  const prompt = (text: string) => line({ type: "user", message: { content: text } });
+  const toolResult = () => line({ type: "user", message: { content: [{ type: "tool_result", content: "ok" }] } });
 
-  it("collects tool names in order across assistant turns", () => {
-    const records = parseJsonl([toolTurn("Read", "Grep"), line({ type: "user", message: { content: "x" } }), toolTurn("Edit")].join("\n"));
-    expect(recentToolNamesFromParsed(records, 10)).toEqual(["Read", "Grep", "Edit"]);
+  // The whole point of the fix: a new user prompt resets the turn, so a prior turn's Edit
+  // can't leak into a turn that's now only reading.
+  it("scopes to the current turn — a new user prompt resets prior tools", () => {
+    const records = parseJsonl([toolTurn("Read", "Grep", "Edit"), prompt("next task"), toolTurn("Read", "Grep")].join("\n"));
+    expect(currentTurnToolNamesFromParsed(records)).toEqual(["Read", "Grep"]);
   });
 
-  it("keeps only the most recent `limit` names", () => {
-    const records = parseJsonl([toolTurn("Read", "Grep", "Glob", "Edit")].join("\n"));
-    expect(recentToolNamesFromParsed(records, 2)).toEqual(["Glob", "Edit"]);
+  // Stability within a turn: an early edit stays in the window even after many later reads,
+  // so verification reads after an edit don't flip the phase back to planning.
+  it("keeps every tool of the turn, so an early edit survives later reads", () => {
+    const records = parseJsonl([prompt("go"), toolTurn("Read", "Edit", "Read", "Grep", "Bash")].join("\n"));
+    expect(currentTurnToolNamesFromParsed(records)).toEqual(["Read", "Edit", "Read", "Grep", "Bash"]);
   });
 
-  it("ignores text blocks and non-assistant turns", () => {
+  // Tool results come back as `user` turns too, but must NOT reset the turn.
+  it("does not reset on a tool_result user turn", () => {
+    const records = parseJsonl([prompt("go"), toolTurn("Edit"), toolResult(), toolTurn("Bash")].join("\n"));
+    expect(currentTurnToolNamesFromParsed(records)).toEqual(["Edit", "Bash"]);
+  });
+
+  it("ignores text blocks", () => {
     const records = parseJsonl(
-      [
-        line({ type: "assistant", message: { content: [{ type: "text", text: "thinking" }] } }),
-        line({ type: "user", message: { content: "go" } }),
-        toolTurn("Bash"),
-      ].join("\n"),
+      [prompt("go"), line({ type: "assistant", message: { content: [{ type: "text", text: "thinking" }] } }), toolTurn("Bash")].join("\n"),
     );
-    expect(recentToolNamesFromParsed(records, 10)).toEqual(["Bash"]);
+    expect(currentTurnToolNamesFromParsed(records)).toEqual(["Bash"]);
   });
 
-  it("is empty for a transcript with no tool calls", () => {
-    expect(recentToolNamesFromParsed(parseJsonl(line({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } })), 10)).toEqual([]);
+  it("is empty for a turn with no tool calls", () => {
+    expect(
+      currentTurnToolNamesFromParsed(parseJsonl([prompt("go"), line({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } })].join("\n"))),
+    ).toHaveLength(0);
   });
 });

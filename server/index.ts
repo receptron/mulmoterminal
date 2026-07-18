@@ -69,7 +69,7 @@ import {
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
   timelineFromJsonl,
-  recentToolNamesFromParsed,
+  currentTurnToolNamesFromParsed,
   type SessionUsage,
   type LatestTurnContext,
   type TimelineEvent,
@@ -905,11 +905,6 @@ const EMPTY_SUMMARY: SessionSummary = {
 // derived values share one parse pass, vs. one parse per helper before).
 const sessionSummaryCache = createFileCache<SessionSummary>();
 
-// How many of the most-recent tool calls the work-phase classifier looks at. Small enough
-// that a just-started edit flips the cell to "editing" promptly, large enough to not read
-// as "planning" the moment the agent pauses editing to read a file.
-const WORK_PHASE_TOOL_WINDOW = 8;
-
 async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
   const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
   let stamp: FileStamp;
@@ -934,7 +929,7 @@ async function readSessionSummary(cwd: string, id: string): Promise<SessionSumma
     userTurns: countUserTurnsFromParsed(records),
     usage: sessionUsageFromParsed(records),
     context: latestTurnContextFromParsed(records),
-    workPhase: classifyWorkPhase(recentToolNamesFromParsed(records, WORK_PHASE_TOOL_WINDOW)),
+    workPhase: classifyWorkPhase(currentTurnToolNamesFromParsed(records)),
   };
   sessionSummaryCache.set(file, stamp, summary);
   return summary;
