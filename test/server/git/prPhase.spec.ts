@@ -131,6 +131,35 @@ describe("phaseForRepoBranch", () => {
     expect(result).toEqual({ phase: "none", url: null });
   });
 
+  // Codex iter-3: a FAILED open query must not fall through to --state all (which could report
+  // a stale merged PR for a reused head); it resolves to none without consulting history.
+  it("does not consult history when the open query fails", async () => {
+    const states: string[] = [];
+    const runGh = async (args: string[]) => {
+      const state = args[args.indexOf("--state") + 1];
+      states.push(state);
+      if (state === "open") return { ok: false, stdout: "", stderr: "" };
+      return { ok: true, stdout: JSON.stringify([{ state: "MERGED", url: "stale" }]), stderr: "" };
+    };
+    const result = await phaseForRepoBranch("o/r", "feat/x", { runGh });
+    expect(result).toEqual({ phase: "none", url: null });
+    expect(states).toEqual(["open"]);
+  });
+
+  it("does not cache a failed query, so the next poll retries", async () => {
+    let attempt = 0;
+    const runGh = async (args: string[]) => {
+      const state = args[args.indexOf("--state") + 1];
+      attempt += 1;
+      if (state === "open" && attempt === 1) return { ok: false, stdout: "", stderr: "" };
+      return { ok: true, stdout: openPr, stderr: "" };
+    };
+    const first = await phaseForRepoBranch("o/r", "feat/x", { runGh, now: () => 1000 });
+    expect(first.phase).toBe("none");
+    const second = await phaseForRepoBranch("o/r", "feat/x", { runGh, now: () => 1000 });
+    expect(second.phase).toBe("ready"); // not cached → retried → real result
+  });
+
   it("caches within the TTL (one lookup's queries serve a second lookup)", async () => {
     const gh = ghByState({ open: openPr });
     await phaseForRepoBranch("o/r", "feat/x", { runGh: gh.fn, now: () => 1000, ttlMs: 30_000 });

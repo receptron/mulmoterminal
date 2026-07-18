@@ -78,19 +78,25 @@ export interface PrPhaseDeps {
   ttlMs?: number;
 }
 
-// The newest PR for `branch` in `repo` in `state`, or null. Never throws.
-async function listPr(run: typeof runGh, repo: string, branch: string, state: "open" | "all"): Promise<ParsedPr | null> {
+const NONE: PrPhaseResult = { phase: "none", url: null };
+
+// The newest PR for `branch` in `state`. `ok` distinguishes "gh ran, no such PR" (pr:null)
+// from "gh failed" — the caller must not treat a failed open-PR query as "no open PR", or a
+// transient error would let a stale merged PR from a reused head win. Never throws.
+async function listPr(run: typeof runGh, repo: string, branch: string, state: "open" | "all"): Promise<{ ok: boolean; pr: ParsedPr | null }> {
   try {
     const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", state, "--json", GH_FIELDS, "--limit", "1"]);
-    return res.ok ? (parsePrList(res.stdout)[0] ?? null) : null;
+    return res.ok ? { ok: true, pr: parsePrList(res.stdout)[0] ?? null } : { ok: false, pr: null };
   } catch {
-    return null;
+    return { ok: false, pr: null };
   }
 }
 
 // The PR phase for `branch`. An OPEN PR (there's at most one per head branch) is the current
 // state, queried first so it can't be masked by stale merged/closed PRs from a reused head —
-// only when there's none do we look at `--state all` for the merged/closed result.
+// only when the open query genuinely returns none do we look at `--state all`. A failed query
+// resolves to `none` and is NOT cached, so the next roster poll retries instead of showing a
+// stale phase.
 export async function phaseForRepoBranch(repo: string, branch: string, deps: PrPhaseDeps = {}): Promise<PrPhaseResult> {
   const run = deps.runGh ?? runGh;
   const now = deps.now ?? Date.now;
@@ -98,7 +104,15 @@ export async function phaseForRepoBranch(repo: string, branch: string, deps: PrP
   const key = `${repo}:${branch}`;
   const hit = cache.get(key);
   if (hit && now() - hit.at < ttlMs) return hit.result;
-  const pr = (await listPr(run, repo, branch, "open")) ?? (await listPr(run, repo, branch, "all"));
+
+  const open = await listPr(run, repo, branch, "open");
+  if (!open.ok) return NONE;
+  let pr = open.pr;
+  if (!pr) {
+    const all = await listPr(run, repo, branch, "all");
+    if (!all.ok) return NONE;
+    pr = all.pr;
+  }
   const result: PrPhaseResult = { phase: derivePrPhase(pr), url: pr?.url ?? null };
   cache.set(key, { result, at: now() });
   return result;
