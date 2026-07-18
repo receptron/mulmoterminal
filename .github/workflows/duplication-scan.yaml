@@ -46,7 +46,7 @@ jobs:
         run: |
           set -euo pipefail
           jscpd . \
-            --format typescript \
+            --format "typescript,vue" \
             --ignore "**/node_modules/**,**/dist/**,**/*.d.ts,**/*.spec.ts" \
             --reporters console,sarif \
             --output report
