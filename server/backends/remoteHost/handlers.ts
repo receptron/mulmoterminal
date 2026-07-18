@@ -14,7 +14,7 @@ import { listBooks } from "@mulmoclaude/accounting-plugin/server";
 import type { CommandHandlers, JsonObject, JsonValue } from "@mulmoclaude/core/remote-host";
 
 import { readShortcuts } from "../shortcuts.js";
-import { googleCalendarCreateEvent, googleCalendarListEvents } from "./googleCalendar.js";
+import { googleCalendarColors, googleCalendarCreateEvent, googleCalendarListCalendars, googleCalendarListEvents } from "./googleCalendar.js";
 import { discoverSkillNames } from "./skills.js";
 import { clampLimit, clampOffset, deriveItems, pageResult } from "./collectionPage.js";
 import {
@@ -139,6 +139,10 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     // way the phone can learn it needs to be run.
     "google.calendar.createEvent": googleCalendarCreateEvent,
     "google.calendar.listEvents": googleCalendarListEvents,
+    // Non-primary calendars + colour palettes (core 0.23). listCalendars needs the
+    // calendar-list read scope, so an existing link errors until the user re-authorizes.
+    "google.calendar.listCalendars": googleCalendarListCalendars,
+    "google.calendar.colors": googleCalendarColors,
 
     // Feed registry with retrieval kind / schedule / last-fetch time (read-only).
     listFeeds: async () => {

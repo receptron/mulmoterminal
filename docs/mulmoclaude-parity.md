@@ -6,7 +6,7 @@ the two hosts can't drift. This doc records where that effort stands: which
 subsystems are shared today, which are deliberately **not**, and what picking
 up each remaining item would involve.
 
-Status date: **2026-07-17** (core `0.20.1`, collection-plugin `0.11.1`).
+Status date: **2026-07-18** (core `0.23.0`, collection-plugin `0.11.1`).
 
 ---
 
@@ -23,7 +23,7 @@ Each of these runs the same engine as MulmoClaude, with host specifics injected:
 | Notifier + collection completion watchers (bell UI) | `@mulmoclaude/core/notifier`, `/collection-watchers` | `server/backends/notifier.ts`, `collectionWatchers.ts` (#124) |
 | Scheduler engine + user cron tasks (`config/scheduler/tasks.json` → spawn a visible chat) | `@mulmoclaude/core/scheduler` | `server/backends/scheduler.ts` (#125) |
 | RSS/JSON feed refresh (system task) | `@mulmoclaude/core/feeds(/server)` | `server/backends/feeds.ts` + `feedRefreshTaskDef` registration in `server/index.ts` |
-| Google account (loopback OAuth) + Calendar, incl. the settings-UI link routes | `@mulmoclaude/core/google` | `server/backends/google.ts` (shim + `/api/google/*`), `remoteHost/googleCalendar.ts`, `server/cli-google.ts` (#386) |
+| Google account (loopback OAuth) + Calendar (events, non-primary calendars, colours) incl. the settings-UI link routes | `@mulmoclaude/core/google` | `server/backends/google.ts` (shim + `/api/google/*`), `remoteHost/googleCalendar.ts` (`createEvent`/`listEvents` w/ `calendarId`+`colorId`, `listCalendars`, `colors`), `server/cli-google.ts` (#386, #425) |
 
 The two workspaces are interchangeable: both apps read and write the same
 on-disk layout (`data/`, `.claude/skills/`, `config/`), and cross-app invariants
