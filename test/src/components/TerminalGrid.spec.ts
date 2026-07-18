@@ -62,6 +62,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   response: null,
   fallback: null,
   phase: "none",
+  workPhase: null,
   ...over,
 });
 const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]) =>
@@ -252,5 +253,26 @@ describe("grid cockpit (list view)", () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "none" })]);
     await nextTick();
     expect(w.find(".cockpit-phase").exists()).toBe(false);
+  });
+
+  it.each([
+    ["planning", "planning"],
+    ["implementing", "editing"],
+  ] as const)("refines a working cell's status word to %s → %s", async (workPhase, word) => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "working", workPhase })]);
+    await nextTick();
+    expect(w.find(".cockpit-badge").text()).toBe(word);
+  });
+
+  it("shows the plain status word for a working cell whose sub-phase is unknown", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "working", workPhase: null })]);
+    await nextTick();
+    expect(w.find(".cockpit-badge").text()).toBe("running");
+  });
+
+  it("ignores workPhase for a non-working cell (idle stays idle)", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "idle", workPhase: "implementing" })]);
+    await nextTick();
+    expect(w.find(".cockpit-badge").text()).toBe("idle");
   });
 });

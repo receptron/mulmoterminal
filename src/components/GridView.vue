@@ -35,7 +35,7 @@ import {
   type Cell,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
-import { isPrPhase, type PrPhase } from "./rosterPhase";
+import { isPrPhase, isWorkPhase, type PrPhase, type WorkPhase } from "./rosterPhase";
 import { useGridActivity } from "../composables/useGridActivity";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
@@ -106,7 +106,7 @@ const expandedUid = computed(() => zoomedUid(state.value));
 // The zoomed grid's cockpit roster: a text row per cell — status + dir + AI summary +
 // current prompt + the agent's latest reply — so many parallel agents can be supervised
 // past the 9-thumbnail grid, and the enlarged terminal is switched by picking a row.
-type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null };
+type SessionMeta = { lastPrompt: string | null; aiTitle: string | null; lastResponse: string | null; workPhase: WorkPhase | null };
 const sessionMeta = reactive(new Map<string, SessionMeta>());
 // Single source of truth for the roster's prompt / summary / reply: each cell's on-disk
 // transcript, read via GET /api/session/:id (always current, and works for sessions this
@@ -120,11 +120,14 @@ async function seedMeta(id: string, cwd: string | null) {
     const res = await fetch(`/api/session/${id}${query}`);
     if (!res.ok) return;
     const d = (await res.json()) as Partial<SessionMeta>;
-    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null };
+    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null, workPhase: null };
     sessionMeta.set(id, {
       lastPrompt: d.lastPrompt ?? prev.lastPrompt,
       aiTitle: d.aiTitle ?? prev.aiTitle,
       lastResponse: d.lastResponse ?? prev.lastResponse,
+      // A successful fetch is authoritative for workPhase (unlike the text fields, which the
+      // summary can transiently miss), so take it as-is — including null (no tools / not working).
+      workPhase: isWorkPhase(d.workPhase) ? d.workPhase : null,
     });
   } catch {
     // best-effort — the next poll retries
@@ -199,6 +202,7 @@ const listRows = computed(() =>
       response: meta?.lastResponse ?? null,
       fallback: fallbackLabel(c),
       phase: (c.cwd ? phaseByCwd.get(c.cwd) : undefined) ?? ("none" as PrPhase),
+      workPhase: meta?.workPhase ?? null,
     };
   }),
 );
