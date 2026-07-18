@@ -5,8 +5,8 @@ import { useGoogleLink } from "../../../src/composables/useGoogleLink";
 
 const jsonResponse = (body: unknown, ok = true, status = 200) => ({ ok, status, json: async () => body }) as Response;
 
-const LINKED = { linked: true, pending: false, clientSecret: "found", lastError: null };
-const PENDING = { linked: false, pending: true, clientSecret: "found", lastError: null };
+const LINKED = { linked: true, pending: false, clientSecret: "found", brokerAvailable: false, lastError: null };
+const PENDING = { linked: false, pending: true, clientSecret: "found", brokerAvailable: false, lastError: null };
 
 describe("useGoogleLink", () => {
   beforeEach(() => {
@@ -36,7 +36,7 @@ describe("useGoogleLink", () => {
     );
     const link = useGoogleLink();
     await link.refresh();
-    expect(link.status.value).toEqual({ linked: false, pending: false, clientSecret: "found", lastError: null });
+    expect(link.status.value).toEqual({ linked: false, pending: false, clientSecret: "found", brokerAvailable: false, lastError: null });
     link.dispose();
   });
 
@@ -121,7 +121,7 @@ describe("useGoogleLink", () => {
       vi.stubGlobal("open", open);
       const fetchMock = vi
         .fn()
-        .mockResolvedValueOnce(jsonResponse({ linked: false, pending: false, clientSecret: "found", lastError: null }))
+        .mockResolvedValueOnce(jsonResponse({ linked: false, pending: false, clientSecret: "found", brokerAvailable: false, lastError: null }))
         .mockResolvedValueOnce(jsonResponse({ authUrl: "https://accounts.google.com/o/oauth2/v2/auth?x=1" }))
         .mockResolvedValue(jsonResponse(PENDING));
       vi.stubGlobal("fetch", fetchMock);
