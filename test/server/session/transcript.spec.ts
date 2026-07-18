@@ -19,6 +19,7 @@ import {
   countUserTurnsFromParsed,
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
+  recentToolNamesFromParsed,
 } from "../../../server/session/transcript.js";
 
 const line = (o: unknown) => JSON.stringify(o);
@@ -386,5 +387,34 @@ describe("countUserTurnsFromJsonl", () => {
 
   it("is 0 for an empty transcript", () => {
     expect(countUserTurnsFromJsonl("")).toBe(0);
+  });
+});
+
+describe("recentToolNamesFromParsed", () => {
+  const toolTurn = (...names: string[]) => line({ type: "assistant", message: { content: names.map((name) => ({ type: "tool_use", name, input: {} })) } });
+
+  it("collects tool names in order across assistant turns", () => {
+    const records = parseJsonl([toolTurn("Read", "Grep"), line({ type: "user", message: { content: "x" } }), toolTurn("Edit")].join("\n"));
+    expect(recentToolNamesFromParsed(records, 10)).toEqual(["Read", "Grep", "Edit"]);
+  });
+
+  it("keeps only the most recent `limit` names", () => {
+    const records = parseJsonl([toolTurn("Read", "Grep", "Glob", "Edit")].join("\n"));
+    expect(recentToolNamesFromParsed(records, 2)).toEqual(["Glob", "Edit"]);
+  });
+
+  it("ignores text blocks and non-assistant turns", () => {
+    const records = parseJsonl(
+      [
+        line({ type: "assistant", message: { content: [{ type: "text", text: "thinking" }] } }),
+        line({ type: "user", message: { content: "go" } }),
+        toolTurn("Bash"),
+      ].join("\n"),
+    );
+    expect(recentToolNamesFromParsed(records, 10)).toEqual(["Bash"]);
+  });
+
+  it("is empty for a transcript with no tool calls", () => {
+    expect(recentToolNamesFromParsed(parseJsonl(line({ type: "assistant", message: { content: [{ type: "text", text: "hi" }] } })), 10)).toEqual([]);
   });
 });

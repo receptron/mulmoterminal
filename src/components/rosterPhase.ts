@@ -22,3 +22,12 @@ const DISPLAY: Record<Exclude<PrPhase, "none">, PhaseDisplay> = {
 };
 
 export const phaseDisplay = (phase: PrPhase): PhaseDisplay | null => (phase === "none" ? null : DISPLAY[phase]);
+
+// The agent-side sub-phase of a "working" cell, mirroring server/session/workPhase.ts. Refines
+// the "running" status word into what the agent is actually doing right now.
+export type WorkPhase = "planning" | "implementing";
+
+export const isWorkPhase = (v: unknown): v is WorkPhase => v === "planning" || v === "implementing";
+
+// "editing" reads clearer than "implementing" in the tiny roster badge.
+export const WORK_WORD: Record<WorkPhase, string> = { planning: "planning", implementing: "editing" };

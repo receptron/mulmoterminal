@@ -9,7 +9,7 @@ import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
-import { phaseDisplay, type PrPhase } from "./rosterPhase";
+import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 
@@ -31,8 +31,11 @@ export interface CockpitRow {
   response: string | null; // tail of the agent's latest reply
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
   phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
+  workPhase: WorkPhase | null; // planning vs editing while working; null when unknown / not working
 }
 const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
+// A working cell shows what it's doing (planning / editing) when known, else the plain word.
+const statusWord = (row: CockpitRow): string => (row.status === "working" && row.workPhase ? WORK_WORD[row.workPhase] : STATUS_WORD[row.status]);
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
@@ -174,7 +177,7 @@ watch(
       >
         <span class="cockpit-head">
           <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
-          <span class="cockpit-badge" :class="`st-${row.status}`">{{ STATUS_WORD[row.status] }}</span>
+          <span class="cockpit-badge" :class="`st-${row.status}`">{{ statusWord(row) }}</span>
           <span v-if="phaseDisplay(row.phase)" class="cockpit-phase" :class="`ph-${row.phase}`" :title="phaseDisplay(row.phase)?.title">
             {{ phaseDisplay(row.phase)?.label }}
           </span>

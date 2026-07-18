@@ -69,10 +69,12 @@ import {
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
   timelineFromJsonl,
+  recentToolNamesFromParsed,
   type SessionUsage,
   type LatestTurnContext,
   type TimelineEvent,
 } from "./session/transcript.js";
+import { classifyWorkPhase, type WorkPhase } from "./session/workPhase.js";
 import { createFileCache, type FileStamp } from "./session/file-cache.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute, resolveGithubUrl } from "./git/gitRemote.js";
@@ -884,8 +886,17 @@ interface SessionSummary {
   userTurns: number;
   usage: SessionUsage;
   context: LatestTurnContext;
+  workPhase: WorkPhase | null;
 }
-const EMPTY_SUMMARY: SessionSummary = { lastPrompt: null, aiTitle: null, lastResponse: null, userTurns: 0, usage: EMPTY_USAGE, context: EMPTY_CONTEXT };
+const EMPTY_SUMMARY: SessionSummary = {
+  lastPrompt: null,
+  aiTitle: null,
+  lastResponse: null,
+  userTurns: 0,
+  usage: EMPTY_USAGE,
+  context: EMPTY_CONTEXT,
+  workPhase: null,
+};
 
 // Transcripts are append-only and can be hundreds of MB; /api/session/:id is hit on every
 // window focus and by each grid cell as turns finish, so re-reading + re-parsing the whole
@@ -893,6 +904,11 @@ const EMPTY_SUMMARY: SessionSummary = { lastPrompt: null, aiTitle: null, lastRes
 // an unchanged transcript returns instantly, and a changed one is read + parsed ONCE (the six
 // derived values share one parse pass, vs. one parse per helper before).
 const sessionSummaryCache = createFileCache<SessionSummary>();
+
+// How many of the most-recent tool calls the work-phase classifier looks at. Small enough
+// that a just-started edit flips the cell to "editing" promptly, large enough to not read
+// as "planning" the moment the agent pauses editing to read a file.
+const WORK_PHASE_TOOL_WINDOW = 8;
 
 async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
   const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
@@ -918,6 +934,7 @@ async function readSessionSummary(cwd: string, id: string): Promise<SessionSumma
     userTurns: countUserTurnsFromParsed(records),
     usage: sessionUsageFromParsed(records),
     context: latestTurnContextFromParsed(records),
+    workPhase: classifyWorkPhase(recentToolNamesFromParsed(records, WORK_PHASE_TOOL_WINDOW)),
   };
   sessionSummaryCache.set(file, stamp, summary);
   return summary;
@@ -1566,7 +1583,7 @@ app.get("/api/session/:id", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   await activityStateHydrated; // a reconnect re-fetch must see the restored working/waiting, not idle
   const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context } = await readSessionSummary(cwd, id);
+  const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context, workPhase } = await readSessionSummary(cwd, id);
   const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
   // The roster always shows OUR summary, never the external on-disk `ai-title` (MulmoClaude's).
   // If we haven't titled it yet, kick off a summary and fall back to the prompt meanwhile.
@@ -1584,6 +1601,7 @@ app.get("/api/session/:id", async (req, res) => {
     lastResponse,
     usage,
     context,
+    workPhase,
   });
 });
 

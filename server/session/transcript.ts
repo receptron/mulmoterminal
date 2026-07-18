@@ -327,3 +327,16 @@ export function timelineFromJsonl(raw: string): TimelineEvent[] {
   }
   return events;
 }
+
+// The last `limit` tool names the agent ran, oldest→newest (for the work-phase classifier).
+// Works on already-parsed records so it shares readSessionSummary's single parse.
+export function recentToolNamesFromParsed(records: Record<string, unknown>[], limit: number): string[] {
+  const names: string[] = [];
+  for (const o of records) {
+    if (o.type !== "assistant" || !isRecord(o.message) || !Array.isArray(o.message.content)) continue;
+    for (const block of o.message.content) {
+      if (isRecord(block) && block.type === "tool_use" && typeof block.name === "string") names.push(block.name);
+    }
+  }
+  return names.slice(-limit);
+}
