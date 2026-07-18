@@ -1738,10 +1738,10 @@
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.23.0":
-  version "0.23.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.23.0.tgz#58701680a519a0c092aeb81f03621f3307ef72fc"
-  integrity sha512-IRwm2VETiCe6RDU7bsTxdYWcx9pUKZWm9RvXLzoDa5sYy3VegiouhzDeMIseuFCCrCUoQZOl6koO69lHvPidBQ==
+"@mulmoclaude/core@^0.23.0", "@mulmoclaude/core@^0.23.1":
+  version "0.23.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.23.1.tgz#49080a78374f2412f1673e5d3c85450043e5dda1"
+  integrity sha512-PDUFrRebpqp9R5GhuRgmLClh+7BC7aaI6hhHd0/8vKdgV3aljsea72c7oztkGrQmKULqWzaH8PyqyM8rPcUu5g==
   dependencies:
     "@duckdb/node-api" "^1.5.4-r.1"
     fast-xml-parser "^5.10.1"

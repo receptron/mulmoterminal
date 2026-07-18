@@ -20,7 +20,6 @@ import {
   configureCollectionHost,
   discoverCollections,
   loadCollection,
-  listItems,
   enrichItems,
   readCustomViewHtml,
   writeItem,
@@ -41,6 +40,9 @@ import {
   deleteCollectionRefusalMessage,
   deleteCustomView,
   applyMutateAction,
+  collectionWritable,
+  readOnlyRefusal,
+  storeFor,
   type LoadedCollection,
   type RecordIssue,
 } from "@mulmoclaude/core/collection/server";
@@ -61,6 +63,9 @@ import {
   remoteViewItemsFailureMessage,
 } from "./remoteView.js";
 import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability } from "./viewToken.js";
+// The shared manageCollection binding — the query route reuses its queryItems
+// action so a view can never do more than the agent's own data plane.
+import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { hostLogger } from "./hostLogger.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
@@ -182,6 +187,7 @@ function csvParam(value: unknown): string[] | undefined {
  *  policy refusal, 400 otherwise. */
 function mutateStatus(kind: string): number {
   if (kind === "view-not-found" || kind === "item-not-found") return 404;
+  if (kind === "read-only-collection") return 405;
   if (kind === "not-writable" || kind === "delete-not-allowed" || kind === "field-not-editable" || kind === "path-escape") return 403;
   return 400;
 }
@@ -291,7 +297,7 @@ const detailHandler: RequestHandler<{ slug: string }> = async (req, res) => {
     return;
   }
   try {
-    const items = await listItems(collection.dataDir);
+    const items = await storeFor(collection).list();
     // Best-effort validation: a malformed record is silently skipped at read
     // time, so surface the problems here too and let the view offer a Repair
     // button. Never let validation failure turn a successful detail into a 500.
@@ -317,6 +323,10 @@ const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => 
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  if (!collectionWritable(collection)) {
+    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
   const record = extractRecord(req.body);
@@ -353,6 +363,10 @@ const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  if (!collectionWritable(collection)) {
+    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
   const record = extractRecord(req.body);
@@ -392,6 +406,10 @@ const itemDeleteHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
   const collection = await loadCollection(req.params.slug);
   if (!collection) {
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+    return;
+  }
+  if (!collectionWritable(collection)) {
+    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
   try {
@@ -467,7 +485,7 @@ const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId
     return;
   }
   try {
-    const record = await readItem(collection.dataDir, req.params.itemId);
+    const record = await storeFor(collection).read(req.params.itemId);
     if (!record) {
       res.status(404).json({ error: `item '${req.params.itemId}' not found` });
       return;
@@ -482,6 +500,12 @@ const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId
     // declarative write itself (`when` was just enforced above, same
     // visibility-is-authorization rule as the seeded kinds).
     if (action.kind === "mutate") {
+      // Schema validation already rejects mutate actions on a dataSource
+      // collection; this is the defensive server-side twin.
+      if (!collectionWritable(collection)) {
+        res.status(405).json({ error: readOnlyRefusal(collection.slug) });
+        return;
+      }
       await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
       return;
     }
@@ -529,7 +553,7 @@ const collectionActionHandler: RequestHandler<{ slug: string; actionId: string }
       res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
       return;
     }
-    const allItems = await listItems(collection.dataDir);
+    const allItems = await storeFor(collection).list();
     const paths = promptPathsFor(collection, getWorkspaceRoot());
     res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template, paths), role: action.role });
   } catch (err) {
@@ -700,7 +724,7 @@ const viewTokenHandler: RequestHandler<{ slug: string }> = async (req, res) => {
 const viewDataCors = (_req: Request, res: Response, next: NextFunction): void => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS");
   next();
 };
 
@@ -713,7 +737,7 @@ const viewDataGetHandler: RequestHandler<{ slug: string }> = async (req, res) =>
       res.status(404).json({ error: `collection '${req.params.slug}' not found` });
       return;
     }
-    const items = await enrichItems(collection, await listItems(collection.dataDir));
+    const items = await enrichItems(collection, await storeFor(collection).list());
     res.json({ items });
   } catch (err) {
     log.warn("collections", "view-data read failed", { slug: req.params.slug, error: errorMessage(err) });
@@ -732,6 +756,10 @@ const viewDataPutHandler: RequestHandler<{ slug: string }> = async (req, res) =>
     const collection = await loadCollection(req.params.slug);
     if (!collection) {
       res.status(404).json({ error: `collection '${req.params.slug}' not found` });
+      return;
+    }
+    if (!collectionWritable(collection)) {
+      res.status(405).json({ error: readOnlyRefusal(collection.slug) });
       return;
     }
     const body = (req.body ?? {}) as { items?: unknown; mode?: unknown };
@@ -756,6 +784,52 @@ const viewDataPutHandler: RequestHandler<{ slug: string }> = async (req, res) =>
   } catch (err) {
     log.warn("collections", "view-data write failed", { slug: req.params.slug, error: errorMessage(err) });
     res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+/** Per-slug in-flight cap for view-issued aggregation queries — each one
+ *  can be a full-file DuckDB scan, so a runaway dashboard loop must not
+ *  stack dozens of concurrent scans. Mirrors MulmoClaude's guard. */
+const VIEW_QUERY_MAX_CONCURRENT = 4;
+const inflightViewQueries = new Map<string, number>();
+const viewQueryConcurrency = (req: Request<{ slug?: string }>, res: Response, next: NextFunction): void => {
+  const slug = req.params.slug ?? "";
+  const current = inflightViewQueries.get(slug) ?? 0;
+  if (current >= VIEW_QUERY_MAX_CONCURRENT) {
+    res.status(429).json({ error: "too many concurrent queries for this collection — retry shortly" });
+    return;
+  }
+  inflightViewQueries.set(slug, current + 1);
+  let released = false;
+  res.once("close", () => {
+    if (released) return;
+    released = true;
+    const now = inflightViewQueries.get(slug) ?? 1;
+    if (now <= 1) inflightViewQueries.delete(slug);
+    else inflightViewQueries.set(slug, now - 1);
+  });
+  next();
+};
+
+// Scoped aggregation: run a structured query (the DSL — never raw SQL) over
+// the collection. Read capability only (the DSL is read-only by construction).
+// Reuses the shared manageCollection handler so a view can never do more than
+// the agent's own queryItems (same validation, same engines: dataSource → the
+// whole-CSV DuckDB scan; file-backed → the enriched-JSONL path). Errors return
+// a FIXED message — raw engine errors can carry host paths, and a scoped view
+// is not a trusted audience for those.
+const viewDataQueryHandler: RequestHandler<{ slug: string }> = async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { query?: unknown };
+    const raw = await manageCollectionHandler({ action: "queryItems", slug: req.params.slug, query: body.query });
+    try {
+      res.json(JSON.parse(raw));
+    } catch {
+      res.status(400).json({ error: raw });
+    }
+  } catch (err) {
+    log.warn("collections", "view-data query failed", { slug: req.params.slug.replace(/[\r\n]/g, " "), error: errorMessage(err) });
+    res.status(500).json({ error: "collection query failed" });
   }
 };
 
@@ -792,4 +866,8 @@ export function mountCollectionRoutes(app: Express): void {
   });
   app.get("/api/collections/:slug/view-data", viewDataCors, requireViewToken("read"), viewDataGetHandler);
   app.put("/api/collections/:slug/view-data", viewDataCors, requireViewToken("write"), viewDataPutHandler);
+  app.options("/api/collections/:slug/view-data/query", viewDataCors, (_req: Request, res: Response) => {
+    res.status(204).end();
+  });
+  app.post("/api/collections/:slug/view-data/query", viewDataCors, viewQueryConcurrency, requireViewToken("read"), viewDataQueryHandler);
 }

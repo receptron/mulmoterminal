@@ -28,13 +28,14 @@ import {
 import {
   deleteItem,
   enrichItems,
-  listItems,
   readCustomViewHtml,
   readCustomViewI18n,
   readItem,
   safeRecordId,
   writeItem,
   type LoadedCollection,
+  collectionWritable,
+  storeFor,
 } from "@mulmoclaude/core/collection/server";
 import type { CollectionCustomView, CollectionItem, CollectionSchema } from "@mulmoclaude/core/collection";
 
@@ -111,6 +112,7 @@ export type MutateRemoteViewResult =
   | { kind: "view-not-found"; viewId: string }
   | { kind: "not-mobile"; viewId: string }
   | { kind: "not-writable"; viewId: string }
+  | { kind: "read-only-collection" }
   | { kind: "field-not-editable"; field: string }
   | { kind: "delete-not-allowed" }
   | { kind: "invalid-patch" }
@@ -132,6 +134,9 @@ export const createMutateRemoteView =
     const view = (collection.schema.views ?? []).find((entry) => entry.id === viewId);
     if (!view) return { kind: "view-not-found", viewId };
     if (view.target !== "mobile") return { kind: "not-mobile", viewId };
+    // A dataSource collection is read-only regardless of what write surface
+    // the view declares — the collection-level rule outranks the view's.
+    if (!collectionWritable(collection)) return { kind: "read-only-collection" };
     if (!isWritableView(view)) return { kind: "not-writable", viewId };
     if (request.op === "delete") return deleteViaView(deps, collection, view.allowDelete === true, request.id);
     return updateViaView(deps, collection, view, request);
@@ -203,7 +208,9 @@ export type RemoteViewItemsResult =
   | { kind: "too-large"; bytes: number };
 
 export interface RemoteViewItemsDeps {
-  listItems: typeof listItems;
+  /** Load every record of the collection — store-aware (file records or a
+   *  `dataSource` CSV's rows), unlike a raw dataDir `listItems`. */
+  listRecords: (collection: LoadedCollection) => Promise<CollectionItem[]>;
   enrichItems: typeof enrichItems;
   resolveThumbnail: ThumbnailResolver;
 }
@@ -256,7 +263,7 @@ export const createRemoteViewItems =
     // Hydrate through the same server resolver getItems uses (enrichItems): refs
     // loaded, derived formulas evaluated, toggles/embeds resolved — the phone
     // gets plain resolved scalars so mobile numbers match desktop exactly.
-    const items = await deps.listItems(collection.dataDir);
+    const items = await deps.listRecords(collection);
     const derived = (await deps.enrichItems(collection, items)) as RemoteViewItem[];
     const page = pageFromItems(derived, request, collection.schema.primaryKey);
     const baseBytes = Buffer.byteLength(JSON.stringify(page), "utf8");
@@ -268,7 +275,7 @@ export const createRemoteViewItems =
     return { kind: "ok", page, inlined, omitted };
   };
 
-export const remoteViewItems = createRemoteViewItems({ listItems, enrichItems, resolveThumbnail });
+export const remoteViewItems = createRemoteViewItems({ listRecords: (collection) => storeFor(collection).list(), enrichItems, resolveThumbnail });
 
 /** Message per non-ok item-page kind, thrown by the channel handler. */
 export function remoteViewItemsFailureMessage(result: Exclude<RemoteViewItemsResult, { kind: "ok" }>, slug: string): string {
@@ -284,6 +291,8 @@ export function mutateRemoteViewFailureMessage(result: Exclude<MutateRemoteViewR
   if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
   if (result.kind === "not-writable")
     return `mobile view '${result.viewId}' is read-only — declare editableFields and/or allowDelete in its views[] entry to allow writes`;
+  if (result.kind === "read-only-collection")
+    return `collection '${slug}' is read-only (backed by an external dataSource) — update the data file itself instead`;
   if (result.kind === "field-not-editable")
     return `field '${result.field}' is not editable from this view — add it to the view's editableFields (the primary key is never editable)`;
   if (result.kind === "delete-not-allowed") return `this view may not delete records — set allowDelete: true in its views[] entry`;
