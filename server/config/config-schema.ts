@@ -11,6 +11,8 @@
 //   2. The `sound` path confinement (a filesystem realpath check) stays in dir-config.ts — it
 //      touches the disk, which does not belong in a pure schema.
 import { z } from "zod";
+// Shared with the client dir-config parser so the two can't drift — see common/themeColors.ts.
+import { THEME_COLOR_KEYS } from "../../common/themeColors.js";
 
 // ---- shared constants ---------------------------------------------------------------------
 
@@ -18,34 +20,6 @@ export const THEME_IDS = ["midnight", "nord", "daylight", "solarized"] as const;
 export const VIEW_TARGETS = ["diff", "prs", "wiki", "collections", "accounting"] as const;
 export const RUN_TYPES = ["shell", "input", "open"] as const;
 export const BUILTIN_CHIPS = ["dir", "git", "ctx", "usage", "status", "diff", "tools"] as const;
-
-// The xterm ITheme keys a `colors` block may override. Anything outside this set is dropped so
-// an arbitrary JSON object can't inject unexpected keys into the terminal options.
-export const THEME_COLOR_KEYS = [
-  "foreground",
-  "background",
-  "cursor",
-  "cursorAccent",
-  "selectionBackground",
-  "selectionForeground",
-  "selectionInactiveBackground",
-  "black",
-  "red",
-  "green",
-  "yellow",
-  "blue",
-  "magenta",
-  "cyan",
-  "white",
-  "brightBlack",
-  "brightRed",
-  "brightGreen",
-  "brightYellow",
-  "brightBlue",
-  "brightMagenta",
-  "brightCyan",
-  "brightWhite",
-] as const;
 
 export const NAME_MAX_CHARS = 40;
 // Runtime caps (sanitizeButtons / sanitizeChips truncate past these), mirrored by the JSON Schema

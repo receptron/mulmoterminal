@@ -2,6 +2,8 @@ import { ref, watch, onScopeDispose, type Ref } from "vue";
 import { usePubSub } from "./usePubSub";
 import type { ITheme } from "@xterm/xterm";
 import { isThemeId, type ThemeId } from "./useTheme";
+// Shared with the server config schema so the two can't drift — see common/themeColors.ts.
+import { THEME_COLOR_KEYS } from "../../common/themeColors";
 
 // The per-directory overrides a terminal adopts when its cwd holds a
 // `.mulmoterminal.json` (served by GET /api/dir-config). The raw sound path stays
@@ -37,34 +39,6 @@ const EMPTY: DirConfig = {
   colors: null,
   hasSound: false,
 };
-
-// The ITheme keys a dir may override; values arrive server-sanitized but are
-// re-checked here so a hand-rolled response can't widen the terminal options.
-const THEME_COLOR_KEYS = [
-  "foreground",
-  "background",
-  "cursor",
-  "cursorAccent",
-  "selectionBackground",
-  "selectionForeground",
-  "selectionInactiveBackground",
-  "black",
-  "red",
-  "green",
-  "yellow",
-  "blue",
-  "magenta",
-  "cyan",
-  "white",
-  "brightBlack",
-  "brightRed",
-  "brightGreen",
-  "brightYellow",
-  "brightBlue",
-  "brightMagenta",
-  "brightCyan",
-  "brightWhite",
-] as const;
 
 function parseColors(input: unknown): Partial<ITheme> | null {
   if (!isRecord(input)) return null;
