@@ -52,7 +52,7 @@ import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./age
 import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
-import { stripTerminalQueries } from "./session/terminal-replay.js";
+import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import {
   isRecord,
   parseJsonl,
@@ -2294,7 +2294,7 @@ function spawnClaudePty(
 
   // PTY -> browser (buffering a bounded tail for reattach).
   entry.term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
     }
@@ -2407,7 +2407,7 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
   ptys.set(sessionId, entry);
 
   term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
     }
@@ -2711,7 +2711,7 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
 
 function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
   entry.term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
     onOutput?.(data);
   });
