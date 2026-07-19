@@ -104,6 +104,16 @@ export function tmuxKillSession(id: string): void {
   tmux(["kill-session", "-t", tmuxSessionName(id)]);
 }
 
+// The rendered contents of a session's visible pane — what the user would see right now,
+// available even while the session is DETACHED and across a server restart (tmux outlives
+// the node process). Null when tmux has no such session, which is also how a tmux-less
+// host reports "ask someone else". Colour sequences are dropped (no `-e`): the headless
+// fallback can only produce plain text, and one contract beats two.
+export function tmuxCapturePane(id: string): string | null {
+  const r = tmux(["capture-pane", "-p", "-t", tmuxSessionName(id)]);
+  return r.status === 0 ? r.stdout : null;
+}
+
 // Ids of sessions that survived (e.g. across a crash), for startup visibility.
 export function tmuxListSessionIds(): string[] {
   const r = tmux(["list-sessions", "-F", "#{session_name}"]);

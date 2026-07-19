@@ -26,6 +26,7 @@ import {
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
 import type { Attachment } from "./ingestAttachments.js";
+import type { TerminalSessionSummary } from "./terminalScreen.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
@@ -34,6 +35,10 @@ export interface RemoteHostHandlerDeps {
   // Download the phone's staged uploads (by storage_id) into the workspace and
   // return path-only attachments (remoteHost/ingestAttachments.ts).
   ingest: (storageIds: string[]) => Promise<Attachment[]>;
+  // The phone's remote terminal view (#435) — the picker's list and one session's
+  // current screen. Wired in server/index.ts, where the PTY table lives.
+  listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
+  captureTerminalScreen: (sessionId: string) => Promise<string>;
 }
 
 // Parse the optional `attachments` param ([{ storage_id }]) into storage ids. A
@@ -123,6 +128,21 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
   return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
 };
 
+// The phone's remote terminal view (#435), read-only: pick a session, then read its
+// screen. Screens are bounded by the terminal's own geometry (rows x cols), so unlike
+// collections they need no paging to stay under the 1 MiB command-doc ceiling.
+type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen">;
+
+const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen }: TerminalScreenDeps): CommandHandlers => ({
+  listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
+
+  getTerminalScreen: async (params: JsonObject) => {
+    const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+    if (!sessionId) throw new Error("sessionId is required");
+    return { screen: await captureTerminalScreen(sessionId) };
+  },
+});
+
 export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHandlers {
   const { workspace, spawnChat, ingest } = deps;
 
@@ -210,5 +230,7 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
       const { chatId } = spawnChat(composeMessage(message, attachments));
       return { started: true, chatId };
     },
+
+    ...terminalScreenHandlers(deps),
   };
 }
