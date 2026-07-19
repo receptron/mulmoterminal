@@ -34,7 +34,10 @@ split 1 は mulmoterminal 単独で完結し、`capabilities` に載った時点
 
 ### `getTerminalScreen({ sessionId })`
 
-セッションの種類で分岐する。分岐条件は `entry.tmux === true` の一点。
+**実装で設計を変更**: 当初は `entry.tmux` で分岐する想定だったが、`capture-pane` を先に試して
+null なら buffer へ落とす形にした。`PtyEntry` を持たない tmux 専用セッション（再起動を生き延びた
+もの）が一覧に出るのに capture で not found になる矛盾が消え、「一覧と読み取りの間にセッションが
+終わる」レースも同じ経路で吸収できる。分岐フラグ自体が不要になった。
 
 **tmux 経路** — tmux が入っていれば claude / launcher / codex は全てこちら。判定は tmux の
 有無のみで env var による opt-out は無い（`server/index.ts:2119`）:
@@ -45,8 +48,10 @@ tmux -L mulmoterminal capture-pane -p -e -t mt-<sessionId>
 
 - detach 中でも取得でき、サーバ再起動も跨ぐ（tmux が node プロセスより長生きするのが
   `tmux.ts` の主目的）
-- `-e` で色を保持。命名 `mt-<sessionId>`、専用ソケット `-L mulmoterminal`
+- 命名 `mt-<sessionId>`、専用ソケット `-L mulmoterminal`
   （ユーザ自身の tmux とは隔離。`server/infra/tmux.ts:13-14,88`）
+- **`-e`（色保持）は使わない**。headless 側は `translateToString` がプレーンテキストしか
+  返せないため、両経路で契約が食い違う。色は split 2 以降の課題として送る
 - 既存の `tmux()` ラッパ（`server/infra/tmux.ts:23`）に寄せる。**`execSync` の引数は 2 つ**
   （`execSync(cmd, options)`）で、配列を渡す形は存在しない
 
@@ -70,8 +75,10 @@ term.dispose();
 
 ## 設計上の注意
 
-- **`term.write()` は非同期**。コールバックを await せずに `buffer.active` を読むと空か途中が
-  返る。素直に書くと踏む罠なので、ここはテストで固定する
+- **`term.write()` は非同期**。コールバックを await せずに `buffer.active` を読むと空が返る
+  （実測で確認済み）。エラーにならず静かに空画面になるので、テストで固定してある
+- **`allowProposedApi: true` が必須**。xterm 6 では `term.buffer` がまだ proposed API で、
+  付けないと読み取りが throw する（実装時に踏んだ）
 - **64KB バッファはエスケープシーケンスの途中で切れうる**（#434）。非 tmux 経路はこの残骸を
   literal text として引き継ぐ。#434 を先に直せば本 issue 側は何もしなくてよいので、
   **#434 を先行させる**
