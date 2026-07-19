@@ -1730,18 +1730,18 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.3.tgz#933121a1720b2b68c62082048fe9df278466445e"
   integrity sha512-13oTtFLQgS7uiM/K6bxOKH7nKSs7Muhcg+PIsfl0ThyaINuu57LuktLf09XoRLDWouhUlL0gBZXDFSwuw+k6qA==
 
-"@mulmoclaude/collection-plugin@^0.12.0":
-  version "0.12.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.12.0.tgz#cf2945bb53dde4acedc565d4ab1d350461d7ce84"
-  integrity sha512-y4jeTiwV3yJ9Iiu8IaMZntoboj7utCpDiYk5/jXnJJTsf4Goe5mKydxoxHGNlDAsFFVCb4+981hgZVRT/BeAoA==
+"@mulmoclaude/collection-plugin@^0.13.1":
+  version "0.13.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.13.1.tgz#fde9099b251cd9c2981f13604e7b393c9a32c05b"
+  integrity sha512-0U5jS5gUBZ5cuuJskSyuun1z1H6HcSu746ra+mcmfW2CroUverEfMrzAByVraREndEXvJlIT8HHtiBV0tPMqCQ==
   dependencies:
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.23.0", "@mulmoclaude/core@^0.23.1":
-  version "0.23.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.23.1.tgz#49080a78374f2412f1673e5d3c85450043e5dda1"
-  integrity sha512-PDUFrRebpqp9R5GhuRgmLClh+7BC7aaI6hhHd0/8vKdgV3aljsea72c7oztkGrQmKULqWzaH8PyqyM8rPcUu5g==
+"@mulmoclaude/core@^0.23.0", "@mulmoclaude/core@^0.25.1":
+  version "0.25.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.25.1.tgz#7a8537438f3b8713f7a211517a6021c82bad627e"
+  integrity sha512-ybFVaYNZtRKxGT6PK4rZ1KMIBbe6T4dhzgPUAPqCvS5lEBchE+5lsYaBk+iCQaK3NkuYDGj8biA5AcA7HiKOng==
   dependencies:
     "@duckdb/node-api" "^1.5.4-r.1"
     fast-xml-parser "^5.10.1"
