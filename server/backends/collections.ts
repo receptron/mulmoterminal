@@ -22,9 +22,6 @@ import {
   loadCollection,
   enrichItems,
   readCustomViewHtml,
-  writeItem,
-  deleteItem,
-  readItem,
   validateRecordObject,
   generateItemId,
   resolveCreateItemId,
@@ -153,9 +150,14 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode:
   if (singleton && itemId !== singleton) {
     return { rejected: { id: itemId, problem: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` } };
   }
+  // Reads and writes go through the collection's STORE (file, sqlite, …);
+  // presence of `write` IS the writability check (core 0.25 storage seam).
+  const store = storeFor(collection);
+  const { write } = store;
+  if (!write) return { rejected: { id: itemId, problem: readOnlyRefusal(collection.slug) } };
   let toWrite: CollectionItem;
   if (mode === "merge") {
-    const existing = await readItem(collection.dataDir, itemId);
+    const existing = await store.read(itemId);
     if (!existing) return { rejected: { id: itemId, problem: `item '${itemId}' not found — use "upsert" or "create" to add it` } };
     toWrite = { ...existing, ...record, [primaryKey]: itemId };
   } else {
@@ -163,7 +165,7 @@ async function writeViewItem(collection: ResolvedCollection, raw: unknown, mode:
   }
   const problem = validateRecordObject(toWrite, itemId, collection.schema);
   if (problem) return { rejected: { id: itemId, problem } };
-  const result = await writeItem(collection.dataDir, itemId, toWrite, { slug: collection.slug, refuseOverwrite: mode === "create" });
+  const result = await write(itemId, toWrite, { refuseOverwrite: mode === "create" });
   // Handle each WriteItemResult kind; the final case (`path-escape`) is the
   // fallthrough return so `result` narrows cleanly instead of hitting a `never`
   // default (mirrors manageCollection.putOneItem in MulmoClaude).
@@ -325,7 +327,8 @@ const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => 
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
     return;
   }
-  if (!collectionWritable(collection)) {
+  const createStore = storeFor(collection).write;
+  if (!createStore) {
     res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
@@ -337,7 +340,7 @@ const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => 
   const itemId = resolveCreateItemId(collection.schema, record) ?? generateItemId();
   const recordWithId: CollectionItem = { ...record, [collection.schema.primaryKey]: itemId };
   try {
-    const result = await writeItem(collection.dataDir, itemId, recordWithId, { refuseOverwrite: true });
+    const result = await createStore(itemId, recordWithId, { refuseOverwrite: true });
     if (result.kind === "invalid-id") {
       res.status(400).json({ error: `invalid item id: ${result.itemId}` });
       return;
@@ -365,7 +368,8 @@ const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
     return;
   }
-  if (!collectionWritable(collection)) {
+  const updateStore = storeFor(collection).write;
+  if (!updateStore) {
     res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
@@ -381,7 +385,7 @@ const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
   }
   const recordWithId: CollectionItem = { ...record, [primaryKey]: req.params.itemId };
   try {
-    const result = await writeItem(collection.dataDir, req.params.itemId, recordWithId);
+    const result = await updateStore(req.params.itemId, recordWithId);
     if (result.kind === "invalid-id") {
       res.status(400).json({ error: `invalid item id: ${result.itemId}` });
       return;
@@ -408,12 +412,13 @@ const itemDeleteHandler: RequestHandler<{ slug: string; itemId: string }> = asyn
     res.status(404).json({ error: `collection '${req.params.slug}' not found` });
     return;
   }
-  if (!collectionWritable(collection)) {
+  const deleteStore = storeFor(collection).delete;
+  if (!deleteStore) {
     res.status(405).json({ error: readOnlyRefusal(collection.slug) });
     return;
   }
   try {
-    const result = await deleteItem(collection.dataDir, req.params.itemId);
+    const result = await deleteStore(req.params.itemId);
     if (result.kind === "invalid-id") {
       res.status(400).json({ error: `invalid item id: ${result.itemId}` });
       return;
