@@ -5,7 +5,13 @@
 //
 // Terminal queries are NOT stripped here (unlike the reattach replay): the emulator's
 // replies go to an onData nobody listens to, and queries render nothing either way.
-import { Terminal } from "@xterm/headless";
+// Imported as a DEFAULT, not `import { Terminal }`. The package ships a UMD/CJS bundle
+// and its `module` field points at a path that doesn't exist, so Node's ESM loader falls
+// back to CJS and can't statically see the named export — a bare named import throws at
+// startup under `node --import tsx`, even though bundlers (and vitest) resolve it fine.
+import headless from "@xterm/headless";
+
+const { Terminal } = headless;
 
 export interface HeadlessScreenInput {
   buffer: string;
