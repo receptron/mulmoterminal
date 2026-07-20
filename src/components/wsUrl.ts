@@ -10,7 +10,9 @@ export interface TerminalWsUrlInput {
   devTerminal?: boolean; // grid dev terminal: no GUI MCP (?gui=0)
 }
 
-export function buildTerminalWsUrl({ host, secure, sessionId, cwd, devTerminal }: TerminalWsUrlInput): string {
+// The two session-terminal endpoints (/ws for claude, /ws/codex for codex) send the
+// identical session/cwd/gui query, so they share this assembly — only the path differs.
+function sessionTerminalWsUrl(path: string, { host, secure, sessionId, cwd, devTerminal }: TerminalWsUrlInput): string {
   const params = new URLSearchParams();
   if (sessionId) params.set("session", sessionId);
   if (cwd) params.set("cwd", cwd);
@@ -18,7 +20,11 @@ export function buildTerminalWsUrl({ host, secure, sessionId, cwd, devTerminal }
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : "";
   const proto = secure ? "wss:" : "ws:";
-  return `${proto}//${host}/ws${suffix}`;
+  return `${proto}//${host}/${path}${suffix}`;
+}
+
+export function buildTerminalWsUrl(input: TerminalWsUrlInput): string {
+  return sessionTerminalWsUrl("ws", input);
 }
 
 export type RunWsUrlInput = { host: string; secure: boolean; cwd?: string | null } & (
@@ -78,13 +84,6 @@ export interface CodexWsUrlInput {
 // The codex-terminal endpoint (a first-class codex session). Persistent & reattachable like
 // /ws; the browser sends the mulmoterminal session id to reattach/resume — the server maps it
 // to codex's own rollout id. ?gui=0 (grid) runs codex without the GUI MCP.
-export function buildCodexWsUrl({ host, secure, sessionId, cwd, devTerminal }: CodexWsUrlInput): string {
-  const params = new URLSearchParams();
-  if (sessionId) params.set("session", sessionId);
-  if (cwd) params.set("cwd", cwd);
-  if (devTerminal) params.set("gui", "0");
-  const qs = params.toString();
-  const suffix = qs ? `?${qs}` : "";
-  const proto = secure ? "wss:" : "ws:";
-  return `${proto}//${host}/ws/codex${suffix}`;
+export function buildCodexWsUrl(input: CodexWsUrlInput): string {
+  return sessionTerminalWsUrl("ws/codex", input);
 }
