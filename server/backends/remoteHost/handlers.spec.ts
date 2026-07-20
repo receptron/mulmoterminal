@@ -7,6 +7,12 @@ import path from "node:path";
 import { createRemoteHostHandlers } from "./handlers.js";
 import { initCollectionsBackend } from "../collections.js";
 
+const unusedTerminalDeps = {
+  listTerminalSessions: async () => [],
+  captureTerminalScreen: async () => "",
+  writeToSession: () => false,
+};
+
 describe("createRemoteHostHandlers", () => {
   let ws: string;
   let spawned: string[];
@@ -28,6 +34,7 @@ describe("createRemoteHostHandlers", () => {
         ingested.push(storageIds);
         return storageIds.map((id) => ({ path: `data/attachments/${id}.jpg`, mimeType: "image/jpeg" }));
       },
+      ...unusedTerminalDeps,
     });
   });
   afterEach(() => rmSync(ws, { recursive: true, force: true }));
@@ -124,7 +131,7 @@ describe("createRemoteHostHandlers · listSkills", () => {
     mkdirSync(path.join(ws, "data", "mycol", "items"), { recursive: true });
 
     initCollectionsBackend({ workspace: ws });
-    handlers = createRemoteHostHandlers({ workspace: ws, spawnChat: () => ({ chatId: "x" }), ingest: async () => [] });
+    handlers = createRemoteHostHandlers({ workspace: ws, spawnChat: () => ({ chatId: "x" }), ingest: async () => [], ...unusedTerminalDeps });
   });
   afterEach(() => rmSync(ws, { recursive: true, force: true }));
 

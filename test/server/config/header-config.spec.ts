@@ -8,13 +8,21 @@ import {
   type HeaderConfig,
 } from "../../../server/config/header-config.js";
 
+// `null` is the sanitizers' "unconfigured" signal; these cases all pass a configured value.
+const configured = <T>(value: T | null): T => {
+  if (value === null) throw new Error("expected a configured value, got null");
+  return value;
+};
+
 describe("sanitizeButtons", () => {
   it("keeps a valid shell/input/open button with its matching payload", () => {
-    const out = sanitizeButtons([
-      { id: "lint", label: "Lint", run: "shell", cmd: "yarn lint" },
-      { id: "c", label: "Compact", run: "input", text: "/compact" },
-      { id: "gh", label: "GH", run: "open", open: { url: "https://x" } },
-    ]);
+    const out = configured(
+      sanitizeButtons([
+        { id: "lint", label: "Lint", run: "shell", cmd: "yarn lint" },
+        { id: "c", label: "Compact", run: "input", text: "/compact" },
+        { id: "gh", label: "GH", run: "open", open: { url: "https://x" } },
+      ]),
+    );
     expect(out.map((b) => b.id)).toEqual(["lint", "c", "gh"]);
     expect(out[2].open).toEqual({ url: "https://x" });
   });
@@ -27,12 +35,14 @@ describe("sanitizeButtons", () => {
   });
 
   it("dedupes by id (first wins) and only keeps known open view targets", () => {
-    const out = sanitizeButtons([
-      { id: "a", label: "A", run: "shell", cmd: "1" },
-      { id: "a", label: "A2", run: "shell", cmd: "2" },
-      { id: "v", label: "V", run: "open", open: { view: "bogus" } },
-      { id: "w", label: "W", run: "open", open: { view: "diff" } },
-    ]);
+    const out = configured(
+      sanitizeButtons([
+        { id: "a", label: "A", run: "shell", cmd: "1" },
+        { id: "a", label: "A2", run: "shell", cmd: "2" },
+        { id: "v", label: "V", run: "open", open: { view: "bogus" } },
+        { id: "w", label: "W", run: "open", open: { view: "diff" } },
+      ]),
+    );
     expect(out.map((b) => b.id)).toEqual(["a", "w"]); // dup 'a' collapsed, bogus-view 'v' dropped
     expect(out[0].label).toBe("A");
   });
@@ -94,7 +104,11 @@ describe("mergeHeaderConfig", () => {
       chips: null,
     };
     const out = mergeHeaderConfig(g, p);
-    expect(out.buttons.map((b) => `${b.id}:${b.label}`).sort()).toEqual(["gonly:GO", "ponly:PO", "shared:P"]);
+    expect(
+      configured(out.buttons)
+        .map((b) => `${b.id}:${b.label}`)
+        .sort(),
+    ).toEqual(["gonly:GO", "ponly:PO", "shared:P"]);
   });
 
   it("orders by `order` (undefined last), stable within equal order", () => {
@@ -108,7 +122,7 @@ describe("mergeHeaderConfig", () => {
       },
       { buttons: [{ id: "c", label: "C", run: "shell", cmd: "x", order: 10 }], chips: null },
     );
-    expect(out.buttons.map((b) => b.id)).toEqual(["c", "a", "b"]);
+    expect(configured(out.buttons).map((b) => b.id)).toEqual(["c", "a", "b"]);
   });
 
   it("takes the project's chips when set, else the global's, and passes null through", () => {

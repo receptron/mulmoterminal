@@ -673,13 +673,38 @@ describe("collection / view delete routes", () => {
   });
 });
 
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
+
+const readJson = async <T>(res: Response, isBody: (value: unknown) => value is T): Promise<T> => {
+  const body: unknown = await res.json();
+  if (!isBody(body)) throw new Error(`unexpected response body: ${JSON.stringify(body)}`);
+  return body;
+};
+
+const defined = <T>(value: T | undefined): T => {
+  if (value === undefined) throw new Error("expected a value, got undefined");
+  return value;
+};
+
+interface MutatedItemBody {
+  item: Record<string, unknown>;
+}
+const isMutatedItemBody = (value: unknown): value is MutatedItemBody => isRecord(value) && isRecord(value.item);
+
+interface InlinedItemsBody {
+  inlined: unknown;
+  page: { items: { id: string; photo: unknown }[] };
+}
+const isInlinedItemsBody = (value: unknown): value is InlinedItemsBody =>
+  isRecord(value) && isRecord(value.page) && Array.isArray(value.page.items) && value.page.items.every((item) => isRecord(item) && typeof item.id === "string");
+
 // The desktop phone-frame preview's data source: a target:"mobile" view built
 // host-side into its sandboxed srcdoc, plus its writable-view mutate channel.
 describe("mobile custom views (phone-frame preview)", () => {
   it("GET /:slug/remote-view builds a mobile view into a sandboxed srcdoc", async () => {
     const res = await fetch(`${base}/api/collections/testcol/remote-view?id=phone&locale=en`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await readJson(res, isRecord);
     expect(body.view).toMatchObject({ id: "phone", target: "mobile" });
     expect(body.srcdoc).toContain("phone-view"); // the authored HTML body
     expect(body.srcdoc).toContain("connect-src 'none'"); // the stricter mobile CSP
@@ -699,7 +724,7 @@ describe("mobile custom views (phone-frame preview)", () => {
       body: JSON.stringify({ op: "update", id: "item1", patch: { name: "Renamed" } }),
     });
     expect(ok.status).toBe(200);
-    expect((await ok.json()).item.name).toBe("Renamed");
+    expect((await readJson(ok, isMutatedItemBody)).item.name).toBe("Renamed");
 
     // `status` is not in the view's editableFields → host-side policy refuses it.
     const forbidden = await fetch(`${base}/api/collections/testcol/remote-view/phone/mutate`, {
@@ -722,9 +747,9 @@ describe("mobile custom views (phone-frame preview)", () => {
   it("GET /:slug/remote-view/:viewId/items inlines the view's image field as a data URL thumbnail", async () => {
     const res = await fetch(`${base}/api/collections/photoscol/remote-view/gallery/items`);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = await readJson(res, isInlinedItemsBody);
     expect(body.inlined).toBeGreaterThanOrEqual(1);
-    const record = body.page.items.find((item: { id: string }) => item.id === "p1");
+    const record = defined(body.page.items.find((item) => item.id === "p1"));
     expect(record.photo).toMatch(/^data:image\/jpeg;base64,/); // the path was replaced by a thumbnail
   });
 

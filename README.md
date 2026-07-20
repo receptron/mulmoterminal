@@ -483,6 +483,7 @@ yarn dev:client         # Vite dev server only
 
 yarn build              # type-check (vue-tsc) + vite build -> dist/
 yarn typecheck:server   # type-check the server (tsconfig.server.json)
+yarn typecheck:test     # type-check the specs (tsconfig.test*.json)
 yarn server             # run backend; serves dist/ + the APIs on :34567
 yarn test               # vitest run
 ```
@@ -490,6 +491,12 @@ yarn test               # vitest run
 The backend is TypeScript run directly via `tsx` (no build step); `server/` is
 type-checked separately through `tsconfig.server.json` (`strict`), kept out of
 the main `build` so the two type-check independently.
+
+Specs sit outside both of those projects, and vitest strips types rather than
+checking them — so `yarn typecheck:test` is what keeps them honest. It mirrors
+the same split: `tsconfig.test.json` (client specs, DOM + `.vue`) and
+`tsconfig.test-server.json` (server specs, node). CI runs it alongside the
+other two.
 
 In dev, open the Vite URL; its proxy forwards `/ws`, `/ws/pubsub`, and `/api` to
 `:34567`. In production, run `yarn build` then `yarn server` and open

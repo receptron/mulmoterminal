@@ -41,9 +41,9 @@ describe("MANAGE_COLLECTION definition", () => {
     expect(MANAGE_COLLECTION.type).toBe("function");
     expect(MANAGE_COLLECTION.prompt).toContain("manageCollection");
     // inputSchema → parameters: the action enum must survive the adaptation.
-    const params = MANAGE_COLLECTION.parameters as { properties: { action: { enum: string[] } } };
-    expect(params.properties.action.enum).toContain("getItems");
-    expect(params.properties.action.enum).toContain("putSchema");
+    const actionEnum = MANAGE_COLLECTION.parameters?.properties.action.enum;
+    expect(actionEnum).toContain("getItems");
+    expect(actionEnum).toContain("putSchema");
   });
 });
 

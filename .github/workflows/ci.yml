@@ -28,6 +28,12 @@ jobs:
       - name: Typecheck (server)
         run: yarn typecheck:server
 
+      # Specs are excluded from the app/server projects, so without this step a
+      # type error in a test file reaches main unnoticed — vitest strips types
+      # rather than checking them.
+      - name: Typecheck (tests)
+        run: yarn typecheck:test
+
       - name: Build
         run: yarn build
 
