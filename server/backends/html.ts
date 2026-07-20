@@ -14,12 +14,12 @@
 //      workspace with an HTML preview CSP (sandboxed-ish: inline scripts + a curated
 //      CDN allowlist, but connect-src 'none' so a page can't phone home).
 import path from "node:path";
-import fs from "node:fs";
 import { createReadStream } from "node:fs";
 import type { Express, Request, Response, NextFunction } from "express";
 import { executeHtmlDispatch } from "@mulmoclaude/html-plugin";
 import { artifactsFileOps } from "./artifacts.js";
 import { publishFileChange } from "./fileChange.js";
+import { statFileOr404 } from "./statFileOr404.js";
 
 // Curated CDN allowlist (matches the collection custom-view policy) for an
 // LLM-authored page that may pull a charting/util lib or font from a CDN.
@@ -88,17 +88,8 @@ export function mountHtmlPreviewRoute(app: Express, deps: { workspace: string })
       res.status(400).json({ error: "not an .html file" });
       return;
     }
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(abs);
-    } catch {
-      res.status(404).json({ error: "not found" });
-      return;
-    }
-    if (!stat.isFile()) {
-      res.status(404).json({ error: "not a file" });
-      return;
-    }
+    const stat = statFileOr404(res, abs);
+    if (!stat) return;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);

@@ -15,9 +15,9 @@
 //     navigation or <iframe>; PDFs skip the sandbox CSP (WebKit refuses to render
 //     sandbox-opaque PDFs) but keep nosniff. Matches MulmoClaude's RAW_SECURITY_HEADERS.
 import path from "node:path";
-import fs from "node:fs";
 import { createReadStream } from "node:fs";
 import type { Express, Request, Response } from "express";
+import { statFileOr404 } from "./statFileOr404.js";
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024; // images / text / generic
 const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // audio / video (streamed via Range)
@@ -77,17 +77,8 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
       res.status(403).json({ error: "path escapes the workspace root" });
       return;
     }
-    let stat: fs.Stats;
-    try {
-      stat = fs.statSync(abs);
-    } catch {
-      res.status(404).json({ error: "not found" });
-      return;
-    }
-    if (!stat.isFile()) {
-      res.status(404).json({ error: "not a file" });
-      return;
-    }
+    const stat = statFileOr404(res, abs);
+    if (!stat) return;
 
     const ext = path.extname(abs).toLowerCase();
     const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
