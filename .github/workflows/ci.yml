@@ -7,8 +7,15 @@ on:
     branches: [main, dev_tool, feat/multi-agent]
 
 jobs:
+  # ubuntu + macOS on every PR. macOS matters here beyond redundancy: the Docker sandbox
+  # is darwin-gated (sandboxPlatformSupported), so its code paths — Keychain credential
+  # export/refresh, mount building — only run for real on a macOS runner.
   lint-and-build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
     steps:
       - uses: actions/checkout@v6
 
