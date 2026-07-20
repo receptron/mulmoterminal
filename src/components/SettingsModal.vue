@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
+import { trapTabKey } from "../utils/focusTrap";
 import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
 import { useCost } from "../composables/useCost";
@@ -215,19 +216,7 @@ function onKeydown(e: KeyboardEvent) {
     return;
   }
   if (e.key !== "Tab" || !modalEl.value) return;
-  const focusable = [...modalEl.value.querySelectorAll<HTMLElement>('button, input, [tabindex]:not([tabindex="-1"])')].filter(
-    (el) => !el.hasAttribute("disabled"),
-  );
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (e.shiftKey && document.activeElement === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && document.activeElement === last) {
-    e.preventDefault();
-    first.focus();
-  }
+  trapTabKey(e, modalEl.value, 'button, input, [tabindex]:not([tabindex="-1"])');
 }
 
 // Load cost unconditionally — the server falls back to the workspace when no cwd is
