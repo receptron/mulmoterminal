@@ -11,12 +11,12 @@ import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { renderSVG } from "uqr";
 
+import ToolbarPopover from "./ToolbarPopover.vue";
 import { auth } from "../config/firebase";
 // Session parking (localStorage) + reconnect-outcome decision live in a plain module
 // so they're unit-testable without mounting this Firebase-importing component.
 import { loadStoredSession, persistSession, reconnectAction, type FetchResult, type RemoteHostStatus } from "./remoteHostSession";
 import { registerRemoteHostSelfHeal } from "./remoteHostSelfHeal";
-import { useDropdownMenu } from "../composables/useDropdownMenu";
 import { usePubSub } from "../composables/usePubSub";
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
@@ -27,10 +27,11 @@ const qrDataUrl = `data:image/svg+xml;base64,${btoa(renderSVG(MOBILE_URL))}`;
 const busy = ref(false);
 const error = ref<string | null>(null);
 const status = ref<RemoteHostStatus>({ connected: false, uid: null });
-const rootRef = useTemplateRef<HTMLElement>("root");
-const { open, close, toggle } = useDropdownMenu(rootRef, () => {
+const popoverRef = useTemplateRef<InstanceType<typeof ToolbarPopover>>("popover");
+
+function onPopoverOpen() {
   refreshStatus().catch(() => undefined);
-});
+}
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -96,7 +97,7 @@ async function onConnect() {
     }
     status.value = res.status;
     persistSession(res.session); // park the session for popup-free reconnect after a restart
-    close();
+    popoverRef.value?.close();
   } catch (err) {
     error.value = errorText(err);
   } finally {
@@ -111,7 +112,7 @@ async function onDisconnect() {
   if (res.ok) {
     status.value = res.status;
     persistSession(null); // forget the parked session on an explicit disconnect
-    close();
+    popoverRef.value?.close();
   } else {
     error.value = res.error;
   }
@@ -139,65 +140,54 @@ onUnmounted(() => stopSelfHeal?.());
 </script>
 
 <template>
-  <div ref="root" class="toolbar-popover-root">
-    <button
-      type="button"
-      class="toolbar-popover-btn"
-      :class="{ active: open, connected: status.connected }"
-      :aria-expanded="open"
-      aria-haspopup="true"
-      :title="status.connected ? 'Remote host connected' : 'Remote host'"
-      aria-label="Remote host"
-      @click="toggle"
-    >
-      <span class="material-symbols-outlined">phonelink</span>
+  <ToolbarPopover
+    ref="popover"
+    icon="phonelink"
+    :title="status.connected ? 'Remote host connected' : 'Remote host'"
+    trigger-label="Remote host"
+    pane-class="rh-pop"
+    pane-label="Remote host"
+    :trigger-class="{ connected: status.connected }"
+    @open="onPopoverOpen"
+  >
+    <div class="rh-head">
+      <span class="material-symbols-outlined rh-dot" :class="{ connected: status.connected }">
+        {{ status.connected ? "check_circle" : "radio_button_unchecked" }}
+      </span>
+      <span class="rh-head-label">{{ status.connected ? "Online" : "Offline" }}</span>
+    </div>
+
+    <p v-if="status.uid" class="rh-uid">Signed in as {{ status.uid }}</p>
+
+    <button v-if="!status.connected" type="button" class="rh-action connect" :disabled="busy" @click="onConnect">
+      <span class="material-symbols-outlined">login</span>
+      {{ busy ? "Connecting…" : "Connect (Google sign-in)" }}
+    </button>
+    <button v-else type="button" class="rh-action disconnect" :disabled="busy" @click="onDisconnect">
+      <span class="material-symbols-outlined">logout</span>
+      {{ busy ? "Disconnecting…" : "Disconnect" }}
     </button>
 
-    <div v-if="open" class="toolbar-popover rh-pop" role="group" aria-label="Remote host">
-      <div class="rh-head">
-        <span class="material-symbols-outlined rh-dot" :class="{ connected: status.connected }">
-          {{ status.connected ? "check_circle" : "radio_button_unchecked" }}
-        </span>
-        <span class="rh-head-label">{{ status.connected ? "Online" : "Offline" }}</span>
-      </div>
+    <p v-if="error" class="rh-error">{{ error }}</p>
 
-      <p v-if="status.uid" class="rh-uid">Signed in as {{ status.uid }}</p>
-
-      <button v-if="!status.connected" type="button" class="rh-action connect" :disabled="busy" @click="onConnect">
-        <span class="material-symbols-outlined">login</span>
-        {{ busy ? "Connecting…" : "Connect (Google sign-in)" }}
-      </button>
-      <button v-else type="button" class="rh-action disconnect" :disabled="busy" @click="onDisconnect">
-        <span class="material-symbols-outlined">logout</span>
-        {{ busy ? "Disconnecting…" : "Disconnect" }}
-      </button>
-
-      <p v-if="error" class="rh-error">{{ error }}</p>
-
-      <div class="rh-help">
-        <p>Drive this terminal from your phone over a Firestore command channel — list collections, browse records, and start a chat.</p>
-        <p>
-          Open
-          <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="rh-link">{{ MOBILE_URL }}</a>
-          on your phone, signed in with the same Google account.
-        </p>
-        <div class="rh-qr">
-          <img :src="qrDataUrl" alt="" aria-hidden="true" />
-          <p>Or scan this QR code with your phone's camera.</p>
-        </div>
+    <div class="rh-help">
+      <p>Drive this terminal from your phone over a Firestore command channel — list collections, browse records, and start a chat.</p>
+      <p>
+        Open
+        <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="rh-link">{{ MOBILE_URL }}</a>
+        on your phone, signed in with the same Google account.
+      </p>
+      <div class="rh-qr">
+        <img :src="qrDataUrl" alt="" aria-hidden="true" />
+        <p>Or scan this QR code with your phone's camera.</p>
       </div>
     </div>
-  </div>
+  </ToolbarPopover>
 </template>
 
-<style scoped src="./toolbarPopover.css"></style>
-
 <style scoped>
-.toolbar-popover-btn.connected {
-  color: #35c46a;
-}
-
-.rh-pop {
+/* The panel div lives inside ToolbarPopover, so its scopeId differs from ours. */
+:deep(.rh-pop) {
   width: 300px;
   gap: 8px;
   padding: 10px;
