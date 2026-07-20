@@ -9,6 +9,7 @@
 //     package's self-contained i18n falls back to English for anything else.
 import { configureAccountingHost } from "@mulmoclaude/accounting-plugin/vue";
 import type { ApiResult } from "@mulmoclaude/accounting-plugin/vue";
+import { fetchJson } from "../utils/fetchJson";
 import { usePubSub } from "./usePubSub";
 
 const { subscribe } = usePubSub();
@@ -16,18 +17,13 @@ const { subscribe } = usePubSub();
 // Network seam — normalise fetch into the package's ApiResult union (the View
 // pattern-matches on `.ok`). Mirrors MulmoClaude's apiCall shape so the View's
 // `apiCall("/api/accounting", { method, body })` calls just work.
-async function apiCall<T = unknown>(path: string, opts: { method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown }): Promise<ApiResult<T>> {
-  try {
-    const res = await fetch(path, {
-      method: opts.method,
-      headers: opts.body !== undefined ? { "content-type": "application/json" } : undefined,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-    });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    return { ok: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err), status: 0 };
-  }
+function apiCall<T = unknown>(path: string, opts: { method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown }): Promise<ApiResult<T>> {
+  const hasBody = opts.body !== undefined;
+  return fetchJson<T>(path, {
+    method: opts.method,
+    headers: hasBody ? { "content-type": "application/json" } : undefined,
+    body: hasBody ? JSON.stringify(opts.body) : undefined,
+  });
 }
 
 configureAccountingHost({

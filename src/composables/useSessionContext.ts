@@ -1,7 +1,8 @@
 // Fetches a session's running model + current-turn context size from /api/session/:id.
 // Used where only the model/context is needed (e.g. header `${model}` substitution). Components that
 // also need live activity/usage (TerminalCell) fetch the same endpoint alongside those concerns.
-import { ref, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
+import { ref, type Ref } from "vue";
+import { useAutoRefresh } from "./useAutoRefresh";
 
 export interface SessionContext {
   model: string | null;
@@ -44,13 +45,7 @@ export function useSessionContext(sessionId: Ref<string | null>, cwd: Ref<string
     }
   }
 
-  const onFocus = () => void refresh();
-  onMounted(() => {
-    void refresh();
-    window.addEventListener("focus", onFocus);
-  });
-  onBeforeUnmount(() => window.removeEventListener("focus", onFocus));
-  watch([sessionId, cwd], () => void refresh());
+  useAutoRefresh(refresh, [sessionId, cwd]);
 
   return { context, refresh };
 }

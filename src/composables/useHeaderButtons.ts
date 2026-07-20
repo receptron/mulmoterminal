@@ -3,7 +3,8 @@
 // dirty, model, …). Re-fetches when the dir/session/agent change or the window regains focus, so
 // ${branch}/${dirty} etc. stay current. `chips: null` means unconfigured (the client keeps its
 // default header); an empty `buttons` array means nothing extra is shown.
-import { ref, watch, onMounted, onBeforeUnmount, type Ref } from "vue";
+import { ref, type Ref } from "vue";
+import { useAutoRefresh } from "./useAutoRefresh";
 
 export interface OpenTarget {
   url?: string;
@@ -63,13 +64,7 @@ export function useHeaderButtons(params: Params) {
     }
   }
 
-  const onFocus = () => void refresh();
-  onMounted(() => {
-    void refresh();
-    window.addEventListener("focus", onFocus);
-  });
-  onBeforeUnmount(() => window.removeEventListener("focus", onFocus));
-  watch([params.cwd, params.session, params.agent, () => params.model?.value], () => void refresh());
+  useAutoRefresh(refresh, [params.cwd, params.session, params.agent, () => params.model?.value]);
 
   return { buttons, chips, refresh };
 }
