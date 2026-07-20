@@ -18,23 +18,9 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="accounting-overlay" role="region" aria-label="Accounting">
+  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep" role="region" aria-label="Accounting">
     <PluginFrame :css="accountingCss" height="100%">
       <AccountingView />
     </PluginFrame>
   </div>
 </template>
-
-<style scoped>
-/* Fills the page BELOW the toolbar (40px) — the toolbar stays visible + clickable,
-   so the user can switch back to Chat / Collections. Matches CollectionsBrowseOverlay. */
-.accounting-overlay {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  background: var(--bg-deep);
-}
-</style>
