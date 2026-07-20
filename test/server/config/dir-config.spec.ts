@@ -198,17 +198,21 @@ describe("loadDirConfig", () => {
 });
 
 describe("dirConfigWriteTarget", () => {
-  const file = "/Users/me/proj/.mulmoterminal.json";
+  // Built through `path` so inputs and expectations carry the running platform's drive
+  // and separators — the function returns path.resolve()'d dirs, which on Windows are
+  // `D:\...` with backslashes, not POSIX literals.
+  const projDir = path.resolve("/Users/me/proj");
+  const file = path.join(projDir, ".mulmoterminal.json");
 
   it("returns the directory for each file-writing tool", () => {
     for (const tool of ["Write", "Edit", "MultiEdit"]) {
-      expect(dirConfigWriteTarget(tool, { file_path: file })).toBe("/Users/me/proj");
+      expect(dirConfigWriteTarget(tool, { file_path: file })).toBe(projDir);
     }
   });
 
   it("resolves a relative path against the SESSION cwd, not the server's", () => {
-    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj");
-    expect(dirConfigWriteTarget("Write", { file_path: "sub/.mulmoterminal.json" }, "/Users/me/proj")).toBe("/Users/me/proj/sub");
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, projDir)).toBe(projDir);
+    expect(dirConfigWriteTarget("Write", { file_path: path.join("sub", ".mulmoterminal.json") }, projDir)).toBe(path.join(projDir, "sub"));
   });
 
   it("publishes nothing for a relative path when the session cwd is unknown", () => {
@@ -218,7 +222,7 @@ describe("dirConfigWriteTarget", () => {
   });
 
   it("ignores the session cwd for an absolute path", () => {
-    expect(dirConfigWriteTarget("Write", { file_path: file }, "/somewhere/else")).toBe("/Users/me/proj");
+    expect(dirConfigWriteTarget("Write", { file_path: file }, path.resolve("/somewhere/else"))).toBe(projDir);
   });
 
   it("ignores tools that don't write the file", () => {
