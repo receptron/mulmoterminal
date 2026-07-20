@@ -24,6 +24,7 @@ import type {
 import type {
   CollectionDetailResponse,
   CollectionsListResponse,
+  CollectionOntologyResponse,
   CollectionNotifySeverity,
   ItemMutationResponse,
   FeedsListResponse,
@@ -146,6 +147,10 @@ configureCollectionUi({
   // ── real (read side) ──
   fetchCollectionDetail: (slug) => apiGet<CollectionDetailResponse>(`/api/collections/${encodeURIComponent(slug)}/detail`),
   listCollections: () => apiGet<CollectionsListResponse>("/api/collections/list"),
+  // Map tab: raw workspace-ontology entries; the plugin builds the graph
+  // client-side via the shared buildOntologyGraph (optional binding — omitting
+  // it would just hide the tab).
+  fetchOntology: () => apiGet<CollectionOntologyResponse>("/api/collections/ontology"),
   confirm: (options) => Promise.resolve(window.confirm(options.message)),
   // MulmoTerminal has no host i18n; the plugin runs its own. Pick the browser's
   // base language, defaulting to English.

@@ -17,6 +17,7 @@ import path from "node:path";
 import os from "node:os";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import {
+  buildWorkspaceOntology,
   configureCollectionHost,
   discoverCollections,
   loadCollection,
@@ -286,6 +287,19 @@ const listHandler: RequestHandler = async (_req, res) => {
     res.json({ collections: collections.map(toSummary) });
   } catch (err) {
     log.warn("collections", "list failed", { error: errorMessage(err) });
+    res.status(500).json({ error: errorMessage(err) });
+  }
+};
+
+// Raw workspace-ontology entries (buildWorkspaceOntology — derived on demand,
+// never stored); the /collections Map tab builds its graph from these with the
+// shared `buildOntologyGraph` client-side. Port of MulmoClaude's
+// GET /api/collections/ontology (mulmoclaude PR #2218).
+const ontologyHandler: RequestHandler = async (_req, res) => {
+  try {
+    res.json({ entries: await buildWorkspaceOntology() });
+  } catch (err) {
+    log.warn("collections", "ontology failed", { error: errorMessage(err) });
     res.status(500).json({ error: errorMessage(err) });
   }
 };
@@ -851,6 +865,7 @@ export function mountCollectionRoutes(app: Express): void {
   app.delete("/api/collections/:slug", collectionDeleteHandler);
 
   app.get("/api/collections/list", listHandler);
+  app.get("/api/collections/ontology", ontologyHandler);
   app.get("/api/collections/:slug/detail", detailHandler);
 
   app.post("/api/collections/:slug/items", itemCreateHandler);
