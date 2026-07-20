@@ -15,6 +15,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
+import { spawnCapture } from "./spawnCapture.js";
 
 const IMAGE = process.env.MULMOTERMINAL_SANDBOX_IMAGE || "mulmoterminal-sandbox";
 const CONTAINER_HOME = "/home/node";
@@ -81,7 +82,7 @@ export function sandboxImageExists(): boolean {
 }
 
 function builtImageSha(): string {
-  const r = runCapture("docker", ["image", "inspect", IMAGE, "--format", `{{index .Config.Labels "${IMAGE_SHA_LABEL}"}}`]);
+  const r = spawnCapture("docker", ["image", "inspect", IMAGE, "--format", `{{index .Config.Labels "${IMAGE_SHA_LABEL}"}}`]);
   return r.status === 0 ? r.stdout.trim() : "";
 }
 
@@ -150,7 +151,7 @@ export function sandboxCredentialsPath(sessionId: string): string {
 // overlay, falling back to whatever ~/.claude/.credentials.json holds.
 export function writeSandboxCredentials(sessionId: string): string | null {
   if (process.platform !== "darwin") return null;
-  const r = runCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
+  const r = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
   const credential = r.status === 0 ? r.stdout.trim() : "";
   if (!credential) return null;
   mkdirSync(SANDBOX_DIR, { recursive: true });
@@ -189,16 +190,11 @@ export function parseMountConfigNames(csv: string | undefined): string[] {
   return [...new Set(names)];
 }
 
-function runCapture(bin: string, args: string[]): { status: number | null; stdout: string } {
-  const r = spawnSync(bin, args, { encoding: "utf8" });
-  return { status: r.status, stdout: r.stdout ?? "" };
-}
-
 // gh on macOS keeps its token in the Keychain (not ~/.config/gh/hosts.yml), so mounting
 // the config dir alone won't authenticate gh / git-over-https. Best-effort: pass the
 // token as GH_TOKEN so it works inside the container.
 function ghTokenArgs(): string[] {
-  const r = runCapture("gh", ["auth", "token"]);
+  const r = spawnCapture("gh", ["auth", "token"]);
   const token = r.status === 0 ? r.stdout.trim() : "";
   return token ? ["-e", `GH_TOKEN=${token}`] : [];
 }

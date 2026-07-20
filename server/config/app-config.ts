@@ -180,24 +180,30 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
   };
 }
 
+// The config's serializable shape, shared by the persisted file and the GET/POST
+// /api/config response so the two can't drift. Fresh object each call; the key order
+// here is the on-disk key order.
+export function toPublicAppConfig(config: AppConfig): AppConfig {
+  return {
+    cwdPresets: config.cwdPresets,
+    soundFile: config.soundFile,
+    prRepos: config.prRepos,
+    launchers: config.launchers,
+    userMcpServers: config.userMcpServers,
+    buttons: config.buttons,
+    chips: config.chips,
+    pushEnabled: config.pushEnabled,
+    worklogEnabled: config.worklogEnabled,
+    worklogIntervalHours: config.worklogIntervalHours,
+  };
+}
+
 // Persist the whole config; returns false on any write failure so the caller can
 // surface it instead of reporting a false success.
 export function saveAppConfig(file: string, config: AppConfig): boolean {
   try {
     mkdirSync(path.dirname(file), { recursive: true });
-    const payload = {
-      cwdPresets: config.cwdPresets,
-      soundFile: config.soundFile,
-      prRepos: config.prRepos,
-      launchers: config.launchers,
-      userMcpServers: config.userMcpServers,
-      buttons: config.buttons,
-      chips: config.chips,
-      pushEnabled: config.pushEnabled,
-      worklogEnabled: config.worklogEnabled,
-      worklogIntervalHours: config.worklogIntervalHours,
-    };
-    writeFileSync(file, JSON.stringify(payload, null, 2));
+    writeFileSync(file, JSON.stringify(toPublicAppConfig(config), null, 2));
     return true;
   } catch {
     return false;
