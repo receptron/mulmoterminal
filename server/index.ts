@@ -53,7 +53,7 @@ import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } fr
 import { loadScripts, resolveScript } from "./files/scripts.js";
 import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
-import { activityHookEffects, resolveHookSessionId, shouldNotifyTaskFinished } from "./session/activity-hook.js";
+import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
@@ -1235,31 +1235,32 @@ app.get(SPA_FALLBACK_RE, (_req, res) => res.sendFile(path.join(__dirname, "../di
 // Activity hooks update a session's working / needs-attention flags. `active` (this
 // session is the user's actively-viewed pane) suppresses the attention flag — see
 // activityHookEffects for why a mere attached socket doesn't count in the grid.
-function handleActivityHook(sessionId: string, event: string, active: boolean) {
+function handleActivityHook(sessionId: string, event: string, active: boolean, message: string) {
   for (const eff of activityHookEffects(event, active)) {
     if (eff.kind === "working") setWorking(sessionId, eff.value, event);
     else setWaiting(sessionId, eff.value, event);
   }
-  // Every finished turn fires a Web Push (see shouldNotifyTaskFinished) — regardless of
-  // whether it's the actively-viewed pane, unlike the attention beep. Stop is one event per
-  // finished turn, so this fires once even though a background Stop publishes twice.
-  if (shouldNotifyTaskFinished(event)) notifyTaskFinished(sessionId);
+  // Push regardless of `active` — the phone is elsewhere, unlike the attention beep.
+  // A finished turn (Stop) and a blocked one (Notification) both reach here; the kind
+  // decides the wording. Stop is one event per finished turn, so this fires once even
+  // though a background Stop publishes twice.
+  const kind = pushKindFor(event);
+  if (kind) notifyTaskFinished(sessionId, kind, message);
 }
 
 const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
 // Notify the user's devices that a background task finished, when Web Push is enabled.
 // Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
-function notifyTaskFinished(sessionId: string): void {
+function notifyTaskFinished(sessionId: string, kind: PushKind, message: string): void {
   if (!getPushEnabled()) return;
   // Internal helper turns flow through /api/hook with active=false too — hidden background
   // workers and translation workers aren't real user tasks, so never push for them.
   if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = cwd ? path.basename(cwd) : "session";
-  const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
-  const title = `✅ ${where}`.slice(0, PUSH_TITLE_MAX);
-  const body = (what || "タスクが完了しました").slice(0, PUSH_BODY_MAX);
+  const detail = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;
   // the host id is what lets it know WHOSE session. Without it the phone opens with
   // no host selected — it never persists one — and can only offer the picker, which
@@ -1431,7 +1432,7 @@ app.post("/api/hook", async (req, res) => {
     const active = !!(entry && entry.active);
     const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
     await applyHeaderHooks(sessionId, event, body, cwd);
-    handleActivityHook(sessionId, event, active);
+    handleActivityHook(sessionId, event, active, typeof body.message === "string" ? body.message : "");
     await handleToolHook(sessionId, event, body);
     // A hidden translation worker that ends its turn while still pending never called
     // submitTranslation — fail it now rather than hang until the timeout. (When it DID
