@@ -12,6 +12,10 @@ ping to your phone when a task finishes. One `npx` command, no Electron, no conf
 npx mulmoterminal        # starts on http://localhost:34567 and opens your browser
 ```
 
+![MulmoTerminal's grid view — several coding agents running side by side](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-2x2.png)
+
+*The grid is a **cockpit for parallel agents** — each cell is one agent (Claude or Codex). A cell's **border color signals its state** — working (blue), needs-you (amber — a permission or answer), idle — and an attention chime pulls you back to a stuck cell off-screen, so you can supervise many and only step in where you're called. (See the [Cost & token usage](#cost--token-usage) shot below for a single cell's live header.)*
+
 ## Why you'll want it
 
 - **See every agent at once.** A grid of live sessions, each cell color-coded by state —
@@ -45,6 +49,10 @@ streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a W
 sidebar lists every session for the project and reflects, in real time, which are **working**
 (the agent is thinking) and which **need attention** (waiting for input, or finished with
 output you haven't seen) — driven by Claude/Codex activity hooks the server injects per spawn.
+
+![Single view — one agent in focus, terminal on the left and a GUI panel on the right](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/single-view.png)
+
+*Besides the grid there's a **single view** for focusing on one agent: the conversation/terminal on the left, and a **GUI panel** ("Canvas") on the right where the agent's tool calls render as documents, forms, charts, images, and HTML — not just printed text. Switch between the two with the chat / grid icons in the toolbar.*
 
 **Inserting a file path** — like a native terminal, you can put a file's absolute path into
 the prompt: **drag a file** onto the terminal (works where the browser exposes the path via
@@ -344,6 +352,10 @@ CLAUDE_CWD=/Users/you/my-project
 The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/config.json`
 (read/written via `GET`/`POST /api/config`):
 
+![The Settings modal — theme, notification sound, PR repos, launch commands, and MCP servers](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/settings.png)
+
+*Open it from the ⚙ button in the toolbar. Pick a **theme**, set a custom **attention sound**, list the repos the cross-repo **PRs & Issues** view should aggregate, add **launch commands** for grid cells, and register your own **MCP servers** — no need to hand-edit the config file.*
+
 | Field        | Meaning |
 | ------------ | ------- |
 | `cwdPresets` | Quick-pick directories offered when launching a terminal. |
@@ -433,6 +445,10 @@ malformed file is ignored.
   "sound": "./.mulmoterminal/alert.mp3" // attention sound, RELATIVE to this directory
 }
 ```
+
+![Four projects color-coded in the grid, each in its own palette](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-colors.png)
+
+*As cells pile up it gets hard to tell which project is which. Give each repo a **name badge** and its own colors in `.mulmoterminal.json` and they're unmistakable — `headerColor`/`badgeColor` tint the frame, while `colors` reaches all the way into the **terminal's own background and text**. (The example above dresses four repos in Mondrian / van Gogh / Picasso / Matisse palettes.)*
 
 | Field        | Meaning |
 | ------------ | ------- |
@@ -610,6 +626,10 @@ separate working tree that shares the repo's `.git`, so several agents can work 
 repo without colliding. Worktrees live under `~/.mulmoterminal/worktrees/` (override with
 `MULMOTERMINAL_HOME`), and existing ones are listed for reuse.
 
+![An empty cell's launch form — choose the agent, working directory, or a worktree](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-launch-form.png)
+
+*Every empty grid cell shows this launch form: toggle **Claude / Codex**, type a **working directory** (frequent ones autocomplete from your presets), or — in a git repo — name a task under **OR ISOLATE IN A WORKTREE** and hit **＋ New worktree** to start the agent on its own isolated branch. **OR LAUNCH** starts a plain shell or any launch command instead.*
+
 A worktree cell's header carries a **diff badge** (`+<commits> ●<dirty>`); click it for a
 **Changes vs `<base>`** panel (file list + patch) with actions:
 
@@ -634,6 +654,10 @@ independently. Backed by `GET /api/prs` and `GET /api/issues`.
 
 Each grid cell's header shows two badges for its session, refreshed when a turn finishes
 (from `GET /api/session/:id`):
+
+![A live Claude cell — the header shows the model·context and token badges this section describes](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-cell-live.png)
+
+*Both badges, live on a real Claude session: **`Opus · ctx 5%`** (model family + how full its context window is) and **`⇡427k ⇣1.8k`** (cumulative input / output tokens for the session). They sit in the header's first row alongside the **status dot**, directory, and **git chip** (`⎇ main ●2`), with what the agent is doing to the right; the icon buttons and the **timeline** (🕘) of tool calls are on the second row.*
 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
@@ -692,6 +716,12 @@ Favorited collections get their own toolbar buttons.
   (pulsing blue), **blocked** (amber — needs a permission / answer), **done** (blue —
   finished, output unreviewed), and **idle** — and the toolbar shows a tally across all
   pages so you notice an off-screen cell that needs you.
+- **Zoom & filmstrip** — a cell's **⤢** enlarges one agent while the rest shrink to
+  thumbnails in a bottom **filmstrip**; click a thumbnail to switch, **⤡** to return to the
+  grid — so you can flip between "see everything" and "focus on one" in a click.
+
+![Zoom — one agent enlarged, the others as a filmstrip along the bottom](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-zoom.png)
+
 - **Timeline** (🕘) — a read-only per-session activity timeline (tools run, newest first),
   from `GET /api/transcript/timeline`.
 - **Tools pane** — the available GUI tools plus a live tool-call history for the active
