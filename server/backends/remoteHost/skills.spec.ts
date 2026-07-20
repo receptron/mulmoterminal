@@ -13,6 +13,17 @@ const writeSkill = (root: string, name: string, contents: string): void => {
   writeFileSync(path.join(dir, "SKILL.md"), contents);
 };
 
+// Like writeSkill, but for names that are INTENTIONALLY unsafe: some (a `"`) are
+// illegal on Windows, where the OS rejects the mkdir. That failure is the same end
+// state the test asserts — the name never becomes a discoverable skill — so swallow it.
+const tryWriteUnsafeSkill = (root: string, name: string, contents: string): void => {
+  try {
+    writeSkill(root, name, contents);
+  } catch {
+    /* OS refused the unsafe name; discovery would have dropped it anyway */
+  }
+};
+
 const SKILL_MD = "---\ndescription: does a thing\n---\n\nbody";
 
 describe("discoverSkillNames", () => {
@@ -128,9 +139,9 @@ describe("discoverSkills", () => {
   // whitespace/quotes (e.g. from an untrusted repo's .claude/skills) must never be
   // discovered — even with valid frontmatter.
   it("rejects dir names that aren't safe slugs (whitespace/quotes/leading dash)", async () => {
-    writeSkill(ws, "bad name", SKILL_MD); // space
-    writeSkill(ws, 'q"uote', SKILL_MD); // quote
-    writeSkill(ws, "-lead", SKILL_MD); // non-alnum start
+    tryWriteUnsafeSkill(ws, "bad name", SKILL_MD); // space
+    tryWriteUnsafeSkill(ws, 'q"uote', SKILL_MD); // quote — illegal on Windows
+    tryWriteUnsafeSkill(ws, "-lead", SKILL_MD); // non-alnum start
     writeSkill(ws, "safe-slug_1", SKILL_MD); // the only valid one
     expect((await discoverSkills({ workspaceRoot: ws, userDir: userDir() })).map((s) => s.slug)).toEqual(["safe-slug_1"]);
   });
