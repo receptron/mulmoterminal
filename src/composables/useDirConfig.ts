@@ -4,22 +4,12 @@ import type { ITheme } from "@xterm/xterm";
 import { isThemeId, type ThemeId } from "./useTheme";
 // Shared with the server config schema so the two can't drift — see common/themeColors.ts.
 import { THEME_COLOR_KEYS } from "../../common/themeColors";
+import type { DirChrome } from "../../common/dirChrome";
 
 // The per-directory overrides a terminal adopts when its cwd holds a
 // `.mulmoterminal.json` (served by GET /api/dir-config). The raw sound path stays
 // server-side; `hasSound` says whether GET /api/dir-sound has something to stream.
-export interface DirConfig {
-  name: string | null;
-  badgeColor: string | null;
-  // The cell header's own background / text color (grid cell + single view), or null
-  // to keep the theme default. Distinct from `colors` (the xterm palette).
-  headerColor: string | null;
-  headerTextColor: string | null;
-  // The cell frame + accents (body background, border, idle status dot, header buttons).
-  cellColor: string | null;
-  cellBorderColor: string | null;
-  dotColor: string | null;
-  buttonColor: string | null;
+export interface DirConfig extends DirChrome {
   theme: ThemeId | null;
   // Per-key xterm palette overrides applied on top of `theme` (or the app theme).
   colors: Partial<ITheme> | null;

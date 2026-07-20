@@ -7,6 +7,7 @@
 import { existsSync, readFileSync, statSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { sanitizeButtons, sanitizeChips } from "./header-config.js";
+import type { DirChrome } from "../../common/dirChrome.js";
 import {
   dirNameField,
   dirColorField,
@@ -20,20 +21,7 @@ import {
 
 const DIR_CONFIG_FILE = ".mulmoterminal.json";
 
-export interface DirConfig {
-  name: string | null;
-  badgeColor: string | null;
-  // The cell header's own background / text color (grid cell + single view). Hex
-  // #rrggbb, or null to keep the theme default. Distinct from `colors` (the xterm
-  // palette) — these tint the chrome around the terminal, not the terminal itself.
-  headerColor: string | null;
-  headerTextColor: string | null;
-  // The cell frame + accents (grid cell): body background, border, the idle status
-  // dot, and the header's icon buttons. Hex #rrggbb or null for the theme default.
-  cellColor: string | null;
-  cellBorderColor: string | null;
-  dotColor: string | null;
-  buttonColor: string | null;
+export interface DirConfig extends DirChrome {
   theme: ThemeId | null;
   // Per-key xterm palette overrides (on top of `theme`), or null when none are valid.
   colors: Record<string, string> | null;
@@ -51,20 +39,10 @@ export interface DirConfig {
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
-// /api/dir-sound), so the client only learns whether one exists.
-export interface PublicDirConfig {
-  name: string | null;
-  badgeColor: string | null;
-  headerColor: string | null;
-  headerTextColor: string | null;
-  cellColor: string | null;
-  cellBorderColor: string | null;
-  dotColor: string | null;
-  buttonColor: string | null;
-  theme: ThemeId | null;
-  colors: Record<string, string> | null;
-  hasSound: boolean;
-}
+// /api/dir-sound), so the client only learns whether one exists. Derived from
+// DirConfig rather than restated, so a new appearance field reaches the client
+// without a second edit.
+export type PublicDirConfig = Omit<DirConfig, "sound" | "buttons" | "chips" | "skills"> & { hasSound: boolean };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
