@@ -1485,9 +1485,7 @@ app.post("/api/agent/toolResult", async (req, res) => {
 // first access so the views survive a reboot.
 app.get("/api/agent/toolResults/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
+  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
   res.json({ sessionId, toolResults: await toolResultsStore.get(sessionId) });
 });
 
@@ -1503,9 +1501,7 @@ app.get("/api/tools", (_req, res) => {
 // from disk (~/.mulmoterminal/toolcalls) on first access so it survives a reboot.
 app.get("/api/tool-calls/:sessionId", async (req, res) => {
   const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
+  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
   res.json({ sessionId, toolCalls: await toolCallsStore.get(sessionId) });
 });
 
@@ -2383,18 +2379,13 @@ function spawnClaudePty(
   // PTY -> browser (buffering a bounded tail for reattach).
   entry.term.onData((data) => {
     entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.send(JSON.stringify({ type: "output", data }));
-    }
+    sendFrame(entry.ws, { type: "output", data });
     scanForDraftReady(data);
   });
 
   entry.term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] exited code=${exitCode} signal=${signal}`);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
-      entry.ws.close();
-    }
+    sendExitAndClose(entry.ws, exitCode, signal);
     // Clear the dot if it died mid-turn, then tear down everything (deletes
     // ptys/knownSessions/activity and publishes "closed") so a process that
     // exits on its own — e.g. a brand-new session that never persisted —
@@ -2430,15 +2421,7 @@ function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, session
       if (msg.active) setWaiting(sessionId, false);
     } else if (msg.type === "input" && typeof msg.data === "string") {
       entry.term.write(msg.data);
-    } else if (
-      msg.type === "resize" &&
-      Number.isInteger(msg.cols) &&
-      Number.isInteger(msg.rows) &&
-      msg.cols >= 2 &&
-      msg.cols <= 500 &&
-      msg.rows >= 1 &&
-      msg.rows <= 200
-    ) {
+    } else if (isResizeFrame(msg)) {
       entry.term.resize(msg.cols, msg.rows);
     }
   } catch (err) {
@@ -2459,14 +2442,11 @@ function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
   console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
 
   term.onData((data) => {
-    if (ws.readyState === ws.OPEN) ws.send(JSON.stringify({ type: "output", data }));
+    sendFrame(ws, { type: "output", data });
   });
   term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] command exited code=${exitCode} signal=${signal}`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
-      ws.close();
-    }
+    sendExitAndClose(ws, exitCode, signal);
   });
   return term;
 }
@@ -2496,16 +2476,11 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
 
   term.onData((data) => {
     entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.send(JSON.stringify({ type: "output", data }));
-    }
+    sendFrame(entry.ws, { type: "output", data });
   });
   term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] launcher exited code=${exitCode} signal=${signal}`);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
-      entry.ws.close();
-    }
+    sendExitAndClose(entry.ws, exitCode, signal);
     reap(sessionId);
   });
   return entry;
@@ -2523,15 +2498,7 @@ function handleCommandFrame(term: IPty, raw: RawData) {
   try {
     if (msg.type === "input" && typeof msg.data === "string") {
       term.write(msg.data);
-    } else if (
-      msg.type === "resize" &&
-      Number.isInteger(msg.cols) &&
-      Number.isInteger(msg.rows) &&
-      msg.cols >= 2 &&
-      msg.cols <= 500 &&
-      msg.rows >= 1 &&
-      msg.rows <= 200
-    ) {
+    } else if (isResizeFrame(msg)) {
       term.resize(msg.cols, msg.rows);
     }
   } catch (err) {
@@ -2627,10 +2594,7 @@ wss.on("connection", (ws, req) => {
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
     // must close just this connection — never crash the whole server.
     console.error(`[ws] failed to start session ${sessionId}: ${messageOf(err)}`);
-    if (ws.readyState === ws.OPEN) {
-      ws.send(JSON.stringify({ type: "error", message: "Failed to start Claude. Is the `claude` CLI installed and on your PATH?" }));
-      ws.close();
-    }
+    closeWithError(ws, "Failed to start Claude. Is the `claude` CLI installed and on your PATH?");
     return;
   }
 
@@ -2699,6 +2663,35 @@ async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
       // already exited — nothing to kill
     }
   });
+}
+
+// Bounds a resize frame must satisfy before it reaches the PTY: a crafted or buggy
+// client must not be able to ask for a 0-column or absurdly large terminal.
+const MIN_TERM_COLS = 2;
+const MAX_TERM_COLS = 500;
+const MIN_TERM_ROWS = 1;
+const MAX_TERM_ROWS = 200;
+
+/** A well-formed `resize` frame with both dimensions inside the allowed bounds. */
+function isResizeFrame(msg: { type?: unknown; cols?: unknown; rows?: unknown }): msg is { type: "resize"; cols: number; rows: number } {
+  if (msg.type !== "resize" || !Number.isInteger(msg.cols) || !Number.isInteger(msg.rows)) return false;
+  const cols = Number(msg.cols);
+  const rows = Number(msg.rows);
+  return cols >= MIN_TERM_COLS && cols <= MAX_TERM_COLS && rows >= MIN_TERM_ROWS && rows <= MAX_TERM_ROWS;
+}
+
+// Send a JSON frame if the socket is still there and open. Null-tolerant so the PTY
+// handlers don't each repeat the readyState guard; reports whether it went out.
+function sendFrame(socket: WebSocket | null | undefined, payload: unknown): boolean {
+  if (!socket || socket.readyState !== socket.OPEN) return false;
+  socket.send(JSON.stringify(payload));
+  return true;
+}
+
+// Report a PTY exit to the browser, then hang up — shared by every PTY kind. The
+// socket is read at exit time because a reattach can swap it after wiring.
+function sendExitAndClose(socket: WebSocket | null | undefined, exitCode: number, signal: number | undefined): void {
+  if (sendFrame(socket, { type: "exit", exitCode, signal })) socket?.close();
 }
 
 // Send a terminal error to the socket and close it (no reconnect on the client side).
@@ -2800,15 +2793,12 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
 function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
   entry.term.onData((data) => {
     entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
+    sendFrame(entry.ws, { type: "output", data });
     onOutput?.(data);
   });
   entry.term.onExit(({ exitCode, signal }) => {
     console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
-    if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
-      entry.ws.send(JSON.stringify({ type: "exit", exitCode, signal }));
-      entry.ws.close();
-    }
+    sendExitAndClose(entry.ws, exitCode, signal);
     reap(sessionId);
   });
 }
