@@ -97,7 +97,7 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Wiki">
+  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Wiki">
     <nav class="wiki-tabs" aria-label="Wiki sections">
       <button type="button" :class="{ active: view.mode === 'index' }" @click="wikiGotoIndex">Index</button>
       <button v-if="view.mode === 'page'" type="button" class="active" aria-current="page" disabled>
@@ -120,7 +120,6 @@ useEscapeToClose(isOpen, close);
   </div>
 </template>
 
-<style scoped src="./overlay.css"></style>
 <style scoped>
 .wiki-tabs {
   flex: 0 0 auto;

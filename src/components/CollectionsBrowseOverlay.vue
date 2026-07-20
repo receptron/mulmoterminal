@@ -45,7 +45,7 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Collections">
+  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Collections">
     <div class="browse-bar">
       <span class="browse-bar-label">Launch with</span>
       <div class="agent-toggle" role="radiogroup" aria-label="Launch agent">
@@ -82,7 +82,6 @@ useEscapeToClose(isOpen, close);
   </div>
 </template>
 
-<style scoped src="./overlay.css"></style>
 <style scoped>
 /* A thin bar picking which agent a collection action / chat launches. */
 .browse-bar {
