@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES, isResumableTmuxSession } from "../../../server/infra/tmux";
+import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES, isResumableTmuxSession, parseTmuxEnvironment } from "../../../server/infra/tmux";
 
 describe("tmuxSessionName", () => {
   it("prefixes the session id", () => {
@@ -55,5 +55,45 @@ describe("isResumableTmuxSession", () => {
 
   it("treats a session tracked nowhere as a pure orphan (reap-able)", () => {
     expect(isResumableTmuxSession("z", new Set(["a"]), new Set(["b"]), new Set(["c"]), (id) => id === "d")).toBe(false);
+  });
+});
+
+describe("parseTmuxEnvironment", () => {
+  it("reads plain NAME=value lines", () => {
+    const env = parseTmuxEnvironment("HOME=/Users/u\nPATH=/usr/bin:/bin\n");
+    expect(env.get("HOME")).toBe("/Users/u");
+    expect(env.get("PATH")).toBe("/usr/bin:/bin");
+    expect(env.size).toBe(2);
+  });
+
+  it("omits vars already flagged for removal (rendered as -NAME)", () => {
+    const env = parseTmuxEnvironment("-PREFIX\nHOME=/Users/u\n");
+    expect(env.has("PREFIX")).toBe(false);
+    expect(env.get("HOME")).toBe("/Users/u");
+  });
+
+  it("keeps a multi-line value whole instead of reading its lines as new vars", () => {
+    const env = parseTmuxEnvironment("SSH_KEY=-----BEGIN-----\nabc\n-----END-----\nHOME=/Users/u\n");
+    expect(env.get("SSH_KEY")).toBe("-----BEGIN-----\nabc\n-----END-----");
+    expect(env.get("HOME")).toBe("/Users/u");
+  });
+
+  // Regression: a naive line split read a multi-line value's continuations as
+  // variable names, so a line beginning `PATH=` inside an exported bash function
+  // would have clobbered the real PATH. A name we can't parse is skipped whole —
+  // we only ever act on plainly-named vars, so silence is the safe outcome.
+  it("never lets a continuation line inside an unparseable var become a var", () => {
+    const env = parseTmuxEnvironment("BASH_FUNC_ls%%=() {\n  PATH=/injected\n}\nPATH=/usr/bin\n");
+    expect(env.get("PATH")).toBe("/usr/bin");
+    expect([...env.keys()]).toEqual(["PATH"]);
+  });
+
+  it("does not let the trailing newline extend the last value", () => {
+    expect(parseTmuxEnvironment("PATH=/usr/bin\n").get("PATH")).toBe("/usr/bin");
+  });
+
+  it("keeps an empty value, and tolerates empty output", () => {
+    expect(parseTmuxEnvironment("EMPTY=\n").get("EMPTY")).toBe("");
+    expect(parseTmuxEnvironment("").size).toBe(0);
   });
 });

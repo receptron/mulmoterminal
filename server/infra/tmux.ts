@@ -9,7 +9,7 @@ import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { isLauncherEnvVar, sanitizePathEntries } from "./pty-env.js";
+import { isLauncherEnvVar } from "./pty-env.js";
 
 const SERVER_SOCKET = "mulmoterminal";
 const SESSION_PREFIX = "mt-";
@@ -74,23 +74,57 @@ function applyLiveTmuxOptions(): void {
   }
 }
 
+// The two line shapes `show-environment` emits. Anything else continues the
+// previous value: env values may contain newlines — an exported bash function is
+// the common case — and a naive line split reads those continuations as variable
+// names. The format is ambiguous at the margin (a continuation that is itself
+// flush-left `NAME=…` is indistinguishable from a real assignment); these
+// patterns resolve everything a shell profile realistically produces.
+const ENV_ASSIGNMENT = /^[A-Za-z_]\w*=/;
+const ENV_FLAGGED_REMOVED = /^-[A-Za-z_]\w*$/;
+
+// `show-environment` output → name/value pairs. Vars flagged for removal carry
+// no value and are omitted, as are names outside the patterns above (an exported
+// bash function's `BASH_FUNC_x%%`): we only ever act on plainly-named vars, so
+// skipping what we can't parse is the safe outcome. Pure, hence unit-testable.
+export function parseTmuxEnvironment(stdout: string): Map<string, string> {
+  const entries = new Map<string, string>();
+  let current: string | null = null;
+  for (const line of stdout.replace(/\n$/, "").split("\n")) {
+    if (ENV_ASSIGNMENT.test(line)) {
+      const eq = line.indexOf("=");
+      current = line.slice(0, eq);
+      entries.set(current, line.slice(eq + 1));
+    } else if (ENV_FLAGGED_REMOVED.test(line)) {
+      current = null;
+    } else if (current !== null) {
+      entries.set(current, `${entries.get(current)}\n${line}`);
+    }
+  }
+  return entries;
+}
+
 // Scrub package-manager launcher vars from a RUNNING tmux server's global
-// environment. The tmux server outlives node: one started under `yarn dev`
-// keeps PREFIX/npm_* in its global env and re-injects them into every new
-// pane — where PREFIX makes nvm strip node/npm from PATH (see pty-env.ts) —
-// so restarting node with a clean env isn't enough. `setenv -g -r` flags each
-// var for removal from new pane environments; the global PATH is rewritten
-// with the run-script shim dirs dropped. Existing panes keep their env (a
-// shell's copy can't be edited from outside); new ones start clean.
+// environment. The tmux server outlives node: one started under `yarn dev` keeps
+// PREFIX/npm_* in its global env and hands them to every new pane — where PREFIX
+// makes nvm strip node/npm from PATH (see pty-env.ts) — so restarting node with a
+// clean env isn't enough. `set-environment -r` flags each var for removal from
+// new pane environments. Existing panes keep their env (a running shell's copy
+// can't be edited from outside); panes created from here on start clean.
+//
+// PATH is deliberately NOT rewritten here. Measured on tmux 3.6a: a new pane takes
+// PATH from the CLIENT that spawns it, never from the server's environment (global
+// `/GLOBAL/only` + client `/CLIENT/only` → the pane gets `/CLIENT/only`), so a
+// clean PATH written here would have no effect. Our client is spawnPty, whose env
+// sanitizePtyEnv already cleans.
+//
+// Session environments need no scrub either: tmux copies only `update-environment`
+// vars (DISPLAY, SSH_*, …) into them, never launcher vars.
 function scrubGlobalEnvironment(): void {
   const r = tmux(["show-environment", "-g"]);
   if (r.status !== 0) return;
-  for (const line of r.stdout.split("\n")) {
-    const eq = line.indexOf("=");
-    if (eq <= 0) continue;
-    const name = line.slice(0, eq);
+  for (const name of parseTmuxEnvironment(r.stdout).keys()) {
     if (isLauncherEnvVar(name)) tmux(["set-environment", "-g", "-r", name]);
-    else if (name === "PATH") tmux(["set-environment", "-g", "PATH", sanitizePathEntries(line.slice(eq + 1), path.delimiter)]);
   }
 }
 
