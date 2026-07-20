@@ -169,7 +169,7 @@ describe("TerminalCell", () => {
       }
       return Promise.resolve({ ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) });
     }) as unknown as typeof fetch;
-    await w.find(".cell-dir-pick").trigger("click");
+    await w.find('[aria-label="Choose the working directory"]').trigger("click");
     await flushPromises();
     expect(body).toContain('"directory":true');
     expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/picked/dir");
@@ -813,7 +813,7 @@ describe("TerminalCell", () => {
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
     expect(w.find(".cell-worktrees").exists()).toBe(true);
-    const rows = w.findAll(".wt-reuse");
+    const rows = w.findAll('[data-testid="worktree-reuse"]');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain("fix-login");
   });
@@ -844,7 +844,7 @@ describe("TerminalCell", () => {
     mockFetchWithWorktrees([{ path: "/wt/old-task", branch: "agent/old-task", task: "old-task", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-reuse").trigger("click");
+    await w.find('[data-testid="worktree-reuse"]').trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/wt/old-task");
