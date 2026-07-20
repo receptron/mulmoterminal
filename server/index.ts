@@ -1260,8 +1260,11 @@ function notifyTaskFinished(sessionId: string): void {
   const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const title = `✅ ${where}`.slice(0, PUSH_TITLE_MAX);
   const body = (what || "タスクが完了しました").slice(0, PUSH_BODY_MAX);
-  // The session id is what lets the phone open this session from the notification.
-  void sendWebPush(title, body, { sessionId });
+  // The session id is what lets the phone open this session from the notification;
+  // the host id is what lets it know WHOSE session. Without it the phone opens with
+  // no host selected — it never persists one — and can only offer the picker, which
+  // is where every notification tap used to land (receptron/mulmoserver#86).
+  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID });
 }
 
 interface HookToolPayload {
