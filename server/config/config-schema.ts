@@ -13,10 +13,10 @@
 import { z } from "zod";
 // Shared with the client dir-config parser so the two can't drift — see common/themeColors.ts.
 import { THEME_COLOR_KEYS } from "../../common/themeColors.js";
+import { THEME_IDS } from "../../common/themeIds.js";
 
 // ---- shared constants ---------------------------------------------------------------------
 
-export const THEME_IDS = ["midnight", "nord", "daylight", "solarized"] as const;
 export const VIEW_TARGETS = ["diff", "prs", "wiki", "collections", "accounting"] as const;
 export const RUN_TYPES = ["shell", "input", "open"] as const;
 export const BUILTIN_CHIPS = ["dir", "git", "ctx", "usage", "status", "diff", "tools"] as const;

@@ -1,7 +1,8 @@
 import { ref } from "vue";
 import type { ITheme } from "@xterm/xterm";
+import type { ThemeId } from "../../common/themeIds";
 
-export type ThemeId = "midnight" | "nord" | "daylight" | "solarized";
+export type { ThemeId };
 
 export interface Theme {
   id: ThemeId;
@@ -87,6 +88,10 @@ export const THEMES: Theme[] = [
 const STORAGE_KEY = "theme";
 const DEFAULT_THEME: ThemeId = "midnight";
 
+// Validate against THEMES, not the id list: an id is only usable if it has a
+// theme object here. A THEME_IDS entry with no matching THEMES entry would
+// otherwise be accepted, set as data-theme, then silently fall back to THEMES[0]
+// for the terminal palette. The useTheme spec asserts the two stay in lockstep.
 export function isThemeId(value: unknown): value is ThemeId {
   return typeof value === "string" && THEMES.some((t) => t.id === value);
 }
