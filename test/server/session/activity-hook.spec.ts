@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects, shouldNotifyTaskFinished } from "../../../server/session/activity-hook.js";
+import { activityHookEffects, resolveHookSessionId, shouldNotifyTaskFinished } from "../../../server/session/activity-hook.js";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {
@@ -48,5 +48,49 @@ describe("shouldNotifyTaskFinished", () => {
     expect(shouldNotifyTaskFinished("UserPromptSubmit")).toBe(false);
     expect(shouldNotifyTaskFinished("PreToolUse")).toBe(false);
     expect(shouldNotifyTaskFinished("SessionStart")).toBe(false);
+  });
+});
+
+describe("resolveHookSessionId", () => {
+  const UUID = "8b1f2c4e-0000-4aaa-9bbb-ccddeeff0011";
+  const OTHER = "11111111-2222-4333-8444-555555555555";
+  const isValidId = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+  const resolve = (header: unknown, body: unknown) => resolveHookSessionId(header, body, isValidId);
+
+  // Claude reissues its own session_id on /clear and /compact; the mulmoterminal id is
+  // the one hooks must stay attributed to.
+  it("prefers the mulmoterminal header over Claude's own id", () => {
+    expect(resolve(UUID, OTHER)).toBe(UUID);
+  });
+
+  it("falls back to the body when no header is present", () => {
+    expect(resolve(undefined, UUID)).toBe(UUID);
+  });
+
+  // The fallback used to skip the shape check the header path applied.
+  it("validates the body fallback, not just the header", () => {
+    expect(resolve(undefined, "not-a-uuid")).toBeNull();
+    expect(resolve(undefined, "")).toBeNull();
+  });
+
+  it("falls through to the body when the header is malformed", () => {
+    expect(resolve("garbage", UUID)).toBe(UUID);
+  });
+
+  // The id becomes a Firestore document id. A value with a path separator would change
+  // the document's depth rather than address a session.
+  it("rejects an id carrying a path separator", () => {
+    expect(resolve(undefined, `${UUID}/../../other`)).toBeNull();
+    expect(resolve(undefined, "a/b")).toBeNull();
+  });
+
+  it("rejects non-string sources", () => {
+    for (const value of [42, true, null, undefined, { id: UUID }, [UUID]]) {
+      expect(resolve(value, value)).toBeNull();
+    }
+  });
+
+  it("accepts either case, since the shape check is case-insensitive", () => {
+    expect(resolve(undefined, UUID.toUpperCase())).toBe(UUID.toUpperCase());
   });
 });

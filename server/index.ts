@@ -51,7 +51,7 @@ import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } fr
 import { loadScripts, resolveScript } from "./files/scripts.js";
 import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
-import { activityHookEffects, shouldNotifyTaskFinished } from "./session/activity-hook.js";
+import { activityHookEffects, resolveHookSessionId, shouldNotifyTaskFinished } from "./session/activity-hook.js";
 import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
@@ -1255,7 +1255,8 @@ function notifyTaskFinished(sessionId: string): void {
   const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const title = `✅ ${where}`.slice(0, PUSH_TITLE_MAX);
   const body = (what || "タスクが完了しました").slice(0, PUSH_BODY_MAX);
-  void sendWebPush(title, body);
+  // The session id is what lets the phone open this session from the notification.
+  void sendWebPush(title, body, { sessionId });
 }
 
 interface HookToolPayload {
@@ -1410,12 +1411,13 @@ async function applyHeaderHooks(sessionId: string, event: string, body: Record<s
 // we can flag which background sessions have new activity / build tool history.
 app.post("/api/hook", async (req, res) => {
   const body = req.body || {};
-  // Prefer the stable mulmoterminal id from the x-mt-session header over Claude's own session_id, which it
-  // reissues on /clear and /compact — the PTY/client id is the one hooks must stay attributed to.
-  const mtHeader = req.headers["x-mt-session"];
-  const mt = typeof mtHeader === "string" && SESSION_ID_RE.test(mtHeader) ? mtHeader : null;
-  const sessionId = mt ?? body.session_id;
+  const sessionId = resolveHookSessionId(req.headers["x-mt-session"], body.session_id, (id) => SESSION_ID_RE.test(id));
   const event = body.hook_event_name;
+  if (!sessionId && body.session_id) {
+    // Rejecting silently would make hooks look simply broken; the id shape is the
+    // precondition for using it as a Firestore doc id and as push routing.
+    console.warn(`[hook] ignoring ${event} — session id is not a canonical uuid`);
+  }
   if (sessionId) {
     const entry = ptys.get(sessionId);
     const active = !!(entry && entry.active);

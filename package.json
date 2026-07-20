@@ -57,7 +57,7 @@
     "@google/genai": "^2.12.0",
     "@marp-team/marp-core": "^4.3.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@mulmobridge/web-push": "^0.1.0",
+    "@mulmobridge/web-push": "^0.2.0",
     "@mulmocast/deck-web": "^1.1.1",
     "@mulmocast/types": "^2.8.1",
     "@mulmochat-plugin/generate-image": "^0.5.1",
