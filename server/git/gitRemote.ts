@@ -1,7 +1,6 @@
 import type { Express, Request } from "express";
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
-import path from "node:path";
+import { resolveDirRequest } from "../files/dirRequest.js";
 
 // Convert a git remote URL to its GitHub repository web URL, or null when the
 // remote isn't on github.com. Pure (no I/O) so it's exhaustively unit-tested.
@@ -60,20 +59,8 @@ interface GitRemoteOptions {
 // other local-only routes.
 export function mountGitRemoteRoute(app: Express, { isAllowedOrigin }: GitRemoteOptions) {
   app.post("/api/git-remote", async (req: Request, res) => {
-    if (!isAllowedOrigin(req.headers.origin)) return res.status(403).json({ error: "forbidden origin" });
-
-    const dir = isRecord(req.body) && typeof req.body.path === "string" ? req.body.path : "";
-    if (!dir || !path.isAbsolute(dir)) return res.status(400).json({ error: "absolute path required" });
-    try {
-      if (!statSync(dir).isDirectory()) return res.status(400).json({ error: "not a directory" });
-    } catch {
-      return res.status(404).json({ error: "directory not found" });
-    }
-
+    const dir = resolveDirRequest(req, res, isAllowedOrigin);
+    if (!dir) return;
     res.json({ githubUrl: await resolveGithubUrl(dir) });
   });
-}
-
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null;
 }

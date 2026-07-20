@@ -1,8 +1,6 @@
 import type { Express, Request } from "express";
 import { spawn } from "node:child_process";
-import { statSync } from "node:fs";
-import path from "node:path";
-import { isRecord } from "../session/transcript.js";
+import { resolveDirRequest } from "./dirRequest.js";
 
 // The native file-manager opener for a platform. The command is a fixed
 // allowlist (never built from input); the directory is passed as a separate argv
@@ -23,16 +21,8 @@ interface OpenDirOptions {
 // the sockets so a random website can't drive it.
 export function mountOpenDirRoute(app: Express, { isAllowedOrigin }: OpenDirOptions) {
   app.post("/api/open-dir", (req: Request, res) => {
-    if (!isAllowedOrigin(req.headers.origin)) return res.status(403).json({ error: "forbidden origin" });
-
-    const dir = isRecord(req.body) && typeof req.body.path === "string" ? req.body.path : "";
-    if (!dir || !path.isAbsolute(dir)) return res.status(400).json({ error: "absolute path required" });
-    try {
-      if (!statSync(dir).isDirectory()) return res.status(400).json({ error: "not a directory" });
-    } catch {
-      return res.status(404).json({ error: "directory not found" });
-    }
-
+    const dir = resolveDirRequest(req, res, isAllowedOrigin);
+    if (!dir) return;
     try {
       const child = spawn(openCommand(process.platform), [dir], { detached: true, stdio: "ignore" });
       child.on("error", (e) => console.error(`[open-dir] failed to open ${dir}: ${e.message}`));
