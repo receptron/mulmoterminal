@@ -1141,8 +1141,14 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             @input="dirTouched = true"
             @keydown.enter="launch"
           />
-          <button type="button" class="cell-dir-pick" title="Choose a folder…" aria-label="Choose the working directory" @click="pickDir">
-            <span class="material-symbols-outlined">folder_open</span>
+          <button
+            type="button"
+            class="flex-none inline-flex items-center justify-center px-2 rounded-md border border-border bg-elevated text-secondary cursor-pointer hover:bg-hover hover:text-fg hover:border-accent"
+            title="Choose a folder…"
+            aria-label="Choose the working directory"
+            @click="pickDir"
+          >
+            <span class="material-symbols-outlined text-[18px]">folder_open</span>
           </button>
           <button
             type="button"
@@ -1171,7 +1177,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button class="cell-start wt-start" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">＋ New worktree</button>
         </div>
         <div v-for="w in worktrees" :key="w.path" class="wt-row">
-          <button class="wt-reuse" :title="w.branch ?? w.path" @click="reuseWorktree(w)">
+          <button
+            class="flex-auto min-w-0 text-left rounded-md border border-border bg-elevated text-secondary cursor-pointer font-mono text-[12px] py-[5px] px-2.5 truncate hover:bg-hover hover:text-fg"
+            data-testid="worktree-reuse"
+            :title="w.branch ?? w.path"
+            @click="reuseWorktree(w)"
+          >
             ⎇ {{ w.task }}<span v-if="w.dirty" class="wt-dirty" title="uncommitted changes">●</span>
           </button>
           <button class="wt-del" title="Remove worktree" aria-label="Remove worktree" @click="removeWorktree(w)">🗑</button>
@@ -1593,32 +1604,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   min-width: 0;
 }
 .cell-dir-go,
-.cell-dir-pick {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
 .cell-dir-go:hover:not(:disabled),
-.cell-dir-pick:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: var(--accent);
-}
 .cell-dir-go:disabled {
   opacity: 0.4;
   cursor: default;
 }
 .cell-dir-go .material-symbols-outlined,
-.cell-dir-pick .material-symbols-outlined {
-  font-size: 18px;
-}
 .cell-start {
   border: 1px solid var(--border);
   background: var(--bg-elevated);
@@ -1660,26 +1651,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   display: flex;
   gap: 6px;
   align-items: center;
-}
-.wt-reuse {
-  flex: 1 1 auto;
-  min-width: 0;
-  text-align: left;
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  padding: 5px 10px;
-  border-radius: 6px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wt-reuse:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 .wt-dirty {
   margin-left: 6px;
