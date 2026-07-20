@@ -5,8 +5,8 @@
 // Google sign-in popup (browser Firebase) → extract the Google OAuth idToken →
 // POST it to /api/remote-host/connect, where the server signs in as the user and
 // starts the Firestore command loop + presence heartbeat. The dropdown shows
-// online/offline + the connected uid and offers Connect / Disconnect. Styling
-// mirrors NotificationBell (dark palette, material-symbols-outlined, dropdown).
+// online/offline + the connected uid and offers Connect / Disconnect. Trigger and
+// panel chrome are shared with NotificationBell via toolbarPopover.css.
 import { onMounted, onUnmounted, ref, useTemplateRef } from "vue";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { renderSVG } from "uqr";
@@ -16,6 +16,7 @@ import { auth } from "../config/firebase";
 // so they're unit-testable without mounting this Firebase-importing component.
 import { loadStoredSession, persistSession, reconnectAction, type FetchResult, type RemoteHostStatus } from "./remoteHostSession";
 import { registerRemoteHostSelfHeal } from "./remoteHostSelfHeal";
+import { useDropdownMenu } from "../composables/useDropdownMenu";
 import { usePubSub } from "../composables/usePubSub";
 
 // Mobile companion PWA — shown in the dropdown as help text (not fetched here).
@@ -23,11 +24,13 @@ const MOBILE_URL = "https://mulmoserver.web.app";
 // Rendered to a data URL (uqr output is ASCII-only SVG) so no v-html is needed.
 const qrDataUrl = `data:image/svg+xml;base64,${btoa(renderSVG(MOBILE_URL))}`;
 
-const open = ref(false);
 const busy = ref(false);
 const error = ref<string | null>(null);
 const status = ref<RemoteHostStatus>({ connected: false, uid: null });
 const rootRef = useTemplateRef<HTMLElement>("root");
+const { open, close, toggle } = useDropdownMenu(rootRef, () => {
+  refreshStatus().catch(() => undefined);
+});
 
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -74,28 +77,6 @@ async function tryAutoReconnect() {
   const action = reconnectAction(res);
   if (action === "park" && res.ok) persistSession(res.session);
   else if (action === "drop") persistSession(null);
-}
-
-function onOutside(event: PointerEvent) {
-  if (rootRef.value && !rootRef.value.contains(event.target as Node)) close();
-}
-function onEscape(event: KeyboardEvent) {
-  if (event.key === "Escape") close();
-}
-function openPanel() {
-  open.value = true;
-  window.addEventListener("pointerdown", onOutside);
-  window.addEventListener("keydown", onEscape);
-  refreshStatus().catch(() => undefined);
-}
-function close() {
-  open.value = false;
-  window.removeEventListener("pointerdown", onOutside);
-  window.removeEventListener("keydown", onEscape);
-}
-function toggle() {
-  if (open.value) close();
-  else openPanel();
 }
 
 async function onConnect() {
@@ -154,17 +135,14 @@ onMounted(() => {
   void selfHeal();
   stopSelfHeal = registerRemoteHostSelfHeal(() => void selfHeal(), pubsub.onReconnect);
 });
-onUnmounted(() => {
-  close();
-  stopSelfHeal?.();
-});
+onUnmounted(() => stopSelfHeal?.());
 </script>
 
 <template>
-  <div ref="root" class="remote-host">
+  <div ref="root" class="toolbar-popover-root">
     <button
       type="button"
-      class="rh-btn"
+      class="toolbar-popover-btn"
       :class="{ active: open, connected: status.connected }"
       :aria-expanded="open"
       aria-haspopup="true"
@@ -175,7 +153,7 @@ onUnmounted(() => {
       <span class="material-symbols-outlined">phonelink</span>
     </button>
 
-    <div v-if="open" class="rh-pop" role="group" aria-label="Remote host">
+    <div v-if="open" class="toolbar-popover rh-pop" role="group" aria-label="Remote host">
       <div class="rh-head">
         <span class="material-symbols-outlined rh-dot" :class="{ connected: status.connected }">
           {{ status.connected ? "check_circle" : "radio_button_unchecked" }}
@@ -212,55 +190,17 @@ onUnmounted(() => {
   </div>
 </template>
 
-<style scoped>
-.remote-host {
-  position: relative;
-  display: inline-flex;
-}
+<style scoped src="./toolbarPopover.css"></style>
 
-/* Mirrors App.vue's .launcher-btn (scoped styles don't cross component boundaries). */
-.rh-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: 30px;
-  width: 30px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.rh-btn:hover,
-.rh-btn.active {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.rh-btn.connected {
+<style scoped>
+.toolbar-popover-btn.connected {
   color: #35c46a;
-}
-.rh-btn .material-symbols-outlined {
-  font-size: 19px;
-  line-height: 1;
 }
 
 .rh-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 60;
   width: 300px;
-  display: flex;
-  flex-direction: column;
   gap: 8px;
   padding: 10px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
   font-family: system-ui, sans-serif;
 }
 

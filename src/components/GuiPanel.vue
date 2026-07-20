@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted, computed } from "vue";
-import { usePubSub } from "../composables/usePubSub";
+import { ref, computed } from "vue";
+import { useSessionFeed } from "../composables/useSessionFeed";
 import { getPlugin } from "../plugins-registry";
 import PluginFrame from "./PluginFrame.vue";
 
@@ -28,54 +28,14 @@ const emit = defineEmits<{ toggleTools: [] }>();
 
 const results = ref<ToolResult[]>([]);
 
-const sessionChannel = (id: string) => `session:${id}`;
-
-// Insert or update a result, deduped by uuid (a re-emitted result — e.g. a form
-// whose viewState changed — updates in place). Mirrors applyToolResultToSession.
-function upsert(result: ToolResult) {
-  const idx = results.value.findIndex((r) => r.uuid === result.uuid);
-  if (idx >= 0) results.value[idx] = result;
-  else results.value = [...results.value, result];
-}
-
-async function loadHistory(id: string) {
-  try {
-    const res = await fetch(`/api/agent/toolResults/${encodeURIComponent(id)}`);
-    // Guard against a session-switch race: a slow response for an old session must
-    // not clobber the pane after the user has switched to a newer one.
-    if (id !== props.sessionId) return;
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (id !== props.sessionId) return;
-    results.value = data.toolResults ?? [];
-  } catch {
-    if (id === props.sessionId) results.value = [];
-  }
-}
-
-const { subscribe } = usePubSub();
-let unsubscribe: (() => void) | undefined;
-
-function subscribeTo(id: string | null) {
-  unsubscribe?.();
-  unsubscribe = undefined;
-  if (!id) return;
-  unsubscribe = subscribe(sessionChannel(id), (data) => upsert(data as ToolResult));
-}
-
-// Reload history + re-subscribe whenever the active session changes (and clear
-// for a fresh, not-yet-identified session).
-watch(
-  () => props.sessionId,
-  (id) => {
-    if (id) loadHistory(id);
-    else results.value = [];
-    subscribeTo(id);
-  },
-  { immediate: true },
-);
-
-onUnmounted(() => unsubscribe?.());
+// Deduping by uuid mirrors applyToolResultToSession.
+const { upsert } = useSessionFeed(results, {
+  sessionId: () => props.sessionId,
+  historyUrl: (id) => `/api/agent/toolResults/${encodeURIComponent(id)}`,
+  historyKey: "toolResults",
+  channel: (id) => `session:${id}`,
+  identify: (result) => result.uuid,
+});
 
 // A plugin view changed its state (e.g. a form field edited / submitted). Per the
 // gui-chat-protocol contract the view may emit a PARTIAL ToolResult (e.g. just
@@ -108,10 +68,17 @@ const hasContent = computed(() => results.value.length > 0);
 </script>
 
 <template>
-  <section class="gui-panel">
-    <div class="header">
-      <span class="title">Canvas</span>
-      <button v-if="!toolsOpen" type="button" class="gear" title="Tools & tool-call history" aria-label="Open tools pane" @click="emit('toggleTools')">
+  <section class="gui-panel side-pane">
+    <div class="side-pane-header">
+      <span class="side-pane-title">Canvas</span>
+      <button
+        v-if="!toolsOpen"
+        type="button"
+        class="side-pane-action"
+        title="Tools & tool-call history"
+        aria-label="Open tools pane"
+        @click="emit('toggleTools')"
+      >
         <span class="material-symbols-outlined">build</span>
       </button>
     </div>
@@ -134,42 +101,12 @@ const hasContent = computed(() => results.value.length > 0);
   </section>
 </template>
 
+<style scoped src="./sidePane.css"></style>
+
 <style scoped>
 .gui-panel {
-  display: flex;
-  flex-direction: column;
   flex: 1;
   min-width: 0;
-  height: 100%;
-  background: var(--bg-deep);
-  border-left: 1px solid var(--border);
-}
-
-.header {
-  padding: 8px 16px;
-  background: var(--bg-panel);
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.title {
-  font-weight: 600;
-}
-.gear {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 15px;
-  line-height: 1;
-  padding: 2px 4px;
-  cursor: pointer;
-  border-radius: 4px;
-}
-.gear:hover {
-  color: var(--text);
 }
 
 .content {
