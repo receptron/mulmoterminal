@@ -1255,7 +1255,8 @@ function notifyTaskFinished(sessionId: string): void {
   const what = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const title = `✅ ${where}`.slice(0, PUSH_TITLE_MAX);
   const body = (what || "タスクが完了しました").slice(0, PUSH_BODY_MAX);
-  void sendWebPush(title, body);
+  // The session id is what lets the phone open this session from the notification.
+  void sendWebPush(title, body, { sessionId });
 }
 
 interface HookToolPayload {
