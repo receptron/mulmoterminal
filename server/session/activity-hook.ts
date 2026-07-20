@@ -35,3 +35,19 @@ export function activityHookEffects(event: string, active: boolean): ActivityEff
 export function shouldNotifyTaskFinished(event: string): boolean {
   return event === "Stop";
 }
+
+// Which session a hook belongs to, or null when neither source names one usably.
+//
+// The `x-mt-session` header wins: Claude reissues its own session_id on /clear and
+// /compact, while the mulmoterminal id is the one hooks must stay attributed to.
+//
+// BOTH sources are validated against the same UUID shape. The id does not stay inside
+// this process — it becomes a Firestore document id (backends/remoteHost/sessionActivity)
+// and travels to the phone as push routing, where a value containing "/" would change
+// the document path rather than address a session. The rest of the codebase already
+// treats a SESSION_ID_RE match as the precondition for using an id as a filename, so
+// the fallback has no business being the one place that skips it.
+export function resolveHookSessionId(header: unknown, bodyValue: unknown, isValidId: (id: string) => boolean): string | null {
+  const usable = (value: unknown): string | null => (typeof value === "string" && isValidId(value) ? value : null);
+  return usable(header) ?? usable(bodyValue);
+}
