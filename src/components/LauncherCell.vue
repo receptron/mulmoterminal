@@ -99,4 +99,5 @@ function relaunch() {
   </div>
 </template>
 
+<style scoped src="./cellChromeBase.css"></style>
 <style scoped src="./cellChrome.css"></style>

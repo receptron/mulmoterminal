@@ -1209,6 +1209,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   </div>
 </template>
 
+<style scoped src="./cellChromeBase.css"></style>
+
 <style scoped>
 .cell {
   position: relative; /* anchors the diff overlay */
@@ -1261,44 +1263,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   color: var(--warn);
   border-bottom-color: var(--amber);
 }
-/* A filmstrip thumbnail's header is a click target: zoom (switch to) this terminal.
-   Signalled with a pointer cursor + a hover tint so it's discoverable. (Normal grid
-   cells are not zoomable by header click — only the ⤢ button.) */
-.cell-header.is-zoomable {
-  cursor: pointer;
-}
-.cell-header.is-zoomable:hover {
-  background: var(--bg-hover);
-}
-
-/* Status dot: idle / working (pulsing blue) / done (static blue) / blocked (amber). */
-.cell-dot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  /* Custom color tints the idle dot; the status classes below override it while
-     working/waiting so the activity signal stays intact. */
-  background: var(--cell-dot, var(--text-dim));
-}
-.cell-dot.is-working {
-  background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
+/* The done/blocked dot states (idle + working + pulse live in cellChromeBase.css). */
 .cell-dot.is-done {
   background: var(--accent);
 }
 .cell-dot.is-blocked {
   background: var(--amber);
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 .cell-dir {
@@ -1443,40 +1413,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   align-items: center;
   gap: 8px;
 }
-/* Never shrinks, never scrolls away: expand + close stay pinned at the top-right. */
-.cell-actions {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 4px;
-}
-.cell-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: var(--cell-btn, var(--text-secondary));
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-close:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
-
-.cell-term {
-  flex: 1;
-  min-height: 0;
-}
-
 /* Empty cell: pick a directory, then launch. */
 .cell-launch {
   flex: 1;

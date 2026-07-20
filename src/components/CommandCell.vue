@@ -205,6 +205,7 @@ function onHeaderClick(event: MouseEvent) {
   </div>
 </template>
 
+<style scoped src="./cellChromeBase.css"></style>
 <style scoped src="./cellChrome.css"></style>
 
 <style scoped>
