@@ -26,15 +26,15 @@ describe("RunMenu", () => {
 
   it("shows the trigger once the project's scripts have loaded", async () => {
     const w = await mountMenu();
-    expect(w.find(".run-trigger").exists()).toBe(true);
-    expect(w.find(".run-pop").exists()).toBe(false); // closed until clicked
+    expect(w.find(".menu-trigger").exists()).toBe(true);
+    expect(w.find(".menu-pop").exists()).toBe(false); // closed until clicked
   });
 
   it("renders nothing when the project has no scripts (no file, no button)", async () => {
     mockFetch([]);
     const w = await mountMenu();
-    expect(w.find(".run-trigger").exists()).toBe(false);
-    expect(w.find(".run-menu").exists()).toBe(false);
+    expect(w.find(".menu-trigger").exists()).toBe(false);
+    expect(w.find(".menu-root").exists()).toBe(false);
   });
 
   it("does not fetch (no button) while cwd is unresolved, avoiding default-workspace scripts", async () => {
@@ -43,37 +43,37 @@ describe("RunMenu", () => {
     const w = mount(RunMenu, { props: { cwd: null } });
     await flushPromises();
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(w.find(".run-trigger").exists()).toBe(false);
+    expect(w.find(".menu-trigger").exists()).toBe(false);
   });
 
   it("lists the scripts when opened", async () => {
     const w = await mountMenu();
-    await w.find(".run-trigger").trigger("click");
-    const items = w.findAll(".run-item");
+    await w.find(".menu-trigger").trigger("click");
+    const items = w.findAll(".menu-item");
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Dev server");
   });
 
   it("closes when cwd changes and does not reappear pre-opened", async () => {
     const w = await mountMenu();
-    await w.find(".run-trigger").trigger("click");
-    expect(w.find(".run-pop").exists()).toBe(true);
+    await w.find(".menu-trigger").trigger("click");
+    expect(w.find(".menu-pop").exists()).toBe(true);
 
     await w.setProps({ cwd: null }); // unresolved → cleared + closed
     await flushPromises();
-    expect(w.find(".run-menu").exists()).toBe(false);
+    expect(w.find(".menu-root").exists()).toBe(false);
 
     await w.setProps({ cwd: "/proj2" }); // resolves again
     await flushPromises();
-    expect(w.find(".run-trigger").exists()).toBe(true);
-    expect(w.find(".run-pop").exists()).toBe(false); // not pre-opened
+    expect(w.find(".menu-trigger").exists()).toBe(true);
+    expect(w.find(".menu-pop").exists()).toBe(false); // not pre-opened
   });
 
   it("emits the picked script with the server-resolved cwd, then closes", async () => {
     const w = await mountMenu();
-    await w.find(".run-trigger").trigger("click");
-    await w.findAll(".run-item")[1].trigger("click");
+    await w.find(".menu-trigger").trigger("click");
+    await w.findAll(".menu-item")[1].trigger("click");
     expect(w.emitted("run")?.[0]?.[0]).toEqual({ source: "script", index: 1, label: "Unit tests", cwd: "/home/me/proj" });
-    expect(w.find(".run-pop").exists()).toBe(false); // closed after picking
+    expect(w.find(".menu-pop").exists()).toBe(false); // closed after picking
   });
 });

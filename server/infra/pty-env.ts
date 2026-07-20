@@ -32,11 +32,24 @@ export function isLauncherEnvVar(name: string): boolean {
   return REMOVED_NAMES.has(lower) || REMOVED_PREFIXES.some((prefix) => lower.startsWith(prefix));
 }
 
+// Does the env var name the search path? Windows spells it "Path".
+export function isPathVar(name: string): boolean {
+  return name.toLowerCase() === "path";
+}
+
+// yarn v1's temp dir is `yarn--` + a timestamp.
+const YARN_SHIM_DIR = /^yarn--\d/;
+
 // Is this PATH entry a run-script injection? yarn v1 prepends a temp dir with a
-// `node` shim (…/T/yarn--<ts>-<rand>) that outlives nothing, and both yarn and
-// npm prepend node_modules/.bin + npm's node-gyp-bin dirs.
+// `node` shim, and both yarn and npm prepend node_modules/.bin + npm's
+// node-gyp-bin dirs. Matched on the entry's LAST segment: a directory that
+// merely contains one of these names somewhere in its path is the user's.
 export function isLauncherPathEntry(entry: string): boolean {
-  return /[\\/]yarn--\d/.test(entry) || /[\\/]node_modules[\\/]\.bin$/.test(entry) || /[\\/]node-gyp-bin$/.test(entry);
+  const segments = entry.split(/[\\/]/).filter((segment) => segment !== "");
+  if (segments.length === 0) return false; // "" and "/" name no directory of ours
+  const last = segments[segments.length - 1];
+  const parent = segments[segments.length - 2];
+  return YARN_SHIM_DIR.test(last) || (last === ".bin" && parent === "node_modules") || last === "node-gyp-bin";
 }
 
 // PATH with the run-script injections removed; everything else (nvm, homebrew,
@@ -54,7 +67,7 @@ export function sanitizePtyEnv(env: NodeJS.ProcessEnv, delimiter: string): NodeJ
   const out: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(env)) {
     if (isLauncherEnvVar(name)) continue;
-    out[name] = name.toLowerCase() === "path" && value !== undefined ? sanitizePathEntries(value, delimiter) : value;
+    out[name] = isPathVar(name) && value !== undefined ? sanitizePathEntries(value, delimiter) : value;
   }
   return out;
 }

@@ -1,0 +1,56 @@
+.menu-root {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Matches the grid toolbar buttons (.tb-btn lives in GridView's scoped styles). */
+.menu-trigger {
+  border: 1px solid var(--border);
+  background: var(--bg-base);
+  color: var(--text-secondary);
+  font-family: system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.menu-trigger:hover,
+.menu-trigger.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.menu-pop {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.menu-item {
+  text-align: left;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  font-family: ui-monospace, "JetBrains Mono", monospace;
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.menu-item:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
