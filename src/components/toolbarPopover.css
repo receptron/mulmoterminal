@@ -26,6 +26,11 @@
   background: var(--bg-hover);
   color: var(--text);
 }
+/* Remote-host "online" accent on the trigger; declared after .active so it wins
+   the colour when the panel is also open. */
+.toolbar-popover-btn.connected {
+  color: #35c46a;
+}
 .toolbar-popover-btn .material-symbols-outlined {
   font-size: 19px;
   line-height: 1;

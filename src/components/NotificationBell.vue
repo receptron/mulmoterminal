@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { useTemplateRef } from "vue";
-import { useDropdownMenu } from "../composables/useDropdownMenu";
+import { computed, useTemplateRef } from "vue";
+import ToolbarPopover from "./ToolbarPopover.vue";
 import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../composables/useNotifications";
 
 // Toolbar bell: a severity-coloured unread badge + a dropdown listing the active
@@ -11,13 +11,18 @@ import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../
 // watcher clears it when the record is done; the ✕ dismisses it explicitly.
 const { count, topSeverity, sorted, dismiss, activate } = useNotifications();
 
-const rootRef = useTemplateRef<HTMLElement>("root");
-const { open, close, toggle } = useDropdownMenu(rootRef);
+const popoverRef = useTemplateRef<InstanceType<typeof ToolbarPopover>>("popover");
+
+const triggerTitle = computed(() => {
+  if (!count.value) return "Notifications";
+  const suffix = count.value === 1 ? "" : "s";
+  return `${count.value} notification${suffix}`;
+});
 
 function onRowClick(entry: NotifierEntry) {
   // Navigate if it's a deep-linkable entry; close either way so the click feels live.
   activate(entry);
-  close();
+  popoverRef.value?.close();
 }
 
 function severityClass(severity: NotifierSeverity): string {
@@ -46,58 +51,44 @@ function relativeTime(iso: string): string {
 </script>
 
 <template>
-  <div ref="root" class="toolbar-popover-root">
-    <button
-      type="button"
-      class="toolbar-popover-btn"
-      :class="{ active: open }"
-      :aria-expanded="open"
-      aria-haspopup="true"
-      :title="count ? `${count} notification${count === 1 ? '' : 's'}` : 'Notifications'"
-      aria-label="Notifications"
-      @click="toggle"
-    >
-      <span class="material-symbols-outlined">notifications</span>
+  <ToolbarPopover ref="popover" icon="notifications" :title="triggerTitle" trigger-label="Notifications" pane-class="notif-pop" pane-label="Notifications">
+    <template #trigger-extra>
       <span v-if="count" class="badge" :class="topSeverity ? severityClass(topSeverity) : ''">{{ count > 99 ? "99+" : count }}</span>
-    </button>
+    </template>
 
-    <div v-if="open" class="toolbar-popover notif-pop" role="group" aria-label="Notifications">
-      <div class="notif-head">Notifications</div>
-      <div class="notif-subhead">Active ({{ sorted.length }})</div>
-      <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
-      <ul v-else class="notif-list">
-        <li
-          v-for="entry in sorted"
-          :key="entry.id"
-          class="notif-row"
-          :class="{ clickable: !!entry.navigateTarget }"
-          :role="entry.navigateTarget ? 'button' : undefined"
-          :tabindex="entry.navigateTarget ? 0 : undefined"
-          :aria-label="entry.navigateTarget ? entry.title : undefined"
-          :title="entry.body || undefined"
-          @click="onRowClick(entry)"
-          @keydown.enter.prevent.self="entry.navigateTarget && onRowClick(entry)"
-          @keydown.space.prevent.self="entry.navigateTarget && onRowClick(entry)"
-        >
-          <span class="material-symbols-outlined bell-icon" :class="severityClass(entry.severity)" aria-hidden="true">notifications</span>
-          <span class="notif-text">
-            <span class="notif-title-row">
-              <span class="notif-title">{{ entry.title }}</span>
-              <span v-if="entry.lifecycle" class="notif-lifecycle">{{ entry.lifecycle }}</span>
-            </span>
-            <span v-if="entry.body" class="notif-body">{{ entry.body }}</span>
-            <span class="notif-meta">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
+    <div class="notif-head">Notifications</div>
+    <div class="notif-subhead">Active ({{ sorted.length }})</div>
+    <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
+    <ul v-else class="notif-list">
+      <li
+        v-for="entry in sorted"
+        :key="entry.id"
+        class="notif-row"
+        :class="{ clickable: !!entry.navigateTarget }"
+        :role="entry.navigateTarget ? 'button' : undefined"
+        :tabindex="entry.navigateTarget ? 0 : undefined"
+        :aria-label="entry.navigateTarget ? entry.title : undefined"
+        :title="entry.body || undefined"
+        @click="onRowClick(entry)"
+        @keydown.enter.prevent.self="entry.navigateTarget && onRowClick(entry)"
+        @keydown.space.prevent.self="entry.navigateTarget && onRowClick(entry)"
+      >
+        <span class="material-symbols-outlined bell-icon" :class="severityClass(entry.severity)" aria-hidden="true">notifications</span>
+        <span class="notif-text">
+          <span class="notif-title-row">
+            <span class="notif-title">{{ entry.title }}</span>
+            <span v-if="entry.lifecycle" class="notif-lifecycle">{{ entry.lifecycle }}</span>
           </span>
-          <button type="button" class="notif-dismiss" title="Dismiss" aria-label="Dismiss notification" @click.stop="dismiss(entry.id)">
-            <span class="material-symbols-outlined">close</span>
-          </button>
-        </li>
-      </ul>
-    </div>
-  </div>
+          <span v-if="entry.body" class="notif-body">{{ entry.body }}</span>
+          <span class="notif-meta">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
+        </span>
+        <button type="button" class="notif-dismiss" title="Dismiss" aria-label="Dismiss notification" @click.stop="dismiss(entry.id)">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </li>
+    </ul>
+  </ToolbarPopover>
 </template>
-
-<style scoped src="./toolbarPopover.css"></style>
 
 <style scoped>
 /* Unread badge: severity-coloured pill at the top-right of the bell. */
@@ -127,7 +118,8 @@ function relativeTime(iso: string): string {
   background: #e0533d;
 }
 
-.notif-pop {
+/* The panel div lives inside ToolbarPopover, so its scopeId differs from ours. */
+:deep(.notif-pop) {
   width: 340px;
   max-height: 460px;
   overflow-y: auto;
