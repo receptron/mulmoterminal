@@ -1,0 +1,26 @@
+# Normalize line endings so a Windows checkout doesn't rewrite text to CRLF.
+# Without this, git-for-windows' default core.autocrlf=true checks every file out with
+# CRLF, and prettier (via eslint) then flags every line — which is exactly how the
+# windows-daily CI job first failed. Keep the repo LF-only everywhere; let git decide
+# which files are text.
+* text=auto eol=lf
+
+# Files that MUST stay LF regardless of guesswork: a CRLF here breaks a shebang, a
+# Docker build, or a shell parser on the runner.
+*.sh text eol=lf
+*.mjs text eol=lf
+*.ts text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+Dockerfile* text eol=lf
+
+# Binary assets git must never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
