@@ -64,6 +64,7 @@ describe("sanitizePathEntries", () => {
     ["a yarn-shim-like ancestor was named by a human", "/Users/u/yarn--2-experiments/bin:/Users/u/node-gyp-bin/src:/usr/bin"],
     ["a bare .bin has a parent other than node_modules", "/Users/u/tools/.bin:/usr/bin"],
     ["entries are empty (they keep their positions)", "/usr/bin::/bin"],
+    ["an entry names no directory at all", "/usr/bin:/:/bin"],
   ])("keeps the PATH untouched when %s", (_case, p) => {
     expect(sanitizePathEntries(p, ":")).toBe(p);
   });
