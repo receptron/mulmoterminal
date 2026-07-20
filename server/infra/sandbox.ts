@@ -154,14 +154,9 @@ export function sandboxCredentialsPath(sessionId: string): string {
 // logged in"). These helpers detect that and force the host CLI to refresh before export.
 
 const EXPIRY_MARGIN_MS = 60_000; // treat a token as expired 60s early
-const RENEWAL_TIMEOUT_MS = 30_000; // give the host claude this long to answer
+const RENEWAL_TIMEOUT_MS = 30_000; // give the host claude this long to refresh
 const RENEWAL_INPUT_DELAY_MS = 3_000; // let the CLI reach its prompt before typing
-// A renewal counts only when claude echoes our nudge AND replies with real prose — an
-// error banner ("Please log in", a network blip) matches neither, so it falls through to
-// the timeout and refreshHostKeychain re-checks expiry before trusting the result.
-const RENEWAL_RESPONSE_RE = /\b(Hello|Hi|I['’]m|I can|How can)\b/i;
-const MIN_RENEWAL_RESPONSE_CHARS = 20;
-const RENEWAL_ECHO_RE = /\bhi\b/;
+const RENEWAL_POLL_INTERVAL_MS = 500; // how often to re-check the Keychain for a fresh token
 
 // The token's expiry (ISO string) from the raw Keychain blob, or null when the JSON is
 // unparseable or carries none. JSON.parse yields `any`, so narrow once here.
@@ -188,14 +183,17 @@ export function isTokenExpired(raw: string): boolean {
   return Date.now() >= expiresMs - EXPIRY_MARGIN_MS;
 }
 
-// Does this post-echo output look like a genuine Claude reply (vs an error banner)?
-export function looksLikeClaudeResponse(text: string): boolean {
-  return RENEWAL_RESPONSE_RE.test(text) && text.length >= MIN_RENEWAL_RESPONSE_CHARS;
+// The current Keychain token, or "" if the entry is absent / unreadable.
+function readKeychainCredential(): string {
+  const r = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
+  return r.status === 0 ? r.stdout.trim() : "";
 }
 
-// Spawn the host `claude` in a PTY and send a one-word nudge; the CLI refreshes its own
-// expired OAuth token as it starts and writes the fresh one back to the Keychain. Resolves
-// true once we see a real reply, false on timeout. Best-effort — never throws.
+// Spawn the host `claude` in a PTY and nudge it into an API call, which makes the CLI
+// refresh its expired OAuth token and write the fresh one back to the Keychain. Success
+// is detected by POLLING the Keychain for a no-longer-expired token — locale-agnostic and
+// authoritative (vs. scraping the CLI's prose, which varies by language). Resolves true
+// once the token is fresh, false on timeout. Best-effort — never throws.
 function renewViaHostClaude(claudeBin: string): Promise<boolean> {
   return new Promise((resolve) => {
     let proc: import("node-pty").IPty;
@@ -205,12 +203,11 @@ function renewViaHostClaude(claudeBin: string): Promise<boolean> {
       resolve(false);
       return;
     }
-    let buffer = "";
-    let echoEndIdx = -1;
     let settled = false;
     const finish = (ok: boolean): void => {
       if (settled) return;
       settled = true;
+      clearInterval(poll);
       clearTimeout(timer);
       try {
         proc.kill();
@@ -219,16 +216,11 @@ function renewViaHostClaude(claudeBin: string): Promise<boolean> {
       }
       resolve(ok);
     };
+    const poll = setInterval(() => {
+      const cred = readKeychainCredential();
+      if (cred && !isTokenExpired(cred)) finish(true);
+    }, RENEWAL_POLL_INTERVAL_MS);
     const timer = setTimeout(() => finish(false), RENEWAL_TIMEOUT_MS);
-    proc.onData((data) => {
-      buffer += data;
-      if (echoEndIdx < 0) {
-        const m = RENEWAL_ECHO_RE.exec(buffer);
-        if (m) echoEndIdx = m.index + m[0].length;
-        return;
-      }
-      if (looksLikeClaudeResponse(buffer.slice(echoEndIdx))) finish(true);
-    });
     setTimeout(() => {
       if (!settled) proc.write("hi\r");
     }, RENEWAL_INPUT_DELAY_MS);
@@ -241,14 +233,11 @@ function renewViaHostClaude(claudeBin: string): Promise<boolean> {
 // renewal just leaves the (stale) token, and the caller still spawns with a warning.
 export async function refreshHostKeychainIfExpired(claudeBin: string): Promise<void> {
   if (process.platform !== "darwin") return;
-  const r = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
-  const credential = r.status === 0 ? r.stdout.trim() : "";
+  const credential = readKeychainCredential();
   if (!credential || !isTokenExpired(credential)) return;
   console.log("[sandbox] Keychain access token expired — asking the host claude to refresh it...");
   const renewed = await renewViaHostClaude(claudeBin);
-  const after = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
-  const stillExpired = after.status !== 0 || isTokenExpired(after.stdout.trim());
-  if (!renewed || stillExpired)
+  if (!renewed || isTokenExpired(readKeychainCredential()))
     console.warn("[sandbox] token refresh did not complete — the container may show 'Not logged in'. Run `claude` on the host to log in.");
   else console.log("[sandbox] token refreshed.");
 }

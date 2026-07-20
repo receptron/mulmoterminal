@@ -16,7 +16,6 @@ import {
   sandboxPlatformSupported,
   readExpiresAt,
   isTokenExpired,
-  looksLikeClaudeResponse,
 } from "../../../server/infra/sandbox";
 
 describe("rewriteLoopbackForDocker", () => {
@@ -166,19 +165,6 @@ describe("isTokenExpired", () => {
   it("accepts an ISO-string expiry too", () => {
     expect(isTokenExpired(credBlob(new Date(Date.now() + HOUR_MS).toISOString()))).toBe(false);
     expect(isTokenExpired(credBlob(new Date(Date.now() - HOUR_MS).toISOString()))).toBe(true);
-  });
-});
-
-describe("looksLikeClaudeResponse", () => {
-  it("accepts a conversational reply of real length", () => {
-    expect(looksLikeClaudeResponse("Hello! How can I help you today?")).toBe(true);
-    expect(looksLikeClaudeResponse("Hi there — I can do that.")).toBe(true);
-  });
-  it("rejects error banners and too-short output", () => {
-    expect(looksLikeClaudeResponse("Please log in to continue")).toBe(false);
-    expect(looksLikeClaudeResponse("Invalid credentials")).toBe(false);
-    expect(looksLikeClaudeResponse("Hi")).toBe(false); // matches the word but too short
-    expect(looksLikeClaudeResponse("")).toBe(false);
   });
 });
 
