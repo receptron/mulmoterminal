@@ -124,15 +124,22 @@ describe("buildDockerRunArgs credential overlay", () => {
 });
 
 describe("cleanupSandbox", () => {
-  it("unlinks the per-session credential file (no leaked token after reap)", () => {
-    const sid = "cleanup-creds-1";
-    const file = sandboxCredentialsPath(sid);
-    mkdirSync(path.dirname(file), { recursive: true });
-    writeFileSync(file, "dummy");
-    expect(existsSync(file)).toBe(true);
-    cleanupSandbox(sid);
-    expect(existsSync(file)).toBe(false);
-  });
+  // cleanupSandbox runs `docker rm -f` first; on the Windows CI runner the docker CLI
+  // is present but its daemon is slow to answer, pushing this past vitest's 5s default.
+  const DOCKER_CALL_TIMEOUT_MS = 30_000;
+  it(
+    "unlinks the per-session credential file (no leaked token after reap)",
+    () => {
+      const sid = "cleanup-creds-1";
+      const file = sandboxCredentialsPath(sid);
+      mkdirSync(path.dirname(file), { recursive: true });
+      writeFileSync(file, "dummy");
+      expect(existsSync(file)).toBe(true);
+      cleanupSandbox(sid);
+      expect(existsSync(file)).toBe(false);
+    },
+    DOCKER_CALL_TIMEOUT_MS,
+  );
 });
 
 describe("writeSandboxClaudeConfig", () => {

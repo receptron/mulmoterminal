@@ -151,9 +151,13 @@ export async function listWorktrees(repoDir: string): Promise<WorktreeInfo[]> {
   if (!repo) return [];
   const res = await git(["worktree", "list", "--porcelain"], repo);
   if (!res.ok) return [];
-  return parseWorktreeList(res.stdout)
-    .filter((w) => isManagedWorktree(repo, w.path))
-    .map((w) => ({ path: w.path, branch: w.branch, head: w.head, task: path.basename(w.path) }));
+  return (
+    parseWorktreeList(res.stdout)
+      .filter((w) => isManagedWorktree(repo, w.path))
+      // git reports forward-slash paths even on Windows; normalize to the OS separator so
+      // a listed worktree's path matches what createWorktree (path.join) returned for it.
+      .map((w) => ({ path: path.normalize(w.path), branch: w.branch, head: w.head, task: path.basename(w.path) }))
+  );
 }
 
 // Whether a worktree has uncommitted changes (so we don't delete it silently).
