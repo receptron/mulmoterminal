@@ -37,6 +37,8 @@ export interface RemoteHostBackendDeps {
   spawnChat: (message: string) => { chatId: string };
   listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
   captureTerminalScreen: (sessionId: string) => Promise<string>;
+  // Type into a session's live PTY (#445); false when none is attached here.
+  writeToSession: (sessionId: string, chunk: string) => boolean;
 }
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
@@ -60,6 +62,7 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
       ingest,
       listTerminalSessions: deps.listTerminalSessions,
       captureTerminalScreen: deps.captureTerminalScreen,
+      writeToSession: deps.writeToSession,
     }),
     log: {
       info: (msg) => console.log(PREFIX, msg),

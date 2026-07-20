@@ -26,6 +26,7 @@ import {
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
 import type { Attachment } from "./ingestAttachments.js";
+import { createTerminalInputSender } from "./terminalInput.js";
 import type { TerminalSessionSummary } from "./terminalScreen.js";
 
 export interface RemoteHostHandlerDeps {
@@ -39,6 +40,10 @@ export interface RemoteHostHandlerDeps {
   // current screen. Wired in server/index.ts, where the PTY table lives.
   listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
   captureTerminalScreen: (sessionId: string) => Promise<string>;
+  // Type into one session's live PTY (#445). Returns false when no PTY is attached
+  // in this process — a tmux session that outlived a restart stays viewable but not
+  // writable from here.
+  writeToSession: (sessionId: string, chunk: string) => boolean;
 }
 
 // Parse the optional `attachments` param ([{ storage_id }]) into storage ids. A
@@ -128,20 +133,35 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
   return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
 };
 
-// The phone's remote terminal view (#435), read-only: pick a session, then read its
-// screen. Screens are bounded by the terminal's own geometry (rows x cols), so unlike
-// collections they need no paging to stay under the 1 MiB command-doc ceiling.
-type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen">;
+// The phone's remote terminal view (#435): pick a session, read its screen, and —
+// since #445 — type into it. Screens are bounded by the terminal's own geometry
+// (rows x cols), so unlike collections they need no paging to stay under the 1 MiB
+// command-doc ceiling.
+type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession">;
 
-const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen }: TerminalScreenDeps): CommandHandlers => ({
-  listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
+const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession }: TerminalScreenDeps): CommandHandlers => {
+  // One sender per host, so its per-session ordering actually spans every command.
+  const sendInput = createTerminalInputSender({ writeToSession });
+  return {
+    listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 
-  getTerminalScreen: async (params: JsonObject) => {
-    const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-    if (!sessionId) throw new Error("sessionId is required");
-    return { screen: await captureTerminalScreen(sessionId) };
-  },
-});
+    getTerminalScreen: async (params: JsonObject) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      if (!sessionId) throw new Error("sessionId is required");
+      return { screen: await captureTerminalScreen(sessionId) };
+    },
+
+    // Type a line into the session and press Enter, as if the user were at the
+    // keyboard. The phone sends only text; the framing, sanitizing and Enter timing
+    // are terminalInput.ts's job.
+    sendTerminalInput: async (params: JsonObject) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      if (!sessionId) throw new Error("sessionId is required");
+      const text = typeof params.text === "string" ? params.text : "";
+      return (await sendInput(sessionId, text)) as unknown as JsonObject;
+    },
+  };
+};
 
 export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHandlers {
   const { workspace, spawnChat, ingest } = deps;

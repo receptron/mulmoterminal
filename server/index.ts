@@ -1937,6 +1937,21 @@ const remoteHostListTerminalSessions = async () =>
     }),
   });
 
+// Write a chunk to a session's live PTY for the phone's terminal input (#445).
+// Only sessions attached in THIS process are writable: a tmux session that outlived
+// a restart is still viewable through capture-pane, but we hold no pty to type into.
+const remoteHostWriteToSession = (sessionId: string, chunk: string): boolean => {
+  const entry = ptys.get(sessionId);
+  if (!entry) return false;
+  try {
+    entry.term.write(chunk);
+    return true;
+  } catch {
+    // pty died between the lookup and the write
+    return false;
+  }
+};
+
 const remoteHostCaptureTerminalScreen = (sessionId: string) =>
   captureSessionScreen(sessionId, {
     capturePane: tmuxCapturePane,
@@ -1952,6 +1967,7 @@ initRemoteHostBackend({
   spawnChat: remoteHostSpawnChat,
   listTerminalSessions: remoteHostListTerminalSessions,
   captureTerminalScreen: remoteHostCaptureTerminalScreen,
+  writeToSession: remoteHostWriteToSession,
 });
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
