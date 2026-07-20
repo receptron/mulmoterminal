@@ -86,6 +86,25 @@ export async function readShortcuts(workspace: string): Promise<Shortcut[]> {
   }
 }
 
+// POSIX rename atomically replaces the destination; Windows MoveFileEx does too, but
+// while a concurrent writer's rename holds the target it briefly denies a second one
+// with EPERM/EACCES/EBUSY. Retry those a few times so concurrent replace-all PUTs
+// (two tabs) all succeed instead of one 500ing. Other errors propagate at once.
+const RENAME_RETRIES = 10;
+const RENAME_RETRY_DELAY_MS = 20;
+const RENAME_LOCK_CODES = new Set(["EPERM", "EACCES", "EBUSY"]);
+async function renameReplacing(from: string, to: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fs.rename(from, to);
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? "";
+      if (attempt >= RENAME_RETRIES || !RENAME_LOCK_CODES.has(code)) throw err;
+      await new Promise((resolve) => setTimeout(resolve, RENAME_RETRY_DELAY_MS));
+    }
+  }
+}
+
 /** Replace the full list. Normalises (validate + dedupe) before an atomic write
  *  (temp file + rename) so the on-disk file is always clean and never half-written.
  *  Returns the canonical list. */
@@ -101,7 +120,7 @@ async function writeShortcuts(workspace: string, input: unknown): Promise<Shortc
   const tmp = `${file}.${randomUUID()}.tmp`;
   try {
     await fs.writeFile(tmp, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
-    await fs.rename(tmp, file);
+    await renameReplacing(tmp, file);
   } catch (err) {
     await fs.rm(tmp, { force: true }); // don't leave a stray temp on failure
     throw err;

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, existsSync, realpathSync, symlinkSync } from "node:fs";
+import { mkdtempSync, writeFileSync, existsSync, realpathSync, symlinkSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { rmDirRetrying, GIT_TEST_TIMEOUT_MS } from "./wtTestUtil.js";
 import {
   slugify,
   parseWorktreeList,
@@ -59,8 +60,22 @@ describe("git worktree lifecycle", () => {
       return false;
     }
   })();
+  // Creating a symlink needs privilege / Developer Mode on Windows; where it's denied
+  // we can't build the escape fixture. The behaviour under test (containment survives a
+  // symlink escape) only matters where symlinks exist, so skipping there loses nothing.
+  const canSymlink = (() => {
+    const probeDir = mkdtempSync(path.join(tmpdir(), "mt-wt-symprobe-"));
+    try {
+      symlinkSync(probeDir, path.join(probeDir, "l"));
+      return true;
+    } catch {
+      return false;
+    } finally {
+      rmDirRetrying(probeDir);
+    }
+  })();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // realpath: git resolves symlinks (macOS /tmp -> /private/var), and the engine
     // keys the managed root off git's toplevel, so the test dirs must match that.
     home = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-wt-home-")));
@@ -75,78 +90,101 @@ describe("git worktree lifecycle", () => {
     writeFileSync(path.join(repo, "README.md"), "hi");
     g("add", "-A");
     g("commit", "-m", "init");
+    // The engine keys the managed root off git's toplevel string; adopt git's exact
+    // form (forward slashes, 8.3 expanded on Windows) so hashes line up on any OS.
+    repo = (await gitTopLevel(repo)) ?? repo;
   });
   afterEach(() => {
     delete process.env.MULMOTERMINAL_HOME;
-    rmSync(home, { recursive: true, force: true });
-    rmSync(repo, { recursive: true, force: true });
+    rmDirRetrying(home);
+    rmDirRetrying(repo);
   });
 
-  it.skipIf(!hasGit)("creates, lists, detects dirty, and removes a worktree", async () => {
-    expect(await gitTopLevel(repo)).toBe(repo);
+  it.skipIf(!hasGit)(
+    "creates, lists, detects dirty, and removes a worktree",
+    async () => {
+      expect(await gitTopLevel(repo)).toBe(repo);
 
-    const wt = await createWorktree(repo, "Fix Login");
-    if (!wt) throw new Error("expected a worktree");
-    expect(wt.branch).toBe("agent/fix-login");
-    expect(existsSync(wt.path)).toBe(true);
-    expect(isManagedWorktree(repo, wt.path)).toBe(true);
+      const wt = await createWorktree(repo, "Fix Login");
+      if (!wt) throw new Error("expected a worktree");
+      expect(wt.branch).toBe("agent/fix-login");
+      expect(existsSync(wt.path)).toBe(true);
+      expect(isManagedWorktree(repo, wt.path)).toBe(true);
 
-    const list = await listWorktrees(repo);
-    expect(list.map((w) => w.branch)).toEqual(["agent/fix-login"]); // excludes the main checkout
+      const list = await listWorktrees(repo);
+      expect(list.map((w) => w.branch)).toEqual(["agent/fix-login"]); // excludes the main checkout
 
-    expect(await isDirty(wt.path)).toBe(false);
-    writeFileSync(path.join(wt.path, "new.txt"), "x");
-    expect(await isDirty(wt.path)).toBe(true);
+      expect(await isDirty(wt.path)).toBe(false);
+      writeFileSync(path.join(wt.path, "new.txt"), "x");
+      expect(await isDirty(wt.path)).toBe(true);
 
-    // a dirty worktree is refused without force, then removed with force + branch
-    expect(await removeWorktree(repo, wt.path)).toEqual({ ok: false, reason: "dirty" });
-    expect(await removeWorktree(repo, wt.path, { force: true, deleteBranch: true })).toEqual({ ok: true });
-    expect(existsSync(wt.path)).toBe(false);
-    expect(await listWorktrees(repo)).toEqual([]);
-  });
+      // a dirty worktree is refused without force, then removed with force + branch
+      expect(await removeWorktree(repo, wt.path)).toEqual({ ok: false, reason: "dirty" });
+      expect(await removeWorktree(repo, wt.path, { force: true, deleteBranch: true })).toEqual({ ok: true });
+      expect(existsSync(wt.path)).toBe(false);
+      expect(await listWorktrees(repo)).toEqual([]);
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("forks a unique branch on a name clash", async () => {
-    const a = await createWorktree(repo, "task");
-    const b = await createWorktree(repo, "task");
-    if (!a || !b) throw new Error("expected two worktrees");
-    expect(a.branch).toBe("agent/task");
-    expect(b.branch).toBe("agent/task-2");
-  });
+  it.skipIf(!hasGit)(
+    "forks a unique branch on a name clash",
+    async () => {
+      const a = await createWorktree(repo, "task");
+      const b = await createWorktree(repo, "task");
+      if (!a || !b) throw new Error("expected two worktrees");
+      expect(a.branch).toBe("agent/task");
+      expect(b.branch).toBe("agent/task-2");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("allocates distinct branches for CONCURRENT creates of the same task (no TOCTOU collision)", async () => {
-    const isWt = (r: { path: string; branch: string } | null): r is { path: string; branch: string } => r !== null;
-    const results = (
-      await Promise.all([createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race")])
-    ).filter(isWt);
-    expect(results).toHaveLength(4); // none failed with a branch-already-exists 500
-    expect(new Set(results.map((r) => r.branch)).size).toBe(4); // all distinct
-    expect(new Set(results.map((r) => r.path)).size).toBe(4);
-  });
+  it.skipIf(!hasGit)(
+    "allocates distinct branches for CONCURRENT creates of the same task (no TOCTOU collision)",
+    async () => {
+      const isWt = (r: { path: string; branch: string } | null): r is { path: string; branch: string } => r !== null;
+      const results = (
+        await Promise.all([createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race"), createWorktree(repo, "race")])
+      ).filter(isWt);
+      expect(results).toHaveLength(4); // none failed with a branch-already-exists 500
+      expect(new Set(results.map((r) => r.branch)).size).toBe(4); // all distinct
+      expect(new Set(results.map((r) => r.path)).size).toBe(4);
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("refuses to remove a path outside the managed root", async () => {
-    expect(await removeWorktree(repo, repo)).toEqual({ ok: false, reason: "not-managed" });
-    expect(await removeWorktree(repo, path.join(home, "outside-managed"))).toEqual({ ok: false, reason: "not-managed" });
-  });
+  it.skipIf(!hasGit)(
+    "refuses to remove a path outside the managed root",
+    async () => {
+      expect(await removeWorktree(repo, repo)).toEqual({ ok: false, reason: "not-managed" });
+      expect(await removeWorktree(repo, path.join(home, "outside-managed"))).toEqual({ ok: false, reason: "not-managed" });
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("rejects a symlink under the managed root that escapes it (no string-prefix bypass)", async () => {
-    const wt = await createWorktree(repo, "real"); // creates the managed root dir
-    if (!wt) throw new Error("expected a worktree");
-    const root = worktreesRoot(repo);
-    const outside = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-wt-outside-")));
-    const link = path.join(root, "escape");
-    symlinkSync(outside, link); // <root>/escape -> /outside (canonicalizes out of the root)
-    try {
-      expect(isManagedWorktree(repo, link)).toBe(false);
-      expect(isManagedWorktree(repo, path.join(link, "wt"))).toBe(false); // symlinked ancestor, absent leaf
-      expect(await removeWorktree(repo, link)).toEqual({ ok: false, reason: "not-managed" });
-    } finally {
-      rmSync(outside, { recursive: true, force: true });
-    }
-  });
+  it.skipIf(!hasGit || !canSymlink)(
+    "rejects a symlink under the managed root that escapes it (no string-prefix bypass)",
+    async () => {
+      const wt = await createWorktree(repo, "real"); // creates the managed root dir
+      if (!wt) throw new Error("expected a worktree");
+      const root = worktreesRoot(repo);
+      const outside = realpathSync(mkdtempSync(path.join(tmpdir(), "mt-wt-outside-")));
+      const link = path.join(root, "escape");
+      symlinkSync(outside, link); // <root>/escape -> /outside (canonicalizes out of the root)
+      try {
+        expect(isManagedWorktree(repo, link)).toBe(false);
+        expect(isManagedWorktree(repo, path.join(link, "wt"))).toBe(false); // symlinked ancestor, absent leaf
+        expect(await removeWorktree(repo, link)).toEqual({ ok: false, reason: "not-managed" });
+      } finally {
+        rmDirRetrying(outside);
+      }
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
   it("gitTopLevel returns null for a non-repo dir", async () => {
     const plain = mkdtempSync(path.join(tmpdir(), "mt-wt-plain-"));
     expect(await gitTopLevel(plain)).toBeNull();
-    rmSync(plain, { recursive: true, force: true });
+    rmDirRetrying(plain);
   });
 });

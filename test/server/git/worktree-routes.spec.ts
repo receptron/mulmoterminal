@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Express } from "express";
-import { mkdtempSync, rmSync, writeFileSync, realpathSync } from "node:fs";
+import { mkdtempSync, writeFileSync, realpathSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { mountWorktreeRoutes } from "../../../server/git/worktree-routes.js";
-import { createWorktree, worktreesRoot } from "../../../server/git/worktrees.js";
+import { createWorktree, worktreesRoot, gitTopLevel } from "../../../server/git/worktrees.js";
+import { rmDirRetrying, GIT_TEST_TIMEOUT_MS } from "./wtTestUtil.js";
 
 interface FakeRes {
   statusCode: number;
@@ -103,7 +104,7 @@ describe("worktree routes: origin guard + validation", () => {
       await routes(allow)["GET /api/worktrees"]({ headers: {}, query: { cwd: dir } }, res);
       expect(res.payload).toEqual({ isGit: false, base: null, worktrees: [] });
     } finally {
-      rmSync(dir, { recursive: true, force: true });
+      rmDirRetrying(dir);
     }
   });
 
@@ -133,7 +134,7 @@ describe("worktree routes: create → list → remove lifecycle", () => {
     }
   })();
 
-  beforeEach(() => {
+  beforeEach(async () => {
     home = realpathSync(mkdtempSync(path.join(tmpdir(), "wt-routes-home-")));
     process.env.MULMOTERMINAL_HOME = home;
     repo = realpathSync(mkdtempSync(path.join(tmpdir(), "wt-routes-repo-")));
@@ -146,107 +147,129 @@ describe("worktree routes: create → list → remove lifecycle", () => {
     writeFileSync(path.join(repo, "README.md"), "hi");
     g("add", "-A");
     g("commit", "-m", "init");
+    // Adopt git's toplevel string so worktreesRoot() hashes the same form the routes do.
+    repo = (await gitTopLevel(repo)) ?? repo;
   });
   afterEach(() => {
     delete process.env.MULMOTERMINAL_HOME;
-    rmSync(home, { recursive: true, force: true });
-    rmSync(repo, { recursive: true, force: true });
+    rmDirRetrying(home);
+    rmDirRetrying(repo);
   });
 
-  it.skipIf(!hasGit)("creates, lists (with dirty), refuses a dirty remove, then force-removes", async () => {
-    const r = routes(allow);
+  it.skipIf(!hasGit)(
+    "creates, lists (with dirty), refuses a dirty remove, then force-removes",
+    async () => {
+      const r = routes(allow);
 
-    const created = makeRes();
-    await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "Fix Login" } }, created);
-    expect(created.statusCode).toBe(200);
-    const wt = created.payload as { path: string; branch: string };
-    expect(wt.branch).toBe("agent/fix-login");
+      const created = makeRes();
+      await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "Fix Login" } }, created);
+      expect(created.statusCode).toBe(200);
+      const wt = created.payload as { path: string; branch: string };
+      expect(wt.branch).toBe("agent/fix-login");
 
-    const listed = makeRes();
-    await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, listed);
-    const body = listed.payload as { isGit: boolean; base: string; worktrees: { task: string; dirty: boolean }[] };
-    expect(body.isGit).toBe(true);
-    expect(body.worktrees).toEqual([{ path: wt.path, branch: "agent/fix-login", head: expect.any(String), task: "fix-login", dirty: false }]);
+      const listed = makeRes();
+      await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, listed);
+      const body = listed.payload as { isGit: boolean; base: string; worktrees: { task: string; dirty: boolean }[] };
+      expect(body.isGit).toBe(true);
+      expect(body.worktrees).toEqual([{ path: wt.path, branch: "agent/fix-login", head: expect.any(String), task: "fix-login", dirty: false }]);
 
-    writeFileSync(path.join(wt.path, "new.txt"), "x");
-    const listed2 = makeRes();
-    await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, listed2);
-    expect((listed2.payload as { worktrees: { dirty: boolean }[] }).worktrees[0].dirty).toBe(true);
+      writeFileSync(path.join(wt.path, "new.txt"), "x");
+      const listed2 = makeRes();
+      await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, listed2);
+      expect((listed2.payload as { worktrees: { dirty: boolean }[] }).worktrees[0].dirty).toBe(true);
 
-    const refused = makeRes();
-    await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path } }, refused);
-    expect(refused.statusCode).toBe(409);
-    expect(refused.payload).toEqual({ ok: false, reason: "dirty" });
+      const refused = makeRes();
+      await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path } }, refused);
+      expect(refused.statusCode).toBe(409);
+      expect(refused.payload).toEqual({ ok: false, reason: "dirty" });
 
-    const removed = makeRes();
-    await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path, force: true, deleteBranch: true } }, removed);
-    expect(removed.statusCode).toBe(200);
-    expect(removed.payload).toEqual({ ok: true });
+      const removed = makeRes();
+      await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path, force: true, deleteBranch: true } }, removed);
+      expect(removed.statusCode).toBe(200);
+      expect(removed.payload).toEqual({ ok: true });
 
-    const empty = makeRes();
-    await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, empty);
-    expect((empty.payload as { worktrees: unknown[] }).worktrees).toEqual([]);
-  });
+      const empty = makeRes();
+      await r["GET /api/worktrees"]({ headers: {}, query: { cwd: repo } }, empty);
+      expect((empty.payload as { worktrees: unknown[] }).worktrees).toEqual([]);
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("409s a remove of the main checkout (not under the managed root)", async () => {
-    const res = makeRes();
-    await routes(allow)["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: repo } }, res);
-    expect(res.statusCode).toBe(409);
-    expect(res.payload).toEqual({ ok: false, reason: "not-managed" });
-  });
+  it.skipIf(!hasGit)(
+    "409s a remove of the main checkout (not under the managed root)",
+    async () => {
+      const res = makeRes();
+      await routes(allow)["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: repo } }, res);
+      expect(res.statusCode).toBe(409);
+      expect(res.payload).toEqual({ ok: false, reason: "not-managed" });
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("treats a non-boolean force as false (no accidental force-delete of a dirty worktree)", async () => {
-    const r = routes(allow);
-    const created = makeRes();
-    await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "wip" } }, created);
-    const wt = created.payload as { path: string };
-    writeFileSync(path.join(wt.path, "dirty.txt"), "x"); // make it dirty
+  it.skipIf(!hasGit)(
+    "treats a non-boolean force as false (no accidental force-delete of a dirty worktree)",
+    async () => {
+      const r = routes(allow);
+      const created = makeRes();
+      await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "wip" } }, created);
+      const wt = created.payload as { path: string };
+      writeFileSync(path.join(wt.path, "dirty.txt"), "x"); // make it dirty
 
-    // the string "false" is truthy in JS — strict validation must NOT force-remove
-    const res = makeRes();
-    await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path, force: "false", deleteBranch: "false" } }, res);
-    expect(res.statusCode).toBe(409);
-    expect(res.payload).toEqual({ ok: false, reason: "dirty" });
-  });
+      // the string "false" is truthy in JS — strict validation must NOT force-remove
+      const res = makeRes();
+      await r["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: wt.path, force: "false", deleteBranch: "false" } }, res);
+      expect(res.statusCode).toBe(409);
+      expect(res.payload).toEqual({ ok: false, reason: "dirty" });
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("500s an internal git failure (managed path, but not a registered worktree)", async () => {
-    await createWorktree(repo, "real"); // makes the managed root dir exist
-    const ghost = path.join(worktreesRoot(repo), "ghost"); // under the root, but no worktree there
-    const res = makeRes();
-    await routes(allow)["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: ghost } }, res);
-    expect(res.statusCode).toBe(500);
-    expect(res.payload).toEqual({ ok: false, reason: "failed" });
-  });
+  it.skipIf(!hasGit)(
+    "500s an internal git failure (managed path, but not a registered worktree)",
+    async () => {
+      await createWorktree(repo, "real"); // makes the managed root dir exist
+      const ghost = path.join(worktreesRoot(repo), "ghost"); // under the root, but no worktree there
+      const res = makeRes();
+      await routes(allow)["POST /api/worktrees/remove"]({ headers: {}, body: { repoDir: repo, path: ghost } }, res);
+      expect(res.statusCode).toBe(500);
+      expect(res.payload).toEqual({ ok: false, reason: "failed" });
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 
-  it.skipIf(!hasGit)("POST /api/worktrees/push 200s with the branch (and 409s with no remote)", async () => {
-    const r = routes(allow);
-    const created = makeRes();
-    await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "ship it" } }, created);
-    const wt = created.payload as { path: string };
-    writeFileSync(path.join(wt.path, "a.txt"), "x");
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
-    execFileSync("git", ["-C", wt.path, "add", "-A"], { stdio: "ignore" });
-    // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
-    execFileSync("git", ["-C", wt.path, "commit", "-m", "work"], { stdio: "ignore" });
-
-    const noRemote = makeRes();
-    await r["POST /api/worktrees/push"]({ headers: {}, body: { cwd: wt.path } }, noRemote);
-    expect(noRemote.statusCode).toBe(409);
-    expect(noRemote.payload).toMatchObject({ ok: false, reason: "no-remote" });
-
-    const remote = realpathSync(mkdtempSync(path.join(tmpdir(), "wt-routes-remote-")));
-    try {
+  it.skipIf(!hasGit)(
+    "POST /api/worktrees/push 200s with the branch (and 409s with no remote)",
+    async () => {
+      const r = routes(allow);
+      const created = makeRes();
+      await r["POST /api/worktrees/create"]({ headers: {}, body: { repoDir: repo, task: "ship it" } }, created);
+      const wt = created.payload as { path: string };
+      writeFileSync(path.join(wt.path, "a.txt"), "x");
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
-      execFileSync("git", ["init", "--bare", "-b", "main", remote], { stdio: "ignore" });
+      execFileSync("git", ["-C", wt.path, "add", "-A"], { stdio: "ignore" });
       // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
-      execFileSync("git", ["-C", repo, "remote", "add", "origin", remote], { stdio: "ignore" });
+      execFileSync("git", ["-C", wt.path, "commit", "-m", "work"], { stdio: "ignore" });
 
-      const pushed = makeRes();
-      await r["POST /api/worktrees/push"]({ headers: {}, body: { cwd: wt.path } }, pushed);
-      expect(pushed.statusCode).toBe(200);
-      expect(pushed.payload).toEqual({ ok: true, branch: "agent/ship-it" });
-    } finally {
-      rmSync(remote, { recursive: true, force: true });
-    }
-  });
+      const noRemote = makeRes();
+      await r["POST /api/worktrees/push"]({ headers: {}, body: { cwd: wt.path } }, noRemote);
+      expect(noRemote.statusCode).toBe(409);
+      expect(noRemote.payload).toMatchObject({ ok: false, reason: "no-remote" });
+
+      const remote = realpathSync(mkdtempSync(path.join(tmpdir(), "wt-routes-remote-")));
+      try {
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
+        execFileSync("git", ["init", "--bare", "-b", "main", remote], { stdio: "ignore" });
+        // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' from PATH in a test; argv only, no shell
+        execFileSync("git", ["-C", repo, "remote", "add", "origin", remote], { stdio: "ignore" });
+
+        const pushed = makeRes();
+        await r["POST /api/worktrees/push"]({ headers: {}, body: { cwd: wt.path } }, pushed);
+        expect(pushed.statusCode).toBe(200);
+        expect(pushed.payload).toEqual({ ok: true, branch: "agent/ship-it" });
+      } finally {
+        rmDirRetrying(remote);
+      }
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
 });

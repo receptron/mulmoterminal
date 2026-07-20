@@ -10,6 +10,11 @@ import { realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+// realpathSync.native, not the JS one: on Windows only the native call expands an
+// 8.3 short component (C:\Users\RUNNER~1 → …\runneradmin) to the long form that
+// `git worktree list` reports, so the two agree in the containment check below.
+const realpath = realpathSync.native;
+
 // Read lazily so MULMOTERMINAL_HOME can redirect the managed root (used by tests to
 // avoid touching the real home dir; defaults to ~/.mulmoterminal). Resolved to its
 // realpath so it matches the realpaths `git worktree list` reports (e.g. macOS
@@ -17,7 +22,7 @@ import path from "node:path";
 function worktreesBase(): string {
   const base = process.env.MULMOTERMINAL_HOME || path.join(os.homedir(), ".mulmoterminal");
   try {
-    return path.join(realpathSync(base), "worktrees");
+    return path.join(realpath(base), "worktrees");
   } catch {
     return path.join(base, "worktrees"); // doesn't exist yet — first run
   }
@@ -58,7 +63,7 @@ function canonicalPath(p: string): string {
   let cur = resolved;
   for (;;) {
     try {
-      const real = realpathSync(cur);
+      const real = realpath(cur);
       return missing.length ? path.join(real, ...missing) : real;
     } catch {
       const parent = path.dirname(cur);
@@ -146,9 +151,13 @@ export async function listWorktrees(repoDir: string): Promise<WorktreeInfo[]> {
   if (!repo) return [];
   const res = await git(["worktree", "list", "--porcelain"], repo);
   if (!res.ok) return [];
-  return parseWorktreeList(res.stdout)
-    .filter((w) => isManagedWorktree(repo, w.path))
-    .map((w) => ({ path: w.path, branch: w.branch, head: w.head, task: path.basename(w.path) }));
+  return (
+    parseWorktreeList(res.stdout)
+      .filter((w) => isManagedWorktree(repo, w.path))
+      // git reports forward-slash paths even on Windows; normalize to the OS separator so
+      // a listed worktree's path matches what createWorktree (path.join) returned for it.
+      .map((w) => ({ path: path.normalize(w.path), branch: w.branch, head: w.head, task: path.basename(w.path) }))
+  );
 }
 
 // Whether a worktree has uncommitted changes (so we don't delete it silently).
