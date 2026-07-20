@@ -2601,7 +2601,16 @@ wss.on("connection", async (ws, req) => {
   // Before touching the Keychain for a sandbox session, refresh it if the token expired
   // (macOS refreshes into the Keychain, not the file — so an untouched export can be a
   // stale token the container 401s on). No-op unless a sandbox spawn/reattach applies.
-  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) await refreshHostKeychainIfExpired(CLAUDE_BIN);
+  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) {
+    await refreshHostKeychainIfExpired(CLAUDE_BIN);
+    // Renewal can block for seconds (it drives the host CLI). If the client vanished
+    // during that window the close handlers aren't wired yet, so spawning now would
+    // leak a PTY nobody reaps — bail instead.
+    if (ws.readyState !== ws.OPEN) {
+      console.log(`[ws] client left during credential refresh — abandoning ${sessionId}`);
+      return;
+    }
+  }
 
   let entry: PtyEntry;
   try {
