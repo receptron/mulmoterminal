@@ -77,7 +77,7 @@ describe("Sidebar", () => {
     const wrapper = mountSidebar({
       sessions: [row({ id: "a", waiting: true }), row({ id: "b" })],
     });
-    const unreadChip = wrapper.findAll(".chip")[1];
+    const unreadChip = wrapper.findAll("[aria-pressed]")[1];
     expect(unreadChip.text()).toContain("(1)");
     await unreadChip.trigger("click");
     expect(wrapper.emitted("update:filter")?.[0]).toEqual(["unread"]);
