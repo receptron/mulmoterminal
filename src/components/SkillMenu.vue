@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onUnmounted, watch, useTemplateRef } from "vue";
+import { ref, watch, useTemplateRef } from "vue";
+import { useDropdownMenu } from "../composables/useDropdownMenu";
 
 // A header dropdown that lists the open project's discoverable skills (user +
 // project `.claude/skills`) and emits the slug picked, so the parent can invoke it
@@ -14,11 +15,11 @@ interface DiscoveredSkill {
 const props = defineProps<{ cwd: string | null }>();
 const emit = defineEmits<{ (e: "skill", slug: string): void }>();
 
-const open = ref(false);
 const skills = ref<DiscoveredSkill[]>([]);
 let req = 0; // request token: drop out-of-order responses
 
 const rootRef = useTemplateRef<HTMLElement>("root");
+const { open, close, toggle } = useDropdownMenu(rootRef);
 
 async function loadSkills() {
   // Close first: a cwd change invalidates the open dropdown (and would otherwise
@@ -45,40 +46,16 @@ async function loadSkills() {
 }
 watch(() => props.cwd, loadSkills, { immediate: true });
 
-function onOutside(e: PointerEvent) {
-  if (rootRef.value && !rootRef.value.contains(e.target as Node)) close();
-}
-function onEscape(e: KeyboardEvent) {
-  if (e.key === "Escape") close();
-}
-
-function openMenu() {
-  open.value = true;
-  window.addEventListener("pointerdown", onOutside);
-  window.addEventListener("keydown", onEscape);
-}
-function close() {
-  open.value = false;
-  window.removeEventListener("pointerdown", onOutside);
-  window.removeEventListener("keydown", onEscape);
-}
-function toggle() {
-  if (open.value) close();
-  else openMenu();
-}
-
 function pick(s: DiscoveredSkill) {
   emit("skill", s.slug);
   close();
 }
-
-onUnmounted(close);
 </script>
 
 <template>
-  <div v-if="skills.length" ref="root" class="skill-menu">
+  <div v-if="skills.length" ref="root" class="menu-root">
     <button
-      class="skill-trigger"
+      class="menu-trigger"
       :class="{ active: open }"
       :aria-expanded="open"
       aria-haspopup="menu"
@@ -87,67 +64,10 @@ onUnmounted(close);
     >
       ⚡ Skill ▾
     </button>
-    <div v-if="open" class="skill-pop" role="menu">
-      <button v-for="s in skills" :key="s.slug" class="skill-item" role="menuitem" :title="s.description" @click="pick(s)">⚡ {{ s.slug }}</button>
+    <div v-if="open" class="menu-pop" role="menu">
+      <button v-for="s in skills" :key="s.slug" class="menu-item" role="menuitem" :title="s.description" @click="pick(s)">⚡ {{ s.slug }}</button>
     </div>
   </div>
 </template>
 
-<style scoped>
-.skill-menu {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Matches the grid toolbar buttons (.tb-btn lives in GridView's scoped styles). */
-.skill-trigger {
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.skill-trigger:hover,
-.skill-trigger.active {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.skill-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
-  min-width: 180px;
-  max-height: 320px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.skill-item {
-  text-align: left;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.skill-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-</style>
+<style scoped src="./headerMenu.css"></style>

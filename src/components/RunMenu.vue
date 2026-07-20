@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onUnmounted, watch, useTemplateRef } from "vue";
+import { ref, watch, useTemplateRef } from "vue";
+import { useDropdownMenu } from "../composables/useDropdownMenu";
 import type { RunCommand } from "./runCommand";
 
 // A header dropdown that lists a directory's script.json entries and emits the one
@@ -14,7 +15,6 @@ interface RunnableScript {
 const props = defineProps<{ cwd: string | null }>();
 const emit = defineEmits<{ (e: "run", command: RunCommand): void }>();
 
-const open = ref(false);
 const scripts = ref<RunnableScript[]>([]);
 // The resolved dir the listed scripts belong to (the server may fall back from a
 // bad path); the picked command runs there.
@@ -22,6 +22,7 @@ const scriptsCwd = ref<string | null>(null);
 let req = 0; // request token: drop out-of-order responses
 
 const rootRef = useTemplateRef<HTMLElement>("root");
+const { open, close, toggle } = useDropdownMenu(rootRef);
 
 async function loadScripts() {
   // Close first: a cwd change invalidates the open dropdown (and would otherwise
@@ -53,102 +54,21 @@ async function loadScripts() {
 }
 watch(() => props.cwd, loadScripts, { immediate: true });
 
-function onOutside(e: PointerEvent) {
-  if (rootRef.value && !rootRef.value.contains(e.target as Node)) close();
-}
-function onEscape(e: KeyboardEvent) {
-  if (e.key === "Escape") close();
-}
-
-function openMenu() {
-  open.value = true;
-  window.addEventListener("pointerdown", onOutside);
-  window.addEventListener("keydown", onEscape);
-}
-function close() {
-  open.value = false;
-  window.removeEventListener("pointerdown", onOutside);
-  window.removeEventListener("keydown", onEscape);
-}
-function toggle() {
-  if (open.value) close();
-  else openMenu();
-}
-
 function pick(s: RunnableScript) {
   emit("run", { source: "script", index: s.index, label: s.label, cwd: scriptsCwd.value ?? props.cwd });
   close();
 }
-
-onUnmounted(close);
 </script>
 
 <template>
-  <div v-if="scripts.length" ref="root" class="run-menu">
-    <button class="run-trigger" :class="{ active: open }" :aria-expanded="open" aria-haspopup="menu" title="Run a script in a spare terminal" @click="toggle">
+  <div v-if="scripts.length" ref="root" class="menu-root">
+    <button class="menu-trigger" :class="{ active: open }" :aria-expanded="open" aria-haspopup="menu" title="Run a script in a spare terminal" @click="toggle">
       ▶ Run ▾
     </button>
-    <div v-if="open" class="run-pop" role="menu">
-      <button v-for="s in scripts" :key="s.index" class="run-item" role="menuitem" :title="s.command" @click="pick(s)">▶ {{ s.label }}</button>
+    <div v-if="open" class="menu-pop" role="menu">
+      <button v-for="s in scripts" :key="s.index" class="menu-item" role="menuitem" :title="s.command" @click="pick(s)">▶ {{ s.label }}</button>
     </div>
   </div>
 </template>
 
-<style scoped>
-.run-menu {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Matches the grid toolbar buttons (.tb-btn lives in GridView's scoped styles). */
-.run-trigger {
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  line-height: 1;
-  padding: 5px 10px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.run-trigger:hover,
-.run-trigger.active {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.run-pop {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 20;
-  min-width: 180px;
-  max-height: 320px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
-}
-
-.run-item {
-  text-align: left;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  padding: 6px 8px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.run-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-</style>
+<style scoped src="./headerMenu.css"></style>
