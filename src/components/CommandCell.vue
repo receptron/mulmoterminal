@@ -205,116 +205,9 @@ function onHeaderClick(event: MouseEvent) {
   </div>
 </template>
 
+<style scoped src="./cellChrome.css"></style>
+
 <style scoped>
-.cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: #1a1a2e;
-  border: 1px solid #2a2a4e;
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.cell-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 8px;
-  background: #16213e;
-  border-bottom: 1px solid #2a2a4e;
-}
-/* Header background is a click target: zoom (switch to) this cell. */
-.cell-header.is-zoomable {
-  cursor: pointer;
-}
-.cell-header.is-zoomable:hover {
-  background: #1c2a4e;
-}
-
-.cell-dot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #4a5070;
-}
-.cell-dot.is-working {
-  background: #4a8cff;
-  animation: pulse 1.2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
-}
-
-.cell-dir {
-  flex: 0 1 auto;
-  /* Floor the width at ~15 chars of the path so the current dir stays readable
-     even on a narrow cell (1ch ≈ one monospace char; the leading … takes one). */
-  min-width: 16ch;
-  max-width: 45%;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: #7f88ad;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Truncate from the FRONT so the tail (the project dir) stays visible. */
-  direction: rtl;
-  /* Left-align so a short path hugs the dot instead of floating right (rtl). */
-  text-align: left;
-}
-.cell-dir-path {
-  unicode-bidi: plaintext;
-}
-.cell-cmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: #c7cdf0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cell-actions {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 4px;
-}
-.cell-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: #c7cdf0;
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-btn:hover {
-  background: #2a3b66;
-  color: #e6e6f0;
-}
-.cell-close:hover {
-  background: #3a2030;
-  color: #ff6b6b;
-}
-
 .cell-summarize {
   color: #9db4ff;
 }
@@ -325,11 +218,6 @@ function onHeaderClick(event: MouseEvent) {
 .cell-summarize.is-busy {
   color: #7f88ad;
   cursor: default;
-}
-
-.cell-term {
-  flex: 1;
-  min-height: 0;
 }
 
 /* Result panel: a short, scrollable strip below the terminal (never steals more than
