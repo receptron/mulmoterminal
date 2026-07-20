@@ -26,7 +26,7 @@ import {
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
 import type { Attachment } from "./ingestAttachments.js";
-import { sendTerminalInput } from "./terminalInput.js";
+import { createTerminalInputSender } from "./terminalInput.js";
 import type { TerminalSessionSummary } from "./terminalScreen.js";
 
 export interface RemoteHostHandlerDeps {
@@ -139,25 +139,29 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
 // command-doc ceiling.
 type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession">;
 
-const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession }: TerminalScreenDeps): CommandHandlers => ({
-  listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
+const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession }: TerminalScreenDeps): CommandHandlers => {
+  // One sender per host, so its per-session ordering actually spans every command.
+  const sendInput = createTerminalInputSender({ writeToSession });
+  return {
+    listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 
-  getTerminalScreen: async (params: JsonObject) => {
-    const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-    if (!sessionId) throw new Error("sessionId is required");
-    return { screen: await captureTerminalScreen(sessionId) };
-  },
+    getTerminalScreen: async (params: JsonObject) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      if (!sessionId) throw new Error("sessionId is required");
+      return { screen: await captureTerminalScreen(sessionId) };
+    },
 
-  // Type a line into the session and press Enter, as if the user were at the
-  // keyboard. The phone sends only text; the framing, sanitizing and Enter timing
-  // are terminalInput.ts's job.
-  sendTerminalInput: async (params: JsonObject) => {
-    const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-    if (!sessionId) throw new Error("sessionId is required");
-    const text = typeof params.text === "string" ? params.text : "";
-    return sendTerminalInput({ writeToSession }, sessionId, text) as unknown as JsonObject;
-  },
-});
+    // Type a line into the session and press Enter, as if the user were at the
+    // keyboard. The phone sends only text; the framing, sanitizing and Enter timing
+    // are terminalInput.ts's job.
+    sendTerminalInput: async (params: JsonObject) => {
+      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+      if (!sessionId) throw new Error("sessionId is required");
+      const text = typeof params.text === "string" ? params.text : "";
+      return (await sendInput(sessionId, text)) as unknown as JsonObject;
+    },
+  };
+};
 
 export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHandlers {
   const { workspace, spawnChat, ingest } = deps;

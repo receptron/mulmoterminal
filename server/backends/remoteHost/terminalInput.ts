@@ -39,21 +39,49 @@ const defaultSchedule = (submit: () => void): void => {
   setTimeout(submit, SUBMIT_DELAY_MS);
 };
 
-// Type one line into a session and press Enter. Throws when the text is empty
-// after sanitizing, or when the session has no live PTY to write to — the phone
-// surfaces the message, which beats a silent no-op it would read as success.
-export const sendTerminalInput = (deps: TerminalInputDeps, sessionId: string, text: string): { sent: boolean } => {
-  const safe = sanitizeTerminalInput(text);
-  if (!safe) {
-    throw new Error("text is required");
-  }
+// Paste, then press Enter a beat later, resolving once the Enter has gone out.
+const typeAndSubmit = (deps: TerminalInputDeps, sessionId: string, safe: string): Promise<void> => {
   if (!deps.writeToSession(sessionId, `${PASTE_START}${safe}${PASTE_END}`)) {
-    throw new Error(`session ${sessionId} has no live terminal on this host`);
+    return Promise.reject(new Error(`session ${sessionId} has no live terminal on this host`));
   }
-  // Best-effort: the session can end between the paste and the Enter, and there is
-  // nothing to report by then — the paste already landed.
-  (deps.scheduleSubmit ?? defaultSchedule)(() => {
-    deps.writeToSession(sessionId, "\r");
+  return new Promise((resolve) => {
+    (deps.scheduleSubmit ?? defaultSchedule)(() => {
+      // Best-effort: the session can end between the paste and the Enter, and there
+      // is nothing to report by then — the paste already landed.
+      deps.writeToSession(sessionId, "\r");
+      resolve();
+    });
   });
-  return { sent: true };
+};
+
+// Types lines into sessions, one at a time per session.
+//
+// The Enter is deliberately a separate, delayed write, which means two sends that
+// overlap would interleave as paste-A, paste-B, CR, CR — the terminal would run the
+// two commands merged into one line, then submit an empty one. So each session gets
+// a chain: a send waits for the previous send's Enter before its own paste.
+// Different sessions never wait on each other.
+export const createTerminalInputSender = (deps: TerminalInputDeps) => {
+  const chains = new Map<string, Promise<void>>();
+
+  return async (sessionId: string, text: string): Promise<{ sent: boolean }> => {
+    const safe = sanitizeTerminalInput(text);
+    if (!safe) {
+      throw new Error("text is required");
+    }
+    // A failed send must not poison the chain for the next one, so the stored link
+    // swallows the error; the caller still sees it through `run`.
+    const previous = chains.get(sessionId) ?? Promise.resolve();
+    const run = previous.then(() => typeAndSubmit(deps, sessionId, safe));
+    const link = run.catch(() => undefined);
+    chains.set(sessionId, link);
+    // Drop the entry once it is the last one, so sessions don't accumulate forever.
+    link.then(() => {
+      if (chains.get(sessionId) === link) {
+        chains.delete(sessionId);
+      }
+    });
+    await run;
+    return { sent: true };
+  };
 };
