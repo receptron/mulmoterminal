@@ -8,6 +8,18 @@
 // exists only in tmux, and nothing recorded what launched it.
 export type SessionAgent = "claude" | "codex" | "shell";
 
+// Map a tmux pane's current command onto the kinds the phone knows. Anything else is a
+// shell or a one-off program the phone has no special input for — "shell" is the right
+// answer for both, since that is where typed commands belong.
+const AGENT_COMMANDS: Record<string, SessionAgent> = { claude: "claude", codex: "codex" };
+
+export const agentFromPaneCommand = (command: string | null): SessionAgent | null => {
+  if (!command) {
+    return null;
+  }
+  return AGENT_COMMANDS[command] ?? "shell";
+};
+
 export interface TerminalSessionSummary {
   id: string;
   title: string;

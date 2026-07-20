@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import {
+  agentFromPaneCommand,
   buildSessionList,
   captureSessionScreen,
   type CaptureScreenDeps,
@@ -14,6 +15,30 @@ const listInput = (over: Partial<SessionListInput> = {}): SessionListInput => ({
   isResumable: () => true,
   detailOf: (id) => ({ title: id, cwd: "/w", agent: "shell" as const }),
   ...over,
+});
+
+// A session that outlived the server has no PtyEntry left, so the kind is recovered
+// from what tmux says is running in it now.
+describe("agentFromPaneCommand", () => {
+  it("recognises the agents the phone treats specially", () => {
+    expect(agentFromPaneCommand("claude")).toBe("claude");
+    expect(agentFromPaneCommand("codex")).toBe("codex");
+  });
+
+  // Anything else is where typed commands belong, which is what "shell" means here —
+  // zsh, bash, or a one-off program the phone has no special input for.
+  it("treats anything else as a shell", () => {
+    expect(agentFromPaneCommand("zsh")).toBe("shell");
+    expect(agentFromPaneCommand("bash")).toBe("shell");
+    expect(agentFromPaneCommand("vim")).toBe("shell");
+  });
+
+  // Null means "cannot tell", and must stay distinguishable from "shell": the phone
+  // withholds suggestions rather than guessing.
+  it("stays unknown when tmux has no answer", () => {
+    expect(agentFromPaneCommand(null)).toBeNull();
+    expect(agentFromPaneCommand("")).toBeNull();
+  });
 });
 
 describe("buildSessionList", () => {

@@ -28,6 +28,7 @@ import {
   tmuxHasSession,
   tmuxKillSession,
   tmuxListSessionIds,
+  tmuxPaneCommand,
   tmuxCapturePane,
   isResumableTmuxSession,
 } from "./infra/tmux.js";
@@ -62,7 +63,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
-import { buildSessionList, captureSessionScreen, type SessionAgent } from "./backends/remoteHost/terminalScreen.js";
+import { agentFromPaneCommand, buildSessionList, captureSessionScreen, type SessionAgent } from "./backends/remoteHost/terminalScreen.js";
 import {
   isRecord,
   parseJsonl,
@@ -1937,8 +1938,10 @@ const remoteHostListTerminalSessions = async () =>
     detailOf: (id) => ({
       title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? "",
       cwd: ptys.get(id)?.cwd ?? "",
-      // Null for a tmux-only session: the process that knew what it launched is gone.
-      agent: ptys.get(id)?.agent ?? null,
+      // A live session knows what it spawned. One that outlived us has no PtyEntry
+      // left, so ask tmux what is running in it now — which is also the truer answer
+      // when the user started a shell and ran an agent inside it.
+      agent: ptys.get(id)?.agent ?? agentFromPaneCommand(tmuxPaneCommand(id)),
     }),
   });
 

@@ -114,6 +114,21 @@ export function tmuxCapturePane(id: string): string | null {
   return r.status === 0 ? r.stdout : null;
 }
 
+// What is running in a session's visible pane right now — "claude", "codex", "zsh", …
+// Survives a server restart, since tmux outlives the node process, which is the whole
+// point: a session that outlived us has no PtyEntry left to ask.
+//
+// Deliberately reports what is RUNNING rather than what was launched: a shell session
+// the user then ran `claude` in should read as claude, and a recorded launch command
+// would say otherwise. Null when tmux has no such session (also how a tmux-less host
+// answers).
+export function tmuxPaneCommand(id: string): string | null {
+  const r = tmux(["display-message", "-p", "-t", tmuxSessionName(id), "#{pane_current_command}"]);
+  if (r.status !== 0) return null;
+  const name = r.stdout.trim();
+  return name === "" ? null : name;
+}
+
 // Ids of sessions that survived (e.g. across a crash), for startup visibility.
 export function tmuxListSessionIds(): string[] {
   const r = tmux(["list-sessions", "-F", "#{session_name}"]);
