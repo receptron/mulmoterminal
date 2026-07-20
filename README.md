@@ -14,7 +14,7 @@ npx mulmoterminal        # starts on http://localhost:34567 and opens your brows
 
 ![MulmoTerminal's grid view — several coding agents running side by side](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-2x2.png)
 
-*The grid is a **cockpit for parallel agents**. Each cell is one agent; its border color tells you the state at a glance — **blue = working**, **amber = needs you** (a permission or answer), plain = idle — with an attention chime so you can look away and still get pulled back. Supervise many; only step in where you're called.*
+*The grid is a **cockpit for parallel agents** — each cell is one agent (Claude or Codex). A cell's **border color signals its state** — working (blue), needs-you (amber — a permission or answer), idle — and an attention chime pulls you back to a stuck cell off-screen, so you can supervise many and only step in where you're called. (See the [Cost & token usage](#cost--token-usage) shot below for a single cell's live header.)*
 
 ## Why you'll want it
 
@@ -655,9 +655,9 @@ independently. Backed by `GET /api/prs` and `GET /api/issues`.
 Each grid cell's header shows two badges for its session, refreshed when a turn finishes
 (from `GET /api/session/:id`):
 
-![Anatomy of a cell — the two-row header packs the agent's state, location, and activity](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-one-cell.png)
+![A live Claude cell — the header shows the model·context and token badges this section describes](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-cell-live.png)
 
-*A cell's header is where "where is it, and what is it doing?" gets answered. Row 1 carries the **status dot**, directory, **git chip** (`⎇ branch ●changes`), the **model / context %** and token badges, and what the agent is doing right now; row 2 carries the connection state, attach / file-browser / GitHub buttons, and the **timeline** (🕘) of tool calls.*
+*Both badges, live on a real Claude session: **`Opus · ctx 5%`** (model family + how full its context window is) and **`⇡427k ⇣1.8k`** (cumulative input / output tokens for the session). They sit in the header's first row alongside the **status dot**, directory, and **git chip** (`⎇ main ●2`), with what the agent is doing to the right; the icon buttons and the **timeline** (🕘) of tool calls are on the second row.*
 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
