@@ -1,0 +1,47 @@
+/* Chrome shared by the toolbar popovers (notifications, remote host): a square
+   icon trigger plus the panel it anchors. Each popover keeps its own sizing rules. */
+.toolbar-popover-root {
+  position: relative;
+  display: inline-flex;
+}
+
+/* Mirrors App.vue's .launcher-btn (scoped styles don't cross component boundaries). */
+.toolbar-popover-btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  height: 30px;
+  width: 30px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.toolbar-popover-btn:hover,
+.toolbar-popover-btn.active {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+.toolbar-popover-btn .material-symbols-outlined {
+  font-size: 19px;
+  line-height: 1;
+}
+
+.toolbar-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  /* Above the collections browse overlay (z-index 50, fills below the toolbar) so
+     the dropdown stays visible when a navigation has opened it. */
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}

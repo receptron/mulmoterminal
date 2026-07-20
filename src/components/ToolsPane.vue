@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
-import { usePubSub } from "../composables/usePubSub";
+import { ref, onUnmounted } from "vue";
+import { useSessionFeed } from "../composables/useSessionFeed";
 
 // The tools pane mirrors MulmoClaude's right sidebar: an "Available Tools" list
 // (the GUI plugin tools, with collapsible descriptions) and a "Tool Call History"
@@ -47,52 +47,18 @@ function callKey(c: ToolCall, i: number): string {
   return c.toolUseId ?? `${c.toolName}-${i}`;
 }
 
-// Insert or update a call, keyed by tool_use_id (a PostToolUse completes the
-// "running" entry its PreToolUse created).
-function upsert(call: ToolCall) {
-  const list = toolCalls.value;
-  const idx = call.toolUseId ? list.findIndex((c) => c.toolUseId === call.toolUseId) : -1;
-  if (idx >= 0) list[idx] = call;
-  else toolCalls.value = [...list, call];
-}
-
-async function loadHistory(id: string) {
-  try {
-    const res = await fetch(`/api/tool-calls/${encodeURIComponent(id)}`);
-    // Guard against a session-switch race: if the user moved on while this was in
-    // flight, drop the stale response instead of clobbering the new session's pane.
-    if (id !== props.sessionId) return;
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    if (id !== props.sessionId) return;
-    toolCalls.value = data.toolCalls ?? [];
-  } catch {
-    if (id === props.sessionId) toolCalls.value = [];
-  }
-}
-
-const { subscribe } = usePubSub();
-let unsubscribe: (() => void) | undefined;
-
-function subscribeTo(id: string | null) {
-  unsubscribe?.();
-  unsubscribe = undefined;
-  if (!id) return;
-  unsubscribe = subscribe(`toolcalls:${id}`, (data) => upsert(data as ToolCall));
-}
-
-watch(
-  () => props.sessionId,
-  (id) => {
+// Keying by tool_use_id lets a PostToolUse complete the "running" entry its
+// PreToolUse created.
+useSessionFeed(toolCalls, {
+  sessionId: () => props.sessionId,
+  historyUrl: (id) => `/api/tool-calls/${encodeURIComponent(id)}`,
+  historyKey: "toolCalls",
+  channel: (id) => `toolcalls:${id}`,
+  identify: (call) => call.toolUseId,
+  onSessionChange: () => {
     expandedCalls.value = new Set();
-    if (id) loadHistory(id);
-    else toolCalls.value = [];
-    subscribeTo(id);
   },
-  { immediate: true },
-);
-
-onUnmounted(() => unsubscribe?.());
+});
 
 function toggleTool(name: string) {
   const next = new Set(expandedTools.value);
@@ -144,10 +110,10 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 </script>
 
 <template>
-  <section class="tools-pane">
-    <div class="header">
-      <span class="title">Tools</span>
-      <button type="button" class="close-btn" title="Close tools pane" aria-label="Close tools pane" @click="emit('close')">
+  <section class="tools-pane side-pane">
+    <div class="side-pane-header">
+      <span class="side-pane-title">Tools</span>
+      <button type="button" class="side-pane-action" title="Close tools pane" aria-label="Close tools pane" @click="emit('close')">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -211,42 +177,12 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
   </section>
 </template>
 
+<style scoped src="./sidePane.css"></style>
+
 <style scoped>
 .tools-pane {
-  display: flex;
-  flex-direction: column;
   width: 340px;
   flex-shrink: 0;
-  height: 100%;
-  background: var(--bg-deep);
-  border-left: 1px solid var(--border);
-}
-
-.header {
-  padding: 8px 16px;
-  background: var(--bg-panel);
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.title {
-  font-weight: 600;
-}
-.close-btn {
-  background: none;
-  border: none;
-  color: var(--text-dim);
-  font-size: 15px;
-  line-height: 1;
-  padding: 2px 4px;
-  cursor: pointer;
-  border-radius: 4px;
-}
-.close-btn:hover {
-  color: var(--text);
 }
 
 .content {

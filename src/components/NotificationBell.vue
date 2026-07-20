@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onUnmounted, useTemplateRef } from "vue";
+import { useTemplateRef } from "vue";
+import { useDropdownMenu } from "../composables/useDropdownMenu";
 import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../composables/useNotifications";
 
 // Toolbar bell: a severity-coloured unread badge + a dropdown listing the active
@@ -10,29 +11,8 @@ import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../
 // watcher clears it when the record is done; the ✕ dismisses it explicitly.
 const { count, topSeverity, sorted, dismiss, activate } = useNotifications();
 
-const open = ref(false);
 const rootRef = useTemplateRef<HTMLElement>("root");
-
-function onOutside(e: PointerEvent) {
-  if (rootRef.value && !rootRef.value.contains(e.target as Node)) close();
-}
-function onEscape(e: KeyboardEvent) {
-  if (e.key === "Escape") close();
-}
-function openPanel() {
-  open.value = true;
-  window.addEventListener("pointerdown", onOutside);
-  window.addEventListener("keydown", onEscape);
-}
-function close() {
-  open.value = false;
-  window.removeEventListener("pointerdown", onOutside);
-  window.removeEventListener("keydown", onEscape);
-}
-function toggle() {
-  if (open.value) close();
-  else openPanel();
-}
+const { open, close, toggle } = useDropdownMenu(rootRef);
 
 function onRowClick(entry: NotifierEntry) {
   // Navigate if it's a deep-linkable entry; close either way so the click feels live.
@@ -63,15 +43,13 @@ function relativeTime(iso: string): string {
   const days = Math.round(hours / 24);
   return `${days}d`;
 }
-
-onUnmounted(close);
 </script>
 
 <template>
-  <div ref="root" class="notif-bell">
+  <div ref="root" class="toolbar-popover-root">
     <button
       type="button"
-      class="bell-btn"
+      class="toolbar-popover-btn"
       :class="{ active: open }"
       :aria-expanded="open"
       aria-haspopup="true"
@@ -83,7 +61,7 @@ onUnmounted(close);
       <span v-if="count" class="badge" :class="topSeverity ? severityClass(topSeverity) : ''">{{ count > 99 ? "99+" : count }}</span>
     </button>
 
-    <div v-if="open" class="notif-pop" role="group" aria-label="Notifications">
+    <div v-if="open" class="toolbar-popover notif-pop" role="group" aria-label="Notifications">
       <div class="notif-head">Notifications</div>
       <div class="notif-subhead">Active ({{ sorted.length }})</div>
       <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
@@ -119,38 +97,9 @@ onUnmounted(close);
   </div>
 </template>
 
+<style scoped src="./toolbarPopover.css"></style>
+
 <style scoped>
-.notif-bell {
-  position: relative;
-  display: inline-flex;
-}
-
-/* Mirrors App.vue's .launcher-btn (scoped styles don't cross component boundaries). */
-.bell-btn {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: 30px;
-  width: 30px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.bell-btn:hover,
-.bell-btn.active {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.bell-btn .material-symbols-outlined {
-  font-size: 19px;
-  line-height: 1;
-}
-
 /* Unread badge: severity-coloured pill at the top-right of the bell. */
 .badge {
   position: absolute;
@@ -179,22 +128,10 @@ onUnmounted(close);
 }
 
 .notif-pop {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  /* Above the collections browse overlay (z-index 50, fills below the toolbar) so
-     the dropdown stays visible when a navigation has opened it. */
-  z-index: 60;
   width: 340px;
   max-height: 460px;
   overflow-y: auto;
-  display: flex;
-  flex-direction: column;
   padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
 .notif-head {
