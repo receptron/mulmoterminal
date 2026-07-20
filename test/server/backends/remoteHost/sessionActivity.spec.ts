@@ -106,4 +106,46 @@ describe("createSessionActivityPublisher", () => {
     expect(() => publisher(failing, () => UID, onError).publish("s1", { working: true, waiting: false })).not.toThrow();
     await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
   });
+
+  // Dedup is recorded optimistically, so without releasing it on failure a lost write
+  // would swallow every later publish of the SAME state and strand the phone until
+  // some different transition happened.
+  it("retries the same state after a failed write", async () => {
+    const onError = vi.fn();
+    const attempts: number[] = [];
+    const flaky: SessionActivityStore = {
+      write: async (_uid, _hostId, _sessionId, payload) => {
+        attempts.push(payload.rev);
+        if (attempts.length === 1) throw new Error("offline");
+      },
+      remove: async () => undefined,
+    };
+    const activity = publisher(flaky, () => UID, onError);
+    activity.publish("s1", { working: true, waiting: false });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    activity.publish("s1", { working: true, waiting: false });
+    expect(attempts).toEqual([1, 2]);
+  });
+
+  // Rolling back blindly would resurrect a state the session has already left.
+  it("does not resurrect a state a newer publish superseded", async () => {
+    const onError = vi.fn();
+    const written: Array<{ working: boolean; waiting: boolean }> = [];
+    const failFirst: SessionActivityStore = {
+      write: async (_uid, _hostId, _sessionId, payload) => {
+        written.push({ working: payload.working, waiting: payload.waiting });
+        if (written.length === 1) throw new Error("offline");
+      },
+      remove: async () => undefined,
+    };
+    const activity = publisher(failFirst, () => UID, onError);
+    activity.publish("s1", { working: true, waiting: false });
+    activity.publish("s1", { working: false, waiting: true });
+    await vi.waitFor(() => expect(onError).toHaveBeenCalledOnce());
+    activity.publish("s1", { working: false, waiting: true });
+    expect(written).toEqual([
+      { working: true, waiting: false },
+      { working: false, waiting: true },
+    ]);
+  });
 });

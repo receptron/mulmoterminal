@@ -66,7 +66,16 @@ export function createSessionActivityPublisher(deps: SessionActivityPublisherDep
     published.set(sessionId, key);
     const rev = (revisions.get(sessionId) ?? 0) + 1;
     revisions.set(sessionId, rev);
-    deps.store.write(uid, deps.hostId, sessionId, { ...activity, rev, at: serverTimestamp() }).catch(deps.onError);
+    deps.store.write(uid, deps.hostId, sessionId, { ...activity, rev, at: serverTimestamp() }).catch((error: unknown) => {
+      // The dedup entry is recorded optimistically, so a failed write would otherwise
+      // swallow every later publish of the SAME state and leave the phone stale until
+      // some different transition happened. Release it so the next one retries —
+      // unless a newer state has already superseded this one, which is then the
+      // truth worth keeping. `rev` deliberately still advances: a gap only tells a
+      // watcher a write was lost, which is exactly what happened.
+      if (published.get(sessionId) === key) published.delete(sessionId);
+      deps.onError(error);
+    });
   };
 
   // On teardown, so the phone's picker doesn't accumulate docs for dead sessions. The
