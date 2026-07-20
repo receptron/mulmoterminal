@@ -70,17 +70,5 @@ const title = computed(() => {
 </script>
 
 <template>
-  <span v-if="label" class="cell-model" :title="title">{{ badgeText }}</span>
+  <span v-if="label" class="flex-none font-mono text-[10px] text-dim whitespace-nowrap tracking-[0.02em]" :title="title">{{ badgeText }}</span>
 </template>
-
-<style scoped>
-/* Mirrors .cell-usage: dim, monospace metadata that reads as a quiet header badge. */
-.cell-model {
-  flex: 0 0 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
-</style>
