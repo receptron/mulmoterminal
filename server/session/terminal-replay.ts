@@ -27,16 +27,20 @@ export function stripTerminalQueries(data: string): string {
 // or ST. Neither can appear inside the sequence before its terminator, so the first
 // occurrence IS the end.
 const CSI_FINAL = /[\x40-\x7E]/;
-const OSC_TERMINATOR = new RegExp(BEL + "|" + ESC);
+// ST is the TWO bytes `ESC \`, so the backslash must be consumed with the escape or it
+// leaks into the retained output. The trailing `?` still matches a lone ESC, which is
+// how a terminal aborts an unfinished OSC.
+const OSC_TERMINATOR = new RegExp(BEL + "|" + ESC + "\\\\?");
 
 // Escape sequences are short, so the sequence a cut may have landed inside is always
 // near the cut. Bounds the look-behind to a constant instead of the whole 64 KiB.
 const SEQUENCE_LOOKBEHIND = 64;
 
+// Past the END of the terminator, not past its first character — ST is two bytes wide.
 const firstMatchEnd = (text: string, terminator: RegExp): number => {
   const found = terminator.exec(text);
   if (!found) return text.length;
-  return found.index + 1;
+  return found.index + found[0].length;
 };
 
 // How many leading characters of `cut` belong to a sequence the truncation split, given

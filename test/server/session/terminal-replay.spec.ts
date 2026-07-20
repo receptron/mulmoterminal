@@ -98,9 +98,22 @@ describe("appendBoundedOutput", () => {
 
   // An OSC string ends with BEL, not a CSI final byte, so scanning for 0x40-0x7E would
   // stop inside the title and leave half of it on screen.
-  it("drops a split OSC string up to its terminator", () => {
+  it("drops a split OSC string up to its BEL terminator", () => {
     const stream = `${"x".repeat(50)}${ESC}]0;window title${BEL}after`;
     expect(appendBoundedOutput(stream, "", 12)).toBe("after");
+  });
+
+  // ST is the two bytes `ESC \`. Consuming only the ESC leaks a stray backslash.
+  it("drops a split OSC string up to its ST terminator, backslash included", () => {
+    const stream = `${"x".repeat(50)}${ESC}]0;window title${ESC}\\after`;
+    const out = appendBoundedOutput(stream, "", 12);
+    expect(out.startsWith("\\")).toBe(false);
+    expect(out).toBe("after");
+  });
+
+  it("keeps an OSC string that closed with ST before the cut", () => {
+    const stream = `${"x".repeat(50)}${ESC}]0;title${ESC}\\visible text`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
   });
 
   it("drops a split two-character sequence", () => {
