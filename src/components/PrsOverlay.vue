@@ -95,7 +95,7 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Pull requests and issues">
+  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Pull requests and issues">
     <header class="prs-head">
       <span class="prs-title">PRs &amp; Issues</span>
       <button type="button" class="prs-reload" :disabled="loading" title="Reload" aria-label="Reload PR and issue list" @click="load">↻</button>
@@ -158,7 +158,6 @@ useEscapeToClose(isOpen, close);
   </div>
 </template>
 
-<style scoped src="./overlay.css"></style>
 <style scoped>
 .prs-head {
   flex: 0 0 auto;
