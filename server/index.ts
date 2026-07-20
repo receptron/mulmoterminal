@@ -22,7 +22,15 @@ import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config
 import { prUrlForBranch } from "./git/pr-for-branch.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import { gitStatus } from "./git/git-status.js";
-import { tmuxAvailable, tmuxNewSessionArgs, tmuxHasSession, tmuxKillSession, tmuxListSessionIds, isResumableTmuxSession } from "./infra/tmux.js";
+import {
+  tmuxAvailable,
+  tmuxNewSessionArgs,
+  tmuxHasSession,
+  tmuxKillSession,
+  tmuxListSessionIds,
+  tmuxCapturePane,
+  isResumableTmuxSession,
+} from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
 import {
   sandboxEnabled,
@@ -52,7 +60,9 @@ import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./age
 import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
-import { stripTerminalQueries } from "./session/terminal-replay.js";
+import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
+import { renderScreen } from "./session/headlessScreen.js";
+import { buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import {
   isRecord,
   parseJsonl,
@@ -1788,6 +1798,17 @@ app.get("/api/sessions", async (req, res) => {
 
 // Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
 // module so the origin guard / id validation / orphan-selection boundary are testable.
+// Shared by the orphan cleanup (which must never reap a resumable session) and the phone's
+// session picker (which must never OFFER a non-resumable one) — the same rule read from
+// both directions, so they can't drift apart.
+const resumableSessionPredicate = async (): Promise<(id: string) => boolean> => {
+  await devTerminalSessionsHydrated;
+  const live = new Set(ptys.keys());
+  const claudeOnDisk = claudeOnDiskSessionIds();
+  const codexRoot = codexSessionsRoot();
+  return (id) => isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, (i) => codexRolloutExists(codexRoot, i));
+};
+
 mountTmuxRoutes(app, {
   isAllowedOrigin,
   isValidSessionId: (id) => SESSION_ID_RE.test(id),
@@ -1795,13 +1816,7 @@ mountTmuxRoutes(app, {
   hasTmux: tmuxHasSession,
   killTmux: tmuxKillSession,
   listTmuxIds: tmuxListSessionIds,
-  resumablePredicate: async () => {
-    await devTerminalSessionsHydrated;
-    const live = new Set(ptys.keys());
-    const claudeOnDisk = claudeOnDiskSessionIds();
-    const codexRoot = codexSessionsRoot();
-    return (id) => isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, (i) => codexRolloutExists(codexRoot, i));
-  },
+  resumablePredicate: resumableSessionPredicate,
 });
 
 // codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
@@ -1891,7 +1906,37 @@ const remoteHostSpawnChat = (message: string) => {
   spawnClaudePty(sessionId, null, null, message);
   return { chatId: sessionId };
 };
-initRemoteHostBackend({ workspace: CLAUDE_CWD, spawnChat: remoteHostSpawnChat });
+// The phone's remote terminal view (#435). Both accessors live here because the PTY table
+// and the title/activity side-tables do; the backend only sees the two functions.
+const remoteHostListTerminalSessions = async () =>
+  buildSessionList({
+    liveIds: [...ptys.keys()],
+    tmuxIds: tmuxListSessionIds(),
+    isResumable: await resumableSessionPredicate(),
+    // Empty title rather than the id as a fallback — buildSessionList uses "nameless"
+    // to drop the long tail of finished sessions the phone can't meaningfully offer.
+    detailOf: (id) => ({
+      title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? "",
+      cwd: ptys.get(id)?.cwd ?? "",
+    }),
+  });
+
+const remoteHostCaptureTerminalScreen = (sessionId: string) =>
+  captureSessionScreen(sessionId, {
+    capturePane: tmuxCapturePane,
+    sourceOf: (id) => {
+      const entry = ptys.get(id);
+      return entry ? { buffer: entry.buffer, cols: entry.term.cols, rows: entry.term.rows } : undefined;
+    },
+    render: renderScreen,
+  });
+
+initRemoteHostBackend({
+  workspace: CLAUDE_CWD,
+  spawnChat: remoteHostSpawnChat,
+  listTerminalSessions: remoteHostListTerminalSessions,
+  captureTerminalScreen: remoteHostCaptureTerminalScreen,
+});
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
 // engine host + notifier are configured. Fire-and-forget + non-fatal: a watcher
@@ -2294,7 +2339,7 @@ function spawnClaudePty(
 
   // PTY -> browser (buffering a bounded tail for reattach).
   entry.term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
     }
@@ -2407,7 +2452,7 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
   ptys.set(sessionId, entry);
 
   term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) {
       entry.ws.send(JSON.stringify({ type: "output", data }));
     }
@@ -2711,7 +2756,7 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
 
 function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
   entry.term.onData((data) => {
-    entry.buffer = (entry.buffer + data).slice(-OUTPUT_BUFFER_LIMIT);
+    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
     if (entry.ws && entry.ws.readyState === entry.ws.OPEN) entry.ws.send(JSON.stringify({ type: "output", data }));
     onOutput?.(data);
   });

@@ -17,6 +17,7 @@ import type { Express } from "express";
 import { createRemoteHost, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
 
 import { createRemoteHostHandlers } from "./handlers.js";
+import type { TerminalSessionSummary } from "./terminalScreen.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
@@ -32,6 +33,8 @@ let lifecycle: RemoteHostLifecycle | null = null;
 export interface RemoteHostBackendDeps {
   workspace: string;
   spawnChat: (message: string) => { chatId: string };
+  listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
+  captureTerminalScreen: (sessionId: string) => Promise<string>;
 }
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
@@ -49,7 +52,13 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
     // Expired offline-queued startChat commands: delete the phone's staged Storage
     // uploads before the runner removes the doc (protocol v2 offline queue).
     onExpire,
-    handlers: createRemoteHostHandlers({ workspace: deps.workspace, spawnChat: deps.spawnChat, ingest }),
+    handlers: createRemoteHostHandlers({
+      workspace: deps.workspace,
+      spawnChat: deps.spawnChat,
+      ingest,
+      listTerminalSessions: deps.listTerminalSessions,
+      captureTerminalScreen: deps.captureTerminalScreen,
+    }),
     log: {
       info: (msg) => console.log(PREFIX, msg),
       warn: (msg) => console.warn(PREFIX, msg),
