@@ -43,6 +43,7 @@ import {
   buildDockerRunArgs,
   writeSandboxClaudeConfig,
   writeSandboxCredentials,
+  refreshHostKeychainIfExpired,
   cleanupSandbox,
   rewriteLoopbackForDocker,
   SANDBOX_HOST,
@@ -2201,6 +2202,13 @@ function spawnPty(bin: string, args: string[], cwd: string): IPty {
   return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
 }
 
+// Would this session run in the Docker sandbox? Single-view interactive only (the caller
+// adds `ws !== null`). Shared by the spawn gate and the connection handler so the
+// pre-spawn credential refresh fires exactly when a sandbox spawn will.
+function sandboxWouldRun(attachGuiMcp: boolean): boolean {
+  return sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && dockerAvailable() && sandboxImageExists();
+}
+
 // Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
 // `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
 // (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
@@ -2336,7 +2344,7 @@ function spawnClaudePty(
   // Sandbox only the SINGLE-VIEW interactive session: attachGuiMcp=true excludes grid
   // dev terminals (?gui=0), and ws!==null excludes hidden background/translation workers.
   // Falls back to the host spawn if the Docker daemon isn't reachable.
-  const sandbox = sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && ws !== null && dockerAvailable() && sandboxImageExists();
+  const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
   const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
   const args = buildClaudeArgs({
     sessionId,
@@ -2551,7 +2559,7 @@ function wsConnectionContext(req: { url?: string }): { url: URL; requested: stri
   return { url, requested, cwd };
 }
 
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
@@ -2590,12 +2598,25 @@ wss.on("connection", (ws, req) => {
   const reportedCwd = live?.cwd ?? cwd;
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: reportedCwd }));
 
+  // Before touching the Keychain for a sandbox session, refresh it if the token expired
+  // (macOS refreshes into the Keychain, not the file — so an untouched export can be a
+  // stale token the container 401s on). No-op unless a sandbox spawn/reattach applies.
+  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) {
+    await refreshHostKeychainIfExpired(CLAUDE_BIN);
+    // Renewal can block for seconds (it drives the host CLI). If the client vanished
+    // during that window the close handlers aren't wired yet, so spawning now would
+    // leak a PTY nobody reaps — bail instead.
+    if (ws.readyState !== ws.OPEN) {
+      console.log(`[ws] client left during credential refresh — abandoning ${sessionId}`);
+      return;
+    }
+  }
+
   let entry: PtyEntry;
   try {
-    // A sandbox session's credential is snapshotted at spawn onto its read-only mount. On
-    // reconnect, re-sync it from the Keychain (overwrites the mounted per-session file in
-    // place) so a token that rotated since spawn doesn't leave the reattached session stuck
-    // at "Not logged in".
+    // A sandbox session's credential is snapshotted at spawn onto its mounted per-session
+    // file. On reconnect, re-sync it from the (now-refreshed) Keychain so a token that
+    // rotated since spawn doesn't leave the reattached session stuck at "Not logged in".
     if (live?.sandbox) writeSandboxCredentials(sessionId);
     entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
   } catch (err) {
