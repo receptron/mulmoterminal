@@ -1,0 +1,83 @@
+# The Windows half of the CI gates. Kept OUT of pull_request on purpose: the Windows
+# runner is slow (NTFS tar extraction, Defender, a second tsc pass) and every PR paying
+# that cost buys little — the Windows-specific surface here is narrow. It runs daily and
+# on main instead, which is early enough to catch a regression before a release.
+#
+# What it actually guards: server/infra/pty-env.ts branches on PATH casing ("Path"),
+# the ";" delimiter and "\" separators; server/index.ts spawns powershell.exe; and the
+# postinstall (server/fix-pty-perms.js) runs on every install. None of that had ever
+# executed on Windows before this workflow.
+name: Windows (daily)
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 18:00 UTC = 03:00 JST
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "plans/**"
+      - "**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-daily-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint_test_windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22.x, 24.x]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # Deliberately no `cache: yarn`: restoring the yarn cache tar onto NTFS is slower
+      # than a fresh install. node_modules is cached directly instead (below).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      # Realtime scanning makes yarn's atomic renames fail with EPERM mid-install.
+      - name: Disable Defender realtime monitoring
+        shell: powershell
+        run: Set-MpPreference -DisableRealtimeMonitoring $true
+
+      - uses: actions/cache@v5
+        with:
+          path: node_modules
+          key: win-node-modules-${{ matrix.node-version }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            win-node-modules-${{ matrix.node-version }}-
+
+      # Restored BEFORE install so puppeteer's postinstall skips its ~120 MB download.
+      - uses: actions/cache@v5
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+
+      # Also exercises the postinstall (server/fix-pty-perms.js) on Windows.
+      - run: yarn install --frozen-lockfile --network-timeout 120000
+
+      - name: Lint
+        run: yarn lint
+
+      - name: Typecheck
+        run: yarn typecheck
+
+      - name: Typecheck (server)
+        run: yarn typecheck:server
+
+      - name: Build
+        run: yarn build
+
+      - name: Test
+        run: yarn test

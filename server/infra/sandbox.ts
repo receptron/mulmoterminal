@@ -35,8 +35,8 @@ export function sandboxEnabled(): boolean {
 // written as uid 1000 (ownership failures on non-1000 hosts — proper uid mapping is a
 // follow-up, #202). Windows is gated off because the same-path mount (`-v <cwd>:<cwd>`)
 // isn't a valid Linux container path. Both fall back to the host spawn.
-export function sandboxPlatformSupported(): boolean {
-  return process.platform === "darwin";
+export function sandboxPlatformSupported(platform: NodeJS.Platform = process.platform): boolean {
+  return platform === "darwin";
 }
 
 // Rewrite a host-loopback URL so it's reachable from inside the container. Same regex

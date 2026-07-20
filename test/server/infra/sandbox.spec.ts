@@ -13,6 +13,7 @@ import {
   cleanupSandbox,
   parseMountConfigNames,
   resolveSandboxAuthArgs,
+  sandboxPlatformSupported,
 } from "../../../server/infra/sandbox";
 
 describe("rewriteLoopbackForDocker", () => {
@@ -48,6 +49,23 @@ describe("sandboxEnabled", () => {
     expect(sandboxEnabled()).toBe(true);
     process.env.MULMOTERMINAL_SANDBOX = "0";
     expect(sandboxEnabled()).toBe(false);
+  });
+});
+
+// Locks the gate the module comment describes: Linux is off until the spawn maps uids
+// (bind-mounted files would land as uid 1000), Windows is off because `-v <cwd>:<cwd>`
+// isn't a valid Linux container path. Enabling either needs that work done deliberately,
+// so it should break a test rather than pass silently.
+describe("sandboxPlatformSupported", () => {
+  it("is macOS only", () => {
+    expect(sandboxPlatformSupported("darwin")).toBe(true);
+    for (const platform of ["win32", "linux", "freebsd", "aix"] as const) {
+      expect(sandboxPlatformSupported(platform), platform).toBe(false);
+    }
+  });
+
+  it("reads the running platform when none is given", () => {
+    expect(sandboxPlatformSupported()).toBe(sandboxPlatformSupported(process.platform));
   });
 });
 

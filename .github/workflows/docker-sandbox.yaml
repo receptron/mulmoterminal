@@ -1,0 +1,85 @@
+# Builds and smoke-tests Dockerfile.sandbox. Nothing else in CI builds this image, and it
+# pins nothing on purpose ("a rebuild picks up the latest, matching how the host runs the
+# newest claude") — so a base-image bump, an apt package rename, or a broken
+# `npm install -g @anthropic-ai/claude-code` breaks it with no code change on our side.
+# Without this job the first person to find out is a macOS user at spawn time.
+#
+# Runs on ubuntu: the image is a Linux image and building it needs no macOS/Windows
+# specifics. The sandbox FEATURE is macOS-only (see sandboxPlatformSupported), but the
+# image build is platform-independent.
+name: Docker sandbox image
+
+on:
+  schedule:
+    - cron: "0 17 * * *" # 17:00 UTC = 02:00 JST
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile.sandbox"
+      - "server/infra/sandbox.ts"
+      - "scripts/ci-sandbox-image.ts"
+      - ".github/workflows/docker-sandbox.yaml"
+  pull_request:
+    paths:
+      - "Dockerfile.sandbox"
+      - "server/infra/sandbox.ts"
+      - "scripts/ci-sandbox-image.ts"
+      - ".github/workflows/docker-sandbox.yaml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-sandbox-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_and_smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: yarn
+
+      - run: yarn install --frozen-lockfile
+
+      # Exercises the REAL ensureSandboxImage(): builds when missing, no-ops when the
+      # Dockerfile is unchanged, rebuilds and re-labels when it changed. That cache
+      # contract is what unit tests cannot reach.
+      - name: ensureSandboxImage() contract
+        run: node --import tsx scripts/ci-sandbox-image.ts
+
+      # What the image has to provide for a claude session to work at all. Each assertion
+      # maps to a line in Dockerfile.sandbox, so a silent drop there fails here.
+      - name: Smoke the built image
+        run: |
+          set -euo pipefail
+          IMAGE=mulmoterminal-sandbox
+
+          echo "--- the agent CLI is installed and runnable ---"
+          docker run --rm "$IMAGE" claude --version
+
+          echo "--- claude's built-in tools are present ---"
+          for tool in git curl rg; do
+            docker run --rm "$IMAGE" sh -c "command -v $tool >/dev/null" \
+              || { echo "missing from the image: $tool"; exit 1; }
+          done
+
+          echo "--- runs unprivileged as uid 1000, not root ---"
+          uid="$(docker run --rm "$IMAGE" id -u)"
+          [ "$uid" = "1000" ] || { echo "expected uid 1000, got $uid"; exit 1; }
+
+          echo "--- HOME and WORKDIR match what buildDockerRunArgs mounts into ---"
+          home="$(docker run --rm "$IMAGE" sh -c 'printf %s "$HOME"')"
+          [ "$home" = "/home/node" ] || { echo "expected HOME=/home/node, got $home"; exit 1; }
+          workdir="$(docker run --rm "$IMAGE" pwd)"
+          [ "$workdir" = "/home/node/workspace" ] || { echo "expected /home/node/workspace, got $workdir"; exit 1; }
+
+          echo "✓ sandbox image smoke passed"
