@@ -173,6 +173,36 @@ function respondForStoreFailure(res: Response, slug: string, failure: CommonStor
   else res.status(403).json({ error: `data directory for '${slug}' escapes the workspace` });
 }
 
+type CollectionWriteFn = NonNullable<ReturnType<typeof storeFor>["write"]>;
+
+/** The collection's write function plus a validated body record, or null after
+ *  sending the 405 (read-only) / 400 (bad body) response. Shared by the create and
+ *  update routes, which each then call `write` their own way. */
+function resolveWriteTarget(res: Response, collection: ResolvedCollection, body: unknown): { write: CollectionWriteFn; record: CollectionItem } | null {
+  const write = storeFor(collection).write;
+  if (!write) {
+    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
+    return null;
+  }
+  const record = extractRecord(body);
+  if (!record) {
+    res.status(400).json({ error: "request body must be a JSON object" });
+    return null;
+  }
+  return { write, record };
+}
+
+/** The action's skill template, or null after sending a 500. Shared by the per-record
+ *  and collection-level action routes. */
+async function readActionTemplateOr500(res: Response, collection: ResolvedCollection, action: { id: string; template: string }): Promise<string | null> {
+  const template = await readSkillTemplate(collection.skillDir, action.template);
+  if (template === null) {
+    res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
+    return null;
+  }
+  return template;
+}
+
 // The write modes a custom view's PUT may request, matching the documented
 // __MC_VIEW contract (@mulmoclaude/core help: custom-view.md).
 type ViewWriteMode = "merge" | "upsert" | "create";
@@ -342,19 +372,11 @@ const detailHandler: RequestHandler<{ slug: string }> = async (req, res) => {
 const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => {
   const collection = await resolveCollection(res, req.params.slug);
   if (!collection) return;
-  const createStore = storeFor(collection).write;
-  if (!createStore) {
-    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
-    return;
-  }
-  const record = extractRecord(req.body);
-  if (!record) {
-    res.status(400).json({ error: "request body must be a JSON object" });
-    return;
-  }
-  const itemId = resolveCreateItemId(collection.schema, record) ?? generateItemId();
-  const recordWithId: CollectionItem = { ...record, [collection.schema.primaryKey]: itemId };
-  const result = await createStore(itemId, recordWithId, { refuseOverwrite: true });
+  const target = resolveWriteTarget(res, collection, req.body);
+  if (!target) return;
+  const itemId = resolveCreateItemId(collection.schema, target.record) ?? generateItemId();
+  const recordWithId: CollectionItem = { ...target.record, [collection.schema.primaryKey]: itemId };
+  const result = await target.write(itemId, recordWithId, { refuseOverwrite: true });
   if (isCommonStoreFailure(result)) {
     respondForStoreFailure(res, collection.slug, result);
     return;
@@ -371,23 +393,15 @@ const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => 
 const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = async (req, res) => {
   const collection = await resolveCollection(res, req.params.slug);
   if (!collection) return;
-  const updateStore = storeFor(collection).write;
-  if (!updateStore) {
-    res.status(405).json({ error: readOnlyRefusal(collection.slug) });
-    return;
-  }
-  const record = extractRecord(req.body);
-  if (!record) {
-    res.status(400).json({ error: "request body must be a JSON object" });
-    return;
-  }
+  const target = resolveWriteTarget(res, collection, req.body);
+  if (!target) return;
   const { singleton, primaryKey } = collection.schema;
   if (singleton && req.params.itemId !== singleton) {
     res.status(400).json({ error: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` });
     return;
   }
-  const recordWithId: CollectionItem = { ...record, [primaryKey]: req.params.itemId };
-  const result = await updateStore(req.params.itemId, recordWithId);
+  const recordWithId: CollectionItem = { ...target.record, [primaryKey]: req.params.itemId };
+  const result = await target.write(req.params.itemId, recordWithId);
   if (isCommonStoreFailure(result)) {
     respondForStoreFailure(res, collection.slug, result);
     return;
@@ -492,11 +506,8 @@ const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId
     await respondForMutateAction(res, collection, action, req.params.itemId, req.body as { params?: unknown } | undefined);
     return;
   }
-  const template = await readSkillTemplate(collection.skillDir, action.template);
-  if (template === null) {
-    res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
-    return;
-  }
+  const template = await readActionTemplateOr500(res, collection, action);
+  if (template === null) return;
   // Pass the collection paths so the seed prompt carries the <collection_paths>
   // block — the skill template needs skillDir/dataPath to find its files.
   const paths = promptPathsFor(collection, getWorkspaceRoot());
@@ -519,11 +530,8 @@ const collectionActionHandler: RequestHandler<{ slug: string; actionId: string }
     return;
   }
   try {
-    const template = await readSkillTemplate(collection.skillDir, action.template);
-    if (template === null) {
-      res.status(500).json({ error: `template '${action.template}' for action '${action.id}' could not be read` });
-      return;
-    }
+    const template = await readActionTemplateOr500(res, collection, action);
+    if (template === null) return;
     const allItems = await storeFor(collection).list();
     const paths = promptPathsFor(collection, getWorkspaceRoot());
     res.json({ prompt: buildCollectionActionSeedPrompt(allItems, collection.schema, template, paths), role: action.role });
