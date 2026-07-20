@@ -1,14 +1,15 @@
 // Client store for shared launcher favorites (pinned collections / feeds).
 // Singleton module state shared across every consumer — the toolbar launcher
 // renders them, the index/view PinToggle toggles them, the indexes reconcile stale
-// labels — so they all see one list. Ported from MulmoClaude's useShortcuts, using
-// fetch (MulmoTerminal has no api helper) over GET/PUT /api/shortcuts.
+// labels — so they all see one list. Ported from MulmoClaude's useShortcuts, over
+// GET/PUT /api/shortcuts via the shared fetchJson helper.
 //
 // Persistence is server-side (`config/shortcuts.json`, shared with MulmoClaude); the
 // client owns the full array and replaces it wholesale. Mutations are optimistic
 // with rollback, and serialized so overlapping replace-all PUTs can't reorder.
 import { computed, ref, type ComputedRef } from "vue";
 import { sameShortcut, type Shortcut, type ShortcutKind } from "../types/shortcuts";
+import { fetchJson } from "../utils/fetchJson";
 
 const shortcuts = ref<Shortcut[]>([]);
 const loadError = ref<string | null>(null);
@@ -22,34 +23,12 @@ interface ShortcutsResponse {
   shortcuts: Shortcut[];
 }
 
-type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string };
-
-async function apiGet<T>(url: string): Promise<ApiResult<T>> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    return { ok: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
-async function apiPut<T>(url: string, body: unknown): Promise<ApiResult<T>> {
-  try {
-    const res = await fetch(url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
-    return { ok: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
-  }
-}
-
 /** Load once per session (deduped). A FAILED load is not cached so the next call
  *  retries. */
 async function load(force = false): Promise<void> {
   if (loadPromise && !force) return loadPromise;
   loadPromise = (async () => {
-    const result = await apiGet<ShortcutsResponse>("/api/shortcuts");
+    const result = await fetchJson<ShortcutsResponse>("/api/shortcuts");
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry
@@ -78,7 +57,11 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 /** Persist `next`, rolling back to `previous` on failure. Call only inside enqueue. */
 async function persist(next: Shortcut[], previous: Shortcut[]): Promise<boolean> {
   shortcuts.value = next;
-  const result = await apiPut<ShortcutsResponse>("/api/shortcuts", { shortcuts: next });
+  const result = await fetchJson<ShortcutsResponse>("/api/shortcuts", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ shortcuts: next }),
+  });
   if (!result.ok) {
     shortcuts.value = previous;
     loadError.value = result.error;
