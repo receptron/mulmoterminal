@@ -216,11 +216,20 @@ function renewViaHostClaude(claudeBin: string): Promise<boolean> {
       }
       resolve(ok);
     };
-    const poll = setInterval(() => {
+    const tokenIsFresh = (): boolean => {
       const cred = readKeychainCredential();
-      if (cred && !isTokenExpired(cred)) finish(true);
+      return cred !== "" && !isTokenExpired(cred);
+    };
+    const poll = setInterval(() => {
+      if (tokenIsFresh()) finish(true);
     }, RENEWAL_POLL_INTERVAL_MS);
     const timer = setTimeout(() => finish(false), RENEWAL_TIMEOUT_MS);
+    // If the CLI exits (fast failure, or it finished right after refreshing), don't sit on
+    // the timeout — one last freshness check decides success now. The settled guard skips
+    // the keychain read on the exit our own finish()→kill() triggers.
+    proc.onExit(() => {
+      if (!settled) finish(tokenIsFresh());
+    });
     setTimeout(() => {
       if (!settled) proc.write("hi\r");
     }, RENEWAL_INPUT_DELAY_MS);
