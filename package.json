@@ -38,6 +38,7 @@
     "build": "vue-tsc -b && vite build",
     "typecheck": "vue-tsc -b",
     "typecheck:server": "tsc -p tsconfig.server.json",
+    "typecheck:test": "vue-tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.test-server.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

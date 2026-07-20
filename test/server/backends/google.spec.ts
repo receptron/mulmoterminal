@@ -11,6 +11,7 @@ const stubDeps = (over: Partial<GoogleRouteDeps> = {}) => {
   const deps: GoogleRouteDeps = {
     authFlow: {
       start: vi.fn(async () => ({ authUrl: "https://accounts.google.com/o/oauth2/v2/auth?x=1" })),
+      cancel: vi.fn(),
       status: vi.fn(() => ({ pending: false, lastError: null })),
     },
     unlink: vi.fn(async () => undefined),
@@ -54,7 +55,7 @@ describe("mountGoogleRoutes", () => {
     });
 
     it("surfaces a pending flow and its last error", async () => {
-      const authFlow = { start: vi.fn(), status: vi.fn(() => ({ pending: true, lastError: "consent timed out" })) };
+      const authFlow = { start: vi.fn(), cancel: vi.fn(), status: vi.fn(() => ({ pending: true, lastError: "consent timed out" })) };
       const res = await request(appWith(stubDeps({ authFlow }))).get("/api/google/status");
       expect(res.body.pending).toBe(true);
       expect(res.body.lastError).toBe("consent timed out");
@@ -89,6 +90,7 @@ describe("mountGoogleRoutes", () => {
         start: vi.fn(async () => {
           throw new Error("client secret missing");
         }),
+        cancel: vi.fn(),
         status: vi.fn(() => ({ pending: false, lastError: null })),
       };
       const res = await request(appWith(stubDeps({ authFlow }))).post("/api/google/authorize");

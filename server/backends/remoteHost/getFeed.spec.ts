@@ -53,7 +53,14 @@ describe("createRemoteHostHandlers · getFeed", () => {
     mkdirSync(dataDir, { recursive: true });
     writeFileSync(path.join(dataDir, "item1.json"), JSON.stringify({ id: "1", title: "First" }));
     writeFileSync(path.join(dataDir, "item2.json"), JSON.stringify({ id: "2", title: "Second" }));
-    handlers = createRemoteHostHandlers({ workspace: ws, spawnChat: () => ({ chatId: "x" }), ingest: async () => [] });
+    handlers = createRemoteHostHandlers({
+      workspace: ws,
+      spawnChat: () => ({ chatId: "x" }),
+      ingest: async () => [],
+      listTerminalSessions: async () => [],
+      captureTerminalScreen: async () => "",
+      writeToSession: () => false,
+    });
   });
   afterEach(() => vi.mocked(listFeeds).mockReset());
   afterAll(() => rmSync(ws, { recursive: true, force: true }));

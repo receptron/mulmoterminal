@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, type Mock } from "vitest";
 import {
   truncateLog,
   buildSummaryPrompt,
@@ -10,7 +10,7 @@ import {
 } from "../../../server/session/command-summary.js";
 
 const KB = 1024;
-const ok = (stdout: string): RunClaude => vi.fn(async () => ({ stdout, stderr: "", code: 0 }));
+const ok = (stdout: string): Mock<RunClaude> => vi.fn<RunClaude>(async () => ({ stdout, stderr: "", code: 0 }));
 
 describe("truncateLog", () => {
   it("returns short logs unchanged and not truncated", () => {
