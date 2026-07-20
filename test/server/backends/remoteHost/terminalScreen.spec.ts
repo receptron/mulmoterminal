@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 import {
+  agentFromPaneCommand,
   buildSessionList,
   captureSessionScreen,
   type CaptureScreenDeps,
@@ -12,8 +13,32 @@ const listInput = (over: Partial<SessionListInput> = {}): SessionListInput => ({
   liveIds: [],
   tmuxIds: [],
   isResumable: () => true,
-  detailOf: (id) => ({ title: id, cwd: "/w" }),
+  detailOf: (id) => ({ title: id, cwd: "/w", agent: "shell" as const }),
   ...over,
+});
+
+// A session that outlived the server has no PtyEntry left, so the kind is recovered
+// from what tmux says is running in it now.
+describe("agentFromPaneCommand", () => {
+  it("recognises the agents the phone treats specially", () => {
+    expect(agentFromPaneCommand("claude")).toBe("claude");
+    expect(agentFromPaneCommand("codex")).toBe("codex");
+  });
+
+  // Anything else is where typed commands belong, which is what "shell" means here —
+  // zsh, bash, or a one-off program the phone has no special input for.
+  it("treats anything else as a shell", () => {
+    expect(agentFromPaneCommand("zsh")).toBe("shell");
+    expect(agentFromPaneCommand("bash")).toBe("shell");
+    expect(agentFromPaneCommand("vim")).toBe("shell");
+  });
+
+  // Null means "cannot tell", and must stay distinguishable from "shell": the phone
+  // withholds suggestions rather than guessing.
+  it("stays unknown when tmux has no answer", () => {
+    expect(agentFromPaneCommand(null)).toBeNull();
+    expect(agentFromPaneCommand("")).toBeNull();
+  });
 });
 
 describe("buildSessionList", () => {
@@ -21,11 +46,30 @@ describe("buildSessionList", () => {
     expect(buildSessionList(listInput())).toEqual([]);
   });
 
+  // The phone offers shell command suggestions only where they make sense, so it has
+  // to be able to tell a zsh session from an agent — and to tell "unknown" apart from
+  // both (mulmoserver#84).
+  it("carries what each session is running, and null when the host cannot tell", () => {
+    const agents: Record<string, "claude" | "shell" | null> = { a: "shell", b: "claude", c: null };
+    const sessions = buildSessionList(
+      listInput({
+        liveIds: ["a", "b"],
+        tmuxIds: ["c"],
+        detailOf: (id) => ({ title: id, cwd: "/w", agent: agents[id] }),
+      }),
+    );
+    expect(sessions.map((session) => [session.id, session.agent])).toEqual([
+      ["a", "shell"],
+      ["b", "claude"],
+      ["c", null],
+    ]);
+  });
+
   it("marks live sessions and unions in the tmux-only ones", () => {
     const sessions = buildSessionList(listInput({ liveIds: ["a"], tmuxIds: ["b"] }));
     expect(sessions).toEqual([
-      { id: "a", title: "a", cwd: "/w", live: true },
-      { id: "b", title: "b", cwd: "/w", live: false },
+      { id: "a", title: "a", cwd: "/w", live: true, agent: "shell" },
+      { id: "b", title: "b", cwd: "/w", live: false, agent: "shell" },
     ]);
   });
 
@@ -47,31 +91,31 @@ describe("buildSessionList", () => {
   // choice the user can make.
   it("drops a nameless session that is not running", () => {
     const sessions = buildSessionList(
-      listInput({ tmuxIds: ["named", "nameless"], detailOf: (id) => ({ title: id === "named" ? "Fix parser" : "", cwd: "" }) }),
+      listInput({ tmuxIds: ["named", "nameless"], detailOf: (id) => ({ title: id === "named" ? "Fix parser" : "", cwd: "", agent: null }) }),
     );
     expect(sessions.map((session) => session.id)).toEqual(["named"]);
   });
 
   // Live earns a row regardless: the id at least points at something running now.
   it("keeps a nameless session while it is live, labelled by its id", () => {
-    const sessions = buildSessionList(listInput({ liveIds: ["abc"], detailOf: () => ({ title: "", cwd: "/w" }) }));
-    expect(sessions).toEqual([{ id: "abc", title: "abc", cwd: "/w", live: true }]);
+    const sessions = buildSessionList(listInput({ liveIds: ["abc"], detailOf: () => ({ title: "", cwd: "/w", agent: "shell" }) }));
+    expect(sessions).toEqual([{ id: "abc", title: "abc", cwd: "/w", live: true, agent: "shell" }]);
   });
 
   // A session that outlived a host restart keeps its recorded title, so it stays offerable.
   it("keeps a named session that is no longer live", () => {
-    const sessions = buildSessionList(listInput({ tmuxIds: ["survivor"], detailOf: () => ({ title: "Overnight build", cwd: "/w" }) }));
+    const sessions = buildSessionList(listInput({ tmuxIds: ["survivor"], detailOf: () => ({ title: "Overnight build", cwd: "/w", agent: null }) }));
     expect(sessions.map((session) => session.title)).toEqual(["Overnight build"]);
   });
 
   it("orders live sessions first, then by title", () => {
     const titles: Record<string, string> = { z: "zulu", a: "alpha", m: "mike" };
-    const sessions = buildSessionList(listInput({ liveIds: ["z"], tmuxIds: ["a", "m"], detailOf: (id) => ({ title: titles[id], cwd: "/w" }) }));
+    const sessions = buildSessionList(listInput({ liveIds: ["z"], tmuxIds: ["a", "m"], detailOf: (id) => ({ title: titles[id], cwd: "/w", agent: "shell" }) }));
     expect(sessions.map((s) => s.title)).toEqual(["zulu", "alpha", "mike"]);
   });
 
   it("carries the per-session title and cwd through", () => {
-    const sessions = buildSessionList(listInput({ liveIds: ["a"], detailOf: () => ({ title: "Fix the parser", cwd: "/repo" }) }));
+    const sessions = buildSessionList(listInput({ liveIds: ["a"], detailOf: () => ({ title: "Fix the parser", cwd: "/repo", agent: "shell" }) }));
     expect(sessions[0]).toMatchObject({ title: "Fix the parser", cwd: "/repo" });
   });
 });

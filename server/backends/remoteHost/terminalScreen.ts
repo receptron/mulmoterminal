@@ -2,6 +2,24 @@
 //
 // Both entry points are dependency-injected and free of server/index.ts internals, so the
 // join rules and the capture fallback are unit-testable without a live PTY or tmux.
+// What is running in a session, so the phone can offer input that suits it: shell
+// command suggestions are useful in zsh and meaningless to an agent that reads prose
+// (mulmoserver#84). Null when the host cannot tell — a session that outlived a restart
+// exists only in tmux, and nothing recorded what launched it.
+export type SessionAgent = "claude" | "codex" | "shell";
+
+// Map a tmux pane's current command onto the kinds the phone knows. Anything else is a
+// shell or a one-off program the phone has no special input for — "shell" is the right
+// answer for both, since that is where typed commands belong.
+const AGENT_COMMANDS: Record<string, SessionAgent> = { claude: "claude", codex: "codex" };
+
+export const agentFromPaneCommand = (command: string | null): SessionAgent | null => {
+  if (!command) {
+    return null;
+  }
+  return AGENT_COMMANDS[command] ?? "shell";
+};
+
 export interface TerminalSessionSummary {
   id: string;
   title: string;
@@ -9,6 +27,9 @@ export interface TerminalSessionSummary {
   // A PTY is attached in THIS server process. False means the session exists only in tmux
   // (it outlived a restart) — still viewable, since capture-pane doesn't need our process.
   live: boolean;
+  // What is running in it, or null when unknown (see SessionAgent). A tmux-only
+  // session is always null: the process that knew is gone.
+  agent: SessionAgent | null;
 }
 
 export interface SessionDetail {
@@ -16,6 +37,7 @@ export interface SessionDetail {
   // nor a recorded one. Such a session is dropped unless it is live (see below).
   title: string;
   cwd: string;
+  agent: SessionAgent | null;
 }
 
 export interface SessionListInput {
