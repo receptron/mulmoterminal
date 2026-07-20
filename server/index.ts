@@ -2539,24 +2539,28 @@ function resolveClaudeSession(requested: string | null, cwd: string): SessionRes
   return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk }, randomUUID);
 }
 
+// The params every terminal WebSocket reads: the request URL, the validated
+// session id, and the resolved cwd. A non-UUID session id is treated as "no
+// session" — it could otherwise smuggle path/flag fragments into
+// sessionExistsOnDisk / --resume — and cwd (?cwd=<abs>) falls back to CLAUDE_CWD.
+function wsConnectionContext(req: { url?: string }): { url: URL; requested: string | null; cwd: string } {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const raw = url.searchParams.get("session");
+  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
+  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  return { url, requested, cwd };
+}
+
 wss.on("connection", (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const raw = url.searchParams.get("session");
-  // A non-UUID id is never used (it could smuggle path/flag fragments into
-  // sessionExistsOnDisk / --resume). Treat it as "no session requested" rather
-  // than closing the socket — closing without a replacement id makes the client
-  // auto-reconnect with the same bad id forever. Falling through mints a fresh
-  // session and tells the browser the new id, so the cell self-recovers.
-  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
-  if (raw && !requested) console.warn(`[ws] ignoring non-UUID session id: ${JSON.stringify(raw)} — starting fresh`);
-
-  // The cell may launch a terminal in a chosen directory (?cwd=<abs>). Validated
-  // (absolute, existing dir) and used as the PTY cwd + the project to resume from;
-  // falls back to CLAUDE_CWD.
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const { url, requested, cwd } = wsConnectionContext(req);
+  // A bad id is never silently reused — closing the socket without a replacement
+  // makes the client auto-reconnect with the same bad id forever, so we warn and
+  // fall through to mint a fresh session, then tell the browser the new id.
+  const rawSession = url.searchParams.get("session");
+  if (rawSession && !requested) console.warn(`[ws] ignoring non-UUID session id: ${JSON.stringify(rawSession)} — starting fresh`);
 
   // ?gui=0 (the grid's dev terminals) spawns claude WITHOUT the GUI plugin MCP /
   // --strict-mcp-config, so the user's + project's MCP servers load normally. Absent
@@ -2746,10 +2750,7 @@ function resolveLaunchSession(
 // lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
 // and is marked a dev-terminal session so it stays out of the chat sidebar.
 runLaunchWss.on("connection", (ws, req) => {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const raw = url.searchParams.get("session");
-  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const { url, requested, cwd } = wsConnectionContext(req);
   const indexRaw = url.searchParams.get("launcher");
   const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
   const shell = url.searchParams.get("shell") === "1";
@@ -2870,10 +2871,7 @@ function startCodexEntry(
 // codex without the GUI MCP and keeps it out of the sidebar; absent (single view) attaches the GUI
 // MCP so codex drives the GUI panel like claude.
 runCodexWss.on("connection", (ws, req) => {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const raw = url.searchParams.get("session");
-  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
+  const { url, requested, cwd } = wsConnectionContext(req);
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
   const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
