@@ -32,6 +32,7 @@ import type {
 import type { RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/core/collection/registry";
 import type { TranslateRequest, TranslateResponse } from "@mulmoclaude/core/translation/client";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
+import { fetchJson } from "../utils/fetchJson";
 import { useShortcuts } from "./useShortcuts";
 import {
   browseGotoIndex,
@@ -64,25 +65,10 @@ export function popCollectionTeleportTarget(target: HTMLElement | ShadowRoot): v
 
 // Read helper: normalise fetch into the package's CollectionApiResult (the view
 // treats `ok:false` with `status` 404 as not-found, any other failure as a skip).
-async function apiGet<T>(url: string): Promise<CollectionApiResult<T>> {
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    return { ok: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err), status: 0 };
-  }
-}
+const apiGet = <T>(url: string): Promise<CollectionApiResult<T>> => fetchJson<T>(url);
 
-async function apiSend<T>(method: "POST" | "PUT", url: string, body: unknown): Promise<CollectionApiResult<T>> {
-  try {
-    const res = await fetch(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}`, status: res.status };
-    return { ok: true, data: (await res.json()) as T };
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err), status: 0 };
-  }
-}
+const apiSend = <T>(method: "POST" | "PUT", url: string, body: unknown): Promise<CollectionApiResult<T>> =>
+  fetchJson<T>(url, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
 const apiPost = <T>(url: string, body: unknown) => apiSend<T>("POST", url, body);
 const apiPut = <T>(url: string, body: unknown) => apiSend<T>("PUT", url, body);
 
