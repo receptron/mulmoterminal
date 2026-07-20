@@ -1,0 +1,134 @@
+# Builds Dockerfile.sandbox from a WINDOWS checkout, inside WSL2.
+#
+# Scope, stated honestly: the sandbox feature itself is macOS-only. server/index.ts gates
+# on sandboxPlatformSupported() BEFORE dockerAvailable(), and && short-circuits, so on
+# Windows the Docker daemon is never even probed. This job therefore does NOT exercise a
+# container spawn path that Windows users have — that path does not exist. What it does
+# cover:
+#
+#   1. The image still builds when the repo was checked out by git-for-windows. There is
+#      no .gitattributes here, so the default core.autocrlf=true rewrites text files to
+#      CRLF on checkout. (BuildKit tolerates CRLF in a Dockerfile, and this Dockerfile
+#      COPYs nothing, so this is a guard rather than a known break — the line-ending
+#      report below exists to make a future regression legible.)
+#   2. The WSL2 scaffold works in this repo, so enabling Windows sandbox support later
+#      starts from a job that already runs.
+#   3. The platform gate really is closed on Windows.
+#
+# windows-latest ships a Windows-container Docker engine and Docker Desktop needs
+# first-run UI, so neither can build a Linux image here. WSL2 + a headless dockerd is the
+# way through; the technique is mulmoclaude's (see its docs/windows-docker-ci.md).
+name: Docker sandbox image (Windows/WSL2)
+
+on:
+  schedule:
+    - cron: "0 19 * * *" # 19:00 UTC = 04:00 JST, after the ubuntu image job
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-sandbox-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_in_wsl2:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      # The gate this job cannot test from inside a container: on win32 the sandbox must
+      # stay off regardless of Docker. Cheap, and it runs before the slow WSL2 setup.
+      - name: The sandbox platform gate is closed on Windows
+        shell: pwsh
+        run: |
+          $out = node -e "process.stdout.write(String(process.platform === 'darwin'))"
+          if ($out -ne "False") { throw "expected the darwin-only gate to be False on windows-latest, got '$out'" }
+          Write-Host "OK: platform gate is closed on $([System.Environment]::OSVersion.Platform)"
+
+      # Diagnostic, not a gate. Makes it obvious in the log whether the checkout arrived
+      # with CRLF, so a future build failure here is one glance to diagnose.
+      - name: Report Dockerfile line endings as checked out
+        shell: pwsh
+        run: |
+          $bytes = [System.IO.File]::ReadAllBytes("Dockerfile.sandbox")
+          $crlf = 0; $lf = 0
+          for ($i = 0; $i -lt $bytes.Length; $i++) {
+            if ($bytes[$i] -eq 10) { if ($i -gt 0 -and $bytes[$i - 1] -eq 13) { $crlf++ } else { $lf++ } }
+          }
+          Write-Host "Dockerfile.sandbox line endings — CRLF: $crlf, bare LF: $lf"
+
+      - name: Install WSL2 with Ubuntu 22.04
+        shell: pwsh
+        run: |
+          wsl --install -d Ubuntu-22.04 --no-launch
+          wsl --set-default-version 2
+          wsl -l -v
+
+      - name: Install Docker inside WSL2
+        shell: pwsh
+        run: |
+          wsl -d Ubuntu-22.04 -u root -- bash -c "apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq docker.io"
+
+      # --iptables=false --bridge=none: WSL2's kernel has no iptables_nat, and the build
+      # needs no container networking beyond the default outbound route.
+      - name: Start dockerd headless and wait for it
+        shell: pwsh
+        run: |
+          wsl -d Ubuntu-22.04 -u root -- bash -c "nohup dockerd --iptables=false --bridge=none > /var/log/dockerd.log 2>&1 &"
+          $ready = $false
+          foreach ($attempt in 1..30) {
+            wsl -d Ubuntu-22.04 -u root -- docker info *> $null
+            if ($LASTEXITCODE -eq 0) { $ready = $true; break }
+            Start-Sleep -Seconds 2
+          }
+          if (-not $ready) {
+            Write-Host "--- dockerd.log ---"
+            wsl -d Ubuntu-22.04 -u root -- cat /var/log/dockerd.log
+            throw "dockerd did not become ready within 60s"
+          }
+          wsl -d Ubuntu-22.04 -u root -- docker version
+
+      - name: Build the sandbox image from the Windows checkout
+        shell: pwsh
+        run: |
+          # C:\a\repo\repo -> /mnt/c/a/repo/repo
+          $drive = $env:GITHUB_WORKSPACE.Substring(0, 1).ToLower()
+          $rest = $env:GITHUB_WORKSPACE.Substring(3) -replace '\\', '/'
+          $wsPath = "/mnt/$drive/$rest"
+          Write-Host "workspace in WSL2: $wsPath"
+          wsl -d Ubuntu-22.04 -u root -- bash -c "cd '$wsPath' && docker build --load -f Dockerfile.sandbox -t mulmoterminal-sandbox ."
+          if ($LASTEXITCODE -ne 0) { throw "docker build failed inside WSL2" }
+
+      # The same assertions the ubuntu job makes, so the two can't drift apart silently.
+      - name: Smoke the built image
+        shell: pwsh
+        run: |
+          $script = @'
+          set -euo pipefail
+          IMAGE=mulmoterminal-sandbox
+          docker run --rm "$IMAGE" claude --version
+          for tool in git curl rg; do
+            docker run --rm "$IMAGE" sh -c "command -v $tool >/dev/null" || { echo "missing from the image: $tool"; exit 1; }
+          done
+          uid="$(docker run --rm "$IMAGE" id -u)"
+          [ "$uid" = "1000" ] || { echo "expected uid 1000, got $uid"; exit 1; }
+          home="$(docker run --rm "$IMAGE" sh -c 'printf %s "$HOME"')"
+          [ "$home" = "/home/node" ] || { echo "expected HOME=/home/node, got $home"; exit 1; }
+          workdir="$(docker run --rm "$IMAGE" pwd)"
+          [ "$workdir" = "/home/node/workspace" ] || { echo "expected /home/node/workspace, got $workdir"; exit 1; }
+          echo "✓ sandbox image smoke passed (built from a Windows checkout)"
+          '@
+          $script | Out-File -FilePath smoke.sh -Encoding ascii
+          $drive = $env:GITHUB_WORKSPACE.Substring(0, 1).ToLower()
+          $rest = $env:GITHUB_WORKSPACE.Substring(3) -replace '\\', '/'
+          wsl -d Ubuntu-22.04 -u root -- bash -c "cd '/mnt/$drive/$rest' && sed -i 's/\r$//' smoke.sh && bash smoke.sh"
+          if ($LASTEXITCODE -ne 0) { throw "image smoke failed" }
