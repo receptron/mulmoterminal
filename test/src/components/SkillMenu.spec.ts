@@ -32,7 +32,7 @@ describe("SkillMenu", () => {
     mockFetch([]);
     const w = await mountMenu();
     expect(w.find('[aria-haspopup="menu"]').exists()).toBe(false);
-    expect(w.find('[aria-haspopup="menu"]').exists()).toBe(false);
+    expect(w.find('[role="menu"]').exists()).toBe(false);
   });
 
   it("does not fetch (no button) while cwd is unresolved, avoiding default-workspace skills", async () => {
