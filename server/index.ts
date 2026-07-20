@@ -1913,8 +1913,10 @@ const remoteHostListTerminalSessions = async () =>
     liveIds: [...ptys.keys()],
     tmuxIds: tmuxListSessionIds(),
     isResumable: await resumableSessionPredicate(),
+    // Empty title rather than the id as a fallback — buildSessionList uses "nameless"
+    // to drop the long tail of finished sessions the phone can't meaningfully offer.
     detailOf: (id) => ({
-      title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? id,
+      title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? "",
       cwd: ptys.get(id)?.cwd ?? "",
     }),
   });
