@@ -47,6 +47,9 @@ export default [
       "max-depth": ["error", 4],
       "max-params": ["warn", 6],
       "max-nested-callbacks": ["error", 4],
+      // `const { secret, ...rest } = obj` is how you drop a field by construction —
+      // the named siblings are the point, not dead code.
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
     },
   },
   {
