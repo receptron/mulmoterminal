@@ -5,23 +5,17 @@
 //
 // Isolation: we use our OWN tmux server (`-L mulmoterminal`) and config file, so none
 // of this touches the user's own tmux sessions, keybindings, or status bar.
-import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { isLauncherEnvVar } from "./pty-env.js";
+import { spawnCapture } from "./spawnCapture.js";
 
 const SERVER_SOCKET = "mulmoterminal";
 const SESSION_PREFIX = "mt-";
 const CONF_FILE = path.join(os.homedir(), ".mulmoterminal", "tmux.conf");
 
-// Spawn a command with the binary as a PARAMETER (not a string literal at the call
-// site) — mirrors server/gh.ts so it isn't flagged as a spawn-of-a-string-literal.
-function run(bin: string, args: string[]): { status: number | null; stdout: string } {
-  const r = spawnSync(bin, args, { encoding: "utf8" });
-  return { status: r.status, stdout: r.stdout ?? "" };
-}
-const tmux = (args: string[]) => run("tmux", ["-L", SERVER_SOCKET, ...args]);
+const tmux = (args: string[]) => spawnCapture("tmux", ["-L", SERVER_SOCKET, ...args]);
 
 let cachedAvailable: boolean | null = null;
 
@@ -29,7 +23,7 @@ let cachedAvailable: boolean | null = null;
 // detection the isolated config is written so `new-session` picks it up via `-f`.
 export function tmuxAvailable(): boolean {
   if (cachedAvailable === null) {
-    cachedAvailable = run("tmux", ["-V"]).status === 0;
+    cachedAvailable = spawnCapture("tmux", ["-V"]).status === 0;
     if (cachedAvailable) ensureConf();
   }
   return cachedAvailable;

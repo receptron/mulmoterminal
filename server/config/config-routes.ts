@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
-import { loadAppConfig, saveAppConfig, mergeConfigUpdate, type AppConfig } from "./app-config.js";
+import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type UserMcpServer } from "./config-schema.js";
 
@@ -72,19 +72,7 @@ function badNullableArrayField(body: Record<string, unknown>): string | null {
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
   // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
   // everything it can write — buttons/chips included — and round-trip it.
-  const configResponse = () => ({
-    cwd: claudeCwd,
-    cwdPresets: config.cwdPresets,
-    soundFile: config.soundFile,
-    prRepos: config.prRepos,
-    launchers: config.launchers,
-    userMcpServers: config.userMcpServers,
-    buttons: config.buttons,
-    chips: config.chips,
-    pushEnabled: config.pushEnabled,
-    worklogEnabled: config.worklogEnabled,
-    worklogIntervalHours: config.worklogIntervalHours,
-  });
+  const configResponse = () => ({ cwd: claudeCwd, ...toPublicAppConfig(config) });
 
   app.get("/api/config", (_req, res) => {
     res.json({ ...configResponse(), home: os.homedir() });
