@@ -91,31 +91,31 @@ describe("buildSessionList", () => {
   // choice the user can make.
   it("drops a nameless session that is not running", () => {
     const sessions = buildSessionList(
-      listInput({ tmuxIds: ["named", "nameless"], detailOf: (id) => ({ title: id === "named" ? "Fix parser" : "", cwd: "" }) }),
+      listInput({ tmuxIds: ["named", "nameless"], detailOf: (id) => ({ title: id === "named" ? "Fix parser" : "", cwd: "", agent: null }) }),
     );
     expect(sessions.map((session) => session.id)).toEqual(["named"]);
   });
 
   // Live earns a row regardless: the id at least points at something running now.
   it("keeps a nameless session while it is live, labelled by its id", () => {
-    const sessions = buildSessionList(listInput({ liveIds: ["abc"], detailOf: () => ({ title: "", cwd: "/w" }) }));
-    expect(sessions).toEqual([{ id: "abc", title: "abc", cwd: "/w", live: true }]);
+    const sessions = buildSessionList(listInput({ liveIds: ["abc"], detailOf: () => ({ title: "", cwd: "/w", agent: "shell" }) }));
+    expect(sessions).toEqual([{ id: "abc", title: "abc", cwd: "/w", live: true, agent: "shell" }]);
   });
 
   // A session that outlived a host restart keeps its recorded title, so it stays offerable.
   it("keeps a named session that is no longer live", () => {
-    const sessions = buildSessionList(listInput({ tmuxIds: ["survivor"], detailOf: () => ({ title: "Overnight build", cwd: "/w" }) }));
+    const sessions = buildSessionList(listInput({ tmuxIds: ["survivor"], detailOf: () => ({ title: "Overnight build", cwd: "/w", agent: null }) }));
     expect(sessions.map((session) => session.title)).toEqual(["Overnight build"]);
   });
 
   it("orders live sessions first, then by title", () => {
     const titles: Record<string, string> = { z: "zulu", a: "alpha", m: "mike" };
-    const sessions = buildSessionList(listInput({ liveIds: ["z"], tmuxIds: ["a", "m"], detailOf: (id) => ({ title: titles[id], cwd: "/w" }) }));
+    const sessions = buildSessionList(listInput({ liveIds: ["z"], tmuxIds: ["a", "m"], detailOf: (id) => ({ title: titles[id], cwd: "/w", agent: "shell" }) }));
     expect(sessions.map((s) => s.title)).toEqual(["zulu", "alpha", "mike"]);
   });
 
   it("carries the per-session title and cwd through", () => {
-    const sessions = buildSessionList(listInput({ liveIds: ["a"], detailOf: () => ({ title: "Fix the parser", cwd: "/repo" }) }));
+    const sessions = buildSessionList(listInput({ liveIds: ["a"], detailOf: () => ({ title: "Fix the parser", cwd: "/repo", agent: "shell" }) }));
     expect(sessions[0]).toMatchObject({ title: "Fix the parser", cwd: "/repo" });
   });
 });
