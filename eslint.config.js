@@ -50,6 +50,15 @@ export default [
     },
   },
   {
+    // `const { secret, ...rest } = obj` is how you drop a field by construction —
+    // the named siblings are the point, not dead code. Scoped to where the
+    // typescript-eslint rule owns unused-vars; plain .js keeps the plugin default.
+    files: ["**/*.{ts,tsx,mts,cts}", "**/*.vue"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
+    },
+  },
+  {
     // Test files: a describe/it suite is one big (nested) callback by design, so the
     // length + callback-nesting guards are noise here. Keep the logic-complexity guards on.
     files: ["**/*.spec.{ts,js}", "**/*.test.{ts,js}"],
