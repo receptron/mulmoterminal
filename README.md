@@ -12,9 +12,9 @@ ping to your phone when a task finishes. One `npx` command, no Electron, no conf
 npx mulmoterminal        # starts on http://localhost:34567 and opens your browser
 ```
 
-![MulmoTerminal's grid view — several coding agents running side by side](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-2x2.png)
+![MulmoTerminal's grid view — four live Claude sessions running side by side, each in its own color-coded project](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-2x2-live.png)
 
-*The grid is a **cockpit for parallel agents** — each cell is one agent (Claude or Codex). A cell's **border color signals its state** — working (blue), needs-you (amber — a permission or answer), idle — and an attention chime pulls you back to a stuck cell off-screen, so you can supervise many and only step in where you're called. (See the [Cost & token usage](#cost--token-usage) shot below for a single cell's live header.)*
+*The grid is a **cockpit for parallel agents** — here, four live Claude sessions, each in its own color-coded project. Every cell's header carries what you need to triage at a glance: **model · context %**, **token counts** (`⇡in ⇣out`), the **git branch / changes** chip, and an AI summary of what the agent is doing. A cell's **border color signals state** — working / done (blue), needs-you (amber — e.g. waiting on a permission), idle — with an attention chime so a stuck cell off-screen still pulls you back. Supervise many; only step in where you're called.*
 
 ## Why you'll want it
 
