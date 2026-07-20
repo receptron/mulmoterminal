@@ -23,10 +23,18 @@ vi.mock("@mulmoclaude/core/collection/registry/server", () => ({
 // inject a crafted collection: a collection-level `kind: "mutate"` action can't
 // exist on disk (the schema refine rejects it), yet the route's defensive 400
 // must still be covered.
-import { deleteCollection, deleteCustomView, loadCollection } from "@mulmoclaude/core/collection/server";
+import { buildWorkspaceOntology, deleteCollection, deleteCustomView, loadCollection } from "@mulmoclaude/core/collection/server";
 vi.mock("@mulmoclaude/core/collection/server", async (importOriginal) => {
   const orig = await importOriginal<typeof import("@mulmoclaude/core/collection/server")>();
-  return { ...orig, deleteCollection: vi.fn(), deleteCustomView: vi.fn(), loadCollection: vi.fn(orig.loadCollection) };
+  return {
+    ...orig,
+    deleteCollection: vi.fn(),
+    deleteCustomView: vi.fn(),
+    loadCollection: vi.fn(orig.loadCollection),
+    // Wrapped (default = real) so the ontology route's 500 mapping can be
+    // covered — the real engine over the fixture workspace never throws.
+    buildWorkspaceOntology: vi.fn(orig.buildWorkspaceOntology),
+  };
 });
 
 // A minimal project-scope collection skill + one record + one read-only custom
@@ -142,6 +150,25 @@ describe("GET /api/collections/list", () => {
     const body = (await res.json()) as { collections: Array<{ slug: string; title: string; source: string }> };
     const testcol = body.collections.find((c) => c.slug === "testcol");
     expect(testcol).toMatchObject({ slug: "testcol", title: "Test Collection", source: "project" });
+  });
+});
+
+describe("GET /api/collections/ontology", () => {
+  it("returns one entry per discovered collection with counts + relations", async () => {
+    const res = await fetch(`${base}/api/collections/ontology`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      entries: Array<{ slug: string; title: string; primaryKey: string; displayField: string; recordCount: number; relations: unknown[] }>;
+    };
+    const testcol = body.entries.find((entry) => entry.slug === "testcol");
+    expect(testcol).toMatchObject({ slug: "testcol", title: "Test Collection", primaryKey: "id", displayField: "id", recordCount: 1, relations: [] });
+  });
+
+  it("maps an engine failure to 500 with the error message", async () => {
+    vi.mocked(buildWorkspaceOntology).mockRejectedValueOnce(new Error("ontology boom"));
+    const res = await fetch(`${base}/api/collections/ontology`);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: "ontology boom" });
   });
 });
 
