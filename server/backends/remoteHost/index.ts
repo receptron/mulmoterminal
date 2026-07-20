@@ -24,7 +24,9 @@ import { onExpire } from "./onExpire.js";
 import { currentFirestore, currentStorage, currentUid, exportSession, reconnectErrorStatus, restore, signIn, signOut } from "./session.js";
 import { mountRemoteHostRoutes as mountRoutes } from "./routes.js";
 
-const HOST_ID = "mulmoterminal";
+// Exported so the session-activity publisher (#439) can address this host's docs; it
+// writes from the hook path, outside the lifecycle this module owns.
+export const HOST_ID = "mulmoterminal";
 const PREFIX = "[remote-host]";
 
 // Module-level singleton — one host runner per process. Null until initialized.
