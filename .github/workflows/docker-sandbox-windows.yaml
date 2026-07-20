@@ -105,7 +105,9 @@ jobs:
           $rest = $env:GITHUB_WORKSPACE.Substring(3) -replace '\\', '/'
           $wsPath = "/mnt/$drive/$rest"
           Write-Host "workspace in WSL2: $wsPath"
-          wsl -d Ubuntu-22.04 -u root -- bash -c "cd '$wsPath' && docker build --load -f Dockerfile.sandbox -t mulmoterminal-sandbox ."
+          # No --load: WSL2's apt `docker.io` is the legacy builder (no buildx), where
+          # --load is an unknown flag and a plain build already lands in the local store.
+          wsl -d Ubuntu-22.04 -u root -- bash -c "cd '$wsPath' && docker build -f Dockerfile.sandbox -t mulmoterminal-sandbox ."
           if ($LASTEXITCODE -ne 0) { throw "docker build failed inside WSL2" }
 
       # The same assertions the ubuntu job makes, so the two can't drift apart silently.
