@@ -1730,18 +1730,18 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/chart-plugin/-/chart-plugin-0.1.3.tgz#933121a1720b2b68c62082048fe9df278466445e"
   integrity sha512-13oTtFLQgS7uiM/K6bxOKH7nKSs7Muhcg+PIsfl0ThyaINuu57LuktLf09XoRLDWouhUlL0gBZXDFSwuw+k6qA==
 
-"@mulmoclaude/collection-plugin@^0.14.0":
-  version "0.14.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.14.0.tgz#ee8b3a96d261e66290c64b2d481e9f7feef74d57"
-  integrity sha512-Mk2fV+r58HcT4bjaIRflBKm2usIsZf+dXPTXcbeh/m3CPvrTGFvAALd+HdzsrCKWUM9sjOZqEHe4VGtCFlThbQ==
+"@mulmoclaude/collection-plugin@^0.14.1":
+  version "0.14.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/collection-plugin/-/collection-plugin-0.14.1.tgz#ac4fb5e8e2e1fcfaeaf9b732c93d50f0f8c246a1"
+  integrity sha512-83quIsJj5pqCO43iiGjFcqB4sj7rtU5pVxOkU/RUEuisVZwgncUNHMDosvTH+dTEEiWppMPoHIJ842Yt/aCSJw==
   dependencies:
     vuedraggable "^4.1.0"
     zod "^4.4.3"
 
-"@mulmoclaude/core@^0.27.0":
-  version "0.27.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.27.0.tgz#a3e661545205e858d8a3b1084b43fb1220d167e4"
-  integrity sha512-Ca0LCoQ91JbKRdl5npNHURg4/wzLgPNrYqP1basH/KhVCKTSU/QfVk8NIJlxBAiMmrOY3+Deg/tUb2NDvipFKg==
+"@mulmoclaude/core@^0.29.0":
+  version "0.29.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-0.29.0.tgz#e5107e92852f71f136f0bd4905eeeb08ce4ad7a9"
+  integrity sha512-n46WyXrH3+f0NLPvr4BIcxWQh37d9/J3A/Fb//ifGlJ9r8yjlubh/jZjZRviWW7cEQLYgBtE9rzrUT/dqi48vg==
   dependencies:
     "@duckdb/node-api" "^1.5.4-r.1"
     fast-xml-parser "^5.10.1"
@@ -1755,12 +1755,12 @@
   resolved "https://npm.flatt.tech/@mulmoclaude/form-plugin/-/form-plugin-0.1.4.tgz#64e8f9dc0537148156cbfc1235d5a68baf64cdf3"
   integrity sha512-dgqEiAazyMzLgNv0V3ewQxSPU5dI0eXecRYZ5rXe0Fu9CWZkCb1GOwJDjYHKDZnzMyYMQLzXnyt5gwHNW+QD+w==
 
-"@mulmoclaude/google-plugin@^0.3.2":
-  version "0.3.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/google-plugin/-/google-plugin-0.3.2.tgz#c75fa9b0f0ac09281b16dd91be45cefe78c44a7d"
-  integrity sha512-trIIStfLX1O0bDj4W4ZZYDxjXPUAymwmjfeB/tm8tDT6q/qzLgTWySvFHYxl1xdcfMXWqOS/OZwNRIPSX+oW6A==
+"@mulmoclaude/google-plugin@^0.3.3":
+  version "0.3.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/google-plugin/-/google-plugin-0.3.3.tgz#7c33804034c5cb94f75880c77eec67090c6a5e2e"
+  integrity sha512-dUa+gMZ/feqG9oq7QL+c1jiVM660j/mCnT/5cT3u021sWpXw3TYwdVUPy+WkRt+UyFNDWaBaV5Cv73nEnqhIaw==
   dependencies:
-    "@mulmoclaude/core" "^0.27.0"
+    "@mulmoclaude/core" "^0.29.0"
 
 "@mulmoclaude/html-plugin@^0.2.5":
   version "0.2.5"
