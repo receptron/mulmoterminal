@@ -3,6 +3,7 @@
 // first), fetched from GET /api/transcript/timeline. Opened from the cell header's
 // 🕘 button so you can see "what did it do?" without scrolling the raw transcript.
 import { ref, watch, onUnmounted, nextTick } from "vue";
+import { trapTabKey } from "../utils/focusTrap";
 
 interface TimelineEvent {
   ts: string;
@@ -68,17 +69,7 @@ const onKeydown = (e: KeyboardEvent) => {
     return;
   }
   if (e.key !== "Tab" || !modalEl.value) return;
-  const focusable = [...modalEl.value.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])')].filter((el) => !el.hasAttribute("disabled"));
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (e.shiftKey && document.activeElement === first) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && document.activeElement === last) {
-    e.preventDefault();
-    first.focus();
-  }
+  trapTabKey(e, modalEl.value);
 };
 
 // One watch over open + identity: (re)load whenever the overlay is open — covering
