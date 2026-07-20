@@ -2,13 +2,10 @@
 // cached briefly per (repo, branch) so /api/header — which fires on every focus / dir / session change —
 // doesn't shell out to gh each time. Pure parse + injectable deps keep it unit-testable without gh.
 import { runGh } from "./gh.js";
+import { createTtlCache } from "./ttl-cache.js";
 
 const CACHE_TTL_MS = 30_000;
-interface CacheEntry {
-  url: string | null;
-  at: number;
-}
-const cache = new Map<string, CacheEntry>();
+const cache = createTtlCache<string | null>();
 
 // The first url in `gh pr list --json url` output, or null (no open PR / malformed).
 export function parsePrUrl(stdout: string): string | null {
@@ -39,8 +36,8 @@ export async function prUrlForBranch(repo: string, branch: string, deps: PrForBr
   const now = deps.now ?? Date.now;
   const ttlMs = deps.ttlMs ?? CACHE_TTL_MS;
   const key = `${repo}:${branch}`;
-  const hit = cache.get(key);
-  if (hit && now() - hit.at < ttlMs) return hit.url;
+  const hit = cache.get(key, now, ttlMs);
+  if (hit !== undefined) return hit;
   let url: string | null = null;
   try {
     const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", "open", "--json", "url", "--limit", "1"]);
@@ -48,7 +45,7 @@ export async function prUrlForBranch(repo: string, branch: string, deps: PrForBr
   } catch {
     url = null;
   }
-  cache.set(key, { url, at: now() });
+  cache.set(key, url, now);
   return url;
 }
 
