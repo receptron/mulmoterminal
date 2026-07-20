@@ -76,8 +76,13 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
    declaration — the built CSS shows what a utility resolves to).
 2. Delete the now-dead scoped rules **and** any descendant selectors that targeted the
    element's children (move those onto the children as utilities).
-3. Update any test that selected the removed class to an accessible selector or
-   `data-testid`.
+3. **Before deleting a class, grep the *whole repo* for it — not just this component's
+   spec.** A class you think is local is often asserted on by *another* component's
+   test (a parent that renders this one). Removing `.cell-model` passed
+   `ModelContextBadge.spec` but broke three assertions in `TerminalCell.spec`, which
+   renders the badge. `grep -rn "class-name" src test`. Then re-point every hit to an
+   accessible selector or `data-testid`. When a parent needs to find a child, give the
+   child a `data-testid` rather than reaching for a styling class.
 4. Confirm the built utility declarations match the originals; screenshot across the
    four themes if it's visually load-bearing.
 
