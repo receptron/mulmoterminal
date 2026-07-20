@@ -39,10 +39,16 @@ export interface DirConfig extends DirChrome {
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
-// /api/dir-sound), so the client only learns whether one exists. Derived from
-// DirConfig rather than restated, so a new appearance field reaches the client
-// without a second edit.
-export type PublicDirConfig = Omit<DirConfig, "sound" | "buttons" | "chips" | "skills"> & { hasSound: boolean };
+// /api/dir-sound), so the client only learns whether one exists.
+//
+// Listed rather than derived from DirConfig, so the wire shape reads in one place
+// instead of as "the server type minus four names" — a reader can see what leaves
+// the server without also holding DirConfig in their head.
+export interface PublicDirConfig extends DirChrome {
+  theme: ThemeId | null;
+  colors: Record<string, string> | null;
+  hasSound: boolean;
+}
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
