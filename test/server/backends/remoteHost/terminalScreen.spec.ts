@@ -12,7 +12,7 @@ const listInput = (over: Partial<SessionListInput> = {}): SessionListInput => ({
   liveIds: [],
   tmuxIds: [],
   isResumable: () => true,
-  detailOf: (id) => ({ title: id, cwd: "/w" }),
+  detailOf: (id) => ({ title: id, cwd: "/w", agent: "shell" as const }),
   ...over,
 });
 
@@ -21,11 +21,30 @@ describe("buildSessionList", () => {
     expect(buildSessionList(listInput())).toEqual([]);
   });
 
+  // The phone offers shell command suggestions only where they make sense, so it has
+  // to be able to tell a zsh session from an agent — and to tell "unknown" apart from
+  // both (mulmoserver#84).
+  it("carries what each session is running, and null when the host cannot tell", () => {
+    const agents: Record<string, "claude" | "shell" | null> = { a: "shell", b: "claude", c: null };
+    const sessions = buildSessionList(
+      listInput({
+        liveIds: ["a", "b"],
+        tmuxIds: ["c"],
+        detailOf: (id) => ({ title: id, cwd: "/w", agent: agents[id] }),
+      }),
+    );
+    expect(sessions.map((session) => [session.id, session.agent])).toEqual([
+      ["a", "shell"],
+      ["b", "claude"],
+      ["c", null],
+    ]);
+  });
+
   it("marks live sessions and unions in the tmux-only ones", () => {
     const sessions = buildSessionList(listInput({ liveIds: ["a"], tmuxIds: ["b"] }));
     expect(sessions).toEqual([
-      { id: "a", title: "a", cwd: "/w", live: true },
-      { id: "b", title: "b", cwd: "/w", live: false },
+      { id: "a", title: "a", cwd: "/w", live: true, agent: "shell" },
+      { id: "b", title: "b", cwd: "/w", live: false, agent: "shell" },
     ]);
   });
 

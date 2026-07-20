@@ -62,7 +62,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
-import { buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
+import { buildSessionList, captureSessionScreen, type SessionAgent } from "./backends/remoteHost/terminalScreen.js";
 import {
   isRecord,
   parseJsonl,
@@ -153,6 +153,9 @@ interface PtyEntry {
   // True when `term` is a `docker run` client (single-view sandbox): reap force-removes
   // the container, since killing the client alone can leave it running.
   sandbox?: boolean;
+  // What is running in this PTY. Recorded at spawn because nothing else can recover it
+  // later, and the phone needs it to offer input that suits the session (mulmoserver#84).
+  agent: SessionAgent;
 }
 
 interface KnownSession {
@@ -1934,6 +1937,8 @@ const remoteHostListTerminalSessions = async () =>
     detailOf: (id) => ({
       title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? "",
       cwd: ptys.get(id)?.cwd ?? "",
+      // Null for a tmux-only session: the process that knew what it launched is gone.
+      agent: ptys.get(id)?.agent ?? null,
     }),
   });
 
@@ -2211,7 +2216,7 @@ function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string,
     console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
   const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials), cwd);
   console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
-  return { term, ws, buffer: "", cwd, sandbox: true, active: false };
+  return { term, ws, buffer: "", cwd, sandbox: true, active: false, agent: "claude" };
 }
 
 // Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
@@ -2351,7 +2356,7 @@ function spawnClaudePty(
   } else {
     const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
     console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-    entry = { term, ws, buffer: "", cwd, tmux, active: false };
+    entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
   }
   ptys.set(sessionId, entry);
 
@@ -2480,7 +2485,7 @@ function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd
   const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
   console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
 
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "shell" };
   ptys.set(sessionId, entry);
 
   term.onData((data) => {
@@ -2833,7 +2838,7 @@ function spawnCodexPty(
   const via = tmux ? " via tmux" : "";
   const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
   console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false };
+  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
   ptys.set(sessionId, entry);
   if (resumeRolloutId) {
     codexRolloutIds.set(sessionId, resumeRolloutId);
