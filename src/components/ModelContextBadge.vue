@@ -70,5 +70,7 @@ const title = computed(() => {
 </script>
 
 <template>
-  <span v-if="label" class="flex-none font-mono text-[10px] text-dim whitespace-nowrap tracking-[0.02em]" :title="title">{{ badgeText }}</span>
+  <span v-if="label" data-testid="model-badge" class="flex-none font-mono text-[10px] text-dim whitespace-nowrap tracking-[0.02em]" :title="title">{{
+    badgeText
+  }}</span>
 </template>

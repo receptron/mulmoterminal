@@ -11,7 +11,7 @@ function mountBadge(props: { agent?: "claude" | "codex"; model: string | null; c
 describe("ModelContextBadge", () => {
   it("shows the short family label + ctx% for a known Claude model (70k / 200k = 35%)", () => {
     const w = mountBadge({ model: "claude-opus-4-20250514", contextTokens: 70_000 });
-    expect(w.find("span").text()).toBe("Opus · ctx 35%");
+    expect(w.find('[data-testid="model-badge"]').text()).toBe("Opus · ctx 35%");
   });
 
   it("maps sonnet and haiku ids to their short labels", () => {
@@ -34,13 +34,13 @@ describe("ModelContextBadge", () => {
 
   it("shows the model tail but NO % for an unknown model (never guesses a window)", () => {
     const w = mountBadge({ agent: "codex", model: "gpt-5-codex", contextTokens: 999_999 });
-    expect(w.find("span").text()).toBe("gpt-5-codex");
-    expect(w.find("span").text()).not.toContain("ctx");
+    expect(w.find('[data-testid="model-badge"]').text()).toBe("gpt-5-codex");
+    expect(w.find('[data-testid="model-badge"]').text()).not.toContain("ctx");
   });
 
   it("uses the last path segment for a provider-prefixed unknown id", () => {
     const w = mountBadge({ agent: "codex", model: "openai/o3-pro", contextTokens: 1000 });
-    expect(w.find("span").text()).toBe("o3-pro");
+    expect(w.find('[data-testid="model-badge"]').text()).toBe("o3-pro");
   });
 
   it("renders nothing when the model is unknown/null (no transcript model yet)", () => {
@@ -54,7 +54,7 @@ describe("ModelContextBadge", () => {
 
   it("puts the agent name, full model id and raw token counts in the tooltip", () => {
     const w = mountBadge({ agent: "claude", model: "claude-opus-4-20250514", contextTokens: 70_000 });
-    const title = w.find("span").attributes("title");
+    const title = w.find('[data-testid="model-badge"]').attributes("title");
     expect(title).toContain("Claude");
     expect(title).toContain("claude-opus-4-20250514");
     expect(title).toContain("70,000 / 200,000 (35%)");

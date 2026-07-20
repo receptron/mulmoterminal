@@ -565,7 +565,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id);
     await flushPromises();
-    const badge = w.find(".cell-model");
+    const badge = w.find('[data-testid="model-badge"]');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toBe("Opus · ctx 35%"); // 70k / 200k
   });
@@ -603,7 +603,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     expect(w.find(".cell-hdr-chip").text()).toBe("prod"); // custom chip renders its substituted text
     expect(w.find(".cell-usage").exists()).toBe(true); // usage is listed
-    expect(w.find(".cell-model").exists()).toBe(false); // ctx omitted from the list → hidden despite context set
+    expect(w.find('[data-testid="model-badge"]').exists()).toBe(false); // ctx omitted from the list → hidden despite context set
   });
 
   it("renders duplicate built-in chips without key collisions", async () => {
@@ -648,7 +648,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id);
     await flushPromises();
-    expect(w.find(".cell-model").exists()).toBe(false);
+    expect(w.find('[data-testid="model-badge"]').exists()).toBe(false);
   });
 
   it("clears a stale prompt when the server sends lastPrompt: null", async () => {
