@@ -23,6 +23,12 @@ describe("isLauncherEnvVar", () => {
     }
   });
 
+  it("matches case-insensitively (Windows env names are case-insensitive)", () => {
+    for (const name of ["Prefix", "prefix", "Init_Cwd", "Node", "NPM_CONFIG_REGISTRY", "Npm_Package_Name", "NPM_EXECPATH"]) {
+      expect(isLauncherEnvVar(name), name).toBe(true);
+    }
+  });
+
   it("keeps real user environment, including other *_PREFIX vars", () => {
     for (const name of ["HOMEBREW_PREFIX", "CONDA_PREFIX", "HOME", "SHELL", "PATH", "NVM_DIR", "NODE_ENV", "NODE_OPTIONS"]) {
       expect(isLauncherEnvVar(name), name).toBe(false);
