@@ -47,8 +47,14 @@ export default [
       "max-depth": ["error", 4],
       "max-params": ["warn", 6],
       "max-nested-callbacks": ["error", 4],
-      // `const { secret, ...rest } = obj` is how you drop a field by construction —
-      // the named siblings are the point, not dead code.
+    },
+  },
+  {
+    // `const { secret, ...rest } = obj` is how you drop a field by construction —
+    // the named siblings are the point, not dead code. Scoped to where the
+    // typescript-eslint rule owns unused-vars; plain .js keeps the plugin default.
+    files: ["**/*.{ts,tsx,mts,cts}", "**/*.vue"],
+    rules: {
       "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
     },
   },
