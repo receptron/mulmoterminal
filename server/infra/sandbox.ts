@@ -15,7 +15,10 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import os from "node:os";
+import pty from "node-pty";
 import { spawnCapture } from "./spawnCapture.js";
+
+const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 
 const IMAGE = process.env.MULMOTERMINAL_SANDBOX_IMAGE || "mulmoterminal-sandbox";
 const CONTAINER_HOME = "/home/node";
@@ -145,6 +148,111 @@ export function sandboxCredentialsPath(sessionId: string): string {
   return path.join(SANDBOX_DIR, `creds-${sessionId}.json`);
 }
 
+// macOS Claude Code refreshes its OAuth token into the KEYCHAIN, never into
+// ~/.claude/.credentials.json. So the value we export can be an EXPIRED token the host
+// hasn't been prompted to refresh yet — the container then reads it and 401s ("Not
+// logged in"). These helpers detect that and force the host CLI to refresh before export.
+
+const EXPIRY_MARGIN_MS = 60_000; // treat a token as expired 60s early
+const RENEWAL_TIMEOUT_MS = 30_000; // give the host claude this long to answer
+const RENEWAL_INPUT_DELAY_MS = 3_000; // let the CLI reach its prompt before typing
+// A renewal counts only when claude echoes our nudge AND replies with real prose — an
+// error banner ("Please log in", a network blip) matches neither, so it falls through to
+// the timeout and refreshHostKeychain re-checks expiry before trusting the result.
+const RENEWAL_RESPONSE_RE = /\b(Hello|Hi|I['’]m|I can|How can)\b/i;
+const MIN_RENEWAL_RESPONSE_CHARS = 20;
+const RENEWAL_ECHO_RE = /\bhi\b/;
+
+// The token's expiry (ISO string) from the raw Keychain blob, or null when the JSON is
+// unparseable or carries none. JSON.parse yields `any`, so narrow once here.
+export function readExpiresAt(raw: string): string | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!isRecord(parsed)) return null;
+  const oauth = parsed.claudeAiOauth;
+  if (!isRecord(oauth)) return null;
+  return typeof oauth.expiresAt === "string" || typeof oauth.expiresAt === "number" ? String(oauth.expiresAt) : null;
+}
+
+// Is the credential's access token expired (with the safety margin)? Unparseable or
+// missing expiry counts as expired, so we err toward forcing a refresh.
+export function isTokenExpired(raw: string): boolean {
+  const expiresAt = readExpiresAt(raw);
+  if (!expiresAt) return true;
+  const expiresMs = new Date(isNaN(Number(expiresAt)) ? expiresAt : Number(expiresAt)).getTime();
+  if (isNaN(expiresMs)) return true;
+  return Date.now() >= expiresMs - EXPIRY_MARGIN_MS;
+}
+
+// Does this post-echo output look like a genuine Claude reply (vs an error banner)?
+export function looksLikeClaudeResponse(text: string): boolean {
+  return RENEWAL_RESPONSE_RE.test(text) && text.length >= MIN_RENEWAL_RESPONSE_CHARS;
+}
+
+// Spawn the host `claude` in a PTY and send a one-word nudge; the CLI refreshes its own
+// expired OAuth token as it starts and writes the fresh one back to the Keychain. Resolves
+// true once we see a real reply, false on timeout. Best-effort — never throws.
+function renewViaHostClaude(claudeBin: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    let proc: import("node-pty").IPty;
+    try {
+      proc = pty.spawn(claudeBin, [], { name: "xterm-color", cols: 80, rows: 30, cwd: process.cwd(), env: process.env });
+    } catch {
+      resolve(false);
+      return;
+    }
+    let buffer = "";
+    let echoEndIdx = -1;
+    let settled = false;
+    const finish = (ok: boolean): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try {
+        proc.kill();
+      } catch {
+        /* already gone */
+      }
+      resolve(ok);
+    };
+    const timer = setTimeout(() => finish(false), RENEWAL_TIMEOUT_MS);
+    proc.onData((data) => {
+      buffer += data;
+      if (echoEndIdx < 0) {
+        const m = RENEWAL_ECHO_RE.exec(buffer);
+        if (m) echoEndIdx = m.index + m[0].length;
+        return;
+      }
+      if (looksLikeClaudeResponse(buffer.slice(echoEndIdx))) finish(true);
+    });
+    setTimeout(() => {
+      if (!settled) proc.write("hi\r");
+    }, RENEWAL_INPUT_DELAY_MS);
+  });
+}
+
+// Before a sandbox spawn: if the Keychain's token is expired, drive the host CLI to
+// refresh it so writeSandboxCredentials exports a LIVE token. No-op off macOS, when the
+// token is still valid, or when there's nothing in the Keychain. Never throws — a failed
+// renewal just leaves the (stale) token, and the caller still spawns with a warning.
+export async function refreshHostKeychainIfExpired(claudeBin: string): Promise<void> {
+  if (process.platform !== "darwin") return;
+  const r = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
+  const credential = r.status === 0 ? r.stdout.trim() : "";
+  if (!credential || !isTokenExpired(credential)) return;
+  console.log("[sandbox] Keychain access token expired — asking the host claude to refresh it...");
+  const renewed = await renewViaHostClaude(claudeBin);
+  const after = spawnCapture("security", ["find-generic-password", "-s", KEYCHAIN_CREDENTIAL_SERVICE, "-w"]);
+  const stillExpired = after.status !== 0 || isTokenExpired(after.stdout.trim());
+  if (!renewed || stillExpired)
+    console.warn("[sandbox] token refresh did not complete — the container may show 'Not logged in'. Run `claude` on the host to log in.");
+  else console.log("[sandbox] token refreshed.");
+}
+
 // Export the host's live Claude credential from the macOS Keychain to a 0600 per-session
 // file for the container to mount. Returns the path, or null when the Keychain has no
 // entry (never logged in) or on a non-macOS host — the caller then spawns without the
@@ -253,8 +361,11 @@ export function buildDockerRunArgs(
     `${claudeDir}:${CONTAINER_HOME}/.claude`,
     // Overlay the live Keychain credential over the dir mount's possibly-stale
     // ~/.claude/.credentials.json — a deeper bind-mount target shadows the file inside
-    // the dir mount. Read-only; the host file is never modified. Absent → no overlay.
-    ...(credentialsPath ? ["-v", `${credentialsPath}:${CONTAINER_HOME}/.claude/.credentials.json:ro`] : []),
+    // the dir mount. NOT read-only: if the token expires mid-session the container's
+    // claude refreshes it and must persist the new one. The mount target is our
+    // throwaway per-session copy (creds-<sid>.json), so that write never touches the
+    // host Keychain or the host's own credentials file. Absent → no overlay.
+    ...(credentialsPath ? ["-v", `${credentialsPath}:${CONTAINER_HOME}/.claude/.credentials.json`] : []),
     "-v",
     `${claudeConfigPath}:${CONTAINER_HOME}/.claude.json`,
     // Opt-in host credentials (gh / gitconfig / SSH agent) — empty unless env-enabled.

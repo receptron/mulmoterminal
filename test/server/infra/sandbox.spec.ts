@@ -14,6 +14,9 @@ import {
   parseMountConfigNames,
   resolveSandboxAuthArgs,
   sandboxPlatformSupported,
+  readExpiresAt,
+  isTokenExpired,
+  looksLikeClaudeResponse,
 } from "../../../server/infra/sandbox";
 
 describe("rewriteLoopbackForDocker", () => {
@@ -109,17 +112,73 @@ describe("sandboxCredentialsPath", () => {
 });
 
 describe("buildDockerRunArgs credential overlay", () => {
-  it("overlays the creds file read-only, AFTER the ~/.claude dir mount so it shadows the stale one", () => {
+  it("overlays the creds file writable, AFTER the ~/.claude dir mount so it shadows the stale one", () => {
     const args = buildDockerRunArgs("sid1", ["--x"], "/Users/me/proj", "/cfg/x.json", "/creds/y.json");
-    expect(args).toContain("/creds/y.json:/home/node/.claude/.credentials.json:ro"); // read-only, host file untouched
+    // NOT :ro — the container must be able to persist a token it refreshes mid-session.
+    // The target is our throwaway per-session file, so the host Keychain/file stay untouched.
+    expect(args).toContain("/creds/y.json:/home/node/.claude/.credentials.json");
+    expect(args.some((a) => a === "/creds/y.json:/home/node/.claude/.credentials.json:ro")).toBe(false);
     const dirMount = args.indexOf(`${path.join(os.homedir(), ".claude")}:/home/node/.claude`);
-    const overlay = args.indexOf("/creds/y.json:/home/node/.claude/.credentials.json:ro");
+    const overlay = args.indexOf("/creds/y.json:/home/node/.claude/.credentials.json");
     expect(dirMount).toBeGreaterThan(-1);
     expect(overlay).toBeGreaterThan(dirMount); // a deeper target only shadows when mounted after its parent
   });
   it("adds NO credential overlay when credentialsPath is omitted/null", () => {
     const args = buildDockerRunArgs("sid1", ["--x"], "/Users/me/proj", "/cfg/x.json");
     expect(args.some((a) => a.includes("/.claude/.credentials.json"))).toBe(false);
+  });
+});
+
+// The Keychain blob's real shape, from `security find-generic-password -s "Claude Code-credentials" -w`.
+const credBlob = (expiresAt: number | string | null): string =>
+  JSON.stringify({ claudeAiOauth: { accessToken: "a", refreshToken: "r", ...(expiresAt === null ? {} : { expiresAt }) } });
+
+describe("readExpiresAt", () => {
+  it("pulls claudeAiOauth.expiresAt as a string", () => {
+    expect(readExpiresAt(credBlob(1784602611420))).toBe("1784602611420");
+    expect(readExpiresAt(credBlob("2026-07-20T00:00:00Z"))).toBe("2026-07-20T00:00:00Z");
+  });
+  it("is null when the JSON is unparseable, not an object, or carries no expiry", () => {
+    expect(readExpiresAt("not json")).toBeNull();
+    expect(readExpiresAt("42")).toBeNull();
+    expect(readExpiresAt(JSON.stringify({ somethingElse: 1 }))).toBeNull();
+    expect(readExpiresAt(credBlob(null))).toBeNull();
+  });
+});
+
+describe("isTokenExpired", () => {
+  const HOUR_MS = 3_600_000;
+  it("is false for a token comfortably in the future", () => {
+    expect(isTokenExpired(credBlob(Date.now() + HOUR_MS))).toBe(false);
+  });
+  it("is true for a token in the past", () => {
+    expect(isTokenExpired(credBlob(Date.now() - HOUR_MS))).toBe(true);
+  });
+  it("applies the 60s safety margin (a token expiring in 30s counts as expired)", () => {
+    expect(isTokenExpired(credBlob(Date.now() + 30_000))).toBe(true);
+    expect(isTokenExpired(credBlob(Date.now() + 120_000))).toBe(false);
+  });
+  it("treats unparseable / missing expiry as expired (err toward refreshing)", () => {
+    expect(isTokenExpired("not json")).toBe(true);
+    expect(isTokenExpired(credBlob(null))).toBe(true);
+    expect(isTokenExpired(credBlob("not-a-date"))).toBe(true);
+  });
+  it("accepts an ISO-string expiry too", () => {
+    expect(isTokenExpired(credBlob(new Date(Date.now() + HOUR_MS).toISOString()))).toBe(false);
+    expect(isTokenExpired(credBlob(new Date(Date.now() - HOUR_MS).toISOString()))).toBe(true);
+  });
+});
+
+describe("looksLikeClaudeResponse", () => {
+  it("accepts a conversational reply of real length", () => {
+    expect(looksLikeClaudeResponse("Hello! How can I help you today?")).toBe(true);
+    expect(looksLikeClaudeResponse("Hi there — I can do that.")).toBe(true);
+  });
+  it("rejects error banners and too-short output", () => {
+    expect(looksLikeClaudeResponse("Please log in to continue")).toBe(false);
+    expect(looksLikeClaudeResponse("Invalid credentials")).toBe(false);
+    expect(looksLikeClaudeResponse("Hi")).toBe(false); // matches the word but too short
+    expect(looksLikeClaudeResponse("")).toBe(false);
   });
 });
 
@@ -187,9 +246,9 @@ describe("resolveSandboxAuthArgs (opt-in, env-gated)", () => {
     delete process.env.SANDBOX_MOUNT_CONFIGS;
     process.env.SANDBOX_SSH_AGENT_FORWARD = "1";
     const args = resolveSandboxAuthArgs();
-    expect(args).toContain("/run/host-services/ssh-auth.sock:/ssh-agent:ro"); // read-only, like every credential mount
+    expect(args).toContain("/run/host-services/ssh-auth.sock:/ssh-agent:ro"); // read-only: never mutate the host agent socket
     expect(args).toContain("SSH_AUTH_SOCK=/ssh-agent");
-    // Every -v this function emits must be read-only.
+    // Every -v this opt-in auth function emits must be read-only.
     args.forEach((a, i) => {
       if (args[i - 1] === "-v") expect(a.endsWith(":ro")).toBe(true);
     });
