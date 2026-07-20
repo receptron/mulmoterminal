@@ -116,6 +116,20 @@ describe("appendBoundedOutput", () => {
     expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
   });
 
+  // OSC 52 carries the clipboard as base64 and this host enables it deliberately
+  // (infra/tmux.ts forwards Claude Code's auto-copy), so payloads run to kilobytes.
+  // Any fixed look-behind window loses the introducer and leaks base64 onto the screen.
+  it("finds the introducer of an OSC payload far longer than any fixed window", () => {
+    const payload = "QUJDRA".repeat(500);
+    const stream = `${"x".repeat(50)}${ESC}]52;c;${payload}${BEL}after`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("after");
+  });
+
+  it("keeps a long OSC payload that closed before the cut", () => {
+    const stream = `${"x".repeat(50)}${ESC}]52;c;${"QUJDRA".repeat(500)}${BEL}visible text`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
+  });
+
   it("drops a split two-character sequence", () => {
     const stream = `${"x".repeat(50)}${ESC}Mrest`;
     expect(appendBoundedOutput(stream, "", 5)).toBe("rest");

@@ -32,10 +32,6 @@ const CSI_FINAL = /[\x40-\x7E]/;
 // how a terminal aborts an unfinished OSC.
 const OSC_TERMINATOR = new RegExp(BEL + "|" + ESC + "\\\\?");
 
-// Escape sequences are short, so the sequence a cut may have landed inside is always
-// near the cut. Bounds the look-behind to a constant instead of the whole 64 KiB.
-const SEQUENCE_LOOKBEHIND = 64;
-
 // Past the END of the terminator, not past its first character — ST is two bytes wide.
 const firstMatchEnd = (text: string, terminator: RegExp): number => {
   const found = terminator.exec(text);
@@ -43,19 +39,23 @@ const firstMatchEnd = (text: string, terminator: RegExp): number => {
   return found.index + found[0].length;
 };
 
-// How many leading characters of `cut` belong to a sequence the truncation split, given
-// the text discarded before it. Zero when the cut fell cleanly BETWEEN sequences — which
-// is the common case, and where every byte must be kept.
+// How many leading characters of `cut` belong to a sequence the truncation split. Zero
+// when the cut fell cleanly BETWEEN sequences — the common case, and the one where every
+// byte must be kept.
 //
-// This is decided from the discarded side, not guessed from the retained side. The
-// previous version pattern-matched the head of `cut` and could strip ordinary text
+// This is decided from the discarded side, not guessed from the retained side. An earlier
+// version pattern-matched the head of `cut` and could strip ordinary text
 // ("/api/v1/resource" -> "pi/v1/resource"); knowing what was thrown away removes the
 // guesswork entirely.
-const splitSequenceLength = (discarded: string, cut: string): number => {
-  const tail = discarded.slice(-SEQUENCE_LOOKBEHIND);
-  const escapeAt = tail.lastIndexOf(ESC);
+//
+// The search for the opening escape spans the WHOLE discarded prefix rather than a fixed
+// window. A bounded look-behind misses OSC strings whose payload is longer than the
+// window — and this host enables OSC 52 deliberately (see infra/tmux.ts), so kilobyte
+// base64 clipboard payloads are a designed-for case, not a hypothetical.
+const splitSequenceLength = (combined: string, cutAt: number, cut: string): number => {
+  const escapeAt = combined.lastIndexOf(ESC, cutAt - 1);
   if (escapeAt === -1) return 0;
-  const afterEscape = tail.slice(escapeAt + 1);
+  const afterEscape = combined.slice(escapeAt + 1, cutAt);
   // The introducer went with the discarded text, or it is the first retained character.
   const introducer = afterEscape.length > 0 ? afterEscape.charAt(0) : cut.charAt(0);
   const retained = afterEscape.length > 0 ? cut : cut.slice(1);
@@ -83,6 +83,7 @@ const splitSequenceLength = (discarded: string, cut: string): number => {
 export function appendBoundedOutput(buffer: string, data: string, limit: number): string {
   const combined = buffer + data;
   if (combined.length <= limit) return combined;
-  const cut = combined.slice(-limit);
-  return cut.slice(splitSequenceLength(combined.slice(0, combined.length - limit), cut));
+  const cutAt = combined.length - limit;
+  const cut = combined.slice(cutAt);
+  return cut.slice(splitSequenceLength(combined, cutAt, cut));
 }
