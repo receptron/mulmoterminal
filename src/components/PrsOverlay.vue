@@ -3,8 +3,9 @@
 // AccountingOverlay. Driven by usePrsView (the /prs route). Fetches /api/prs and
 // /api/issues (the repos set in Settings, aggregated server-side via `gh`) on open and
 // on the reload button, grouped by repo. Read-only: a row click opens it on GitHub.
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import { usePrsView } from "../composables/usePrsView";
+import { useEscapeToClose } from "../composables/useEscapeToClose";
 
 type CiState = "passing" | "failing" | "pending" | "none";
 interface PrItem {
@@ -90,15 +91,11 @@ function relativeTime(iso: string): string {
 const CI_TITLE: Record<CiState, string> = { passing: "Checks passing", failing: "Checks failing", pending: "Checks running", none: "No checks" };
 const REVIEW_LABEL: Record<string, string> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
 
-function onKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isOpen.value) close();
-}
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="prs-overlay" role="region" aria-label="Pull requests and issues">
+  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Pull requests and issues">
     <header class="prs-head">
       <span class="prs-title">PRs &amp; Issues</span>
       <button type="button" class="prs-reload" :disabled="loading" title="Reload" aria-label="Reload PR and issue list" @click="load">↻</button>
@@ -161,18 +158,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   </div>
 </template>
 
+<style scoped src="./overlay.css"></style>
 <style scoped>
-.prs-overlay {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  background: var(--bg-deep);
-  display: flex;
-  flex-direction: column;
-}
 .prs-head {
   flex: 0 0 auto;
   display: flex;

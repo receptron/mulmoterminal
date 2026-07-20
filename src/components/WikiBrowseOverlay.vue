@@ -7,9 +7,10 @@
 //
 // Data is re-fetched on every view entry (the shared workspace changes underfoot as
 // the terminal Claude edits pages), so the browser never shows a stale page/graph.
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { ref, watch } from "vue";
 import type { WikiGraph } from "@mulmoclaude/core/wiki";
 import { useWikiBrowse, wikiGotoIndex, wikiGotoGraph, wikiGotoLint, type WikiView } from "../composables/useWikiBrowse";
+import { useEscapeToClose } from "../composables/useEscapeToClose";
 import { fetchWikiIndex, fetchWikiGraph, fetchWikiPage, fetchWikiLint, type WikiIndex, type WikiPage, type WikiLint } from "../wikiApi";
 import { renderWikiHtml } from "../wikiMarkdown";
 import WikiIndexView from "./WikiIndexView.vue";
@@ -92,15 +93,11 @@ watch(
   { immediate: true },
 );
 
-function onKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isOpen.value) close();
-}
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="wiki-overlay" role="region" aria-label="Wiki">
+  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Wiki">
     <nav class="wiki-tabs" aria-label="Wiki sections">
       <button type="button" :class="{ active: view.mode === 'index' }" @click="wikiGotoIndex">Index</button>
       <button v-if="view.mode === 'page'" type="button" class="active" aria-current="page" disabled>
@@ -123,20 +120,8 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
   </div>
 </template>
 
+<style scoped src="./overlay.css"></style>
 <style scoped>
-/* Fills the page BELOW the toolbar (40px) — the toolbar stays visible + clickable so
-   the user can switch back to Chat. Matches the other overlays. */
-.wiki-overlay {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  background: var(--bg-deep);
-  display: flex;
-  flex-direction: column;
-}
 .wiki-tabs {
   flex: 0 0 auto;
   display: flex;
