@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { isUnread, type Session, type Filter } from "../composables/useSessions";
-import FilterChip from "./FilterChip.vue";
+import { useSessionFilter, type SessionListEmits } from "../composables/sessionList";
+import SessionFilters from "./SessionFilters.vue";
 
 // Presentational: list + filter are owned by App.vue and shared with the
 // vertical Sidebar, so switching layouts preserves them (no refetch/reset).
@@ -10,25 +11,16 @@ const props = defineProps<{
   activeId: string | null;
   filter: Filter;
 }>();
-const emit = defineEmits<{
-  (e: "select", id: string, agent: "claude" | "codex"): void;
-  (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
-  (e: "update:filter", f: Filter): void;
-}>();
+const emit = defineEmits<SessionListEmits>();
 
-// Same "unread" mapping as the vertical sidebar (waiting, excluding hidden
-// background workers); the filter applies to the horizontal tabs too.
-const unreadCount = computed(() => props.sessions.filter(isUnread).length);
+const { unreadCount, filteredSessions } = useSessionFilter(props);
 
 // The horizontal bar never scrolls — tabs flex to share the available width.
 // Cap to the most-recent N (sessions are already sorted by recency) so they
 // don't shrink to unreadable slivers when there are many. The unread filter
 // applies before the cap.
 const MAX_TABS = 8;
-const visibleSessions = computed(() => {
-  const list = props.filter === "unread" ? props.sessions.filter(isUnread) : props.sessions;
-  return list.slice(0, MAX_TABS);
-});
+const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS));
 </script>
 
 <template>
@@ -39,11 +31,7 @@ const visibleSessions = computed(() => {
     <button class="new-btn new-codex-btn" title="New Codex session" aria-label="New Codex session" @click="emit('new-codex')">cx</button>
 
     <div class="filters">
-      <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
-      <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
-      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">
-        <span class="material-symbols-outlined">refresh</span>
-      </button>
+      <SessionFilters :filter="filter" :unread-count="unreadCount" @update:filter="emit('update:filter', $event)" @refresh="emit('refresh')" />
     </div>
 
     <div class="tabs">
@@ -121,10 +109,6 @@ const visibleSessions = computed(() => {
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-}
-
-.sort-btn {
-  font-size: 14px;
 }
 
 .tabs {
@@ -205,16 +189,5 @@ const visibleSessions = computed(() => {
   gap: 8px;
   flex-shrink: 0;
 }
-
-.icon-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 16px;
-  cursor: pointer;
-  line-height: 1;
-}
-.icon-btn:hover {
-  color: var(--text);
-}
 </style>
+<style scoped src="./sessionList.css"></style>

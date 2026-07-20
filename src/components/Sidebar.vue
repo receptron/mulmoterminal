@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import { isUnread, type Session, type Filter } from "../composables/useSessions";
-import FilterChip from "./FilterChip.vue";
+import { useSessionFilter, type SessionListEmits } from "../composables/sessionList";
+import SessionFilters from "./SessionFilters.vue";
 
 // Presentational: the session list + filter are owned by App.vue (a single
 // useSessions instance shared across layouts) so toggling vertical/horizontal
@@ -13,17 +13,9 @@ const props = defineProps<{
   activeId: string | null;
   filter: Filter;
 }>();
-const emit = defineEmits<{
-  (e: "select", id: string, agent: "claude" | "codex"): void;
-  (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
-  (e: "update:filter", f: Filter): void;
-}>();
+const emit = defineEmits<SessionListEmits>();
 
-// A session that is `waiting` for the user's attention is what mulmoclaude calls
-// "unread" — render it bold and let the user filter to just those rows. Hidden
-// background workers are excluded (see isUnread).
-const unreadCount = computed(() => props.sessions.filter(isUnread).length);
-const visibleSessions = computed(() => (props.filter === "unread" ? props.sessions.filter(isUnread) : props.sessions));
+const { unreadCount, filteredSessions } = useSessionFilter(props);
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -53,11 +45,13 @@ function relativeTime(ms: number): string {
     </div>
 
     <div class="filters">
-      <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
-      <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
-      <button class="icon-btn sort-btn" title="Sort by most recent" aria-label="Sort by most recent" @click="emit('refresh')">
-        <span class="material-symbols-outlined">refresh</span>
-      </button>
+      <SessionFilters
+        :filter="filter"
+        :unread-count="unreadCount"
+        align-refresh-end
+        @update:filter="emit('update:filter', $event)"
+        @refresh="emit('refresh')"
+      />
     </div>
 
     <div v-if="loading" class="state">Loading…</div>
@@ -65,11 +59,11 @@ function relativeTime(ms: number): string {
       {{ error }}
     </div>
     <div v-else-if="sessions.length === 0" class="state">No sessions yet</div>
-    <div v-else-if="visibleSessions.length === 0" class="state">No unread sessions</div>
+    <div v-else-if="filteredSessions.length === 0" class="state">No unread sessions</div>
 
     <ul v-else class="list">
       <li
-        v-for="s in visibleSessions"
+        v-for="s in filteredSessions"
         :key="s.id"
         :class="['item', { active: s.id === props.activeId, waiting: isUnread(s) }]"
         :title="s.title"
@@ -113,18 +107,6 @@ function relativeTime(ms: number): string {
   color: var(--text-muted);
 }
 
-.icon-btn {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 16px;
-  cursor: pointer;
-  line-height: 1;
-}
-.icon-btn:hover {
-  color: var(--text);
-}
-
 .new-btn {
   display: flex;
   align-items: center;
@@ -162,12 +144,6 @@ function relativeTime(ms: number): string {
   align-items: center;
   gap: 6px;
   padding: 0 12px 8px;
-}
-
-/* Recency re-sort sits with the list controls, pushed to the far right. */
-.sort-btn {
-  margin-left: auto;
-  font-size: 14px;
 }
 
 .state {
@@ -254,3 +230,4 @@ function relativeTime(ms: number): string {
   color: var(--text-dim);
 }
 </style>
+<style scoped src="./sessionList.css"></style>
