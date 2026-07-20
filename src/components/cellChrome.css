@@ -1,7 +1,9 @@
-/* Chrome shared by the non-Claude grid cells (CommandCell, LauncherCell): the
-   frame, the header strip, and its status dot / path / label / buttons. Colors are
-   the same theme tokens TerminalCell uses, so all three cell kinds recolor together
-   when the app theme changes — and pick up a directory's .mulmoterminal.json tint
+/* Frame + header/path/label chrome specific to the non-Claude grid cells
+   (CommandCell, LauncherCell). The rules identical to every cell kind — the
+   zoomable-header affordance, the status dot, the action buttons — live in
+   cellChromeBase.css, which these two import alongside this file. Colors are the
+   same theme tokens TerminalCell uses, so all three cell kinds recolor together
+   when the app theme changes, and pick up a directory's .mulmoterminal.json tint
    through the same override vars the moment one is set. */
 .cell {
   display: flex;
@@ -23,34 +25,6 @@
   padding: 0 8px;
   background: var(--cell-header-bg, var(--bg-panel));
   border-bottom: 1px solid var(--border);
-}
-/* Header background is a click target: zoom (switch to) this cell. */
-.cell-header.is-zoomable {
-  cursor: pointer;
-}
-.cell-header.is-zoomable:hover {
-  background: var(--bg-hover);
-}
-
-.cell-dot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--cell-dot, var(--text-dim));
-}
-.cell-dot.is-working {
-  background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.35;
-  }
 }
 
 .cell-dir {
@@ -82,37 +56,4 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.cell-actions {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 4px;
-}
-.cell-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: var(--cell-btn, var(--text-secondary));
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-close:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
-
-.cell-term {
-  flex: 1;
-  min-height: 0;
 }
