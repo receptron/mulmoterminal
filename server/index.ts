@@ -33,6 +33,7 @@ import {
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
+import { sanitizePtyEnv } from "./infra/pty-env.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -2194,8 +2195,10 @@ const PTY_ROWS = 30;
 
 // pty.spawn with the binary as a PARAMETER (never a string literal at the call site),
 // so the tmux/shell/claude spawns aren't flagged as spawn-of-a-string-literal.
+// The env is sanitized: package-manager launcher vars (yarn's PREFIX kills nvm
+// in spawned shells — see infra/pty-env.ts) must not leak into PTYs.
 function spawnPty(bin: string, args: string[], cwd: string): IPty {
-  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: process.env });
+  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
 }
 
 // Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
@@ -2452,7 +2455,7 @@ function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
   const isWindows = process.platform === "win32";
   const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
   const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
-  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: process.env });
+  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
   console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
 
   term.onData((data) => {

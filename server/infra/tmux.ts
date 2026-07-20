@@ -9,6 +9,7 @@ import { spawnSync } from "node:child_process";
 import { writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { isLauncherEnvVar, sanitizePathEntries } from "./pty-env.js";
 
 const SERVER_SOCKET = "mulmoterminal";
 const SESSION_PREFIX = "mt-";
@@ -73,11 +74,34 @@ function applyLiveTmuxOptions(): void {
   }
 }
 
+// Scrub package-manager launcher vars from a RUNNING tmux server's global
+// environment. The tmux server outlives node: one started under `yarn dev`
+// keeps PREFIX/npm_* in its global env and re-injects them into every new
+// pane — where PREFIX makes nvm strip node/npm from PATH (see pty-env.ts) —
+// so restarting node with a clean env isn't enough. `setenv -g -r` flags each
+// var for removal from new pane environments; the global PATH is rewritten
+// with the run-script shim dirs dropped. Existing panes keep their env (a
+// shell's copy can't be edited from outside); new ones start clean.
+function scrubGlobalEnvironment(): void {
+  const r = tmux(["show-environment", "-g"]);
+  if (r.status !== 0) return;
+  for (const line of r.stdout.split("\n")) {
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const name = line.slice(0, eq);
+    if (isLauncherEnvVar(name)) tmux(["set-environment", "-g", "-r", name]);
+    else if (name === "PATH") tmux(["set-environment", "-g", "PATH", sanitizePathEntries(line.slice(eq + 1), path.delimiter)]);
+  }
+}
+
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });
     writeFileSync(CONF_FILE, TMUX_CONF_LINES.join("\n") + "\n");
-    if (tmux(["list-sessions"]).status === 0) applyLiveTmuxOptions();
+    if (tmux(["list-sessions"]).status === 0) {
+      applyLiveTmuxOptions();
+      scrubGlobalEnvironment();
+    }
   } catch {
     // non-fatal — tmux falls back to its defaults (a status bar, etc.)
   }
