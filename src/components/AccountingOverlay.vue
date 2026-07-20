@@ -6,21 +6,15 @@
 // selectedResult: the View self-fetches its books on mount and auto-selects one (or
 // shows the first-run "New book" form on an empty workspace). The host seams
 // (apiCall / subscribe / locale) are wired once in composables/accountingUi.ts.
-import { onBeforeUnmount, onMounted } from "vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import accountingCss from "@mulmoclaude/accounting-plugin/style.css?inline";
 import PluginFrame from "./PluginFrame.vue";
 import { useAccountingView } from "../composables/useAccountingView";
+import { useEscapeToClose } from "../composables/useEscapeToClose";
 
 const { isOpen, close } = useAccountingView();
 
-// Close on Escape (window-level so it fires without focusing the overlay), matching
-// CollectionsBrowseOverlay.
-function onKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isOpen.value) close();
-}
-onMounted(() => window.addEventListener("keydown", onKeydown));
-onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
+useEscapeToClose(isOpen, close);
 </script>
 
 <template>

@@ -5,11 +5,12 @@
 // inside a PluginFrame shadow root with the collection styles, exactly like the chat
 // card. Opened by the toolbar launcher / index cards / ref hops via the binding's nav
 // capabilities (collectionUi.ts).
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, ref, watch } from "vue";
 import { CollectionsIndexView, CollectionView } from "@mulmoclaude/collection-plugin/vue";
 import PluginFrame from "./PluginFrame.vue";
 import { collectionShadowCss } from "../collectionShadowCss";
 import { useCollectionBrowse } from "../composables/useCollectionBrowse";
+import { useEscapeToClose } from "../composables/useEscapeToClose";
 import { pushCollectionTeleportTarget, popCollectionTeleportTarget } from "../composables/collectionUi";
 import { launchAgent } from "../composables/useChatLauncher";
 
@@ -38,20 +39,13 @@ watch(probe, (el) => {
     pushCollectionTeleportTarget(root);
   }
 });
-onBeforeUnmount(() => {
-  unregister();
-  window.removeEventListener("keydown", onKeydown);
-});
+onBeforeUnmount(unregister);
 
-// Close on Escape (window-level so it fires without focusing the overlay).
-function onKeydown(e: KeyboardEvent): void {
-  if (e.key === "Escape" && isOpen.value) close();
-}
-onMounted(() => window.addEventListener("keydown", onKeydown));
+useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="browse-overlay" role="region" aria-label="Collections">
+  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Collections">
     <div class="browse-bar">
       <span class="browse-bar-label">Launch with</span>
       <div class="agent-toggle" role="radiogroup" aria-label="Launch agent">
@@ -88,20 +82,8 @@ onMounted(() => window.addEventListener("keydown", onKeydown));
   </div>
 </template>
 
+<style scoped src="./overlay.css"></style>
 <style scoped>
-/* Fills the page BELOW the toolbar (40px) — the toolbar stays visible + clickable. */
-.browse-overlay {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  background: var(--bg-deep);
-  display: flex;
-  flex-direction: column;
-}
-
 /* A thin bar picking which agent a collection action / chat launches. */
 .browse-bar {
   flex: 0 0 auto;

@@ -207,7 +207,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div v-if="isOpen" class="files-overlay" role="region" aria-label="Files">
+  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Files">
     <header class="files-head">
       <span class="files-title">Files</span>
       <span class="files-root" :title="cwd ?? ''">{{ cwd ?? "(default workspace)" }}</span>
@@ -250,18 +250,8 @@ onBeforeUnmount(() => {
   </div>
 </template>
 
+<style scoped src="./overlay.css"></style>
 <style scoped>
-.files-overlay {
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 50;
-  background: var(--bg-deep);
-  display: flex;
-  flex-direction: column;
-}
 .files-head {
   flex: 0 0 auto;
   display: flex;
