@@ -1,7 +1,8 @@
 import { ref } from "vue";
 import type { ITheme } from "@xterm/xterm";
+import { THEME_IDS, type ThemeId } from "../../common/themeIds";
 
-export type ThemeId = "midnight" | "nord" | "daylight" | "solarized";
+export type { ThemeId };
 
 export interface Theme {
   id: ThemeId;
@@ -88,7 +89,7 @@ const STORAGE_KEY = "theme";
 const DEFAULT_THEME: ThemeId = "midnight";
 
 export function isThemeId(value: unknown): value is ThemeId {
-  return typeof value === "string" && THEMES.some((t) => t.id === value);
+  return typeof value === "string" && THEME_IDS.some((id) => id === value);
 }
 
 // Storage access can throw (private mode / sandboxed contexts with storage
