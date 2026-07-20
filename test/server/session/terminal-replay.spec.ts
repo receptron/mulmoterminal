@@ -59,25 +59,53 @@ describe("appendBoundedOutput", () => {
     expect(appendBoundedOutput(stream, "", 9)).toBe("RED"); // was "5;196mRED"
   });
 
-  it("keeps text that merely resembles a remnant", () => {
+  // A clean cut must keep EVERY retained byte. An earlier version resumed at the next
+  // newline or ESC, silently discarding the head of the tail even when nothing was split.
+  it("keeps the whole tail when the cut falls between sequences", () => {
     expect(appendBoundedOutput("zzzhello world", "", 11)).toBe("hello world");
+    expect(appendBoundedOutput("y".repeat(200), "", 10)).toBe("y".repeat(10));
+    // Including a leading newline: it is a real byte of the retained tail, not a boundary
+    // to skip past.
+    expect(appendBoundedOutput(`aaa\nbbb${ESC}[0m`, "", 8)).toBe(`\nbbb${ESC}[0m`);
   });
 
-  it("prefers a newline boundary when it comes before the next sequence", () => {
-    const stream = `aaa\nbbb${ESC}[0m`;
-    expect(appendBoundedOutput(stream, "", 8)).toBe(`bbb${ESC}[0m`);
+  // Codex's counter-examples against the previous heuristic, which pattern-matched the
+  // head of the tail and ate ordinary punctuation-then-letter prefixes.
+  it.each([
+    ["5 files pending", 15],
+    ["/api/v1/resource", 16],
+    ["3.14 is pi", 10],
+    [";not a sequence", 15],
+  ])("does not touch plain text that merely looks like a sequence: %s", (text, limit) => {
+    expect(appendBoundedOutput(`${"q".repeat(40)}${text}`, "", limit)).toBe(text);
   });
 
-  it("resumes at the sequence start when no newline precedes it", () => {
-    const stream = `aaaa${ESC}[31mbbb`;
-    expect(appendBoundedOutput(stream, "", 9)).toBe(`${ESC}[31mbbb`);
+  it("drops only the split sequence, keeping the text that follows it", () => {
+    // The cut lands inside the SGR; "RED" after it must survive intact.
+    const stream = `${"x".repeat(50)}${ESC}[38;5;196mRED`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("RED");
   });
 
-  // A full-screen TUI redraws with cursor moves, not newlines, so the escape branch
-  // carries these; plain shell output is carried by the newline branch.
-  it("returns the raw tail when the window holds no boundary at all", () => {
-    const stream = "y".repeat(200);
-    expect(appendBoundedOutput(stream, "", 10)).toBe("y".repeat(10));
+  it("drops the introducer too when only the ESC was discarded", () => {
+    const stream = `${"x".repeat(50)}${ESC}[31mbbb`;
+    expect(appendBoundedOutput(stream, "", 7)).toBe("bbb");
+  });
+
+  it("keeps a sequence that closed before the cut", () => {
+    const stream = `${"x".repeat(50)}${ESC}[31mvisible text`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("visible text");
+  });
+
+  // An OSC string ends with BEL, not a CSI final byte, so scanning for 0x40-0x7E would
+  // stop inside the title and leave half of it on screen.
+  it("drops a split OSC string up to its terminator", () => {
+    const stream = `${"x".repeat(50)}${ESC}]0;window title${BEL}after`;
+    expect(appendBoundedOutput(stream, "", 12)).toBe("after");
+  });
+
+  it("drops a split two-character sequence", () => {
+    const stream = `${"x".repeat(50)}${ESC}Mrest`;
+    expect(appendBoundedOutput(stream, "", 5)).toBe("rest");
   });
 
   it("stays within the limit", () => {
