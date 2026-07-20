@@ -107,7 +107,9 @@ import { manageCollectionHandler } from "./infra/collection-tool.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
-import { initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
+import { HOST_ID as REMOTE_HOST_ID, initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
+import { createSessionActivityPublisher, firestoreSessionActivityStore } from "./backends/remoteHost/sessionActivity.js";
+import { currentFirestore, currentUid } from "./backends/remoteHost/session.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { installConfigSkill } from "./infra/install-config-skill.js";
@@ -696,6 +698,7 @@ function reap(id: string) {
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);
+  sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
   titleInFlight.delete(id);
   lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
   lastTitleAttemptMs.delete(id);
@@ -721,12 +724,23 @@ function reap(id: string) {
   pubsub?.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
 }
 
+// Mirrors session activity into Firestore so the phone's terminal viewer can refresh
+// on a real transition instead of polling (#439). Deduped and fire-and-forget inside;
+// a no-op while the remote host is disconnected.
+const sessionActivityPublisher = createSessionActivityPublisher({
+  uid: currentUid,
+  hostId: REMOTE_HOST_ID,
+  store: firestoreSessionActivityStore(currentFirestore),
+  onError: (err) => console.warn("[remote-host] session activity publish failed:", err),
+});
+
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(id: string) {
   const a = activity.get(id) || {};
   const cwd = ptys.get(id)?.cwd ?? null;
   // A turn just ended (waiting) → capture the reply's tail for the roster.
   if (a.waiting && cwd) refreshLastResponse(id, cwd);
+  sessionActivityPublisher.publish(id, { working: a.working ?? false, waiting: a.waiting ?? false });
   pubsub?.publish(SESSIONS_CHANNEL, {
     id,
     // The session's working dir, so the attention-sound player can pick up that
