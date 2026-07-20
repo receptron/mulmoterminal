@@ -3,6 +3,7 @@
 // (file list + patch). Mutations (push / PR) live elsewhere. All git calls reuse
 // the shared runner and never throw — a non-worktree dir is just `isWorktree:false`.
 import { git, repoRoot, defaultBaseBranch, isManagedWorktree } from "./worktrees.js";
+import { dirtyCount } from "./dirty-count.js";
 
 export interface WorktreeFile {
   path: string;
@@ -32,11 +33,6 @@ const toCount = (s: string): number => {
 async function aheadOf(cwd: string, base: string): Promise<number> {
   const res = await git(["rev-list", "--count", `${base}..HEAD`], cwd);
   return res.ok ? toCount(res.stdout) : 0;
-}
-
-async function dirtyCount(cwd: string): Promise<number> {
-  const res = await git(["status", "--porcelain"], cwd);
-  return res.ok ? res.stdout.split("\n").filter((l) => l.trim()).length : 0;
 }
 
 // Tracked changes vs base, with +/- counts (numstat: "<add>\t<del>\t<path>", "-"

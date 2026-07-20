@@ -2,9 +2,9 @@
 // and open/create a PR. PR creation prefers `gh pr create`; when gh is missing or
 // unauthed it falls back to opening the GitHub compare URL in the browser. Guarded
 // upstream by origin checks; here every command is argv-only (no shell).
-import { spawn } from "node:child_process";
 import { repoRoot, defaultBaseBranch, isManagedWorktree, git } from "./worktrees.js";
 import { resolveGithubUrl } from "./gitRemote.js";
+import { spawnCollect, type SpawnResult } from "./spawn-collect.js";
 
 type Reason = "not-worktree" | "no-branch" | "no-remote" | "no-github" | "push-failed" | "failed";
 
@@ -24,24 +24,10 @@ export interface PrResult {
 
 const DETAIL_LIMIT = 500;
 
-interface ExecResult {
-  ok: boolean;
-  stdout: string;
-  stderr: string;
-}
-
-// Like worktrees.ts' git(), but captures stderr too (push/gh errors land there) and
-// runs an arbitrary local tool (git / gh) — both fixed names from PATH, argv only.
-function run(cmd: "git" | "gh", args: string[], cwd: string): Promise<ExecResult> {
-  return new Promise((resolve) => {
-    const child = spawn(cmd, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    let stderr = "";
-    child.stdout.on("data", (c) => (stdout += c.toString()));
-    child.stderr.on("data", (c) => (stderr += c.toString()));
-    child.on("error", () => resolve({ ok: false, stdout: "", stderr: "spawn failed" }));
-    child.on("close", (code) => resolve({ ok: code === 0, stdout, stderr }));
-  });
+// worktrees.ts' git() drops stderr and only runs git; push/gh failures report via
+// stderr, so use the stderr-capturing runner, constrained to those two tools.
+function run(cmd: "git" | "gh", args: string[], cwd: string): Promise<SpawnResult> {
+  return spawnCollect(cmd, args, { cwd, errorStderr: "spawn failed" });
 }
 
 async function currentBranch(cwd: string): Promise<string | null> {

@@ -9,6 +9,7 @@
 // of the config/header layer.
 import { runGh } from "./gh.js";
 import { rollupCiState, type CiState } from "./prs.js";
+import { createTtlCache } from "./ttl-cache.js";
 
 // Ordered roughly along the lifecycle so the client can pick a colour/label per phase.
 // `none` = no PR for this branch yet (still local work); `ready` = open, CI green, no
@@ -66,11 +67,7 @@ export interface PrPhaseResult {
 
 const CACHE_TTL_MS = 30_000;
 const GH_FIELDS = "state,isDraft,reviewDecision,statusCheckRollup,url";
-interface CacheEntry {
-  result: PrPhaseResult;
-  at: number;
-}
-const cache = new Map<string, CacheEntry>();
+const cache = createTtlCache<PrPhaseResult>();
 
 export interface PrPhaseDeps {
   runGh?: typeof runGh;
@@ -102,8 +99,8 @@ export async function phaseForRepoBranch(repo: string, branch: string, deps: PrP
   const now = deps.now ?? Date.now;
   const ttlMs = deps.ttlMs ?? CACHE_TTL_MS;
   const key = `${repo}:${branch}`;
-  const hit = cache.get(key);
-  if (hit && now() - hit.at < ttlMs) return hit.result;
+  const hit = cache.get(key, now, ttlMs);
+  if (hit !== undefined) return hit;
 
   const open = await listPr(run, repo, branch, "open");
   if (!open.ok) return NONE;
@@ -114,7 +111,7 @@ export async function phaseForRepoBranch(repo: string, branch: string, deps: PrP
     pr = all.pr;
   }
   const result: PrPhaseResult = { phase: derivePrPhase(pr), url: pr?.url ?? null };
-  cache.set(key, { result, at: now() });
+  cache.set(key, result, now);
   return result;
 }
 

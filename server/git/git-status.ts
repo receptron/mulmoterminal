@@ -2,6 +2,7 @@
 // branch / dirty / ahead·behind without the user running `git status`. Reuses the
 // shared git runner and never throws — a non-repo dir is just `repo:false`.
 import { git, gitTopLevel } from "./worktrees.js";
+import { dirtyCount } from "./dirty-count.js";
 
 export interface GitStatus {
   repo: boolean;
@@ -30,11 +31,6 @@ async function currentBranch(cwd: string): Promise<{ branch: string | null; deta
   if (name) return { branch: name, detached: false };
   const head = await git(["rev-parse", "--verify", "--quiet", "HEAD"], cwd);
   return { branch: null, detached: head.ok };
-}
-
-async function dirtyCount(cwd: string): Promise<number> {
-  const res = await git(["status", "--porcelain"], cwd);
-  return res.ok ? res.stdout.split("\n").filter((l) => l.trim()).length : 0;
 }
 
 // ahead/behind vs the tracking branch. `--left-right @{upstream}...HEAD` prints
