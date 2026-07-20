@@ -38,31 +38,45 @@ parse を独立した純粋関数に切り出して直しておく。
 と同じく「純粋だからテストできる」の前例に倣う）。行が新しいエントリを始めるのは
 `NAME=` / `-NAME` の形をしている時だけとし、それ以外は直前の値の継続行として連結する。
 
-あわせて PATH の判定を `name === "PATH"` の exact match から、`sanitizePtyEnv` と共有する
-`isPathVar()` に置き換えて非対称を解消する（DRY）。
+### 4. tmux の session environment scrub → **実測により不要と判明。取り下げ**
 
-### 4. tmux の session environment が scrub されていない
+当初は「汚染されていた頃に作られた既存セッションが自前のコピーを持つので、session-environment も
+scrub すべき」と考えていた。tmux 3.6a で実測したところ、この前提が誤っていた。
 
-グローバル環境しか scrub していないため、汚染されていた頃に作られた**既存セッション内で新規に
-作られるペイン**は session-environment 経由で `PREFIX` を継承したままになる。
+使い捨てソケット（`-L mulmoterminal` には触れずに検証、後で kill-server 済み）:
 
-**方針**: scrub 処理を「対象を引数で取る」形に一般化し、グローバル → 各 `mt-` セッションの順に適用する。
+| 検証 | 結果 |
+|---|---|
+| グローバル env の非 PATH 変数 → 新規ペイン | 届く。`set-environment -g -r` での削除も効く |
+| グローバル env の `PATH` → 新規ペイン | **届かない**。global `/GLOBAL/only` + client `/CLIENT/only` で、ペインは `/CLIENT/only` を取得 |
+| 既存セッション内の新規ウィンドウ | 同上（client の PATH が勝つ） |
+| セッション env への launcher 変数のコピー | **存在しない**。`update-environment`（DISPLAY / SSH_* 等）の分だけ |
 
-留意点:
-- 既存の**ペイン**には影響しない（プロセスは環境のコピーを既に持っている）。影響するのは
-  そのセッションで**これから作られる**ペインだけで、それが本項の狙い。
-- `show-environment -t <session>` はグローバルとセッションのマージ結果を返す。したがって
-  グローバルを先に scrub してから回すこと。
-- PATH は「サニタイズで実際に変化した時だけ」書き戻す。変化が無いのに `-t` で書くと、不要な
-  セッションレベルの override を増やしてしまうため。
+稼働中の `mulmoterminal` サーバの実セッションを読み取り確認しても、session env には
+`update-environment` 由来の変数しか入っていなかった。
+
+したがって:
+
+- **session environment を scrub する必要はない**。launcher 変数がそこに入る経路が存在しない。
+  手動 split されたペインも、親ペイン（= サニタイズ済み）の環境を継承する。
+- 副産物として、#449 の **`set-environment -g PATH <sanitized>` が no-op** であることも判明した。
+  tmux は自分の env の PATH を新規ペインに適用しない。PATH が実際に直っているのは client 側、
+  つまり `spawnPty` に渡している `sanitizePtyEnv` の効果である。
+
+**方針**: session env scrub は実装しない。あわせて no-op である global PATH の書き戻しを削除し、
+「なぜここで PATH を触らないのか」を実測値つきでコメントに残す。効果のない書き込みが残っていると
+「PATH はここで面倒を見ている」と次の読者に誤読させるため。
+
+これに伴い項目 3 の「`isPathVar()` で PATH 判定を共有する」も tmux 側では不要になる
+（`isPathVar()` は `sanitizePtyEnv` 内の重複を消すために残す）。
 
 ## 実装ステップ
 
 1. `pty-env.ts`: `isLauncherPathEntry` を最終セグメント基準に書き換え、`isPathVar()` を追加してエクスポート
 2. `pty-env.spec.ts`: 親ディレクトリ名の巻き込み / 末尾セパレータ / 相対エントリの回帰テストを追加
-3. `tmux.ts`: `parseTmuxEnvironment()` を切り出してエクスポート、`scrubEnvironment(target)` に一般化、
-   グローバル + 各セッションへ適用
-4. `tmux.spec.ts`: `parseTmuxEnvironment` の単体テスト（通常 / `-NAME` / 複数行値 / 末尾改行）を追加
+3. `tmux.ts`: `parseTmuxEnvironment()` を切り出してエクスポートし、`scrubGlobalEnvironment()` は
+   launcher 変数の `-r` 削除だけを行う（PATH の書き戻しを削除）
+4. `tmux.spec.ts`: `parseTmuxEnvironment` の単体テスト（通常 / `-NAME` / 複数行値 / 末尾改行 / 空）を追加
 5. `yarn format` / `yarn lint` / `yarn build` / `yarn typecheck` / `yarn test`
 
 ## スコープ外
