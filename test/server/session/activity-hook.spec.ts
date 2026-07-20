@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects, resolveHookSessionId, shouldNotifyTaskFinished } from "../../../server/session/activity-hook.js";
+import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId } from "../../../server/session/activity-hook.js";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {
@@ -36,18 +36,49 @@ describe("activityHookEffects", () => {
   });
 });
 
-describe("shouldNotifyTaskFinished", () => {
-  it("fires on every finished turn — unlike the beep, the actively-viewed pane is NOT exempt", () => {
-    // The push takes no `active` argument by design: a Stop notifies whether or not the user
-    // is looking at that pane. This regression-guards against re-adding an active-pane gate.
-    expect(shouldNotifyTaskFinished("Stop")).toBe(true);
+describe("pushKindFor", () => {
+  // A finished turn and a blocked one both reach the phone, and mean different things.
+  it("maps a finished turn to 'finished'", () => {
+    expect(pushKindFor("Stop")).toBe("finished");
   });
 
-  it("does not fire on non-Stop events (a paused turn / prompt / tool use is not a finish)", () => {
-    expect(shouldNotifyTaskFinished("Notification")).toBe(false);
-    expect(shouldNotifyTaskFinished("UserPromptSubmit")).toBe(false);
-    expect(shouldNotifyTaskFinished("PreToolUse")).toBe(false);
-    expect(shouldNotifyTaskFinished("SessionStart")).toBe(false);
+  // The one this feature adds: a paused turn is where the user can actually help.
+  it("maps a paused turn (Notification) to 'waiting'", () => {
+    expect(pushKindFor("Notification")).toBe("waiting");
+  });
+
+  it("is null for events that are neither a finish nor a block", () => {
+    expect(pushKindFor("UserPromptSubmit")).toBeNull();
+    expect(pushKindFor("PreToolUse")).toBeNull();
+    expect(pushKindFor("SessionStart")).toBeNull();
+  });
+});
+
+describe("buildPushText", () => {
+  const limits = { title: 80, body: 160 };
+
+  it("marks a finished turn with a check and shows the prompt", () => {
+    const { title, body } = buildPushText("finished", "myrepo", "fix the parser", "", limits);
+    expect(title).toBe("\u2705 myrepo");
+    expect(body).toBe("fix the parser");
+  });
+
+  it("marks a waiting turn with a question and quotes the hook's message", () => {
+    const { title, body } = buildPushText("waiting", "myrepo", "fix the parser", "Claude needs permission to run Bash", limits);
+    expect(title).toBe("\u2753 myrepo");
+    // The message (what it is blocked ON) beats the prompt — that is what the user answers.
+    expect(body).toBe("Claude needs permission to run Bash");
+  });
+
+  it("falls back to the prompt, then a default, when a waiting hook carries no message", () => {
+    expect(buildPushText("waiting", "myrepo", "fix the parser", "", limits).body).toBe("fix the parser");
+    expect(buildPushText("waiting", "myrepo", "", "  ", limits).body).toBe("\u5165\u529b\u5f85\u3061\u3067\u3059");
+  });
+
+  it("clips title and body to the limits", () => {
+    const { title, body } = buildPushText("finished", "d".repeat(200), "p".repeat(400), "", limits);
+    expect(title).toHaveLength(80);
+    expect(body).toHaveLength(160);
   });
 });
 
