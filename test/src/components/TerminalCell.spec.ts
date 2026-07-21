@@ -130,7 +130,7 @@ describe("TerminalCell", () => {
   it("launches in the dir typed in the form and sends it to the terminal", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
     await w.find(".cell-dir-input").setValue("/home/me/picked");
     await w.find(".cell-dir-input").trigger("keydown.enter");
     const term = w.findComponent({ name: "TerminalView" });
@@ -178,11 +178,11 @@ describe("TerminalCell", () => {
   it("shows a cancel ✕ on a cancellable launcher that emits close, but not otherwise", async () => {
     const plain = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect(plain.find(".cell-launch-cancel").exists()).toBe(false);
+    expect(plain.find('[data-testid="cell-launch-cancel"]').exists()).toBe(false);
 
     const w = mountCell(null, { defaultCwd: "/home/me/default", cancellable: true });
     await flushPromises();
-    await w.find(".cell-launch-cancel").trigger("click");
+    await w.find('[data-testid="cell-launch-cancel"]').trigger("click");
     expect(w.emitted("close")).toHaveLength(1);
   });
 
@@ -190,9 +190,9 @@ describe("TerminalCell", () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    const item = w.find(".cell-resume-item");
+    const item = w.find('[data-testid="cell-resume-item"]');
     expect(item.exists()).toBe(true);
-    expect(item.find(".ri-title").text()).toBe("fix the parser");
+    expect(item.find('[data-testid="ri-title"]').text()).toBe("fix the parser");
     await item.trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
@@ -208,11 +208,11 @@ describe("TerminalCell", () => {
     ]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    const items = w.findAll(".cell-resume-item");
+    const items = w.findAll('[data-testid="cell-resume-item"]');
     expect(items[0].classes()).toContain("is-open");
-    expect(items[0].find(".ri-open").exists()).toBe(true);
+    expect(items[0].find('[data-testid="ri-open"]').exists()).toBe(true);
     expect(items[1].classes()).not.toContain("is-open");
-    expect(items[1].find(".ri-open").exists()).toBe(false);
+    expect(items[1].find('[data-testid="ri-open"]').exists()).toBe(false);
   });
 
   it("confirms before resuming a session open elsewhere, and bails on cancel", async () => {
@@ -221,7 +221,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
     confirmSpy.mockRestore();
@@ -233,7 +233,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(openId);
     confirmSpy.mockRestore();
@@ -245,7 +245,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: ["other-id"] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(id);
     confirmSpy.mockRestore();
@@ -261,7 +261,7 @@ describe("TerminalCell", () => {
     );
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    const items = w.findAll(".cell-script-item");
+    const items = w.findAll('[data-testid="cell-script-item"]');
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Build");
     await items[0].trigger("click");
@@ -287,7 +287,7 @@ describe("TerminalCell", () => {
   it("shows no resume list when the dir has no sessions", async () => {
     const w = mountCell(null);
     await flushPromises();
-    expect(w.find(".cell-resume").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-resume"]').exists()).toBe(false);
   });
 
   it("ignores an out-of-order session-list response (keeps the latest dir's rows)", async () => {
@@ -310,7 +310,7 @@ describe("TerminalCell", () => {
     first.resolve({ ok: true, json: async () => ({ cwd: "/A", sessions: [{ id: "a-id", title: "A-sess", mtime: 1 }] }) });
     await flushPromises();
 
-    expect(w.findAll(".ri-title").map((x) => x.text())).toEqual(["B-sess"]);
+    expect(w.findAll('[data-testid="ri-title"]').map((x) => x.text())).toEqual(["B-sess"]);
   });
 
   it("resumes with the resolved cwd from the API, not the typed input", async () => {
@@ -322,7 +322,7 @@ describe("TerminalCell", () => {
 
     const w = mountCell(null, { defaultCwd: "/typed" });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(w.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/resolved");
   });
 
@@ -438,7 +438,7 @@ describe("TerminalCell", () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
     expect(w.emitted("record-cwd")).toBeUndefined();
@@ -454,7 +454,7 @@ describe("TerminalCell", () => {
     await w.find(".cell-dir-input").trigger("keydown.enter"); // flag = true, no cwd yet
     await w.find(".cell-close").trigger("click"); // teardown must clear the flag
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click"); // resume an existing session
+    await w.find('[data-testid="cell-resume-item"]').trigger("click"); // resume an existing session
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
     expect(w.emitted("record-cwd")).toBeUndefined();
@@ -492,7 +492,7 @@ describe("TerminalCell", () => {
     await w.find(".cell-dir-input").trigger("keydown.enter");
     await w.find(".cell-close").trigger("click");
     await nextTick();
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
     expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/default");
   });
 
@@ -812,7 +812,7 @@ describe("TerminalCell", () => {
     mockFetchWithWorktrees([{ path: "/wt/fix-login", branch: "agent/fix-login", task: "fix-login", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-worktrees").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-worktrees"]').exists()).toBe(true);
     const rows = w.findAll('[data-testid="worktree-reuse"]');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain("fix-login");
@@ -822,15 +822,15 @@ describe("TerminalCell", () => {
     mockFetch(); // default mock reports no isGit
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    expect(w.find(".cell-worktrees").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-worktrees"]').exists()).toBe(false);
   });
 
   it("creates a worktree for the typed task and launches claude in it", async () => {
     const posts = mockFetchWithWorktrees([], { path: "/wt/fix-login", branch: "agent/fix-login" });
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-task").setValue("fix login");
-    await w.find(".wt-start").trigger("click");
+    await w.find('[data-testid="wt-task"]').setValue("fix login");
+    await w.find('[data-testid="wt-start"]').trigger("click");
     await flushPromises();
     const create = posts.find((p) => p.url.includes("/api/worktrees/create"));
     if (!create) throw new Error("create not called");
@@ -854,7 +854,7 @@ describe("TerminalCell", () => {
     const posts = mockFetchWithWorktrees([{ path: "/wt/done", branch: "agent/done", task: "done", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-del").trigger("click");
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
     if (!remove) throw new Error("remove not called");
@@ -866,8 +866,8 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".wt-dirty").exists()).toBe(true); // the ● uncommitted-changes marker
-    await w.find(".wt-del").trigger("click");
+    expect(w.find('[data-testid="wt-dirty"]').exists()).toBe(true); // the ● uncommitted-changes marker
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     expect(confirmSpy).toHaveBeenCalled();
     const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
@@ -881,7 +881,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-del").trigger("click");
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
     confirmSpy.mockRestore();
@@ -915,10 +915,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
 
-    const badge = w.find(".cell-wt-badge");
+    const badge = w.find('[data-testid="cell-wt-badge"]');
     expect(badge.exists()).toBe(true);
-    expect(badge.find(".wt-ahead").text()).toBe("+3");
-    expect(badge.find(".wt-dirty-count").text()).toBe("●2");
+    expect(badge.find('[data-testid="wt-ahead"]').text()).toBe("+3");
+    expect(badge.find('[data-testid="wt-dirty-count"]').text()).toBe("●2");
 
     expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // panel closed initially
     await badge.trigger("click");
@@ -936,14 +936,14 @@ describe("TerminalCell", () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 0, dirty: 0, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("never shows the diff badge for a non-worktree cell", async () => {
     mockFetchWithDiff({ isWorktree: false, base: null, ahead: 9, dirty: 9, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: "/home/me/regular-proj" });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("bootstraps the diff badge when RESUMING an idle worktree session", async () => {
@@ -956,21 +956,21 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(null, { defaultCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click"); // resume the idle worktree session
+    await w.find('[data-testid="cell-resume-item"]').trigger("click"); // resume the idle worktree session
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true);
-    expect(w.find(".wt-ahead").text()).toBe("+2");
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true);
+    expect(w.find('[data-testid="wt-ahead"]').text()).toBe("+2");
   });
 
   it("clears the diff badge when the cwd falls back to a non-worktree dir", async () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 3, dirty: 1, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true);
     // server confirms a different, non-worktree dir → badge must not linger
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/plain-proj");
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("auto-closes the open diff panel when the cwd leaves the worktree (no empty overlay)", async () => {
@@ -985,7 +985,7 @@ describe("TerminalCell", () => {
     });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     // leaving the worktree clears `diff`; the panel must not linger as an empty overlay
@@ -998,7 +998,7 @@ describe("TerminalCell", () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 2, dirty: 0, files: [], patch: "x", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click"); // user opens the panel
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click"); // user opens the panel
     await flushPromises();
     expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
 
@@ -1009,7 +1009,7 @@ describe("TerminalCell", () => {
 
     term.vm.$emit("cwd", WT_CWD); // re-enter a worktree
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true); // badge returns…
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true); // badge returns…
     expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // …but the panel stays closed until clicked
   });
 
@@ -1017,7 +1017,7 @@ describe("TerminalCell", () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 1, dirty: 0, files: [], patch: "x", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // focus may be on the badge/terminal
@@ -1042,7 +1042,7 @@ describe("TerminalCell", () => {
     // the stale worktree diff now resolves — it must not repopulate the badge
     diffFetch.resolve({ ok: true, json: async () => ({ isWorktree: true, base: "main", ahead: 5, dirty: 5, files: [], patch: "", truncated: false }) });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   // Slice 2 — push / open-PR actions in the diff panel footer.
@@ -1069,7 +1069,7 @@ describe("TerminalCell", () => {
     truncated: false,
   });
   const openPanel = async (w: ReturnType<typeof mountCell>) => {
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
   };
 
@@ -1278,7 +1278,7 @@ describe("TerminalCell", () => {
     await w.find(".cell-close").trigger("click");
     await nextTick();
     expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
-    expect(w.find(".cell-launch").exists()).toBe(true); // torn down to the launcher
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true); // torn down to the launcher
   });
 
   it("Keep worktree tears the cell down WITHOUT removing the room", async () => {
@@ -1289,7 +1289,7 @@ describe("TerminalCell", () => {
     await w.find('[data-testid="ccx-keep"]').trigger("click");
     await flushPromises();
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
   });
 
   it("Remove worktree posts a forced remove (path+repoDir = the worktree) then closes", async () => {
@@ -1303,7 +1303,7 @@ describe("TerminalCell", () => {
     const rm = posts.find((p) => p.url.includes("/api/worktrees/remove"));
     if (!rm) throw new Error("remove not called");
     expect(JSON.parse(rm.body)).toMatchObject({ repoDir: WT_CWD, path: WT_CWD, deleteBranch: true, force: true });
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
   });
 
   it("holds Remove (Checking…) until the fresh diff load completes", async () => {
@@ -1344,7 +1344,7 @@ describe("TerminalCell", () => {
     await w.find('[data-testid="ccx-remove"]').trigger("click");
     await flushPromises();
     expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true); // NOT torn down
-    expect(w.find(".cell-launch").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(false);
     expect(w.find('[data-testid="ccx-warn"]').text()).toContain("Couldn't remove");
   });
 

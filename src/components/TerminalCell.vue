@@ -909,12 +909,13 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <button
                 v-else-if="chip.builtin === 'diff' && showDiffBadge && diff"
                 type="button"
-                class="cell-wt-badge"
+                data-testid="cell-wt-badge"
+                class="inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-[10px] border border-border bg-elevated px-[7px] py-px font-mono text-[11px] hover:bg-hover"
                 :title="`View changes vs ${diff.base ?? 'base'}`"
                 @click="openDiff"
               >
-                <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-                <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+                <span v-if="diff.ahead > 0" data-testid="wt-ahead" class="text-accent">+{{ diff.ahead }}</span>
+                <span v-if="diff.dirty > 0" data-testid="wt-dirty-count" class="text-[var(--warn-text,#e0a030)]">●{{ diff.dirty }}</span>
               </button>
               <ModelContextBadge v-else-if="chip.builtin === 'ctx' && context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
               <span v-else-if="chip.builtin === 'usage' && showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
@@ -1145,11 +1146,19 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         </div>
       </div>
     </template>
-    <div v-else class="cell-launch">
-      <button v-if="cancellable" type="button" class="cell-launch-cancel" title="Cancel new terminal" aria-label="Cancel new terminal" @click="emit('close')">
+    <div v-else data-testid="cell-launch" class="flex min-h-0 flex-1 flex-col items-center justify-start gap-2 overflow-y-auto p-4">
+      <button
+        v-if="cancellable"
+        type="button"
+        data-testid="cell-launch-cancel"
+        class="absolute right-1.5 top-1.5 inline-flex h-[26px] w-7 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-[16px] leading-none text-secondary hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+        title="Cancel new terminal"
+        aria-label="Cancel new terminal"
+        @click="emit('close')"
+      >
         ✕
       </button>
-      <div v-if="presets.length" class="cell-presets">
+      <div v-if="presets.length" class="flex max-w-[360px] flex-wrap justify-center gap-1.5">
         <span
           v-for="p in presets"
           :key="p.label + p.path"
@@ -1202,11 +1211,11 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
         </span>
       </div>
-      <div class="cell-agent" role="radiogroup" aria-label="Agent">
+      <div class="inline-flex gap-0.5 self-start rounded-[7px] border border-border bg-deep p-0.5" role="radiogroup" aria-label="Agent">
         <button
           type="button"
-          class="cell-agent-btn"
-          :class="{ active: agent === 'claude' }"
+          class="cursor-pointer rounded-[5px] border-none px-3.5 py-1 font-sans text-[12px] font-medium"
+          :class="agent === 'claude' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="agent === 'claude'"
           @click="agent = 'claude'"
@@ -1215,8 +1224,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         </button>
         <button
           type="button"
-          class="cell-agent-btn"
-          :class="{ active: agent === 'codex' }"
+          class="cursor-pointer rounded-[5px] border-none px-3.5 py-1 font-sans text-[12px] font-medium"
+          :class="agent === 'codex' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="agent === 'codex'"
           @click="agent = 'codex'"
@@ -1224,8 +1233,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           Codex
         </button>
       </div>
-      <label class="cell-launch-label">
-        <span class="cell-launch-caption">Working directory</span>
+      <label class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">Working directory</span>
         <span class="cell-dir-row">
           <input
             v-model="dirInput"
@@ -1257,57 +1266,94 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
         </span>
       </label>
-      <div v-if="isGitRepo" class="cell-worktrees">
-        <span class="cell-launch-caption">or isolate in a worktree (git repo)</span>
-        <div class="wt-new">
+      <div v-if="isGitRepo" data-testid="cell-worktrees" class="flex w-full max-w-[360px] flex-col items-stretch gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or isolate in a worktree (git repo)</span>
+        <div class="flex gap-1.5">
           <input
             v-model="worktreeTask"
-            class="cell-dir-input wt-task"
+            data-testid="wt-task"
+            class="cell-dir-input w-auto min-w-0 flex-auto"
             type="text"
             placeholder="task name (e.g. fix-login)"
             aria-label="Worktree task name"
             spellcheck="false"
             @keydown.enter="createWorktreeAndLaunch"
           />
-          <button class="cell-start wt-start" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">＋ New worktree</button>
+          <button data-testid="wt-start" class="cell-start flex-none whitespace-nowrap" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">
+            ＋ New worktree
+          </button>
         </div>
-        <div v-for="w in worktrees" :key="w.path" class="wt-row">
+        <div v-for="w in worktrees" :key="w.path" class="flex items-center gap-1.5">
           <button
             class="flex-auto min-w-0 text-left rounded-md border border-border bg-elevated text-secondary cursor-pointer font-mono text-[12px] py-[5px] px-2.5 truncate hover:bg-hover hover:text-fg"
             data-testid="worktree-reuse"
             :title="w.branch ?? w.path"
             @click="reuseWorktree(w)"
           >
-            ⎇ {{ w.task }}<span v-if="w.dirty" class="wt-dirty" title="uncommitted changes">●</span>
+            ⎇ {{ w.task }}<span v-if="w.dirty" data-testid="wt-dirty" class="ml-1.5 text-[var(--warn-text,#e0a030)]" title="uncommitted changes">●</span>
           </button>
-          <button class="wt-del" title="Remove worktree" aria-label="Remove worktree" @click="removeWorktree(w)">🗑</button>
+          <button
+            data-testid="wt-del"
+            class="flex-none cursor-pointer rounded-md border-none bg-transparent px-1.5 py-1 text-[13px] hover:bg-[var(--err-hover-bg)]"
+            title="Remove worktree"
+            aria-label="Remove worktree"
+            @click="removeWorktree(w)"
+          >
+            🗑
+          </button>
         </div>
       </div>
-      <div v-if="scripts.length" class="cell-scripts">
-        <span class="cell-launch-caption">or run a script</span>
-        <div class="cell-script-list">
-          <button v-for="s in scripts" :key="s.index" class="cell-script-item" :title="s.command" @click="runScript(s)">▶ {{ s.label }}</button>
+      <div v-if="scripts.length" class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or run a script</span>
+        <div class="flex w-full flex-wrap justify-center gap-1.5">
+          <button
+            v-for="s in scripts"
+            :key="s.index"
+            data-testid="cell-script-item"
+            class="cursor-pointer rounded-[14px] border border-[#2a4e3a] bg-[#16271d] px-2.5 py-1 font-sans text-[12px] text-[#b6e3c7] hover:border-[#3fae6b] hover:bg-[#1f3a2a] hover:text-white"
+            :title="s.command"
+            @click="runScript(s)"
+          >
+            ▶ {{ s.label }}
+          </button>
         </div>
       </div>
-      <div v-if="launchers && launchers.length" class="cell-scripts">
-        <span class="cell-launch-caption">or launch</span>
-        <div class="cell-script-list">
-          <button v-for="(l, i) in launchers" :key="l.label" class="cell-script-item" :title="l.command" @click="launchProgram(i, l)">⌘ {{ l.label }}</button>
+      <div v-if="launchers && launchers.length" class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or launch</span>
+        <div class="flex w-full flex-wrap justify-center gap-1.5">
+          <button
+            v-for="(l, i) in launchers"
+            :key="l.label"
+            data-testid="cell-script-item"
+            class="cursor-pointer rounded-[14px] border border-[#2a4e3a] bg-[#16271d] px-2.5 py-1 font-sans text-[12px] text-[#b6e3c7] hover:border-[#3fae6b] hover:bg-[#1f3a2a] hover:text-white"
+            :title="l.command"
+            @click="launchProgram(i, l)"
+          >
+            ⌘ {{ l.label }}
+          </button>
         </div>
       </div>
-      <div v-if="resumable.length" class="cell-resume">
-        <span class="cell-launch-caption">or resume here</span>
-        <div class="cell-resume-list">
+      <div v-if="resumable.length" data-testid="cell-resume" class="flex min-h-0 w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or resume here</span>
+        <div class="flex w-full flex-col gap-1">
           <button
             v-for="s in resumable"
             :key="s.id"
-            :class="['cell-resume-item', { 'is-open': sessionOpenElsewhere(s.id) }]"
+            data-testid="cell-resume-item"
+            class="flex cursor-pointer items-baseline justify-between gap-2 rounded-md border bg-deep px-2.5 py-[5px] text-left font-sans text-[12px] text-secondary hover:border-accent hover:bg-elevated"
+            :class="[{ 'is-open': sessionOpenElsewhere(s.id) }, sessionOpenElsewhere(s.id) ? 'border-amber' : 'border-border']"
             :title="sessionOpenElsewhere(s.id) ? `${s.title} — already open in another terminal` : s.title"
             @click="resume(s)"
           >
-            <span class="ri-title">{{ s.title }}</span>
-            <span v-if="sessionOpenElsewhere(s.id)" class="ri-open" title="Already open in another terminal">● open</span>
-            <span class="ri-time">{{ relativeTime(s.mtime) }}</span>
+            <span data-testid="ri-title" class="truncate">{{ s.title }}</span>
+            <span
+              v-if="sessionOpenElsewhere(s.id)"
+              data-testid="ri-open"
+              class="flex-none whitespace-nowrap text-[11px] text-amber"
+              title="Already open in another terminal"
+              >● open</span
+            >
+            <span class="flex-none text-[11px] text-dim">{{ relativeTime(s.mtime) }}</span>
           </button>
         </div>
       </div>
@@ -1462,93 +1508,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   align-items: center;
   gap: 8px;
 }
-/* Empty cell: pick a directory, then launch. */
-.cell-launch {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Top-aligned: the form anchors to the top of the cell rather than floating in
-     the vertical middle (which looks adrift when there are few/no resume rows). */
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 16px;
-  overflow-y: auto;
-}
-/* Dismiss an added launcher (anchored to the cell, so it stays put while the form
-   scrolls). */
-.cell-launch-cancel {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-launch-cancel:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
-.cell-presets {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  max-width: 360px;
-}
-.cell-launch-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.cell-launch-caption {
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.cell-agent {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-deep);
-  align-self: flex-start;
-}
-.cell-agent-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 14px;
-  border-radius: 5px;
-}
-.cell-agent-btn:hover {
-  color: var(--text);
-}
-.cell-agent-btn.active {
-  background: var(--bg-elevated);
-  color: var(--text);
-}
 .cell-dir-input {
   width: 100%;
   box-sizing: border-box;
@@ -1595,157 +1554,5 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 .cell-start:hover {
   background: var(--bg-hover);
   color: var(--text);
-}
-
-.cell-worktrees {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.wt-new {
-  display: flex;
-  gap: 6px;
-}
-.wt-task {
-  flex: 1 1 auto;
-  min-width: 0; /* let the input shrink so the button keeps its width */
-  width: auto;
-}
-.wt-start {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.wt-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.wt-dirty {
-  margin-left: 6px;
-  color: var(--warn-text, #e0a030);
-}
-.wt-del {
-  flex: 0 0 auto;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 4px 6px;
-  border-radius: 6px;
-}
-.wt-del:hover {
-  background: var(--err-hover-bg);
-}
-
-.cell-scripts {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.cell-script-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-}
-.cell-script-item {
-  border: 1px solid #2a4e3a;
-  background: #16271d;
-  color: #b6e3c7;
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 14px;
-}
-.cell-script-item:hover {
-  background: #1f3a2a;
-  border-color: #3fae6b;
-  color: #fff;
-}
-
-.cell-resume {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-  min-height: 0;
-}
-.cell-resume-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-.cell-resume-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-deep);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  text-align: left;
-  padding: 5px 10px;
-  border-radius: 6px;
-}
-.cell-resume-item:hover {
-  background: var(--bg-elevated);
-  border-color: var(--accent);
-}
-.ri-title {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.ri-time {
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-.cell-resume-item.is-open {
-  border-color: var(--amber);
-}
-.ri-open {
-  flex: 0 0 auto;
-  color: var(--amber);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-/* Worktree diff badge in the header (ahead / uncommitted), opens the diff panel. */
-.cell-wt-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 1px 7px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  cursor: pointer;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-}
-.cell-wt-badge:hover {
-  background: var(--bg-hover);
-}
-.wt-ahead {
-  color: var(--accent);
-}
-.wt-dirty-count {
-  color: var(--warn-text, #e0a030);
 }
 </style>
