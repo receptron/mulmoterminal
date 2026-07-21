@@ -1150,30 +1150,50 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         ✕
       </button>
       <div v-if="presets.length" class="cell-presets">
-        <span v-for="p in presets" :key="p.label + p.path" :class="['cell-chip', { 'is-running': isCwdRunning(p.path) }]">
+        <span
+          v-for="p in presets"
+          :key="p.label + p.path"
+          data-testid="cell-chip"
+          class="inline-flex items-stretch overflow-hidden rounded-[14px] border"
+          :class="[
+            { 'is-running': isCwdRunning(p.path) },
+            isCwdRunning(p.path)
+              ? 'border-[color-mix(in_srgb,#3b82f6_55%,var(--border))] bg-[color-mix(in_srgb,#3b82f6_14%,var(--bg-elevated))]'
+              : 'border-border bg-elevated',
+          ]"
+        >
           <button
             type="button"
-            class="cell-chip-main"
+            data-testid="cell-chip-main"
+            class="cursor-pointer border-none bg-transparent px-2.5 py-1 font-sans text-[12px] hover:bg-hover hover:text-fg"
+            :class="isCwdRunning(p.path) ? 'text-fg' : 'text-secondary'"
             :title="p.path"
             :aria-label="`Use ${p.label} — fill the field to browse / resume here (without launching)`"
             @click="fillDir(p.path)"
           >
-            <span v-if="isCwdRunning(p.path)" class="cell-chip-dot" aria-hidden="true" />{{ p.label }}
+            <span
+              v-if="isCwdRunning(p.path)"
+              data-testid="cell-chip-dot"
+              class="mr-[5px] inline-block h-1.5 w-1.5 rounded-full bg-[#3b82f6] align-middle"
+              aria-hidden="true"
+            />{{ p.label }}
           </button>
           <button
             type="button"
-            class="cell-chip-launch"
+            data-testid="cell-chip-launch"
+            class="inline-flex cursor-pointer items-center border-0 border-l border-l-border bg-transparent px-[5px] text-secondary hover:bg-hover hover:text-fg"
             :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : `Launch a new terminal in ${p.path} now`"
             :aria-label="
               isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : `Launch a new terminal in ${p.label} now`
             "
             @click="selectPreset(p)"
           >
-            <span class="material-symbols-outlined">play_arrow</span>
+            <span class="material-symbols-outlined text-[14px]">play_arrow</span>
           </button>
           <button
             type="button"
-            class="cell-chip-del"
+            data-testid="cell-chip-del"
+            class="cursor-pointer border-0 border-l border-l-border bg-transparent px-[7px] text-[11px] text-secondary hover:bg-hover hover:text-[var(--danger,#e5484d)]"
             :title="`Remove ${p.path} from the list`"
             :aria-label="`Remove ${p.path} from the list`"
             @click="emit('remove-preset', p.path)"
@@ -1233,7 +1253,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             aria-label="Start a new terminal here"
             @click="launch"
           >
-            <span class="material-symbols-outlined">play_arrow</span>
+            <span class="material-symbols-outlined text-[14px]">play_arrow</span>
           </button>
         </span>
       </label>
@@ -1485,73 +1505,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   justify-content: center;
   gap: 6px;
   max-width: 360px;
-}
-/* A chip is a segmented pill: the main button launches; the tiny end button just
-   fills the working-directory field (so the user can resume a session there). */
-.cell-chip {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--bg-elevated);
-}
-/* A dir already running a session in another cell: tint the chip + show a dot. */
-.cell-chip.is-running {
-  border-color: color-mix(in srgb, #3b82f6 55%, var(--border));
-  background: color-mix(in srgb, #3b82f6 14%, var(--bg-elevated));
-}
-.cell-chip-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: #3b82f6;
-  vertical-align: middle;
-}
-.cell-chip-main {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 10px;
-}
-.cell-chip.is-running .cell-chip-main {
-  color: var(--text);
-}
-.cell-chip-launch {
-  display: inline-flex;
-  align-items: center;
-  border: none;
-  border-left: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0 5px;
-}
-.cell-chip-launch .material-symbols-outlined {
-  font-size: 14px;
-}
-.cell-chip-del {
-  border: none;
-  border-left: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 0 7px;
-}
-.cell-chip-main:hover,
-.cell-chip-launch:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-chip-del:hover {
-  background: var(--bg-hover);
-  color: var(--danger, #e5484d);
 }
 .cell-launch-label {
   display: flex;
