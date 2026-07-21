@@ -60,6 +60,20 @@ export function parseScheduledSessions(raw: unknown, isValidId: (id: string) => 
   return records;
 }
 
+/** Fold what is on disk into our own records. Several mulmoterminal instances share
+ *  ~/.mulmoterminal (the user runs multiple clones, and the worklog flag lives in the
+ *  shared config), so a plain overwrite would erase the other instance's ids — and an id
+ *  nobody has on file is an id nobody reaps after a restart. Ids this process already
+ *  reaped are never resurrected, or a peer's stale copy would keep re-adding them. */
+export function mergeScheduledSessions(
+  onDisk: readonly ScheduledSessionRecord[],
+  ours: readonly ScheduledSessionRecord[],
+  reaped: ReadonlySet<string>,
+): ScheduledSessionRecord[] {
+  const known = new Set(ours.map((record) => record.id));
+  return [...ours, ...onDisk.filter((record) => !known.has(record.id) && !reaped.has(record.id))];
+}
+
 export interface ScheduledSessionRegistryDeps {
   file: string;
   isValidId: (id: string) => boolean;
@@ -84,16 +98,22 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
   const policy = deps.policy ?? SCHEDULED_SESSION_RETENTION;
   const now = deps.now ?? Date.now;
   let records: ScheduledSessionRecord[] = [];
+  const reaped = new Set<string>();
+
+  const readPersisted = async (): Promise<ScheduledSessionRecord[]> => {
+    try {
+      return parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
+    } catch {
+      return []; // no file yet / unreadable => nothing to fold in
+    }
+  };
 
   const hydrated: Promise<void> = (async () => {
-    try {
-      records = parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
-    } catch {
-      // no file yet / unreadable => start empty
-    }
+    records = await readPersisted();
   })();
 
   const persist = async (): Promise<void> => {
+    records = mergeScheduledSessions(await readPersisted(), records, reaped);
     await fs.mkdir(path.dirname(deps.file), { recursive: true });
     await fs.writeFile(deps.file, JSON.stringify(records));
   };
@@ -103,6 +123,7 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
   const evict = (record: ScheduledSessionRecord): void => {
     deps.reapSession(record.id);
     if (deps.hasTmux(record.id)) deps.killTmux(record.id);
+    reaped.add(record.id);
   };
 
   const runSweep = async (): Promise<void> => {

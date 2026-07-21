@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createScheduledSessionRegistry,
+  mergeScheduledSessions,
   parseScheduledSessions,
   selectExpiredScheduledSessions,
   SCHEDULED_SESSION_RETENTION,
@@ -103,6 +104,31 @@ describe("parseScheduledSessions", () => {
 
   it("returns [] for an empty array", () => {
     expect(parseScheduledSessions([], anyId)).toEqual([]);
+  });
+});
+
+describe("mergeScheduledSessions", () => {
+  const none = new Set<string>();
+
+  it("keeps ids another instance wrote while the file was ours to update", () => {
+    expect(mergeScheduledSessions([at(1, "theirs")], [at(2, "ours")], none)).toEqual([at(2, "ours"), at(1, "theirs")]);
+  });
+
+  it("prefers our own record for an id present on both sides", () => {
+    const ours = { id: "same", createdAt: 200 };
+    expect(mergeScheduledSessions([{ id: "same", createdAt: 100 }], [ours], none)).toEqual([ours]);
+  });
+
+  it("never resurrects an id this process already reaped", () => {
+    expect(mergeScheduledSessions([at(1, "gone")], [], new Set(["gone"]))).toEqual([]);
+  });
+
+  it("returns our records unchanged when the file is empty", () => {
+    expect(mergeScheduledSessions([], [at(1, "ours")], none)).toEqual([at(1, "ours")]);
+  });
+
+  it("adopts the file's records when we hold none", () => {
+    expect(mergeScheduledSessions([at(1, "theirs")], [], none)).toEqual([at(1, "theirs")]);
   });
 });
 
@@ -227,6 +253,38 @@ describe("createScheduledSessionRegistry", () => {
     await r.sweep();
     expect(reapSession).not.toHaveBeenCalled();
     expect(killTmux).not.toHaveBeenCalled();
+  });
+
+  // The user runs several clones sharing ~/.mulmoterminal, so two servers write this file.
+  it("does not erase the ids a concurrent instance wrote", async () => {
+    // The peer starts FIRST, so it hydrates before the other instance's id exists — the
+    // exact window where a plain overwrite would drop that id and its session would leak.
+    const peer = registry();
+    await peer.sweep();
+
+    const mine = registry();
+    mine.register("s1");
+    await mine.sweep();
+
+    peer.register("s2");
+    await peer.sweep();
+
+    expect((await readFile()).map((rec: ScheduledSessionRecord) => rec.id).sort()).toEqual(["s1", "s2"]);
+  });
+
+  it("does not re-adopt an id it reaped just because a peer's copy is still on file", async () => {
+    const mine = registry();
+    mine.register("s1");
+    clockMs += 25 * HOUR;
+    await mine.sweep();
+    expect(await readFile()).toEqual([]);
+
+    // A peer that never noticed writes its stale copy back.
+    await fs.writeFile(file, JSON.stringify([{ id: "s1", createdAt: clockMs - 25 * HOUR }]));
+    mine.register("s2");
+    await mine.sweep();
+    expect((await readFile()).map((rec: ScheduledSessionRecord) => rec.id)).toEqual(["s2"]);
+    expect(reapSession).toHaveBeenCalledExactlyOnceWith("s1");
   });
 
   it("starts empty when the file is missing", async () => {
