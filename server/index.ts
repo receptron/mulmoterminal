@@ -29,6 +29,7 @@ import {
   tmuxKillSession,
   tmuxListSessionIds,
   tmuxPaneCommand,
+  tmuxAttachedClientCount,
   tmuxCapturePane,
   isResumableTmuxSession,
 } from "./infra/tmux.js";
@@ -56,6 +57,8 @@ import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
+import { reapDecisionFor } from "./session/reap-policy.js";
+import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./agents/codex-args.js";
@@ -677,7 +680,8 @@ function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
 // that's actively thinking (`working`) is never reaped — that's "clearly working,
 // don't close it". One that needs the user (`waiting`) gets the long grace. A
 // genuinely idle session (finished AND already viewed, so neither flag) gets the
-// short grace — that's the "auto-close inactive ones" behaviour.
+// short grace — that's the "auto-close inactive ones" behaviour. The ordering rule
+// lives in reapDecisionFor (pure/tested).
 function armReapForDetached(id: string) {
   const entry = ptys.get(id);
   if (!entry || entry.ws) return; // still attached: nothing to reap
@@ -685,12 +689,12 @@ function armReapForDetached(id: string) {
   // last arm, and a stale short timer must not survive to reap a session that now
   // needs the user. cancelReap clears it so scheduleReap re-arms with the right grace.
   cancelReap(id);
-  const a = activity.get(id);
-  if (a?.working) {
+  const decision = reapDecisionFor(activity.get(id), { idleMs: REAP_GRACE_MS, waitingMs: WAIT_REAP_GRACE_MS });
+  if (decision.kind === "keep") {
     console.log(`[pty] keeping working session ${id} alive (detached)`);
     return;
   }
-  scheduleReap(id, a?.waiting ? WAIT_REAP_GRACE_MS : REAP_GRACE_MS);
+  scheduleReap(id, decision.delayMs);
 }
 
 function reap(id: string) {
@@ -1991,10 +1995,39 @@ startCollectionCompletionWatchers().catch((err) => {
 // and spawn a NEW chat seeded with the task's prompt (e.g. the workout-log weekly
 // nudge). The run-binding spawns a VISIBLE session so the user sees the result.
 // Non-fatal: a scheduler failure must never abort startup.
+//
+// Nobody ever presses ✕ on a scheduled session, and one blocked on a permission prompt
+// never finishes a turn, so the hook-driven reap can miss it entirely — hence the
+// registry, which bounds them by count and age whatever their hooks did (#541).
+
+// Would killing this session take it away from someone? Two answers are needed: our own
+// viewer (a local fact) and any OTHER server process holding it, which only tmux can tell
+// us — see heldByAnotherProcess for the arithmetic.
+function scheduledSessionInUse(id: string): boolean {
+  const entry = ptys.get(id);
+  if (entry?.ws) return true; // our own user is looking at it
+  return heldByAnotherProcess(tmuxAttachedClientCount(id), !!entry);
+}
+
+const scheduledSessions = createScheduledSessionRegistry({
+  dir: scheduledSessionsDir(CLAUDE_CWD, MULMOTERMINAL_HOME),
+  isValidId: (id) => SESSION_ID_RE.test(id),
+  isInUse: scheduledSessionInUse,
+  reapSession: reap,
+  hasTmux: tmuxHasSession,
+  killTmux: tmuxKillSession,
+});
+// Sweep at startup (catching sessions that outlived a restart — tmux survives one by
+// design) and hourly, so the age cap holds even after the schedule is turned off.
+const SCHEDULED_SWEEP_INTERVAL_MS = 60 * 60_000;
+void scheduledSessions.sweep();
+setInterval(() => void scheduledSessions.sweep(), SCHEDULED_SWEEP_INTERVAL_MS).unref();
+
 function spawnScheduledChat(message: string): void {
   const sessionId = randomUUID();
   try {
     spawnClaudePty(sessionId, null, null, message);
+    scheduledSessions.register(sessionId);
   } catch (err) {
     console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);
   }
