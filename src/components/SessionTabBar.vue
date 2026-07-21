@@ -51,7 +51,12 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
     </div>
 
     <div class="actions">
-      <button class="icon-btn" title="Switch to vertical sidebar" aria-label="Switch to vertical sidebar" @click="emit('toggle-layout')">
+      <button
+        class="bg-transparent border-0 text-muted text-base leading-none cursor-pointer hover:text-fg"
+        title="Switch to vertical sidebar"
+        aria-label="Switch to vertical sidebar"
+        @click="emit('toggle-layout')"
+      >
         <span class="material-symbols-outlined">dock_to_right</span>
       </button>
     </div>
@@ -190,4 +195,3 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
   flex-shrink: 0;
 }
 </style>
-<style scoped src="./sessionList.css"></style>

@@ -32,7 +32,12 @@ function relativeTime(ms: number): string {
   <aside class="sidebar">
     <div class="sidebar-header">
       <span class="heading">Sessions</span>
-      <button class="icon-btn" title="Switch to horizontal tabs" aria-label="Switch to horizontal tabs" @click="emit('toggle-layout')">
+      <button
+        class="bg-transparent border-0 text-muted text-base leading-none cursor-pointer hover:text-fg"
+        title="Switch to horizontal tabs"
+        aria-label="Switch to horizontal tabs"
+        @click="emit('toggle-layout')"
+      >
         <span class="material-symbols-outlined">toolbar</span>
       </button>
     </div>
@@ -230,4 +235,3 @@ function relativeTime(ms: number): string {
   color: var(--text-dim);
 }
 </style>
-<style scoped src="./sessionList.css"></style>
