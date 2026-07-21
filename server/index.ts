@@ -80,6 +80,7 @@ import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
+import { buildTranslationPrompt, isValidTranslationResult } from "./session/translation-prompt.js";
 import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
 import { claudeOnDiskSessionIds, latestUserPrompt, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
@@ -1307,9 +1308,10 @@ async function runTranslationWorkerOnce(prompt: string, expected: number): Promi
     // pending entry now so this internal worker never surfaces as a sidebar row (the
     // /api/sessions filter on translationWorkerIds covers its on-disk transcript).
     knownSessions.delete(sessionId);
-    const translations = await submitted;
-    if (translations.length !== expected || !translations.every((s) => typeof s === "string")) {
-      throw new Error(`[translation] submitTranslation returned ${translations.length} strings for ${expected} inputs`);
+    const translations: unknown = await submitted;
+    if (!isValidTranslationResult(translations, expected)) {
+      const got = Array.isArray(translations) ? `${translations.length} strings` : "a non-array";
+      throw new Error(`[translation] submitTranslation returned ${got} for ${expected} inputs`);
     }
     return translations;
   } finally {
@@ -1325,13 +1327,7 @@ async function runTranslationWorkerOnce(prompt: string, expected: number): Promi
 // /api/translation/submit). Retries a fresh worker if one answers without submitting.
 async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
   const expected = sentences.length;
-  const prompt =
-    `You are an automated translation service. Translate each of the ${expected} English strings in ` +
-    `the JSON array below into the target language (BCP-47 code: ${targetLanguage}), preserving ` +
-    `placeholders like {name}, {count}, %s and any HTML tags verbatim. You MUST deliver the result by ` +
-    `calling the submitTranslation tool with a "translations" array of exactly ${expected} strings in ` +
-    `the same order — that tool call is the ONLY way to return the result; a text reply is discarded. ` +
-    `Do not call any other tool.\n\nInput: ${JSON.stringify(sentences)}`;
+  const prompt = buildTranslationPrompt(targetLanguage, sentences);
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= TRANSLATION_MAX_ATTEMPTS; attempt++) {
