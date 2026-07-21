@@ -90,7 +90,7 @@ describe("CommandCell summarize", () => {
   it("has no summary panel until the button is clicked", () => {
     const w = mountCell();
     expect(w.find('[aria-label="Summarize command output"]').exists()).toBe(true);
-    expect(w.find(".cell-summary").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-summary"]').exists()).toBe(false);
   });
 
   it("posts the captured output and renders the returned summary", async () => {
@@ -109,7 +109,7 @@ describe("CommandCell summarize", () => {
     const sent = JSON.parse(String(init?.body));
     expect(sent.log).toContain("npm ERR!");
     expect(typeof sent.locale).toBe("string"); // browser locale forwarded for the reply language
-    expect(w.find(".cell-summary-text").text()).toContain("missing module foo");
+    expect(w.find('[data-testid="cell-summary-text"]').text()).toContain("missing module foo");
   });
 
   it("copies the command + summary as a prompt to the clipboard", async () => {
@@ -123,14 +123,14 @@ describe("CommandCell summarize", () => {
     await w.find('[aria-label="Summarize command output"]').trigger("click");
     await flushPromises();
 
-    await w.find(".cell-summary-continue").trigger("click");
+    await w.find('[data-testid="cell-summary-continue"]').trigger("click");
     expect(writeText).toHaveBeenCalledOnce();
     const copied = String(writeText.mock.calls[0][0]);
     expect(copied).toContain("Dev server"); // the command label
     expect(copied).toContain("/work/proj"); // the command's dir
     expect(copied).toContain("missing module foo"); // the summary
     await flushPromises();
-    expect(w.find(".cell-summary-continue").text()).toContain("Copied");
+    expect(w.find('[data-testid="cell-summary-continue"]').text()).toContain("Copied");
   });
 
   it("does not throw when the clipboard API is unavailable (insecure origin / webview)", async () => {
@@ -142,8 +142,8 @@ describe("CommandCell summarize", () => {
     const w = mountCell();
     await w.find('[aria-label="Summarize command output"]').trigger("click");
     await flushPromises();
-    await w.find(".cell-summary-continue").trigger("click"); // must not throw
-    expect(w.find(".cell-summary-continue").text()).toContain("Copy"); // stays "Copy as prompt"
+    await w.find('[data-testid="cell-summary-continue"]').trigger("click"); // must not throw
+    expect(w.find('[data-testid="cell-summary-continue"]').text()).toContain("Copy"); // stays "Copy as prompt"
   });
 
   it("shows the truncation note when the server truncated the log", async () => {
@@ -154,7 +154,7 @@ describe("CommandCell summarize", () => {
     const w = mountCell();
     await w.find('[aria-label="Summarize command output"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-summary-note").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-summary-note"]').exists()).toBe(true);
   });
 
   it("surfaces the server error message on failure", async () => {
@@ -165,8 +165,8 @@ describe("CommandCell summarize", () => {
     const w = mountCell();
     await w.find('[aria-label="Summarize command output"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-summary-error").text()).toContain("not logged in");
-    expect(w.find(".cell-summary-text").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-summary-error"]').text()).toContain("not logged in");
+    expect(w.find('[data-testid="cell-summary-text"]').exists()).toBe(false);
   });
 
   it("dismisses the summary panel", async () => {
@@ -177,8 +177,8 @@ describe("CommandCell summarize", () => {
     const w = mountCell();
     await w.find('[aria-label="Summarize command output"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-summary").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-summary"]').exists()).toBe(true);
     await w.find('[aria-label="Dismiss summary"]').trigger("click");
-    expect(w.find(".cell-summary").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-summary"]').exists()).toBe(false);
   });
 });

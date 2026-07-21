@@ -183,19 +183,35 @@ function onHeaderClick(event: MouseEvent) {
       :zoomed="zoomed"
       @exit="onExit"
     />
-    <div v-if="showSummary" class="cell-summary">
-      <div class="cell-summary-head">
-        <span class="cell-summary-title">✦ Summary</span>
+    <div v-if="showSummary" data-testid="cell-summary" class="flex max-h-[40%] min-h-0 flex-none flex-col border-t border-t-[#2a2a4e] bg-[#141b33]">
+      <div class="flex flex-none items-center justify-between border-b border-b-[#232a48] py-0.5 pl-2.5 pr-1.5">
+        <span class="font-sans text-[11px] font-semibold text-[#9db4ff]">✦ Summary</span>
         <button class="cell-btn cell-summary-close" title="Dismiss summary" aria-label="Dismiss summary" @click="closeSummary">✕</button>
       </div>
-      <div class="cell-summary-body">
-        <span v-if="summaryState === 'loading'" class="cell-summary-loading">Summarizing…</span>
-        <p v-else-if="summaryState === 'error'" class="cell-summary-error">{{ summaryError }}</p>
+      <div class="min-h-0 flex-auto overflow-auto px-2.5 pb-2 pt-1.5">
+        <span v-if="summaryState === 'loading'" class="font-sans text-[12px] text-[#7f88ad]">Summarizing…</span>
+        <p
+          v-else-if="summaryState === 'error'"
+          data-testid="cell-summary-error"
+          class="m-0 font-mono text-[12px] text-[#ff8a8a] whitespace-pre-wrap [word-break:break-word]"
+        >
+          {{ summaryError }}
+        </p>
         <template v-else>
-          <pre class="cell-summary-text">{{ summaryText }}</pre>
-          <p v-if="summaryTruncated" class="cell-summary-note">(long output — summarized the tail only)</p>
-          <div class="cell-summary-actions">
-            <button type="button" class="cell-summary-continue" title="Copy this as a prompt to paste into a Claude session" @click="copyPrompt">
+          <pre data-testid="cell-summary-text" class="m-0 font-mono text-[12px] leading-[1.5] text-[#d6dcf5] whitespace-pre-wrap [word-break:break-word]">{{
+            summaryText
+          }}</pre>
+          <p v-if="summaryTruncated" data-testid="cell-summary-note" class="mt-1.5 font-sans text-[11px] text-[#7f88ad]">
+            (long output — summarized the tail only)
+          </p>
+          <div class="mt-2 flex justify-end">
+            <button
+              type="button"
+              data-testid="cell-summary-continue"
+              class="cursor-pointer rounded-md border border-[#3b4a7a] bg-[#232a45] px-2.5 py-1 font-sans text-[12px] text-[#cdd6ff] hover:bg-[#2c355a]"
+              title="Copy this as a prompt to paste into a Claude session"
+              @click="copyPrompt"
+            >
               {{ copied ? "✓ Copied" : "⧉ Copy as prompt" }}
             </button>
           </div>
@@ -208,6 +224,10 @@ function onHeaderClick(event: MouseEvent) {
 <style scoped src="./cellChromeBase.css"></style>
 <style scoped src="./cellChrome.css"></style>
 
+<!-- These two buttons carry the shared .cell-btn class (cellChromeBase.css). That
+     rule is unlayered scoped CSS, which beats Tailwind's layered utilities, so their
+     per-instance overrides (colour, size) can't move to utilities until the shared
+     chrome itself is converted — kept scoped for now. -->
 <style scoped>
 .cell-summarize {
   color: #9db4ff;
@@ -220,87 +240,9 @@ function onHeaderClick(event: MouseEvent) {
   color: #7f88ad;
   cursor: default;
 }
-
-/* Result panel: a short, scrollable strip below the terminal (never steals more than
-   ~40% of the cell). */
-.cell-summary {
-  flex: 0 0 auto;
-  max-height: 40%;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  background: #141b33;
-  border-top: 1px solid #2a2a4e;
-}
-.cell-summary-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 2px 6px 2px 10px;
-  border-bottom: 1px solid #232a48;
-}
-.cell-summary-title {
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  color: #9db4ff;
-}
 .cell-summary-close {
   width: 22px;
   height: 22px;
   font-size: 13px;
-}
-.cell-summary-body {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  padding: 6px 10px 8px;
-}
-.cell-summary-loading {
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: #7f88ad;
-}
-.cell-summary-error {
-  margin: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: #ff8a8a;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cell-summary-text {
-  margin: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  line-height: 1.5;
-  color: #d6dcf5;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.cell-summary-note {
-  margin: 6px 0 0;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: #7f88ad;
-}
-.cell-summary-actions {
-  margin-top: 8px;
-  display: flex;
-  justify-content: flex-end;
-}
-.cell-summary-continue {
-  border: 1px solid #3b4a7a;
-  background: #232a45;
-  color: #cdd6ff;
-  border-radius: 6px;
-  padding: 4px 10px;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  cursor: pointer;
-}
-.cell-summary-continue:hover {
-  background: #2c355a;
 }
 </style>
