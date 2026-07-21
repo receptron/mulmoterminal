@@ -563,14 +563,22 @@ const aiTitles = new Map<string, string>(); // id -> AI title
 // a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
 const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
 const LAST_RESPONSE_MAX = 400;
-function refreshLastResponse(id: string, cwd: string): void {
+// The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
+// the cache below because the two want opposite things on failure: the roster would rather
+// keep showing the last reply it had, while a push must never describe a finished turn with
+// the PREVIOUS turn's text — for that caller, null has to stay null.
+function readLatestResponse(id: string, cwd: string): string | null {
   try {
     const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
     const text = latestAssistantTextFromJsonl(raw);
-    if (text) lastResponses.set(id, text.slice(0, LAST_RESPONSE_MAX));
+    return text ? text.slice(0, LAST_RESPONSE_MAX) : null;
   } catch {
-    // no transcript yet / unreadable — leave any prior value
+    return null; // no transcript yet / unreadable
   }
+}
+function refreshLastResponse(id: string, cwd: string): void {
+  const text = readLatestResponse(id, cwd);
+  if (text) lastResponses.set(id, text); // a failed read leaves any prior value
 }
 const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
 const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
@@ -1271,12 +1279,14 @@ function notifyTaskFinished(sessionId: string, kind: PushKind, message: string):
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = cwd ? path.basename(cwd) : "session";
   // A finished turn should say what the agent DID — the prompt is what the user already
-  // knows, and reading it back tells them nothing about the outcome. Refresh here rather
-  // than rely on publishActivity's: an actively-viewed session never flags `waiting`, so
-  // that path skips the refresh and the phone would get the PREVIOUS turn's reply.
-  if (kind === "finished" && cwd) refreshLastResponse(sessionId, cwd);
-  const reply = kind === "finished" ? (lastResponses.get(sessionId) ?? "") : "";
-  const detail = reply.trim() || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  // knows, and reading it back tells them nothing about the outcome. Read it HERE instead
+  // of taking `lastResponses`: publishActivity skips its refresh for an actively-viewed
+  // session (no `waiting` flag) while the push still fires, and the cache deliberately
+  // survives a failed read — either way the map can hold the previous turn's reply, which
+  // is worse than saying nothing. No reply to read falls through to the prompt.
+  const reply = kind === "finished" && cwd ? readLatestResponse(sessionId, cwd) : null;
+  if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
+  const detail = (reply ?? "").trim() || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;
   // the host id is what lets it know WHOSE session. Without it the phone opens with
