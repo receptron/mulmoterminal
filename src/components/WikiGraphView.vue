@@ -34,18 +34,30 @@ function title(slug: string): string {
 </script>
 
 <template>
-  <div class="wiki-graph">
-    <p v-if="!graph.nodes.length" class="wiki-empty">No pages yet.</p>
-    <ul v-else class="graph-list">
-      <li v-for="node in rows" :key="node.slug" class="graph-row">
-        <div class="graph-head">
-          <button type="button" class="graph-node" @click="wikiGotoPage(node.slug)">{{ node.title }}</button>
-          <span v-if="incomingCount.get(node.slug)" class="graph-incoming" :title="`${incomingCount.get(node.slug)} incoming link(s)`">
+  <div class="max-w-[820px] mx-auto pt-6 px-7 pb-16">
+    <p v-if="!graph.nodes.length" class="py-12 px-7 text-center text-muted">No pages yet.</p>
+    <ul v-else class="list-none flex flex-col gap-3.5">
+      <li v-for="node in rows" :key="node.slug" class="py-3 px-3.5 bg-panel border border-border rounded-lg">
+        <div class="flex items-baseline gap-2.5">
+          <button
+            type="button"
+            class="bg-transparent border-0 text-[15px] font-semibold text-fg cursor-pointer hover:text-accent"
+            @click="wikiGotoPage(node.slug)"
+          >
+            {{ node.title }}
+          </button>
+          <span v-if="incomingCount.get(node.slug)" class="text-[12px] text-muted" :title="`${incomingCount.get(node.slug)} incoming link(s)`">
             ← {{ incomingCount.get(node.slug) }}
           </span>
         </div>
-        <div v-if="outgoing.get(node.slug)?.length" class="graph-edges">
-          <button v-for="to in outgoing.get(node.slug)" :key="to" type="button" class="graph-chip" @click="wikiGotoPage(to)">
+        <div v-if="outgoing.get(node.slug)?.length" class="mt-2 flex flex-wrap gap-1.5">
+          <button
+            v-for="to in outgoing.get(node.slug)"
+            :key="to"
+            type="button"
+            class="text-[12px] py-0.5 px-2 bg-subtle border border-border rounded-full text-secondary cursor-pointer hover:text-fg hover:border-accent"
+            @click="wikiGotoPage(to)"
+          >
             {{ title(to) }}
           </button>
         </div>
@@ -53,70 +65,3 @@ function title(slug: string): string {
     </ul>
   </div>
 </template>
-
-<style scoped>
-.wiki-graph {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 24px 28px 64px;
-}
-.graph-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.graph-row {
-  padding: 12px 14px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.graph-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-.graph-node {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text);
-  cursor: pointer;
-}
-.graph-node:hover {
-  color: var(--accent);
-}
-.graph-incoming {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.graph-edges {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.graph-chip {
-  font-size: 12px;
-  padding: 2px 8px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-.graph-chip:hover {
-  color: var(--text);
-  border-color: var(--accent);
-}
-.wiki-empty {
-  padding: 48px 28px;
-  text-align: center;
-  color: var(--text-muted);
-}
-</style>
