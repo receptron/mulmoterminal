@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import {
   createScheduledSessionRegistry,
+  heldByAnotherProcess,
   parseScheduledSessionRecord,
   scheduledSessionsDir,
   selectExpiredScheduledSessions,
@@ -97,6 +98,33 @@ describe("parseScheduledSessionRecord", () => {
   });
 });
 
+describe("heldByAnotherProcess", () => {
+  // The leak this registry exists for IS our own detached background pty: it holds a tmux
+  // client, so it must NOT read as somebody else's, or nothing would ever be reaped.
+  it("does not count our own pty as another process", () => {
+    expect(heldByAnotherProcess(1, true)).toBe(false);
+  });
+
+  it("reports a second client while we hold one", () => {
+    expect(heldByAnotherProcess(2, true)).toBe(true);
+  });
+
+  it("reports any client at all when we hold none", () => {
+    expect(heldByAnotherProcess(1, false)).toBe(true);
+  });
+
+  it("treats a session with no clients as free", () => {
+    expect(heldByAnotherProcess(0, false)).toBe(false);
+    expect(heldByAnotherProcess(0, true)).toBe(false);
+  });
+
+  // null = tmux could not tell us, which means there is no tmux session to take away.
+  it("treats an unanswerable count as not held", () => {
+    expect(heldByAnotherProcess(null, false)).toBe(false);
+    expect(heldByAnotherProcess(null, true)).toBe(false);
+  });
+});
+
 describe("scheduledSessionsDir", () => {
   it("gives each workspace its own directory", () => {
     expect(scheduledSessionsDir("/ws/app", "/home")).not.toEqual(scheduledSessionsDir("/ws/app2", "/home"));
@@ -131,13 +159,13 @@ describe("createScheduledSessionRegistry", () => {
   const reapSession = vi.fn();
   const killTmux = vi.fn();
   const hasTmux = vi.fn(() => true);
-  const isAttached = vi.fn<(id: string) => boolean>(() => false);
+  const isInUse = vi.fn<(id: string) => boolean>(() => false);
 
   const registry = () =>
     createScheduledSessionRegistry({
       dir,
       isValidId: (id) => id.startsWith("s"),
-      isAttached,
+      isInUse,
       reapSession,
       hasTmux,
       killTmux,
@@ -154,7 +182,7 @@ describe("createScheduledSessionRegistry", () => {
     clockMs = NOW;
     vi.clearAllMocks();
     hasTmux.mockReturnValue(true);
-    isAttached.mockReturnValue(false);
+    isInUse.mockReturnValue(false);
   });
 
   afterEach(async () => {
@@ -213,27 +241,27 @@ describe("createScheduledSessionRegistry", () => {
     expect(killTmux).not.toHaveBeenCalled();
   });
 
-  it("spares an expired session the user currently has open, and reaps it once they leave", async () => {
+  it("spares an expired session that is still in use, and reaps it once it is not", async () => {
     const r = registry();
     r.register("s1");
     clockMs += 25 * HOUR;
-    isAttached.mockReturnValue(true);
+    isInUse.mockReturnValue(true);
     await r.sweep();
     expect(reapSession).not.toHaveBeenCalled();
     expect(await registered()).toEqual(["s1.json"]);
 
-    isAttached.mockReturnValue(false);
+    isInUse.mockReturnValue(false);
     await r.sweep();
     expect(reapSession).toHaveBeenCalledWith("s1");
     expect(await registered()).toEqual([]);
   });
 
-  it("reaps the unattached expired sessions even when another is being viewed", async () => {
+  it("reaps the idle expired sessions even when another is in use", async () => {
     const r = registry();
     r.register("s1");
     r.register("s2");
     clockMs += 25 * HOUR;
-    isAttached.mockImplementation((id: string) => id === "s1");
+    isInUse.mockImplementation((id: string) => id === "s1");
     await r.sweep();
     expect(reapSession).toHaveBeenCalledExactlyOnceWith("s2");
     expect(await registered()).toEqual(["s1.json"]);

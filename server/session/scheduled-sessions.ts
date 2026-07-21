@@ -63,6 +63,17 @@ export function parseScheduledSessionRecord(id: string, raw: unknown, isValidId:
   return { id, createdAt };
 }
 
+/** Does a tmux client other than our own hold this session? Each mulmoterminal server
+ *  holds exactly ONE tmux client per session it runs, so a count above our own share
+ *  belongs to another process — the signal that a PORT-split peer on this workspace would
+ *  lose a live session if we killed it. Our own detached background pty counts as ours,
+ *  which is what keeps the leak this whole registry exists for reapable. A count tmux
+ *  can't give (null) means there is no tmux session to take from anyone: not held. */
+export function heldByAnotherProcess(attachedClients: number | null, weHoldAPty: boolean): boolean {
+  if (attachedClients === null) return false;
+  return attachedClients > (weHoldAPty ? 1 : 0);
+}
+
 // A path can't be used as a filename raw: on Windows it carries `\` and `:`, which are a
 // separator and a stream marker, so the write would fail (or land somewhere unintended)
 // and Windows would silently lose restart-time cleanup. Fold everything unsafe to "-" and
@@ -84,8 +95,10 @@ export function scheduledSessionsDir(workspace: string, home: string = path.join
 export interface ScheduledSessionRegistryDeps {
   dir: string;
   isValidId: (id: string) => boolean;
-  /** Is someone looking at this session right now (a client socket is attached)? */
-  isAttached: (id: string) => boolean;
+  /** Would anyone lose this session if we killed it — our own viewer, or another server
+   *  process holding it? Must account for BOTH: two servers can share a workspace, and a
+   *  process-local check would happily tear down a session live in the other one. */
+  isInUse: (id: string) => boolean;
   /** Reap a live session (pty + tmux + cleanup); a no-op once no live entry is left. */
   reapSession: (id: string) => void;
   hasTmux: (id: string) => boolean;
@@ -136,7 +149,7 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
     const { expire } = selectExpiredScheduledSessions(await readRecords(), now(), policy);
     // Never yank a session out from under someone who has it open — the reap machinery
     // leaves attached sessions alone too. Its entry stays, so a later sweep retries.
-    const evicted = expire.filter((record) => !deps.isAttached(record.id));
+    const evicted = expire.filter((record) => !deps.isInUse(record.id));
     await Promise.all(evicted.map(evict));
     if (evicted.length > 0) console.log(`[scheduler] reaped ${evicted.length} scheduled session(s) past retention`);
   };

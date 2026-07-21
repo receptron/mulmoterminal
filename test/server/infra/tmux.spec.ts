@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { tmuxSessionName, tmuxNewSessionArgs, TMUX_CONF_LINES, isResumableTmuxSession, parseTmuxEnvironment } from "../../../server/infra/tmux";
+import {
+  tmuxSessionName,
+  tmuxNewSessionArgs,
+  TMUX_CONF_LINES,
+  isResumableTmuxSession,
+  parseTmuxEnvironment,
+  parseAttachedClientCount,
+} from "../../../server/infra/tmux";
 
 describe("tmuxSessionName", () => {
   it("prefixes the session id", () => {
@@ -95,5 +102,21 @@ describe("parseTmuxEnvironment", () => {
   it("keeps an empty value, and tolerates empty output", () => {
     expect(parseTmuxEnvironment("EMPTY=\n").get("EMPTY")).toBe("");
     expect(parseTmuxEnvironment("").size).toBe(0);
+  });
+});
+
+describe("parseAttachedClientCount", () => {
+  it("reads the client count", () => {
+    expect(parseAttachedClientCount("2\n")).toBe(2);
+    expect(parseAttachedClientCount("0")).toBe(0);
+  });
+
+  // The caller decides whether to KILL a session, so "we could not tell" has to be
+  // distinguishable from "nobody is attached" — null, never 0.
+  it("returns null for anything that is not a count", () => {
+    expect(parseAttachedClientCount("")).toBeNull();
+    expect(parseAttachedClientCount("no server running")).toBeNull();
+    expect(parseAttachedClientCount("-1")).toBeNull();
+    expect(parseAttachedClientCount("1.5")).toBeNull();
   });
 });

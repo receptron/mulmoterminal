@@ -56,6 +56,14 @@ sha256 先頭 8 桁を付ける。長いパスでも名前が伸びないよう 
 書き込みは temp + rename の原子的書き込み（`files/atomic-write.ts`、`backends/feeds.ts` から共通化）で、
 書き込み中のクラッシュによる破損も防ぐ。
 
+**「使用中かどうか」の判定はプロセス横断で行う**。`ptys.get(id)?.ws` は自プロセスしか見えないので、
+同一ワークスペースに 2 台という構成では、他プロセスで開かれているセッションを殺せてしまう（Codex 指摘）。
+唯一のプロセス横断シグナルは tmux 自身が持つ接続クライアント数（`#{session_attached}`）で、サーバは
+セッション 1 つにつきクライアント 1 つを持つため、**自分の分を超える数 = 他プロセスが保持中**と判定できる
+（`heldByAnotherProcess`）。自分の detached なバックグラウンド pty は「自分の分」に入るので、本 issue の
+本丸であるリークは従来どおり回収される。実 tmux で 3 ケース（peer 保持 = 1 → skip / orphan = 0 → 回収 /
+peer 切断後 = 0 → 回収）を確認済み。
+
 - 純粋関数 `selectExpiredScheduledSessions(records, nowMs, policy)` — 新しい順に `keep` 件を残し、
   それを超えたもの / `ttlMs` を過ぎたものを `expire` に振り分ける
 - 純粋関数 `parseScheduledSessions(raw, isValidId)` — 壊れた JSON / 不正 id を落とす
