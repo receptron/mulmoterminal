@@ -1,66 +1,72 @@
-/* The grid-cell chrome rules that are identical across every cell kind — the Claude
-   cell (TerminalCell), the command cell, and the launcher cell: the zoomable-header
-   affordance, the status dot's working/pulse animation, and the action buttons. Each
-   cell's own stylesheet layers its cell-specific rules (frame, header tint, dir, and
-   any status states) on top. */
-.cell-header.is-zoomable {
-  cursor: pointer;
-}
-.cell-header.is-zoomable:hover {
-  background: var(--bg-hover);
-}
-
-.cell-dot {
-  flex: 0 0 auto;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  /* Custom color tints the idle dot; the status classes override it while active. */
-  background: var(--cell-dot, var(--text-dim));
-}
-.cell-dot.is-working {
-  background: var(--accent);
-  animation: pulse 1.2s ease-in-out infinite;
-}
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
+/* Wrapped in @layer components so Tailwind utilities (@layer utilities, declared
+   last) can override this shared chrome on a per-cell basis. Unlayered it beats
+   every utility regardless of specificity. Each component's own <style scoped>
+   stays unlayered and therefore still wins over these, exactly as before. */
+@layer components {
+  /* The grid-cell chrome rules that are identical across every cell kind — the Claude
+     cell (TerminalCell), the command cell, and the launcher cell: the zoomable-header
+     affordance, the status dot's working/pulse animation, and the action buttons. Each
+     cell's own stylesheet layers its cell-specific rules (frame, header tint, dir, and
+     any status states) on top. */
+  .cell-header.is-zoomable {
+    cursor: pointer;
   }
-  50% {
-    opacity: 0.35;
+  .cell-header.is-zoomable:hover {
+    background: var(--bg-hover);
   }
-}
 
-.cell-actions {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 4px;
-}
-.cell-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: var(--cell-btn, var(--text-secondary));
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-close:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
+  .cell-dot {
+    flex: 0 0 auto;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    /* Custom color tints the idle dot; the status classes override it while active. */
+    background: var(--cell-dot, var(--text-dim));
+  }
+  .cell-dot.is-working {
+    background: var(--accent);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.35;
+    }
+  }
 
-.cell-term {
-  flex: 1;
-  min-height: 0;
+  .cell-actions {
+    flex: 0 0 auto;
+    display: flex;
+    gap: 4px;
+  }
+  .cell-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border: none;
+    background: transparent;
+    color: var(--cell-btn, var(--text-secondary));
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 6px;
+  }
+  .cell-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .cell-close:hover {
+    background: var(--err-hover-bg);
+    color: var(--err-text);
+  }
+
+  .cell-term {
+    flex: 1;
+    min-height: 0;
+  }
 }

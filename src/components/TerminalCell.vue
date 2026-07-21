@@ -889,21 +889,37 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
              model / tokens / custom) don't shrink, so without this they would overflow and
              push the actions past the cell's `overflow: hidden` edge — the buttons must
              stay reachable no matter how much a dir's config crams in here. -->
-        <div class="cell-header-main">
+        <div data-testid="cell-header-main" class="flex min-w-0 flex-auto items-center gap-2 overflow-hidden">
           <span class="cell-dot" :class="statusClass" :title="statusLabel" />
           <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
                header's job is to zoom (switch to this terminal), so the dir is inert text
                and a click on it falls through to the header's zoom gesture. -->
-          <button v-if="headerDir && !filmstrip" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
-            <span class="cell-dir-path">{{ headerDir }}</span>
+          <button
+            v-if="headerDir && !filmstrip"
+            type="button"
+            class="cell-dir flex-initial min-w-[16ch] max-w-[60%] cursor-pointer truncate border-none bg-transparent p-0 text-left font-mono text-[11px] text-[var(--cell-header-fg,var(--text-dim))] [direction:rtl] hover:text-muted hover:underline"
+            :title="cwd ? `Open ${cwd}` : ''"
+            @click="openDir"
+          >
+            <span class="cell-dir-path [unicode-bidi:plaintext]">{{ headerDir }}</span>
           </button>
-          <span v-else-if="headerDir" class="cell-dir" :title="cwd ?? ''">
-            <span class="cell-dir-path">{{ headerDir }}</span>
+          <span
+            v-else-if="headerDir"
+            class="cell-dir flex-initial min-w-[16ch] max-w-[60%] cursor-pointer truncate border-none bg-transparent p-0 text-left font-mono text-[11px] text-[var(--cell-header-fg,var(--text-dim))] [direction:rtl] hover:text-muted hover:underline"
+            :title="cwd ?? ''"
+          >
+            <span class="cell-dir-path [unicode-bidi:plaintext]">{{ headerDir }}</span>
           </span>
           <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
                thumbnail, leaving only dir + what it's doing + a zoom button. -->
           <template v-if="!filmstrip">
-            <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+            <span
+              v-if="dirConfig.name"
+              class="max-w-[14ch] flex-none truncate rounded-[10px] px-[7px] py-px font-sans text-[11px] font-semibold"
+              :style="dirBadgeStyle"
+              :title="dirConfig.name"
+              >{{ dirConfig.name }}</span
+            >
             <template v-for="chip in cellChips" :key="chip.key">
               <GitBranchChip v-if="chip.builtin === 'git'" :status="gitStatus" :hide-dirty="isWorktreeCell" />
               <button
@@ -918,11 +934,28 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 <span v-if="diff.dirty > 0" data-testid="wt-dirty-count" class="text-[var(--warn-text,#e0a030)]">●{{ diff.dirty }}</span>
               </button>
               <ModelContextBadge v-else-if="chip.builtin === 'ctx' && context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-              <span v-else-if="chip.builtin === 'usage' && showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
-              <span v-else-if="chip.custom" class="cell-hdr-chip" :title="chip.custom.label || chip.custom.text">{{ chip.custom.text }}</span>
+              <span
+                v-else-if="chip.builtin === 'usage' && showUsage"
+                data-testid="cell-usage"
+                class="flex-none whitespace-nowrap font-mono text-[10px] tracking-[0.02em] text-dim"
+                :title="usageTitle"
+                >{{ usageLabel }}</span
+              >
+              <span
+                v-else-if="chip.custom"
+                data-testid="cell-hdr-chip"
+                class="flex-none whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[10px] text-dim"
+                :title="chip.custom.label || chip.custom.text"
+                >{{ chip.custom.text }}</span
+              >
             </template>
           </template>
-          <span class="cell-prompt" :title="lastPrompt || aiTitle || ''">{{ headerText }}</span>
+          <span
+            data-testid="cell-prompt"
+            class="min-w-0 flex-auto truncate font-sans text-[12px] text-[var(--cell-header-fg,var(--text-secondary))]"
+            :title="lastPrompt || aiTitle || ''"
+            >{{ headerText }}</span
+          >
         </div>
         <!-- Expand/restore + close stay on row 1 (the info row) and OUTSIDE the info
              track, so they're always pinned top-right. `.stop` so they don't trigger the
@@ -1235,10 +1268,11 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       </div>
       <label class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
         <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">Working directory</span>
-        <span class="cell-dir-row">
+        <span class="flex w-full items-stretch gap-1.5">
           <input
             v-model="dirInput"
-            class="cell-dir-input"
+            data-testid="cell-dir-input"
+            class="box-border w-full rounded-md border border-border bg-input px-2.5 py-[7px] font-mono text-[12px] text-fg focus:border-accent focus:outline-none min-w-0 flex-auto"
             type="text"
             placeholder="/path/to/project"
             spellcheck="false"
@@ -1256,13 +1290,17 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
           <button
             type="button"
-            class="cell-dir-go"
+            data-testid="cell-dir-go"
+            class="cursor-default opacity-40"
             :disabled="!dirInput.trim()"
             title="Start a new terminal here (or press Enter)"
             aria-label="Start a new terminal here"
             @click="launch"
           >
-            <span class="material-symbols-outlined text-[14px]">play_arrow</span>
+            <span
+              class="material-symbols-outlined cursor-pointer rounded-md border border-border bg-elevated px-4 py-[7px] font-sans text-[14px] font-medium text-secondary"
+              >play_arrow</span
+            >
           </button>
         </span>
       </label>
@@ -1272,14 +1310,19 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <input
             v-model="worktreeTask"
             data-testid="wt-task"
-            class="cell-dir-input w-auto min-w-0 flex-auto"
+            class="box-border w-full rounded-md border border-border bg-input px-2.5 py-[7px] font-mono text-[12px] text-fg focus:border-accent focus:outline-none w-auto min-w-0 flex-auto"
             type="text"
             placeholder="task name (e.g. fix-login)"
             aria-label="Worktree task name"
             spellcheck="false"
             @keydown.enter="createWorktreeAndLaunch"
           />
-          <button data-testid="wt-start" class="cell-start flex-none whitespace-nowrap" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">
+          <button
+            data-testid="wt-start"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-4 py-[7px] font-sans text-[14px] font-medium text-secondary flex-none whitespace-nowrap hover:bg-hover hover:text-fg"
+            :disabled="!worktreeTask.trim()"
+            @click="createWorktreeAndLaunch"
+          >
             ＋ New worktree
           </button>
         </div>
@@ -1423,80 +1466,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   background: var(--amber);
 }
 
-.cell-dir {
-  flex: 0 1 auto;
-  /* Floor the width at ~15 chars of the path so the current dir stays readable
-     even on a narrow cell (1ch ≈ one monospace char; the leading … takes one). */
-  min-width: 16ch;
-  max-width: 60%;
-  border: none;
-  background: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--cell-header-fg, var(--text-dim));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Truncate from the FRONT so the tail (the project dir) stays visible: in an
-     rtl box the ellipsis falls on the left. The inner span keeps the path itself
-     in natural left-to-right order (plaintext base direction). */
-  direction: rtl;
-}
-.cell-dir-path {
-  unicode-bidi: plaintext;
-}
-/* Project badge from <cwd>/.mulmoterminal.json — a per-directory identity chip. */
-.cell-badge {
-  flex: 0 0 auto;
-  max-width: 14ch;
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cell-dir:hover {
-  color: var(--text-muted);
-  text-decoration: underline;
-}
-.cell-prompt {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--cell-header-fg, var(--text-secondary));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Per-cell token usage: ⇡ input · ⇣ output. Dim + monospace so it reads as metadata. */
-.cell-usage {
-  flex: 0 0 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
-
-/* A user-defined display-only chip (from the `chips` config). */
-.cell-hdr-chip {
-  flex: 0 0 auto;
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-
 /* The info track absorbs all the width pressure: it grows into the free space and,
    crucially, is allowed to shrink below its content (min-width: 0) and clip. That keeps
    the non-shrinking chips from pushing .cell-actions out of the cell. */
@@ -1507,52 +1476,5 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   display: flex;
   align-items: center;
   gap: 8px;
-}
-.cell-dir-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-}
-.cell-dir-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.cell-dir-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  width: 100%;
-}
-.cell-dir-row .cell-dir-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.cell-dir-go,
-.cell-dir-go:hover:not(:disabled),
-.cell-dir-go:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.cell-dir-go .material-symbols-outlined,
-.cell-start {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 7px 16px;
-  border-radius: 6px;
-}
-.cell-start:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 </style>
