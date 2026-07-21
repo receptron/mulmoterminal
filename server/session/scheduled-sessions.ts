@@ -8,11 +8,17 @@
 // so sessions that outlived a server restart — tmux survives it by design — are still
 // reaped afterwards.
 //
-// The file is per WORKSPACE (scheduledSessionsFile), which makes this process its only
-// writer: the user runs several clones off one ~/.mulmoterminal, and a single shared file
-// would need every instance to merge on write — a read-modify-write whose lost updates
-// would silently drop ids, i.e. bring the leak back. A server owns one workspace (the
-// port makes two servers on the same one a non-case), so per-workspace means one writer.
+// The file is per WORKSPACE (scheduledSessionsFile). The user runs several clones off one
+// ~/.mulmoterminal, and a single shared file would put every instance in contention over
+// it; splitting by workspace means each server normally owns its file outright.
+//
+// "Normally" is not "always" — PORT is configurable, so two servers CAN run against one
+// workspace — hence the reconcile at the top of each sweep: we fold in whatever landed on
+// disk before deciding what to reap, so ids we never registered are still swept, and a
+// write we lose to a peer is re-added on our next sweep. That leaves a window where a
+// dropped id is untracked, which turns permanent only if this process dies inside it; a
+// lock file's stale-lock failures are likelier than that, and a compacting journal has
+// the same race, so the self-healing window is the trade we take.
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -68,6 +74,19 @@ export function parseScheduledSessions(raw: unknown, isValidId: (id: string) => 
   return records;
 }
 
+/** Fold what is on disk into our own records, so a second server on this workspace (two
+ *  are possible — PORT is configurable) has its ids swept by us as well, and ids of ours
+ *  it overwrote come back. Ids we already reaped are never resurrected, or its stale copy
+ *  would keep re-adding them. */
+export function mergeScheduledSessions(
+  onDisk: readonly ScheduledSessionRecord[],
+  ours: readonly ScheduledSessionRecord[],
+  reaped: ReadonlySet<string>,
+): ScheduledSessionRecord[] {
+  const known = new Set(ours.map((record) => record.id));
+  return [...ours, ...onDisk.filter((record) => !known.has(record.id) && !reaped.has(record.id))];
+}
+
 /** Where this workspace's registry lives. Encoded the way Claude encodes its own project
  *  dirs ("/" and "." → "-"), so the file is recognizable when you go looking for it. */
 export function scheduledSessionsFile(workspace: string, home: string = path.join(os.homedir(), ".mulmoterminal")): string {
@@ -98,13 +117,18 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
   const policy = deps.policy ?? SCHEDULED_SESSION_RETENTION;
   const now = deps.now ?? Date.now;
   let records: ScheduledSessionRecord[] = [];
+  const reaped = new Set<string>();
+
+  const readPersisted = async (): Promise<ScheduledSessionRecord[]> => {
+    try {
+      return parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
+    } catch {
+      return []; // no file yet / unreadable => nothing to fold in
+    }
+  };
 
   const hydrated: Promise<void> = (async () => {
-    try {
-      records = parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
-    } catch {
-      // no file yet / unreadable => start empty
-    }
+    records = await readPersisted();
   })();
 
   const persist = (): Promise<void> => writeFileAtomic(deps.file, JSON.stringify(records));
@@ -114,9 +138,12 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
   const evict = (record: ScheduledSessionRecord): void => {
     deps.reapSession(record.id);
     if (deps.hasTmux(record.id)) deps.killTmux(record.id);
+    reaped.add(record.id);
   };
 
   const runSweep = async (): Promise<void> => {
+    // Reconcile BEFORE selecting, so retention covers ids we never registered ourselves.
+    records = mergeScheduledSessions(await readPersisted(), records, reaped);
     const { keep, expire } = selectExpiredScheduledSessions(records, now(), policy);
     // Never yank a session out from under someone who has it open — the reap machinery
     // leaves attached sessions alone too. It stays registered, so a later sweep retries.
