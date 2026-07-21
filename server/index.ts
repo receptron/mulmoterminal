@@ -1255,6 +1255,12 @@ function handleActivityHook(sessionId: string, event: string, active: boolean, m
 
 const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
+// Which port this host's UI answers on, so a receiver can open it instead of guessing.
+// Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server, whose
+// port the backend only knows when CLIENT_PORT is set in its environment (vite.config.ts
+// defaults it separately). Reaching it still requires a receiver on this machine — see the
+// data payload below.
+const UI_PORT = String(process.env.CLIENT_PORT || PORT);
 // Notify the user's devices that a background task finished, when Web Push is enabled.
 // Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
 function notifyTaskFinished(sessionId: string, kind: PushKind, message: string): void {
@@ -1264,13 +1270,22 @@ function notifyTaskFinished(sessionId: string, kind: PushKind, message: string):
   if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = cwd ? path.basename(cwd) : "session";
-  const detail = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  // A finished turn should say what the agent DID — the prompt is what the user already
+  // knows, and reading it back tells them nothing about the outcome. Refresh here rather
+  // than rely on publishActivity's: an actively-viewed session never flags `waiting`, so
+  // that path skips the refresh and the phone would get the PREVIOUS turn's reply.
+  if (kind === "finished" && cwd) refreshLastResponse(sessionId, cwd);
+  const reply = kind === "finished" ? (lastResponses.get(sessionId) ?? "") : "";
+  const detail = reply.trim() || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;
   // the host id is what lets it know WHOSE session. Without it the phone opens with
   // no host selected — it never persists one — and can only offer the picker, which
   // is where every notification tap used to land (receptron/mulmoserver#86).
-  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID });
+  // `port` is for a receiver running ON this machine, which can then open the local UI
+  // directly (http://localhost:<port>). A phone cannot use it — its own localhost is the
+  // phone — so the receiver has to treat it as optional and keep the existing routing.
+  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID, port: UI_PORT });
 }
 
 interface HookToolPayload {

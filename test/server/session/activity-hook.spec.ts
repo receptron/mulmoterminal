@@ -57,10 +57,45 @@ describe("pushKindFor", () => {
 describe("buildPushText", () => {
   const limits = { title: 80, body: 160 };
 
-  it("marks a finished turn with a check and shows the prompt", () => {
-    const { title, body } = buildPushText("finished", "myrepo", "fix the parser", "", limits);
+  it("marks a finished turn with a check and shows what the agent reported", () => {
+    const { title, body } = buildPushText("finished", "myrepo", "パーサの丸め誤差を修正しました", "", limits);
     expect(title).toBe("\u2705 myrepo");
-    expect(body).toBe("fix the parser");
+    expect(body).toBe("パーサの丸め誤差を修正しました");
+  });
+
+  // The finished body is the agent's reply now, so it arrives as markdown. Left as-is the
+  // newlines and indentation would eat the 160-character budget before the point lands.
+  it("collapses a multi-line reply into one line", () => {
+    const reply = "作業ログを追記しました。\n\n- dev-log-2026-w29.md   （3リポ分）\n- worklog.md にリンク追加";
+    expect(buildPushText("finished", "myrepo", reply, "", limits).body).toBe(
+      "作業ログを追記しました。 - dev-log-2026-w29.md （3リポ分） - worklog.md にリンク追加",
+    );
+  });
+
+  it("collapses a multi-line waiting message too", () => {
+    expect(buildPushText("waiting", "myrepo", "", "Bash を実行する\n許可が必要です", limits).body).toBe("Bash を実行する 許可が必要です");
+  });
+
+  it("flattens a markdown link to its text, keeping the URL out of the budget", () => {
+    const reply = "issue [receptron/mulmoserver#81](https://github.com/receptron/mulmoserver/issues/81) を作成しました";
+    expect(buildPushText("finished", "myrepo", reply, "", limits).body).toBe("issue receptron/mulmoserver#81 を作成しました");
+  });
+
+  it("keeps text verbatim when a bracket never closes into a link", () => {
+    expect(buildPushText("finished", "myrepo", "配列 [0] を [未完了 のまま", "", limits).body).toBe("配列 [0] を [未完了 のまま");
+  });
+
+  it("flattens several links in one reply", () => {
+    const reply = "[#1](https://x/1) と [#2](https://x/2) を閉じました";
+    expect(buildPushText("finished", "myrepo", reply, "", limits).body).toBe("#1 と #2 を閉じました");
+  });
+
+  it("drops emphasis markers but keeps a leading # (it starts an issue number)", () => {
+    expect(buildPushText("finished", "myrepo", "**#300 マージ完了** — done", "", limits).body).toBe("#300 マージ完了 — done");
+  });
+
+  it("treats a whitespace-only reply as absent and falls back", () => {
+    expect(buildPushText("finished", "myrepo", " \n\t ", "", limits).body).toBe("タスクが完了しました");
   });
 
   it("marks a waiting turn with a question and quotes the hook's message", () => {
