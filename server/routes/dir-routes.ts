@@ -40,6 +40,9 @@ export function mountDirRoutes(app: Express): void {
     res.json({ cwd, skills });
   });
 
+  // Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a
+  // terminal opened in this directory should use. cwd is validated like every other
+  // cwd-scoped route; the raw sound path stays server-side (see /api/dir-sound).
   app.get("/api/dir-config", (req, res) => {
     const cwd = workspaceFromQuery(req.query.cwd);
     res.json(publicDirConfig(cwd));
