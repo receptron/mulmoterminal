@@ -55,7 +55,7 @@ import { resolveSession, type SessionResolution } from "./session/session-resolv
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
-import type { PtyEntry, ToolCall, ToolResult } from "./session/types.js";
+import type { PtyEntry } from "./session/types.js";
 import {
   activity,
   aiTitles,
@@ -81,6 +81,7 @@ import {
 import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
+import { createToolStores } from "./session/tool-store.js";
 import { claudeOnDiskSessionIds, latestUserPrompt, projectSessionsDir, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -207,148 +208,11 @@ const sessionChannel = (id: string) => `session:${id}`;
 // worker can call it without a permission prompt.
 const GUI_MCP_TOOLS = [...allowedToolNames(), "mcp__mulmoterminal-gui__submitTranslation"].join(",");
 
-// A per-session list store mirrored to disk so it survives a server reboot — one
-// JSON file per session under <workspace>/<dirName>/<sessionId>.json
-// (<workspace> = CLAUDE_CWD). The in-memory Map is the working copy; the file is
-// rewritten on each change and lazy-loaded on first access. Session ids are
-// validated UUIDs (SESSION_ID_RE), so they're safe to use as filenames.
-function createSessionStore<T>(dirName: string) {
-  const dir = path.join(MULMOTERMINAL_HOME, dirName);
-  const fileFor = (id: string) => path.join(dir, `${id}.json`);
-  const map = new Map<string, T[]>(); // id -> list (the working copy; mutate in place)
-  const loading = new Map<string, Promise<T[]>>(); // id -> Promise<list>, dedupes concurrent loads
-
-  // Lazily load a session's list from disk, then keep using the in-memory copy.
-  function get(sessionId: string): Promise<T[]> {
-    const cached = map.get(sessionId);
-    if (cached) return Promise.resolve(cached);
-    const inflight = loading.get(sessionId);
-    if (inflight) return inflight;
-    const p = (async () => {
-      let list: T[] = [];
-      if (SESSION_ID_RE.test(sessionId)) {
-        try {
-          const parsed = JSON.parse(await fs.readFile(fileFor(sessionId), "utf8"));
-          if (Array.isArray(parsed)) list = parsed;
-        } catch {
-          // No file yet (or unreadable) => start empty.
-        }
-      }
-      map.set(sessionId, list);
-      loading.delete(sessionId);
-      return list;
-    })();
-    loading.set(sessionId, p);
-    return p;
-  }
-
-  // Persist a session's list (best-effort, fire-and-forget).
-  async function save(sessionId: string) {
-    if (!SESSION_ID_RE.test(sessionId)) return;
-    try {
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(fileFor(sessionId), JSON.stringify(map.get(sessionId) || []));
-    } catch (e) {
-      console.error(`[${dirName}] failed to persist ${sessionId}: ${messageOf(e)}`);
-    }
-  }
-
-  return { get, save };
-}
-
-// GUI toolResults per session, persisted under ~/.mulmoterminal/toolresults so
-// the panel replays the rendered views even after a server reboot. (Chat +
-// message history live in the terminal and Claude's .jsonl; this is the GUI-side
-// store.) Each entry is an array of toolResults, capped to the most recent N.
-const toolResultsStore = createSessionStore<ToolResult>("toolresults");
-const GUI_HISTORY_LIMIT = 50;
-
-// Upsert a toolResult into a session's list, deduped by uuid — a re-emitted result
-// (e.g. a form whose viewState changed after the user submitted) updates in place.
-// Mirrors MulmoClaude's applyToolResultToSession.
-async function storeToolResult(sessionId: string, result: ToolResult) {
-  const list = await toolResultsStore.get(sessionId);
-  const idx = list.findIndex((r) => r.uuid === result.uuid);
-  if (idx >= 0) {
-    list[idx] = result;
-  } else {
-    list.push(result);
-    if (list.length > GUI_HISTORY_LIMIT) list.splice(0, list.length - GUI_HISTORY_LIMIT);
-  }
-  toolResultsStore.save(sessionId);
-}
-
-// Per-session tool-call history, fed by Claude's PreToolUse/PostToolUse hooks so
-// it captures EVERY tool call — built-ins (Bash, Read, …), the user's MCP tools,
-// AND our GUI plugin tools — not just the GUI ones the broker sees. Published on a
-// per-session channel the tools pane subscribes to. (The broker's toolResults
-// store above is separate; it only drives rendering of GUI views.)
-//
-// Persisted under ~/.mulmoterminal/toolcalls via the same disk-backed store as
-// the toolResults, so the history survives a server reboot.
-const toolCallsStore = createSessionStore<ToolCall>("toolcalls");
-const TOOLCALLS_LIMIT = 200;
-const toolCallsChannel = (id: string) => `toolcalls:${id}`;
-// Stored tool outputs are capped so one verbose tool can't bloat the on-disk
-// history (and the pane). The raw output still reaches the LLM via the terminal;
-// this is only the history copy.
-const TOOL_OUTPUT_CAP = 20_000;
-
-function capToolOutput(output: unknown): unknown {
-  if (typeof output === "string" && output.length > TOOL_OUTPUT_CAP) {
-    return output.slice(0, TOOL_OUTPUT_CAP) + `\n… (truncated ${output.length - TOOL_OUTPUT_CAP} chars)`;
-  }
-  return output;
-}
-
-// PreToolUse: a tool started. Append a "running" entry (deduped by tool_use_id).
-async function recordToolCallStart(sessionId: string, { toolUseId, toolName, toolInput }: { toolUseId?: string; toolName?: string; toolInput?: unknown }) {
-  const list = await toolCallsStore.get(sessionId);
-  if (toolUseId && list.some((c) => c.toolUseId === toolUseId)) return;
-  const call = { toolUseId, toolName, toolInput, status: "running", at: Date.now() };
-  list.push(call);
-  if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
-  pubsub?.publish(toolCallsChannel(sessionId), call);
-  toolCallsStore.save(sessionId);
-}
-
-// PostToolUse (status "completed") or PostToolUseFailure (status "failed"):
-// complete the matching entry by tool_use_id (or add one if we never saw the
-// start). A failed tool fires PostToolUseFailure, NOT PostToolUse, so both route
-// here — otherwise the entry would be stuck on "running".
-async function recordToolCallEnd(
-  sessionId: string,
-  {
-    toolUseId,
-    toolName,
-    toolInput,
-    toolOutput,
-    durationMs,
-    status,
-  }: {
-    toolUseId?: string;
-    toolName?: string;
-    toolInput?: unknown;
-    toolOutput?: unknown;
-    durationMs?: number;
-    status: string;
-  },
-) {
-  const list = await toolCallsStore.get(sessionId);
-  const output = capToolOutput(toolOutput);
-  let call = toolUseId ? list.find((c) => c.toolUseId === toolUseId) : undefined;
-  if (call) {
-    call.status = status;
-    call.toolOutput = output;
-    call.durationMs = durationMs;
-  } else {
-    call = { toolUseId, toolName, toolInput, toolOutput: output, status, at: Date.now(), durationMs };
-    list.push(call);
-    if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
-  }
-  pubsub?.publish(toolCallsChannel(sessionId), call);
-  toolCallsStore.save(sessionId);
-}
+// The panel's per-session stores. `publish` is a closure rather than the pubsub object
+// because pub/sub only exists once the HTTP server does, and these are built before it.
+const { toolResultsStore, toolCallsStore, storeToolResult, recordToolCallStart, recordToolCallEnd } = createToolStores({
+  publish: (channel, data) => pubsub?.publish(channel, data),
+});
 
 const LAST_PROMPT_CAP = 200;
 
