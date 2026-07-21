@@ -24,33 +24,50 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
 </script>
 
 <template>
-  <div class="tabbar">
-    <button class="new-btn" title="New session" aria-label="New session" @click="emit('new')">
+  <div class="flex h-10 shrink-0 items-center gap-2 overflow-hidden border-b border-border bg-panel px-2.5 font-sans text-fg">
+    <button
+      class="h-[26px] w-[26px] shrink-0 cursor-pointer rounded-md border-0 bg-selected text-[16px] leading-none text-secondary hover:bg-selected-hover"
+      title="New session"
+      aria-label="New session"
+      @click="emit('new')"
+    >
       <span class="material-symbols-outlined">add</span>
     </button>
-    <button class="new-btn new-codex-btn" title="New Codex session" aria-label="New Codex session" @click="emit('new-codex')">cx</button>
+    <button
+      class="h-[26px] w-[26px] shrink-0 cursor-pointer rounded-md border-0 bg-selected text-[12px] font-semibold uppercase leading-none text-secondary hover:bg-selected-hover"
+      title="New Codex session"
+      aria-label="New Codex session"
+      @click="emit('new-codex')"
+    >
+      cx
+    </button>
 
-    <div class="filters">
+    <div class="flex shrink-0 items-center gap-1.5">
       <SessionFilters :filter="filter" :unread-count="unreadCount" @update:filter="emit('update:filter', $event)" @refresh="emit('refresh')" />
     </div>
 
-    <div class="tabs">
+    <div class="flex min-w-0 flex-1 gap-1.5 overflow-hidden">
       <button
         v-for="s in visibleSessions"
         :key="s.id"
-        :class="['tab', { active: s.id === props.activeId, waiting: isUnread(s) }]"
+        class="relative flex h-7 min-w-0 max-w-[200px] flex-1 cursor-pointer items-center gap-[5px] rounded-md border px-2.5 text-[12px] text-secondary transition-[background] duration-[120ms] ease-[ease]"
+        :class="s.id === props.activeId ? 'border-accent bg-subtle' : 'border-transparent hover:bg-subtle'"
         :title="s.title"
         :aria-current="s.id === props.activeId ? 'page' : undefined"
         @click="emit('select', s.id, s.agent ?? 'claude')"
       >
         <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
-        <span v-if="s.agent === 'codex'" class="agent-badge">cx</span>
-        <span class="tab-title">{{ s.title }}</span>
-        <span v-if="isUnread(s) && s.id !== props.activeId" class="unread-dot" aria-label="Unread" />
+        <span v-if="s.agent === 'codex'" class="shrink-0 rounded-[3px] bg-selected px-1 text-[9px] font-bold uppercase text-dim">cx</span>
+        <span class="truncate" :class="{ 'font-bold text-fg': isUnread(s) }">{{ s.title }}</span>
+        <span
+          v-if="isUnread(s) && s.id !== props.activeId"
+          class="h-[7px] w-[7px] shrink-0 rounded-full bg-[var(--err-strong)] shadow-[0_0_0_2px_var(--bg-panel)]"
+          aria-label="Unread"
+        />
       </button>
     </div>
 
-    <div class="actions">
+    <div class="flex shrink-0 items-center gap-2">
       <button
         class="bg-transparent border-0 text-muted text-base leading-none cursor-pointer hover:text-fg"
         title="Switch to vertical sidebar"
@@ -63,115 +80,9 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
   </div>
 </template>
 
+<!-- The spinner's animated ring (custom keyframes + a color-mix border) has no
+     utility equivalent, so it stays scoped; everything else is utilities. -->
 <style scoped>
-.tabbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 40px;
-  flex-shrink: 0;
-  padding: 0 10px;
-  background: var(--bg-panel);
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  border-bottom: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.new-btn {
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  background: var(--bg-selected);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  line-height: 1;
-  cursor: pointer;
-}
-.new-btn:hover {
-  background: var(--bg-selected-hover);
-}
-.new-codex-btn {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-.agent-badge {
-  flex-shrink: 0;
-  padding: 0 4px;
-  border-radius: 3px;
-  background: var(--bg-selected);
-  color: var(--text-dim);
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.tabs {
-  display: flex;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-
-.tab {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  flex: 1 1 0;
-  min-width: 0;
-  max-width: 200px;
-  height: 28px;
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.12s;
-}
-.tab:hover {
-  background: var(--bg-subtle);
-}
-.tab.active {
-  background: var(--bg-subtle);
-  border-color: var(--accent);
-}
-
-.tab-title {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Background session waiting for input (unread): bold, like the sidebar. */
-.tab.waiting .tab-title {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.unread-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--err-strong);
-  box-shadow: 0 0 0 2px var(--bg-panel);
-}
-
-/* Spinning "thinking" ring — mirrors the vertical sidebar's spinner. */
 .spinner {
   flex-shrink: 0;
   width: 10px;
@@ -186,12 +97,5 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
   to {
     transform: rotate(360deg);
   }
-}
-
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
 }
 </style>
