@@ -1,3 +1,12 @@
+/* Layer order, declared here too (this file loads first) so it never depends on
+   import order: utilities must come last to win over the base defaults below. */
+@layer theme, base, components, utilities;
+
+/* Material Symbols ships an unlayered `.material-symbols-outlined { font-size: 24px }`.
+   Pulling it into `base` lets our own icon rule below (same layer, declared later)
+   keep winning as it always did, while `text-*` utilities can now size an icon. */
+@import "material-symbols/outlined.css" layer(base);
+
 /* Theme tokens. The default (:root) palette is "Midnight"; [data-theme] blocks
    below override it. Components reference these via var(--token), so switching
    the data-theme attribute on <html> recolors the whole app. The four themes
@@ -139,28 +148,36 @@
   --err-hover-bg: #f6d4d7;
 }
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+/* These global defaults live in @layer base so Tailwind utilities (@layer
+   utilities, declared last in tailwind.css) can override them. Unlayered they
+   would WIN over every utility: the universal reset silently killed every
+   padding and margin utility, and the icon rule killed every icon font-size
+   utility. Component `<style scoped>` is unlayered and still beats these,
+   exactly as before. */
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
 
-body {
-  background: var(--bg-base);
-  overflow: hidden;
-}
+  body {
+    background: var(--bg-base);
+    overflow: hidden;
+  }
 
-/* Project-wide icon convention: Material Symbols (outlined). Icons inherit the
-   surrounding text size by default; set font-size on the element to scale, and
-   the optical-size axis (opsz) follows so weight stays balanced. */
-.material-symbols-outlined {
-  font-size: inherit;
-  line-height: 1;
-  vertical-align: middle;
-  user-select: none;
-  font-variation-settings:
-    "FILL" 0,
-    "wght" 400,
-    "GRAD" 0,
-    "opsz" 20;
+  /* Project-wide icon convention: Material Symbols (outlined). Icons inherit the
+     surrounding text size by default; set font-size on the element to scale, and
+     the optical-size axis (opsz) follows so weight stays balanced. */
+  .material-symbols-outlined {
+    font-size: inherit;
+    line-height: 1;
+    vertical-align: middle;
+    user-select: none;
+    font-variation-settings:
+      "FILL" 0,
+      "wght" 400,
+      "GRAD" 0,
+      "opsz" 20;
+  }
 }
