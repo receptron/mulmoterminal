@@ -5,6 +5,7 @@
 import type { IPty } from "node-pty";
 import type { WebSocket } from "ws";
 import { getLaunchers } from "../config/config-routes.js";
+import { launcherAt, shellInvocation } from "./shell-command.js";
 import { ptys } from "./registry.js";
 import { ptySpawn, spawnPty } from "./pty-spawn.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -18,9 +19,7 @@ export function createShellSpawners(deps: SpawnDeps) {
   // reap/grace. It's an ephemeral grid terminal (the Run menu); the caller kills it
   // when the viewer's socket closes.
   function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
-    const isWindows = process.platform === "win32";
-    const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-    const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
+    const { shell, args } = shellInvocation(command, false, process.platform, process.env.SHELL);
     const term = spawnPty(shell, args, cwd);
     console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
 
@@ -37,8 +36,7 @@ export function createShellSpawners(deps: SpawnDeps) {
   // Resolve a launcher by its position in the user's configured list — the browser
   // sends only an INDEX (the config is the allowlist), never a raw command.
   function resolveLauncher(index: number): { label: string; command: string } | null {
-    const list = getLaunchers();
-    return Number.isInteger(index) && index >= 0 && index < list.length ? list[index] : null;
+    return launcherAt(getLaunchers(), index);
   }
 
   // Spawn a configured launcher command as a PERSISTENT, reattachable PTY that shares
@@ -47,10 +45,8 @@ export function createShellSpawners(deps: SpawnDeps) {
   // becomes the single foreground process ($SHELL, codex, etc.) — env vars in the
   // command (e.g. $SHELL) expand, and the process stays interactive in the PTY.
   function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd: string): PtyEntry {
-    const isWindows = process.platform === "win32";
-    const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-    const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", `exec ${command}`];
     // Persistent: reattaches a surviving tmux session (command ignored) or creates one.
+    const { shell, args } = shellInvocation(command, true, process.platform, process.env.SHELL);
     const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
     console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
 
