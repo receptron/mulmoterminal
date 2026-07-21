@@ -331,7 +331,7 @@ onUnmounted(() => {
         and finishes on <strong>this machine</strong>, so use a browser here — over a remote connection, run
         <code>npx mulmoterminal google login</code> instead. The link is shared with MulmoClaude.
       </p>
-      <p v-if="googleSecretHint" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-[var(--danger)]">{{ googleSecretHint }}</p>
+      <p v-if="googleSecretHint" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-err-text">{{ googleSecretHint }}</p>
       <div class="mb-3 flex items-center gap-2.5">
         <span class="text-[12px]" :class="googleStatus?.linked ? 'text-ok' : 'text-muted'">{{ googleStatusText }}</span>
         <SettingsButton
@@ -343,7 +343,7 @@ onUnmounted(() => {
         </SettingsButton>
         <SettingsButton v-else :disabled="googleBusy" @click="onUnlinkGoogle">Unlink</SettingsButton>
       </div>
-      <p v-if="googleError" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-[var(--danger)]" role="alert">{{ googleError }}</p>
+      <p v-if="googleError" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-err-text" role="alert">{{ googleError }}</p>
 
       <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Pull request repos</h3>
       <p class="mb-3 mt-1.5 text-[12px] text-dim">
