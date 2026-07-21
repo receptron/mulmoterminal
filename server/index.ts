@@ -4,10 +4,9 @@ import { WebSocketServer, WebSocket, type RawData } from "ws";
 import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "path";
-import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./infra/pubsub.js";
@@ -56,7 +55,7 @@ import { resolveSession, type SessionResolution } from "./session/session-resolv
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { messageOf } from "./errors.js";
-import type { DiskStat, PendingSession, PtyEntry, SessionMeta, ToolCall, ToolResult } from "./session/types.js";
+import type { PtyEntry, SessionMeta, ToolCall, ToolResult } from "./session/types.js";
 import {
   activity,
   activityStateHydrated,
@@ -81,6 +80,18 @@ import {
 } from "./session/registry.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
+import {
+  claudeOnDiskSessionIds,
+  collectOnDiskSessionStats,
+  collectPendingSessions,
+  latestUserPrompt,
+  projectSessionsDir,
+  readSessionMeta,
+  readSessionSummary,
+  sessionExistsOnDisk,
+  sessionTimeline,
+  LAST_RESPONSE_MAX,
+} from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -92,29 +103,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
-import {
-  isRecord,
-  parseJsonl,
-  userPromptText,
-  isTrivialPrompt,
-  aiTitleFromParsed,
-  countUserTurnsFromJsonl,
-  countUserTurnsFromParsed,
-  latestMeaningfulUserPromptFromJsonl,
-  latestMeaningfulUserPromptFromParsed,
-  latestAssistantTextFromJsonl,
-  latestAssistantTextFromParsed,
-  preferredHeaderPrompt,
-  sessionUsageFromParsed,
-  latestTurnContextFromParsed,
-  timelineFromJsonl,
-  currentTurnToolNamesFromParsed,
-  type SessionUsage,
-  type LatestTurnContext,
-  type TimelineEvent,
-} from "./session/transcript.js";
-import { classifyWorkPhase, type WorkPhase } from "./session/workPhase.js";
-import { createFileCache, type FileStamp } from "./session/file-cache.js";
+import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
@@ -390,7 +379,6 @@ const ACTIVITY_IDS_LIMIT = 200;
 
 const LAST_PROMPT_CAP = 200;
 
-const LAST_RESPONSE_MAX = 400;
 // The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
 // the cache below because the two want opposite things on failure: the roster would rather
 // keep showing the last reply it had, while a push must never describe a finished turn with
@@ -645,158 +633,6 @@ function mcpConfigJson(sessionId: string, host: string = "127.0.0.1", sandbox: b
   }
   mcpServers["mulmoterminal-gui"] = { type: "http", url: `http://${host}:${PORT}/api/mcp/${sessionId}` };
   return JSON.stringify({ mcpServers });
-}
-
-// Claude stores each project's sessions under ~/.claude/projects/<encoded-cwd>/,
-// where the absolute cwd has its "/" and "." characters replaced by "-".
-function projectSessionsDir(cwd: string) {
-  const encoded = path.resolve(cwd).replace(/[/.]/g, "-");
-  return path.join(os.homedir(), ".claude", "projects", encoded);
-}
-
-// Whether a session has an on-disk transcript (claude only writes it after the
-// first prompt) in the given workspace. Determines whether `--resume` will work.
-function sessionExistsOnDisk(id: string, cwd: string): boolean {
-  return existsSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`));
-}
-
-// readdirSync that yields [] instead of throwing on a missing / unreadable dir.
-function safeReaddir(dir: string): string[] {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-}
-
-// Every session id with a Claude transcript on disk, across ALL project dirs — so the
-// orphan-tmux cleanup can tell a resumable session from a pure orphan (per-cwd
-// sessionExistsOnDisk can't, since a tmux orphan carries no cwd). A non-dir entry under
-// the projects root reads as empty, so it's harmlessly skipped.
-function claudeOnDiskSessionIds(): Set<string> {
-  const ids = new Set<string>();
-  const root = path.join(os.homedir(), ".claude", "projects");
-  for (const project of safeReaddir(root)) {
-    for (const f of safeReaddir(path.join(root, project))) {
-      if (f.endsWith(".jsonl")) ids.add(f.slice(0, -".jsonl".length));
-    }
-  }
-  return ids;
-}
-
-// The most recent user prompt from a resumed session's on-disk transcript, so a
-// freshly-resumed cell can show its last prompt instead of just the id. null if
-// there's no transcript yet (a never-prompted session) or it can't be read.
-async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    return latestMeaningfulUserPromptFromJsonl(raw);
-  } catch {
-    return null;
-  }
-}
-
-const EMPTY_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-const EMPTY_CONTEXT: LatestTurnContext = { model: null, contextTokens: 0 };
-interface SessionSummary {
-  lastPrompt: string | null;
-  aiTitle: string | null;
-  lastResponse: string | null;
-  userTurns: number;
-  usage: SessionUsage;
-  context: LatestTurnContext;
-  workPhase: WorkPhase | null;
-}
-const EMPTY_SUMMARY: SessionSummary = {
-  lastPrompt: null,
-  aiTitle: null,
-  lastResponse: null,
-  userTurns: 0,
-  usage: EMPTY_USAGE,
-  context: EMPTY_CONTEXT,
-  workPhase: null,
-};
-
-// Transcripts are append-only and can be hundreds of MB; /api/session/:id is hit on every
-// window focus and by each grid cell as turns finish, so re-reading + re-parsing the whole
-// .jsonl each time blocked the event loop and janked the terminals. Memoize by (mtime,size):
-// an unchanged transcript returns instantly, and a changed one is read + parsed ONCE (the six
-// derived values share one parse pass, vs. one parse per helper before).
-const sessionSummaryCache = createFileCache<SessionSummary>();
-
-async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
-  const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
-  let stamp: FileStamp;
-  try {
-    const st = await fs.stat(file);
-    stamp = { mtimeMs: st.mtimeMs, size: st.size };
-  } catch {
-    return EMPTY_SUMMARY; // no transcript on disk yet
-  }
-  const cached = sessionSummaryCache.get(file, stamp);
-  if (cached) return cached;
-  let records: Record<string, unknown>[];
-  try {
-    records = parseJsonl(await fs.readFile(file, "utf8"));
-  } catch {
-    return EMPTY_SUMMARY;
-  }
-  const summary: SessionSummary = {
-    lastPrompt: latestMeaningfulUserPromptFromParsed(records),
-    aiTitle: aiTitleFromParsed(records),
-    lastResponse: latestAssistantTextFromParsed(records)?.slice(0, LAST_RESPONSE_MAX) ?? null,
-    userTurns: countUserTurnsFromParsed(records),
-    usage: sessionUsageFromParsed(records),
-    context: latestTurnContextFromParsed(records),
-    workPhase: classifyWorkPhase(currentTurnToolNamesFromParsed(records)),
-  };
-  sessionSummaryCache.set(file, stamp, summary);
-  return summary;
-}
-
-// The tool-activity timeline for a session, capped to the most recent events so the
-// payload stays bounded on a long session. A missing transcript is an empty list.
-const TIMELINE_MAX_EVENTS = 300;
-async function sessionTimeline(cwd: string, id: string): Promise<{ events: TimelineEvent[]; truncated: boolean }> {
-  try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    const all = timelineFromJsonl(raw);
-    return { events: all.slice(-TIMELINE_MAX_EVENTS), truncated: all.length > TIMELINE_MAX_EVENTS };
-  } catch {
-    return { events: [], truncated: false };
-  }
-}
-
-// Scan a session JSONL for a human-friendly title and last activity.
-async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> {
-  const full = path.join(dir, file);
-  const [raw, stat] = await Promise.all([fs.readFile(full, "utf8"), fs.stat(full)]);
-
-  let aiTitle: string | null = null;
-  let lastPrompt: string | null = null;
-  let firstUserMsg: string | null = null;
-
-  for (const o of parseJsonl(raw)) {
-    if (o.type === "ai-title" && o.aiTitle) aiTitle = String(o.aiTitle);
-    else if (o.type === "last-prompt" && o.lastPrompt) lastPrompt = String(o.lastPrompt);
-    else if (o.type === "user" && firstUserMsg === null) {
-      firstUserMsg = userPromptText(isRecord(o.message) ? o.message.content : undefined);
-    }
-  }
-
-  const id = path.basename(file, ".jsonl");
-  // The live in-memory title (this process run) wins over the on-disk record.
-  const title = aiTitles.get(id) || aiTitle || lastPrompt || firstUserMsg || "(untitled session)";
-  const a = activity.get(id);
-  return {
-    id,
-    title,
-    mtime: stat.mtimeMs,
-    working: a?.working ?? false,
-    waiting: a?.waiting ?? false,
-    event: a?.event ?? null,
-    hidden: hiddenSessions.has(id),
-  };
 }
 
 const app = express();
@@ -1439,9 +1275,6 @@ app.get("/api/activity", async (req, res) => {
   res.json(out);
 });
 
-// Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a
-// terminal opened in this directory should use. cwd is validated like every other
-// cwd-scoped route; the raw sound path stays server-side (see /api/dir-sound).
 // The tool-activity timeline for a session (what the agent ran, newest last), so a
 // cell can show "what did it do?" without scrolling the raw transcript.
 app.get("/api/transcript/timeline", async (req, res) => {
@@ -1450,45 +1283,6 @@ app.get("/api/transcript/timeline", async (req, res) => {
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await sessionTimeline(cwd, session));
 });
-
-// Cheap recency pass: stat (don't read) every session file just for its mtime, so the
-// list can be ranked by recency. Files that vanished between readdir and stat are skipped.
-async function collectOnDiskSessionStats(dir: string, files: string[]): Promise<DiskStat[]> {
-  const stats = await Promise.all(
-    files.map(async (file): Promise<DiskStat | null> => {
-      try {
-        const st = await fs.stat(path.join(dir, file));
-        return { kind: "disk", id: path.basename(file, ".jsonl"), file, mtime: st.mtimeMs };
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return stats.filter((s): s is DiskStat => s !== null);
-}
-
-// In-memory sessions not yet written to disk. Prune (delete from knownSessions) any that
-// have since been persisted — the on-disk record (with its real title) wins.
-function collectPendingSessions(onDisk: Set<string>, includePending: boolean): PendingSession[] {
-  const pending: PendingSession[] = [];
-  for (const [id, meta] of includePending ? knownSessions : []) {
-    if (onDisk.has(id)) {
-      knownSessions.delete(id);
-      continue;
-    }
-    pending.push({
-      kind: "pending",
-      id,
-      title: meta.title,
-      mtime: meta.createdAt,
-      working: activity.get(id)?.working ?? false,
-      waiting: activity.get(id)?.waiting ?? false,
-      event: activity.get(id)?.event ?? null,
-      hidden: hiddenSessions.has(id),
-    });
-  }
-  return pending;
-}
 
 // List the chat sessions for the current project (CLAUDE_CWD), including
 // newly-created sessions that aren't persisted to disk yet.
