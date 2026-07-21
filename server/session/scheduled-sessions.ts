@@ -112,6 +112,9 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
     records = await readPersisted();
   })();
 
+  // Adopting a peer's ids is part of writing, not a separate step: we must fold in whatever
+  // landed on disk since our last read or the overwrite would drop it, and the ids we adopt
+  // are then ours to sweep like any other.
   const persist = async (): Promise<void> => {
     records = mergeScheduledSessions(await readPersisted(), records, reaped);
     await fs.mkdir(path.dirname(deps.file), { recursive: true });
@@ -133,9 +136,8 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
     const isOpen = (record: ScheduledSessionRecord) => deps.isAttached(record.id);
     const held = expire.filter(isOpen);
     const evicted = expire.filter((record) => !isOpen(record));
-    if (evicted.length === 0) return;
     evicted.forEach(evict);
-    console.log(`[scheduler] reaped ${evicted.length} scheduled session(s) past retention`);
+    if (evicted.length > 0) console.log(`[scheduler] reaped ${evicted.length} scheduled session(s) past retention`);
     records = [...keep, ...held];
     await persist();
   };
@@ -154,8 +156,7 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
       const record = { id, createdAt: now() };
       void enqueue(async () => {
         records = [...records, record];
-        await persist();
-        await runSweep();
+        await runSweep(); // persists, so the new id survives a restart either way
       });
     },
     sweep: () => enqueue(runSweep),
