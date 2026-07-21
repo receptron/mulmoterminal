@@ -39,7 +39,14 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
 ## Rules
 
 1. **Default to Tailwind utilities.** New or changed markup gets utility classes,
-   not a fresh `<style scoped>` block.
+   not a fresh `<style scoped>` block. **This is enforced:** `vue/no-restricted-block`
+   makes a `<style>` block in `src/**/*.vue` a lint error. If a rule genuinely can't be
+   a utility, add the file to the **scoped-CSS allowlist in `eslint.config.js` with a
+   one-line reason** — don't reach for an inline `eslint-disable`. Keeping the list in
+   one place means every exception is visible in review, and the reasons can be audited
+   (and entries deleted) as the constraints go away. Today's entries are all `@keyframes`,
+   `:deep` into `v-html`/CodeMirror, a sibling combinator, a parent-state layout machine,
+   and the shared cell-chrome imports.
 2. **Prefer a token over a raw hex.** Where a token exists, `bg-elevated` beats
    `bg-[#20203a]` — the token is what theme-switches, so the arbitrary hex would be a
    regression. **But** when a color is *already* hardcoded in the scoped CSS and has no

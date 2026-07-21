@@ -26,7 +26,37 @@ export default [
     rules: {
       "vue/multi-word-component-names": "off",
       "vue/max-attributes-per-line": "off",
+      // Components are styled with Tailwind utilities (docs/styling.md) so the styling
+      // travels with the markup. A <style> block is the exception, not the default —
+      // add the file to the allowlist below WITH a reason rather than disabling inline.
+      "vue/no-restricted-block": [
+        "error",
+        {
+          element: "style",
+          message:
+            "Use Tailwind utilities (see docs/styling.md). If this genuinely can't be a utility, add the file to the scoped-CSS allowlist in eslint.config.js with a reason.",
+        },
+      ],
     },
+  },
+  {
+    // Scoped-CSS allowlist. Each entry is something Tailwind utilities cannot express;
+    // keep the reason current, and delete the entry when the reason goes away.
+    files: [
+      "src/components/Sidebar.vue", //            @keyframes — the "thinking" spinner ring
+      "src/components/SessionTabBar.vue", //      @keyframes — the same spinner
+      "src/components/Terminal.vue", //           @keyframes — the voice button's pulse / spin
+      "src/components/TerminalGrid.vue", //       parent-state x descendant layout machine + FLIP @keyframes
+      "src/components/GuiPanel.vue", //           `.frame + .frame` sibling-combinator spacing
+      "src/components/WikiPageView.vue", //       :deep into v-html markdown
+      "src/components/WikiBrowseOverlay.vue", //  :deep into v-html lint output
+      "src/components/FilesOverlay.vue", //       :deep into CodeMirror's injected root
+      "src/components/CommandCell.vue", //        overrides of the shared .cell-btn + the shared chrome imports
+      "src/components/TerminalCell.vue", //       shared chrome import
+      "src/components/LauncherCell.vue", //       shared chrome imports
+      "src/components/ToolbarPopover.vue", //     shared popover chrome import
+    ],
+    rules: { "vue/no-restricted-block": "off" },
   },
   {
     files: ["server/**/*.js", "bin/**/*.js", "scripts/**/*.{js,mjs}"],
