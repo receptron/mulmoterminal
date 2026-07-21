@@ -3,10 +3,10 @@
 // today/month roll-up served at GET /api/cost. Pricing is a public-list estimate
 // (see MODEL_PRICING); unknown models are left unpriced rather than guessed.
 import path from "node:path";
-import os from "node:os";
 import fs from "node:fs/promises";
 import type { Express } from "express";
 import { isRecord, parseJsonl } from "./transcript.js";
+import { projectSessionsDir } from "./project-dir.js";
 
 const TOKENS_PER_MILLION = 1_000_000;
 // Cache reads bill at ~0.1x the base input rate; cache writes at 1.25x for the
@@ -114,13 +114,6 @@ export function costFromJsonl(raw: string): JsonlCost {
 // stays bounded. Files within the month window are read newest-first up to this.
 const MAX_COST_FILES = 200;
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Claude stores each project's transcripts under ~/.claude/projects/<encoded-cwd>/
-// (mirrors index.ts projectSessionsDir; kept here so this module has no server deps).
-function projectSessionsDir(cwd: string): string {
-  const encoded = path.resolve(cwd).replace(/[/.]/g, "-");
-  return path.join(os.homedir(), ".claude", "projects", encoded);
-}
 
 const startOfToday_ms = (now: Date): number => new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
 const startOfMonth_ms = (now: Date): number => new Date(now.getFullYear(), now.getMonth(), 1).getTime();

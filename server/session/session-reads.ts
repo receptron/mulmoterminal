@@ -32,16 +32,11 @@ import {
 import { createFileCache, type FileStamp } from "./file-cache.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
 import { activity, aiTitles, hiddenSessions, knownSessions } from "./registry.js";
+import { projectSessionsDir } from "./project-dir.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 
 // Bytes of an assistant reply kept for the roster; the same cap the push body uses.
 export const LAST_RESPONSE_MAX = 400;
-// Claude stores each project's sessions under ~/.claude/projects/<encoded-cwd>/,
-// where the absolute cwd has its "/" and "." characters replaced by "-".
-export function projectSessionsDir(cwd: string) {
-  const encoded = path.resolve(cwd).replace(/[/.]/g, "-");
-  return path.join(os.homedir(), ".claude", "projects", encoded);
-}
 
 // Whether a session has an on-disk transcript (claude only writes it after the
 // first prompt) in the given workspace. Determines whether `--resume` will work.
