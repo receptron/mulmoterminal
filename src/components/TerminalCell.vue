@@ -1291,16 +1291,13 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button
             type="button"
             data-testid="cell-dir-go"
-            class="cursor-default opacity-40"
+            class="inline-flex flex-none cursor-pointer items-center justify-center rounded-md border border-border bg-elevated px-2 text-secondary enabled:hover:border-accent enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-40"
             :disabled="!dirInput.trim()"
             title="Start a new terminal here (or press Enter)"
             aria-label="Start a new terminal here"
             @click="launch"
           >
-            <span
-              class="material-symbols-outlined cursor-pointer rounded-md border border-border bg-elevated px-4 py-[7px] font-sans text-[14px] font-medium text-secondary"
-              >play_arrow</span
-            >
+            <span class="material-symbols-outlined text-[18px]">play_arrow</span>
           </button>
         </span>
       </label>
