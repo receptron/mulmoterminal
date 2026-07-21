@@ -9,45 +9,45 @@ const render = (status: GitStatus | null, hideDirty = false) => mount(GitBranchC
 
 describe("GitBranchChip", () => {
   it("renders nothing when status is null", () => {
-    expect(render(null).find(".git-chip").exists()).toBe(false);
+    expect(render(null).find('[data-testid="git-chip"]').exists()).toBe(false);
   });
 
   it("renders nothing for a non-git dir (repo:false)", () => {
     expect(
       render({ ...base, repo: false, branch: null })
-        .find(".git-chip")
+        .find('[data-testid="git-chip"]')
         .exists(),
     ).toBe(false);
   });
 
   it("shows the branch name on a clean repo", () => {
     const w = render(base);
-    expect(w.find(".git-chip").exists()).toBe(true);
-    expect(w.find(".git-branch").text()).toContain("main");
-    expect(w.find(".git-dirty").exists()).toBe(false);
+    expect(w.find('[data-testid="git-chip"]').exists()).toBe(true);
+    expect(w.find('[data-testid="git-branch"]').text()).toContain("main");
+    expect(w.find('[data-testid="git-dirty"]').exists()).toBe(false);
   });
 
   it("shows the dirty count when there are uncommitted changes", () => {
     const w = render({ ...base, dirty: 3 });
-    expect(w.find(".git-dirty").text()).toBe("●3");
+    expect(w.find('[data-testid="git-dirty"]').text()).toBe("●3");
   });
 
   it("hides the dirty count when hideDirty is set (worktree cell)", () => {
     const w = render({ ...base, dirty: 3 }, true);
-    expect(w.find(".git-dirty").exists()).toBe(false);
-    expect(w.find(".git-branch").text()).toContain("main");
+    expect(w.find('[data-testid="git-dirty"]').exists()).toBe(false);
+    expect(w.find('[data-testid="git-branch"]').text()).toContain("main");
   });
 
   it("shows ahead/behind only when an upstream exists", () => {
     const noUpstream = render({ ...base, ahead: 2, behind: 1, upstream: false });
-    expect(noUpstream.findAll(".git-ab")).toHaveLength(0);
+    expect(noUpstream.findAll('[data-testid="git-ab"]')).toHaveLength(0);
     const withUpstream = render({ ...base, ahead: 2, behind: 1, upstream: true });
-    const abs = withUpstream.findAll(".git-ab").map((n) => n.text());
+    const abs = withUpstream.findAll('[data-testid="git-ab"]').map((n) => n.text());
     expect(abs).toEqual(["↑2", "↓1"]);
   });
 
   it("labels a detached HEAD", () => {
     const w = render({ ...base, branch: null, detached: true });
-    expect(w.find(".git-branch").text()).toContain("detached");
+    expect(w.find('[data-testid="git-branch"]').text()).toContain("detached");
   });
 });
