@@ -110,10 +110,16 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 </script>
 
 <template>
-  <section class="tools-pane side-pane">
-    <div class="side-pane-header">
-      <span class="side-pane-title">Tools</span>
-      <button type="button" class="side-pane-action" title="Close tools pane" aria-label="Close tools pane" @click="emit('close')">
+  <section class="tools-pane flex flex-col h-full bg-deep border-l border-border">
+    <div class="py-2 px-4 bg-panel text-fg font-sans text-[14px] flex items-center justify-between">
+      <span class="font-semibold">Tools</span>
+      <button
+        type="button"
+        class="bg-transparent border-0 text-dim text-[15px] leading-none py-0.5 px-1 cursor-pointer rounded hover:text-fg"
+        title="Close tools pane"
+        aria-label="Close tools pane"
+        @click="emit('close')"
+      >
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -176,8 +182,6 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
     </div>
   </section>
 </template>
-
-<style scoped src="./sidePane.css"></style>
 
 <style scoped>
 .tools-pane {
