@@ -198,9 +198,13 @@ function onHeaderClick(event: MouseEvent) {
           {{ summaryError }}
         </p>
         <template v-else>
-          <pre data-testid="cell-summary-text" class="m-0 font-mono text-[12px] leading-[1.5] text-[#d6dcf5] whitespace-pre-wrap [word-break:break-word]">{{
-            summaryText
-          }}</pre>
+          <!-- v-text (not {{ }}): keeps the summary's exact bytes and is immune to a
+               formatter wrapping the interpolation onto its own indented line inside <pre>. -->
+          <pre
+            data-testid="cell-summary-text"
+            class="m-0 font-mono text-[12px] leading-[1.5] text-[#d6dcf5] whitespace-pre-wrap [word-break:break-word]"
+            v-text="summaryText"
+          ></pre>
           <p v-if="summaryTruncated" data-testid="cell-summary-note" class="mt-1.5 font-sans text-[11px] text-[#7f88ad]">
             (long output — summarized the tail only)
           </p>
