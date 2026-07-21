@@ -729,23 +729,24 @@ const statusClass = computed(() => STATUS_CLASS[status.value]);
 // The header colour rides along in the non-blocked branches so two text utilities
 // never race for the same element.
 const HEADER_FG = "text-[var(--cell-header-fg,inherit)]";
-const cellStatusClass = computed(() =>
-  status.value === "done"
-    ? "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_40%,transparent)]"
-    : status.value === "blocked"
-      ? "border-amber shadow-[0_0_0_2px_color-mix(in_srgb,var(--amber)_55%,transparent)]"
-      : status.value === "working"
-        ? "border-accent"
-        : "",
-);
-const headerStatusClass = computed(() =>
-  status.value === "blocked"
-    ? "bg-[var(--warn-bg-subtle)] border-b-amber text-warn"
-    : status.value === "working" || status.value === "done"
-      ? `bg-selected border-b-accent ${HEADER_FG}`
-      : `bg-[var(--cell-header-bg,var(--bg-panel))] border-b-border ${HEADER_FG}`,
-);
-const dotStatusClass = computed(() => (status.value === "done" ? "bg-accent" : status.value === "blocked" ? "bg-amber" : ""));
+const CELL_STATUS = {
+  // Idle keeps the per-dir --cell-border override; the active states deliberately replace it.
+  idle: "border-[var(--cell-border,var(--border))]",
+  working: "border-accent",
+  done: "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_40%,transparent)]",
+  blocked: "border-amber shadow-[0_0_0_2px_color-mix(in_srgb,var(--amber)_55%,transparent)]",
+} as const;
+const HEADER_STATUS = {
+  idle: `bg-[var(--cell-header-bg,var(--bg-panel))] border-b-border ${HEADER_FG}`,
+  working: `bg-selected border-b-accent ${HEADER_FG}`,
+  done: `bg-selected border-b-accent ${HEADER_FG}`,
+  blocked: "bg-[var(--warn-bg-subtle)] border-b-amber text-warn",
+} as const;
+// idle/working dots stay on cellChromeBase (which owns the working pulse).
+const DOT_STATUS = { idle: "", working: "", done: "bg-accent", blocked: "bg-amber" } as const;
+const cellStatusClass = computed(() => CELL_STATUS[status.value]);
+const headerStatusClass = computed(() => HEADER_STATUS[status.value]);
+const dotStatusClass = computed(() => DOT_STATUS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
 
