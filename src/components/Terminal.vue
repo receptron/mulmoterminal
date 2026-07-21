@@ -96,6 +96,13 @@ function currentTarget(): conn.ConnTarget {
 const terminalRef = ref<HTMLDivElement>();
 // Connection status + server-resolved cwd are projected reactively from the manager.
 const status = computed(() => conn.connView.get(slotKey)?.status ?? "connecting");
+// Connection pill colours. The *-bg tokens aren't in Tailwind's palette, so the
+// backgrounds come through as arbitrary var() values.
+const statusClass = computed(() => {
+  if (status.value === "connected") return "bg-[var(--ok-bg)] text-ok";
+  if (status.value === "connecting") return "bg-[var(--warn-bg)] text-warn";
+  return "bg-[var(--err-deep)] text-err";
+});
 // The server-resolved cwd of the connected session (the open project), used by the
 // Run menu so it lists THAT directory's scripts. Falls back to the requested cwd.
 const serverCwd = computed(() => conn.connView.get(slotKey)?.serverCwd ?? props.cwd ?? null);
@@ -325,36 +332,47 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="terminal-wrapper">
-    <div v-if="!hideHeader" class="header" :style="headerStyle">
-      <span class="title">Terminal</span>
-      <span v-if="dirName" class="dir-badge" :style="dirBadgeStyle" :title="dirName">{{ dirName }}</span>
+  <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-base">
+    <div
+      v-if="!hideHeader"
+      class="flex items-center gap-3 bg-[var(--cell-header-bg,var(--bg-panel))] px-4 py-2 font-sans text-[14px] text-[var(--cell-header-fg,var(--text))]"
+      :style="headerStyle"
+    >
+      <span class="font-semibold">Terminal</span>
+      <span
+        v-if="dirName"
+        class="max-w-[16ch] truncate rounded-[10px] px-2 py-px text-[11px] font-semibold leading-[1.6]"
+        :style="dirBadgeStyle"
+        :title="dirName"
+        >{{ dirName }}</span
+      >
       <GitBranchChip :status="gitStatus" />
-      <span :class="['status', status]">{{ status }}</span>
+      <span class="rounded-[4px] px-2 py-0.5 text-[12px]" :class="statusClass">{{ status }}</span>
       <RunMenu v-if="runMenu" :cwd="serverCwd" @run="(c) => emit('run', c)" />
       <SkillMenu v-if="runMenu" :cwd="serverCwd" @skill="onSkill" />
-      <div class="header-actions">
+      <div class="ml-auto inline-flex items-center gap-1">
         <button
           v-for="b in headerButtons"
           :key="b.id"
           type="button"
-          class="icon-btn hdr-action"
+          class="inline-flex cursor-pointer items-center rounded-[4px] border-0 bg-transparent p-0.5 text-[var(--cell-btn,var(--text-muted))] hover:bg-selected hover:text-fg"
           :title="b.label"
           :aria-label="b.label"
           @click="onHeaderButton(b)"
         >
-          <span v-if="b.emoji" class="hdr-emoji">{{ b.emoji }}</span>
-          <span v-else class="material-symbols-outlined">{{ b.icon || "bolt" }}</span>
+          <span v-if="b.emoji" class="text-[15px] leading-none">{{ b.emoji }}</span>
+          <span v-else class="material-symbols-outlined text-[18px]">{{ b.icon || "bolt" }}</span>
         </button>
         <button
           v-if="voice.capable.value"
           type="button"
-          :class="['icon-btn', 'voice', { listening: voice.listening.value, busy: voice.downloading.value || voice.transcribing.value }]"
+          class="inline-flex cursor-pointer items-center rounded-[4px] border-0 bg-transparent p-0.5 text-[var(--cell-btn,var(--text-muted))] hover:bg-selected hover:text-fg"
+          :class="['voice', { listening: voice.listening.value, busy: voice.downloading.value || voice.transcribing.value }]"
           :title="voiceTitle()"
           :aria-label="voiceTitle()"
           @click="voice.toggle()"
         >
-          <span class="material-symbols-outlined">{{ voiceIcon() }}</span>
+          <span class="material-symbols-outlined text-[18px]">{{ voiceIcon() }}</span>
         </button>
         <!-- The file-path picker and file explorer are now DEFAULT_BUTTONS (server-resolved into
              headerButtons above), so the user can drop/reorder/replace them via config. -->
@@ -363,91 +381,27 @@ onUnmounted(() => {
         <slot name="header-actions" />
       </div>
     </div>
-    <div ref="terminalRef" :class="['terminal-container', { 'drag-over': dragOver }]" @dragover="onDragOver" @dragleave="dragOver = false" @drop="onDrop" />
+    <div
+      ref="terminalRef"
+      class="min-h-0 flex-1 p-1"
+      :class="{ '[outline:2px_dashed_var(--accent)] [outline-offset:-2px]': dragOver }"
+      @dragover="onDragOver"
+      @dragleave="dragOver = false"
+      @drop="onDrop"
+    />
   </div>
 </template>
 
+<!-- The voice button's recording pulse / busy spin need @keyframes, which have no
+     utility equivalent — the rest of the header is utilities. These target .voice
+     directly (the icon-btn base is now utilities). -->
 <style scoped>
-.terminal-wrapper {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  background: var(--bg-base);
-}
-
-.header {
-  padding: 8px 16px;
-  /* Per-dir overrides via .mulmoterminal.json (headerColor/headerTextColor); matches
-     the grid cell's row-1 header so both header rows share the look. */
-  background: var(--cell-header-bg, var(--bg-panel));
-  color: var(--cell-header-fg, var(--text));
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.title {
-  font-weight: 600;
-}
-
-/* Project badge from <cwd>/.mulmoterminal.json — a per-directory identity chip. */
-.dir-badge {
-  max-width: 16ch;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.6;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-actions {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.icon-btn {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--cell-btn, var(--text-muted));
-  cursor: pointer;
-}
-
-.icon-btn:hover {
-  background: var(--bg-selected);
-  color: var(--text);
-}
-
-.icon-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-/* A configured action button's emoji glyph, sized to sit with the icon buttons. */
-.hdr-emoji {
-  font-size: 15px;
-  line-height: 1;
-}
-
-/* Recording: solid red, gently pulsing. Busy (download/transcribe): the spinner
-   icon rotates. */
-.icon-btn.voice.listening {
+.voice.listening {
   color: #e5484d;
   animation: voice-pulse 1.2s ease-in-out infinite;
 }
 
-.icon-btn.voice.busy .material-symbols-outlined {
+.voice.busy .material-symbols-outlined {
   animation: voice-spin 1s linear infinite;
 }
 
@@ -465,43 +419,5 @@ onUnmounted(() => {
   to {
     transform: rotate(360deg);
   }
-}
-
-.status {
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 4px;
-}
-
-.status.connected {
-  background: var(--ok-bg);
-  color: var(--ok);
-}
-
-.status.connecting {
-  background: var(--warn-bg);
-  color: var(--warn);
-}
-
-.status.disconnected {
-  background: var(--err-deep);
-  color: var(--err);
-}
-
-/* min-height:0 is load-bearing: a flex item's default min-height is `auto`
-   (its content's min size), which pins this xterm host to the terminal's full
-   rendered height. In a short grid cell that overflows and is clipped — the
-   bottom input row can't be seen or scrolled to — and FitAddon then reads the
-   un-shrunk height and never reduces the rows. min-height:0 lets it shrink so
-   fit() can size the terminal to the cell. */
-.terminal-container {
-  flex: 1;
-  min-height: 0;
-  padding: 4px;
-}
-
-.terminal-container.drag-over {
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
 }
 </style>
