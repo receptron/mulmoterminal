@@ -322,6 +322,23 @@ describe("createScheduledSessionRegistry", () => {
     expect(await registered()).toEqual(["s1.json"]);
   });
 
+  // The id becomes a filename, so a bad one must never reach the write path.
+  it("refuses to register an id that could escape the registry directory", async () => {
+    const r = registry();
+    const escapee = path.join("..", "..", "escaped");
+    r.register(escapee);
+    await r.sweep();
+    expect(await registered()).toEqual([]);
+    await expect(fs.stat(path.join(home, "escaped.json"))).rejects.toThrow();
+  });
+
+  it("ignores a registration whose id fails validation", async () => {
+    const r = registry();
+    r.register("nope"); // isValidId requires an "s" prefix
+    await r.sweep();
+    expect(await registered()).toEqual([]);
+  });
+
   it("starts empty when the directory is missing", async () => {
     await registry().sweep();
     expect(reapSession).not.toHaveBeenCalled();

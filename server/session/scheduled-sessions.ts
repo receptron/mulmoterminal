@@ -163,6 +163,13 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
 
   return {
     register: (id: string) => {
+      // The id becomes a filename, so validate BEFORE building the path — reads already
+      // drop a bad id, and a caller passing "../…" must not be able to write outside the
+      // registry. Today's caller mints a uuid; this keeps that from being load-bearing.
+      if (!deps.isValidId(id)) {
+        console.warn(`[scheduler] refusing to register a session id that is not canonical: ${JSON.stringify(id)}`);
+        return;
+      }
       // Stamp the spawn time HERE, not inside the queued task: the write may drain much
       // later, and an age cap measured from the drain would keep a session alive too long.
       const createdAt = now();
