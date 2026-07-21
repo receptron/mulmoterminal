@@ -1512,6 +1512,10 @@ describe("TerminalCell", () => {
     expect(style).toContain("--cell-border: #2a2a4e");
     expect(style).toContain("--cell-dot: #00e676");
     expect(style).toContain("--cell-btn: #c7cdf0");
+    // …and the idle frame must actually CONSUME --cell-border, not just emit it:
+    // the border colour lived in a scoped rule until it moved to a utility, and
+    // dropping the consumer would silently lose the per-dir tint.
+    expect(w.find(".cell").classes()).toContain("border-[var(--cell-border,var(--border))]");
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {

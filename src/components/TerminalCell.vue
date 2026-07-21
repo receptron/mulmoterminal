@@ -724,6 +724,29 @@ const status = computed<CellStatus>(() => activityStatus(working.value, waiting.
 const STATUS_CLASS = { blocked: "is-blocked", done: "is-done", working: "is-working", idle: "is-idle" } as const;
 const STATUS_LABEL = { blocked: "Needs input", done: "Done — review", working: "Working…", idle: "Idle" } as const;
 const statusClass = computed(() => STATUS_CLASS[status.value]);
+// The is-* class stays on the element as a state marker (the specs assert it); these
+// carry the styling that used to live in the .cell.is-* / .cell-header.is-* rules.
+// The header colour rides along in the non-blocked branches so two text utilities
+// never race for the same element.
+const HEADER_FG = "text-[var(--cell-header-fg,inherit)]";
+const CELL_STATUS = {
+  // Idle keeps the per-dir --cell-border override; the active states deliberately replace it.
+  idle: "border-[var(--cell-border,var(--border))]",
+  working: "border-accent",
+  done: "border-accent shadow-[0_0_0_2px_color-mix(in_srgb,var(--accent)_40%,transparent)]",
+  blocked: "border-amber shadow-[0_0_0_2px_color-mix(in_srgb,var(--amber)_55%,transparent)]",
+} as const;
+const HEADER_STATUS = {
+  idle: `bg-[var(--cell-header-bg,var(--bg-panel))] border-b-border ${HEADER_FG}`,
+  working: `bg-selected border-b-accent ${HEADER_FG}`,
+  done: `bg-selected border-b-accent ${HEADER_FG}`,
+  blocked: "bg-[var(--warn-bg-subtle)] border-b-amber text-warn",
+} as const;
+// idle/working dots stay on cellChromeBase (which owns the working pulse).
+const DOT_STATUS = { idle: "", working: "", done: "bg-accent", blocked: "bg-amber" } as const;
+const cellStatusClass = computed(() => CELL_STATUS[status.value]);
+const headerStatusClass = computed(() => HEADER_STATUS[status.value]);
+const dotStatusClass = computed(() => DOT_STATUS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
 
@@ -880,17 +903,26 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 </script>
 
 <template>
-  <div class="cell" :class="statusClass" :style="cellStyle">
+  <div
+    class="cell relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border bg-[var(--cell-bg,var(--bg-base))]"
+    :class="[statusClass, cellStatusClass]"
+    :style="cellStyle"
+  >
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
-      <div class="cell-header" :class="[statusClass, { 'is-zoomable': !expanded }]" :style="headerStyle" @click="onHeaderClick">
+      <div
+        class="cell-header flex h-[34px] flex-none items-center gap-2 border-b px-2"
+        :class="[statusClass, headerStatusClass, { 'is-zoomable': !expanded }]"
+        :style="headerStyle"
+        @click="onHeaderClick"
+      >
         <!-- All the info lives in one shrinkable, clipping track. The chips (badge / git /
              model / tokens / custom) don't shrink, so without this they would overflow and
              push the actions past the cell's `overflow: hidden` edge — the buttons must
              stay reachable no matter how much a dir's config crams in here. -->
         <div data-testid="cell-header-main" class="flex min-w-0 flex-auto items-center gap-2 overflow-hidden">
-          <span class="cell-dot" :class="statusClass" :title="statusLabel" />
+          <span class="cell-dot" :class="[statusClass, dotStatusClass]" :title="statusLabel" />
           <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
                header's job is to zoom (switch to this terminal), so the dir is inert text
                and a click on it falls through to the header's zoom gesture. -->
@@ -1402,76 +1434,3 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 </template>
 
 <style scoped src="./cellChromeBase.css"></style>
-
-<style scoped>
-.cell {
-  position: relative; /* anchors the diff overlay */
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  /* Per-dir overrides via .mulmoterminal.json (cellColor/cellBorderColor); the status
-     frame below still wins the border while working/blocked. */
-  background: var(--cell-bg, var(--bg-base));
-  border: 1px solid var(--cell-border, var(--border));
-  border-radius: 6px;
-  overflow: hidden;
-}
-/* Frame the whole cell by status: blocked = amber glow (needs you NOW), done = blue
-   glow (finished a turn, review it), working = blue border (busy). */
-.cell.is-working {
-  border-color: var(--accent);
-}
-.cell.is-done {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 40%, transparent);
-}
-.cell.is-blocked {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--amber) 55%, transparent);
-}
-
-.cell-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 8px;
-  /* Per-dir override via .mulmoterminal.json (headerColor/headerTextColor) sets these
-     vars; the status tint below still wins for the background while working/blocked. */
-  background: var(--cell-header-bg, var(--bg-panel));
-  color: var(--cell-header-fg, inherit);
-  border-bottom: 1px solid var(--border);
-}
-/* The header also tints by status (working/done = blue, blocked = amber). */
-.cell-header.is-working,
-.cell-header.is-done {
-  background: var(--bg-selected);
-  border-bottom-color: var(--accent);
-}
-.cell-header.is-blocked {
-  background: var(--warn-bg-subtle);
-  color: var(--warn);
-  border-bottom-color: var(--amber);
-}
-/* The done/blocked dot states (idle + working + pulse live in cellChromeBase.css). */
-.cell-dot.is-done {
-  background: var(--accent);
-}
-.cell-dot.is-blocked {
-  background: var(--amber);
-}
-
-/* The info track absorbs all the width pressure: it grows into the free space and,
-   crucially, is allowed to shrink below its content (min-width: 0) and clip. That keeps
-   the non-shrinking chips from pushing .cell-actions out of the cell. */
-.cell-header-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-</style>
