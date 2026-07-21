@@ -40,10 +40,16 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
 
 1. **Default to Tailwind utilities.** New or changed markup gets utility classes,
    not a fresh `<style scoped>` block.
-2. **Never hardcode a color.** Use a token utility (`bg-elevated`, `text-muted`),
-   never `bg-[#20203a]` or a raw hex — the token is what theme-switches. Reach for an
-   arbitrary value only for a one-off *dimension* Tailwind's scale lacks (e.g.
-   `py-[5px]`, `text-[18px]`), never for color.
+2. **Prefer a token over a raw hex.** Where a token exists, `bg-elevated` beats
+   `bg-[#20203a]` — the token is what theme-switches, so the arbitrary hex would be a
+   regression. **But** when a color is *already* hardcoded in the scoped CSS and has no
+   token — a deliberate fixed color like a status green or a terminal palette —
+   `bg-[#hex]` / `text-[#hex]` is a faithful move: it deletes the scoped rule without
+   changing behavior (the color didn't theme-switch before and still won't). If such a
+   color *should* theme-switch, promote it to a token in `style.css` instead — but
+   that's a visual change on the other themes, a separate decision from the refactor.
+   Arbitrary values for *dimensions* Tailwind's scale lacks (`py-[5px]`, `max-w-[16ch]`,
+   `bg-[color-mix(...)]`) are always fine.
 3. **Shared custom CSS goes global, once.** If a pattern genuinely can't be utilities
    and repeats across components, add it to `style.css` (a token or a shared class) —
    as one shared design primitive, not a copy per component.
@@ -73,7 +79,11 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
 ## Migrating an existing component
 
 1. Add the equivalent utilities to the element (verify each against the original
-   declaration — the built CSS shows what a utility resolves to).
+   declaration — the built CSS shows what a utility resolves to). Convert *every*
+   declaration, including ones the global reset also covers — e.g. a list's explicit
+   `margin: 0; padding: 0` → `m-0 p-0`. The `*` reset does zero them (so dropping them
+   renders identically), but keeping them explicit is faithful, survives a reset change,
+   and doesn't read as a regression to a reviewer who forgets `list-none` isn't a reset.
 2. Delete the now-dead scoped rules **and** any descendant selectors that targeted the
    element's children (move those onto the children as utilities).
 3. **Before deleting a class, grep the *whole repo* for it — not just this component's

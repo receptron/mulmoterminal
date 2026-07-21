@@ -64,7 +64,7 @@ function toggleTag(tag: string): void {
       <FilterChip v-for="[tag, count] in visibleTags" :key="tag" :label="`#${tag}`" :count="count" :active="selected.has(tag)" @click="toggleTag(tag)" />
     </div>
     <p v-if="!entries.length" class="py-12 px-7 text-center text-muted">The wiki is empty.</p>
-    <ul v-else class="list-none grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
+    <ul v-else class="list-none m-0 p-0 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
       <li v-for="entry in filtered" :key="entry.slug">
         <!-- A div (not button) so the per-tag filter chips can be real buttons. -->
         <div
