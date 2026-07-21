@@ -57,11 +57,11 @@ describe("ToolsPane", () => {
     const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
     await flushPromises();
 
-    expect(wrapper.find(".tool-name").text()).toBe("presentDocument");
-    expect(wrapper.findAll(".call")).toHaveLength(3);
-    expect(wrapper.find(".badge.done").exists()).toBe(true);
-    expect(wrapper.find(".badge.running").exists()).toBe(true);
-    expect(wrapper.find(".badge.failed").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+    expect(wrapper.findAll('[data-testid="tool-call"]')).toHaveLength(3);
+    expect(wrapper.find('[data-testid="badge-done"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="badge-running"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="badge-failed"]').exists()).toBe(true);
   });
 
   it("completes a running call in place when a pub/sub push arrives (deduped by tool_use_id)", async () => {
@@ -72,15 +72,15 @@ describe("ToolsPane", () => {
 
     const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
     await flushPromises();
-    expect(wrapper.find(".badge.running").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="badge-running"]').exists()).toBe(true);
 
     // Server pushes the completion for the same tool_use_id.
     captured?.({ toolUseId: "t1", toolName: "Bash", status: "completed", at: 1, durationMs: 9, toolOutput: "ok" });
     await flushPromises();
 
-    expect(wrapper.findAll(".call")).toHaveLength(1); // updated in place, not appended
-    expect(wrapper.find(".badge.running").exists()).toBe(false);
-    expect(wrapper.find(".badge.done").exists()).toBe(true);
+    expect(wrapper.findAll('[data-testid="tool-call"]')).toHaveLength(1); // updated in place, not appended
+    expect(wrapper.find('[data-testid="badge-running"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="badge-done"]').exists()).toBe(true);
   });
 
   it("drops a stale history response when the session changes mid-flight", async () => {
