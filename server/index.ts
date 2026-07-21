@@ -50,6 +50,7 @@ import { hasErrnoCode, messageOf } from "./errors.js";
 import type { PtyEntry } from "./session/types.js";
 import { spawnPty, ptySpawn, spawnSandboxEntry, sandboxWouldRun } from "./session/pty-spawn.js";
 import { attachDraftInjection, attachCodexAutoRun } from "./session/draft-injection.js";
+import { sendFrame, sendExitAndClose, closeWithError, isResizeFrame } from "./session/ws-frames.js";
 import {
   activity,
   aiTitles,
@@ -1711,43 +1712,6 @@ async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
       // already exited — nothing to kill
     }
   });
-}
-
-// Bounds a resize frame must satisfy before it reaches the PTY: a crafted or buggy
-// client must not be able to ask for a 0-column or absurdly large terminal.
-const MIN_TERM_COLS = 2;
-const MAX_TERM_COLS = 500;
-const MIN_TERM_ROWS = 1;
-const MAX_TERM_ROWS = 200;
-
-/** A well-formed `resize` frame with both dimensions inside the allowed bounds. */
-function isResizeFrame(msg: { type?: unknown; cols?: unknown; rows?: unknown }): msg is { type: "resize"; cols: number; rows: number } {
-  if (msg.type !== "resize" || !Number.isInteger(msg.cols) || !Number.isInteger(msg.rows)) return false;
-  const cols = Number(msg.cols);
-  const rows = Number(msg.rows);
-  return cols >= MIN_TERM_COLS && cols <= MAX_TERM_COLS && rows >= MIN_TERM_ROWS && rows <= MAX_TERM_ROWS;
-}
-
-// Send a JSON frame if the socket is still there and open. Null-tolerant so the PTY
-// handlers don't each repeat the readyState guard; reports whether it went out.
-function sendFrame(socket: WebSocket | null | undefined, payload: unknown): boolean {
-  if (!socket || socket.readyState !== socket.OPEN) return false;
-  socket.send(JSON.stringify(payload));
-  return true;
-}
-
-// Report a PTY exit to the browser, then hang up — shared by every PTY kind. The
-// socket is read at exit time because a reattach can swap it after wiring.
-function sendExitAndClose(socket: WebSocket | null | undefined, exitCode: number, signal: number | undefined): void {
-  if (sendFrame(socket, { type: "exit", exitCode, signal })) socket?.close();
-}
-
-// Send a terminal error to the socket and close it (no reconnect on the client side).
-function closeWithError(ws: WebSocket, message: string): void {
-  if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ type: "error", message }));
-    ws.close();
-  }
 }
 
 // The command a launcher runs when spawned fresh. On a tmux reattach it's ignored
