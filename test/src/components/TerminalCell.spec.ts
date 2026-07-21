@@ -301,9 +301,9 @@ describe("TerminalCell", () => {
 
     const w = mountCell(null, { defaultCwd: "/A", presets: [{ label: "B", path: "/B" }] });
     await nextTick(); // mount → fetch #1 (dir A) in flight
-    const chipB = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "B");
+    const chipB = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "B");
     if (!chipB) throw new Error("preset B not found");
-    await chipB.find(".cell-chip-main").trigger("click"); // main click = fillDir → fetch #2 (dir B)
+    await chipB.find('[data-testid="cell-chip-main"]').trigger("click"); // main click = fillDir → fetch #2 (dir B)
 
     second.resolve({ ok: true, json: async () => ({ cwd: "/B", sessions: [{ id: "b-id", title: "B-sess", mtime: 1 }] }) });
     await flushPromises();
@@ -329,7 +329,7 @@ describe("TerminalCell", () => {
   it("clicking a preset chip's main button fills the dir WITHOUT launching (so the user can resume or start)", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const main = w.findAll(".cell-chip-main").find((b) => b.text() === "proj");
+    const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "proj");
     if (!main) throw new Error("preset chip not found");
     await main.trigger("click");
     // No terminal — the main click only selects the directory (fill, not launch).
@@ -340,9 +340,9 @@ describe("TerminalCell", () => {
   it("the chip's ▶ launch button quick-starts a fresh session in its dir", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    const chip = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "proj");
     if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-launch").trigger("click");
+    await chip.find('[data-testid="cell-chip-launch"]').trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/work/proj");
@@ -357,7 +357,7 @@ describe("TerminalCell", () => {
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
       const before = sessionCalls();
 
-      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "x");
       if (!main) throw new Error("preset chip not found");
       await main.trigger("click"); // fillDir → one immediate /api/sessions load
       await flushPromises();
@@ -385,7 +385,7 @@ describe("TerminalCell", () => {
       await w.find(".cell-dir-input").setValue("/typed"); // schedules a 300ms debounced load
       const before = sessionCalls();
 
-      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "x");
       if (!main) throw new Error("preset chip not found");
       await main.trigger("click"); // fillDir → immediate load + must cancel the pending /typed debounce
       await flushPromises();
@@ -417,9 +417,9 @@ describe("TerminalCell", () => {
   it("emits remove-preset (and does NOT launch) when a chip's ✕ is clicked", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    const chip = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "proj");
     if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-del").trigger("click");
+    await chip.find('[data-testid="cell-chip-del"]').trigger("click");
     expect(w.emitted("remove-preset")?.at(-1)).toEqual(["/work/proj"]);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
   });
@@ -1522,16 +1522,16 @@ describe("TerminalCell", () => {
       ],
       openCwds: ["/home/me/a"],
     });
-    const chips = w.findAll(".cell-chip");
+    const chips = w.findAll('[data-testid="cell-chip"]');
     const running = chips.find((c) => c.text().includes("proj-a"));
     const idle = chips.find((c) => c.text().includes("proj-b"));
     expect(running?.classes()).toContain("is-running");
-    expect(running?.find(".cell-chip-dot").exists()).toBe(true);
+    expect(running?.find('[data-testid="cell-chip-dot"]').exists()).toBe(true);
     // a11y: the running state is exposed in text (on the ▶ launch button — the action that
     // would actually double-launch there), not just color/hover.
-    expect(running?.find(".cell-chip-launch").attributes("aria-label")).toContain("already running");
+    expect(running?.find('[data-testid="cell-chip-launch"]').attributes("aria-label")).toContain("already running");
     expect(idle?.classes()).not.toContain("is-running");
-    expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
-    expect(idle?.find(".cell-chip-launch").attributes("aria-label")).not.toContain("already running");
+    expect(idle?.find('[data-testid="cell-chip-dot"]').exists()).toBe(false);
+    expect(idle?.find('[data-testid="cell-chip-launch"]').attributes("aria-label")).not.toContain("already running");
   });
 });
