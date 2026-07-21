@@ -705,19 +705,19 @@ describe("TerminalCell", () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-gh").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-gh"]').exists()).toBe(true);
   });
 
   it("hides the GitHub button for a non-GitHub repo (null) and on lookup failure", async () => {
     mockFetchWithGithub(null);
     const a = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(a.find(".cell-gh").exists()).toBe(false);
+    expect(a.find('[data-testid="cell-gh"]').exists()).toBe(false);
 
     mockFetchWithGithub("https://github.com/owner/repo", false); // res.ok = false
     const b = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(b.find(".cell-gh").exists()).toBe(false);
+    expect(b.find('[data-testid="cell-gh"]').exists()).toBe(false);
   });
 
   it("opens repository / issues / pull requests from the popover", async () => {
@@ -727,8 +727,8 @@ describe("TerminalCell", () => {
     await flushPromises();
 
     const openItem = async (label: string) => {
-      await w.find(".cell-gh").trigger("click");
-      const item = w.findAll(".cell-gh-item").find((b) => b.text() === label);
+      await w.find('[data-testid="cell-gh"]').trigger("click");
+      const item = w.findAll('[data-testid="cell-gh-item"]').find((b) => b.text() === label);
       await item?.trigger("click");
     };
     await openItem("Repository");
@@ -747,11 +747,11 @@ describe("TerminalCell", () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-gh-menu").exists()).toBe(false);
-    await w.find(".cell-gh").trigger("click");
-    expect(w.find(".cell-gh-menu").exists()).toBe(true);
-    await w.find(".cell-gh-menu").trigger("keydown", { key: "Escape" });
-    expect(w.find(".cell-gh-menu").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(false);
+    await w.find('[data-testid="cell-gh"]').trigger("click");
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(true);
+    await w.find('[data-testid="cell-gh-menu"]').trigger("keydown", { key: "Escape" });
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(false);
   });
 
   it("ignores an out-of-order /api/git-remote response after a fast cwd change", async () => {
@@ -776,9 +776,9 @@ describe("TerminalCell", () => {
     await flushPromises();
 
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    await w.find(".cell-gh").trigger("click");
+    await w.find('[data-testid="cell-gh"]').trigger("click");
     await w
-      .findAll(".cell-gh-item")
+      .findAll('[data-testid="cell-gh-item"]')
       .find((b) => b.text() === "Repository")
       ?.trigger("click");
     expect(openSpy.mock.calls.at(-1)?.[0]).toBe("https://github.com/owner/repoB");

@@ -963,27 +963,54 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       >
         <!-- Row 2 — the cell's icon actions, gathered onto the terminal's header row. -->
         <template #header-actions>
-          <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
+          <span v-if="githubUrl" ref="ghWrap" class="relative inline-flex flex-none">
             <button
               type="button"
-              class="cell-gh"
+              data-testid="cell-gh"
+              class="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg"
               title="Open on GitHub"
               aria-label="Open on GitHub"
               aria-haspopup="true"
               :aria-expanded="ghMenuOpen"
               @click="ghMenuOpen = !ghMenuOpen"
             >
-              <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <svg class="block h-[14px] w-[14px]" viewBox="0 0 16 16" aria-hidden="true">
                 <path
                   fill-rule="evenodd"
                   d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
                 />
               </svg>
             </button>
-            <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
-              <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
-              <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
-              <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
+            <div
+              v-if="ghMenuOpen"
+              data-testid="cell-gh-menu"
+              class="absolute left-0 top-full z-20 mt-1 flex min-w-[132px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+              @keydown.escape="ghMenuOpen = false"
+            >
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('')"
+              >
+                Repository
+              </button>
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('/issues')"
+              >
+                Issues
+              </button>
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('/pulls')"
+              >
+                Pull requests
+              </button>
             </div>
           </span>
           <button
@@ -1371,63 +1398,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 .cell-dir:hover {
   color: var(--text-muted);
   text-decoration: underline;
-}
-.cell-gh-wrap {
-  position: relative;
-  flex: 0 0 auto;
-  display: inline-flex;
-}
-.cell-gh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  border-radius: 4px;
-}
-.cell-gh:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-gh-icon {
-  display: block;
-  width: 14px;
-  height: 14px;
-}
-.cell-gh-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 20;
-  margin-top: 4px;
-  min-width: 132px;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-}
-.cell-gh-item {
-  text-align: left;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.cell-gh-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
 }
 .cell-prompt {
   flex: 1 1 auto;
