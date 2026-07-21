@@ -71,7 +71,7 @@
     "@mulmoclaude/google-plugin": "^0.3.4",
     "@mulmoclaude/html-plugin": "^0.2.5",
     "@mulmoclaude/markdown-plugin": "^0.1.10",
-    "@mulmoclaude/mulmoscript-plugin": "^0.2.2",
+    "@mulmoclaude/mulmoscript-plugin": "^0.2.3",
     "@mulmoclaude/x-plugin": "^0.1.2",
     "@receptron/task-scheduler": "^0.1.0",
     "@xterm/addon-attach": "^0.12.0",

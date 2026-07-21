@@ -1777,10 +1777,10 @@
     marked "^18.0.5"
     mermaid "^11.16.0"
 
-"@mulmoclaude/mulmoscript-plugin@^0.2.2":
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.2.tgz#578b8a0993f1d4a4dbe996bb9dde0b6d6e35186c"
-  integrity sha512-rbaer2fBI/deUbXkFEsmRGgh6i8lL7nIB0MBGXJjHFhbeeB+iwNWyWQLIYNw8o3ox/pjCx5ypxsT48JpPPGFFw==
+"@mulmoclaude/mulmoscript-plugin@^0.2.3":
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.3.tgz#13cf776809060b3d7f67073759325f3ffbc4eb0a"
+  integrity sha512-sO5kiheIyIajpYN7hhOtbEbYkMcYqQOXkleSmB3nMMAM9x+6mS3vsnu7STUkwgYybpL/nSePhllrrR7lF0PPiQ==
 
 "@mulmoclaude/x-plugin@^0.1.2":
   version "0.1.2"
