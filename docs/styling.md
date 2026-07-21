@@ -75,6 +75,16 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
 - **Unlayered scoped CSS beats layered utilities.** An existing `<style scoped>` rule
   wins over a Tailwind utility at equal specificity, so when migrating an element you
   must *remove* its scoped declarations, not just add the utility.
+- **Global CSS must live in `@layer base`, or it silently kills utilities.** Unlayered
+  author CSS beats *every* layered utility regardless of specificity — a bare
+  `* { margin: 0; padding: 0 }` disables **every** `p-*` / `m-*` class app-wide, and an
+  unlayered `.material-symbols-outlined { font-size: … }` disables every icon `text-*`.
+  `style.css` therefore wraps its resets in `@layer base` and pulls the Material Symbols
+  package in with `@import … layer(base)`. Third-party CSS imported from JS is unlayered:
+  import it from CSS with `layer(base)` instead.
+- **Verify that a utility *wins*, not just that it exists.** Grepping the built CSS for
+  `.px-2\.5{…}` only proves it was generated. Confirm the rendered `getComputedStyle`
+  matches the original declaration — that is what catches a cascade-layer loss.
 
 ## Migrating an existing component
 
