@@ -29,9 +29,9 @@ function relativeTime(ms: number): string {
 </script>
 
 <template>
-  <aside class="sidebar">
-    <div class="sidebar-header">
-      <span class="heading">Sessions</span>
+  <aside class="flex w-[260px] shrink-0 flex-col overflow-hidden border-r border-border bg-panel font-sans text-fg">
+    <div class="flex items-center justify-between px-3.5 py-2.5">
+      <span class="text-[13px] font-semibold tracking-[0.05em] text-muted">Sessions</span>
       <button
         class="bg-transparent border-0 text-muted text-base leading-none cursor-pointer hover:text-fg"
         title="Switch to horizontal tabs"
@@ -42,14 +42,23 @@ function relativeTime(ms: number): string {
       </button>
     </div>
 
-    <div class="new-row">
-      <button class="new-btn" @click="emit('new')"><span class="material-symbols-outlined">add</span> New session</button>
-      <button class="new-btn new-codex-btn" title="New Codex session" @click="emit('new-codex')">
-        <span class="material-symbols-outlined">add</span> Codex
+    <div class="mx-3 mb-2 flex gap-2">
+      <button
+        class="flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 bg-selected p-2 text-[13px] text-secondary hover:bg-selected-hover"
+        @click="emit('new')"
+      >
+        <span class="material-symbols-outlined text-[18px]">add</span> New session
+      </button>
+      <button
+        class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 bg-selected p-2 text-[13px] text-secondary hover:bg-selected-hover"
+        title="New Codex session"
+        @click="emit('new-codex')"
+      >
+        <span class="material-symbols-outlined text-[18px]">add</span> Codex
       </button>
     </div>
 
-    <div class="filters">
+    <div class="flex items-center gap-1.5 px-3 pb-2">
       <SessionFilters
         :filter="filter"
         :unread-count="unreadCount"
@@ -59,159 +68,48 @@ function relativeTime(ms: number): string {
       />
     </div>
 
-    <div v-if="loading" class="state">Loading…</div>
-    <div v-else-if="error" class="state error">
+    <div v-if="loading" class="px-3.5 py-3 text-[13px] text-muted">Loading…</div>
+    <div v-else-if="error" class="px-3.5 py-3 text-[13px] text-err">
       {{ error }}
     </div>
-    <div v-else-if="sessions.length === 0" class="state">No sessions yet</div>
-    <div v-else-if="filteredSessions.length === 0" class="state">No unread sessions</div>
+    <div v-else-if="sessions.length === 0" class="px-3.5 py-3 text-[13px] text-muted">No sessions yet</div>
+    <div v-else-if="filteredSessions.length === 0" class="px-3.5 py-3 text-[13px] text-muted">No unread sessions</div>
 
-    <ul v-else class="list">
+    <ul v-else class="m-0 flex-1 list-none overflow-y-auto p-0">
       <li
         v-for="s in filteredSessions"
         :key="s.id"
-        :class="['item', { active: s.id === props.activeId, waiting: isUnread(s) }]"
+        data-testid="session-item"
+        class="flex cursor-pointer flex-col gap-0.5 border-l-[3px] px-3.5 py-2.5"
+        :class="[{ waiting: isUnread(s) }, s.id === props.activeId ? 'border-l-accent bg-subtle' : 'border-l-transparent hover:bg-subtle']"
         :title="s.title"
         @click="emit('select', s.id, s.agent ?? 'claude')"
       >
-        <span class="item-title">
-          <span v-if="s.working && !s.waiting && s.id !== props.activeId" class="spinner" title="Claude is working" aria-label="Claude is working" />
-          <span v-if="s.agent === 'codex'" class="agent-badge">codex</span>
+        <span class="truncate text-[13px]" :class="{ 'font-bold text-fg': isUnread(s) }">
+          <span
+            v-if="s.working && !s.waiting && s.id !== props.activeId"
+            data-testid="session-spinner"
+            class="spinner"
+            title="Claude is working"
+            aria-label="Claude is working"
+          />
+          <span
+            v-if="s.agent === 'codex'"
+            data-testid="agent-badge"
+            class="mr-[5px] inline-block rounded-[4px] bg-selected px-[5px] align-middle text-[10px] font-semibold uppercase text-dim"
+            >codex</span
+          >
           {{ s.title }}
         </span>
-        <span class="item-time">{{ relativeTime(s.mtime) }}</span>
+        <span class="text-[11px] text-dim">{{ relativeTime(s.mtime) }}</span>
       </li>
     </ul>
   </aside>
 </template>
 
+<!-- The spinner's animated ring (custom keyframes + a color-mix border) has no
+     utility equivalent, so it stays scoped; everything else is utilities. -->
 <style scoped>
-.sidebar {
-  width: 260px;
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel);
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  border-right: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.sidebar-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-}
-
-.heading {
-  font-size: 13px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
-  color: var(--text-muted);
-}
-
-.new-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 0 12px 8px;
-  padding: 8px;
-  background: var(--bg-selected);
-  color: var(--text-secondary);
-  border: none;
-  border-radius: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-.new-btn .material-symbols-outlined {
-  font-size: 18px;
-}
-.new-btn:hover {
-  background: var(--bg-selected-hover);
-}
-.new-row {
-  display: flex;
-  gap: 8px;
-  margin: 0 12px 8px;
-}
-.new-row .new-btn {
-  margin: 0;
-}
-.new-row .new-btn:first-child {
-  flex: 1;
-}
-
-.filters {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 12px 8px;
-}
-
-.state {
-  padding: 12px 14px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-.state.error {
-  color: var(--err);
-}
-
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.item {
-  padding: 10px 14px;
-  cursor: pointer;
-  border-left: 3px solid transparent;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.item:hover {
-  background: var(--bg-subtle);
-}
-.item.active {
-  background: var(--bg-subtle);
-  border-left-color: var(--accent);
-}
-
-.item-title {
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.agent-badge {
-  display: inline-block;
-  margin-right: 5px;
-  padding: 0 5px;
-  border-radius: 4px;
-  background: var(--bg-selected);
-  color: var(--text-dim);
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  vertical-align: middle;
-}
-
-/* Background session waiting for input (Notification); cleared on foreground. */
-.item.waiting .item-title {
-  font-weight: 700;
-  color: var(--text);
-}
-
-/* Shown while Claude is working/"thinking" in a session (UserPromptSubmit →
-   Stop). Mirrors mulmoclaude's spinning role icon: a slowly rotating ring. */
 .spinner {
   display: inline-block;
   width: 10px;
@@ -228,10 +126,5 @@ function relativeTime(ms: number): string {
   to {
     transform: rotate(360deg);
   }
-}
-
-.item-time {
-  font-size: 11px;
-  color: var(--text-dim);
 }
 </style>
