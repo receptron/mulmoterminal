@@ -1042,7 +1042,7 @@
     protobufjs "^7.5.4"
     ws "^8.18.0"
 
-"@google/genai@^2.10.0", "@google/genai@^2.12.0":
+"@google/genai@^2.12.0":
   version "2.12.0"
   resolved "https://registry.yarnpkg.com/@google/genai/-/genai-2.12.0.tgz#42d81d8f5c5189b467189bd5b823858a17587a70"
   integrity sha512-LUr972DZosqPUhf9Mb3CIVu/B99woD3QW6ZJV1T9aNgxaoimAZARmo+IyyDsxIL+zouFiYSdA4hzfEWXc9oNIQ==
@@ -1664,7 +1664,7 @@
     zod "^3.25 || ^4.0"
     zod-to-json-schema "^3.25.1"
 
-"@modernized/fluent-ffmpeg@^1.0.1":
+"@modernized/fluent-ffmpeg@^1.0.2":
   version "1.0.2"
   resolved "https://registry.yarnpkg.com/@modernized/fluent-ffmpeg/-/fluent-ffmpeg-1.0.2.tgz#d300afd52c32c7617636cf4257af47a5a0ba219e"
   integrity sha512-cQeJuTlOS9RH0AKu7p1h/B9CwPdXnkQonSHtvfYNusc23z36Rkab0LfS+ghu+QbBbPB+oxaTEgFw6YV1sxMl9w==
@@ -1700,10 +1700,10 @@
   dependencies:
     zod "^4.4.3"
 
-"@mulmocast/types@^2.8.1":
-  version "2.8.1"
-  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.8.1.tgz#58614a3fac8225c1458febd284293fd91ce2beb6"
-  integrity sha512-XYdGxELGinBzHP1M7v5SPOsv7uNXxtd4ECpWjQjEH1U9FJpINqH0fQ811r0lQOXWAYfQptLrKLTXKe1UkzaJAA==
+"@mulmocast/types@^2.9.0":
+  version "2.9.0"
+  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.9.0.tgz#ac7dcf3508574ec31d4db1b56dfd6e98ee6e8b11"
+  integrity sha512-UkJUKTdEbgdZbQlCLGZv7469CX0AA565q8d4PDx9SXrai+fz75X2GPMZbk0lJId9qp9hjs3JmyWv7FVWK39/dg==
   dependencies:
     "@mulmocast/deck" "^0.7.0"
     zod "^4.4.3"
@@ -1777,10 +1777,10 @@
     marked "^18.0.5"
     mermaid "^11.16.0"
 
-"@mulmoclaude/mulmoscript-plugin@^0.2.2":
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.2.tgz#578b8a0993f1d4a4dbe996bb9dde0b6d6e35186c"
-  integrity sha512-rbaer2fBI/deUbXkFEsmRGgh6i8lL7nIB0MBGXJjHFhbeeB+iwNWyWQLIYNw8o3ox/pjCx5ypxsT48JpPPGFFw==
+"@mulmoclaude/mulmoscript-plugin@^0.2.3":
+  version "0.2.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/mulmoscript-plugin/-/mulmoscript-plugin-0.2.3.tgz#13cf776809060b3d7f67073759325f3ffbc4eb0a"
+  integrity sha512-sO5kiheIyIajpYN7hhOtbEbYkMcYqQOXkleSmB3nMMAM9x+6mS3vsnu7STUkwgYybpL/nSePhllrrR7lF0PPiQ==
 
 "@mulmoclaude/x-plugin@^0.1.2":
   version "0.1.2"
@@ -6130,13 +6130,13 @@ mulmocast-vision@^1.0.12:
     puppeteer "^25.3.0"
     yauzl "^3.4.0"
 
-mulmocast@^2.8.1:
-  version "2.8.1"
-  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.8.1.tgz#ca44d1d73225acf15e5cfc59711bda3888e2ee10"
-  integrity sha512-9st5lWmXF9Rh8daId5su6Rbre0/dTWNmCcgPuKTBEtdvXR8d9dLSfZmjIsdRSa72wu5CzuERcCapGWtnLOP2Pg==
+mulmocast@^2.9.0:
+  version "2.9.0"
+  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.9.0.tgz#46b7ebbbb406819d06659bee8cece037aac29e47"
+  integrity sha512-x208f4/3UxDyIUOEI/EFwWnCvgGW19f+ziqXDF0CGFM00td2WJ2YdwbSXFzBFHBf7NbQAQWJ8+ZdgFMu0E1dFA==
   dependencies:
     "@google-cloud/text-to-speech" "^6.4.1"
-    "@google/genai" "^2.10.0"
+    "@google/genai" "^2.12.0"
     "@graphai/anthropic_agent" "^2.0.12"
     "@graphai/browserless_agent" "^2.0.3"
     "@graphai/gemini_agent" "^2.0.5"
@@ -6149,7 +6149,7 @@ mulmocast@^2.8.1:
     "@inquirer/input" "^5.1.2"
     "@inquirer/select" "^5.2.1"
     "@modelcontextprotocol/sdk" "^1.29.0"
-    "@modernized/fluent-ffmpeg" "^1.0.1"
+    "@modernized/fluent-ffmpeg" "^1.0.2"
     "@mozilla/readability" "^0.6.0"
     "@mulmocast/deck" "^1.1.0"
     "@tavily/core" "^0.7.6"
