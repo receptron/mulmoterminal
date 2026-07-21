@@ -25,8 +25,17 @@ function onRowClick(entry: NotifierEntry) {
   popoverRef.value?.close();
 }
 
-function severityClass(severity: NotifierSeverity): string {
-  return `sev-${severity}`;
+// Severity colours (info blue-grey, nudge amber, urgent red) — hardcoded, token-less
+// hues shared by the trigger badge (background) and the per-row bell (text).
+function badgeClass(severity: NotifierSeverity | null): string {
+  if (severity === "nudge") return "bg-[#e0a526]";
+  if (severity === "urgent") return "bg-[#e0533d]";
+  return "bg-[#9aa6cc]";
+}
+function bellColorClass(severity: NotifierSeverity): string {
+  if (severity === "nudge") return "text-[#e0a526]";
+  if (severity === "urgent") return "text-[#e0533d]";
+  return "text-[#9aa6cc]";
 }
 
 // Strip a leading `@scope/` from a package name for the meta line (matches
@@ -51,20 +60,32 @@ function relativeTime(iso: string): string {
 </script>
 
 <template>
-  <ToolbarPopover ref="popover" icon="notifications" :title="triggerTitle" trigger-label="Notifications" pane-class="notif-pop" pane-label="Notifications">
+  <ToolbarPopover
+    ref="popover"
+    icon="notifications"
+    :title="triggerTitle"
+    trigger-label="Notifications"
+    pane-class="w-[340px] max-h-[460px] overflow-y-auto p-1"
+    pane-label="Notifications"
+  >
     <template #trigger-extra>
-      <span v-if="count" class="badge" :class="topSeverity ? severityClass(topSeverity) : ''">{{ count > 99 ? "99+" : count }}</span>
+      <span
+        v-if="count"
+        class="absolute right-px top-px box-border h-[14px] min-w-[14px] rounded-[7px] px-[3px] font-sans text-[9px] font-bold leading-[14px] text-white"
+        :class="badgeClass(topSeverity)"
+        >{{ count > 99 ? "99+" : count }}</span
+      >
     </template>
 
-    <div class="notif-head">Notifications</div>
-    <div class="notif-subhead">Active ({{ sorted.length }})</div>
-    <div v-if="!sorted.length" class="notif-empty">You're all caught up.</div>
-    <ul v-else class="notif-list">
+    <div class="px-2 py-1.5 font-sans text-[12px] font-semibold text-fg">Notifications</div>
+    <div class="border-t border-border px-2 py-1 font-sans text-[11px] font-medium text-muted">Active ({{ sorted.length }})</div>
+    <div v-if="!sorted.length" class="px-2 py-3.5 text-center font-sans text-[12px] text-muted">You're all caught up.</div>
+    <ul v-else class="m-0 flex list-none flex-col p-0">
       <li
         v-for="entry in sorted"
         :key="entry.id"
-        class="notif-row"
-        :class="{ clickable: !!entry.navigateTarget }"
+        class="flex items-start gap-2 rounded-md p-2 focus-visible:[outline:2px_solid_var(--accent-bg)] focus-visible:[outline-offset:-2px]"
+        :class="{ 'cursor-pointer hover:bg-hover': !!entry.navigateTarget }"
         :role="entry.navigateTarget ? 'button' : undefined"
         :tabindex="entry.navigateTarget ? 0 : undefined"
         :aria-label="entry.navigateTarget ? entry.title : undefined"
@@ -73,189 +94,27 @@ function relativeTime(iso: string): string {
         @keydown.enter.prevent.self="entry.navigateTarget && onRowClick(entry)"
         @keydown.space.prevent.self="entry.navigateTarget && onRowClick(entry)"
       >
-        <span class="material-symbols-outlined bell-icon" :class="severityClass(entry.severity)" aria-hidden="true">notifications</span>
-        <span class="notif-text">
-          <span class="notif-title-row">
-            <span class="notif-title">{{ entry.title }}</span>
-            <span v-if="entry.lifecycle" class="notif-lifecycle">{{ entry.lifecycle }}</span>
+        <span class="material-symbols-outlined mt-px flex-none text-[18px] leading-none" :class="bellColorClass(entry.severity)" aria-hidden="true"
+          >notifications</span
+        >
+        <span class="flex min-w-0 flex-auto flex-col gap-0.5">
+          <span class="flex min-w-0 items-baseline gap-1.5">
+            <span class="truncate font-sans text-[13px] text-fg">{{ entry.title }}</span>
+            <span v-if="entry.lifecycle" class="flex-none font-sans text-[9px] uppercase tracking-[0.04em] text-muted">{{ entry.lifecycle }}</span>
           </span>
-          <span v-if="entry.body" class="notif-body">{{ entry.body }}</span>
-          <span class="notif-meta">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
+          <span v-if="entry.body" class="font-sans text-[12px] text-muted [overflow-wrap:anywhere]">{{ entry.body }}</span>
+          <span class="font-mono text-[10px] text-muted">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
         </span>
-        <button type="button" class="notif-dismiss" title="Dismiss" aria-label="Dismiss notification" @click.stop="dismiss(entry.id)">
-          <span class="material-symbols-outlined">close</span>
+        <button
+          type="button"
+          class="inline-flex h-[22px] w-[22px] flex-none cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent p-0 text-muted hover:bg-hover hover:text-fg"
+          title="Dismiss"
+          aria-label="Dismiss notification"
+          @click.stop="dismiss(entry.id)"
+        >
+          <span class="material-symbols-outlined text-[16px] leading-none">close</span>
         </button>
       </li>
     </ul>
   </ToolbarPopover>
 </template>
-
-<style scoped>
-/* Unread badge: severity-coloured pill at the top-right of the bell. */
-.badge {
-  position: absolute;
-  top: 1px;
-  right: 1px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  box-sizing: border-box;
-  border-radius: 7px;
-  font-family: system-ui, sans-serif;
-  font-size: 9px;
-  font-weight: 700;
-  line-height: 14px;
-  color: #fff;
-  background: #9aa6cc;
-}
-.badge.sev-info {
-  background: #9aa6cc;
-}
-.badge.sev-nudge {
-  background: #e0a526;
-}
-.badge.sev-urgent {
-  background: #e0533d;
-}
-
-/* The panel div lives inside ToolbarPopover, so its scopeId differs from ours. */
-:deep(.notif-pop) {
-  width: 340px;
-  max-height: 460px;
-  overflow-y: auto;
-  padding: 4px;
-}
-
-.notif-head {
-  padding: 6px 8px;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.notif-subhead {
-  padding: 4px 8px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-}
-
-.notif-empty {
-  padding: 14px 8px;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--text-muted);
-  text-align: center;
-}
-
-.notif-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.notif-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 8px;
-  border-radius: 6px;
-}
-.notif-row.clickable {
-  cursor: pointer;
-}
-.notif-row.clickable:hover {
-  background: var(--bg-hover);
-}
-.notif-row:focus-visible {
-  outline: 2px solid var(--accent-bg);
-  outline-offset: -2px;
-}
-
-/* Per-row severity-coloured bell icon — MulmoClaude's "this is a notification"
-   at-a-glance signal (replaces a generic coloured dot). */
-.bell-icon {
-  flex: 0 0 auto;
-  margin-top: 1px;
-  font-size: 18px;
-  line-height: 1;
-  color: #9aa6cc;
-}
-.bell-icon.sev-info {
-  color: #9aa6cc;
-}
-.bell-icon.sev-nudge {
-  color: #e0a526;
-}
-.bell-icon.sev-urgent {
-  color: #e0533d;
-}
-
-.notif-text {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.notif-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-.notif-title {
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-  color: var(--text);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.notif-lifecycle {
-  flex: 0 0 auto;
-  font-family: system-ui, sans-serif;
-  font-size: 9px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.notif-body {
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-.notif-meta {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.notif-dismiss {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 4px;
-  cursor: pointer;
-}
-.notif-dismiss:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.notif-dismiss .material-symbols-outlined {
-  font-size: 16px;
-  line-height: 1;
-}
-</style>
