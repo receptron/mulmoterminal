@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { router } from "../router";
 import NotificationBell from "./NotificationBell.vue";
 import RemoteHostControl from "./RemoteHostControl.vue";
+import LauncherButton from "./LauncherButton.vue";
 import { useShortcuts } from "../composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
@@ -79,184 +80,73 @@ function showPrs(): void {
 </script>
 
 <template>
-  <header class="toolbar">
-    <span class="toolbar-title">MulmoTerminal</span>
-    <nav class="launcher" aria-label="Views">
-      <button type="button" class="launcher-btn" :class="{ active: chatActive }" title="Chat" aria-label="Chat" @click="showChat">
-        <span class="material-symbols-outlined">chat</span>
-      </button>
-      <button type="button" class="launcher-btn" :class="{ active: inGrid }" title="Grid (multiple terminals)" aria-label="Grid view" @click="showGrid">
-        <span class="material-symbols-outlined">grid_view</span>
-      </button>
-      <button type="button" class="launcher-btn" :class="{ active: collectionsActive }" title="Collections" aria-label="Collections" @click="showCollections">
-        <span class="material-symbols-outlined">apps</span>
-      </button>
-      <button type="button" class="launcher-btn" :class="{ active: accountingActive }" title="Accounting" aria-label="Accounting" @click="showAccounting">
-        <span class="material-symbols-outlined">account_balance</span>
-      </button>
-      <button type="button" class="launcher-btn" :class="{ active: prsActive }" title="Pull requests" aria-label="Pull requests" @click="showPrs">
-        <span class="material-symbols-outlined">call_merge</span>
-      </button>
-      <button type="button" class="launcher-btn" :class="{ active: wikiActive }" title="Wiki" aria-label="Wiki" @click="showWiki">
-        <span class="material-symbols-outlined">menu_book</span>
-      </button>
-      <button
+  <header class="flex h-10 flex-none items-center border-b border-border bg-panel px-4">
+    <span class="font-sans text-[14px] font-semibold tracking-[0.02em] text-fg">MulmoTerminal</span>
+    <nav class="ml-4 flex min-w-0 items-center gap-[3px] overflow-x-auto" aria-label="Views">
+      <LauncherButton icon="chat" title="Chat" label="Chat" :active="chatActive" @click="showChat" />
+      <LauncherButton icon="grid_view" title="Grid (multiple terminals)" label="Grid view" :active="inGrid" @click="showGrid" />
+      <LauncherButton icon="apps" title="Collections" label="Collections" :active="collectionsActive" @click="showCollections" />
+      <LauncherButton icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
+      <LauncherButton icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
+      <LauncherButton icon="menu_book" title="Wiki" label="Wiki" :active="wikiActive" @click="showWiki" />
+      <LauncherButton
         v-for="s in shortcuts"
         :key="`${s.kind}:${s.slug}`"
-        type="button"
-        class="launcher-btn"
-        :class="{ active: favActive(s) }"
+        :icon="s.icon || 'bookmark'"
         :title="s.title"
-        :aria-label="s.title"
+        :label="s.title"
+        :active="favActive(s)"
         @click="showFavorite(s)"
-      >
-        <span class="material-symbols-outlined">{{ s.icon || "bookmark" }}</span>
-      </button>
-      <button
+      />
+      <LauncherButton
         v-if="inGrid"
-        type="button"
-        class="launcher-btn"
-        :class="{ active: addTerminalActive }"
+        icon="add"
         :title="addTerminalActive ? 'Cancel adding a terminal' : 'New terminal (overflows to a new tab when full)'"
-        aria-label="New terminal"
+        label="New terminal"
+        :active="addTerminalActive"
         @click="emit('add-terminal')"
-      >
-        <span class="material-symbols-outlined">add</span>
-      </button>
-      <button
+      />
+      <LauncherButton
         v-if="inGrid"
-        type="button"
-        class="launcher-btn"
-        :class="{ active: autoSort }"
+        :icon="autoSort ? 'sort' : 'swap_horiz'"
         :title="
           autoSort
             ? 'Auto order: attention-first — needs-attention cells float up (click for manual ◀▶ ordering)'
             : 'Manual order: reorder cells with ◀▶ (click for auto attention-sort)'
         "
-        aria-label="Toggle grid cell ordering"
+        label="Toggle grid cell ordering"
+        :active="autoSort"
         :aria-pressed="autoSort"
         @click="emit('toggle-sort')"
+      />
+      <span
+        v-if="inGrid && hasSummary && statusCounts"
+        class="ml-1.5 inline-flex flex-none items-center gap-2 border-l border-border pl-2.5"
+        role="img"
+        :aria-label="`Grid status — ${summaryTitle}`"
+        :title="summaryTitle"
       >
-        <span class="material-symbols-outlined">{{ autoSort ? "sort" : "swap_horiz" }}</span>
-      </button>
-      <span v-if="inGrid && hasSummary && statusCounts" class="grid-summary" role="img" :aria-label="`Grid status — ${summaryTitle}`" :title="summaryTitle">
-        <span v-if="statusCounts.blocked" class="gs gs-blocked" aria-hidden="true">{{ statusCounts.blocked }}</span>
-        <span v-if="statusCounts.done" class="gs gs-done" aria-hidden="true">{{ statusCounts.done }}</span>
-        <span v-if="statusCounts.working" class="gs gs-working" aria-hidden="true">{{ statusCounts.working }}</span>
+        <span v-if="statusCounts.blocked" class="inline-flex items-center gap-1 font-mono text-[12px] leading-none text-amber" aria-hidden="true">
+          <span class="h-2 w-2 rounded-full bg-current" />{{ statusCounts.blocked }}
+        </span>
+        <span v-if="statusCounts.done" class="inline-flex items-center gap-1 font-mono text-[12px] leading-none text-accent" aria-hidden="true">
+          <span class="h-2 w-2 rounded-full bg-current" />{{ statusCounts.done }}
+        </span>
+        <span v-if="statusCounts.working" class="inline-flex items-center gap-1 font-mono text-[12px] leading-none text-muted" aria-hidden="true">
+          <span class="h-2 w-2 rounded-full bg-current" />{{ statusCounts.working }}
+        </span>
       </span>
     </nav>
-    <NotificationBell class="toolbar-bell" />
+    <NotificationBell class="ml-auto" />
     <RemoteHostControl />
-    <button
-      type="button"
-      class="launcher-btn sound-toggle"
-      :class="{ active: soundEnabled }"
+    <LauncherButton
+      :icon="soundEnabled ? 'notifications_active' : 'notifications_off'"
       :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
-      :aria-label="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
+      :label="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
+      :active="soundEnabled"
       :aria-pressed="soundEnabled"
       @click="toggleSound"
-    >
-      <span class="material-symbols-outlined">{{ soundEnabled ? "notifications_active" : "notifications_off" }}</span>
-    </button>
-    <button type="button" class="launcher-btn settings-btn" title="Settings" aria-label="Settings" @click="emit('settings')">
-      <span class="material-symbols-outlined">settings</span>
-    </button>
+    />
+    <LauncherButton icon="settings" title="Settings" label="Settings" @click="emit('settings')" />
   </header>
 </template>
-
-<style scoped>
-/* Top toolbar with the app title. */
-.toolbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  height: 40px;
-  padding: 0 16px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-}
-.toolbar-title {
-  font-family: system-ui, sans-serif;
-  font-weight: 600;
-  font-size: 14px;
-  color: var(--text);
-  letter-spacing: 0.02em;
-}
-
-/* Toolbar tabs: Chat + Grid + Collections + Accounting + one per pinned favorite
-   (+ the grid-only New terminal button). Icon-only. */
-.launcher {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-left: 16px;
-  min-width: 0;
-  overflow-x: auto;
-}
-.launcher-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  height: 30px;
-  width: 30px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.launcher-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.launcher-btn.active {
-  background: var(--accent-bg);
-  color: var(--on-accent);
-}
-/* Push the action buttons (bell, sound, settings) to the far right as a group. */
-.toolbar-bell {
-  margin-left: auto;
-}
-.launcher-btn .material-symbols-outlined {
-  font-size: 19px;
-  line-height: 1;
-}
-
-/* Grid-wide status tally: blocked (amber, needs you) · done (blue, review) · working
-   (dim, just busy). A colored dot + count each; grouped after the grid controls. */
-.grid-summary {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  flex: 0 0 auto;
-  margin-left: 6px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border);
-}
-.gs {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  line-height: 1;
-}
-.gs::before {
-  content: "";
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.gs-blocked {
-  color: var(--amber);
-}
-.gs-done {
-  color: var(--accent);
-}
-.gs-working {
-  color: var(--text-muted);
-}
-</style>
