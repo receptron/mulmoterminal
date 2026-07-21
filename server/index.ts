@@ -56,7 +56,31 @@ import { loadScripts, resolveScript } from "./files/scripts.js";
 import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
-import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
+import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
+import { messageOf } from "./errors.js";
+import type { DiskStat, PendingSession, PtyEntry, SessionMeta, ToolCall, ToolResult } from "./session/types.js";
+import {
+  activity,
+  activityStateHydrated,
+  aiTitles,
+  claimedCodexRollouts,
+  codexRolloutIds,
+  devTerminalSessions,
+  devTerminalSessionsHydrated,
+  hiddenSessions,
+  knownSessions,
+  lastPrompts,
+  lastResponses,
+  lastTitleAttemptMs,
+  lastTitledUserTurns,
+  markDevTerminalSession,
+  persistActivityState,
+  ptys,
+  titleEpoch,
+  titleInFlight,
+  titlePending,
+  titleTurnCounts,
+} from "./session/registry.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -68,7 +92,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
-import { agentFromPaneCommand, buildSessionList, captureSessionScreen, type SessionAgent } from "./backends/remoteHost/terminalScreen.js";
+import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import {
   isRecord,
   parseJsonl,
@@ -134,97 +158,12 @@ import { initMulmoScriptBackend, mountMulmoScriptDispatchRoute, mountMulmoScript
 import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
-interface Activity {
-  working?: boolean;
-  waiting?: boolean;
-  event?: string | null;
-  at?: number;
-}
-
-// A live PTY and its (possibly detached) browser socket.
-interface PtyEntry {
-  term: IPty;
-  ws: WebSocket | null;
-  buffer: string;
-  cwd: string; // the dir the PTY actually runs in (reported on reattach)
-  // True when this session is the user's actively-viewed pane: the single-view open
-  // session, or a focused/zoomed grid cell. Gates the attention flag — a socket being
-  // attached is NOT enough (every on-screen grid cell has one), so `ws != null` can't
-  // stand in for "the user is looking at THIS cell". Set at attach (by gui mode) and
-  // updated by the client's `view` frame.
-  active: boolean;
-  // True when `term` is a tmux client (persistent): killing it only detaches, so reap
-  // must kill the tmux session to actually end the program.
-  tmux?: boolean;
-  // True when `term` is a `docker run` client (single-view sandbox): reap force-removes
-  // the container, since killing the client alone can leave it running.
-  sandbox?: boolean;
-  // What is running in this PTY. Recorded at spawn because nothing else can recover it
-  // later, and the phone needs it to offer input that suits the session (mulmoserver#84).
-  agent: SessionAgent;
-}
-
-interface KnownSession {
-  createdAt: number;
-  title: string;
-}
-
-// A GUI plugin result, deduped by uuid; the rest of the payload is opaque here.
-interface ToolResult {
-  uuid: string;
-  [key: string]: unknown;
-}
-
-// One entry in a session's tool-call history (Pre/PostToolUse hooks).
-interface ToolCall {
-  toolUseId?: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolOutput?: unknown;
-  durationMs?: number;
-  status: string;
-  at: number;
-}
-
-// A sidebar session row (resolved from disk or a pending in-memory session).
-interface SessionMeta {
-  id: string;
-  title: string;
-  mtime: number;
-  working: boolean;
-  waiting: boolean;
-  /** The hook that set the current state (e.g. "Stop" | "Notification"), or null.
-   *  Lets the client split `waiting` into "done, unreviewed" (Stop) vs "blocked on
-   *  input" (Notification). */
-  event: string | null;
-  /** Spawned as a hidden background worker (spawnBackgroundChat hidden:true). The
-   *  tab still lists, but it never renders bold/unread — a background helper
-   *  finishing shouldn't pull the user's attention. */
-  hidden: boolean;
-}
-
-// Recency rank for an on-disk .jsonl, before its contents are read.
-interface DiskStat {
-  kind: "disk";
-  id: string;
-  file: string;
-  mtime: number;
-}
-
-// An in-memory session not yet persisted to disk.
-interface PendingSession extends SessionMeta {
-  kind: "pending";
-}
 
 // Node fs errors carry a `code` (e.g. "ENOENT"); narrow before reading it.
 const hasErrnoCode = (e: unknown): e is { code?: string } => typeof e === "object" && e !== null;
 
-// Error message extracted defensively from an unknown thrown value.
-const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = process.env.PORT || 34567;
 const CLAUDE_BIN = claudeAdapter.bin();
 const CODEX_BIN = codexAdapter.bin();
 // Model override for codex sessions (--model); null uses codex's own configured default.
@@ -233,7 +172,6 @@ const CODEX_MODEL = process.env.CODEX_MODEL || null;
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
 const CLAUDE_PERMISSION_MODE = process.env.CLAUDE_PERMISSION_MODE || "auto";
-const CLAUDE_CWD = process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaude");
 
 // CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
 // session state, so it must exist before we spawn anything into it.
@@ -249,11 +187,6 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
 
-// MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
-// history) lives here, keyed by sessionId (a global UUID) — NOT under the
-// workspace dir, so it stays valid regardless of which directory is active.
-const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
-
 // Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
 // already trusted — because claude blocks on its workspace-trust dialog in any
 // untrusted dir (no input ever comes, so the worker would hang). Their session ids
@@ -267,60 +200,6 @@ const translationWorkerIds = new Set<string>();
 // worker ends its turn WITHOUT submitting (a misbehaved turn), so we fail fast
 // instead of waiting out the full timeout.
 const pendingTranslations = new Map<string, { resolve: (translations: string[]) => void; reject: (err: Error) => void }>();
-
-// A session id is always a UUID (server-generated, or a .jsonl basename). Reject
-// anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
-// a value that claude re-parses as a flag) into the spawned process.
-const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Session ids that belong to the multi-terminal GRID — dev terminals, spawned with
-// gui=0 (no GUI MCP; see the ?gui handling in the WS connection handler). They're
-// FILTERED OUT of the chat sidebar's /api/sessions so a grid terminal never surfaces
-// as a clickable chat row: selecting it in chat would reattach its live PTY and
-// SUPERSEDE the grid cell (the "chat hijacked my multi-terminal session" bug). The
-// set is persisted so the exclusion survives a reboot and outlives the live PTY — a
-// reaped grid session's on-disk transcript still shouldn't reappear as a chat. NOTE:
-// the exclusion applies ONLY to the unscoped (chat) query; the grid's OWN cwd-scoped
-// resume picker (/api/sessions?cwd=…) must keep listing these so they stay resumable.
-const devTerminalSessions = new Set<string>();
-const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-sessions.json");
-
-// Hydrate the set once at boot (best-effort — absent on first run / unreadable =>
-// empty). Exposed as a promise so readers/writers can wait for it: a request served
-// (or a mark persisted) before this resolves would otherwise see an empty set and
-// either leak hidden grid transcripts into chat or clobber the file with a snapshot
-// missing the on-disk ids.
-const devTerminalSessionsHydrated: Promise<void> = (async () => {
-  try {
-    const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
-    if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
-  } catch {
-    // no file yet or unreadable => start empty
-  }
-})();
-
-// Serialize every persist into ONE chain so concurrent marks can't run overlapping
-// writeFile()s that interleave and leave an older snapshot on disk (dropping ids).
-// Each link waits for hydration first (so it never persists a set missing the on-disk
-// ids) and stringifies the CURRENT set at write time, so the last link always writes
-// the complete, up-to-date set. A failed write is logged and the chain continues.
-let devTerminalPersist: Promise<void> = Promise.resolve();
-function persistDevTerminalSessions(): void {
-  devTerminalPersist = devTerminalPersist
-    .then(() => devTerminalSessionsHydrated)
-    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
-    .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
-}
-
-// Record a grid/dev-terminal session id, then persist. A no-op once the id is known,
-// so repeated reattaches of the same cell — or a reconnect after a reboot — don't
-// rewrite the file.
-function markDevTerminalSession(id: string): void {
-  if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
-  devTerminalSessions.add(id);
-  persistDevTerminalSessions();
-}
 
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
 // a malicious website the user visits can't drive the local Claude PTY (a
@@ -511,57 +390,8 @@ const SESSION_LIST_LIMIT = 50;
 // it bounds the query string a client can make us parse.
 const ACTIVITY_IDS_LIMIT = 200;
 
-// Per-session "working" state, driven by Claude hooks (see /api/hook):
-// UserPromptSubmit => Claude started thinking; Stop => it finished.
-const activity = new Map<string, Activity>(); // id -> { working, event, at }
-
-// Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a
-// --watch hot reload), so a live session doesn't reattach as idle. `waiting` matters because
-// Claude won't re-fire Notification while already sitting at a prompt; `working` because a
-// turn usually outlives the ~1s restart and its later Stop hook self-corrects a stale flag
-// (the only stale case is a turn that finished DURING the restart window — corrected on the
-// user's next turn). Read paths await hydration (see /api/activity, /api/session) so a
-// reconnect re-fetch can't race it back to idle. Mirrors the dev-terminal-sessions pattern.
-const ACTIVITY_STATE_FILE = path.join(MULMOTERMINAL_HOME, "activity-state.json");
-const activityStateHydrated: Promise<void> = (async () => {
-  try {
-    const parsed = JSON.parse(await fs.readFile(ACTIVITY_STATE_FILE, "utf8"));
-    for (const { id, working, waiting, event } of parseActivityState(parsed, (x) => SESSION_ID_RE.test(x))) {
-      // Don't clobber a live update that already landed while hydration was in flight.
-      if (!activity.has(id)) activity.set(id, { working, waiting, event, at: Date.now() });
-    }
-  } catch {
-    // no file yet / unreadable => nothing to restore
-  }
-})();
-
-// Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
-// CURRENT working/waiting entries at write time, so the last link always writes the complete set.
-let activityPersist: Promise<void> = Promise.resolve();
-function persistActivityState(): void {
-  activityPersist = activityPersist
-    .then(() => activityStateHydrated)
-    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(ACTIVITY_STATE_FILE, JSON.stringify(buildActivitySnapshot(activity, (id) => hiddenSessions.has(id)))))
-    .catch((e) => console.error(`[activity-state] failed to persist: ${messageOf(e)}`));
-}
-
-// Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
-// on the grid cell header so you can tell at a glance what each terminal is about. A
-// trivial ack ("ok", "merge") doesn't replace it (see the hook handler), so a short
-// follow-up can't hide the task.
-const lastPrompts = new Map<string, string>(); // id -> prompt text
 const LAST_PROMPT_CAP = 200;
 
-// AI header title per session (issue #316): a short summary of the recent turns that
-// stays meaningful when the session turns into a back-and-forth, where the raw last
-// prompt goes stale ("ok") or context-dependent ("2番目にして"). Generated by a cheap
-// model, it takes precedence over lastPrompt in the cell header. Kept in memory (never
-// written into Claude's transcript); a resumed session falls back to any on-disk title.
-const aiTitles = new Map<string, string>(); // id -> AI title
-// the last few lines of the agent's most recent reply, refreshed when
-// a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
-const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
 const LAST_RESPONSE_MAX = 400;
 // The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
 // the cache below because the two want opposite things on failure: the roster would rather
@@ -580,44 +410,7 @@ function refreshLastResponse(id: string, cwd: string): void {
   const text = readLatestResponse(id, cwd);
   if (text) lastResponses.set(id, text); // a failed read leaves any prior value
 }
-const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
-const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
-const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
-const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to void an in-flight generation
-// The transcript's user-turn count when we last titled a session, so the roster's view-triggered
-// re-titling knows when a session has advanced enough to be worth re-summarizing. Kept across
-// /clear (dropped only on teardown) so a just-cleared session isn't re-titled from its frozen
-// pre-clear transcript.
-const lastTitledUserTurns = new Map<string, number>();
-// Wall-clock of the last view-triggered title attempt per session, so a session whose generation
-// keeps failing backs off instead of re-spawning the summarizer on every 4s roster poll.
-const lastTitleAttemptMs = new Map<string, number>();
 const VIEW_TITLE_RETRY_MS = 30_000;
-
-// Live ptys keyed by session id. A pty outlives its WebSocket while the session
-// is still "working", so switching away doesn't interrupt Claude mid-turn; it
-// is reaped once the session goes idle (Stop hook) or the process exits. `ws`
-// is null while the session runs in the background.
-const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
-
-// mulmoterminal session key -> the codex rollout id it maps to. codex mints its own id, so we
-// discover it after spawn and keep it here to `codex resume <id>` once the live PTY is gone.
-const codexRolloutIds = new Map<string, string>();
-// Rollout files already attributed to a session, so a single rollout is never mapped to two keys
-// (which would let both cold-resume the same conversation). Serialized by the single event loop.
-const claimedCodexRollouts = new Set<string>();
-
-// New sessions started in this process that have no .jsonl on disk yet (Claude
-// only writes the file on the first prompt). Merged into /api/sessions so a
-// freshly created session shows in the sidebar immediately. An entry is dropped
-// once the file exists (the on-disk record takes over) or the pty is reaped.
-const knownSessions = new Map<string, KnownSession>(); // id -> { createdAt, title }
-
-// Sessions spawned as hidden background workers (spawnBackgroundChat hidden:true).
-// They list normally but never render bold/unread. Process-lifetime only (not
-// persisted) — and tied to `activity`'s lifecycle in reap() so a finished hidden
-// worker that stays `waiting` doesn't lose its hidden flag and re-bold.
-const hiddenSessions = new Set<string>(); // id
 
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
@@ -782,7 +575,7 @@ function setWorking(id: string, working: boolean, event?: string) {
   activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
   // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
-  persistActivityState();
+  persistActivityState((id) => hiddenSessions.has(id));
 
   // A background session (no attached client) that just finished a turn is no
   // longer `working`. Don't kill it outright — if it ended its turn to ask the
@@ -801,7 +594,7 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
   // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
-  persistActivityState();
+  persistActivityState((id) => hiddenSessions.has(id));
 
   // A detached session that just started needing the user escalates from the short
   // idle grace to the long one — re-arm so it isn't reaped before they can return.
