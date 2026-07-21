@@ -1268,7 +1268,7 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true); // session not torn down yet
   });
 
@@ -1277,7 +1277,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await nextTick();
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
     expect(w.find(".cell-launch").exists()).toBe(true); // torn down to the launcher
   });
 
@@ -1286,7 +1286,7 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    await w.find(".ccx-keep").trigger("click");
+    await w.find('[data-testid="ccx-keep"]').trigger("click");
     await flushPromises();
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
     expect(w.find(".cell-launch").exists()).toBe(true);
@@ -1298,7 +1298,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises(); // the close() diff refresh enables the Remove button
-    await w.find(".ccx-remove").trigger("click");
+    await w.find('[data-testid="ccx-remove"]').trigger("click");
     await flushPromises();
     const rm = posts.find((p) => p.url.includes("/api/worktrees/remove"));
     if (!rm) throw new Error("remove not called");
@@ -1323,10 +1323,10 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click"); // close() refresh is pending on `gate`
     await nextTick();
-    expect(w.find(".ccx-remove").attributes("disabled")).toBeDefined(); // held while checking
+    expect(w.find('[data-testid="ccx-remove"]').attributes("disabled")).toBeDefined(); // held while checking
     gate.resolve({ ok: true, json: async () => cleanWtDiff });
     await flushPromises();
-    expect(w.find(".ccx-remove").attributes("disabled")).toBeUndefined(); // released
+    expect(w.find('[data-testid="ccx-remove"]').attributes("disabled")).toBeUndefined(); // released
   });
 
   it("keeps the confirm open with an error when the remove fails (no false success)", async () => {
@@ -1341,11 +1341,11 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises();
-    await w.find(".ccx-remove").trigger("click");
+    await w.find('[data-testid="ccx-remove"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-close-confirm").exists()).toBe(true); // NOT torn down
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true); // NOT torn down
     expect(w.find(".cell-launch").exists()).toBe(false);
-    expect(w.find(".ccx-warn").text()).toContain("Couldn't remove");
+    expect(w.find('[data-testid="ccx-warn"]').text()).toContain("Couldn't remove");
   });
 
   it("Escape dismisses the close confirmation", async () => {
@@ -1353,10 +1353,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await nextTick();
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true);
   });
 
@@ -1365,8 +1365,8 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    await w.find(".ccx-cancel").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
+    await w.find('[data-testid="ccx-cancel"]').trigger("click");
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true);
   });
 
@@ -1384,11 +1384,11 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises(); // the close() diff refresh
-    const warn = w.find(".ccx-warn");
+    const warn = w.find('[data-testid="ccx-warn"]');
     expect(warn.exists()).toBe(true);
     expect(warn.text()).toContain("2 unpushed");
     expect(warn.text()).toContain("1 uncommitted");
-    expect(w.find(".ccx-remove").text()).toContain("Discard");
+    expect(w.find('[data-testid="ccx-remove"]').text()).toContain("Discard");
   });
 
   it("keeps expand + close on row 1 (cell-header); the other icons live on row 2", async () => {
