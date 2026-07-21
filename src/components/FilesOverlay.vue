@@ -208,184 +208,82 @@ onBeforeUnmount(() => {
 
 <template>
   <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Files">
-    <header class="files-head">
-      <span class="files-title">Files</span>
-      <span class="files-root" :title="cwd ?? ''">{{ cwd ?? "(default workspace)" }}</span>
-      <span class="files-spacer" />
-      <span v-if="openPath" class="files-open" :class="{ dirty }">{{ openName }}<span v-if="dirty" class="files-dot" title="Unsaved">●</span></span>
-      <button v-if="openPath && isMarkdown" type="button" class="files-btn" @click="showPreview = !showPreview">
+    <header class="flex flex-none items-center gap-2.5 border-b border-border bg-panel px-4 py-2">
+      <span class="text-[14px] font-[650] text-fg">Files</span>
+      <span class="max-w-[40%] truncate font-mono text-[11px] text-muted" :title="cwd ?? ''">{{ cwd ?? "(default workspace)" }}</span>
+      <span class="flex-auto" />
+      <span v-if="openPath" class="font-mono text-[12px]" :class="dirty ? 'text-fg' : 'text-secondary'"
+        >{{ openName }}<span v-if="dirty" class="ml-1 text-amber" title="Unsaved">●</span></span
+      >
+      <button
+        v-if="openPath && isMarkdown"
+        type="button"
+        class="h-[26px] cursor-pointer rounded-md border border-border bg-base px-2.5 py-1 text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
+        @click="showPreview = !showPreview"
+      >
         {{ showPreview ? "Edit" : "Preview" }}
       </button>
-      <button v-if="openPath" type="button" class="files-btn files-save" :disabled="!dirty || saving" @click="save">
+      <button
+        v-if="openPath"
+        type="button"
+        class="h-[26px] cursor-pointer rounded-md border border-accent bg-accent-bg px-2.5 py-1 text-[12px] text-on-accent enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
+        :disabled="!dirty || saving"
+        @click="save"
+      >
         {{ saving ? "Saving…" : "Save" }}
       </button>
-      <button type="button" class="files-btn" title="Reload tree" aria-label="Reload tree" @click="loadRoot">↻</button>
-      <button type="button" class="files-btn" title="Close" aria-label="Close files" @click="requestClose">✕</button>
+      <button
+        type="button"
+        class="h-[26px] cursor-pointer rounded-md border border-border bg-base px-2.5 py-1 text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
+        title="Reload tree"
+        aria-label="Reload tree"
+        @click="loadRoot"
+      >
+        ↻
+      </button>
+      <button
+        type="button"
+        class="h-[26px] cursor-pointer rounded-md border border-border bg-base px-2.5 py-1 text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-50"
+        title="Close"
+        aria-label="Close files"
+        @click="requestClose"
+      >
+        ✕
+      </button>
     </header>
-    <div class="files-body">
-      <nav class="files-tree" aria-label="File tree">
-        <p v-if="treeError" class="files-msg files-error">{{ treeError }}</p>
-        <p v-else-if="roots.length === 0" class="files-msg">Empty directory.</p>
+    <div class="flex min-h-0 flex-auto">
+      <nav class="basis-[clamp(200px,24%,340px)] shrink-0 grow-0 overflow-auto border-r border-border py-1.5" aria-label="File tree">
+        <p v-if="treeError" class="p-4 text-[13px] text-err">{{ treeError }}</p>
+        <p v-else-if="roots.length === 0" class="p-4 text-[13px] text-muted">Empty directory.</p>
         <button
           v-for="{ node, depth } in rows"
           :key="node.path"
           type="button"
-          class="files-row"
-          :class="{ 'is-open': node.path === openPath }"
+          data-testid="files-row"
+          class="flex w-full cursor-pointer items-center gap-1 whitespace-nowrap border-0 bg-transparent px-2 py-[3px] text-left font-mono text-[12px]"
+          :class="node.path === openPath ? 'bg-hover text-fg' : 'text-secondary hover:bg-hover hover:text-fg'"
           :style="{ paddingLeft: `${8 + depth * 14}px` }"
           @click="openFile(node)"
         >
-          <span class="files-caret">{{ node.dir ? (node.expanded ? "▾" : "▸") : "" }}</span>
-          <span class="files-icon">{{ node.dir ? "📁" : "📄" }}</span>
-          <span class="files-name">{{ node.name }}</span>
+          <span class="w-2.5 flex-none text-dim">{{ node.dir ? (node.expanded ? "▾" : "▸") : "" }}</span>
+          <span class="flex-none">{{ node.dir ? "📁" : "📄" }}</span>
+          <span class="truncate">{{ node.name }}</span>
         </button>
       </nav>
-      <section class="files-main">
-        <p v-if="fileError" class="files-msg files-error">{{ fileError }}</p>
-        <p v-if="!openPath" class="files-msg files-empty">Select a file to view or edit.</p>
-        <iframe v-show="openPath && showPreview" class="files-preview" :src="previewSrc" sandbox="" title="Markdown preview" />
-        <div v-show="openPath && !showPreview" ref="editorHost" class="files-editor" />
+      <section class="relative flex min-w-0 flex-auto">
+        <p v-if="fileError" class="p-4 text-[13px] text-err">{{ fileError }}</p>
+        <p v-if="!openPath" class="m-auto p-4 text-[13px] text-muted">Select a file to view or edit.</p>
+        <iframe v-show="openPath && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
+        <div v-show="openPath && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />
       </section>
     </div>
   </div>
 </template>
 
+<!-- The CodeMirror editor is injected into .files-editor at runtime, so its root
+     can't carry a utility and must be sized via :deep. -->
 <style scoped>
-.files-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.files-title {
-  font-weight: 650;
-  font-size: 14px;
-  color: var(--text);
-}
-.files-root {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 40%;
-}
-.files-spacer {
-  flex: 1 1 auto;
-}
-.files-open {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.files-open.dirty {
-  color: var(--text);
-}
-.files-dot {
-  color: var(--amber, #e0a030);
-  margin-left: 4px;
-}
-.files-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 4px 10px;
-  height: 26px;
-  font-size: 12px;
-}
-.files-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.files-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.files-save {
-  border-color: var(--accent);
-  color: var(--on-accent, #fff);
-  background: var(--accent-bg, var(--accent));
-}
-.files-body {
-  flex: 1 1 auto;
-  display: flex;
-  min-height: 0;
-}
-.files-tree {
-  flex: 0 0 clamp(200px, 24%, 340px);
-  overflow: auto;
-  border-right: 1px solid var(--border);
-  padding: 6px 0;
-}
-.files-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  width: 100%;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 3px 8px;
-  font-size: 12px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  text-align: left;
-  white-space: nowrap;
-}
-.files-row:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.files-row.is-open {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.files-caret {
-  flex: 0 0 auto;
-  width: 10px;
-  color: var(--text-dim);
-}
-.files-icon {
-  flex: 0 0 auto;
-}
-.files-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.files-main {
-  flex: 1 1 auto;
-  min-width: 0;
-  position: relative;
-  display: flex;
-}
-.files-editor {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-}
 .files-editor :deep(.cm-editor) {
   height: 100%;
-}
-.files-preview {
-  flex: 1 1 auto;
-  border: none;
-  background: #fff;
-}
-.files-msg {
-  padding: 16px;
-  color: var(--text-muted);
-  font-size: 13px;
-}
-.files-error {
-  color: var(--err, #e0556b);
-}
-.files-empty {
-  margin: auto;
 }
 </style>
