@@ -79,7 +79,11 @@ Spacing/radius use Tailwind's scale on a 4px base: `px-2` = 8px, `px-2.5` = 10px
 ## Migrating an existing component
 
 1. Add the equivalent utilities to the element (verify each against the original
-   declaration — the built CSS shows what a utility resolves to).
+   declaration — the built CSS shows what a utility resolves to). Convert *every*
+   declaration, including ones the global reset also covers — e.g. a list's explicit
+   `margin: 0; padding: 0` → `m-0 p-0`. The `*` reset does zero them (so dropping them
+   renders identically), but keeping them explicit is faithful, survives a reset change,
+   and doesn't read as a regression to a reviewer who forgets `list-none` isn't a reset.
 2. Delete the now-dead scoped rules **and** any descendant selectors that targeted the
    element's children (move those onto the children as utilities).
 3. **Before deleting a class, grep the *whole repo* for it — not just this component's

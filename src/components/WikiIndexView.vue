@@ -59,26 +59,33 @@ function toggleTag(tag: string): void {
 </script>
 
 <template>
-  <div class="wiki-index">
-    <div v-if="visibleTags.length" class="tag-filter">
+  <div class="max-w-[900px] mx-auto pt-5 px-7 pb-16">
+    <div v-if="visibleTags.length" class="flex flex-wrap gap-1.5 mb-5">
       <FilterChip v-for="[tag, count] in visibleTags" :key="tag" :label="`#${tag}`" :count="count" :active="selected.has(tag)" @click="toggleTag(tag)" />
     </div>
-    <p v-if="!entries.length" class="wiki-empty">The wiki is empty.</p>
-    <ul v-else class="card-grid">
+    <p v-if="!entries.length" class="py-12 px-7 text-center text-muted">The wiki is empty.</p>
+    <ul v-else class="list-none m-0 p-0 grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3">
       <li v-for="entry in filtered" :key="entry.slug">
         <!-- A div (not button) so the per-tag filter chips can be real buttons. -->
         <div
-          class="page-card"
+          class="flex flex-col gap-1.5 w-full h-full text-left py-3.5 px-4 bg-panel border border-border rounded-[10px] cursor-pointer hover:border-accent"
           role="button"
           tabindex="0"
           @click="wikiGotoPage(entry.slug)"
           @keydown.enter="wikiGotoPage(entry.slug)"
           @keydown.space.prevent="wikiGotoPage(entry.slug)"
         >
-          <span class="card-title">{{ entry.title }}</span>
-          <span v-if="entry.description" class="card-desc">{{ entry.description }}</span>
-          <span v-if="entry.tags.length" class="card-tags">
-            <button v-for="t in entry.tags" :key="t" type="button" class="card-tag" :class="{ active: selected.has(t) }" @click.stop="toggleTag(t)">
+          <span class="text-[14px] font-[650] text-fg">{{ entry.title }}</span>
+          <span v-if="entry.description" class="text-[12.5px] leading-normal text-secondary">{{ entry.description }}</span>
+          <span v-if="entry.tags.length" class="flex flex-wrap gap-1.5 mt-0.5">
+            <button
+              v-for="t in entry.tags"
+              :key="t"
+              type="button"
+              class="text-[11px] border-0 bg-transparent cursor-pointer"
+              :class="selected.has(t) ? 'text-accent font-semibold' : 'text-muted hover:text-accent'"
+              @click.stop="toggleTag(t)"
+            >
               #{{ t }}
             </button>
           </span>
@@ -87,77 +94,3 @@ function toggleTag(tag: string): void {
     </ul>
   </div>
 </template>
-
-<style scoped>
-.wiki-index {
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 20px 28px 64px;
-}
-.tag-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 20px;
-}
-.card-grid {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 12px;
-}
-.page-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  height: 100%;
-  text-align: left;
-  padding: 14px 16px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  cursor: pointer;
-}
-.page-card:hover {
-  border-color: var(--accent);
-}
-.card-title {
-  font-size: 14px;
-  font-weight: 650;
-  color: var(--text);
-}
-.card-desc {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-}
-.card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 2px;
-}
-.card-tag {
-  font-size: 11px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.card-tag:hover {
-  color: var(--accent);
-}
-.card-tag.active {
-  color: var(--accent);
-  font-weight: 600;
-}
-.wiki-empty {
-  padding: 48px 28px;
-  text-align: center;
-  color: var(--text-muted);
-}
-</style>
