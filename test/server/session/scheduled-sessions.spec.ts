@@ -4,9 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   createScheduledSessionRegistry,
-  mergeScheduledSessions,
-  parseScheduledSessions,
-  scheduledSessionsFile,
+  parseScheduledSessionRecord,
+  scheduledSessionsDir,
   selectExpiredScheduledSessions,
   SCHEDULED_SESSION_RETENTION,
   type ScheduledSessionRecord,
@@ -74,84 +73,60 @@ describe("selectExpiredScheduledSessions", () => {
   });
 });
 
-describe("parseScheduledSessions", () => {
+describe("parseScheduledSessionRecord", () => {
   const anyId = () => true;
 
-  it("parses well-formed records", () => {
-    expect(parseScheduledSessions([{ id: "a", createdAt: 1 }], anyId)).toEqual([{ id: "a", createdAt: 1 }]);
+  it("parses a well-formed entry", () => {
+    expect(parseScheduledSessionRecord("a", { createdAt: 1 }, anyId)).toEqual({ id: "a", createdAt: 1 });
   });
 
-  it("drops ids that fail validation", () => {
-    const raw = [
-      { id: "good", createdAt: 1 },
-      { id: "../evil", createdAt: 2 },
-    ];
-    expect(parseScheduledSessions(raw, (id) => id === "good")).toEqual([{ id: "good", createdAt: 1 }]);
+  it("rejects an id that fails validation", () => {
+    expect(parseScheduledSessionRecord("../evil", { createdAt: 1 }, (id) => id === "good")).toBeNull();
   });
 
-  it("drops entries with a missing or non-numeric createdAt", () => {
-    expect(parseScheduledSessions([{ id: "a" }, { id: "b", createdAt: "1" }, { id: "c", createdAt: NaN }], anyId)).toEqual([]);
+  it("rejects a missing, non-numeric or non-finite createdAt", () => {
+    expect(parseScheduledSessionRecord("a", {}, anyId)).toBeNull();
+    expect(parseScheduledSessionRecord("a", { createdAt: "1" }, anyId)).toBeNull();
+    expect(parseScheduledSessionRecord("a", { createdAt: NaN }, anyId)).toBeNull();
   });
 
-  it("drops non-object entries", () => {
-    expect(parseScheduledSessions(["a", 1, null, undefined], anyId)).toEqual([]);
-  });
-
-  it("returns [] for a non-array (an object, a primitive, null)", () => {
-    expect(parseScheduledSessions({ id: "a", createdAt: 1 }, anyId)).toEqual([]);
-    expect(parseScheduledSessions("nope", anyId)).toEqual([]);
-    expect(parseScheduledSessions(null, anyId)).toEqual([]);
-  });
-
-  it("returns [] for an empty array", () => {
-    expect(parseScheduledSessions([], anyId)).toEqual([]);
+  it("rejects a non-object payload", () => {
+    expect(parseScheduledSessionRecord("a", "nope", anyId)).toBeNull();
+    expect(parseScheduledSessionRecord("a", null, anyId)).toBeNull();
+    expect(parseScheduledSessionRecord("a", [1], anyId)).toBeNull();
   });
 });
 
-describe("mergeScheduledSessions", () => {
-  const none = new Set<string>();
-
-  it("keeps the ids a second server on this workspace wrote", () => {
-    expect(mergeScheduledSessions([at(1, "theirs")], [at(2, "ours")], none)).toEqual([at(2, "ours"), at(1, "theirs")]);
+describe("scheduledSessionsDir", () => {
+  it("gives each workspace its own directory", () => {
+    expect(scheduledSessionsDir("/ws/app", "/home")).not.toEqual(scheduledSessionsDir("/ws/app2", "/home"));
   });
 
-  it("prefers our own record for an id present on both sides", () => {
-    const ours = { id: "same", createdAt: 200 };
-    expect(mergeScheduledSessions([{ id: "same", createdAt: 100 }], [ours], none)).toEqual([ours]);
+  it("resolves a relative workspace so the same dir maps to one registry", () => {
+    expect(scheduledSessionsDir("/ws/app", "/home")).toBe(scheduledSessionsDir("/ws/sub/../app", "/home"));
   });
 
-  it("never resurrects an id this process already reaped", () => {
-    expect(mergeScheduledSessions([at(1, "gone")], [], new Set(["gone"]))).toEqual([]);
+  // A Windows path carries "\" and ":" — used raw they would break the write (or escape
+  // the intended directory), silently costing Windows its restart-time cleanup.
+  it("leaves no path-unsafe characters in a Windows-style workspace", () => {
+    const name = path.basename(scheduledSessionsDir("C:\\Users\\RUNNER~1\\ws", "/home"));
+    expect(name).toMatch(/^[a-zA-Z0-9-]+$/);
   });
 
-  it("returns our records unchanged when the file is empty", () => {
-    expect(mergeScheduledSessions([], [at(1, "ours")], none)).toEqual([at(1, "ours")]);
+  it("keeps workspaces apart even when their names fold to the same slug", () => {
+    expect(scheduledSessionsDir("/ws/a.b", "/home")).not.toEqual(scheduledSessionsDir("/ws/a-b", "/home"));
   });
 
-  it("adopts the file's records when we hold none", () => {
-    expect(mergeScheduledSessions([at(1, "theirs")], [], none)).toEqual([at(1, "theirs")]);
-  });
-});
-
-describe("scheduledSessionsFile", () => {
-  // One writer per file is what makes the plain overwrite safe — two clones must never
-  // land on the same path, however similar their names.
-  it("gives each workspace its own file", () => {
-    expect(scheduledSessionsFile("/ws/app", "/home")).not.toEqual(scheduledSessionsFile("/ws/app2", "/home"));
-  });
-
-  it("encodes the absolute path the way Claude encodes its project dirs", () => {
-    expect(scheduledSessionsFile("/ws/my.app", "/home")).toBe(path.join("/home", "scheduled-sessions", "-ws-my-app.json"));
-  });
-
-  it("resolves a relative workspace so the same dir maps to one file", () => {
-    expect(scheduledSessionsFile("/ws/app", "/home")).toBe(scheduledSessionsFile("/ws/sub/../app", "/home"));
+  it("bounds the directory name for a deep path", () => {
+    const segments = Array.from({ length: 40 }, (_, i) => `segment-${i}`);
+    const deep = path.join("/", ...segments);
+    expect(path.basename(scheduledSessionsDir(deep, "/home")).length).toBeLessThanOrEqual(80);
   });
 });
 
 describe("createScheduledSessionRegistry", () => {
+  let home = "";
   let dir = "";
-  let file = "";
   let clockMs = NOW;
   const reapSession = vi.fn();
   const killTmux = vi.fn();
@@ -160,7 +135,7 @@ describe("createScheduledSessionRegistry", () => {
 
   const registry = () =>
     createScheduledSessionRegistry({
-      file,
+      dir,
       isValidId: (id) => id.startsWith("s"),
       isAttached,
       reapSession,
@@ -170,11 +145,12 @@ describe("createScheduledSessionRegistry", () => {
       now: () => clockMs,
     });
 
-  const readFile = async () => JSON.parse(await fs.readFile(file, "utf8"));
+  const registered = async (): Promise<string[]> => (await fs.readdir(dir).catch(() => [])).sort();
+  const writeEntry = (id: string, createdAt: number) => fs.writeFile(path.join(dir, `${id}.json`), JSON.stringify({ createdAt }));
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(path.join(os.tmpdir(), "mt-scheduled-"));
-    file = path.join(dir, "nested", "scheduled-sessions.json");
+    home = await fs.mkdtemp(path.join(os.tmpdir(), "mt-scheduled-"));
+    dir = scheduledSessionsDir("/ws/app", home);
     clockMs = NOW;
     vi.clearAllMocks();
     hasTmux.mockReturnValue(true);
@@ -182,14 +158,14 @@ describe("createScheduledSessionRegistry", () => {
   });
 
   afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(home, { recursive: true, force: true });
   });
 
-  it("persists registered sessions, creating the directory", async () => {
+  it("records a registered session, creating the directory", async () => {
     const r = registry();
     r.register("s1");
     await r.sweep();
-    expect(await readFile()).toEqual([{ id: "s1", createdAt: NOW }]);
+    expect(await registered()).toEqual(["s1.json"]);
   });
 
   it("reaps the oldest once the count exceeds `keep`", async () => {
@@ -200,9 +176,9 @@ describe("createScheduledSessionRegistry", () => {
     clockMs += HOUR;
     r.register("s3");
     await r.sweep();
-    expect(reapSession).toHaveBeenCalledWith("s1");
-    expect(killTmux).toHaveBeenCalledWith("s1");
-    expect((await readFile()).map((rec: ScheduledSessionRecord) => rec.id)).toEqual(["s3", "s2"]);
+    expect(reapSession).toHaveBeenCalledExactlyOnceWith("s1");
+    expect(killTmux).toHaveBeenCalledExactlyOnceWith("s1");
+    expect(await registered()).toEqual(["s2.json", "s3.json"]);
   });
 
   it("reaps a session past the ttl on a plain sweep, with nothing newly registered", async () => {
@@ -211,10 +187,9 @@ describe("createScheduledSessionRegistry", () => {
     await first.sweep();
 
     clockMs += 25 * HOUR;
-    const restarted = registry(); // a new process reading the same file
-    await restarted.sweep();
+    await registry().sweep(); // a new process reading the same directory
     expect(reapSession).toHaveBeenCalledWith("s1");
-    expect(await readFile()).toEqual([]);
+    expect(await registered()).toEqual([]);
   });
 
   it("kills a tmux left behind by a previous run, whose pty is long gone", async () => {
@@ -245,11 +220,12 @@ describe("createScheduledSessionRegistry", () => {
     isAttached.mockReturnValue(true);
     await r.sweep();
     expect(reapSession).not.toHaveBeenCalled();
+    expect(await registered()).toEqual(["s1.json"]);
 
     isAttached.mockReturnValue(false);
     await r.sweep();
     expect(reapSession).toHaveBeenCalledWith("s1");
-    expect(await readFile()).toEqual([]);
+    expect(await registered()).toEqual([]);
   });
 
   it("reaps the unattached expired sessions even when another is being viewed", async () => {
@@ -260,7 +236,7 @@ describe("createScheduledSessionRegistry", () => {
     isAttached.mockImplementation((id: string) => id === "s1");
     await r.sweep();
     expect(reapSession).toHaveBeenCalledExactlyOnceWith("s2");
-    expect((await readFile()).map((rec: ScheduledSessionRecord) => rec.id)).toEqual(["s1"]);
+    expect(await registered()).toEqual(["s1.json"]);
   });
 
   it("leaves everything alone while within the policy", async () => {
@@ -273,68 +249,73 @@ describe("createScheduledSessionRegistry", () => {
   });
 
   // PORT is configurable, so two servers CAN share a workspace. Neither may drop the
-  // other's ids, and each must enforce retention on them.
-  it("sweeps an expired id a second server registered after we hydrated", async () => {
+  // other's entries, and each must enforce retention on them.
+  it("sweeps an expired session a second server registered after we started", async () => {
     const mine = registry();
-    await mine.sweep(); // hydrates from an empty file — s1 does not exist yet
+    await mine.sweep();
 
     const peer = registry();
     peer.register("s1");
     await peer.sweep();
 
     clockMs += 25 * HOUR;
-    await mine.sweep(); // only a sweep-time reconcile can see s1 at all
+    await mine.sweep();
     expect(reapSession).toHaveBeenCalledWith("s1");
-    expect(await readFile()).toEqual([]);
+    expect(await registered()).toEqual([]);
   });
 
-  it("re-adds an id of ours that a second server overwrote", async () => {
+  it("keeps a second server's registration when we register our own", async () => {
     const mine = registry();
-    mine.register("s1");
     await mine.sweep();
 
-    // The peer hydrated before s1 existed and writes its own view over ours.
-    await fs.writeFile(file, JSON.stringify([{ id: "s2", createdAt: clockMs }]));
+    await fs.mkdir(dir, { recursive: true });
+    await writeEntry("s1", clockMs); // the peer's entry, which we never saw registered
 
+    mine.register("s2");
     await mine.sweep();
-    expect((await readFile()).map((rec: ScheduledSessionRecord) => rec.id).sort()).toEqual(["s1", "s2"]);
+    expect(await registered()).toEqual(["s1.json", "s2.json"]);
   });
 
-  it("picks up the ids a previous run of this workspace left behind", async () => {
+  it("picks up the sessions a previous run of this workspace left behind", async () => {
     const previousRun = registry();
     previousRun.register("s1");
     await previousRun.sweep();
 
     clockMs += 25 * HOUR;
-    await registry().sweep(); // the restarted server, same workspace => same file
+    await registry().sweep(); // the restarted server, same workspace => same directory
     expect(reapSession).toHaveBeenCalledWith("s1");
-    expect(await readFile()).toEqual([]);
+    expect(await registered()).toEqual([]);
   });
 
   it("leaves no temp file behind (the write is a rename, not a truncate)", async () => {
     const r = registry();
     r.register("s1");
     await r.sweep();
-    expect(await fs.readdir(path.dirname(file))).toEqual(["scheduled-sessions.json"]);
+    expect(await registered()).toEqual(["s1.json"]);
   });
 
-  it("starts empty when the file is missing", async () => {
+  it("starts empty when the directory is missing", async () => {
     await registry().sweep();
     expect(reapSession).not.toHaveBeenCalled();
   });
 
-  it("starts empty (and does not throw) when the file is corrupt", async () => {
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, "{not json");
-    const r = registry();
-    r.register("s1");
-    await r.sweep();
-    expect(await readFile()).toEqual([{ id: "s1", createdAt: NOW }]);
+  it("ignores an entry whose file is corrupt", async () => {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "s1.json"), "{not json");
+    await registry().sweep();
+    expect(reapSession).not.toHaveBeenCalled();
   });
 
-  it("ignores persisted entries whose id fails validation", async () => {
-    await fs.mkdir(path.dirname(file), { recursive: true });
-    await fs.writeFile(file, JSON.stringify([{ id: "../evil", createdAt: NOW - 99 * HOUR }]));
+  it("ignores entries whose id fails validation", async () => {
+    await fs.mkdir(dir, { recursive: true });
+    await writeEntry("nope", clockMs - 99 * HOUR); // isValidId requires an "s" prefix
+    await registry().sweep();
+    expect(reapSession).not.toHaveBeenCalled();
+  });
+
+  it("ignores files that are not entries", async () => {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "README"), "not an entry");
     await registry().sweep();
     expect(reapSession).not.toHaveBeenCalled();
   });
