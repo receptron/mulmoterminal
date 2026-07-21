@@ -7,8 +7,16 @@
 // of what the session's hooks did. It is persisted (a tiny file, at most `keep` entries)
 // so sessions that outlived a server restart — tmux survives it by design — are still
 // reaped afterwards.
+//
+// The file is per WORKSPACE (scheduledSessionsFile), which makes this process its only
+// writer: the user runs several clones off one ~/.mulmoterminal, and a single shared file
+// would need every instance to merge on write — a read-modify-write whose lost updates
+// would silently drop ids, i.e. bring the leak back. A server owns one workspace (the
+// port makes two servers on the same one a non-case), so per-workspace means one writer.
 import { promises as fs } from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import { writeFileAtomic } from "../files/atomic-write.js";
 
 export interface ScheduledSessionRecord {
   id: string;
@@ -60,18 +68,10 @@ export function parseScheduledSessions(raw: unknown, isValidId: (id: string) => 
   return records;
 }
 
-/** Fold what is on disk into our own records. Several mulmoterminal instances share
- *  ~/.mulmoterminal (the user runs multiple clones, and the worklog flag lives in the
- *  shared config), so a plain overwrite would erase the other instance's ids — and an id
- *  nobody has on file is an id nobody reaps after a restart. Ids this process already
- *  reaped are never resurrected, or a peer's stale copy would keep re-adding them. */
-export function mergeScheduledSessions(
-  onDisk: readonly ScheduledSessionRecord[],
-  ours: readonly ScheduledSessionRecord[],
-  reaped: ReadonlySet<string>,
-): ScheduledSessionRecord[] {
-  const known = new Set(ours.map((record) => record.id));
-  return [...ours, ...onDisk.filter((record) => !known.has(record.id) && !reaped.has(record.id))];
+/** Where this workspace's registry lives. Encoded the way Claude encodes its own project
+ *  dirs ("/" and "." → "-"), so the file is recognizable when you go looking for it. */
+export function scheduledSessionsFile(workspace: string, home: string = path.join(os.homedir(), ".mulmoterminal")): string {
+  return path.join(home, "scheduled-sessions", `${path.resolve(workspace).replace(/[/.]/g, "-")}.json`);
 }
 
 export interface ScheduledSessionRegistryDeps {
@@ -98,35 +98,22 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
   const policy = deps.policy ?? SCHEDULED_SESSION_RETENTION;
   const now = deps.now ?? Date.now;
   let records: ScheduledSessionRecord[] = [];
-  const reaped = new Set<string>();
-
-  const readPersisted = async (): Promise<ScheduledSessionRecord[]> => {
-    try {
-      return parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
-    } catch {
-      return []; // no file yet / unreadable => nothing to fold in
-    }
-  };
 
   const hydrated: Promise<void> = (async () => {
-    records = await readPersisted();
+    try {
+      records = parseScheduledSessions(JSON.parse(await fs.readFile(deps.file, "utf8")), deps.isValidId);
+    } catch {
+      // no file yet / unreadable => start empty
+    }
   })();
 
-  // Adopting a peer's ids is part of writing, not a separate step: we must fold in whatever
-  // landed on disk since our last read or the overwrite would drop it, and the ids we adopt
-  // are then ours to sweep like any other.
-  const persist = async (): Promise<void> => {
-    records = mergeScheduledSessions(await readPersisted(), records, reaped);
-    await fs.mkdir(path.dirname(deps.file), { recursive: true });
-    await fs.writeFile(deps.file, JSON.stringify(records));
-  };
+  const persist = (): Promise<void> => writeFileAtomic(deps.file, JSON.stringify(records));
 
   // The expired session may be live (kill the pty + its tmux), or a tmux left behind by a
   // previous server run (kill it directly) — the same two-step the ✕ / terminate route uses.
   const evict = (record: ScheduledSessionRecord): void => {
     deps.reapSession(record.id);
     if (deps.hasTmux(record.id)) deps.killTmux(record.id);
-    reaped.add(record.id);
   };
 
   const runSweep = async (): Promise<void> => {

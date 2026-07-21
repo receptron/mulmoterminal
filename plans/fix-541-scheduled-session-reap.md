@@ -36,9 +36,16 @@
 
 ### 1. `server/session/scheduled-sessions.ts`（新規）
 
-スケジュールが生成したセッション id の登録簿。`~/.mulmoterminal/scheduled-sessions.json` に永続するので
-**サーバ再起動をまたいでも回収できる**（原因 C のスケジュール由来分）。完了検知に依存しないため、
-フックが 1 つも来なかったセッション（原因 B）も無条件に回収される。
+スケジュールが生成したセッション id の登録簿。`~/.mulmoterminal/scheduled-sessions/<workspace>.json` に
+永続するので**サーバ再起動をまたいでも回収できる**（原因 C のスケジュール由来分）。完了検知に依存しない
+ため、フックが 1 つも来なかったセッション（原因 B）も無条件に回収される。
+
+**ファイルはワークスペース単位**にする。ユーザは 1 つの `~/.mulmoterminal` を複数 clone で共有しており、
+共有ファイルにすると全インスタンスが書き込み時にマージする必要がある。その read-modify-write は lost
+update を生み、id が黙って消える ＝ リークが戻る（Codex レビュー指摘）。サーバ 1 台 = ワークスペース 1 つ
+（同一ワークスペースに 2 台はポート衝突で成立しない）なので、ワークスペース単位なら**書き手は常に 1 つ**に
+なり、競合そのものが消える。書き込みは temp + rename の原子的書き込み（`files/atomic-write.ts`、
+`backends/feeds.ts` から共通化）で、書き込み中のクラッシュによる破損も防ぐ。
 
 - 純粋関数 `selectExpiredScheduledSessions(records, nowMs, policy)` — 新しい順に `keep` 件を残し、
   それを超えたもの / `ttlMs` を過ぎたものを `expire` に振り分ける

@@ -57,7 +57,7 @@ import { resolveSession, type SessionResolution } from "./session/session-resolv
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
-import { createScheduledSessionRegistry } from "./session/scheduled-sessions.js";
+import { createScheduledSessionRegistry, scheduledSessionsFile } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./agents/codex-args.js";
@@ -1999,7 +1999,7 @@ startCollectionCompletionWatchers().catch((err) => {
 // never finishes a turn, so the hook-driven reap can miss it entirely — hence the
 // registry, which bounds them by count and age whatever their hooks did (#541).
 const scheduledSessions = createScheduledSessionRegistry({
-  file: path.join(MULMOTERMINAL_HOME, "scheduled-sessions.json"),
+  file: scheduledSessionsFile(CLAUDE_CWD, MULMOTERMINAL_HOME),
   isValidId: (id) => SESSION_ID_RE.test(id),
   isAttached: (id) => !!ptys.get(id)?.ws,
   reapSession: reap,
