@@ -14,7 +14,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import { mountConfigRoutes, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
 import { resolveButtonCommand } from "./config/header-resolve.js";
@@ -46,8 +46,6 @@ import {
   rewriteLoopbackForDocker,
   SANDBOX_HOST,
 } from "./infra/sandbox.js";
-import { listPrsAcrossRepos } from "./git/prs.js";
-import { listIssuesAcrossRepos } from "./git/issues.js";
 import { dirConfigWriteTarget } from "./config/dir-config.js";
 import { resolveScript } from "./files/scripts.js";
 import { buildClaudeArgs } from "./agents/claude-args.js";
@@ -82,6 +80,8 @@ import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
+import { mountToolRoutes } from "./routes/tool-routes.js";
+import { mountRepoRoutes } from "./routes/repo-routes.js";
 import { claudeOnDiskSessionIds, latestUserPrompt, projectSessionsDir, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -210,9 +210,10 @@ const GUI_MCP_TOOLS = [...allowedToolNames(), "mcp__mulmoterminal-gui__submitTra
 
 // The panel's per-session stores. `publish` is a closure rather than the pubsub object
 // because pub/sub only exists once the HTTP server does, and these are built before it.
-const { toolResultsStore, toolCallsStore, storeToolResult, recordToolCallStart, recordToolCallEnd } = createToolStores({
+const toolStores = createToolStores({
   publish: (channel, data) => pubsub?.publish(channel, data),
 });
+const { recordToolCallStart, recordToolCallEnd } = toolStores;
 
 const LAST_PROMPT_CAP = 200;
 
@@ -923,71 +924,12 @@ app.post("/api/hook", async (req, res) => {
   res.json({ ok: true });
 });
 
-// The GUI toolResult sink. Two callers POST here:
-//   - the MCP broker, after a plugin produces a result (data gates rendering);
-//   - the GUI panel, to persist a plugin view's state change (e.g. a submitted
-//     form's viewState) under the same uuid.
-// We store the result keyed by session id and publish it on that session's channel
-// so the active panel renders/updates it live. Mirrors MulmoClaude's internal
-// toolResult route + applyToolResultToSession.
-app.post("/api/agent/toolResult", async (req, res) => {
-  const { sessionId, toolName, uuid } = req.body || {};
-  // The session id flows from env (broker) / the client and ends up in a pub/sub
-  // channel name — keep it to the known UUID shape.
-  if (!sessionId || !SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
-  if (typeof toolName !== "string" || !toolName) {
-    return res.status(400).json({ error: "invalid toolName" });
-  }
-  if (typeof uuid !== "string" || !uuid) {
-    return res.status(400).json({ error: "invalid uuid" });
-  }
+// The tools pane: the toolResult sink, its replay, the available-tool list and the
+// call history (see routes/tool-routes.ts).
+mountToolRoutes(app, { stores: toolStores, toolSummaries, publish: (c, d) => pubsub?.publish(c, d), sessionChannel });
 
-  // Store everything except the routing fields; the result itself is the payload
-  // the panel renders.
-  // `persistOnly` (set by the GUI panel when a view persists its own state change)
-  // means: store, but do NOT re-publish on the session channel. Re-publishing would
-  // echo the update back to the originating panel as a fresh result, which re-seeds
-  // the view and re-emits — an infinite flicker loop. The broker (new tool calls)
-  // omits the flag, so its results still publish and render live.
-  const result = { ...req.body };
-  delete result.sessionId;
-  const persistOnly = result.persistOnly === true;
-  delete result.persistOnly;
-  await storeToolResult(sessionId, result);
-
-  if (!persistOnly) {
-    pubsub?.publish(sessionChannel(sessionId), result);
-    console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
-  }
-  res.json({ ok: true });
-});
-
-// Replay a session's stored toolResults so the panel can render them when the
-// user (re)selects that session. Loads from disk (~/.mulmoterminal/toolresults) on
-// first access so the views survive a reboot.
-app.get("/api/agent/toolResults/:sessionId", async (req, res) => {
-  const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
-  res.json({ sessionId, toolResults: await toolResultsStore.get(sessionId) });
-});
-
-// The GUI plugin tools available this session (for the tools pane's "Available
-// Tools" list). The full set claude can call — built-ins, other MCP — is not
-// enumerable server-side; those still show up in the tool-call history below.
-app.get("/api/tools", (_req, res) => {
-  res.json({ tools: toolSummaries });
-});
-
-// Replay a session's tool-call history (every tool, via the Pre/PostToolUse hooks)
-// so the tools pane can render it when the user (re)selects that session. Loads
-// from disk (~/.mulmoterminal/toolcalls) on first access so it survives a reboot.
-app.get("/api/tool-calls/:sessionId", async (req, res) => {
-  const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
-  res.json({ sessionId, toolCalls: await toolCallsStore.get(sessionId) });
-});
+// The /prs and /issues views (see routes/repo-routes.ts).
+mountRepoRoutes(app);
 
 // GET/POST /api/config (workspace dir + directory presets) — in its own module.
 // GRID-ONLY (dev_tool): backs the grid launcher's default dir + the settings
@@ -998,25 +940,6 @@ mountConfigRoutes(app, CLAUDE_CWD);
 // (GET /api/files/browse/{list,text,md}, PUT .../write — all ?cwd=&path=). Each
 // terminal browses its own session's project dir; paths are contained within it.
 mountFilesBrowseRoutes(app, { defaultCwd: CLAUDE_CWD });
-
-// Cross-repo PR list (the /prs view): aggregate open PRs for the configured repos via
-// the server's `gh` login. Repos come from config (never the request).
-app.get("/api/prs", async (_req, res) => {
-  try {
-    res.json({ repos: await listPrsAcrossRepos(getPrRepos()) });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// Sibling of /api/prs: the same configured repos' open issues (capped per repo).
-app.get("/api/issues", async (_req, res) => {
-  try {
-    res.json({ repos: await listIssuesAcrossRepos(getPrRepos()) });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
 
 // Directory-scoped reads for a terminal cell: scripts, skills, dir config, git status,
 // PR phase, resolved header, custom sound. All keyed by ?cwd= (see routes/dir-routes.ts).
