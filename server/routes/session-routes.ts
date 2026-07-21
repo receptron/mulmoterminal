@@ -19,14 +19,8 @@ import {
   lastResponses,
   translationWorkerIds,
 } from "../session/registry.js";
-import {
-  collectOnDiskSessionStats,
-  collectPendingSessions,
-  projectSessionsDir,
-  readSessionMeta,
-  readSessionSummary,
-  sessionTimeline,
-} from "../session/session-reads.js";
+import { collectOnDiskSessionStats, collectPendingSessions, readSessionMeta, readSessionSummary, sessionTimeline } from "../session/session-reads.js";
+import { projectSessionsDir } from "../session/project-dir.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import type { SessionMeta } from "../session/types.js";
