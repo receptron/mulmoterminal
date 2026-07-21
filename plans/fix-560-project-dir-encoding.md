@@ -72,3 +72,33 @@ POSIX / Windows 双方の入力をそのままテストできる。
 
 ローカルに Windows が無いため、feature branch を ref に指定して
 `Windows (daily)` をディスパッチし、緑になることを確認してからマージする。
+
+## 追記: 2 つ目の Windows 専用バグ（`writeFileAtomic`）
+
+上記の dispatch（run 29871985889）でエンコーディングの 2 件はパスしたが、
+別のテストが落ちた:
+
+```
+FAIL test/server/files/atomic-write.spec.ts > writeFileAtomic > survives concurrent writes to the same path
+EPERM: operation not permitted, rename '...\state.json.<uuid>.tmp' -> '...\state.json'
+```
+
+`server/files/atomic-write.ts` は「atomic on POSIX + Windows」「一意な temp 名により
+二者が同時に使える」と謳っているが、Windows では**同一 dest への rename が
+瞬間的なロックで EPERM を返す**（並行 writer 自身の rename、インデクサ、ウイルススキャナ）。
+POSIX の rename は競合しても勝つのでこの問題は出ない。つまり実装がコメントの約束を
+Windows で守れていない。
+
+このテストは #556 (`c77232c`) で新規追加されたもので、green だった `8ba8e7e8` には
+存在しない。過去の赤 run では偶然パスしていた = Windows で flaky。
+
+### 修正
+
+`rename` を `EPERM` / `EACCES` / `EBUSY` の間だけバックオフ付きでリトライする。
+リトライを使い果たしたら最後の試行のエラーをそのまま投げる（書けていないのに
+成功を報告しない）。
+
+テスト可能性のため:
+- `isRenameContention(err)` を純粋述語として切り出す
+- `renameWithRetry` は `renameFile` と `wait` を注入可能にする
+  → Windows ホストが無くてもリトライ挙動を全プラットフォームで決定的に検証できる
