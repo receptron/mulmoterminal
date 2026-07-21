@@ -54,11 +54,10 @@ import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
-import { messageOf } from "./errors.js";
-import type { PtyEntry, SessionMeta, ToolCall, ToolResult } from "./session/types.js";
+import { hasErrnoCode, messageOf } from "./errors.js";
+import type { PtyEntry, ToolCall, ToolResult } from "./session/types.js";
 import {
   activity,
-  activityStateHydrated,
   aiTitles,
   claimedCodexRollouts,
   codexRolloutIds,
@@ -71,6 +70,7 @@ import {
   lastTitleAttemptMs,
   lastTitledUserTurns,
   markDevTerminalSession,
+  translationWorkerIds,
   persistActivityState,
   ptys,
   titleEpoch,
@@ -80,25 +80,15 @@ import {
 } from "./session/registry.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
-import {
-  claudeOnDiskSessionIds,
-  collectOnDiskSessionStats,
-  collectPendingSessions,
-  latestUserPrompt,
-  projectSessionsDir,
-  readSessionMeta,
-  readSessionSummary,
-  sessionExistsOnDisk,
-  sessionTimeline,
-  LAST_RESPONSE_MAX,
-} from "./session/session-reads.js";
+import { mountSessionRoutes } from "./routes/session-routes.js";
+import { claudeOnDiskSessionIds, latestUserPrompt, projectSessionsDir, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./agents/codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
-import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
+import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
@@ -146,9 +136,6 @@ import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 
-// Node fs errors carry a `code` (e.g. "ENOENT"); narrow before reading it.
-const hasErrnoCode = (e: unknown): e is { code?: string } => typeof e === "object" && e !== null;
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const CLAUDE_BIN = claudeAdapter.bin();
@@ -173,13 +160,6 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
-
-// Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
-// already trusted — because claude blocks on its workspace-trust dialog in any
-// untrusted dir (no input ever comes, so the worker would hang). Their session ids
-// are tracked here so they're FILTERED OUT of /api/sessions: a translation worker is
-// a transient internal helper, not a chat the user should see in the sidebar.
-const translationWorkerIds = new Set<string>();
 
 // sessionId → settlers for a hidden translation worker's in-flight request.
 // `resolve` is called from POST /api/translation/submit when the worker reports its
@@ -369,13 +349,6 @@ async function recordToolCallEnd(
   pubsub?.publish(toolCallsChannel(sessionId), call);
   toolCallsStore.save(sessionId);
 }
-
-// Only the most-recent N sessions are listed in the sidebar; older ones aren't
-// read or parsed, keeping /api/sessions cheap for projects with many sessions.
-const SESSION_LIST_LIMIT = 50;
-// Cap on ids per /api/activity request — a grid can't show more cells than this, and
-// it bounds the query string a client can make us parse.
-const ACTIVITY_IDS_LIMIT = 200;
 
 const LAST_PROMPT_CAP = 200;
 
@@ -1223,123 +1196,9 @@ mountRemoteHostRoutes(app, { isAllowedOrigin });
 // fallback for remote setups. Same-origin guarded; tokens never reach a response.
 mountGoogleRoutes(app, { isAllowedOrigin });
 
-// GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
-// can render its header immediately (live updates then arrive via the "sessions"
-// pub/sub channel). The single view reads activity straight from that channel.
-// ?cwd= locates the transcript so a freshly-resumed session shows its most recent
-// prompt; the live in-memory prompt (this process run) takes precedence.
-app.get("/api/session/:id", async (req, res) => {
-  const { id } = req.params;
-  if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  await activityStateHydrated; // a reconnect re-fetch must see the restored working/waiting, not idle
-  const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context, workPhase } = await readSessionSummary(cwd, id);
-  const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
-  // The roster always shows OUR summary, never the external on-disk `ai-title` (MulmoClaude's).
-  // If we haven't titled it yet, kick off a summary and fall back to the prompt meanwhile.
-  freshenRosterTitle(id, cwd, userTurns);
-  const aiTitle = aiTitles.get(id) ?? null;
-  const lastResponse = lastResponses.get(id) ?? transcriptResponse;
-  res.json({
-    id,
-    cwd,
-    working: a.working ?? false,
-    waiting: a.waiting ?? false,
-    event: a.event ?? null,
-    lastPrompt,
-    aiTitle,
-    lastResponse,
-    usage,
-    context,
-    workPhase,
-  });
-});
-
-// Attention state (working / waiting / event) for an explicit set of session ids.
-// The grid uses this to seed the status of its OFF-PAGE cells, which /api/sessions
-// can't serve: it hides dev-terminal sessions and is capped by the list limit. Reads
-// only the in-memory activity map (no disk), so it's cheap to call per grid render.
-app.get("/api/activity", async (req, res) => {
-  await activityStateHydrated; // the grid re-seeds this on reconnect — must not race hydration back to idle
-  const raw = typeof req.query.ids === "string" ? req.query.ids : "";
-  const ids = raw
-    .split(",")
-    .filter((id) => SESSION_ID_RE.test(id))
-    .slice(0, ACTIVITY_IDS_LIMIT);
-  const out: Record<string, { working: boolean; waiting: boolean; event: string | null }> = {};
-  for (const id of ids) {
-    const a = activity.get(id) || {};
-    out[id] = { working: a.working ?? false, waiting: a.waiting ?? false, event: a.event ?? null };
-  }
-  res.json(out);
-});
-
-// The tool-activity timeline for a session (what the agent ran, newest last), so a
-// cell can show "what did it do?" without scrolling the raw transcript.
-app.get("/api/transcript/timeline", async (req, res) => {
-  const { session } = req.query;
-  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(await sessionTimeline(cwd, session));
-});
-
-// List the chat sessions for the current project (CLAUDE_CWD), including
-// newly-created sessions that aren't persisted to disk yet.
-app.get("/api/sessions", async (req, res) => {
-  try {
-    await activityStateHydrated; // list working/waiting from the restored state, not a racing idle
-    // Optional ?cwd= scopes the list to that project's on-disk sessions (the grid
-    // cell's resume picker). Without it, the classic single view's behavior is
-    // unchanged: CLAUDE_CWD + in-memory pending sessions.
-    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
-    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
-    const includePending = !cwdParam;
-    // Wait for the persisted grid-session set before filtering (below), so a chat
-    // request racing server boot can't leak previously-hidden grid transcripts.
-    if (includePending) await devTerminalSessionsHydrated;
-    const dir = projectSessionsDir(cwd);
-    let files: string[] = [];
-    try {
-      files = (await fs.readdir(dir)).filter((f) => f.endsWith(".jsonl"));
-    } catch (err) {
-      if (!hasErrnoCode(err) || err.code !== "ENOENT") throw err;
-    }
-
-    const onDiskStats = await collectOnDiskSessionStats(dir, files);
-    const onDisk = new Set(onDiskStats.map((s) => s.id));
-    // Pending is skipped for a cwd-scoped query (pending sessions aren't tracked per dir).
-    const pending = collectPendingSessions(onDisk, includePending);
-
-    // Keep only the most-recent N, then read & parse contents for just those
-    // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation
-    // workers are dropped first — they're transient internal helpers, not user chats.
-    const top = [...onDiskStats, ...pending]
-      .filter((s) => !translationWorkerIds.has(s.id))
-      // Hide multi-terminal GRID sessions from the CHAT sidebar (the unscoped query
-      // only). The grid's own resume picker passes ?cwd= (includePending=false) and
-      // must keep listing them, so gate the exclusion on includePending.
-      .filter((s) => !includePending || !devTerminalSessions.has(s.id))
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, SESSION_LIST_LIMIT);
-    const sessions = (
-      await Promise.all(
-        top.map((s) =>
-          s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, event: s.event, hidden: s.hidden }
-            : readSessionMeta(dir, s.file).catch(() => null),
-        ),
-      )
-    )
-      .filter((s): s is SessionMeta => s !== null)
-      .sort((a, b) => b.mtime - a.mtime);
-
-    res.json({ cwd, sessions });
-  } catch (err) {
-    console.error("[api] /api/sessions failed:", err);
-    res.status(500).json({ error: String(err) });
-  }
-});
+// Sidebar listing, one session's detail, the grid's attention poll, the tool timeline and
+// codex's own sessions (see routes/session-routes.ts).
+mountSessionRoutes(app, { freshenRosterTitle });
 
 // Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
 // module so the origin guard / id validation / orphan-selection boundary are testable.
@@ -1362,20 +1221,6 @@ mountTmuxRoutes(app, {
   killTmux: tmuxKillSession,
   listTmuxIds: tmuxListSessionIds,
   resumablePredicate: resumableSessionPredicate,
-});
-
-// codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
-// the single view's sidebar lists these so past codex conversations are switchable + resumable.
-app.get("/api/codex/sessions", async (req, res) => {
-  try {
-    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
-    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
-    const sessions = await listCodexSessions(codexSessionsRoot(), cwd, SESSION_LIST_LIMIT);
-    res.json({ cwd, sessions });
-  } catch (err) {
-    console.error("[api] /api/codex/sessions failed:", err);
-    res.status(500).json({ error: String(err) });
-  }
 });
 
 const server = http.createServer(app);
