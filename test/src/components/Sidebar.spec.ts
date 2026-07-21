@@ -85,7 +85,7 @@ describe("Sidebar", () => {
 
   it("emits refresh when the sort button is clicked", async () => {
     const wrapper = mountSidebar({ sessions: [row({ id: "a" })] });
-    await wrapper.find(".sort-btn").trigger("click");
+    await wrapper.find('[aria-label="Sort by most recent"]').trigger("click");
     expect(wrapper.emitted("refresh")).toHaveLength(1);
   });
 
