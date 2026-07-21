@@ -920,16 +920,16 @@ describe("TerminalCell", () => {
     expect(badge.find(".wt-ahead").text()).toBe("+3");
     expect(badge.find(".wt-dirty-count").text()).toBe("●2");
 
-    expect(w.find(".cell-diff").exists()).toBe(false); // panel closed initially
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // panel closed initially
     await badge.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
-    expect(w.findAll(".cell-diff-file")).toHaveLength(2);
-    expect(w.find(".df-new").exists()).toBe(true); // the untracked file
-    expect(w.find(".cell-diff-patch").text()).toContain("hello");
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
+    expect(w.findAll('[data-testid="cell-diff-file"]')).toHaveLength(2);
+    expect(w.find('[data-testid="df-new"]').exists()).toBe(true); // the untracked file
+    expect(w.find('[data-testid="cell-diff-patch"]').text()).toContain("hello");
 
-    await w.find(".cell-diff .cell-btn").trigger("click"); // ✕ closes it
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    await w.find('[data-testid="cell-diff"] .cell-btn').trigger("click"); // ✕ closes it
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("shows no diff badge for a clean worktree (0 ahead / 0 dirty)", async () => {
@@ -987,11 +987,11 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-wt-badge").trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     // leaving the worktree clears `diff`; the panel must not linger as an empty overlay
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/plain-proj");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("does not auto-reopen the diff panel after leaving and re-entering a worktree", async () => {
@@ -1000,17 +1000,17 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-wt-badge").trigger("click"); // user opens the panel
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
 
     const term = w.findComponent({ name: "TerminalView" });
     term.vm.$emit("cwd", "/home/me/plain-proj"); // leave the worktree → panel closes
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
 
     term.vm.$emit("cwd", WT_CWD); // re-enter a worktree
     await flushPromises();
     expect(w.find(".cell-wt-badge").exists()).toBe(true); // badge returns…
-    expect(w.find(".cell-diff").exists()).toBe(false); // …but the panel stays closed until clicked
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // …but the panel stays closed until clicked
   });
 
   it("closes the diff panel on Escape (document-level handler)", async () => {
@@ -1019,10 +1019,10 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-wt-badge").trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // focus may be on the badge/terminal
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("ignores an in-flight diff fetch that resolves after the cwd left the worktree", async () => {
@@ -1090,7 +1090,7 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const btns = w.findAll(".cell-diff-btn");
+    const btns = w.findAll('[data-testid="cell-diff-btn"]');
     const labelled = (text: string) => btns.find((b) => b.text().includes(text));
     expect(labelled("Push")?.attributes("disabled")).toBeDefined(); // no commits ahead
     expect(labelled("Open PR")?.attributes("disabled")).toBeDefined();
@@ -1102,14 +1102,14 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     if (!push) throw new Error("Push button not found");
     await push.trigger("click");
     await flushPromises();
     const req = posts.find((p) => p.url.includes("/api/worktrees/push"));
     if (!req) throw new Error("push not called");
     expect(JSON.parse(req.body)).toEqual({ cwd: WT_CWD });
-    expect(w.find(".cell-diff-msg").text()).toBe("Pushed agent/fix-login");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toBe("Pushed agent/fix-login");
   });
 
   it("Open PR opens the returned url in a new tab", async () => {
@@ -1118,12 +1118,12 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const pr = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Open PR"));
+    const pr = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Open PR"));
     if (!pr) throw new Error("Open PR button not found");
     await pr.trigger("click");
     await flushPromises();
     expect(openSpy).toHaveBeenCalledWith("https://github.com/owner/repo/pull/9", "_blank", "noopener,noreferrer");
-    expect(w.find(".cell-diff-msg").text()).toBe("PR created");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toBe("PR created");
     openSpy.mockRestore();
   });
 
@@ -1132,13 +1132,13 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     await push?.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff-msg").text()).toContain("No git remote");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("No git remote");
   });
 
-  const commitBtn = (w: ReturnType<typeof mountCell>) => w.findAll(".cell-diff-btn").find((b) => b.text().includes("Commit"));
+  const commitBtn = (w: ReturnType<typeof mountCell>) => w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Commit"));
 
   it("Commit asks the Claude session to commit when there are uncommitted changes", async () => {
     // ahead 0, dirty 2 → the badge shows (dirty) and the Commit button is enabled
@@ -1167,7 +1167,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     expect(submit).toHaveBeenCalledTimes(1);
     expect(submit.mock.calls[0][0]).toContain("Commit all current changes");
-    expect(w.find(".cell-diff-msg").text()).toContain("Asked Claude to commit");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("Asked Claude to commit");
   });
 
   it("disables Commit when there are no uncommitted changes (dirty=0)", async () => {
@@ -1219,7 +1219,7 @@ describe("TerminalCell", () => {
     vi.spyOn(term.vm as unknown as { submitText: (t: string) => boolean }, "submitText").mockReturnValue(false);
     await commitBtn(w)?.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff-msg").text()).toContain("Couldn't reach the session");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("Couldn't reach the session");
   });
 
   it("does not get stuck on 'Pushing…' when the response has no JSON body (403)", async () => {
@@ -1240,10 +1240,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     await push?.trigger("click");
     await flushPromises();
-    const msg = w.find(".cell-diff-msg").text();
+    const msg = w.find('[data-testid="cell-diff-msg"]').text();
     expect(msg).not.toBe("Pushing…");
     expect(msg).toContain("Not allowed");
   });

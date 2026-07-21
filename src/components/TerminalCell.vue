@@ -999,28 +999,37 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
         </template>
       </TerminalView>
-      <div v-if="diffOpen && diff" class="cell-diff">
-        <div class="cell-diff-head">
-          <span class="cell-diff-title">Changes vs {{ diff?.base ?? "base" }}</span>
-          <span class="cell-diff-sum">{{ diff?.ahead ?? 0 }} ahead · {{ diff?.dirty ?? 0 }} uncommitted</span>
+      <div
+        v-if="diffOpen && diff"
+        data-testid="cell-diff"
+        class="absolute inset-x-0 bottom-0 top-[34px] z-[15] flex flex-col overflow-hidden border-t border-t-border bg-base"
+      >
+        <div class="flex flex-none items-center gap-2 border-b border-b-border bg-panel px-2 py-1.5">
+          <span class="font-sans text-[12px] font-semibold text-fg">Changes vs {{ diff?.base ?? "base" }}</span>
+          <span class="flex-auto font-sans text-[11px] text-dim">{{ diff?.ahead ?? 0 }} ahead · {{ diff?.dirty ?? 0 }} uncommitted</span>
           <button class="cell-btn" title="Close diff" aria-label="Close diff" @click="diffOpen = false">✕</button>
         </div>
-        <div v-if="diff && diff.files.length" class="cell-diff-files">
-          <div v-for="f in diff.files" :key="f.path" class="cell-diff-file">
-            <span class="df-path">{{ f.path }}</span>
-            <span v-if="f.status === 'untracked'" class="df-new">new</span>
-            <span v-else class="df-nums">
-              <span class="df-add">+{{ f.additions < 0 ? "bin" : f.additions }}</span>
-              <span class="df-del">−{{ f.deletions < 0 ? "bin" : f.deletions }}</span>
+        <div v-if="diff && diff.files.length" class="max-h-[35%] flex-none overflow-y-auto border-b border-b-border px-2 py-1">
+          <div v-for="f in diff.files" :key="f.path" data-testid="cell-diff-file" class="flex items-baseline gap-2 py-px font-mono text-[11px]">
+            <span class="min-w-0 flex-auto truncate text-secondary [direction:rtl]">{{ f.path }}</span>
+            <span v-if="f.status === 'untracked'" data-testid="df-new" class="flex-none text-[#3fae6b]">new</span>
+            <span v-else class="flex-none">
+              <span class="text-[#3fae6b]">+{{ f.additions < 0 ? "bin" : f.additions }}</span>
+              <span class="text-err-text">−{{ f.deletions < 0 ? "bin" : f.deletions }}</span>
             </span>
           </div>
         </div>
-        <pre v-if="diff && diff.patch" class="cell-diff-patch">{{ diff.patch }}</pre>
-        <p v-if="diff && diff.truncated" class="cell-diff-note">Diff truncated — open the worktree to see the rest.</p>
-        <p v-if="diff && !diff.files.length" class="cell-diff-empty">No changes yet.</p>
-        <div class="cell-diff-actions">
+        <pre
+          v-if="diff && diff.patch"
+          data-testid="cell-diff-patch"
+          class="m-0 flex-auto overflow-auto whitespace-pre p-2 font-mono text-[11px] leading-[1.45] text-secondary [tab-size:2]"
+          >{{ diff.patch }}</pre>
+        <p v-if="diff && diff.truncated" class="m-0 p-2 font-sans text-[11px] text-dim">Diff truncated — open the worktree to see the rest.</p>
+        <p v-if="diff && !diff.files.length" class="m-0 p-2 font-sans text-[11px] text-dim">No changes yet.</p>
+        <div class="flex flex-none items-center gap-2 border-t border-t-border bg-panel px-2 py-1.5">
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || working || (diff?.dirty ?? 0) === 0"
             :title="(diff?.dirty ?? 0) === 0 ? 'No uncommitted changes' : working ? 'Wait for the session to finish' : 'Ask Claude to commit the changes'"
             @click="commitViaClaude"
@@ -1028,7 +1037,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             ✓ Commit
           </button>
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || (diff?.ahead ?? 0) === 0"
             :title="(diff?.ahead ?? 0) === 0 ? 'Commit changes first' : 'git push -u origin'"
             @click="pushBranch"
@@ -1036,14 +1046,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             ⬆ Push
           </button>
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || (diff?.ahead ?? 0) === 0"
             :title="(diff?.ahead ?? 0) === 0 ? 'Commit changes in the terminal first' : 'Push and open a pull request'"
             @click="openPR"
           >
             ⧉ Open PR
           </button>
-          <span v-if="prMsg" class="cell-diff-msg">{{ prMsg }}</span>
+          <span v-if="prMsg" data-testid="cell-diff-msg" class="min-w-0 flex-auto truncate font-sans text-[11px] text-dim">{{ prMsg }}</span>
         </div>
       </div>
       <div v-if="closeConfirm" class="cell-close-confirm" role="dialog" aria-modal="true" :aria-label="`Close worktree ${headerDir}`">
@@ -1776,133 +1787,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 }
 .wt-dirty-count {
   color: var(--warn-text, #e0a030);
-}
-
-/* Read-only diff panel: overlays the terminal area of the cell. */
-.cell-diff {
-  position: absolute;
-  inset: 34px 0 0 0; /* below the 34px header */
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-base);
-  border-top: 1px solid var(--border);
-  overflow: hidden;
-}
-.cell-diff-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.cell-diff-title {
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.cell-diff-sum {
-  flex: 1 1 auto;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.cell-diff-files {
-  flex: 0 0 auto;
-  max-height: 35%;
-  overflow-y: auto;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.cell-diff-file {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  padding: 1px 0;
-}
-.df-path {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  direction: rtl;
-  color: var(--text-secondary);
-}
-.df-nums {
-  flex: 0 0 auto;
-}
-.df-add {
-  color: #3fae6b;
-}
-.df-del {
-  color: var(--err-text, #e0556b);
-}
-.df-new {
-  flex: 0 0 auto;
-  color: #3fae6b;
-}
-.cell-diff-patch {
-  flex: 1 1 auto;
-  margin: 0;
-  overflow: auto;
-  padding: 8px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-  white-space: pre;
-  tab-size: 2;
-}
-.cell-diff-note,
-.cell-diff-empty {
-  margin: 0;
-  padding: 8px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.cell-diff-actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.cell-diff-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 6px;
-}
-.cell-diff-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-diff-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.cell-diff-msg {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
 }
 
 /* Close confirmation: keep or remove the worktree before tearing the cell down. */
