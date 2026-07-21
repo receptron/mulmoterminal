@@ -98,79 +98,70 @@ useEscapeToClose(isOpen, close);
 
 <template>
   <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Wiki">
-    <nav class="wiki-tabs" aria-label="Wiki sections">
-      <button type="button" :class="{ active: view.mode === 'index' }" @click="wikiGotoIndex">Index</button>
-      <button v-if="view.mode === 'page'" type="button" class="active" aria-current="page" disabled>
+    <nav class="flex flex-none gap-1 border-b border-border bg-panel px-4 py-2" aria-label="Wiki sections">
+      <button
+        type="button"
+        class="max-w-[280px] truncate rounded-md border-0 px-3 py-1 text-[13px]"
+        :class="
+          view.mode === 'index'
+            ? 'cursor-default bg-accent-bg text-on-accent'
+            : 'cursor-pointer bg-transparent text-muted enabled:hover:bg-hover enabled:hover:text-fg'
+        "
+        @click="wikiGotoIndex"
+      >
+        Index
+      </button>
+      <button
+        v-if="view.mode === 'page'"
+        type="button"
+        class="max-w-[280px] cursor-default truncate rounded-md border-0 bg-accent-bg px-3 py-1 text-[13px] text-on-accent"
+        aria-current="page"
+        disabled
+      >
         {{ page?.resolvedTitle ?? "Page" }}
       </button>
-      <button type="button" :class="{ active: view.mode === 'graph' }" @click="wikiGotoGraph">Graph</button>
-      <button type="button" :class="{ active: view.mode === 'lint' }" @click="wikiGotoLint">Lint</button>
+      <button
+        type="button"
+        class="max-w-[280px] truncate rounded-md border-0 px-3 py-1 text-[13px]"
+        :class="
+          view.mode === 'graph'
+            ? 'cursor-default bg-accent-bg text-on-accent'
+            : 'cursor-pointer bg-transparent text-muted enabled:hover:bg-hover enabled:hover:text-fg'
+        "
+        @click="wikiGotoGraph"
+      >
+        Graph
+      </button>
+      <button
+        type="button"
+        class="max-w-[280px] truncate rounded-md border-0 px-3 py-1 text-[13px]"
+        :class="
+          view.mode === 'lint'
+            ? 'cursor-default bg-accent-bg text-on-accent'
+            : 'cursor-pointer bg-transparent text-muted enabled:hover:bg-hover enabled:hover:text-fg'
+        "
+        @click="wikiGotoLint"
+      >
+        Lint
+      </button>
     </nav>
-    <div class="wiki-content">
-      <p v-if="error" class="wiki-msg wiki-error">{{ error }}</p>
-      <p v-else-if="loading" class="wiki-msg">Loading…</p>
+    <div class="flex-auto overflow-y-auto">
+      <p v-if="error" class="px-7 py-12 text-center text-err">{{ error }}</p>
+      <p v-else-if="loading" class="px-7 py-12 text-center text-muted">Loading…</p>
       <template v-else>
         <WikiIndexView v-if="view.mode === 'index' && index" :entries="index.entries" />
         <WikiPageView v-else-if="view.mode === 'page' && page" :slug="view.slug" :page="page" :graph="graph" />
         <WikiGraphView v-else-if="view.mode === 'graph' && graph" :graph="graph" />
         <!-- eslint-disable-next-line vue/no-v-html -- sanitized in renderWikiHtml -->
-        <div v-else-if="view.mode === 'lint'" class="wiki-lint" v-html="lintHtml"></div>
+        <div class="wiki-lint mx-auto max-w-[820px] px-7 pt-6 pb-16 text-[14px] leading-[1.6] text-fg" v-else-if="view.mode === 'lint'" v-html="lintHtml"></div>
       </template>
     </div>
   </div>
 </template>
 
+<!-- Only the lint markdown body stays scoped: it's v-html, so its elements
+     can't carry utilities and must be reached via :deep. -->
 <style scoped>
-.wiki-tabs {
-  flex: 0 0 auto;
-  display: flex;
-  gap: 4px;
-  padding: 8px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.wiki-tabs button {
-  padding: 4px 12px;
-  font-size: 13px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.wiki-tabs button:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.wiki-tabs button.active {
-  background: var(--accent-bg);
-  color: var(--on-accent);
-  cursor: default;
-}
-.wiki-content {
-  flex: 1 1 auto;
-  overflow-y: auto;
-}
-.wiki-msg {
-  padding: 48px 28px;
-  text-align: center;
-  color: var(--text-muted);
-}
-.wiki-error {
-  color: var(--err);
-}
-.wiki-lint {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 24px 28px 64px;
-  color: var(--text);
-  font-size: 14px;
-  line-height: 1.6;
-}
 .wiki-lint :deep(h1),
 .wiki-lint :deep(h2) {
   font-weight: 650;
