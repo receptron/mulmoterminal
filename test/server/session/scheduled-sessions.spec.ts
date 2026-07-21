@@ -267,6 +267,27 @@ describe("createScheduledSessionRegistry", () => {
     expect(await registered()).toEqual(["s1.json"]);
   });
 
+  // Sweeping several sessions costs a tmux probe each, so a session can become attached
+  // WHILE the sweep runs. The check must be the one from just before its own kill, not a
+  // snapshot taken over the whole batch. Entries are written directly so both land in ONE
+  // sweep — register() sweeps as it goes, which would separate them.
+  it("spares a session that becomes in use partway through the sweep", async () => {
+    await fs.mkdir(dir, { recursive: true });
+    await writeEntry("s1", clockMs); // newer, so it is evicted first
+    await writeEntry("s2", clockMs - HOUR);
+    clockMs += 25 * HOUR;
+
+    let s1Reaped = false;
+    reapSession.mockImplementation((id: string) => {
+      if (id === "s1") s1Reaped = true;
+    });
+    isInUse.mockImplementation((id: string) => id === "s2" && s1Reaped); // s2 is opened mid-sweep
+
+    await registry().sweep();
+    expect(reapSession).toHaveBeenCalledExactlyOnceWith("s1");
+    expect(await registered()).toEqual(["s2.json"]);
+  });
+
   it("leaves everything alone while within the policy", async () => {
     const r = registry();
     r.register("s1");

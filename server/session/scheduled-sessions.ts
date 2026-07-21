@@ -139,19 +139,23 @@ export function createScheduledSessionRegistry(deps: ScheduledSessionRegistryDep
 
   // The expired session may be live (kill the pty + its tmux), or a tmux left behind by a
   // previous server run (kill it directly) — the same two-step the ✕ / terminate route uses.
-  const evict = async (record: ScheduledSessionRecord): Promise<void> => {
+  // Reports whether it actually went, since the in-use check can spare it.
+  const evict = async (record: ScheduledSessionRecord): Promise<boolean> => {
+    // Checked HERE rather than over the whole set first: sweeping several sessions costs a
+    // tmux probe each, and someone can attach during that. The answer has to be the one
+    // from the instant before the kill, with nothing awaited in between. A spared entry
+    // stays on disk, so a later sweep retries it.
+    if (deps.isInUse(record.id)) return false;
     deps.reapSession(record.id);
     if (deps.hasTmux(record.id)) deps.killTmux(record.id);
     await fs.rm(entryFile(record.id), { force: true });
+    return true;
   };
 
   const runSweep = async (): Promise<void> => {
     const { expire } = selectExpiredScheduledSessions(await readRecords(), now(), policy);
-    // Never yank a session out from under someone who has it open — the reap machinery
-    // leaves attached sessions alone too. Its entry stays, so a later sweep retries.
-    const evicted = expire.filter((record) => !deps.isInUse(record.id));
-    await Promise.all(evicted.map(evict));
-    if (evicted.length > 0) console.log(`[scheduler] reaped ${evicted.length} scheduled session(s) past retention`);
+    const reaped = (await Promise.all(expire.map(evict))).filter(Boolean).length;
+    if (reaped > 0) console.log(`[scheduler] reaped ${reaped} scheduled session(s) past retention`);
   };
 
   // One chain, so a sweep can't run against a half-written registration.
