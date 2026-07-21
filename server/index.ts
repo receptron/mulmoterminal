@@ -7,7 +7,7 @@ import path from "path";
 import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./infra/pubsub.js";
@@ -17,11 +17,9 @@ import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
-import { buildHeaderContext, loadHeaderConfig, repoFromWebUrl } from "./config/header-context.js";
-import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config/header-resolve.js";
-import { prUrlForBranch } from "./git/pr-for-branch.js";
+import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
+import { resolveButtonCommand } from "./config/header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
-import { gitStatus } from "./git/git-status.js";
 import {
   tmuxAvailable,
   tmuxNewSessionArgs,
@@ -51,8 +49,8 @@ import {
 } from "./infra/sandbox.js";
 import { listPrsAcrossRepos } from "./git/prs.js";
 import { listIssuesAcrossRepos } from "./git/issues.js";
-import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } from "./config/dir-config.js";
-import { loadScripts, resolveScript } from "./files/scripts.js";
+import { dirConfigWriteTarget } from "./config/dir-config.js";
+import { resolveScript } from "./files/scripts.js";
 import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
@@ -82,6 +80,8 @@ import {
   titleTurnCounts,
 } from "./session/registry.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
+import { resolveWorkspace } from "./config/workspace.js";
+import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
@@ -89,7 +89,6 @@ import { buildCodexArgs } from "./agents/codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
 import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
-import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
@@ -117,8 +116,7 @@ import {
 import { classifyWorkPhase, type WorkPhase } from "./session/workPhase.js";
 import { createFileCache, type FileStamp } from "./session/file-cache.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
-import { mountGitRemoteRoute, resolveGithubUrl } from "./git/gitRemote.js";
-import { phaseForRepoBranch } from "./git/prPhase.js";
+import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
 import { mountPickFileRoute } from "./files/pick-file.js";
 import { mountCommandSummaryRoute } from "./session/command-summary.js";
@@ -684,20 +682,6 @@ function claudeOnDiskSessionIds(): Set<string> {
     }
   }
   return ids;
-}
-
-// Validate a client-supplied workspace dir: must be an absolute, existing
-// directory. Anything else (relative, missing, a file) falls back to CLAUDE_CWD,
-// so a cell can launch a terminal in a chosen dir without trusting raw input.
-function resolveWorkspace(cwd: string | null): string {
-  if (cwd && path.isAbsolute(cwd)) {
-    try {
-      if (statSync(cwd).isDirectory()) return cwd;
-    } catch {
-      // not a dir / doesn't exist — fall through
-    }
-  }
-  return CLAUDE_CWD;
 }
 
 // The most recent user prompt from a resumed session's on-disk transcript, so a
@@ -1361,27 +1345,9 @@ app.get("/api/issues", async (_req, res) => {
   }
 });
 
-// GRID-ONLY (dev_tool): the `script.json` entries a cell's launcher offers for its
-// chosen directory (?cwd=<dir>, falling back to CLAUDE_CWD). The browser shows
-// these and sends back only an INDEX + the cwd (see /ws/run), so the file is the
-// allowlist of what can run. The resolved `cwd` is returned so the cell runs the
-// script in the same dir it listed scripts for.
-app.get("/api/scripts", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json({ cwd, scripts: loadScripts(cwd).map((s, index) => ({ index, label: s.label, command: s.command, cwd: s.cwd })) });
-});
-
-// The `.claude/skills` (user + project scope) discoverable for ?cwd=<dir>, so the
-// terminal header's Skill menu can list them — working-dir skills first. Mirrors
-// /api/scripts: the picked skill is invoked in the running session by typing its
-// /<slug> (agent-side), so the browser only needs the slug + a description tooltip.
-// A per-dir `.mulmoterminal.json` `skills` allowlist narrows/orders the list;
-// absent => show all.
-app.get("/api/skills", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const skills = applySkillFilter(await discoverSkills({ workspaceRoot: cwd }), loadDirConfig(cwd).skills);
-  res.json({ cwd, skills });
-});
+// Directory-scoped reads for a terminal cell: scripts, skills, dir config, git status,
+// PR phase, resolved header, custom sound. All keyed by ?cwd= (see routes/dir-routes.ts).
+mountDirRoutes(app);
 
 // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
 // OS file manager (a browser tab can't, but this local server can).
@@ -1476,49 +1442,6 @@ app.get("/api/activity", async (req, res) => {
 // Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a
 // terminal opened in this directory should use. cwd is validated like every other
 // cwd-scoped route; the raw sound path stays server-side (see /api/dir-sound).
-app.get("/api/dir-config", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(publicDirConfig(cwd));
-});
-
-// Live git status (branch / dirty / ahead·behind) for a terminal's dir, so the
-// header can show it without the user typing `git status`. A non-git dir is
-// `repo:false`, not an error.
-app.get("/api/git-status", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(await gitStatus(cwd));
-});
-
-// GRID-ONLY: the workflow phase of a cell's branch — no PR yet / in the review loop / ready
-// to merge / merged (server/git/prPhase.ts). The cockpit roster shows it alongside the agent
-// status. Resolves the branch's repo here (same as the header's PR button); a non-repo dir,
-// detached HEAD, or non-GitHub remote yields `none`. Read-only; the gh call is cached.
-app.get("/api/pr-phase", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const status = await gitStatus(cwd);
-  const repo = status.repo && status.branch ? repoFromWebUrl(await resolveGithubUrl(cwd)) : null;
-  if (!repo || !status.branch) return res.json({ phase: "none", url: null });
-  res.json(await phaseForRepoBranch(repo, status.branch));
-});
-
-// The resolved terminal-header config (buttons + chips) for a session: global config merged with the
-// dir's, with `when` evaluated and ${vars} substituted for this session's live context. `chips:null`
-// means unconfigured, so the client keeps its default header (see plans/feat-header-toolbar-config.md).
-app.get("/api/header", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const session = typeof req.query.session === "string" && SESSION_ID_RE.test(req.query.session) ? req.query.session : null;
-  const agent = req.query.agent === "codex" ? "codex" : "claude";
-  const model = typeof req.query.model === "string" ? req.query.model : null;
-  const config = loadHeaderConfig(cwd, getHeaderConfig());
-  const context = await buildHeaderContext(cwd, { session, agent, model });
-  // Resolve the branch's PR URL only when a `pr` button is present (a cached gh call); an open.pr
-  // button then opens that URL, or is dropped when there's no open PR.
-  if (headerHasPrButton(config) && context.repo && context.branch) {
-    context.prUrl = await prUrlForBranch(context.repo, context.branch);
-  }
-  res.json(resolveHeader(config, context));
-});
-
 // The tool-activity timeline for a session (what the agent ran, newest last), so a
 // cell can show "what did it do?" without scrolling the raw transcript.
 app.get("/api/transcript/timeline", async (req, res) => {
@@ -1526,22 +1449,6 @@ app.get("/api/transcript/timeline", async (req, res) => {
   if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   res.json(await sessionTimeline(cwd, session));
-});
-
-// Stream a directory's custom attention sound. The path never comes from the
-// request — it's read from that dir's .mulmoterminal.json and confined to the dir —
-// so there's no traversal surface. 404 when unset/missing (the client falls back to
-// the global sound, then the built-in chime).
-app.get("/api/dir-sound", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const file = dirSoundFile(cwd);
-  if (!file) return res.status(404).end();
-  // dotfiles:"allow" — the conventional location is a hidden <cwd>/.mulmoterminal/
-  // dir, which send() would otherwise 404. The path is already confined to cwd, so
-  // serving from a dot-segment is safe here.
-  res.sendFile(file, { dotfiles: "allow" }, (err) => {
-    if (err && !res.headersSent) res.status(404).end();
-  });
 });
 
 // Cheap recency pass: stat (don't read) every session file just for its mtime, so the
