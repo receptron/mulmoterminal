@@ -1,7 +1,6 @@
 import express from "express";
 import http from "http";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "path";
 import fs from "fs/promises";
@@ -30,7 +29,6 @@ import {
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import { sanitizePtyEnv } from "./infra/pty-env.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -50,7 +48,7 @@ import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, 
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
 import type { PtyEntry } from "./session/types.js";
-import { ptySpawn, spawnSandboxEntry, sandboxWouldRun } from "./session/pty-spawn.js";
+import { spawnPty, ptySpawn, spawnSandboxEntry, sandboxWouldRun } from "./session/pty-spawn.js";
 import { attachDraftInjection, attachCodexAutoRun } from "./session/draft-injection.js";
 import {
   activity,
@@ -1471,7 +1469,7 @@ function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
   const isWindows = process.platform === "win32";
   const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
   const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
-  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
+  const term = spawnPty(shell, args, cwd);
   console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
 
   term.onData((data) => {
