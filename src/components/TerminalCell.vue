@@ -1057,25 +1057,62 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <span v-if="prMsg" data-testid="cell-diff-msg" class="min-w-0 flex-auto truncate font-sans text-[11px] text-dim">{{ prMsg }}</span>
         </div>
       </div>
-      <div v-if="closeConfirm" class="cell-close-confirm" role="dialog" aria-modal="true" :aria-label="`Close worktree ${headerDir}`">
-        <div class="ccx-box">
-          <p class="ccx-title">Close {{ headerDir }}</p>
+      <div
+        v-if="closeConfirm"
+        data-testid="cell-close-confirm"
+        class="absolute inset-0 z-[25] flex items-center justify-center bg-[color-mix(in_srgb,var(--bg-base)_82%,transparent)] p-4"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="`Close worktree ${headerDir}`"
+      >
+        <div class="flex max-w-[320px] flex-col gap-2.5 rounded-lg border border-border bg-panel p-4 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+          <p class="m-0 font-sans text-[13px] font-semibold text-fg">Close {{ headerDir }}</p>
           <template v-if="!closeError">
-            <p v-if="hasUnsaved" class="ccx-warn">{{ unsavedSummary }} will be discarded if you remove the worktree.</p>
-            <p v-else class="ccx-sub">Keep the worktree to reuse it later, or remove it.</p>
-            <div class="ccx-actions">
-              <button class="ccx-btn ccx-keep" @click="teardown">Keep worktree</button>
-              <button class="ccx-btn ccx-remove" :disabled="closeChecking" @click="removeAndClose">
+            <p v-if="hasUnsaved" data-testid="ccx-warn" class="m-0 font-sans text-[12px] text-[var(--warn-text,#e0a030)]">
+              {{ unsavedSummary }} will be discarded if you remove the worktree.
+            </p>
+            <p v-else class="m-0 font-sans text-[12px] text-dim">Keep the worktree to reuse it later, or remove it.</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                data-testid="ccx-keep"
+                class="cursor-pointer rounded-md border border-accent bg-elevated px-3 py-1.5 font-sans text-[12px] text-fg hover:bg-hover hover:text-fg"
+                @click="teardown"
+              >
+                Keep worktree
+              </button>
+              <button
+                data-testid="ccx-remove"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:border-err-text hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+                :disabled="closeChecking"
+                @click="removeAndClose"
+              >
                 {{ closeChecking ? "Checking…" : hasUnsaved ? "Discard &amp; remove" : "Remove worktree" }}
               </button>
-              <button class="ccx-btn ccx-cancel" @click="cancelClose">Cancel</button>
+              <button
+                data-testid="ccx-cancel"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="cancelClose"
+              >
+                Cancel
+              </button>
             </div>
           </template>
           <template v-else>
-            <p class="ccx-warn">{{ closeError }}</p>
-            <div class="ccx-actions">
-              <button class="ccx-btn ccx-remove" @click="removeAndClose">Retry</button>
-              <button class="ccx-btn" @click="teardown">Close cell</button>
+            <p data-testid="ccx-warn" class="m-0 font-sans text-[12px] text-[var(--warn-text,#e0a030)]">{{ closeError }}</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                data-testid="ccx-remove"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:border-err-text hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+                @click="removeAndClose"
+              >
+                Retry
+              </button>
+              <button
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="teardown"
+              >
+                Close cell
+              </button>
             </div>
           </template>
         </div>
@@ -1787,75 +1824,5 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 }
 .wt-dirty-count {
   color: var(--warn-text, #e0a030);
-}
-
-/* Close confirmation: keep or remove the worktree before tearing the cell down. */
-.cell-close-confirm {
-  position: absolute;
-  inset: 0;
-  z-index: 25;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--bg-base) 82%, transparent);
-}
-.ccx-box {
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-.ccx-title {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.ccx-sub {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.ccx-warn {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--warn-text, #e0a030);
-}
-.ccx-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ccx-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: 6px;
-}
-.ccx-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.ccx-keep {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.ccx-remove:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-  border-color: var(--err-text, #e0556b);
 }
 </style>
