@@ -73,6 +73,13 @@ export const codexRolloutIds = new Map<string, string>();
 // (which would let both cold-resume the same conversation). Serialized by the single event loop.
 export const claimedCodexRollouts = new Set<string>();
 
+// Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
+// already trusted — because claude blocks on its workspace-trust dialog in any
+// untrusted dir (no input ever comes, so the worker would hang). Their session ids
+// are tracked here so they're FILTERED OUT of /api/sessions: a translation worker is
+// a transient internal helper, not a chat the user should see in the sidebar.
+export const translationWorkerIds = new Set<string>();
+
 // Session ids that belong to the multi-terminal GRID — dev terminals, spawned with
 // gui=0 (no GUI MCP; see the ?gui handling in the WS connection handler). They're
 // FILTERED OUT of the chat sidebar's /api/sessions so a grid terminal never surfaces
