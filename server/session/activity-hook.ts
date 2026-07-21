@@ -57,16 +57,43 @@ export interface PushText {
 
 const clip = (text: string, max: number): string => text.slice(0, max);
 
+// A push body renders as one run of text, but the finished-turn body is now the agent's
+// reply — markdown with newlines and indentation. Collapsed, the first 160 characters are
+// a sentence; left alone they are ragged fragments with the useful part pushed off the end.
+const oneLine = (text: string): string => text.replace(/\s+/g, " ").trim();
+
+// Replace "[text](url)" with "text", scanning rather than matching — the obvious regex
+// backtracks (lint bans those, as in the scheduler's time parsing). An unclosed "[" ends
+// the scan and the remainder is kept verbatim.
+const flattenLinks = (text: string): string => {
+  const parts: string[] = [];
+  let rest = 0;
+  for (let open = text.indexOf("["); open !== -1; open = text.indexOf("[", rest)) {
+    const label = text.indexOf("](", open);
+    const close = label === -1 ? -1 : text.indexOf(")", label + 2);
+    if (close === -1) break;
+    parts.push(text.slice(rest, open), text.slice(open + 1, label));
+    rest = close + 1;
+  }
+  parts.push(text.slice(rest));
+  return parts.join("");
+};
+
+// A lock screen renders no markdown: emphasis arrives as literal asterisks, and a link's
+// target spends a third of the 160-character budget on something the user cannot click
+// from the text. Heading markers are left alone — "#" also starts an issue number.
+const plainText = (text: string): string => flattenLinks(text).replace(/\*\*/g, "");
+
 export function buildPushText(kind: PushKind, where: string, detail: string, message: string, limits: { title: number; body: number }): PushText {
   if (kind === "waiting") {
     return {
       title: clip(`\u2753 ${where}`, limits.title),
-      body: clip(message.trim() || detail.trim() || "\u5165\u529b\u5f85\u3061\u3067\u3059", limits.body),
+      body: clip(oneLine(plainText(message)) || oneLine(plainText(detail)) || "\u5165\u529b\u5f85\u3061\u3067\u3059", limits.body),
     };
   }
   return {
     title: clip(`\u2705 ${where}`, limits.title),
-    body: clip(detail.trim() || "\u30bf\u30b9\u30af\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f", limits.body),
+    body: clip(oneLine(plainText(detail)) || "\u30bf\u30b9\u30af\u304c\u5b8c\u4e86\u3057\u307e\u3057\u305f", limits.body),
   };
 }
 
