@@ -48,6 +48,15 @@ describe("isValidTranslationResult", () => {
     expect(isValidTranslationResult(["a", null], 2)).toBe(false);
   });
 
+  it("rejects a sparse array whose holes are not real strings", () => {
+    // `.every` skips holes, so a right-length sparse array would slip through as
+    // all-strings and hand the caller a row of undefineds.
+    expect(isValidTranslationResult(new Array(2), 2)).toBe(false);
+    const withHole = ["a"];
+    withHole[2] = "c"; // index 1 is a hole
+    expect(isValidTranslationResult(withHole, 3)).toBe(false);
+  });
+
   it("rejects anything that is not an array", () => {
     expect(isValidTranslationResult("a", 1)).toBe(false);
     expect(isValidTranslationResult(undefined, 1)).toBe(false);

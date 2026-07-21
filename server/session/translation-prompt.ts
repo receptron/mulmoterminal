@@ -22,5 +22,7 @@ export function buildTranslationPrompt(targetLanguage: string, sentences: readon
  *  A wrong count means the order no longer lines up with the inputs, so a partial answer
  *  is worse than none — the caller retries a fresh worker instead. */
 export function isValidTranslationResult(translations: unknown, expected: number): translations is string[] {
-  return Array.isArray(translations) && translations.length === expected && translations.every((s) => typeof s === "string");
+  // Array.from materializes holes as undefined so a sparse array (e.g. new Array(n))
+  // is rejected — `.every` skips holes and would wave one through as all-strings.
+  return Array.isArray(translations) && translations.length === expected && Array.from(translations).every((s) => typeof s === "string");
 }
