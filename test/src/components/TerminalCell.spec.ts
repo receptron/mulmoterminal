@@ -1429,7 +1429,7 @@ describe("TerminalCell", () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
     await flushPromises();
     // Info stripped: no git chip / usage; the second (terminal) header row is hidden.
-    expect(w.find(".git-chip").exists()).toBe(false);
+    expect(w.find('[data-testid="git-chip"]').exists()).toBe(false);
     expect(w.find(".cell-usage").exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
     // Row 1 keeps dir + prompt + the expand/close actions (row 2 is hidden).
