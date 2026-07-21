@@ -68,13 +68,13 @@ const hasContent = computed(() => results.value.length > 0);
 </script>
 
 <template>
-  <section class="gui-panel side-pane">
-    <div class="side-pane-header">
-      <span class="side-pane-title">Canvas</span>
+  <section class="gui-panel flex flex-col h-full bg-deep border-l border-border">
+    <div class="py-2 px-4 bg-panel text-fg font-sans text-[14px] flex items-center justify-between">
+      <span class="font-semibold">Canvas</span>
       <button
         v-if="!toolsOpen"
         type="button"
-        class="side-pane-action"
+        class="bg-transparent border-0 text-dim text-[15px] leading-none py-0.5 px-1 cursor-pointer rounded hover:text-fg"
         title="Tools & tool-call history"
         aria-label="Open tools pane"
         @click="emit('toggleTools')"
@@ -100,8 +100,6 @@ const hasContent = computed(() => results.value.length > 0);
     </div>
   </section>
 </template>
-
-<style scoped src="./sidePane.css"></style>
 
 <style scoped>
 .gui-panel {
