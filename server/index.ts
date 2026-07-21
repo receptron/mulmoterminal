@@ -1,7 +1,6 @@
 import express from "express";
 import http from "http";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "path";
 import fs from "fs/promises";
@@ -21,7 +20,6 @@ import { resolveButtonCommand } from "./config/header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import {
   tmuxAvailable,
-  tmuxNewSessionArgs,
   tmuxHasSession,
   tmuxKillSession,
   tmuxListSessionIds,
@@ -31,15 +29,11 @@ import {
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import { sanitizePtyEnv } from "./infra/pty-env.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
   dockerAvailable,
-  sandboxImageExists,
   ensureSandboxImage,
-  buildDockerRunArgs,
-  writeSandboxClaudeConfig,
   writeSandboxCredentials,
   refreshHostKeychainIfExpired,
   cleanupSandbox,
@@ -54,6 +48,8 @@ import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, 
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
 import type { PtyEntry } from "./session/types.js";
+import { spawnPty, ptySpawn, spawnSandboxEntry, sandboxWouldRun } from "./session/pty-spawn.js";
+import { attachDraftInjection, attachCodexAutoRun } from "./session/draft-injection.js";
 import {
   activity,
   aiTitles,
@@ -1341,29 +1337,6 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
   throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
 }
 
-// Claude must have its input box + bracketed-paste mode up before it will capture a
-// typed `draft`; too early and the bytes are echoed into the scrollback instead. We
-// wait for its status line to paint (the "shift+tab to cycle" mode hint), settle
-// briefly, then type. A fallback fires if that marker never shows (UI string drift).
-const DRAFT_READY_MARKER = claudeAdapter.draftReadyMarker;
-const DRAFT_SETTLE_MS = 250;
-const DRAFT_FALLBACK_MS = 6000;
-// Claude's TUI commits a bracketed paste to its input box asynchronously; a CR glued
-// onto the same write can arrive before the paste lands and be dropped — leaving an
-// auto-run prompt typed-but-unsent. Send the submitting Enter as a SEPARATE chunk a
-// beat after the paste so it actually registers.
-const DRAFT_SUBMIT_MS = 150;
-
-// Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —
-// ESC, Ctrl-C, CR/LF, and an embedded bracketed-paste terminator) so untrusted draft
-// content can't inject terminal control sequences that break out of the paste and
-// submit/interrupt. Only printable text survives, with whitespace collapsed.
-// eslint-disable-next-line no-control-regex -- intentional: match terminal control bytes (C0/C1) to strip them
-const DRAFT_CONTROL_BYTES_RE = /[\u0000-\u001F\u007F-\u009F]+/g;
-function sanitizeDraftText(text: string): string {
-  return text.replace(DRAFT_CONTROL_BYTES_RE, " ").replace(/\s+/g, " ").trim();
-}
-
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
 // exit back to the browser socket. `ws` may be null for a session spawned without
 // a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
@@ -1372,141 +1345,6 @@ function sanitizeDraftText(text: string): string {
 // opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
 // into the input box (no Enter) so the user can review / edit / send it. Pass one or
 // the other, never both.
-const PTY_COLS = 120;
-const PTY_ROWS = 30;
-
-// pty.spawn with the binary as a PARAMETER (never a string literal at the call site),
-// so the tmux/shell/claude spawns aren't flagged as spawn-of-a-string-literal.
-// The env is sanitized: package-manager launcher vars (yarn's PREFIX kills nvm
-// in spawned shells — see infra/pty-env.ts) must not leak into PTYs.
-function spawnPty(bin: string, args: string[], cwd: string): IPty {
-  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
-}
-
-// Would this session run in the Docker sandbox? Single-view interactive only (the caller
-// adds `ws !== null`). Shared by the spawn gate and the connection handler so the
-// pre-spawn credential refresh fires exactly when a sandbox spawn will.
-function sandboxWouldRun(attachGuiMcp: boolean): boolean {
-  return sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && dockerAvailable() && sandboxImageExists();
-}
-
-// Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
-// `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
-// (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
-function ptySpawn(sessionId: string, file: string, args: string[], cwd: string, persistent: boolean): { term: IPty; tmux: boolean } {
-  if (persistent && tmuxAvailable()) {
-    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd), tmux: true };
-  }
-  return { term: spawnPty(file, args, cwd), tmux: false };
-}
-
-// Spawn the single-view session inside a Docker container (the sandbox path). Exports the
-// host's live Keychain credential so the containerized claude is authenticated — without
-// it the container reads a stale/absent ~/.claude/.credentials.json and shows "Not logged in".
-function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string, ws: WebSocket | null): PtyEntry {
-  cleanupSandbox(sessionId); // clear any stale container/config/credential with this name
-  const claudeConfig = writeSandboxClaudeConfig(sessionId, cwd);
-  const credentials = writeSandboxCredentials(sessionId);
-  if (credentials === null)
-    console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
-  const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials), cwd);
-  console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
-  return { term, ws, buffer: "", cwd, sandbox: true, active: false, agent: "claude" };
-}
-
-// Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
-// claude's input box once it's ready — NOT as a `claude` CLI arg, which a large prompt
-// would overflow tmux's `new-session` command-length limit with ("command too long",
-// killing the session). ALL control bytes are stripped first — C0/C1, including ESC,
-// Ctrl-C, CR/LF and an embedded bracketed-paste terminator (\e[201~) — so untrusted text
-// (collection / custom-view) can't inject sequences that break out of the paste. It's
-// wrapped in bracketed paste (\e[200~…\e[201~); initialPrompt then presses Enter to run
-// it, while a draft gets NO Enter so the user reviews + sends. Returns a scanner to feed
-// the pty output to: it types once the input-box readiness marker paints (after a settle),
-// or after DRAFT_FALLBACK_MS if the marker never appears (UI drift). No-op when neither.
-function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined, draft: string | undefined): (data: string) => void {
-  const pendingText = draft ?? initialPrompt;
-  const autoSubmit = draft === undefined && initialPrompt !== undefined;
-  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
-  if (!draftText) return () => {};
-  let done = false;
-  let scan = "";
-  const typeDraft = () => {
-    if (done) return;
-    done = true;
-    try {
-      // Type the paste first; for an auto-run, submit with a CR in a SEPARATE write a beat
-      // later (DRAFT_SUBMIT_MS) so the Enter isn't dropped while Claude's TUI is still
-      // committing the paste. A draft gets no CR — the user reviews + sends.
-      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
-      if (autoSubmit) {
-        setTimeout(() => {
-          try {
-            entry.term.write("\r");
-          } catch {
-            // pty already gone — nothing to submit
-          }
-        }, DRAFT_SUBMIT_MS);
-      }
-    } catch {
-      // pty already gone — nothing to draft into
-    }
-  };
-  // Fallback: type even if the readiness marker never appears (UI string drift).
-  setTimeout(typeDraft, DRAFT_FALLBACK_MS);
-  return (data: string) => {
-    if (done) return;
-    // Type the draft once claude's input box has painted (its mode-hint status line),
-    // then settle briefly so the paste lands in the input rather than the scrollback.
-    scan = (scan + data).slice(-4096);
-    if (DRAFT_READY_MARKER.test(scan)) {
-      scan = "";
-      setTimeout(typeDraft, DRAFT_SETTLE_MS);
-    }
-  };
-}
-
-// codex's TUI has no stable "input ready" marker (its placeholder rotates), so instead of matching
-// a string we wait for its startup output to SETTLE — the boot banner + MCP-boot spinner keep
-// emitting until the input prompt is ready, so a quiet gap means codex is waiting for input. Then
-// paste the seed + Enter to auto-run it. Same reason as attachDraftInjection: a long prompt can't go
-// through tmux's new-session command-length limit ("command too long"). Returns a scanner fed the
-// pty output.
-const CODEX_READY_QUIET_MS = 1000;
-const CODEX_AUTORUN_MAX_WAIT_MS = 15_000;
-function attachCodexAutoRun(entry: PtyEntry, prompt: string): (data: string) => void {
-  const text = sanitizeDraftText(prompt);
-  if (!text) return () => {};
-  let done = false;
-  let quiet: ReturnType<typeof setTimeout> | null = null;
-  const type = () => {
-    if (done) return;
-    done = true;
-    if (quiet) clearTimeout(quiet);
-    try {
-      entry.term.write(`\x1b[200~${text}\x1b[201~`);
-      setTimeout(() => {
-        try {
-          entry.term.write("\r");
-        } catch {
-          // pty already gone — nothing to submit
-        }
-      }, DRAFT_SUBMIT_MS);
-    } catch {
-      // pty already gone — nothing to type into
-    }
-  };
-  const cap = setTimeout(type, CODEX_AUTORUN_MAX_WAIT_MS);
-  return () => {
-    if (done) return;
-    if (quiet) clearTimeout(quiet);
-    quiet = setTimeout(() => {
-      clearTimeout(cap);
-      type();
-    }, CODEX_READY_QUIET_MS);
-  };
-}
-
 function spawnClaudePty(
   sessionId: string,
   resume: string | null,
@@ -1631,7 +1469,7 @@ function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
   const isWindows = process.platform === "win32";
   const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
   const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
-  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
+  const term = spawnPty(shell, args, cwd);
   console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
 
   term.onData((data) => {
