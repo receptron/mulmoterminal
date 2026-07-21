@@ -30,6 +30,7 @@ import {
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import type { SessionMeta } from "../session/types.js";
+import { parseActivityIds, selectSessionRows } from "../session/session-list.js";
 
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
@@ -82,11 +83,7 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
 // only the in-memory activity map (no disk), so it's cheap to call per grid render.
 async function activitySnapshot(req: Request, res: Response) {
   await activityStateHydrated; // the grid re-seeds this on reconnect — must not race hydration back to idle
-  const raw = typeof req.query.ids === "string" ? req.query.ids : "";
-  const ids = raw
-    .split(",")
-    .filter((id) => SESSION_ID_RE.test(id))
-    .slice(0, ACTIVITY_IDS_LIMIT);
+  const ids = parseActivityIds(req.query.ids, (id) => SESSION_ID_RE.test(id), ACTIVITY_IDS_LIMIT);
   const out: Record<string, { working: boolean; waiting: boolean; event: string | null }> = {};
   for (const id of ids) {
     const a = activity.get(id) || {};
@@ -134,14 +131,12 @@ async function sessionList(req: Request, res: Response) {
     // Keep only the most-recent N, then read & parse contents for just those
     // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation
     // workers are dropped first — they're transient internal helpers, not user chats.
-    const top = [...onDiskStats, ...pending]
-      .filter((s) => !translationWorkerIds.has(s.id))
-      // Hide multi-terminal GRID sessions from the CHAT sidebar (the unscoped query
-      // only). The grid's own resume picker passes ?cwd= (includePending=false) and
-      // must keep listing them, so gate the exclusion on includePending.
-      .filter((s) => !includePending || !devTerminalSessions.has(s.id))
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, SESSION_LIST_LIMIT);
+    const top = selectSessionRows([...onDiskStats, ...pending], {
+      isTranslationWorker: (id) => translationWorkerIds.has(id),
+      isDevTerminal: (id) => devTerminalSessions.has(id),
+      includePending,
+      limit: SESSION_LIST_LIMIT,
+    });
     const sessions = (
       await Promise.all(
         top.map((s) =>
