@@ -177,6 +177,8 @@ describe("createToolStores", () => {
     const s = stores();
     await s.storeToolResult(SESSION, { uuid: "a" });
     await s.recordToolCallStart(SESSION, { toolUseId: "t1" });
-    expect((await fs.readdir(root)).sort()).toEqual(["toolcalls", "toolresults"]);
+    // Persisting is fire-and-forget (see createSessionStore.save), so the directories
+    // land a tick after these resolve — poll instead of racing the write.
+    await expect.poll(async () => (await fs.readdir(root).catch(() => [])).sort()).toEqual(["toolcalls", "toolresults"]);
   });
 });
