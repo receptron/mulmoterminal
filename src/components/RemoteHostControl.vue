@@ -145,148 +145,54 @@ onUnmounted(() => stopSelfHeal?.());
     icon="phonelink"
     :title="status.connected ? 'Remote host connected' : 'Remote host'"
     trigger-label="Remote host"
-    pane-class="rh-pop"
+    pane-class="w-[300px] gap-2 p-2.5 font-sans"
     pane-label="Remote host"
     :trigger-class="{ connected: status.connected }"
     @open="onPopoverOpen"
   >
-    <div class="rh-head">
-      <span class="material-symbols-outlined rh-dot" :class="{ connected: status.connected }">
+    <div class="flex items-center gap-1.5">
+      <span class="material-symbols-outlined text-[16px] leading-none" :class="status.connected ? 'text-[#35c46a]' : 'text-muted'">
         {{ status.connected ? "check_circle" : "radio_button_unchecked" }}
       </span>
-      <span class="rh-head-label">{{ status.connected ? "Online" : "Offline" }}</span>
+      <span class="text-[12px] font-semibold text-fg">{{ status.connected ? "Online" : "Offline" }}</span>
     </div>
 
-    <p v-if="status.uid" class="rh-uid">Signed in as {{ status.uid }}</p>
+    <p v-if="status.uid" class="font-mono text-[10px] text-muted [overflow-wrap:anywhere]">Signed in as {{ status.uid }}</p>
 
-    <button v-if="!status.connected" type="button" class="rh-action connect" :disabled="busy" @click="onConnect">
-      <span class="material-symbols-outlined">login</span>
+    <button
+      v-if="!status.connected"
+      type="button"
+      class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 bg-accent-bg px-2.5 text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+      :disabled="busy"
+      @click="onConnect"
+    >
+      <span class="material-symbols-outlined text-[16px] leading-none">login</span>
       {{ busy ? "Connecting…" : "Connect (Google sign-in)" }}
     </button>
-    <button v-else type="button" class="rh-action disconnect" :disabled="busy" @click="onDisconnect">
-      <span class="material-symbols-outlined">logout</span>
+    <button
+      v-else
+      type="button"
+      class="inline-flex h-8 cursor-pointer items-center justify-center gap-1.5 rounded-md border border-border bg-transparent px-2.5 text-[12px] font-medium text-fg enabled:hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
+      :disabled="busy"
+      @click="onDisconnect"
+    >
+      <span class="material-symbols-outlined text-[16px] leading-none">logout</span>
       {{ busy ? "Disconnecting…" : "Disconnect" }}
     </button>
 
-    <p v-if="error" class="rh-error">{{ error }}</p>
+    <p v-if="error" class="text-[11px] text-[#e0533d] [overflow-wrap:anywhere]">{{ error }}</p>
 
-    <div class="rh-help">
+    <div class="flex flex-col gap-1.5 border-t border-border pt-2 text-[11px] leading-[1.4] text-muted">
       <p>Drive this terminal from your phone over a Firestore command channel — list collections, browse records, and start a chat.</p>
       <p>
         Open
-        <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="rh-link">{{ MOBILE_URL }}</a>
+        <a :href="MOBILE_URL" target="_blank" rel="noopener noreferrer" class="font-mono text-[#6ea8fe] [overflow-wrap:anywhere]">{{ MOBILE_URL }}</a>
         on your phone, signed in with the same Google account.
       </p>
-      <div class="rh-qr">
-        <img :src="qrDataUrl" alt="" aria-hidden="true" />
+      <div class="flex flex-col items-center gap-1.5 pt-0.5">
+        <img :src="qrDataUrl" alt="" aria-hidden="true" class="h-32 w-32 rounded-md" />
         <p>Or scan this QR code with your phone's camera.</p>
       </div>
     </div>
   </ToolbarPopover>
 </template>
-
-<style scoped>
-/* The panel div lives inside ToolbarPopover, so its scopeId differs from ours. */
-:deep(.rh-pop) {
-  width: 300px;
-  gap: 8px;
-  padding: 10px;
-  font-family: system-ui, sans-serif;
-}
-
-.rh-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.rh-dot {
-  font-size: 16px;
-  line-height: 1;
-  color: var(--text-muted);
-}
-.rh-dot.connected {
-  color: #35c46a;
-}
-.rh-head-label {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.rh-uid {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-
-.rh-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  height: 32px;
-  padding: 0 10px;
-  border-radius: 6px;
-  border: none;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-}
-.rh-action:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.rh-action.connect {
-  background: var(--accent-bg, #2f59c0);
-  color: #fff;
-}
-.rh-action.disconnect {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-.rh-action.disconnect:hover:not(:disabled) {
-  background: var(--bg-hover);
-}
-.rh-action .material-symbols-outlined {
-  font-size: 16px;
-  line-height: 1;
-}
-
-.rh-error {
-  font-size: 11px;
-  color: #e0533d;
-  overflow-wrap: anywhere;
-}
-
-.rh-help {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 8px;
-  border-top: 1px solid var(--border);
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--text-muted);
-}
-.rh-link {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  color: #6ea8fe;
-  overflow-wrap: anywhere;
-}
-
-.rh-qr {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding-top: 2px;
-}
-/* uqr's SVG carries its own white background, so it stays scannable on the dark panel. */
-.rh-qr img {
-  width: 128px;
-  height: 128px;
-  border-radius: 6px;
-}
-</style>

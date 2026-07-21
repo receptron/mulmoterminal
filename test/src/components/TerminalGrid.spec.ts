@@ -204,28 +204,28 @@ describe("grid cockpit (list view)", () => {
   it("toggles between the text roster and the thumbnail strip", async () => {
     const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
     await nextTick();
-    expect(w.find(".cockpit").exists()).toBe(true);
+    expect(w.find('[data-testid="cockpit"]').exists()).toBe(true);
     expect(w.find(".stage").classes()).toContain("listmode");
-    expect(w.findAll(".cockpit-row")).toHaveLength(2);
+    expect(w.findAll('[data-testid="cockpit-row"]')).toHaveLength(2);
 
-    await w.get(".view-toggle").trigger("click");
-    expect(w.find(".cockpit").exists()).toBe(false); // roster gone
+    await w.get('[data-testid="view-toggle"]').trigger("click");
+    expect(w.find('[data-testid="cockpit"]').exists()).toBe(false); // roster gone
     expect(w.find(".stage").classes()).not.toContain("listmode"); // filmstrip mode
   });
 
   it("emits list-mode as the roster is toggled off then on, so the parent can pause its poll", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0)]);
     await nextTick();
-    await w.get(".view-toggle").trigger("click"); // roster -> strip
+    await w.get('[data-testid="view-toggle"]').trigger("click"); // roster -> strip
     expect(w.emitted("list-mode")?.[0]).toEqual([false]);
-    await w.get(".view-toggle").trigger("click"); // strip -> roster
+    await w.get('[data-testid="view-toggle"]').trigger("click"); // strip -> roster
     expect(w.emitted("list-mode")?.[1]).toEqual([true]);
   });
 
   it("emits toggle-expand when a NON-active row is clicked, and not for the active one", async () => {
     const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
     await nextTick();
-    const rows = w.findAll(".cockpit-row");
+    const rows = w.findAll('[data-testid="cockpit-row"]');
     await rows[1].trigger("click"); // uid 1, not the expanded (0)
     expect(w.emitted("toggle-expand")?.[0]).toEqual([1]);
     await rows[0].trigger("click"); // uid 0 IS the expanded one — no-op
@@ -235,7 +235,7 @@ describe("grid cockpit (list view)", () => {
   it("falls back to the running program's label when a row has no prompt or summary", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { summary: null, prompt: null, fallback: "bash" })]);
     await nextTick();
-    const lines = w.findAll(".cockpit-line").map((l) => l.text());
+    const lines = w.findAll('[data-testid="cockpit-line"]').map((l) => l.text());
     expect(lines.some((t) => t.includes("summary"))).toBe(false); // no summary line
     expect(lines.some((t) => t.includes("prompt") && t.includes("bash"))).toBe(true); // fallback in the prompt line
   });
@@ -243,7 +243,7 @@ describe("grid cockpit (list view)", () => {
   it("renders a PR-phase badge with the phase label and class", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "ready" })]);
     await nextTick();
-    const badge = w.find(".cockpit-phase");
+    const badge = w.find('[data-testid="cockpit-phase"]');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toBe("ready");
     expect(badge.classes()).toContain("ph-ready");
@@ -252,7 +252,7 @@ describe("grid cockpit (list view)", () => {
   it("shows no phase badge for a cell with no PR yet (phase none)", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "none" })]);
     await nextTick();
-    expect(w.find(".cockpit-phase").exists()).toBe(false);
+    expect(w.find('[data-testid="cockpit-phase"]').exists()).toBe(false);
   });
 
   it.each([
@@ -261,18 +261,18 @@ describe("grid cockpit (list view)", () => {
   ] as const)("refines a working cell's status word to %s → %s", async (workPhase, word) => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "working", workPhase })]);
     await nextTick();
-    expect(w.find(".cockpit-badge").text()).toBe(word);
+    expect(w.find('[data-testid="cockpit-badge"]').text()).toBe(word);
   });
 
   it("shows the plain status word for a working cell whose sub-phase is unknown", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "working", workPhase: null })]);
     await nextTick();
-    expect(w.find(".cockpit-badge").text()).toBe("running");
+    expect(w.find('[data-testid="cockpit-badge"]').text()).toBe("running");
   });
 
   it("ignores workPhase for a non-working cell (idle stays idle)", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { status: "idle", workPhase: "implementing" })]);
     await nextTick();
-    expect(w.find(".cockpit-badge").text()).toBe("idle");
+    expect(w.find('[data-testid="cockpit-badge"]').text()).toBe("idle");
   });
 });

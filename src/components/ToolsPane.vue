@@ -110,12 +110,12 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
 </script>
 
 <template>
-  <section class="tools-pane flex flex-col h-full bg-deep border-l border-border">
-    <div class="py-2 px-4 bg-panel text-fg font-sans text-[14px] flex items-center justify-between">
+  <section class="flex h-full w-[340px] shrink-0 flex-col border-l border-border bg-deep">
+    <div class="flex items-center justify-between bg-panel px-4 py-2 font-sans text-[14px] text-fg">
       <span class="font-semibold">Tools</span>
       <button
         type="button"
-        class="bg-transparent border-0 text-dim text-[15px] leading-none py-0.5 px-1 cursor-pointer rounded hover:text-fg"
+        class="cursor-pointer rounded border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-dim hover:text-fg"
         title="Close tools pane"
         aria-label="Close tools pane"
         @click="emit('close')"
@@ -123,239 +123,94 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
-    <div class="content">
+    <div class="flex-1 overflow-y-auto font-sans text-[13px] text-fg">
       <!-- Available tools -->
-      <div class="section">
-        <div class="section-title">Available Tools</div>
-        <div v-if="availableTools.length === 0" class="muted">No GUI plugin tools enabled.</div>
-        <div v-for="tool in availableTools" :key="tool.toolName" class="tool">
-          <button class="tool-head" type="button" @click="toggleTool(tool.toolName)">
-            <code class="tool-name">{{ tool.toolName }}</code>
-            <span v-if="tool.description" class="caret material-symbols-outlined">{{ expandedTools.has(tool.toolName) ? "expand_less" : "expand_more" }}</span>
+      <div class="border-b border-border px-3 py-2.5">
+        <div class="mb-2 text-[11px] font-bold uppercase tracking-[0.04em] text-dim">Available Tools</div>
+        <div v-if="availableTools.length === 0" class="text-[12px] text-dim">No GUI plugin tools enabled.</div>
+        <div v-for="tool in availableTools" :key="tool.toolName" class="[&+&]:mt-1">
+          <button
+            class="flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent px-0 py-1 text-left text-inherit"
+            type="button"
+            @click="toggleTool(tool.toolName)"
+          >
+            <code
+              data-testid="tool-name"
+              class="rounded-[4px] bg-subtle px-1.5 py-0.5 font-['JetBrains_Mono',_monospace] text-[12px] break-all text-secondary"
+              >{{ tool.toolName }}</code
+            >
+            <span v-if="tool.description" class="material-symbols-outlined text-[18px] text-dim">{{
+              expandedTools.has(tool.toolName) ? "expand_less" : "expand_more"
+            }}</span>
           </button>
-          <div v-if="expandedTools.has(tool.toolName)" class="tool-desc">
+          <div v-if="expandedTools.has(tool.toolName)" class="mb-1.5 mt-0.5 whitespace-pre-wrap text-[12px] text-muted">
             {{ tool.description }}
           </div>
         </div>
       </div>
 
       <!-- Tool call history -->
-      <div class="section">
-        <div class="section-title section-title--with-action">
+      <div class="border-b border-border px-3 py-2.5">
+        <div class="mb-2 flex items-center justify-between gap-2 text-[11px] font-bold uppercase tracking-[0.04em] text-dim">
           <span>Tool Call History</span>
           <button
-            class="copy-history"
+            class="inline-flex cursor-pointer items-center gap-1 rounded-[4px] border border-border bg-subtle px-2 py-0.5 text-[10px] font-semibold normal-case tracking-[0.02em] text-muted enabled:hover:bg-selected-hover enabled:hover:text-secondary disabled:cursor-not-allowed disabled:opacity-40"
             type="button"
             :disabled="toolCalls.length === 0"
             :title="historyCopied ? 'Copied!' : 'Copy all call history'"
             :aria-label="historyCopied ? 'Copied!' : 'Copy all call history'"
             @click="copyHistory"
           >
-            <span class="material-symbols-outlined">{{ historyCopied ? "check" : "content_copy" }}</span>
+            <span class="material-symbols-outlined text-[14px] transition-[color,background] duration-150 ease-[ease]">{{
+              historyCopied ? "check" : "content_copy"
+            }}</span>
             {{ historyCopied ? "Copied" : "Copy all" }}
           </button>
         </div>
-        <div v-if="toolCalls.length === 0" class="muted">No tool calls yet.</div>
-        <div v-for="(call, i) in toolCalls" :key="callKey(call, i)" class="call">
-          <button class="call-head" type="button" @click="toggleCall(callKey(call, i))">
-            <code class="call-name">{{ call.toolName }}</code>
-            <span class="call-meta">
-              <span v-if="call.status === 'running'" class="badge running">running…</span>
-              <span v-else-if="call.status === 'failed'" class="badge failed">failed</span>
-              <span v-else class="badge done">{{ call.durationMs != null ? `${call.durationMs} ms` : "done" }}</span>
-              <span class="time">{{ formatTime(call.at) }}</span>
+        <div v-if="toolCalls.length === 0" class="text-[12px] text-dim">No tool calls yet.</div>
+        <div v-for="(call, i) in toolCalls" :key="callKey(call, i)" data-testid="tool-call" class="mt-1.5 rounded-md border border-border bg-deep px-2 py-1.5">
+          <button
+            class="flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent px-0 py-1 text-left text-inherit"
+            type="button"
+            @click="toggleCall(callKey(call, i))"
+          >
+            <code class="rounded-[4px] bg-subtle px-1.5 py-0.5 font-['JetBrains_Mono',_monospace] text-[12px] break-all text-secondary">{{
+              call.toolName
+            }}</code>
+            <span class="flex shrink-0 items-center gap-2">
+              <span
+                v-if="call.status === 'running'"
+                data-testid="badge-running"
+                class="rounded-full bg-[var(--warn-bg-subtle)] px-1.5 py-px text-[10px] text-warn"
+                >running…</span
+              >
+              <span v-else-if="call.status === 'failed'" data-testid="badge-failed" class="rounded-full bg-[var(--err-bg)] px-1.5 py-px text-[10px] text-err"
+                >failed</span
+              >
+              <span v-else data-testid="badge-done" class="rounded-full bg-[var(--ok-bg-subtle)] px-1.5 py-px text-[10px] text-ok">{{
+                call.durationMs != null ? `${call.durationMs} ms` : "done"
+              }}</span>
+              <span class="text-[11px] tabular-nums text-dim">{{ formatTime(call.at) }}</span>
             </span>
           </button>
-          <div v-if="expandedCalls.has(callKey(call, i))" class="call-body">
-            <div class="label">arguments</div>
-            <pre class="block">{{ formatValue(call.toolInput) }}</pre>
+          <div v-if="expandedCalls.has(callKey(call, i))" class="mt-1.5">
+            <div class="mb-0.5 mt-1.5 text-[10px] uppercase tracking-[0.04em] text-dim">arguments</div>
+            <pre
+              class="m-0 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-[4px] border border-border bg-deep px-2 py-1.5 font-['JetBrains_Mono',_monospace] text-[11.5px] [word-break:break-word]"
+              >{{ formatValue(call.toolInput) }}</pre>
             <template v-if="call.status === 'completed' || call.status === 'failed'">
-              <div class="label">
+              <div class="mb-0.5 mt-1.5 text-[10px] uppercase tracking-[0.04em] text-dim">
                 {{ call.status === "failed" ? "error" : "result" }}
               </div>
-              <pre class="block" :class="call.status === 'failed' ? 'error' : 'result'">{{ formatValue(call.toolOutput) || "(no output)" }}</pre>
+              <pre
+                class="m-0 max-h-[220px] overflow-auto whitespace-pre-wrap rounded-[4px] border bg-deep px-2 py-1.5 font-['JetBrains_Mono',_monospace] text-[11.5px] [word-break:break-word]"
+                :class="call.status === 'failed' ? 'border-[var(--err-bg)] text-err' : 'border-[var(--ok-border)]'"
+                >{{ formatValue(call.toolOutput) || "(no output)" }}</pre>
             </template>
-            <div v-else class="muted italic">Waiting for result…</div>
+            <div v-else class="text-[12px] italic text-dim">Waiting for result…</div>
           </div>
         </div>
       </div>
     </div>
   </section>
 </template>
-
-<style scoped>
-.tools-pane {
-  width: 340px;
-  flex-shrink: 0;
-}
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-}
-
-.section {
-  border-bottom: 1px solid var(--border);
-  padding: 10px 12px;
-}
-.section-title {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  margin-bottom: 8px;
-}
-.section-title--with-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-}
-.copy-history {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0.02em;
-  color: var(--text-muted);
-  background: var(--bg-subtle);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-.copy-history .material-symbols-outlined {
-  font-size: 14px;
-  transition:
-    color 0.15s,
-    background 0.15s;
-}
-.copy-history:hover:not(:disabled) {
-  color: var(--text-secondary);
-  background: var(--bg-selected-hover);
-}
-.copy-history:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.muted {
-  color: var(--text-dim);
-  font-size: 12px;
-}
-.italic {
-  font-style: italic;
-}
-
-/* Available tools */
-.tool + .tool {
-  margin-top: 4px;
-}
-.tool-head,
-.call-head {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  background: none;
-  border: none;
-  padding: 4px 0;
-  cursor: pointer;
-  text-align: left;
-  color: inherit;
-}
-.tool-name,
-.call-name {
-  background: var(--bg-subtle);
-  color: var(--text-secondary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 12px;
-  word-break: break-all;
-}
-.caret {
-  color: var(--text-dim);
-  font-size: 18px;
-}
-.tool-desc {
-  color: var(--text-muted);
-  font-size: 12px;
-  margin: 2px 0 6px;
-  white-space: pre-wrap;
-}
-
-/* Tool call history */
-.call {
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 8px;
-  margin-top: 6px;
-  background: var(--bg-deep);
-}
-.call-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.badge {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: 999px;
-}
-.badge.running {
-  background: var(--warn-bg-subtle);
-  color: var(--warn);
-}
-.badge.done {
-  background: var(--ok-bg-subtle);
-  color: var(--ok);
-}
-.badge.failed {
-  background: var(--err-bg);
-  color: var(--err);
-}
-.time {
-  color: var(--text-dim);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.call-body {
-  margin-top: 6px;
-}
-.label {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  margin: 6px 0 2px;
-}
-.block {
-  background: var(--bg-deep);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 6px 8px;
-  margin: 0;
-  max-height: 220px;
-  overflow: auto;
-  font-family: "JetBrains Mono", monospace;
-  font-size: 11.5px;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-.block.result {
-  border-color: var(--ok-border);
-}
-.block.error {
-  border-color: var(--err-bg);
-  color: var(--err);
-}
-</style>

@@ -68,7 +68,7 @@ const hasContent = computed(() => results.value.length > 0);
 </script>
 
 <template>
-  <section class="gui-panel flex flex-col h-full bg-deep border-l border-border">
+  <section class="flex h-full min-w-0 flex-1 flex-col border-l border-border bg-deep">
     <div class="py-2 px-4 bg-panel text-fg font-sans text-[14px] flex items-center justify-between">
       <span class="font-semibold">Canvas</span>
       <button
@@ -82,9 +82,10 @@ const hasContent = computed(() => results.value.length > 0);
         <span class="material-symbols-outlined">build</span>
       </button>
     </div>
-    <div class="content">
-      <div v-if="!hasContent" class="empty">
-        Ask Claude to use <code>presentDocument</code> or <code>presentForm</code>
+    <div class="flex-1 overflow-y-auto px-4 py-3 font-sans text-[14px] leading-normal text-fg">
+      <div v-if="!hasContent" class="text-[13px] text-dim">
+        Ask Claude to use <code class="rounded-[4px] bg-subtle px-[5px] py-px">presentDocument</code> or
+        <code class="rounded-[4px] bg-subtle px-[5px] py-px">presentForm</code>
         to render content here.
       </div>
       <template v-for="r in results" :key="r.uuid">
@@ -101,32 +102,9 @@ const hasContent = computed(() => results.value.length > 0);
   </section>
 </template>
 
+<!-- Adjacent-frame spacing is a sibling-combinator rule with no clean utility
+     equivalent, so it stays scoped; everything else is utilities. -->
 <style scoped>
-.gui-panel {
-  flex: 1;
-  min-width: 0;
-}
-
-.content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  line-height: 1.5;
-}
-
-.empty {
-  color: var(--text-dim);
-  font-size: 13px;
-}
-.empty code {
-  background: var(--bg-subtle);
-  padding: 1px 5px;
-  border-radius: 4px;
-}
-
 .frame + .frame {
   margin-top: 16px;
   padding-top: 16px;

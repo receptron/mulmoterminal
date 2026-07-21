@@ -84,7 +84,7 @@ describe("FilesOverlay", () => {
 
     // Open the markdown file → text fetched and pushed into the editor.
     const readmeRow = must(
-      w.findAll("button.files-row").find((b) => b.text().includes("README.md")),
+      w.findAll('[data-testid="files-row"]').find((b) => b.text().includes("README.md")),
       "README row",
     );
     await readmeRow.trigger("click");
@@ -119,7 +119,7 @@ describe("FilesOverlay", () => {
     await flushPromises();
     const open = (name: string) =>
       must(
-        w.findAll("button.files-row").find((b) => b.text().includes(name)),
+        w.findAll('[data-testid="files-row"]').find((b) => b.text().includes(name)),
         name,
       ).trigger("click");
     await open("README.md");
@@ -147,7 +147,7 @@ describe("FilesOverlay", () => {
     const w = mountOverlay();
     await flushPromises();
     await must(
-      w.findAll("button.files-row").find((b) => b.text().includes("README.md")),
+      w.findAll('[data-testid="files-row"]').find((b) => b.text().includes("README.md")),
       "readme",
     ).trigger("click");
     await flushPromises();
@@ -168,7 +168,7 @@ describe("FilesOverlay", () => {
     const w = mountOverlay();
     await flushPromises();
     await must(
-      w.findAll("button.files-row").find((b) => b.text().includes("README.md")),
+      w.findAll('[data-testid="files-row"]').find((b) => b.text().includes("README.md")),
       "readme",
     ).trigger("click");
     await flushPromises();
@@ -189,7 +189,7 @@ describe("FilesOverlay", () => {
     const w = mountOverlay();
     await flushPromises();
     const srcRow = must(
-      w.findAll("button.files-row").find((b) => b.text().includes("src")),
+      w.findAll('[data-testid="files-row"]').find((b) => b.text().includes("src")),
       "src row",
     );
     await srcRow.trigger("click");

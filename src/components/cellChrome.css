@@ -1,59 +1,65 @@
-/* Frame + header/path/label chrome specific to the non-Claude grid cells
-   (CommandCell, LauncherCell). The rules identical to every cell kind — the
-   zoomable-header affordance, the status dot, the action buttons — live in
-   cellChromeBase.css, which these two import alongside this file. Colors are the
-   same theme tokens TerminalCell uses, so all three cell kinds recolor together
-   when the app theme changes, and pick up a directory's .mulmoterminal.json tint
-   through the same override vars the moment one is set. */
-.cell {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  background: var(--cell-bg, var(--bg-base));
-  border: 1px solid var(--cell-border, var(--border));
-  border-radius: 6px;
-  overflow: hidden;
-}
+/* Wrapped in @layer components so Tailwind utilities (@layer utilities, declared
+   last) can override this shared chrome on a per-cell basis. Unlayered it beats
+   every utility regardless of specificity. Each component's own <style scoped>
+   stays unlayered and therefore still wins over these, exactly as before. */
+@layer components {
+  /* Frame + header/path/label chrome specific to the non-Claude grid cells
+     (CommandCell, LauncherCell). The rules identical to every cell kind — the
+     zoomable-header affordance, the status dot, the action buttons — live in
+     cellChromeBase.css, which these two import alongside this file. Colors are the
+     same theme tokens TerminalCell uses, so all three cell kinds recolor together
+     when the app theme changes, and pick up a directory's .mulmoterminal.json tint
+     through the same override vars the moment one is set. */
+  .cell {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--cell-bg, var(--bg-base));
+    border: 1px solid var(--cell-border, var(--border));
+    border-radius: 6px;
+    overflow: hidden;
+  }
 
-.cell-header {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: 34px;
-  padding: 0 8px;
-  background: var(--cell-header-bg, var(--bg-panel));
-  border-bottom: 1px solid var(--border);
-}
+  .cell-header {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 34px;
+    padding: 0 8px;
+    background: var(--cell-header-bg, var(--bg-panel));
+    border-bottom: 1px solid var(--border);
+  }
 
-.cell-dir {
-  flex: 0 1 auto;
-  /* Floor the width at ~15 chars of the path so the current dir stays readable
-     even on a narrow cell (1ch ≈ one monospace char; the leading … takes one). */
-  min-width: 16ch;
-  max-width: 45%;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--cell-header-fg, var(--text-dim));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Truncate from the FRONT so the tail (the project dir) stays visible. */
-  direction: rtl;
-  /* Left-align so a short path hugs the dot instead of floating right (rtl). */
-  text-align: left;
-}
-.cell-dir-path {
-  unicode-bidi: plaintext;
-}
-.cell-cmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  .cell-dir {
+    flex: 0 1 auto;
+    /* Floor the width at ~15 chars of the path so the current dir stays readable
+       even on a narrow cell (1ch ≈ one monospace char; the leading … takes one). */
+    min-width: 16ch;
+    max-width: 45%;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 11px;
+    color: var(--cell-header-fg, var(--text-dim));
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* Truncate from the FRONT so the tail (the project dir) stays visible. */
+    direction: rtl;
+    /* Left-align so a short path hugs the dot instead of floating right (rtl). */
+    text-align: left;
+  }
+  .cell-dir-path {
+    unicode-bidi: plaintext;
+  }
+  .cell-cmd {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 }

@@ -97,113 +97,48 @@ onUnmounted(() => document.removeEventListener("keydown", onKeydown));
 </script>
 
 <template>
-  <div v-if="open" class="tl-backdrop" @click.self="emit('close')">
-    <div ref="modalEl" class="tl-modal" role="dialog" aria-modal="true" aria-label="Activity timeline" tabindex="-1">
-      <div class="tl-head">
-        <span class="tl-title">Activity</span>
-        <span class="tl-count">{{ events.length }} step{{ events.length === 1 ? "" : "s" }}{{ truncated ? "+" : "" }}</span>
-        <button type="button" class="tl-close" aria-label="Close timeline" @click="emit('close')">✕</button>
+  <div v-if="open" class="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(0,0,0,0.45)]" @click.self="emit('close')">
+    <div
+      ref="modalEl"
+      data-testid="tl-modal"
+      class="flex max-h-[80vh] w-[min(640px,92vw)] flex-col overflow-hidden rounded-lg bg-panel text-fg shadow-[0_10px_40px_rgba(0,0,0,0.5)]"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Activity timeline"
+      tabindex="-1"
+    >
+      <div class="flex items-center gap-2 border-b border-b-[color-mix(in_srgb,currentColor_15%,transparent)] px-3.5 py-2.5">
+        <span class="font-semibold">Activity</span>
+        <span data-testid="tl-count" class="text-[0.8rem] opacity-60"
+          >{{ events.length }} step{{ events.length === 1 ? "" : "s" }}{{ truncated ? "+" : "" }}</span
+        >
+        <button
+          type="button"
+          data-testid="tl-close"
+          class="ml-auto cursor-pointer border-0 bg-transparent text-[0.95rem] text-inherit"
+          aria-label="Close timeline"
+          @click="emit('close')"
+        >
+          ✕
+        </button>
       </div>
-      <div class="tl-body">
-        <p v-if="loading" class="tl-empty">Loading…</p>
-        <p v-else-if="error" class="tl-empty">Couldn't load the timeline.</p>
-        <p v-else-if="events.length === 0" class="tl-empty">No tool activity yet.</p>
-        <ol v-else class="tl-list">
-          <li v-for="(ev, idx) in reversed()" :key="idx" class="tl-row">
-            <span class="tl-time">{{ formatTime(ev.ts) }}</span>
-            <span class="tl-tool">{{ ev.tool }}</span>
-            <span class="tl-summary" :title="ev.summary">{{ ev.summary }}</span>
+      <div class="overflow-y-auto py-1.5">
+        <p v-if="loading" data-testid="tl-empty" class="px-3.5 py-6 text-center opacity-60">Loading…</p>
+        <p v-else-if="error" data-testid="tl-empty" class="px-3.5 py-6 text-center opacity-60">Couldn't load the timeline.</p>
+        <p v-else-if="events.length === 0" data-testid="tl-empty" class="px-3.5 py-6 text-center opacity-60">No tool activity yet.</p>
+        <ol v-else class="m-0 list-none p-0">
+          <li
+            v-for="(ev, idx) in reversed()"
+            :key="idx"
+            data-testid="tl-row"
+            class="flex items-baseline gap-2.5 px-3.5 py-[5px] text-[0.82rem] odd:bg-[color-mix(in_srgb,currentColor_5%,transparent)]"
+          >
+            <span class="flex-none text-[0.75rem] tabular-nums opacity-[0.55]">{{ formatTime(ev.ts) }}</span>
+            <span data-testid="tl-tool" class="min-w-[4.5em] flex-none font-semibold">{{ ev.tool }}</span>
+            <span class="flex-auto truncate font-[ui-monospace,monospace] opacity-85" :title="ev.summary">{{ ev.summary }}</span>
           </li>
         </ol>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.tl-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.45);
-}
-.tl-modal {
-  width: min(640px, 92vw);
-  max-height: 80vh;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-panel, #1e1e2e);
-  color: var(--text, #e6e6e6);
-  border-radius: 8px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
-  overflow: hidden;
-}
-.tl-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 15%, transparent);
-}
-.tl-title {
-  font-weight: 600;
-}
-.tl-count {
-  font-size: 0.8rem;
-  opacity: 0.6;
-}
-.tl-close {
-  margin-left: auto;
-  background: none;
-  border: none;
-  color: inherit;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-.tl-body {
-  overflow-y: auto;
-  padding: 6px 0;
-}
-.tl-empty {
-  padding: 24px 14px;
-  text-align: center;
-  opacity: 0.6;
-}
-.tl-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.tl-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 5px 14px;
-  font-size: 0.82rem;
-}
-.tl-row:nth-child(odd) {
-  background: color-mix(in srgb, currentColor 5%, transparent);
-}
-.tl-time {
-  flex: 0 0 auto;
-  font-variant-numeric: tabular-nums;
-  opacity: 0.55;
-  font-size: 0.75rem;
-}
-.tl-tool {
-  flex: 0 0 auto;
-  font-weight: 600;
-  min-width: 4.5em;
-}
-.tl-summary {
-  flex: 1 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: ui-monospace, monospace;
-  opacity: 0.85;
-}
-</style>

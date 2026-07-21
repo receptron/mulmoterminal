@@ -889,39 +889,73 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
              model / tokens / custom) don't shrink, so without this they would overflow and
              push the actions past the cell's `overflow: hidden` edge — the buttons must
              stay reachable no matter how much a dir's config crams in here. -->
-        <div class="cell-header-main">
+        <div data-testid="cell-header-main" class="flex min-w-0 flex-auto items-center gap-2 overflow-hidden">
           <span class="cell-dot" :class="statusClass" :title="statusLabel" />
           <!-- Normal grid: the dir is a button that opens it. As a filmstrip thumbnail the
                header's job is to zoom (switch to this terminal), so the dir is inert text
                and a click on it falls through to the header's zoom gesture. -->
-          <button v-if="headerDir && !filmstrip" type="button" class="cell-dir" :title="cwd ? `Open ${cwd}` : ''" @click="openDir">
-            <span class="cell-dir-path">{{ headerDir }}</span>
+          <button
+            v-if="headerDir && !filmstrip"
+            type="button"
+            class="cell-dir flex-initial min-w-[16ch] max-w-[60%] cursor-pointer truncate border-none bg-transparent p-0 text-left font-mono text-[11px] text-[var(--cell-header-fg,var(--text-dim))] [direction:rtl] hover:text-muted hover:underline"
+            :title="cwd ? `Open ${cwd}` : ''"
+            @click="openDir"
+          >
+            <span class="cell-dir-path [unicode-bidi:plaintext]">{{ headerDir }}</span>
           </button>
-          <span v-else-if="headerDir" class="cell-dir" :title="cwd ?? ''">
-            <span class="cell-dir-path">{{ headerDir }}</span>
+          <span
+            v-else-if="headerDir"
+            class="cell-dir flex-initial min-w-[16ch] max-w-[60%] cursor-pointer truncate border-none bg-transparent p-0 text-left font-mono text-[11px] text-[var(--cell-header-fg,var(--text-dim))] [direction:rtl] hover:text-muted hover:underline"
+            :title="cwd ?? ''"
+          >
+            <span class="cell-dir-path [unicode-bidi:plaintext]">{{ headerDir }}</span>
           </span>
           <!-- Info (dir badge / git / diff / model / tokens) is dropped on a filmstrip
                thumbnail, leaving only dir + what it's doing + a zoom button. -->
           <template v-if="!filmstrip">
-            <span v-if="dirConfig.name" class="cell-badge" :style="dirBadgeStyle" :title="dirConfig.name">{{ dirConfig.name }}</span>
+            <span
+              v-if="dirConfig.name"
+              class="max-w-[14ch] flex-none truncate rounded-[10px] px-[7px] py-px font-sans text-[11px] font-semibold"
+              :style="dirBadgeStyle"
+              :title="dirConfig.name"
+              >{{ dirConfig.name }}</span
+            >
             <template v-for="chip in cellChips" :key="chip.key">
               <GitBranchChip v-if="chip.builtin === 'git'" :status="gitStatus" :hide-dirty="isWorktreeCell" />
               <button
                 v-else-if="chip.builtin === 'diff' && showDiffBadge && diff"
                 type="button"
-                class="cell-wt-badge"
+                data-testid="cell-wt-badge"
+                class="inline-flex flex-none cursor-pointer items-center gap-1.5 rounded-[10px] border border-border bg-elevated px-[7px] py-px font-mono text-[11px] hover:bg-hover"
                 :title="`View changes vs ${diff.base ?? 'base'}`"
                 @click="openDiff"
               >
-                <span v-if="diff.ahead > 0" class="wt-ahead">+{{ diff.ahead }}</span>
-                <span v-if="diff.dirty > 0" class="wt-dirty-count">●{{ diff.dirty }}</span>
+                <span v-if="diff.ahead > 0" data-testid="wt-ahead" class="text-accent">+{{ diff.ahead }}</span>
+                <span v-if="diff.dirty > 0" data-testid="wt-dirty-count" class="text-[var(--warn-text,#e0a030)]">●{{ diff.dirty }}</span>
               </button>
               <ModelContextBadge v-else-if="chip.builtin === 'ctx' && context" :agent="agent" :model="context.model" :context-tokens="context.contextTokens" />
-              <span v-else-if="chip.builtin === 'usage' && showUsage" class="cell-usage" :title="usageTitle">{{ usageLabel }}</span>
-              <span v-else-if="chip.custom" class="cell-hdr-chip" :title="chip.custom.label || chip.custom.text">{{ chip.custom.text }}</span>
+              <span
+                v-else-if="chip.builtin === 'usage' && showUsage"
+                data-testid="cell-usage"
+                class="flex-none whitespace-nowrap font-mono text-[10px] tracking-[0.02em] text-dim"
+                :title="usageTitle"
+                >{{ usageLabel }}</span
+              >
+              <span
+                v-else-if="chip.custom"
+                data-testid="cell-hdr-chip"
+                class="flex-none whitespace-nowrap rounded-full border border-border px-1.5 py-px text-[10px] text-dim"
+                :title="chip.custom.label || chip.custom.text"
+                >{{ chip.custom.text }}</span
+              >
             </template>
           </template>
-          <span class="cell-prompt" :title="lastPrompt || aiTitle || ''">{{ headerText }}</span>
+          <span
+            data-testid="cell-prompt"
+            class="min-w-0 flex-auto truncate font-sans text-[12px] text-[var(--cell-header-fg,var(--text-secondary))]"
+            :title="lastPrompt || aiTitle || ''"
+            >{{ headerText }}</span
+          >
         </div>
         <!-- Expand/restore + close stay on row 1 (the info row) and OUTSIDE the info
              track, so they're always pinned top-right. `.stop` so they don't trigger the
@@ -963,27 +997,54 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
       >
         <!-- Row 2 — the cell's icon actions, gathered onto the terminal's header row. -->
         <template #header-actions>
-          <span v-if="githubUrl" ref="ghWrap" class="cell-gh-wrap">
+          <span v-if="githubUrl" ref="ghWrap" class="relative inline-flex flex-none">
             <button
               type="button"
-              class="cell-gh"
+              data-testid="cell-gh"
+              class="inline-flex h-5 w-5 cursor-pointer items-center justify-center rounded-[4px] border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg"
               title="Open on GitHub"
               aria-label="Open on GitHub"
               aria-haspopup="true"
               :aria-expanded="ghMenuOpen"
               @click="ghMenuOpen = !ghMenuOpen"
             >
-              <svg class="cell-gh-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <svg class="block h-[14px] w-[14px]" viewBox="0 0 16 16" aria-hidden="true">
                 <path
                   fill-rule="evenodd"
                   d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82A7.6 7.6 0 0 1 8 4.6c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
                 />
               </svg>
             </button>
-            <div v-if="ghMenuOpen" class="cell-gh-menu" @keydown.escape="ghMenuOpen = false">
-              <button type="button" class="cell-gh-item" @click="openGithub('')">Repository</button>
-              <button type="button" class="cell-gh-item" @click="openGithub('/issues')">Issues</button>
-              <button type="button" class="cell-gh-item" @click="openGithub('/pulls')">Pull requests</button>
+            <div
+              v-if="ghMenuOpen"
+              data-testid="cell-gh-menu"
+              class="absolute left-0 top-full z-20 mt-1 flex min-w-[132px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+              @keydown.escape="ghMenuOpen = false"
+            >
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('')"
+              >
+                Repository
+              </button>
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('/issues')"
+              >
+                Issues
+              </button>
+              <button
+                type="button"
+                data-testid="cell-gh-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="openGithub('/pulls')"
+              >
+                Pull requests
+              </button>
             </div>
           </span>
           <button
@@ -999,28 +1060,37 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">▶</button>
         </template>
       </TerminalView>
-      <div v-if="diffOpen && diff" class="cell-diff">
-        <div class="cell-diff-head">
-          <span class="cell-diff-title">Changes vs {{ diff?.base ?? "base" }}</span>
-          <span class="cell-diff-sum">{{ diff?.ahead ?? 0 }} ahead · {{ diff?.dirty ?? 0 }} uncommitted</span>
+      <div
+        v-if="diffOpen && diff"
+        data-testid="cell-diff"
+        class="absolute inset-x-0 bottom-0 top-[34px] z-[15] flex flex-col overflow-hidden border-t border-t-border bg-base"
+      >
+        <div class="flex flex-none items-center gap-2 border-b border-b-border bg-panel px-2 py-1.5">
+          <span class="font-sans text-[12px] font-semibold text-fg">Changes vs {{ diff?.base ?? "base" }}</span>
+          <span class="flex-auto font-sans text-[11px] text-dim">{{ diff?.ahead ?? 0 }} ahead · {{ diff?.dirty ?? 0 }} uncommitted</span>
           <button class="cell-btn" title="Close diff" aria-label="Close diff" @click="diffOpen = false">✕</button>
         </div>
-        <div v-if="diff && diff.files.length" class="cell-diff-files">
-          <div v-for="f in diff.files" :key="f.path" class="cell-diff-file">
-            <span class="df-path">{{ f.path }}</span>
-            <span v-if="f.status === 'untracked'" class="df-new">new</span>
-            <span v-else class="df-nums">
-              <span class="df-add">+{{ f.additions < 0 ? "bin" : f.additions }}</span>
-              <span class="df-del">−{{ f.deletions < 0 ? "bin" : f.deletions }}</span>
+        <div v-if="diff && diff.files.length" class="max-h-[35%] flex-none overflow-y-auto border-b border-b-border px-2 py-1">
+          <div v-for="f in diff.files" :key="f.path" data-testid="cell-diff-file" class="flex items-baseline gap-2 py-px font-mono text-[11px]">
+            <span class="min-w-0 flex-auto truncate text-secondary [direction:rtl]">{{ f.path }}</span>
+            <span v-if="f.status === 'untracked'" data-testid="df-new" class="flex-none text-[#3fae6b]">new</span>
+            <span v-else class="flex-none">
+              <span class="text-[#3fae6b]">+{{ f.additions < 0 ? "bin" : f.additions }}</span>
+              <span class="text-err-text">−{{ f.deletions < 0 ? "bin" : f.deletions }}</span>
             </span>
           </div>
         </div>
-        <pre v-if="diff && diff.patch" class="cell-diff-patch">{{ diff.patch }}</pre>
-        <p v-if="diff && diff.truncated" class="cell-diff-note">Diff truncated — open the worktree to see the rest.</p>
-        <p v-if="diff && !diff.files.length" class="cell-diff-empty">No changes yet.</p>
-        <div class="cell-diff-actions">
+        <pre
+          v-if="diff && diff.patch"
+          data-testid="cell-diff-patch"
+          class="m-0 flex-auto overflow-auto whitespace-pre p-2 font-mono text-[11px] leading-[1.45] text-secondary [tab-size:2]"
+          >{{ diff.patch }}</pre>
+        <p v-if="diff && diff.truncated" class="m-0 p-2 font-sans text-[11px] text-dim">Diff truncated — open the worktree to see the rest.</p>
+        <p v-if="diff && !diff.files.length" class="m-0 p-2 font-sans text-[11px] text-dim">No changes yet.</p>
+        <div class="flex flex-none items-center gap-2 border-t border-t-border bg-panel px-2 py-1.5">
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || working || (diff?.dirty ?? 0) === 0"
             :title="(diff?.dirty ?? 0) === 0 ? 'No uncommitted changes' : working ? 'Wait for the session to finish' : 'Ask Claude to commit the changes'"
             @click="commitViaClaude"
@@ -1028,7 +1098,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             ✓ Commit
           </button>
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || (diff?.ahead ?? 0) === 0"
             :title="(diff?.ahead ?? 0) === 0 ? 'Commit changes first' : 'git push -u origin'"
             @click="pushBranch"
@@ -1036,69 +1107,135 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             ⬆ Push
           </button>
           <button
-            class="cell-diff-btn"
+            data-testid="cell-diff-btn"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1 font-sans text-[12px] text-secondary enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             :disabled="prBusy || (diff?.ahead ?? 0) === 0"
             :title="(diff?.ahead ?? 0) === 0 ? 'Commit changes in the terminal first' : 'Push and open a pull request'"
             @click="openPR"
           >
             ⧉ Open PR
           </button>
-          <span v-if="prMsg" class="cell-diff-msg">{{ prMsg }}</span>
+          <span v-if="prMsg" data-testid="cell-diff-msg" class="min-w-0 flex-auto truncate font-sans text-[11px] text-dim">{{ prMsg }}</span>
         </div>
       </div>
-      <div v-if="closeConfirm" class="cell-close-confirm" role="dialog" aria-modal="true" :aria-label="`Close worktree ${headerDir}`">
-        <div class="ccx-box">
-          <p class="ccx-title">Close {{ headerDir }}</p>
+      <div
+        v-if="closeConfirm"
+        data-testid="cell-close-confirm"
+        class="absolute inset-0 z-[25] flex items-center justify-center bg-[color-mix(in_srgb,var(--bg-base)_82%,transparent)] p-4"
+        role="dialog"
+        aria-modal="true"
+        :aria-label="`Close worktree ${headerDir}`"
+      >
+        <div class="flex max-w-[320px] flex-col gap-2.5 rounded-lg border border-border bg-panel p-4 shadow-[0_8px_24px_rgba(0,0,0,0.4)]">
+          <p class="m-0 font-sans text-[13px] font-semibold text-fg">Close {{ headerDir }}</p>
           <template v-if="!closeError">
-            <p v-if="hasUnsaved" class="ccx-warn">{{ unsavedSummary }} will be discarded if you remove the worktree.</p>
-            <p v-else class="ccx-sub">Keep the worktree to reuse it later, or remove it.</p>
-            <div class="ccx-actions">
-              <button class="ccx-btn ccx-keep" @click="teardown">Keep worktree</button>
-              <button class="ccx-btn ccx-remove" :disabled="closeChecking" @click="removeAndClose">
+            <p v-if="hasUnsaved" data-testid="ccx-warn" class="m-0 font-sans text-[12px] text-[var(--warn-text,#e0a030)]">
+              {{ unsavedSummary }} will be discarded if you remove the worktree.
+            </p>
+            <p v-else class="m-0 font-sans text-[12px] text-dim">Keep the worktree to reuse it later, or remove it.</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                data-testid="ccx-keep"
+                class="cursor-pointer rounded-md border border-accent bg-elevated px-3 py-1.5 font-sans text-[12px] text-fg hover:bg-hover hover:text-fg"
+                @click="teardown"
+              >
+                Keep worktree
+              </button>
+              <button
+                data-testid="ccx-remove"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:border-err-text hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+                :disabled="closeChecking"
+                @click="removeAndClose"
+              >
                 {{ closeChecking ? "Checking…" : hasUnsaved ? "Discard &amp; remove" : "Remove worktree" }}
               </button>
-              <button class="ccx-btn ccx-cancel" @click="cancelClose">Cancel</button>
+              <button
+                data-testid="ccx-cancel"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="cancelClose"
+              >
+                Cancel
+              </button>
             </div>
           </template>
           <template v-else>
-            <p class="ccx-warn">{{ closeError }}</p>
-            <div class="ccx-actions">
-              <button class="ccx-btn ccx-remove" @click="removeAndClose">Retry</button>
-              <button class="ccx-btn" @click="teardown">Close cell</button>
+            <p data-testid="ccx-warn" class="m-0 font-sans text-[12px] text-[var(--warn-text,#e0a030)]">{{ closeError }}</p>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                data-testid="ccx-remove"
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:border-err-text hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+                @click="removeAndClose"
+              >
+                Retry
+              </button>
+              <button
+                class="cursor-pointer rounded-md border border-border bg-elevated px-3 py-1.5 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="teardown"
+              >
+                Close cell
+              </button>
             </div>
           </template>
         </div>
       </div>
     </template>
-    <div v-else class="cell-launch">
-      <button v-if="cancellable" type="button" class="cell-launch-cancel" title="Cancel new terminal" aria-label="Cancel new terminal" @click="emit('close')">
+    <div v-else data-testid="cell-launch" class="flex min-h-0 flex-1 flex-col items-center justify-start gap-2 overflow-y-auto p-4">
+      <button
+        v-if="cancellable"
+        type="button"
+        data-testid="cell-launch-cancel"
+        class="absolute right-1.5 top-1.5 inline-flex h-[26px] w-7 cursor-pointer items-center justify-center rounded-md border-none bg-transparent text-[16px] leading-none text-secondary hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+        title="Cancel new terminal"
+        aria-label="Cancel new terminal"
+        @click="emit('close')"
+      >
         ✕
       </button>
-      <div v-if="presets.length" class="cell-presets">
-        <span v-for="p in presets" :key="p.label + p.path" :class="['cell-chip', { 'is-running': isCwdRunning(p.path) }]">
+      <div v-if="presets.length" class="flex max-w-[360px] flex-wrap justify-center gap-1.5">
+        <span
+          v-for="p in presets"
+          :key="p.label + p.path"
+          data-testid="cell-chip"
+          class="inline-flex items-stretch overflow-hidden rounded-[14px] border"
+          :class="[
+            { 'is-running': isCwdRunning(p.path) },
+            isCwdRunning(p.path)
+              ? 'border-[color-mix(in_srgb,#3b82f6_55%,var(--border))] bg-[color-mix(in_srgb,#3b82f6_14%,var(--bg-elevated))]'
+              : 'border-border bg-elevated',
+          ]"
+        >
           <button
             type="button"
-            class="cell-chip-main"
+            data-testid="cell-chip-main"
+            class="cursor-pointer border-none bg-transparent px-2.5 py-1 font-sans text-[12px] hover:bg-hover hover:text-fg"
+            :class="isCwdRunning(p.path) ? 'text-fg' : 'text-secondary'"
             :title="p.path"
             :aria-label="`Use ${p.label} — fill the field to browse / resume here (without launching)`"
             @click="fillDir(p.path)"
           >
-            <span v-if="isCwdRunning(p.path)" class="cell-chip-dot" aria-hidden="true" />{{ p.label }}
+            <span
+              v-if="isCwdRunning(p.path)"
+              data-testid="cell-chip-dot"
+              class="mr-[5px] inline-block h-1.5 w-1.5 rounded-full bg-[#3b82f6] align-middle"
+              aria-hidden="true"
+            />{{ p.label }}
           </button>
           <button
             type="button"
-            class="cell-chip-launch"
+            data-testid="cell-chip-launch"
+            class="inline-flex cursor-pointer items-center border-0 border-l border-l-border bg-transparent px-[5px] text-secondary hover:bg-hover hover:text-fg"
             :title="isCwdRunning(p.path) ? `${p.path} — a session is already running here in another terminal` : `Launch a new terminal in ${p.path} now`"
             :aria-label="
               isCwdRunning(p.path) ? `${p.label} — a session is already running here in another terminal` : `Launch a new terminal in ${p.label} now`
             "
             @click="selectPreset(p)"
           >
-            <span class="material-symbols-outlined">play_arrow</span>
+            <span class="material-symbols-outlined text-[14px]">play_arrow</span>
           </button>
           <button
             type="button"
-            class="cell-chip-del"
+            data-testid="cell-chip-del"
+            class="cursor-pointer border-0 border-l border-l-border bg-transparent px-[7px] text-[11px] text-secondary hover:bg-hover hover:text-[var(--danger,#e5484d)]"
             :title="`Remove ${p.path} from the list`"
             :aria-label="`Remove ${p.path} from the list`"
             @click="emit('remove-preset', p.path)"
@@ -1107,11 +1244,11 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
         </span>
       </div>
-      <div class="cell-agent" role="radiogroup" aria-label="Agent">
+      <div class="inline-flex gap-0.5 self-start rounded-[7px] border border-border bg-deep p-0.5" role="radiogroup" aria-label="Agent">
         <button
           type="button"
-          class="cell-agent-btn"
-          :class="{ active: agent === 'claude' }"
+          class="cursor-pointer rounded-[5px] border-none px-3.5 py-1 font-sans text-[12px] font-medium"
+          :class="agent === 'claude' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="agent === 'claude'"
           @click="agent = 'claude'"
@@ -1120,8 +1257,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         </button>
         <button
           type="button"
-          class="cell-agent-btn"
-          :class="{ active: agent === 'codex' }"
+          class="cursor-pointer rounded-[5px] border-none px-3.5 py-1 font-sans text-[12px] font-medium"
+          :class="agent === 'codex' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="agent === 'codex'"
           @click="agent = 'codex'"
@@ -1129,12 +1266,13 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           Codex
         </button>
       </div>
-      <label class="cell-launch-label">
-        <span class="cell-launch-caption">Working directory</span>
-        <span class="cell-dir-row">
+      <label class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">Working directory</span>
+        <span class="flex w-full items-stretch gap-1.5">
           <input
             v-model="dirInput"
-            class="cell-dir-input"
+            data-testid="cell-dir-input"
+            class="box-border w-full rounded-md border border-border bg-input px-2.5 py-[7px] font-mono text-[12px] text-fg focus:border-accent focus:outline-none min-w-0 flex-auto"
             type="text"
             placeholder="/path/to/project"
             spellcheck="false"
@@ -1152,67 +1290,110 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
           <button
             type="button"
-            class="cell-dir-go"
+            data-testid="cell-dir-go"
+            class="inline-flex flex-none cursor-pointer items-center justify-center rounded-md border border-border bg-elevated px-2 text-secondary enabled:hover:border-accent enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-40"
             :disabled="!dirInput.trim()"
             title="Start a new terminal here (or press Enter)"
             aria-label="Start a new terminal here"
             @click="launch"
           >
-            <span class="material-symbols-outlined">play_arrow</span>
+            <span class="material-symbols-outlined text-[18px]">play_arrow</span>
           </button>
         </span>
       </label>
-      <div v-if="isGitRepo" class="cell-worktrees">
-        <span class="cell-launch-caption">or isolate in a worktree (git repo)</span>
-        <div class="wt-new">
+      <div v-if="isGitRepo" data-testid="cell-worktrees" class="flex w-full max-w-[360px] flex-col items-stretch gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or isolate in a worktree (git repo)</span>
+        <div class="flex gap-1.5">
           <input
             v-model="worktreeTask"
-            class="cell-dir-input wt-task"
+            data-testid="wt-task"
+            class="box-border w-full rounded-md border border-border bg-input px-2.5 py-[7px] font-mono text-[12px] text-fg focus:border-accent focus:outline-none w-auto min-w-0 flex-auto"
             type="text"
             placeholder="task name (e.g. fix-login)"
             aria-label="Worktree task name"
             spellcheck="false"
             @keydown.enter="createWorktreeAndLaunch"
           />
-          <button class="cell-start wt-start" :disabled="!worktreeTask.trim()" @click="createWorktreeAndLaunch">＋ New worktree</button>
+          <button
+            data-testid="wt-start"
+            class="cursor-pointer rounded-md border border-border bg-elevated px-4 py-[7px] font-sans text-[14px] font-medium text-secondary flex-none whitespace-nowrap hover:bg-hover hover:text-fg"
+            :disabled="!worktreeTask.trim()"
+            @click="createWorktreeAndLaunch"
+          >
+            ＋ New worktree
+          </button>
         </div>
-        <div v-for="w in worktrees" :key="w.path" class="wt-row">
+        <div v-for="w in worktrees" :key="w.path" class="flex items-center gap-1.5">
           <button
             class="flex-auto min-w-0 text-left rounded-md border border-border bg-elevated text-secondary cursor-pointer font-mono text-[12px] py-[5px] px-2.5 truncate hover:bg-hover hover:text-fg"
             data-testid="worktree-reuse"
             :title="w.branch ?? w.path"
             @click="reuseWorktree(w)"
           >
-            ⎇ {{ w.task }}<span v-if="w.dirty" class="wt-dirty" title="uncommitted changes">●</span>
+            ⎇ {{ w.task }}<span v-if="w.dirty" data-testid="wt-dirty" class="ml-1.5 text-[var(--warn-text,#e0a030)]" title="uncommitted changes">●</span>
           </button>
-          <button class="wt-del" title="Remove worktree" aria-label="Remove worktree" @click="removeWorktree(w)">🗑</button>
+          <button
+            data-testid="wt-del"
+            class="flex-none cursor-pointer rounded-md border-none bg-transparent px-1.5 py-1 text-[13px] hover:bg-[var(--err-hover-bg)]"
+            title="Remove worktree"
+            aria-label="Remove worktree"
+            @click="removeWorktree(w)"
+          >
+            🗑
+          </button>
         </div>
       </div>
-      <div v-if="scripts.length" class="cell-scripts">
-        <span class="cell-launch-caption">or run a script</span>
-        <div class="cell-script-list">
-          <button v-for="s in scripts" :key="s.index" class="cell-script-item" :title="s.command" @click="runScript(s)">▶ {{ s.label }}</button>
+      <div v-if="scripts.length" class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or run a script</span>
+        <div class="flex w-full flex-wrap justify-center gap-1.5">
+          <button
+            v-for="s in scripts"
+            :key="s.index"
+            data-testid="cell-script-item"
+            class="cursor-pointer rounded-[14px] border border-[#2a4e3a] bg-[#16271d] px-2.5 py-1 font-sans text-[12px] text-[#b6e3c7] hover:border-[#3fae6b] hover:bg-[#1f3a2a] hover:text-white"
+            :title="s.command"
+            @click="runScript(s)"
+          >
+            ▶ {{ s.label }}
+          </button>
         </div>
       </div>
-      <div v-if="launchers && launchers.length" class="cell-scripts">
-        <span class="cell-launch-caption">or launch</span>
-        <div class="cell-script-list">
-          <button v-for="(l, i) in launchers" :key="l.label" class="cell-script-item" :title="l.command" @click="launchProgram(i, l)">⌘ {{ l.label }}</button>
+      <div v-if="launchers && launchers.length" class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or launch</span>
+        <div class="flex w-full flex-wrap justify-center gap-1.5">
+          <button
+            v-for="(l, i) in launchers"
+            :key="l.label"
+            data-testid="cell-script-item"
+            class="cursor-pointer rounded-[14px] border border-[#2a4e3a] bg-[#16271d] px-2.5 py-1 font-sans text-[12px] text-[#b6e3c7] hover:border-[#3fae6b] hover:bg-[#1f3a2a] hover:text-white"
+            :title="l.command"
+            @click="launchProgram(i, l)"
+          >
+            ⌘ {{ l.label }}
+          </button>
         </div>
       </div>
-      <div v-if="resumable.length" class="cell-resume">
-        <span class="cell-launch-caption">or resume here</span>
-        <div class="cell-resume-list">
+      <div v-if="resumable.length" data-testid="cell-resume" class="flex min-h-0 w-full max-w-[360px] flex-col items-center gap-1.5">
+        <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or resume here</span>
+        <div class="flex w-full flex-col gap-1">
           <button
             v-for="s in resumable"
             :key="s.id"
-            :class="['cell-resume-item', { 'is-open': sessionOpenElsewhere(s.id) }]"
+            data-testid="cell-resume-item"
+            class="flex cursor-pointer items-baseline justify-between gap-2 rounded-md border bg-deep px-2.5 py-[5px] text-left font-sans text-[12px] text-secondary hover:border-accent hover:bg-elevated"
+            :class="[{ 'is-open': sessionOpenElsewhere(s.id) }, sessionOpenElsewhere(s.id) ? 'border-amber' : 'border-border']"
             :title="sessionOpenElsewhere(s.id) ? `${s.title} — already open in another terminal` : s.title"
             @click="resume(s)"
           >
-            <span class="ri-title">{{ s.title }}</span>
-            <span v-if="sessionOpenElsewhere(s.id)" class="ri-open" title="Already open in another terminal">● open</span>
-            <span class="ri-time">{{ relativeTime(s.mtime) }}</span>
+            <span data-testid="ri-title" class="truncate">{{ s.title }}</span>
+            <span
+              v-if="sessionOpenElsewhere(s.id)"
+              data-testid="ri-open"
+              class="flex-none whitespace-nowrap text-[11px] text-amber"
+              title="Already open in another terminal"
+              >● open</span
+            >
+            <span class="flex-none text-[11px] text-dim">{{ relativeTime(s.mtime) }}</span>
           </button>
         </div>
       </div>
@@ -1282,137 +1463,6 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   background: var(--amber);
 }
 
-.cell-dir {
-  flex: 0 1 auto;
-  /* Floor the width at ~15 chars of the path so the current dir stays readable
-     even on a narrow cell (1ch ≈ one monospace char; the leading … takes one). */
-  min-width: 16ch;
-  max-width: 60%;
-  border: none;
-  background: none;
-  padding: 0;
-  text-align: left;
-  cursor: pointer;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--cell-header-fg, var(--text-dim));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  /* Truncate from the FRONT so the tail (the project dir) stays visible: in an
-     rtl box the ellipsis falls on the left. The inner span keeps the path itself
-     in natural left-to-right order (plaintext base direction). */
-  direction: rtl;
-}
-.cell-dir-path {
-  unicode-bidi: plaintext;
-}
-/* Project badge from <cwd>/.mulmoterminal.json — a per-directory identity chip. */
-.cell-badge {
-  flex: 0 0 auto;
-  max-width: 14ch;
-  padding: 1px 7px;
-  border-radius: 10px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cell-dir:hover {
-  color: var(--text-muted);
-  text-decoration: underline;
-}
-.cell-gh-wrap {
-  position: relative;
-  flex: 0 0 auto;
-  display: inline-flex;
-}
-.cell-gh {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  border-radius: 4px;
-}
-.cell-gh:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-gh-icon {
-  display: block;
-  width: 14px;
-  height: 14px;
-}
-.cell-gh-menu {
-  position: absolute;
-  top: 100%;
-  left: 0;
-  z-index: 20;
-  margin-top: 4px;
-  min-width: 132px;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-}
-.cell-gh-item {
-  text-align: left;
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  border-radius: 4px;
-  cursor: pointer;
-}
-.cell-gh-item:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-prompt {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--cell-header-fg, var(--text-secondary));
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Per-cell token usage: ⇡ input · ⇣ output. Dim + monospace so it reads as metadata. */
-.cell-usage {
-  flex: 0 0 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  letter-spacing: 0.02em;
-}
-
-/* A user-defined display-only chip (from the `chips` config). */
-.cell-hdr-chip {
-  flex: 0 0 auto;
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  padding: 1px 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-}
-
 /* The info track absorbs all the width pressure: it grows into the free space and,
    crucially, is allowed to shrink below its content (min-width: 0) and clip. That keeps
    the non-shrinking chips from pushing .cell-actions out of the cell. */
@@ -1423,555 +1473,5 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
   display: flex;
   align-items: center;
   gap: 8px;
-}
-/* Empty cell: pick a directory, then launch. */
-.cell-launch {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  /* Top-aligned: the form anchors to the top of the cell rather than floating in
-     the vertical middle (which looks adrift when there are few/no resume rows). */
-  justify-content: flex-start;
-  gap: 8px;
-  padding: 16px;
-  overflow-y: auto;
-}
-/* Dismiss an added launcher (anchored to the cell, so it stays put while the form
-   scrolls). */
-.cell-launch-cancel {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 26px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 16px;
-  line-height: 1;
-  border-radius: 6px;
-}
-.cell-launch-cancel:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
-.cell-presets {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  max-width: 360px;
-}
-/* A chip is a segmented pill: the main button launches; the tiny end button just
-   fills the working-directory field (so the user can resume a session there). */
-.cell-chip {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--bg-elevated);
-}
-/* A dir already running a session in another cell: tint the chip + show a dot. */
-.cell-chip.is-running {
-  border-color: color-mix(in srgb, #3b82f6 55%, var(--border));
-  background: color-mix(in srgb, #3b82f6 14%, var(--bg-elevated));
-}
-.cell-chip-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  margin-right: 5px;
-  border-radius: 50%;
-  background: #3b82f6;
-  vertical-align: middle;
-}
-.cell-chip-main {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 10px;
-}
-.cell-chip.is-running .cell-chip-main {
-  color: var(--text);
-}
-.cell-chip-launch {
-  display: inline-flex;
-  align-items: center;
-  border: none;
-  border-left: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0 5px;
-}
-.cell-chip-launch .material-symbols-outlined {
-  font-size: 14px;
-}
-.cell-chip-del {
-  border: none;
-  border-left: 1px solid var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 11px;
-  padding: 0 7px;
-}
-.cell-chip-main:hover,
-.cell-chip-launch:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-chip-del:hover {
-  background: var(--bg-hover);
-  color: var(--danger, #e5484d);
-}
-.cell-launch-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.cell-launch-caption {
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.cell-agent {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-deep);
-  align-self: flex-start;
-}
-.cell-agent-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 500;
-  padding: 4px 14px;
-  border-radius: 5px;
-}
-.cell-agent-btn:hover {
-  color: var(--text);
-}
-.cell-agent-btn.active {
-  background: var(--bg-elevated);
-  color: var(--text);
-}
-.cell-dir-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-}
-.cell-dir-input:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.cell-dir-row {
-  display: flex;
-  align-items: stretch;
-  gap: 6px;
-  width: 100%;
-}
-.cell-dir-row .cell-dir-input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.cell-dir-go,
-.cell-dir-go:hover:not(:disabled),
-.cell-dir-go:disabled {
-  opacity: 0.4;
-  cursor: default;
-}
-.cell-dir-go .material-symbols-outlined,
-.cell-start {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 7px 16px;
-  border-radius: 6px;
-}
-.cell-start:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-
-.cell-worktrees {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.wt-new {
-  display: flex;
-  gap: 6px;
-}
-.wt-task {
-  flex: 1 1 auto;
-  min-width: 0; /* let the input shrink so the button keeps its width */
-  width: auto;
-}
-.wt-start {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-.wt-row {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-.wt-dirty {
-  margin-left: 6px;
-  color: var(--warn-text, #e0a030);
-}
-.wt-del {
-  flex: 0 0 auto;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  font-size: 13px;
-  padding: 4px 6px;
-  border-radius: 6px;
-}
-.wt-del:hover {
-  background: var(--err-hover-bg);
-}
-
-.cell-scripts {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-}
-.cell-script-list {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 6px;
-  width: 100%;
-}
-.cell-script-item {
-  border: 1px solid #2a4e3a;
-  background: #16271d;
-  color: #b6e3c7;
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 10px;
-  border-radius: 14px;
-}
-.cell-script-item:hover {
-  background: #1f3a2a;
-  border-color: #3fae6b;
-  color: #fff;
-}
-
-.cell-resume {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  max-width: 360px;
-  min-height: 0;
-}
-.cell-resume-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  width: 100%;
-}
-.cell-resume-item {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg-deep);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  text-align: left;
-  padding: 5px 10px;
-  border-radius: 6px;
-}
-.cell-resume-item:hover {
-  background: var(--bg-elevated);
-  border-color: var(--accent);
-}
-.ri-title {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-.ri-time {
-  flex: 0 0 auto;
-  color: var(--text-dim);
-  font-size: 11px;
-}
-.cell-resume-item.is-open {
-  border-color: var(--amber);
-}
-.ri-open {
-  flex: 0 0 auto;
-  color: var(--amber);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
-/* Worktree diff badge in the header (ahead / uncommitted), opens the diff panel. */
-.cell-wt-badge {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 1px 7px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--bg-elevated);
-  cursor: pointer;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-}
-.cell-wt-badge:hover {
-  background: var(--bg-hover);
-}
-.wt-ahead {
-  color: var(--accent);
-}
-.wt-dirty-count {
-  color: var(--warn-text, #e0a030);
-}
-
-/* Read-only diff panel: overlays the terminal area of the cell. */
-.cell-diff {
-  position: absolute;
-  inset: 34px 0 0 0; /* below the 34px header */
-  z-index: 15;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-base);
-  border-top: 1px solid var(--border);
-  overflow: hidden;
-}
-.cell-diff-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.cell-diff-title {
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text);
-}
-.cell-diff-sum {
-  flex: 1 1 auto;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.cell-diff-files {
-  flex: 0 0 auto;
-  max-height: 35%;
-  overflow-y: auto;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.cell-diff-file {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  padding: 1px 0;
-}
-.df-path {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  direction: rtl;
-  color: var(--text-secondary);
-}
-.df-nums {
-  flex: 0 0 auto;
-}
-.df-add {
-  color: #3fae6b;
-}
-.df-del {
-  color: var(--err-text, #e0556b);
-}
-.df-new {
-  flex: 0 0 auto;
-  color: #3fae6b;
-}
-.cell-diff-patch {
-  flex: 1 1 auto;
-  margin: 0;
-  overflow: auto;
-  padding: 8px;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-  white-space: pre;
-  tab-size: 2;
-}
-.cell-diff-note,
-.cell-diff-empty {
-  margin: 0;
-  padding: 8px;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.cell-diff-actions {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  border-top: 1px solid var(--border);
-  background: var(--bg-panel);
-}
-.cell-diff-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 4px 12px;
-  border-radius: 6px;
-}
-.cell-diff-btn:hover:not(:disabled) {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.cell-diff-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.cell-diff-msg {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  font-family: system-ui, sans-serif;
-  font-size: 11px;
-  color: var(--text-dim);
-}
-
-/* Close confirmation: keep or remove the worktree before tearing the cell down. */
-.cell-close-confirm {
-  position: absolute;
-  inset: 0;
-  z-index: 25;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: color-mix(in srgb, var(--bg-base) 82%, transparent);
-}
-.ccx-box {
-  max-width: 320px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-}
-.ccx-title {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text);
-}
-.ccx-sub {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.ccx-warn {
-  margin: 0;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  color: var(--warn-text, #e0a030);
-}
-.ccx-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.ccx-btn {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-family: system-ui, sans-serif;
-  font-size: 12px;
-  padding: 6px 12px;
-  border-radius: 6px;
-}
-.ccx-btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.ccx-keep {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.ccx-remove:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-  border-color: var(--err-text, #e0556b);
 }
 </style>

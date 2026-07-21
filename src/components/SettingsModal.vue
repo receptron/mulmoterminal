@@ -5,6 +5,8 @@ import { useTheme } from "../composables/useTheme";
 import { previewAttention } from "../composables/useAttentionSound";
 import { useCost } from "../composables/useCost";
 import { useGoogleLink } from "../composables/useGoogleLink";
+import SettingsButton from "./SettingsButton.vue";
+import SettingsField from "./SettingsField.vue";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
 
@@ -196,7 +198,7 @@ function onThemeKey(e: KeyboardEvent, index: number) {
   e.preventDefault();
   const next = (index + (forward ? 1 : themes.length - 1)) % themes.length;
   setTheme(themes[next].id);
-  themesEl.value?.querySelectorAll<HTMLElement>(".theme-card")[next]?.focus();
+  themesEl.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
 }
 
 // Read-only estimated cost (Session / Today / Month), loaded when the modal opens.
@@ -237,21 +239,34 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="overlay" @click.self="emit('close')">
-    <div ref="modalEl" class="modal" role="dialog" aria-modal="true" aria-label="Settings">
-      <div class="modal-head">
-        <h2 class="modal-title">Settings</h2>
-        <button class="icon-btn" title="Close" aria-label="Close settings" @click="emit('close')">✕</button>
+  <div class="fixed inset-0 z-[100] flex items-center justify-center bg-[rgba(0,0,0,0.55)]" @click.self="emit('close')">
+    <div
+      ref="modalEl"
+      class="flex max-h-[85vh] w-[min(560px,92vw)] flex-col overflow-y-auto rounded-[10px] border border-border bg-base p-4 font-sans text-fg"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Settings"
+    >
+      <div class="flex items-center justify-between">
+        <h2 class="m-0 text-[15px] font-semibold">Settings</h2>
+        <button
+          class="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[14px] text-muted hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+          title="Close"
+          aria-label="Close settings"
+          @click="emit('close')"
+        >
+          ✕
+        </button>
       </div>
 
-      <h3 class="section-title">Theme</h3>
-      <div ref="themesEl" class="themes" role="radiogroup" aria-label="Theme">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Theme</h3>
+      <div ref="themesEl" class="flex flex-wrap gap-2" role="radiogroup" aria-label="Theme">
         <button
           v-for="(t, i) in themes"
           :key="t.id"
           type="button"
-          class="theme-card"
-          :class="{ active: themeId === t.id }"
+          class="flex w-[84px] cursor-pointer flex-col items-center gap-1.5 rounded-lg border bg-elevated p-2 hover:bg-hover"
+          :class="themeId === t.id ? 'border-accent text-fg' : 'border-border text-muted hover:text-fg'"
           role="radio"
           :aria-checked="themeId === t.id"
           :tabindex="themeId === t.id ? 0 : -1"
@@ -259,464 +274,216 @@ onUnmounted(() => {
           @click="setTheme(t.id)"
           @keydown="onThemeKey($event, i)"
         >
-          <span class="swatch" :style="{ background: t.swatch.base }">
-            <span class="swatch-dot" :style="{ background: t.swatch.panel }" />
-            <span class="swatch-dot" :style="{ background: t.swatch.accent }" />
+          <span class="relative h-[34px] w-full overflow-hidden rounded-md border border-border" :style="{ background: t.swatch.base }">
+            <span class="absolute bottom-1.5 left-2 h-3 w-3 rounded-full" :style="{ background: t.swatch.panel }" />
+            <span class="absolute bottom-1.5 left-6 h-3 w-3 rounded-full" :style="{ background: t.swatch.accent }" />
           </span>
-          <span class="theme-label">{{ t.label }}</span>
+          <span class="text-[12px]">{{ t.label }}</span>
         </button>
       </div>
 
-      <h3 class="section-title">Directory appearance</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Directory appearance</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Launch the <code>mulmoterminal-config</code> skill to style a directory — name badge, colors, terminal palette, header buttons. It configures the
         focused session's directory, or lets you pick from your recent directories.
       </p>
-      <button class="btn" type="button" @click="emit('configure-appearance')">🎨 Configure appearance…</button>
+      <SettingsButton @click="emit('configure-appearance')">🎨 Configure appearance…</SettingsButton>
 
-      <h3 class="section-title">Notification sound</h3>
-      <p class="hint">Played when a session needs attention. Leave empty for the built-in chime, or point to your own audio file.</p>
-      <div class="sound-row">
-        <input
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Notification sound</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
+        Played when a session needs attention. Leave empty for the built-in chime, or point to your own audio file.
+      </p>
+      <div class="flex items-center gap-2">
+        <SettingsField
           v-model="soundPath"
-          class="field sound-field"
-          type="text"
+          class="flex-auto font-mono"
           placeholder="/absolute/path/to/sound.wav"
           aria-label="Custom notification sound file"
           spellcheck="false"
           @change="applySound"
         />
-        <button class="btn" type="button" @click="browseSound">Browse…</button>
+        <SettingsButton @click="browseSound">Browse…</SettingsButton>
       </div>
-      <div class="sound-actions">
-        <button class="btn" type="button" title="Play the current sound" @click="testSound">▶ Test</button>
-        <button class="btn" type="button" :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</button>
+      <div class="mt-2 flex gap-2">
+        <SettingsButton title="Play the current sound" @click="testSound">▶ Test</SettingsButton>
+        <SettingsButton :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</SettingsButton>
       </div>
 
-      <h3 class="section-title">Web Push notifications</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Web Push notifications</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Send a push to your registered devices when a background task finishes. Requires the <strong>RemoteHost</strong> connection — its sign-in provides the
         notification auth, so pushes only send while it's connected.
       </p>
-      <label class="push-row">
-        <input type="checkbox" :checked="props.pushEnabled ?? false" aria-label="Send a Web Push when a task finishes" @change="onPushToggle" />
+      <label class="flex cursor-pointer items-center gap-2">
+        <input
+          type="checkbox"
+          class="cursor-pointer"
+          :checked="props.pushEnabled ?? false"
+          aria-label="Send a Web Push when a task finishes"
+          @change="onPushToggle"
+        />
         <span>Notify my devices when a task finishes</span>
       </label>
 
-      <h3 class="section-title">Google account</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Google account</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Link a Google account so the <code>google</code> tool and your phone can read and create <strong>Calendar</strong> events. Sign-in opens in a new tab
         and finishes on <strong>this machine</strong>, so use a browser here — over a remote connection, run
         <code>npx mulmoterminal google login</code> instead. The link is shared with MulmoClaude.
       </p>
-      <p v-if="googleSecretHint" class="hint google-warn">{{ googleSecretHint }}</p>
-      <div class="google-row">
-        <span class="google-status" :class="{ linked: googleStatus?.linked }">{{ googleStatusText }}</span>
-        <button
+      <p v-if="googleSecretHint" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-err-text">{{ googleSecretHint }}</p>
+      <div class="mb-3 flex items-center gap-2.5">
+        <span class="text-[12px]" :class="googleStatus?.linked ? 'text-ok' : 'text-muted'">{{ googleStatusText }}</span>
+        <SettingsButton
           v-if="!googleStatus?.linked"
-          class="btn"
-          type="button"
           :disabled="googleBusy || googleStatus?.pending || (googleStatus?.clientSecret !== 'found' && !googleStatus?.brokerAvailable)"
           @click="connectGoogle"
         >
           Sign in with Google
-        </button>
-        <button v-else class="btn" type="button" :disabled="googleBusy" @click="onUnlinkGoogle">Unlink</button>
+        </SettingsButton>
+        <SettingsButton v-else :disabled="googleBusy" @click="onUnlinkGoogle">Unlink</SettingsButton>
       </div>
-      <p v-if="googleError" class="hint google-warn" role="alert">{{ googleError }}</p>
+      <p v-if="googleError" data-testid="google-warn" class="mb-3 mt-1.5 text-[12px] text-err-text" role="alert">{{ googleError }}</p>
 
-      <h3 class="section-title">Pull request repos</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Pull request repos</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Repos whose open PRs the cross-repo <strong>Pull requests</strong> view lists. Uses your <code>gh</code> login. Format: <code>owner/repo</code>.
       </p>
-      <ul v-if="repos.length" class="repo-list">
-        <li v-for="r in repos" :key="r" class="repo-item">
-          <span class="repo-name">{{ r }}</span>
-          <button class="icon-btn" type="button" :title="`Remove ${r}`" :aria-label="`Remove ${r}`" @click="removeRepo(r)">✕</button>
+      <ul v-if="repos.length" class="m-0 mb-2 flex list-none flex-col gap-1 p-0">
+        <li v-for="r in repos" :key="r" class="flex items-center gap-2 rounded-md border border-border bg-elevated py-1 pl-2.5 pr-1.5">
+          <span class="flex-auto font-mono text-[12px] text-secondary">{{ r }}</span>
+          <button
+            class="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[14px] text-muted hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+            type="button"
+            :title="`Remove ${r}`"
+            :aria-label="`Remove ${r}`"
+            @click="removeRepo(r)"
+          >
+            ✕
+          </button>
         </li>
       </ul>
-      <div class="sound-row">
-        <input
+      <div class="flex items-center gap-2">
+        <SettingsField
           v-model="newRepo"
-          class="field repo-field"
-          type="text"
+          class="flex-auto font-mono"
           placeholder="owner/repo"
           aria-label="Add a repository (owner/repo)"
           spellcheck="false"
           @keydown.enter="addRepo"
         />
-        <button class="btn" type="button" :disabled="!newRepoValid" @click="addRepo">Add</button>
+        <SettingsButton :disabled="!newRepoValid" @click="addRepo">Add</SettingsButton>
       </div>
 
-      <h3 class="section-title">Launch commands</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Launch commands</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Programs a grid cell can launch besides Claude — a plain shell, <code>codex</code>, any interactive command. They run in the cell's directory as a
         persistent terminal. Example: <code>Shell</code> → <code>$SHELL</code>, <code>Codex</code> → <code>codex</code>.
       </p>
-      <ul v-if="launcherList.length" class="repo-list">
-        <li v-for="l in launcherList" :key="l.label" class="repo-item">
-          <span class="repo-name">{{ l.label }}</span>
-          <code class="launcher-cmd">{{ l.command }}</code>
-          <button class="icon-btn" type="button" :title="`Remove ${l.label}`" :aria-label="`Remove ${l.label}`" @click="removeLauncher(l.label)">✕</button>
+      <ul v-if="launcherList.length" class="m-0 mb-2 flex list-none flex-col gap-1 p-0">
+        <li v-for="l in launcherList" :key="l.label" class="flex items-center gap-2 rounded-md border border-border bg-elevated py-1 pl-2.5 pr-1.5">
+          <span class="flex-auto font-mono text-[12px] text-secondary">{{ l.label }}</span>
+          <code class="min-w-0 flex-auto truncate font-mono text-[11px] text-dim">{{ l.command }}</code>
+          <button
+            class="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[14px] text-muted hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+            type="button"
+            :title="`Remove ${l.label}`"
+            :aria-label="`Remove ${l.label}`"
+            @click="removeLauncher(l.label)"
+          >
+            ✕
+          </button>
         </li>
       </ul>
-      <div class="sound-row launcher-add">
-        <input
+      <div class="flex items-center gap-2">
+        <SettingsField
           v-model="newLauncherLabel"
-          class="field launcher-label"
-          type="text"
+          class="min-w-0 shrink grow basis-[30%]"
           placeholder="Label"
           aria-label="Launcher label"
           spellcheck="false"
           @keydown.enter="addLauncher"
         />
-        <input
+        <SettingsField
           v-model="newLauncherCommand"
-          class="field repo-field"
-          type="text"
+          class="min-w-0 flex-auto font-mono"
           placeholder="command (e.g. $SHELL)"
           aria-label="Launcher command"
           spellcheck="false"
           @keydown.enter="addLauncher"
         />
-        <button class="btn" type="button" :disabled="!newLauncherValid" @click="addLauncher">Add</button>
+        <SettingsButton :disabled="!newLauncherValid" @click="addLauncher">Add</SettingsButton>
       </div>
 
-      <h3 class="section-title">MCP servers</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">MCP servers</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         HTTP MCP servers the <strong>single-view</strong> Claude session loads (in addition to the built-in GUI tools). <code>id</code> is the server name;
         <code>url</code> is its streamable-HTTP endpoint. In the Docker sandbox, a <code>localhost</code> URL is reached over <code>host.docker.internal</code>
         automatically. Takes effect on the next Claude session.
       </p>
-      <ul v-if="mcpServers.length" class="repo-list">
-        <li v-for="s in mcpServers" :key="s.id" class="repo-item">
-          <span class="repo-name">{{ s.id }}</span>
-          <code class="launcher-cmd">{{ s.url }}</code>
-          <button class="icon-btn" type="button" :title="`Remove ${s.id}`" :aria-label="`Remove ${s.id}`" @click="removeMcpServer(s.id)">✕</button>
+      <ul v-if="mcpServers.length" class="m-0 mb-2 flex list-none flex-col gap-1 p-0">
+        <li v-for="s in mcpServers" :key="s.id" class="flex items-center gap-2 rounded-md border border-border bg-elevated py-1 pl-2.5 pr-1.5">
+          <span class="flex-auto font-mono text-[12px] text-secondary">{{ s.id }}</span>
+          <code class="min-w-0 flex-auto truncate font-mono text-[11px] text-dim">{{ s.url }}</code>
+          <button
+            class="cursor-pointer rounded-md border-0 bg-transparent px-1.5 py-1 text-[14px] text-muted hover:bg-[var(--err-hover-bg)] hover:text-err-text"
+            type="button"
+            :title="`Remove ${s.id}`"
+            :aria-label="`Remove ${s.id}`"
+            @click="removeMcpServer(s.id)"
+          >
+            ✕
+          </button>
         </li>
       </ul>
-      <div class="sound-row launcher-add">
-        <input
+      <div class="flex items-center gap-2">
+        <SettingsField
           v-model="newMcpId"
-          class="field launcher-label"
-          type="text"
+          class="min-w-0 shrink grow basis-[30%]"
           placeholder="id (e.g. weather)"
           aria-label="MCP server id"
           spellcheck="false"
           @keydown.enter="addMcpServer"
         />
-        <input
+        <SettingsField
           v-model="newMcpUrl"
-          class="field repo-field"
-          type="text"
+          class="min-w-0 flex-auto font-mono"
           placeholder="https://… or http://localhost:PORT/mcp"
           aria-label="MCP server URL"
           spellcheck="false"
           @keydown.enter="addMcpServer"
         />
-        <button class="btn" type="button" :disabled="!newMcpValid" @click="addMcpServer">Add</button>
+        <SettingsButton :disabled="!newMcpValid" @click="addMcpServer">Add</SettingsButton>
       </div>
 
-      <h3 class="section-title">Cost (estimated)</h3>
-      <p class="hint">
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Cost (estimated)</h3>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Estimated spend for this project from <strong>public per-model pricing</strong> (input, output, and cache tokens) — actual billing may differ, and
         flat-plan (Max) usage isn't reflected. Today / Month roll up this project's sessions.
       </p>
-      <div class="cost-grid" role="group" aria-label="Estimated cost" title="Estimated from public per-model pricing; actual billing may differ.">
-        <div class="cost-cell">
-          <span class="cost-label">Session</span>
-          <span class="cost-value">{{ formatUsd(cost?.session) }}</span>
+      <div class="flex gap-2" role="group" aria-label="Estimated cost" title="Estimated from public per-model pricing; actual billing may differ.">
+        <div class="flex flex-1 flex-col gap-1 rounded-lg border border-border bg-elevated p-2.5">
+          <span class="text-[11px] uppercase tracking-[0.04em] text-muted">Session</span>
+          <span class="font-mono text-[16px] font-semibold text-fg">{{ formatUsd(cost?.session) }}</span>
         </div>
-        <div class="cost-cell">
-          <span class="cost-label">Today</span>
-          <span class="cost-value">{{ formatUsd(cost?.today) }}</span>
+        <div class="flex flex-1 flex-col gap-1 rounded-lg border border-border bg-elevated p-2.5">
+          <span class="text-[11px] uppercase tracking-[0.04em] text-muted">Today</span>
+          <span class="font-mono text-[16px] font-semibold text-fg">{{ formatUsd(cost?.today) }}</span>
         </div>
-        <div class="cost-cell">
-          <span class="cost-label">Month</span>
-          <span class="cost-value">{{ formatUsd(cost?.month) }}</span>
+        <div class="flex flex-1 flex-col gap-1 rounded-lg border border-border bg-elevated p-2.5">
+          <span class="text-[11px] uppercase tracking-[0.04em] text-muted">Month</span>
+          <span class="font-mono text-[16px] font-semibold text-fg">{{ formatUsd(cost?.month) }}</span>
         </div>
       </div>
-      <p v-if="costError" class="hint cost-note">Couldn't load cost estimate.</p>
-      <p v-else-if="cost && (cost.unpricedTurns > 0 || cost.sessionUnpricedTurns > 0)" class="hint cost-note">
+      <p v-if="costError" class="mt-2 text-[12px] text-dim">Couldn't load cost estimate.</p>
+      <p v-else-if="cost && (cost.unpricedTurns > 0 || cost.sessionUnpricedTurns > 0)" class="mt-2 text-[12px] text-dim">
         Some turns used a model with no known price and are excluded from these estimates.
       </p>
 
-      <div class="modal-foot">
-        <span class="spacer" />
-        <button class="btn btn-primary" @click="emit('close')">Close</button>
+      <div class="mt-4 flex items-center gap-2">
+        <span class="flex-1" />
+        <SettingsButton primary @click="emit('close')">Close</SettingsButton>
       </div>
     </div>
   </div>
 </template>
-
-<style scoped>
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-.modal {
-  width: min(560px, 92vw);
-  max-height: 85vh;
-  /* Sections (theme, sound, PR repos, launch commands) can exceed the viewport —
-     scroll inside the modal so the top stays reachable instead of overflowing. */
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-base);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px;
-  color: var(--text);
-  font-family: system-ui, sans-serif;
-}
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.modal-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-}
-.section-title {
-  margin: 14px 0 8px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.themes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.theme-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  width: 84px;
-  padding: 8px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.theme-card:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.theme-card.active {
-  border-color: var(--accent);
-  color: var(--text);
-}
-.swatch {
-  position: relative;
-  width: 100%;
-  height: 34px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.swatch-dot {
-  position: absolute;
-  bottom: 6px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-}
-.swatch-dot:nth-child(1) {
-  left: 8px;
-}
-.swatch-dot:nth-child(2) {
-  left: 24px;
-}
-.theme-label {
-  font-size: 12px;
-}
-.hint {
-  margin: 6px 0 12px;
-  font-size: 12px;
-  color: var(--text-dim);
-}
-.field {
-  box-sizing: border-box;
-  padding: 7px 10px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--text);
-  font-size: 12px;
-}
-.field:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-.sound-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.google-row {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.google-status {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.google-status.linked {
-  color: var(--ok);
-}
-.google-warn {
-  color: var(--danger);
-}
-.sound-field {
-  flex: 1 1 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-}
-.repo-field {
-  flex: 1 1 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-}
-.launcher-label {
-  flex: 1 1 30%;
-  min-width: 0;
-}
-.launcher-add .repo-field {
-  min-width: 0; /* let the command field shrink instead of overflowing the row */
-}
-.launcher-cmd {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 11px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.repo-list {
-  list-style: none;
-  margin: 0 0 8px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.repo-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px 4px 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.repo-name {
-  flex: 1 1 auto;
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-.sound-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-.push-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-.push-row input {
-  cursor: pointer;
-}
-.cost-grid {
-  display: flex;
-  gap: 8px;
-}
-.cost-cell {
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-.cost-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-muted);
-}
-.cost-value {
-  font-family: ui-monospace, "JetBrains Mono", monospace;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-}
-.cost-note {
-  margin: 8px 0 0;
-}
-.modal-foot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 16px;
-}
-.btn:disabled {
-  opacity: 0.6;
-  cursor: default;
-}
-.spacer {
-  flex: 1;
-}
-.icon-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-size: 14px;
-  padding: 4px 6px;
-  border-radius: 6px;
-}
-.icon-btn:hover {
-  background: var(--err-hover-bg);
-  color: var(--err-text);
-}
-.btn {
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 6px 14px;
-  border-radius: 6px;
-}
-.btn:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.btn-primary {
-  background: var(--accent-bg);
-  border-color: var(--accent);
-  color: var(--on-accent);
-}
-.btn-primary:hover {
-  background: var(--accent-bg-hover);
-}
-</style>

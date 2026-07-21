@@ -115,15 +115,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div ref="hostEl" class="plugin-frame-host" :style="height ? { height } : undefined">
+  <div ref="hostEl" class="block" :style="height ? { height } : undefined">
     <Teleport v-if="target" :to="target">
       <slot />
     </Teleport>
   </div>
 </template>
-
-<style scoped>
-.plugin-frame-host {
-  display: block;
-}
-</style>
