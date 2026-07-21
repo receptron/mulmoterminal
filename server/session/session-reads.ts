@@ -5,7 +5,9 @@
 //
 // The readers touch the registry (a live in-memory title beats the on-disk one, and a
 // row carries its session's activity flags), which is fine now that the registry is its
-// own module: the dependency runs one way.
+// own module: the dependency runs one way. One of them also WRITES — collectPendingSessions
+// drops a session from knownSessions once disk has it — so "reads" describes the direction
+// of the data, not a guarantee of purity.
 import { existsSync, readdirSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
