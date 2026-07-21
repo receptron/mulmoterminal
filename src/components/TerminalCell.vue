@@ -743,7 +743,7 @@ const headerStatusClass = computed(() =>
     ? "bg-[var(--warn-bg-subtle)] border-b-amber text-warn"
     : status.value === "working" || status.value === "done"
       ? `bg-selected border-b-accent ${HEADER_FG}`
-      : HEADER_FG,
+      : `bg-[var(--cell-header-bg,var(--bg-panel))] border-b-border ${HEADER_FG}`,
 );
 const dotStatusClass = computed(() => (status.value === "done" ? "bg-accent" : status.value === "blocked" ? "bg-amber" : ""));
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
@@ -902,11 +902,20 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
 </script>
 
 <template>
-  <div class="cell relative" :class="[statusClass, cellStatusClass]" :style="cellStyle">
+  <div
+    class="cell relative flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border bg-[var(--cell-bg,var(--bg-base))]"
+    :class="[statusClass, cellStatusClass]"
+    :style="cellStyle"
+  >
     <template v-if="launched">
       <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
            BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
-      <div class="cell-header" :class="[statusClass, headerStatusClass, { 'is-zoomable': !expanded }]" :style="headerStyle" @click="onHeaderClick">
+      <div
+        class="cell-header flex h-[34px] flex-none items-center gap-2 border-b px-2"
+        :class="[statusClass, headerStatusClass, { 'is-zoomable': !expanded }]"
+        :style="headerStyle"
+        @click="onHeaderClick"
+      >
         <!-- All the info lives in one shrinkable, clipping track. The chips (badge / git /
              model / tokens / custom) don't shrink, so without this they would overflow and
              push the actions past the cell's `overflow: hidden` edge — the buttons must
