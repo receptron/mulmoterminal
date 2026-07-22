@@ -14,26 +14,25 @@ describe("badgeStyleFor", () => {
     expect(badgeStyleFor("#000000")).toEqual({ background: "#000000", color: "#fff" });
   });
 
-  // Perceived brightness, not raw magnitude: the same channel value reads very differently
-  // depending on which channel it is in.
+  // Green carries far more perceived light than blue, so the same channel value reads very
+  // differently depending on which channel it is in.
   it("weighs the channels by how bright they look, not by their value", () => {
-    expect(badgeStyleFor("#80ff80").color).toBe("#000"); // 202.6
-    expect(badgeStyleFor("#8080ff").color).toBe("#fff"); // 142.5
+    // The same channel value: green carries most of the perceived light, blue almost none.
+    expect(badgeStyleFor("#00ff00").color).toBe("#000");
+    expect(badgeStyleFor("#0000ff").color).toBe("#fff");
   });
 
-  // Recorded because it is surprising rather than because it is right: pure green scores
-  // 0.587 x 255 = 149.685, a fraction under the 150 threshold, so a vivid green badge gets
-  // WHITE text. Worth a look if a green badge ever reads as hard to see — the fix would be
-  // the threshold, which changes existing badges, so it is not made here.
-  it("gives pure green light text, just under the threshold", () => {
-    expect(badgeStyleFor("#00ff00").color).toBe("#fff");
+  // Was the other way round until #308: the old brightness approximation scored pure green a
+  // fraction under its threshold and chose white, at a contrast ratio of 1.37:1.
+  it("gives a mid green dark text", () => {
+    expect(badgeStyleFor("#22c55e").color).toBe("#000");
   });
 
-  it("keeps a mid grey on the light side of the threshold", () => {
-    // 0.299·155 + 0.587·155 + 0.114·155 = 155 > 150
+  // A mid grey is darker than it looks once gamma is accounted for, but black still wins on
+  // both of these — the old rule flipped one of them to white.
+  it("gives mid greys dark text", () => {
     expect(badgeStyleFor("#9b9b9b").color).toBe("#000");
-    // …and 140 < 150.
-    expect(badgeStyleFor("#8c8c8c").color).toBe("#fff");
+    expect(badgeStyleFor("#8c8c8c").color).toBe("#000");
   });
 
   it("accepts upper-case hex", () => {
