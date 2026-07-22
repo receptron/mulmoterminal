@@ -7,6 +7,7 @@ import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import { unsavedWork } from "./unsavedWork";
+import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
@@ -118,12 +119,12 @@ const filmstrip = computed(() => !!props.zoomed && !props.expanded);
 // recent preset, then the server default. Both `presets` and `defaultCwd` arrive
 // async from /api/config, so the watcher upgrades a still-pristine field once they
 // load (cold-load / open-before-config) — it never clobbers the user's own edit.
-const dirInput = ref(props.initialCwd ?? props.presets[0]?.path ?? props.defaultCwd ?? "");
+const dirInput = ref(preferredLaunchDir(props));
 const dirTouched = ref(false); // true once the user types in / picks a dir
 watch([() => props.presets, () => props.defaultCwd], () => {
   if (cwd.value === null && props.defaultCwd) cwd.value = props.defaultCwd;
-  if (props.initialCwd || dirTouched.value || launched.value) return;
-  const preferred = props.presets[0]?.path ?? props.defaultCwd;
+  if (!shouldSyncLaunchDir({ hasInitialCwd: !!props.initialCwd, touched: dirTouched.value, launched: launched.value })) return;
+  const preferred = preferredLaunchDir({ presets: props.presets, defaultCwd: props.defaultCwd });
   if (preferred && dirInput.value !== preferred) dirInput.value = preferred;
 });
 
