@@ -31,8 +31,11 @@ import {
 } from "./transcript.js";
 import { createFileCache, type FileStamp } from "./file-cache.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
-import { activity, aiTitles, hiddenSessions, knownSessions } from "./registry.js";
+import { activity, aiTitles, codexRolloutIds, hiddenSessions, knownSessions } from "./registry.js";
 import { projectSessionsDir } from "./project-dir.js";
+import { lastTurnFromClaudeParsed, lastTurnFromCodexRollout, EMPTY_TURN, type LastTurn } from "./last-turn.js";
+import { codexSessionsRoot } from "../agents/codex-session.js";
+import { codexRolloutPath } from "../agents/codex-sessions.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 
 // Bytes of an assistant reply kept for the roster; the same cap the push body uses.
@@ -148,6 +151,30 @@ export async function sessionTimeline(cwd: string, id: string): Promise<{ events
     return { events: all.slice(-TIMELINE_MAX_EVENTS), truncated: all.length > TIMELINE_MAX_EVENTS };
   } catch {
     return { events: [], truncated: false };
+  }
+}
+
+// A session's last COMPLETED exchange, read from whichever log its agent keeps: Claude's
+// per-project transcript, or codex's rollout. A codex session is addressed here by the
+// mulmoterminal key the browser knows; the rollout it maps to is the one we recorded at
+// spawn, or the key itself when it came from the sidebar (which lists rollout ids).
+async function codexLastTurn(sessionKey: string): Promise<LastTurn> {
+  const rolloutId = codexRolloutIds.get(sessionKey) ?? sessionKey;
+  const file = codexRolloutPath(codexSessionsRoot(), rolloutId);
+  if (!file) return EMPTY_TURN;
+  try {
+    return lastTurnFromCodexRollout(await fs.readFile(file, "utf8"));
+  } catch {
+    return EMPTY_TURN;
+  }
+}
+
+export async function sessionLastTurn(cwd: string, id: string, agent: "claude" | "codex"): Promise<LastTurn> {
+  if (agent === "codex") return codexLastTurn(id);
+  try {
+    return lastTurnFromClaudeParsed(parseJsonl(await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8")));
+  } catch {
+    return EMPTY_TURN; // no transcript on disk yet
   }
 }
 

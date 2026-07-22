@@ -24,6 +24,19 @@ import {
 
 const line = (o: unknown) => JSON.stringify(o);
 
+describe("userPromptText", () => {
+  it("rejects the harness-injected blocks that are not typed prompts", () => {
+    expect(userPromptText("<task-notification>\n<task-id>abc</task-id>\n</task-notification>")).toBeNull();
+    expect(userPromptText("<local-command-stdout>ok</local-command-stdout>")).toBeNull();
+    expect(userPromptText("<command-message>run</command-message>")).toBeNull();
+    expect(userPromptText("<bash-input>ls</bash-input>")).toBeNull();
+  });
+
+  it("keeps a prompt that merely mentions one of those tags mid-text", () => {
+    expect(userPromptText("what is a <task-notification> block?")).toBe("what is a <task-notification> block?");
+  });
+});
+
 describe("latestAssistantTextFromJsonl", () => {
   it("returns the most recent assistant prose turn", () => {
     const raw = [

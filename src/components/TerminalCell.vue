@@ -16,6 +16,10 @@ import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
+import { handoffTargets, handoffLastTurn, type HandoffTarget } from "../composables/useHandoff";
+
+// How long a handoff failure stays on the cell before it clears itself.
+const ASK_MSG_MS = 4000;
 
 const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 
@@ -604,6 +608,46 @@ watch(ghMenuOpen, (open) => {
 });
 onUnmounted(() => document.removeEventListener("mousedown", onGhOutside));
 
+// "Ask another cell": paste this session's last completed exchange into a sibling
+// terminal's input box, so the two agents can be pointed at each other's work without
+// the user copying text between panes. The destination list is a snapshot taken when
+// the menu opens, so it reflects what is connected right now.
+const askMenuOpen = ref(false);
+const askWrap = useTemplateRef<HTMLElement>("askWrap");
+const askTargets = ref<HandoffTarget[]>([]);
+const askMsg = ref<string | null>(null);
+let askMsgTimer: ReturnType<typeof setTimeout> | null = null;
+
+function openAskMenu() {
+  askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
+  askMenuOpen.value = !askMenuOpen.value;
+}
+
+function showAskMsg(msg: string) {
+  askMsg.value = msg;
+  if (askMsgTimer) clearTimeout(askMsgTimer);
+  askMsgTimer = setTimeout(() => (askMsg.value = null), ASK_MSG_MS);
+}
+
+async function askCell(destKey: string) {
+  askMenuOpen.value = false;
+  if (!sessionId.value) return;
+  const error = await handoffLastTurn({ sessionId: sessionId.value, cwd: cwd.value, agent: agent.value }, destKey);
+  if (error) showAskMsg(error);
+}
+
+function onAskOutside(e: MouseEvent) {
+  if (askWrap.value && !askWrap.value.contains(e.target as Node)) askMenuOpen.value = false;
+}
+watch(askMenuOpen, (open) => {
+  if (open) document.addEventListener("mousedown", onAskOutside);
+  else document.removeEventListener("mousedown", onAskOutside);
+});
+onUnmounted(() => {
+  document.removeEventListener("mousedown", onAskOutside);
+  if (askMsgTimer) clearTimeout(askMsgTimer);
+});
+
 // Reap the session and reset the cell back to the empty launcher. The cell isn't
 // remounted (stable key), so the dir/diff state is reset explicitly — otherwise the
 // launch form would still show the closed session's directory.
@@ -1078,6 +1122,46 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 Pull requests
               </button>
             </div>
+          </span>
+          <span v-if="sessionId" ref="askWrap" class="relative inline-flex flex-none">
+            <button
+              type="button"
+              data-testid="cell-ask"
+              class="cell-btn"
+              title="Paste this cell's last turn into another terminal"
+              aria-label="Ask another cell about this turn"
+              aria-haspopup="true"
+              :aria-expanded="askMenuOpen"
+              @click="openAskMenu"
+            >
+              💬
+            </button>
+            <div
+              v-if="askMenuOpen"
+              data-testid="cell-ask-menu"
+              class="absolute right-0 top-full z-20 mt-1 flex min-w-[180px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+              @keydown.escape="askMenuOpen = false"
+            >
+              <button
+                v-for="target in askTargets"
+                :key="target.key"
+                type="button"
+                data-testid="cell-ask-item"
+                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                @click="askCell(target.key)"
+              >
+                {{ target.label }}
+              </button>
+              <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal is connected</p>
+            </div>
+            <p
+              v-if="askMsg"
+              data-testid="cell-ask-msg"
+              role="status"
+              class="absolute right-0 top-full z-20 m-0 mt-1 whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1.5 font-sans text-[12px] text-dim shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+            >
+              {{ askMsg }}
+            </p>
           </span>
           <button
             v-if="sessionId && agent !== 'codex'"

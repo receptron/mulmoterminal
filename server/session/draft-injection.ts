@@ -4,6 +4,7 @@
 // the input box is ready, and neither decision needs any of index.ts's session state.
 import { claudeAdapter } from "../agents/claude.js";
 import type { PtyEntry } from "./types.js";
+import { sanitizeDraftText } from "./pty-text.js";
 
 // Claude must have its input box + bracketed-paste mode up before it will capture a
 // typed `draft`; too early and the bytes are echoed into the scrollback instead. We
@@ -17,16 +18,6 @@ const DRAFT_FALLBACK_MS = 6000;
 // auto-run prompt typed-but-unsent. Send the submitting Enter as a SEPARATE chunk a
 // beat after the paste so it actually registers.
 const DRAFT_SUBMIT_MS = 150;
-
-// Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —
-// ESC, Ctrl-C, CR/LF, and an embedded bracketed-paste terminator) so untrusted draft
-// content can't inject terminal control sequences that break out of the paste and
-// submit/interrupt. Only printable text survives, with whitespace collapsed.
-// eslint-disable-next-line no-control-regex -- intentional: match terminal control bytes (C0/C1) to strip them
-const DRAFT_CONTROL_BYTES_RE = /[\u0000-\u001F\u007F-\u009F]+/g;
-export function sanitizeDraftText(text: string): string {
-  return text.replace(DRAFT_CONTROL_BYTES_RE, " ").replace(/\s+/g, " ").trim();
-}
 
 // Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
 // claude's input box once it's ready — NOT as a `claude` CLI arg, which a large prompt

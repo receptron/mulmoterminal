@@ -6,10 +6,13 @@ export const isRecord = (v: unknown): v is Record<string, unknown> => typeof v =
 
 // A real user prompt from a JSONL "user" line's content, or null if it's a
 // slash-/local-command wrapper rather than a typed prompt. Content may be a plain
-// string or an array of blocks (guard against null elements).
+// string or an array of blocks (guard against null elements). `task-notification` is
+// in the list for the same reason as the rest: the harness writes it into the user
+// channel when a background task finishes, and it is no more a typed prompt than a
+// slash command is.
 export function userPromptText(content: unknown): string | null {
   const text = Array.isArray(content) ? content.map((x) => (isRecord(x) ? String(x.text ?? "") : String(x ?? ""))).join(" ") : content;
-  if (typeof text === "string" && text.trim() && !/^\s*<(local-command|command-|bash-)/.test(text)) {
+  if (typeof text === "string" && text.trim() && !/^\s*<(local-command|command-|bash-|task-notification)/.test(text)) {
     return text.trim();
   }
   return null;
