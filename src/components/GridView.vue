@@ -33,6 +33,8 @@ import {
   type GridState,
   type CellStatus,
   type Cell,
+  resolveCellStatus,
+  MAX_TERMINALS,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { isPrPhase, isWorkPhase, type PrPhase, type WorkPhase } from "./rosterPhase";
@@ -86,14 +88,7 @@ const sessionStatus = computed(() => {
   for (const [id, a] of gridActivity) m.set(id, activityStatus(a.working, a.waiting, a.event));
   return m;
 });
-const statusForSort = computed<Record<number, CellStatus>>(() => {
-  const out: Record<number, CellStatus> = {};
-  for (const c of state.value.cells) {
-    const fromSession = c.session ? sessionStatus.value.get(c.session) : undefined;
-    out[c.uid] = fromSession ?? statusByUid[c.uid] ?? "idle";
-  }
-  return out;
-});
+const statusForSort = computed<Record<number, CellStatus>>(() => resolveCellStatus(state.value.cells, sessionStatus.value, statusByUid));
 // At-a-glance tally across ALL pages, for the toolbar summary.
 const statusCounts = computed(() => countByStatus(state.value.cells, statusForSort.value));
 const reorderable = computed(() => state.value.sortMode === "manual");
@@ -224,7 +219,7 @@ const openCwds = computed(() =>
 );
 
 function onAddTerminal() {
-  if (runningCount(state.value.cells) >= 81 && !launchOpen.value) return; // surfaced by the disabled button
+  if (runningCount(state.value.cells) >= MAX_TERMINALS && !launchOpen.value) return; // surfaced by the disabled button
   state.value = addCell(state.value);
 }
 const onSession = (uid: number, id: string) => (state.value = setSession(state.value, uid, id));

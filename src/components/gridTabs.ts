@@ -322,3 +322,26 @@ export function initialState(curRaw: string | null, legacyRaw: string | null): {
   if (migrated) return { state: migrated, migrated: true };
   return { state: ensureEntry({ cells: [], expanded: null, page: 0, nextUid: 0, sortMode: "manual" }), migrated: false };
 }
+
+// Which status a cell sorts and tallies by.
+//
+// The precedence is the rule: the server's activity for the cell's SESSION wins, because it
+// is the only source that knows a turn is blocked. A cell's own reported status is the
+// fallback — command cells have no session id, and a just-launched cell has none yet — and
+// idle is the floor.
+//
+// This feeds orderCells and countByStatus, so getting it backwards is not cosmetic: in auto
+// mode a blocked cell on page 3 stops floating to page 1, which is the entire point of that
+// mode, and the toolbar's "needs you" tally goes with it.
+export function resolveCellStatus(
+  cells: readonly { uid: number; session: string | null }[],
+  bySession: ReadonlyMap<string, CellStatus>,
+  byUid: Readonly<Record<number, CellStatus>>,
+): Record<number, CellStatus> {
+  const out: Record<number, CellStatus> = {};
+  for (const cell of cells) {
+    const fromSession = cell.session ? bySession.get(cell.session) : undefined;
+    out[cell.uid] = fromSession ?? byUid[cell.uid] ?? "idle";
+  }
+  return out;
+}

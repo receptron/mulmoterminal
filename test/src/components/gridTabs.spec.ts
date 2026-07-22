@@ -3,6 +3,7 @@ import type { RunCommand } from "../../../src/components/runCommand.js";
 import {
   pageCount,
   pageSlice,
+  resolveCellStatus,
   runningCount,
   addCell,
   setSession,
@@ -454,5 +455,44 @@ describe("parseGridState / migrateLegacy / initialState", () => {
     const fresh = initialState(null, null);
     expect(fresh.state.cells).toHaveLength(1);
     expect(fresh.state.cells[0].session).toBeNull();
+  });
+});
+
+describe("resolveCellStatus", () => {
+  const cell = (uid: number, session: string | null) => ({ uid, session });
+
+  // The server's activity for the cell's session wins: it is the only source that knows a
+  // turn is blocked, which is what auto mode sorts on.
+  it("prefers the session's live status over the cell's own", () => {
+    const out = resolveCellStatus([cell(1, "s1")], new Map<string, CellStatus>([["s1", "blocked"]]), { 1: "working" });
+    expect(out[1]).toBe("blocked");
+  });
+
+  // Command cells have no session id, and a just-launched cell has none yet — without the
+  // fallback they would read idle and sort past cells that need nothing.
+  it("falls back to the cell's own status when it has no session", () => {
+    expect(resolveCellStatus([cell(2, null)], new Map<string, CellStatus>(), { 2: "working" })[2]).toBe("working");
+  });
+
+  it("falls back when the session has no activity yet", () => {
+    expect(resolveCellStatus([cell(3, "unknown")], new Map<string, CellStatus>(), { 3: "working" })[3]).toBe("working");
+  });
+
+  it("lands on idle when nothing knows anything", () => {
+    expect(resolveCellStatus([cell(4, null)], new Map<string, CellStatus>(), {})[4]).toBe("idle");
+  });
+
+  it("answers for every cell, not just the ones with activity", () => {
+    const out = resolveCellStatus([cell(1, "s1"), cell(2, null), cell(3, "s3")], new Map<string, CellStatus>([["s1", "blocked"]]), {});
+    expect(Object.keys(out).sort()).toEqual(["1", "2", "3"]);
+  });
+
+  it("keys by uid, so two cells on the same session can still differ elsewhere", () => {
+    const out = resolveCellStatus([cell(1, "s1"), cell(2, "s1")], new Map<string, CellStatus>([["s1", "working"]]), {});
+    expect([out[1], out[2]]).toEqual(["working", "working"]);
+  });
+
+  it("returns an empty map for no cells", () => {
+    expect(resolveCellStatus([], new Map<string, CellStatus>(), {})).toEqual({});
   });
 });
