@@ -7,7 +7,8 @@ import type { IPty } from "node-pty";
 import path from "node:path";
 import type { WebSocket } from "ws";
 import { sanitizePtyEnv } from "../infra/pty-env.js";
-import { tmuxAvailable, tmuxNewSessionArgs } from "../infra/tmux.js";
+import { withoutUnset } from "./provider-env.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxScrubEnvNames } from "../infra/tmux.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -27,8 +28,12 @@ const PTY_ROWS = 30;
 // so the tmux/shell/claude spawns aren't flagged as spawn-of-a-string-literal.
 // The env is sanitized: package-manager launcher vars (yarn's PREFIX kills nvm
 // in spawned shells — see infra/pty-env.ts) must not leak into PTYs.
-export function spawnPty(bin: string, args: string[], cwd: string): IPty {
-  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
+// `unset` drops variables the session must NOT inherit — ANTHROPIC_API_KEY for a provider
+// session, which would silently outrank its auth token (#579). It cannot be expressed in
+// the settings `env` block, which can set a variable but not remove one.
+export function spawnPty(bin: string, args: string[], cwd: string, unset: readonly string[] = []): IPty {
+  const env = withoutUnset(sanitizePtyEnv(process.env, path.delimiter), unset);
+  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env });
 }
 
 // Would this session run in the Docker sandbox? Single-view interactive only (the caller
@@ -41,11 +46,21 @@ export function sandboxWouldRun(attachGuiMcp: boolean): boolean {
 // Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
 // `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
 // (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
-export function ptySpawn(sessionId: string, file: string, args: string[], cwd: string, persistent: boolean): { term: IPty; tmux: boolean } {
+export function ptySpawn(
+  sessionId: string,
+  file: string,
+  args: string[],
+  cwd: string,
+  persistent: boolean,
+  unset: readonly string[] = [],
+): { term: IPty; tmux: boolean } {
   if (persistent && tmuxAvailable()) {
-    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd), tmux: true };
+    // A pane inherits the tmux SERVER's environment, so stripping our own copy is not
+    // enough — the server may already carry the name from an earlier session.
+    if (unset.length > 0) tmuxScrubEnvNames(unset);
+    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd, unset), tmux: true };
   }
-  return { term: spawnPty(file, args, cwd), tmux: false };
+  return { term: spawnPty(file, args, cwd, unset), tmux: false };
 }
 
 // Spawn the single-view session inside a Docker container (the sandbox path). Exports the

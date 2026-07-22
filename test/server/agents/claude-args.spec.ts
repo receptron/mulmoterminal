@@ -12,6 +12,8 @@ const base: ClaudeArgsInput = {
   guiMcpTools: "mcp__gui__a,mcp__gui__b",
 };
 
+const cfg = (over: Partial<ClaudeArgsInput> = {}): ClaudeArgsInput => ({ ...base, ...over });
+
 describe("buildClaudeArgs", () => {
   it("single view (attachGuiMcp): attaches GUI MCP + --strict-mcp-config + --allowedTools", () => {
     const args = buildClaudeArgs(base);
@@ -59,5 +61,26 @@ describe("buildClaudeArgs", () => {
   it("never emits a `--` positional (auto-run text is typed in, not passed as an arg)", () => {
     expect(buildClaudeArgs(base)).not.toContain("--");
     expect(buildClaudeArgs({ ...base, canResume: true, resume: "44444444-4444-4444-4444-444444444444" })).not.toContain("--");
+  });
+});
+
+// #579: a directory can pin its sessions to a model — an alias or a third-party backend's
+// own name. `--model` is the one lever that outranks both the settings `model` key and
+// ANTHROPIC_MODEL, so the choice has to land here.
+describe("model selection", () => {
+  it("passes the chosen model through", () => {
+    expect(buildClaudeArgs(cfg({ model: "z-ai/glm-5.2" }))).toContain("--model");
+    expect(buildClaudeArgs(cfg({ model: "z-ai/glm-5.2" }))).toContain("z-ai/glm-5.2");
+  });
+
+  it("omits the flag entirely when no model is chosen", () => {
+    expect(buildClaudeArgs(base)).not.toContain("--model");
+    expect(buildClaudeArgs(cfg({ model: null }))).not.toContain("--model");
+  });
+
+  it("still passes it on a resumed session", () => {
+    const args = buildClaudeArgs(cfg({ model: "opus", resume: "abc", canResume: true }));
+    expect(args).toContain("--resume");
+    expect(args).toContain("--model");
   });
 });

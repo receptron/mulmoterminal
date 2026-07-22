@@ -134,6 +134,25 @@ export const dirColorsField = z
   .nullable()
   .catch(null);
 
+// An Anthropic-compatible backend a directory can point its sessions at (#579). The key
+// itself is never stored here — `tokenEnv` names the env var the SERVER reads it from,
+// because this config is served over HTTP to the browser and the phone.
+export const providerSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  // No trailing /v1: Claude Code appends /v1/messages itself.
+  baseUrl: z.string().min(1),
+  tokenEnv: z.string().min(1),
+  maxOutputTokens: z.number().int().positive().optional(),
+});
+export type Provider = z.infer<typeof providerSchema>;
+
+// Which provider/model a directory's sessions run on. Both lenient: a typo must not stop
+// the directory's other settings from loading — resolveProvider reports the real problem
+// at spawn time, where the user sees it.
+export const dirProviderField = z.string().trim().min(1).nullable().catch(null);
+export const dirModelField = z.string().trim().min(1).nullable().catch(null);
+
 // A per-dir allowlist for the header Skill menu: which skill slugs to show, in this
 // order. Trimmed, deduped, capped. null when unset/garbage/empty — which means
 // "no filter, show every discovered skill" (absent config == show all).

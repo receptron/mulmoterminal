@@ -10,7 +10,7 @@ export interface SpawnDeps {
   guiMcpTools: string;
   /** Bytes of pty output kept for a client that reattaches later. */
   outputBufferLimit: number;
-  hookSettingsJson: (host: string, sessionId: string) => string;
+  hookSettingsJson: (host: string, sessionId: string, env?: Record<string, string>) => string;
   mcpConfigJson: (sessionId: string, host?: string, sandbox?: boolean) => string;
   reap: (id: string) => void;
   setWorking: (id: string, working: boolean) => void;

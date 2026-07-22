@@ -9,7 +9,7 @@ import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
 import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
-import { type Launcher, type UserMcpServer } from "./config-schema.js";
+import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -30,6 +30,12 @@ export function getLaunchers(): Launcher[] {
 // Claude spawn without a restart.
 export function getUserMcpServers(): UserMcpServer[] {
   return config.userMcpServers;
+}
+
+// The configured Anthropic-compatible backends, read live so a config edit applies to the
+// next session without a restart (#579).
+export function getProviders(): Provider[] {
+  return config.providers;
 }
 
 // The global terminal-header buttons/chips — read live so /api/header reflects a config
