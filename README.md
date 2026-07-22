@@ -225,6 +225,17 @@ today — **Claude Code** (the default) and **Codex**.
 cell's launch form and the Collections browser carry a **Claude / Codex** toggle (your
 choice is remembered).
 
+**Other models.**
+Claude Code can run against any **Anthropic-compatible** backend (OpenRouter, Moonshot, a
+LiteLLM gateway). Backends are listed in `~/.mulmoterminal/config.json` under `providers`,
+and their **keys are read from the server's environment** — never from a file the app
+serves. A directory sets its default in `.mulmoterminal.json` (`provider` / `model`), and
+each grid cell's launch form has a **MODEL** select that overrides it for one session,
+listing ~27 curated models with the measured pass rate of a real tool-using task beside
+each. A provider whose token can't be resolved **refuses to start** rather than falling
+back to Anthropic, and providers can't be combined with the Docker sandbox. See
+[Configuration → providers](https://receptron.github.io/mulmoterminal/guide/en/config.html#providers).
+
 **Skills for Codex.** Codex has no `/<slug>` slash commands, so on session setup
 MulmoTerminal **mirrors the workspace's `.claude/skills` into `~/.codex/skills`** (each
 mirrored directory carries a `.mt-mirror` marker so a re-sync overwrites what MulmoTerminal
@@ -668,8 +679,10 @@ Each grid cell's header shows two badges for its session, refreshed when a turn 
 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
-  current-gen Opus / Sonnet / Fable, **200k** otherwise; an unknown model shows the label
-  with no %).
+  current-gen Opus / Sonnet / Fable, **200k** otherwise). A session running on a
+  [provider model](#agents-claude--codex) shows that model's name and its published window
+  (`Kimi K2.7 Code · ctx 12%`); a model in neither list keeps the label and hides the %,
+  since the window is never guessed.
 - **Token badge** — `⇡<in> ⇣<out>`: cumulative input (fresh + cache-read + cache-creation)
   and output tokens for the session, k/M-formatted, with a full breakdown in the tooltip.
 
@@ -938,8 +951,9 @@ same-origin-guarded.
 
 | Endpoint | Purpose |
 | -------- | ------- |
-| `GET\|POST /api/config` | User UI config (`cwdPresets`, `soundFile`, `prRepos`, `launchers`, `userMcpServers`). |
+| `GET\|POST /api/config` | User UI config (`cwdPresets`, `soundFile`, `prRepos`, `launchers`, `userMcpServers`, `providers`). |
 | `GET /api/sound` · `/api/dir-sound?cwd=` · `/api/dir-config?cwd=` | Custom / per-directory attention sound + per-dir config. |
+| `GET /api/launch-options` | The Anthropic-compatible backends this server can reach, each with its models and — when it can't — the reason. Reports the **name** of the env var a key is read from, never the key. |
 | `GET /api/notifications`(`/history`) · `POST /api/notifications/:id/clear` | Notification feed. |
 | `POST /api/transcribe`(`/model`…) | Voice-input transcription (Whisper, macOS). |
 | `POST /api/translation` | Runtime UI-string translation. |

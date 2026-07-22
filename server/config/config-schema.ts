@@ -144,6 +144,10 @@ export const providerSchema = z.object({
   baseUrl: z.string().min(1),
   tokenEnv: z.string().min(1),
   maxOutputTokens: z.number().int().positive().optional(),
+  // Extra model ids to offer in the launch picker, on top of the built-in presets
+  // (common/modelPresets.ts). Listed here rather than measured, so the picker shows them
+  // without the pass-rate the presets carry.
+  models: z.array(z.string().trim().min(1)).catch([]).default([]),
 });
 export type Provider = z.infer<typeof providerSchema>;
 
@@ -239,6 +243,10 @@ const writableDirConfigSchema = z.object({
   chips: z.array(writableHeaderChipSchema).max(MAX_CHIPS).optional(),
   // Header Skill-menu allowlist: show only these skill slugs, in this order. Omit to show all.
   skills: z.array(nonEmptyText).max(MAX_SKILL_FILTER).optional(),
+  // Which backend this directory's sessions run on (#579). `provider` names an entry in the
+  // global config's `providers`; `model` alone picks a different model on Anthropic itself.
+  provider: nonEmptyText.optional(),
+  model: nonEmptyText.optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {

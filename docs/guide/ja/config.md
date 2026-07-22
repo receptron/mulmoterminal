@@ -52,10 +52,107 @@ nav_order: 4
 | `launchers` | グリッドセルの「OR LAUNCH」に並ぶ起動コマンド |
 | `prRepos` | 横断 PR/Issue ビューの対象リポ |
 | `buttons` / `chips` | ヘッダーのボタン/チップ（プロジェクト設定とマージ。→ [ヘッダーのカスタマイズ](#header)） |
+| `providers` | Anthropic 互換の接続先（→ [別のモデルで動かす](#providers)） |
+
+## 別のモデルで動かす（プロバイダ） {#providers}
+
+Claude Code は Anthropic 互換のバックエンドなら何にでも接続できます。MulmoTerminal はその接続先を
+`config.json` から、**鍵はサーバを起動したときの環境変数から**読みます。鍵が設定ファイルに入ることはありません。
+
+### 1. 接続先を `~/.mulmoterminal/config.json` に足す
+
+```json
+{
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api",
+      "tokenEnv": "OPENROUTER_API_KEY",
+      "maxOutputTokens": 16000,
+      "models": []
+    }
+  ]
+}
+```
+
+| キー | 役割 |
+|---|---|
+| `id` | `.mulmoterminal.json` や起動時の選択から参照する名前 |
+| `baseUrl` | **末尾に `/v1` を付けない** — Claude Code が `/v1/messages` を自分で足すため、付けると `/v1/v1/messages` になって 404 |
+| `tokenEnv` | 鍵が入っている環境変数の**名前**（値ではありません） |
+| `maxOutputTokens` | 省略時 16000。思考型モデルは出力枠が足りないと考えるだけで終わり、**返答が空**になります |
+| `models` | プリセットに加えて選択肢に出したいモデル id |
+
+### 2. 鍵はサーバの環境変数に置く
+
+MulmoTerminal を起動するシェル、または隣に置いた `.env` に書きます。
+
+```bash
+OPENROUTER_API_KEY=sk-or-…
+```
+
+追加したらサーバを再起動してください。鍵が解決できないプロバイダは**起動を拒否します** — Anthropic に
+黙って落とすと、そのディレクトリが選んでいないバックエンドにプロンプトが流れてしまうためです。
+
+### 3. プロジェクトの既定（任意）
+
+```json
+{
+  "provider": "openrouter",
+  "model": "moonshotai/kimi-k2.7-code"
+}
+```
+
+そのディレクトリで開いた端末はすべてこれで起動します。
+
+### 起動時に選ぶ
+
+プロバイダが 1 つでも使える状態なら、空セルの起動フォームに **MODEL** の選択欄が出ます。選んだ内容は
+**そのセッションだけ**に効き、`.mulmoterminal.json` の既定は書き換えません。選ばなければ既定のままです。
+
+選択肢の脇の数字は実測値です。
+
+```
+Kimi K2.7 Code · 3/3 · 14s · 262k
+```
+
+`3/3` は「ファイルを読んで別のファイルに書く」課題を**実際に完走した回数 / 試行回数**。プロンプトに
+流暢に答えても一度もツールを呼ばないモデルが実在するため、この数字が載っています。`14s` は中央値、
+`262k` はコンテキスト長です。
+
+- `0/4 — never used a tool` … 応答は返るがツールを使えない
+- `not reachable from this account` … 計測した OpenRouter アカウントの
+  [プライバシー設定](https://openrouter.ai/settings/privacy)で配信元が全部除外されていたもの。
+  **モデルの欠陥ではなく**、別のアカウントなら動く可能性があります
+- `not tested` … `models` に自分で足したもの
+
+一覧は `common/modelPresets.ts`、計測スクリプトは `scripts/model-trials.ts` です。
+
+```bash
+yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 <model-id>
+```
+
+### 制限
+
+Docker サンドボックス（`MULMOTERMINAL_SANDBOX`）とは併用できません。コンテナは環境変数を引き継がず、
+そのまま動かすと**選んだはずのプロバイダではなく Anthropic に**接続してしまうため、明示的に拒否します。
 
 ## プロジェクトごとの `.mulmoterminal.json` {#per-dir}
 
 プロジェクト直下に置くと、**そのディレクトリで開いた端末（グリッドセル）**の見た目・音・ヘッダーを変えられます。
+
+### 使うモデル
+
+```json
+{
+  "provider": "openrouter",
+  "model": "moonshotai/kimi-k2.7-code"
+}
+```
+
+そのディレクトリのセッションが既定で使うバックエンドとモデル。`provider` を省いて `model` だけ書くと
+Anthropic のまま別のモデルを指定できます。→ [別のモデルで動かす](#providers)
 
 ### 名前バッジと色
 

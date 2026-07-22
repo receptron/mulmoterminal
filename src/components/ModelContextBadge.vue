@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { presetFor } from "./modelOption";
 
 // Which model is running + how full its context is, e.g. `Opus · ctx 35%`. Model
 // and contextTokens come from the transcript (server /api/session/:id); the agent
@@ -45,12 +46,18 @@ const PERCENT = 100;
 const AGENT_NAME: Record<"claude" | "codex", string> = { claude: "Claude", codex: "Codex" };
 
 function shortModelLabel(model: string): string {
+  const preset = presetFor(model);
+  if (preset) return preset.label;
   const lower = model.toLowerCase();
   const family = CLAUDE_FAMILIES.find((f) => lower.includes(f.match));
   return family ? family.label : (model.split("/").pop() ?? model);
 }
 
 function contextWindowTokens(model: string): number | null {
+  // A preset carries the window its provider publishes, so a session on one shows a real
+  // % instead of nothing — the substring lists below only know Claude's own families.
+  const preset = presetFor(model);
+  if (preset?.contextLength) return preset.contextLength;
   const lower = model.toLowerCase();
   const entry = CONTEXT_WINDOWS.find((w) => lower.includes(w.match));
   return entry ? entry.tokens : null;

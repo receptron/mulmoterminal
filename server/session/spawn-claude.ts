@@ -16,27 +16,31 @@ import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 import { loadDirConfig } from "../config/dir-config.js";
 import { getProviders } from "../config/config-routes.js";
-import { requireResolution, resolveProvider } from "./provider-env.js";
+import { requireResolution, resolveProvider, type DirModelChoice } from "./provider-env.js";
 import { settingsArgument, withSettingsCleanup } from "./session-settings.js";
+import { effectiveChoice } from "./launch-choice.js";
+
+export interface SpawnClaudeOptions {
+  // Passed to claude as the first turn, so the session starts working before anyone
+  // opens it. Mutually exclusive with `draft`.
+  initialPrompt?: string;
+  cwd?: string;
+  attachGuiMcp?: boolean;
+  // Typed into the input box once claude is ready, NOT submitted — the user reviews it.
+  draft?: string;
+  // What the browser picked in the launch form (#584). Replaces the directory's default
+  // as a PAIR: a provider from one source with a model from the other is a combination
+  // neither of them asked for. Absent — the usual case — means "use the directory's".
+  launch?: DirModelChoice;
+}
 
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
   // exit back to the browser socket. `ws` may be null for a session spawned without
   // a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
-  // reattaches. `initialPrompt`, when given, is passed to claude as the first turn
-  // so the session starts working immediately, before anyone opens it. `draft` is the
-  // opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
-  // into the input box (no Enter) so the user can review / edit / send it. Pass one or
-  // the other, never both.
-  function spawnClaudePty(
-    sessionId: string,
-    resume: string | null,
-    ws: WebSocket | null,
-    initialPrompt?: string,
-    cwd: string = CLAUDE_CWD,
-    attachGuiMcp: boolean = true,
-    draft?: string,
-  ): PtyEntry {
+  // reattaches.
+  function spawnClaudePty(sessionId: string, resume: string | null, ws: WebSocket | null, options: SpawnClaudeOptions = {}): PtyEntry {
+    const { initialPrompt, cwd = CLAUDE_CWD, attachGuiMcp = true, draft, launch } = options;
     // attachGuiMcp picks the MCP mode (see buildClaudeArgs): the single view (default)
     // attaches the GUI MCP + --strict-mcp-config (main's classic behavior); the grid's
     // dev terminals attach neither, so the user's + project's MCP servers load normally.
@@ -54,7 +58,8 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // select, which is exactly what the provider contract exists to prevent. The ws route
     // turns it into a message in the terminal.
     const dir = loadDirConfig(cwd);
-    const resolved = requireResolution(resolveProvider({ provider: dir.provider, model: dir.model }, getProviders(), process.env, sandbox));
+    const choice = effectiveChoice(launch, { provider: dir.provider, model: dir.model });
+    const resolved = requireResolution(resolveProvider(choice, getProviders(), process.env, sandbox));
 
     const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
     const args = buildClaudeArgs({

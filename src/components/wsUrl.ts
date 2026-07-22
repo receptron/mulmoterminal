@@ -2,21 +2,34 @@
 // the query it sends — including ?gui=0, which tells the server to run a plain dev
 // terminal (no GUI MCP) — is unit-testable without xterm/WebSocket.
 
+// What the launch form picked for THIS session (#584), overriding the directory's own
+// default. Either half may be absent: a bare model is a valid pick on the default
+// Anthropic backend.
+export interface LaunchChoice {
+  provider?: string | null;
+  model?: string | null;
+}
+
 export interface TerminalWsUrlInput {
   host: string; // location.host
   secure: boolean; // location.protocol === "https:"
   sessionId: string | null; // resume this session; null => fresh session
   cwd?: string | null; // launch in this directory
   devTerminal?: boolean; // grid dev terminal: no GUI MCP (?gui=0)
+  launch?: LaunchChoice | null; // picked at launch; absent => the directory's default
 }
 
 // The two session-terminal endpoints (/ws for claude, /ws/codex for codex) send the
 // identical session/cwd/gui query, so they share this assembly — only the path differs.
-function sessionTerminalWsUrl(path: string, { host, secure, sessionId, cwd, devTerminal }: TerminalWsUrlInput): string {
+function sessionTerminalWsUrl(path: string, { host, secure, sessionId, cwd, devTerminal, launch }: TerminalWsUrlInput): string {
   const params = new URLSearchParams();
   if (sessionId) params.set("session", sessionId);
   if (cwd) params.set("cwd", cwd);
   if (devTerminal) params.set("gui", "0");
+  // Only sent when the user picked one — an absent param is what tells the server to use
+  // the directory's own provider/model.
+  if (launch?.provider) params.set("provider", launch.provider);
+  if (launch?.model) params.set("model", launch.model);
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : "";
   const proto = secure ? "wss:" : "ws:";

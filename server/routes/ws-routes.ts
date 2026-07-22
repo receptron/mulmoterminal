@@ -18,6 +18,8 @@ import { resolveButtonCommand, shellQuoteFor } from "../config/header-resolve.js
 import { resolveScript } from "../files/scripts.js";
 import { refreshHostKeychainIfExpired, writeSandboxCredentials } from "../infra/sandbox.js";
 import { tmuxHasSession } from "../infra/tmux.js";
+import type { SpawnClaudeOptions } from "../session/spawn-claude.js";
+import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
@@ -39,15 +41,7 @@ export interface WsRouteDeps {
   reattachPty: (entry: PtyEntry, ws: WebSocket, sessionId: string) => PtyEntry;
   handleClientFrame: (entry: PtyEntry, ws: WebSocket, raw: { toString(): string }, sessionId: string) => void;
   handleClientClose: (entry: PtyEntry, ws: WebSocket, sessionId: string) => void;
-  spawnClaudePty: (
-    sessionId: string,
-    resume: string | null,
-    ws: WebSocket | null,
-    initialPrompt?: string,
-    cwd?: string,
-    attachGuiMcp?: boolean,
-    draft?: string,
-  ) => PtyEntry;
+  spawnClaudePty: (sessionId: string, resume: string | null, ws: WebSocket | null, options?: SpawnClaudeOptions) => PtyEntry;
   spawnCodexPty: (
     sessionId: string,
     ws: WebSocket | null,
@@ -210,6 +204,11 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: { u
   // (the single view) keeps main's behavior: GUI MCP attached + strict.
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
+  // ?provider=/?model= — what the launch form picked for THIS session (#584). It replaces
+  // the directory's default; absent (the usual case) leaves that default alone. Ignored on
+  // a reattach, where no spawn happens and the running session keeps what it started with.
+  const launch = launchChoiceFromParams(url.searchParams);
+
   // Decide the effective session id BEFORE telling the browser. A requested id
   // is honored only if it can actually be served: a live pty (reattach) or an
   // on-disk transcript (`--resume`). A requested id that's neither — e.g. a cell
@@ -253,7 +252,7 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: { u
     // file. On reconnect, re-sync it from the (now-refreshed) Keychain so a token that
     // rotated since spawn doesn't leave the reattached session stuck at "Not logged in".
     if (live?.sandbox) writeSandboxCredentials(sessionId);
-    entry = live ? deps.reattachPty(live, ws, sessionId) : deps.spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
+    entry = live ? deps.reattachPty(live, ws, sessionId) : deps.spawnClaudePty(sessionId, resume, ws, { cwd, attachGuiMcp, launch });
   } catch (err) {
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
     // must close just this connection — never crash the whole server.

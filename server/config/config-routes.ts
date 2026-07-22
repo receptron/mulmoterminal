@@ -10,6 +10,7 @@ import type { Express } from "express";
 import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
+import { launchOptions } from "./launch-options.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -102,6 +103,13 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });
     config = next;
     res.json(configResponse());
+  });
+
+  // What the launch form may offer (#584): the configured backends, whether each can be
+  // reached right now, and the models it can run. Never the tokens themselves — only the
+  // NAME of the variable each is read from, which is what the setup help has to say.
+  app.get("/api/launch-options", (_req, res) => {
+    res.json(launchOptions(config.providers, process.env));
   });
 
   // Stream the user's custom attention sound (their own file, set in config). The
