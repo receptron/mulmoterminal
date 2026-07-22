@@ -6,6 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
+import { unsavedWork } from "./unsavedWork";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
@@ -692,15 +693,9 @@ function teardown() {
 const closeConfirm = ref(false);
 const closeChecking = ref(false); // refreshing dirty/ahead — the destructive action is held until it's accurate
 const closeError = ref<string | null>(null);
-const hasUnsaved = computed(() => (diff.value?.dirty ?? 0) > 0 || (diff.value?.ahead ?? 0) > 0);
-const unsavedSummary = computed(() => {
-  const ahead = diff.value?.ahead ?? 0;
-  const dirty = diff.value?.dirty ?? 0;
-  const parts: string[] = [];
-  if (ahead) parts.push(`${ahead} unpushed commit${ahead > 1 ? "s" : ""}`);
-  if (dirty) parts.push(`${dirty} uncommitted change${dirty > 1 ? "s" : ""}`);
-  return parts.join(" + ");
-});
+const unsaved = computed(() => unsavedWork(diff.value));
+const hasUnsaved = computed(() => unsaved.value.has);
+const unsavedSummary = computed(() => unsaved.value.summary);
 
 async function close() {
   if (!isWorktreeCell.value) {
