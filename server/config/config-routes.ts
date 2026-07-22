@@ -11,6 +11,7 @@ import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, typ
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import { launchOptions } from "./launch-options.js";
+import { badArrayField, badNullableArrayField } from "./config-body.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -55,25 +56,6 @@ export function getPushEnabled(): boolean {
 // scheduler wiring (a restart, currently). Off by default.
 export function getWorklogConfig(): { enabled: boolean; intervalHours: number } {
   return { enabled: config.worklogEnabled, intervalHours: config.worklogIntervalHours };
-}
-
-// Body fields that must be an array when present (a partial POST /api/config may omit any).
-const ARRAY_FIELDS = ["cwdPresets", "prRepos", "launchers", "userMcpServers"] as const;
-function badArrayField(body: Record<string, unknown>): string | null {
-  for (const field of ARRAY_FIELDS) {
-    if (body[field] !== undefined && !Array.isArray(body[field])) return field;
-  }
-  return null;
-}
-
-// `buttons`/`chips` are nullable (null = unconfigured), so they can't join ARRAY_FIELDS: reject any present
-// value that is neither an array nor null instead of letting the sanitizer silently coerce it to null.
-const NULLABLE_ARRAY_FIELDS = ["buttons", "chips"] as const;
-function badNullableArrayField(body: Record<string, unknown>): string | null {
-  for (const field of NULLABLE_ARRAY_FIELDS) {
-    if (body[field] !== undefined && body[field] !== null && !Array.isArray(body[field])) return field;
-  }
-  return null;
 }
 
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
