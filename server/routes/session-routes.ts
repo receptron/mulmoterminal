@@ -19,7 +19,15 @@ import {
   lastResponses,
   translationWorkerIds,
 } from "../session/registry.js";
-import { collectOnDiskSessionStats, collectPendingSessions, readSessionMeta, readSessionSummary, sessionTimeline } from "../session/session-reads.js";
+import {
+  collectOnDiskSessionStats,
+  collectPendingSessions,
+  readSessionMeta,
+  readSessionSummary,
+  sessionLastTurn,
+  sessionTimeline,
+} from "../session/session-reads.js";
+import { formatHandoff } from "../session/handoff-text.js";
 import { projectSessionsDir } from "../session/project-dir.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
@@ -95,6 +103,22 @@ async function toolTimeline(req: Request, res: Response) {
   res.json(await sessionTimeline(cwd, session));
 }
 
+// A session's last completed exchange, already rendered as the text to paste into ANOTHER
+// session's input box (#550). Reading the agent's own log instead of the terminal's screen
+// buffer is the whole point: no ANSI frames, no spinner debris, no lines lost to scrollback,
+// and a turn boundary that is recorded rather than guessed. The origin line is composed from
+// what the server knows, so nothing the client sends ends up inside the text another agent
+// will read. Sits under /api/transcript because /api/session/:id would match "last-turn"
+// first and read it as a session id.
+async function lastTurn(req: Request, res: Response) {
+  const { session } = req.query;
+  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
+  const agent = req.query.agent === "codex" ? "codex" : "claude";
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const turn = await sessionLastTurn(cwd, session, agent);
+  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn) });
+}
+
 // List the chat sessions for the current project (CLAUDE_CWD), including
 // newly-created sessions that aren't persisted to disk yet.
 async function sessionList(req: Request, res: Response) {
@@ -168,6 +192,7 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   app.get("/api/session/:id", (req, res) => sessionDetail(req, res, deps.freshenRosterTitle));
   app.get("/api/activity", activitySnapshot);
   app.get("/api/transcript/timeline", toolTimeline);
+  app.get("/api/transcript/last-turn", lastTurn);
   app.get("/api/sessions", sessionList);
   app.get("/api/codex/sessions", codexSessionList);
 }
