@@ -9,7 +9,7 @@ import { sendWebPush } from "../infra/web-push.js";
 import { HOST_ID as REMOTE_HOST_ID } from "../backends/remoteHost/index.js";
 import { buildPushText, type PushKind } from "./activity-hook.js";
 import { aiTitles, hiddenSessions, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
-import { sessionLastTurn } from "./session-reads.js";
+import { sessionLastTurn, LAST_RESPONSE_MAX } from "./session-reads.js";
 
 const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
@@ -24,7 +24,10 @@ const PUSH_BODY_MAX = 160;
 async function latestReply(sessionId: string, cwd: string): Promise<string | null> {
   const agent = ptys.get(sessionId)?.agent === "codex" ? "codex" : "claude";
   const turn = await sessionLastTurn(cwd, sessionId, agent);
-  return turn.reply?.trim() || null;
+  const reply = turn.reply?.trim();
+  // Capped like every other writer of lastResponses — the map is declared as holding
+  // truncated text, and it is served in the roster payload for every listed session.
+  return reply ? reply.slice(0, LAST_RESPONSE_MAX) : null;
 }
 
 // Notify the user's devices that a turn finished or is blocked, when Web Push is enabled.
