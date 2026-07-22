@@ -9,13 +9,21 @@ const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}
 const parse = (contents: string) => parseDevTerminalSessionIds(contents, isUuid);
 
 describe("devTerminalSessionLine", () => {
-  // The newline is what makes concurrent appends land as separate records.
-  it("ends the record so the next append starts its own line", () => {
-    expect(devTerminalSessionLine(A)).toBe(`${A}\n`);
+  // Leading, not trailing: the legacy file ends WITHOUT a newline, so a trailing one would
+  // weld the first appended id onto the end of the JSON array.
+  it("starts the record on its own line", () => {
+    expect(devTerminalSessionLine(A)).toBe(`\n${A}`);
   });
 
   it("round-trips through the parser", () => {
     expect(parse(devTerminalSessionLine(A) + devTerminalSessionLine(B))).toEqual([A, B]);
+  });
+
+  // The regression Codex caught: a trailing newline welds the first id onto the array.
+  it("does not weld the first id onto a legacy array", () => {
+    const welded = JSON.stringify([A]) + `${C}\n`;
+    expect(parse(welded)).not.toContain(A);
+    expect(parse(JSON.stringify([A]) + devTerminalSessionLine(C))).toEqual([A, C]);
   });
 });
 
@@ -68,11 +76,21 @@ describe("parseDevTerminalSessionIds", () => {
       expect(parse(JSON.stringify([A, "nope", 42, null]))).toEqual([A]);
     });
 
-    // What the file looks like after the first append to a legacy file: the array on the
-    // first line, then plain ids. Both halves have to survive, or upgrading loses the ids
-    // that were already hidden.
-    it("reads a legacy array followed by appended ids", () => {
-      expect(parse(`${JSON.stringify([A, B])}\n${C}\n`)).toEqual([A, B, C]);
+    // What the file ACTUALLY looks like after the first append: the legacy array has no
+    // trailing newline, so the appended record has to bring its own. Getting this wrong
+    // loses every id that was already hidden — the whole point of the file.
+    it("reads a legacy array appended to exactly as the writer writes it", () => {
+      const onDisk = JSON.stringify([A, B]) + devTerminalSessionLine(C);
+      expect(parse(onDisk)).toEqual([A, B, C]);
+    });
+
+    it("survives several appends onto a legacy file", () => {
+      const onDisk = JSON.stringify([A]) + devTerminalSessionLine(B) + devTerminalSessionLine(C);
+      expect(parse(onDisk)).toEqual([A, B, C]);
+    });
+
+    it("reads appends onto an empty file", () => {
+      expect(parse(devTerminalSessionLine(A) + devTerminalSessionLine(B))).toEqual([A, B]);
     });
 
     it("does not lose the legacy ids when an appended one repeats them", () => {

@@ -40,7 +40,15 @@ export function parseDevTerminalSessionIds(contents: string, isValidId: (id: str
   return [...new Set(ids)];
 }
 
-/** What to append for a newly marked id. */
+/**
+ * What to append for a newly marked id.
+ *
+ * The newline goes BEFORE the id, not after. An existing file holds the legacy JSON array
+ * with no trailing newline, so appending `<id>\n` would weld the first id onto the end of
+ * that array — the line then parses as neither, and every previously hidden session is lost
+ * on the next hydrate. Leading it instead means an appended id always starts its own line,
+ * whatever the file ended with.
+ */
 export function devTerminalSessionLine(id: string): string {
-  return `${id}\n`;
+  return `\n${id}`;
 }
