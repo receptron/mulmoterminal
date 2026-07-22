@@ -601,6 +601,39 @@ describe("TerminalCell", () => {
     expect(dotClass(w)).toContain("is-done");
   });
 
+  it("does not let an older seed clobber a newer one when two reconnect re-seeds overlap", async () => {
+    // seed-vs-seed (reconnect flaps): the OLDER seed resolves FIRST with a now-stale snapshot,
+    // the NEWER one resolves LAST with the current one. Without a per-request token the older
+    // applies first and the newer is then dropped by the push-guard — leaving the stale value.
+    const id = "55555555-5555-5555-5555-555555555555";
+    const gates = [deferred<boolean>(), deferred<boolean>()];
+    let call = 0;
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        const n = call++;
+        if (n === 0) return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) }; // mount
+        await gates[n - 1].promise;
+        // seed #1 => working (stale), seed #2 => idle (current, the turn has since ended).
+        return { ok: true, json: async () => ({ working: n === 1, waiting: false, lastPrompt: null }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    await flushPromises();
+
+    reconnect?.(); // seed #1 (older) — reports working
+    reconnect?.(); // seed #2 (newer) — reports idle
+    gates[0].resolve(true); // OLDER resolves first
+    await flushPromises();
+    gates[1].resolve(true); // NEWER resolves last
+    await flushPromises();
+    await nextTick();
+    expect(dotClass(w)).toContain("is-idle"); // the newest seed wins, not the first to resolve
+  });
+
   it("shows a token-usage badge from /api/session/:id", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {

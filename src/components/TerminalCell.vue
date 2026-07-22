@@ -190,6 +190,9 @@ const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" &&
 // moment it ASKED; a live push that lands while it is in flight is newer, so the seed must
 // not overwrite it — the #620 race, scoped to one cell.
 let activityGen = 0;
+// Seeds also overlap each other — mount racing a reconnect, or reconnect flaps. Only the
+// newest may apply; an older one, even resolving last, describes a moment already overtaken.
+let latestSeed = 0;
 function applyActivity(d: ActivityMsg) {
   activityGen++;
   const next = applyActivityPush(
@@ -234,9 +237,12 @@ function applyBadges(data: SessionDetail) {
 }
 
 async function loadInitial(id: string) {
+  const seedId = ++latestSeed;
   const genBeforeFetch = activityGen;
   const data = await fetchSessionDetail(id);
-  if (!data) return;
+  // A newer seed superseded this one while it was in flight: its answer is the current one,
+  // so this stale snapshot applies neither activity nor badges.
+  if (!data || seedId !== latestSeed) return;
   // A live push landed while we were fetching: it is newer than this snapshot, so keep it
   // and don't let a stale seed put the cell back to idle. Badges have no such push, so they
   // always refresh.
