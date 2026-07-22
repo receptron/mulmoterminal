@@ -1,10 +1,9 @@
 // The open PR URL for a branch (the header "open this branch's PR" button). One `gh pr list --head`,
 // cached briefly per (repo, branch) so /api/header — which fires on every focus / dir / session change —
 // doesn't shell out to gh each time. Pure parse + injectable deps keep it unit-testable without gh.
-import { runGh } from "./gh.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { branchQuery, type BranchQueryDeps } from "./branch-query.js";
 
-const CACHE_TTL_MS = 30_000;
 const cache = createTtlCache<string | null>();
 
 // The first url in `gh pr list --json url` output, or null (no open PR / malformed).
@@ -23,19 +22,12 @@ export function parsePrUrl(stdout: string): string | null {
   return null;
 }
 
-export interface PrForBranchDeps {
-  runGh?: typeof runGh;
-  now?: () => number;
-  ttlMs?: number;
-}
+export type PrForBranchDeps = BranchQueryDeps;
 
 // The open PR URL for `branch` in `repo`, or null when there's none (the button is then hidden).
 // Never throws — a gh failure resolves to null (the button just doesn't show).
 export async function prUrlForBranch(repo: string, branch: string, deps: PrForBranchDeps = {}): Promise<string | null> {
-  const run = deps.runGh ?? runGh;
-  const now = deps.now ?? Date.now;
-  const ttlMs = deps.ttlMs ?? CACHE_TTL_MS;
-  const key = `${repo}:${branch}`;
+  const { run, now, ttlMs, key } = branchQuery(deps, repo, branch);
   const hit = cache.get(key, now, ttlMs);
   if (hit !== undefined) return hit;
   let url: string | null = null;

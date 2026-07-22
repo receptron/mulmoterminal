@@ -16,8 +16,7 @@
 import type { Express } from "express";
 import { createRemoteHost, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
 
-import { createRemoteHostHandlers } from "./handlers.js";
-import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
+import { createRemoteHostHandlers, type RemoteHostHandlerDeps } from "./handlers.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
@@ -32,16 +31,10 @@ const PREFIX = "[remote-host]";
 // Module-level singleton — one host runner per process. Null until initialized.
 let lifecycle: RemoteHostLifecycle | null = null;
 
-export interface RemoteHostBackendDeps {
-  workspace: string;
-  spawnChat: (message: string) => { chatId: string };
-  listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
-  captureTerminalScreen: (sessionId: string) => Promise<SessionScreen>;
-  // Type into a session's live PTY (#445); false when none is attached here.
-  writeToSession: (sessionId: string, chunk: string) => boolean;
-  // Whether typing may empty that session's input box first (#572).
-  canClearBox: (sessionId: string) => boolean;
-}
+// Everything the handlers need except `ingest`, which this module builds itself — it has to
+// read the LIVE session's storage/uid, which only exist once a connection is up. Derived
+// rather than restated so a new handler dependency cannot be added in one place only.
+export type RemoteHostBackendDeps = Omit<RemoteHostHandlerDeps, "ingest">;
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
   // Ingest pulls the phone's staged uploads (Firebase Storage, signed in as the
