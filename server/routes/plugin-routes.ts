@@ -76,7 +76,15 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
         body: JSON.stringify(isRecord(req.body) ? req.body : {}),
       });
       const body: unknown = await upstream.json().catch(() => ({}));
-      if (!upstream.ok) return res.json({ message: upstreamFailureMessage(upstream.status, body, "accounting request failed") });
+      if (!upstream.ok) {
+        // A refused request is only ever narrated to the agent, so without this it leaves no
+        // trace on the server at all — and a router answering `{ error: "" }` leaves none with
+        // the agent either. "Could not connect" is logged below; "connected and was refused"
+        // should be too.
+        const message = upstreamFailureMessage(upstream.status, body, "accounting request failed");
+        console.error(`[manageAccounting] upstream ${upstream.status}: ${message || "(no message)"}`);
+        return res.json({ message });
+      }
       return res.json(body);
     } catch (err) {
       console.error(`[manageAccounting] dispatch failed: ${messageOf(err)}`);
