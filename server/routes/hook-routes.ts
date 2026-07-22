@@ -6,7 +6,7 @@ import type { Express, Request, Response } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
 import { activityHookEffects, pushKindFor, resolveHookSessionId } from "../session/activity-hook.js";
-import { lastPrompts, ptys } from "../session/registry.js";
+import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript.js";
