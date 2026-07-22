@@ -72,11 +72,19 @@ export function useSessions() {
     }
   }
 
+  // load() runs on every "sessions" push, so bursts of activity put several in flight at
+  // once and they can answer out of order. An older answer applied last reverts titles and
+  // ordering to a state the user already saw replaced (#620 F4). Only the newest request may
+  // write.
+  let latestRequest = 0;
+
   async function load(resort = false) {
+    const request = ++latestRequest;
     try {
       const [res, codex] = await Promise.all([fetch("/api/sessions"), fetchCodexSessions()]);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      if (request !== latestRequest) return; // a newer load has already answered
       const incoming = [...(data.sessions ?? []), ...codex].sort((a: Session, b: Session) => b.mtime - a.mtime);
       sessions.value = mergeStable(sessions.value, incoming, resort);
       error.value = null;
