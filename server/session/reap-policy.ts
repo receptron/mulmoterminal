@@ -53,3 +53,11 @@ export function parseWaitGraceMs(raw: string | undefined, defaultMs: number, onI
   }
   return n;
 }
+
+/** Whether teardown may also drop the session's activity record. A session that is still
+ *  working or still waiting keeps it: `waiting` is the bold-until-viewed window, and the
+ *  row has to stay bold after its pty is gone until the user actually looks. Only once
+ *  neither holds is the record — and the hidden flag that rides with it — safe to drop. */
+export function shouldForgetActivity(activity: ReapActivity | undefined): boolean {
+  return !activity || (!activity.working && !activity.waiting);
+}
