@@ -6,6 +6,7 @@ import { useDirConfig } from "../composables/useDirConfig";
 import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
+import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
@@ -145,24 +146,12 @@ const aiTitle = ref<string | null>(null);
 
 // Cumulative token usage for this session (from /api/session/:id, refreshed when a
 // turn finishes). Null until first fetched.
-interface Usage {
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-}
-const usage = ref<Usage | null>(null);
-const isUsage = (u: unknown): u is Usage => typeof u === "object" && u !== null && "outputTokens" in u;
+const usage = ref<CellUsage | null>(null);
 
 // The running model + current-turn context size (from /api/session/:id), for the
 // model/context badge. Null until first fetched; model may be null with no assistant
 // turn yet, which hides the badge.
-interface SessionContext {
-  model: string | null;
-  contextTokens: number;
-}
-const context = ref<SessionContext | null>(null);
-const isContext = (c: unknown): c is SessionContext => typeof c === "object" && c !== null && "contextTokens" in c;
+const context = ref<CellContext | null>(null);
 
 // Configurable row-1 info chips (GET /api/header `chips`). `null` = unconfigured ⇒ the default order/set
 // below, so with no config the header is exactly as before. When configured, the built-ins listed here
@@ -225,8 +214,12 @@ async function loadInitial(id: string) {
     // while the fetch was in flight — don't leak old status into the new state.
     if (id === sessionId.value) {
       applyActivity(data);
-      if (isUsage(data.usage)) usage.value = data.usage;
-      if (isContext(data.context)) context.value = data.context;
+      // Cleared rather than kept when the shape is wrong: the server always sends both
+      // (EMPTY_USAGE / EMPTY_CONTEXT when it has nothing to report), so an unrenderable one
+      // means something is actually broken — and a badge showing the previous turn's numbers
+      // as if they were current is the failure this guard exists to stop.
+      usage.value = isCellUsage(data.usage) ? data.usage : null;
+      context.value = isCellContext(data.context) ? data.context : null;
     }
   } catch {
     // best-effort — pub/sub will fill it in on the next event
@@ -244,8 +237,8 @@ async function refreshUsage() {
     if (!res.ok) return;
     const data = await res.json();
     if (id !== sessionId.value) return;
-    if (isUsage(data.usage)) usage.value = data.usage;
-    if (isContext(data.context)) context.value = data.context;
+    usage.value = isCellUsage(data.usage) ? data.usage : null;
+    context.value = isCellContext(data.context) ? data.context : null;
   } catch {
     // best-effort
   }
