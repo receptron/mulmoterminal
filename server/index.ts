@@ -644,8 +644,7 @@ mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
 // match MulmoClaude (so the <workspace>/data/translation cache is shared between the
 // apps), but the LLM step is MulmoTerminal's own: translateViaHiddenChat spawns a
 // hidden background claude session (NEVER `claude -p`) and is filtered from the
-// sidebar. translateViaHiddenChat is a hoisted function declaration defined alongside
-// spawnClaudePty below.
+// sidebar (see session/translation-worker.ts).
 mountTranslationRoutes(app, { workspace: CLAUDE_CWD, translateBatch: translateViaHiddenChat });
 
 // The hidden translation worker reports its answer here, via the broker's worker-only
