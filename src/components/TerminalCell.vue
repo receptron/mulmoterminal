@@ -7,6 +7,7 @@ import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import { unsavedWork } from "./unsavedWork";
+import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
@@ -534,14 +535,7 @@ function resume(s: ResumableSession) {
   loadDiff(); // an already-idle worktree session shows its badge right away
 }
 
-function relativeTime(ms: number): string {
-  const min = Math.floor((Date.now() - ms) / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
-}
+const relativeTime = (ms: number): string => relativeTimeFrom(ms, Date.now());
 
 // Reveal this cell's working directory in the OS file manager. The browser can't
 // open a folder, but the local server can (POST /api/open-dir).
@@ -829,15 +823,9 @@ watch(status, (s) => emit("status", s), { immediate: true });
 const headerText = computed(() => aiTitle.value || lastPrompt.value || (sessionId.value ? sessionId.value.slice(0, 8) : "starting…"));
 
 // Per-cell token usage badge: ⇡ total input (fresh + cache) · ⇣ output generated.
-function fmtTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}k`;
-  return String(n);
-}
-const usageIn = computed(() => (usage.value ? usage.value.inputTokens + usage.value.cacheReadTokens + usage.value.cacheCreationTokens : 0));
-const usageOut = computed(() => usage.value?.outputTokens ?? 0);
-const showUsage = computed(() => usageIn.value + usageOut.value > 0);
-const usageLabel = computed(() => `⇡${fmtTokens(usageIn.value)} ⇣${fmtTokens(usageOut.value)}`);
+const usageView = computed(() => usageBadge(usage.value));
+const showUsage = computed(() => usageView.value.show);
+const usageLabel = computed(() => usageView.value.label);
 const usageTitle = computed(() =>
   usage.value
     ? `Tokens — input ${usage.value.inputTokens.toLocaleString()} · cache ${(usage.value.cacheReadTokens + usage.value.cacheCreationTokens).toLocaleString()} · output ${usage.value.outputTokens.toLocaleString()}`
