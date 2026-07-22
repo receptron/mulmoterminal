@@ -8,6 +8,7 @@
 // matching the wire shape the server's /api/notifications + NotifierEvent emit.
 import { ref, computed } from "vue";
 import { usePubSub } from "./usePubSub";
+import { applyLiveChanges, type LiveChange } from "./liveMerge";
 import { browseNavigateToRecord } from "./useCollectionBrowse";
 
 // Must match server/backends/notifier.ts NOTIFIER_CHANNEL.
@@ -36,6 +37,13 @@ const SEVERITY_RANK: Record<NotifierSeverity, number> = { info: 0, nudge: 1, urg
 
 const active = ref<NotifierEntry[]>([]);
 let initialized = false;
+// Non-null while the authoritative list is being fetched, recording what the channel did
+// meanwhile. The response answers as of the moment it was REQUESTED, so applying it as-is
+// hands back a notification the user has since dismissed (#620 F2).
+let changesDuringFetch: LiveChange<NotifierEntry>[] | null = null;
+// Fetches overlap: the bell asks on init and again on every pub/sub reconnect. Only the
+// newest answer may be applied — an older one describes a moment already overtaken.
+let latestFetch = 0;
 
 /** Parse a collection deep-link (`/collections/<slug>?selected=<itemId>`) into its
  *  parts. String ops + URLSearchParams only — no regex (lint bans backtracking-prone
@@ -81,26 +89,38 @@ function applyEvent(event: NotifierEvent): void {
   switch (event.type) {
     case "published":
     case "updated":
+      changesDuringFetch?.push({ kind: "upsert", item: event.entry });
       upsert(event.entry);
       break;
     case "cleared":
     case "cancelled":
+      changesDuringFetch?.push({ kind: "remove", id: event.id });
       remove(event.id);
       break;
   }
 }
 
 async function fetchActive(): Promise<void> {
+  const fetchId = ++latestFetch;
+  const changes: LiveChange<NotifierEntry>[] = [];
+  changesDuringFetch = changes;
   try {
     const res = await fetch("/api/notifications");
+    // Overtaken while we waited: leave the list to the fetch that overtook us.
+    if (fetchId !== latestFetch) return;
     if (!res.ok) {
       console.error(`[notifications] list failed: HTTP ${res.status}`);
       return;
     }
     const data = (await res.json()) as { active?: NotifierEntry[] };
-    active.value = Array.isArray(data.active) ? data.active : [];
+    if (fetchId !== latestFetch) return;
+    const snapshot = Array.isArray(data.active) ? data.active : [];
+    active.value = applyLiveChanges(snapshot, changes, (entry) => entry.id);
   } catch (err) {
     console.error("[notifications] list failed", err);
+  } finally {
+    // A newer fetch has taken over: leave its record alone.
+    if (changesDuringFetch === changes) changesDuringFetch = null;
   }
 }
 
