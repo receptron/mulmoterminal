@@ -111,3 +111,29 @@ describe("watchCodexActivity", () => {
     expect(boundaries).toEqual([]);
   });
 });
+
+describe("watcher lifetime", () => {
+  it("reports nothing more once its pty has been replaced", async () => {
+    // The regression this guards: binding the tail to `ptys.has(id)` rather than to the
+    // pty itself. A session reaped and respawned under the SAME id within one poll would
+    // leave the old tail alive next to the new one, reporting every boundary twice.
+    const ownPty = { id: 1 };
+    let current: { id: number } | undefined = ownPty;
+    const boundaries: CodexTurnBoundary[] = [];
+    let content = "";
+    let ticks = 0;
+    await watchCodexActivity({
+      fileSize: async () => Buffer.byteLength(content),
+      readSlice: async (from, to) => Buffer.from(content).subarray(from, to).toString(),
+      onBoundary: (b) => boundaries.push(b),
+      isAlive: () => current === ownPty,
+      startAtEnd: false,
+      sleep: async () => {
+        ticks += 1;
+        if (ticks === 1) current = { id: 2 }; // reaped and respawned under the same id
+        content += started();
+      },
+    });
+    expect(boundaries).toEqual([]);
+  });
+});

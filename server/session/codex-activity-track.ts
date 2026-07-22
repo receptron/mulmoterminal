@@ -12,9 +12,11 @@ export interface CodexActivityTrackDeps {
   setWorking: (id: string, working: boolean, event?: string) => void;
   setWaiting: (id: string, waiting: boolean, event?: string) => void;
   /** Is this session the user's actively-viewed pane? Suppresses the attention flag. */
-  isActive: (id: string) => boolean;
-  /** False once the pty is gone, which is what stops the tail. */
-  isAlive: (id: string) => boolean;
+  isActive: () => boolean;
+  /** False once THIS pty is gone. Must identify the pty, not just its session id: a
+   *  session reaped and respawned under the same id within one poll would otherwise
+   *  leave this tail running beside the new one, reporting every boundary twice. */
+  isAlive: () => boolean;
 }
 
 const readSliceOf =
@@ -40,7 +42,7 @@ const sizeOf = (file: string) => async (): Promise<number | null> => {
 
 function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: CodexActivityTrackDeps): void {
   const event = HOOK_EVENT_FOR[boundary];
-  for (const eff of activityHookEffects(event, deps.isActive(sessionId))) {
+  for (const eff of activityHookEffects(event, deps.isActive())) {
     if (eff.kind === "working") deps.setWorking(sessionId, eff.value, event);
     else deps.setWaiting(sessionId, eff.value, event);
   }
@@ -54,7 +56,7 @@ export function trackCodexActivity(sessionId: string, file: string, startAtEnd: 
     fileSize: sizeOf(file),
     readSlice: readSliceOf(file),
     onBoundary: (boundary) => applyBoundary(sessionId, boundary, deps),
-    isAlive: () => deps.isAlive(sessionId),
+    isAlive: deps.isAlive,
     startAtEnd,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   }).catch(() => {}); // a rollout that vanishes mid-session just stops reporting

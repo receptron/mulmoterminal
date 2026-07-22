@@ -16,12 +16,14 @@ import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 
 export function createCodexSpawner(deps: SpawnDeps) {
-  const activityDeps = {
+  // Bound to ONE pty: `ptys.has(id)` would keep a stale tail alive after a reap-then-
+  // respawn under the same id, and both tails would report the same boundaries.
+  const activityDepsFor = (sessionId: string, entry: PtyEntry) => ({
     setWorking: deps.setWorking,
     setWaiting: deps.setWaiting,
-    isActive: (id: string) => ptys.get(id)?.active ?? false,
-    isAlive: (id: string) => ptys.has(id),
-  };
+    isActive: () => ptys.get(sessionId)?.active ?? false,
+    isAlive: () => ptys.get(sessionId) === entry,
+  });
 
   function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
     entry.term.onData((data) => {
@@ -39,7 +41,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
   // codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
   // (stop once its pty is gone) and capture the minted id so a later cold reconnect can
   // `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
-  function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
+  function rememberCodexRollout(sessionId: string, entry: PtyEntry, root: string, before: Set<string>, cwd: string): void {
     watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => !ptys.has(sessionId) })
       .then((meta) => {
         if (!meta) return;
@@ -47,7 +49,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
         codexRolloutIds.set(sessionId, meta.id);
         // A rollout only discovered now is one this session just created, so it is read
         // whole: its first turn is in there and hasn't been reported yet.
-        trackCodexActivity(sessionId, meta.file, false, activityDeps);
+        trackCodexActivity(sessionId, meta.file, false, activityDepsFor(sessionId, entry));
       })
       .catch(() => {});
   }
@@ -75,11 +77,11 @@ export function createCodexSpawner(deps: SpawnDeps) {
     if (resumeRolloutId) {
       codexRolloutIds.set(sessionId, resumeRolloutId);
       const file = codexRolloutPath(root, resumeRolloutId);
-      if (file) trackCodexActivity(sessionId, file, true, activityDeps);
+      if (file) trackCodexActivity(sessionId, file, true, activityDepsFor(sessionId, entry));
     } else {
       // Discover the id only for a FRESH session. On resume we already know it; running the watcher
       // could overwrite the known id with a mis-attributed concurrent rollout.
-      rememberCodexRollout(sessionId, root, before, cwd);
+      rememberCodexRollout(sessionId, entry, root, before, cwd);
     }
     // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
     // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
