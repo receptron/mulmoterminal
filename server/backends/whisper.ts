@@ -16,6 +16,7 @@ import path from "node:path";
 import { existsSync } from "node:fs";
 import type { Express, Request, Response } from "express";
 import { createWhisper, DEFAULT_WHISPER_MODEL, type WhisperLogger, type WhisperModelName } from "@mulmoclaude/core/whisper";
+import { admitAudioClip, normalizeLanguage } from "./audioAdmission.js";
 
 const log: WhisperLogger = {
   info: (message, data) => console.log(`[whisper] ${message}`, data ?? ""),
@@ -30,12 +31,6 @@ function service(): ReturnType<typeof createWhisper> {
   if (!whisper) throw new Error("whisper backend not mounted");
   return whisper;
 }
-
-// 10 MB decoded audio is ~60 s of opus; the cap just bounds resource use against a
-// bypassed client. The raw data-URL cap (base64 ~+33%) is applied before decoding
-// so an oversized payload is rejected without first allocating the decoded buffer.
-const MAX_AUDIO_BYTES = 10 * 1024 * 1024;
-const MAX_DATAURL_CHARS = MAX_AUDIO_BYTES * 3;
 
 // Probe a binary once (memoized) by scanning PATH for an executable of that name —
 // no child process. Binaries don't appear mid-session, so caching is safe and keeps
@@ -102,34 +97,6 @@ export function stopWhisperSidecar(): void {
   whisper?.shutdown();
 }
 
-interface DataUrlParts {
-  mimeType: string;
-  base64: string;
-}
-
-/** Parse a `data:<mime>;base64,<payload>` URL. Returns null for anything else.
- *  Hand-parsed (no regex) to sidestep catastrophic-backtracking concerns. */
-function parseDataUrl(dataUrl: string): DataUrlParts | null {
-  if (!dataUrl.startsWith("data:")) return null;
-  const comma = dataUrl.indexOf(",");
-  if (comma === -1) return null;
-  const header = dataUrl.slice("data:".length, comma);
-  if (!header.includes(";base64")) return null;
-  const mimeType = header.split(";")[0] || "application/octet-stream";
-  return { mimeType, base64: dataUrl.slice(comma + 1) };
-}
-
-/** Whisper language code or "auto". Keep short codes; anything else falls back to
- *  auto-detection from the audio. */
-function normalizeLanguage(language: unknown): string {
-  if (typeof language === "string" && language.length > 0 && language.length <= 5) return language;
-  return "auto";
-}
-
-function approxBytes(base64: string): number {
-  return Math.floor((base64.length * 3) / 4);
-}
-
 interface TranscribeBody {
   dataUrl?: string;
   language?: string;
@@ -141,29 +108,15 @@ async function handleTranscribe(req: Request<object, unknown, TranscribeBody>, r
     return;
   }
   const { dataUrl, language } = req.body ?? {};
-  if (typeof dataUrl !== "string" || !dataUrl) {
-    res.status(400).json({ error: "dataUrl is required" });
-    return;
-  }
-  // Bound the raw payload BEFORE decoding so a giant data URL can't be expanded
-  // into memory ahead of the post-decode cap.
-  if (dataUrl.length > MAX_DATAURL_CHARS) {
-    res.status(413).json({ error: "audio clip exceeds the size limit" });
-    return;
-  }
-  const parsed = parseDataUrl(dataUrl);
-  if (!parsed) {
-    res.status(400).json({ error: "dataUrl must be a base64 data: URI" });
-    return;
-  }
-  if (approxBytes(parsed.base64) > MAX_AUDIO_BYTES) {
-    res.status(413).json({ error: "audio clip exceeds the size limit" });
+  const admitted = admitAudioClip(dataUrl);
+  if (!admitted.ok) {
+    res.status(admitted.status).json({ error: admitted.error });
     return;
   }
   try {
     const { text } = await service().transcribe({
-      base64: parsed.base64,
-      mimeType: parsed.mimeType,
+      base64: admitted.parts.base64,
+      mimeType: admitted.parts.mimeType,
       language: normalizeLanguage(language),
       model: selectedModel(),
     });
