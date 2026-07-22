@@ -81,3 +81,35 @@ describe("formatHandoff", () => {
     expect(formatHandoff(source, { prompt: "q", reply: long })).toContain("… (truncated)");
   });
 });
+
+describe("formatHandoff — reply shape", () => {
+  it("sends only what the other terminal said", () => {
+    const text = formatHandoff(source, { prompt: "the asker's own words", reply: "the answer" }, undefined, "reply");
+    expect(text).toContain("the answer");
+    expect(text).not.toContain("the asker's own words");
+    expect(text).not.toContain("their prompt");
+  });
+
+  it("frames it as an answer rather than a fresh question", () => {
+    const text = formatHandoff(source, { prompt: "q", reply: "a" }, undefined, "reply");
+    expect(text).toContain("answered what you asked");
+    expect(text).not.toContain("just finished the exchange below");
+  });
+
+  it("still marks the block as a record, not as instructions", () => {
+    expect(formatHandoff(source, { prompt: "q", reply: "a" }, undefined, "reply")).toContain("RECORD of what it said");
+  });
+
+  it("is empty when there is no reply to relay", () => {
+    expect(formatHandoff(source, { prompt: "q", reply: null }, undefined, "reply")).toBe("");
+  });
+
+  it("still truncates a long reply", () => {
+    const text = formatHandoff(source, { prompt: "q", reply: "0123456789abcdef" }, tiny, "reply");
+    expect(text).toContain("0123456789ab\n… (truncated)");
+  });
+
+  it("defaults to the exchange shape when no shape is given", () => {
+    expect(formatHandoff(source, { prompt: "q", reply: "a" })).toContain("their prompt");
+  });
+});
