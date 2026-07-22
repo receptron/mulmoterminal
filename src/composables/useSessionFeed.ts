@@ -21,6 +21,10 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
   // meanwhile — the history answers as of the moment it was REQUESTED, so those items are
   // newer than it and must survive being applied (#620 F1).
   let arrivedDuringLoad: T[] | null = null;
+  // Loads overlap when the session changes and changes back, so the guard below is not
+  // enough on its own: both requests are for the id that is current. Only the newest answer
+  // may be applied — an older one describes a moment already overtaken.
+  let latestLoad = 0;
 
   function upsert(item: T) {
     arrivedDuringLoad?.push(item);
@@ -31,20 +35,23 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
   }
 
   async function loadHistory(id: string) {
+    const loadId = ++latestLoad;
     const live: T[] = [];
     arrivedDuringLoad = live;
+    const overtaken = () => id !== sessionId() || loadId !== latestLoad;
     try {
       const res = await fetch(historyUrl(id));
       // Guard against a session-switch race: a slow response for an old session must
       // not clobber the pane after the user has switched to a newer one.
-      if (id !== sessionId()) return;
+      if (overtaken()) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (id !== sessionId()) return;
+      if (overtaken()) return;
       items.value = mergeSnapshotWithLive(data[historyKey] ?? [], live, identify);
     } catch {
       // No history to show, but an event that arrived while asking is still this session's.
-      if (id === sessionId()) items.value = [...live];
+      // A load that has been overtaken leaves the list to the one that overtook it.
+      if (!overtaken()) items.value = [...live];
     } finally {
       // A newer load has taken over: leave its buffer alone.
       if (arrivedDuringLoad === live) arrivedDuringLoad = null;
