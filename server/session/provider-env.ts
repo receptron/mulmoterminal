@@ -15,6 +15,8 @@
 //   - ANTHROPIC_API_KEY must be UNSET, not empty — a leftover value silently outranks the
 //     auth token. It cannot be expressed here as a value, hence `unset`.
 
+import { isUsableModelId, MODEL_ID_ALLOWED } from "../../common/modelIds.js";
+
 export interface ProviderConfig {
   id: string;
   label: string;
@@ -92,12 +94,26 @@ export function resolveProvider(
   env: NodeJS.ProcessEnv,
   sandbox: boolean = false,
 ): ProviderResult {
+  // The model becomes `claude --model <value>` in argv. Checked HERE rather than at each
+  // entry point because this is the single gate every one of them passes through — the ws
+  // query, a directory's .mulmoterminal.json, and whatever comes next (#590).
+  //
+  // Refused, never dropped. Dropping a bad model would start the session on the Anthropic
+  // default instead of the backend the directory asked for, and silently running somewhere
+  // the user did not choose is the failure this module exists to prevent. A directory that
+  // names a provider typo or omits its model is already refused, so this is the same
+  // contract, not a new one.
+  if (choice.model && !isUsableModelId(choice.model)) {
+    return { ok: false, reason: `unusable model id ${JSON.stringify(choice.model)} — ${MODEL_ID_ALLOWED} only` };
+  }
   if (!choice.provider) {
     // No provider named: stay on Anthropic, honour a bare model choice.
     return { ok: true, value: { ...NOTHING, model: choice.model } };
   }
   const provider = providers.find((candidate) => candidate.id === choice.provider);
-  if (!provider) return { ok: false, reason: `unknown provider '${choice.provider}' — add it to config.json under "providers"` };
+  // JSON.stringify, not quotes: this string comes from a file in whatever repository was
+  // opened, and reaches a log line and the session's terminal.
+  if (!provider) return { ok: false, reason: `unknown provider ${JSON.stringify(choice.provider)} — add it to config.json under "providers"` };
   if (sandbox) return { ok: false, reason: `provider '${provider.id}' cannot run in the Docker sandbox yet` };
   const usable = usableProvider(provider, env);
   if (!usable.ok) return usable;

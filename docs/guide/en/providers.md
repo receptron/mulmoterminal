@@ -133,7 +133,7 @@ that are **not** in that list (→ [Adding models](#add-models)).
 
 | Key | Meaning |
 |---|---|
-| `id` | the name other settings refer to; letters, digits and `. _ : / -` |
+| `id` | the name other settings refer to; letters, digits and `. _ : / - ~` |
 | `label` | what the picker shows |
 | `baseUrl` | **no trailing `/v1`** — see below |
 | `tokenEnv` | the **name** of the environment variable holding the key, never the key |
@@ -197,6 +197,11 @@ In that project's `.mulmoterminal.json`:
 ```
 
 Omit `provider` and give only `model` to pick a different model **on Anthropic itself**.
+
+Ids may contain letters, digits and `. _ : / - ~` — the same rule as a provider's `id`, so
+OpenRouter's "always the latest" aliases such as `~anthropic/claude-opus-latest` work too. A value shaped
+differently (whitespace, a leading dash) makes sessions in that directory **refuse to start**, rather
+than quietly running on some other model. The directory's other settings still load.
 
 ### What happens on resume
 {: .no_toc }
