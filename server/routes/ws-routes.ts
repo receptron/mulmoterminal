@@ -30,6 +30,7 @@ import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
 import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
+import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
 
 export interface WsRouteDeps {
   /** The http server these endpoints hang their `upgrade` handler off. */
@@ -342,17 +343,15 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   // First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
   // with session discovery + resume. Its own endpoint so /ws stays claude-only.
   const runCodexWss = new WebSocketServer({ noServer: true });
-  function wssForPath(pathname: string): WebSocketServer | null {
-    if (pathname === "/ws") return wss;
-    if (pathname === "/ws/run") return runWss;
-    if (pathname === "/ws/launch") return runLaunchWss;
-    if (pathname === "/ws/codex") return runCodexWss;
-    return null; // e.g. /ws/pubsub — left to socket.io's own upgrade handler
-  }
+  const serverFor: Record<TerminalWsKind, WebSocketServer> = { claude: wss, run: runWss, launch: runLaunchWss, codex: runCodexWss };
   deps.server.on("upgrade", (req, socket, head) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
-    const target = wssForPath(pathname);
-    if (!target) return;
+    const kind = terminalWsKind(pathname);
+    // Not ours (e.g. /ws/pubsub) — leave it for socket.io's own upgrade handler. This
+    // returns BEFORE the origin check on purpose: rejecting here would destroy a socket
+    // socket.io is entitled to.
+    if (!kind) return;
+    const target = serverFor[kind];
     if (!deps.isAllowedOrigin(req.headers.origin)) {
       console.warn(`[ws] rejected cross-origin upgrade from ${req.headers.origin}`);
       socket.destroy();
