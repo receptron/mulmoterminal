@@ -8,6 +8,7 @@ import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import { badgeStyleFor } from "./dirBadge";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
+import { applyActivityPush, cellHeaderText } from "./cellActivity";
 import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
@@ -200,13 +201,15 @@ interface ActivityMsg {
 const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" && d !== null && "id" in d;
 
 function applyActivity(d: ActivityMsg) {
-  working.value = d.working ?? false;
-  waiting.value = d.waiting ?? false;
-  if (d.event !== undefined) activityEvent.value = d.event;
-  // Apply lastPrompt/aiTitle whenever the field is present — including an explicit null,
-  // so a cleared/new session doesn't keep showing the previous prompt or title.
-  if (d.lastPrompt !== undefined) lastPrompt.value = d.lastPrompt;
-  if (d.aiTitle !== undefined) aiTitle.value = d.aiTitle;
+  const next = applyActivityPush(
+    { working: working.value, waiting: waiting.value, event: activityEvent.value, lastPrompt: lastPrompt.value, aiTitle: aiTitle.value },
+    d,
+  );
+  working.value = next.working;
+  waiting.value = next.waiting;
+  activityEvent.value = next.event;
+  lastPrompt.value = next.lastPrompt;
+  aiTitle.value = next.aiTitle;
 }
 
 async function loadInitial(id: string) {
@@ -820,7 +823,7 @@ const dotStatusClass = computed(() => DOT_STATUS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
 
-const headerText = computed(() => aiTitle.value || lastPrompt.value || (sessionId.value ? sessionId.value.slice(0, 8) : "starting…"));
+const headerText = computed(() => cellHeaderText(aiTitle.value, lastPrompt.value, sessionId.value));
 
 // Per-cell token usage badge: ⇡ total input (fresh + cache) · ⇣ output generated.
 const usageView = computed(() => usageBadge(usage.value));
