@@ -52,7 +52,8 @@ import {
   ptys,
   titleInFlight,
 } from "./session/registry.js";
-import { reapDecisionFor } from "./session/reap-policy.js";
+import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay } from "./session/reap-policy.js";
+import { nextActivity, sessionRow, shouldRefreshReply } from "./session/activity-transition.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -205,17 +206,10 @@ const REAP_GRACE_MS = 30_000;
 // unfinished task: reaping it loses work. So it gets a much longer grace than an
 // idle one, long enough that you can switch away, do other things, and come back
 // to answer it. Override with WAIT_REAP_GRACE_MS=0 to never auto-close these.
-const WAIT_REAP_GRACE_MS = (() => {
-  const def = 30 * 60_000;
-  const raw = process.env.WAIT_REAP_GRACE_MS;
-  if (raw === undefined) return def;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) {
-    console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${def}ms`);
-    return def;
-  }
-  return n; // a non-positive value means "never auto-reap waiting sessions" (see scheduleReap)
-})();
+const WAIT_REAP_GRACE_DEFAULT_MS = 30 * 60_000;
+const WAIT_REAP_GRACE_MS = parseWaitGraceMs(process.env.WAIT_REAP_GRACE_MS, WAIT_REAP_GRACE_DEFAULT_MS, (raw) =>
+  console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${WAIT_REAP_GRACE_DEFAULT_MS}ms`),
+);
 const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function cancelReap(id: string) {
@@ -226,17 +220,12 @@ function cancelReap(id: string) {
   }
 }
 
-// Node's setTimeout delay is a signed 32-bit int; a larger value overflows and
-// fires at ~1ms. Clamp to the max so a big grace doesn't become an instant reap.
-const MAX_TIMER_MS = 2_147_483_647;
-
 function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
-  // Non-positive or non-finite (e.g. a bad env value yielding NaN) => never
-  // auto-reap; the session stays until reattached or explicitly terminated.
-  // Guarding here matters because setTimeout(..., NaN) would fire ~immediately.
-  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+  // null => never auto-reap; the session stays until reattached or explicitly
+  // terminated (see reapTimerDelay for why a bad value must not reach setTimeout).
+  const delay = reapTimerDelay(delayMs);
+  if (delay === null) return;
   if (reapTimers.has(id)) return;
-  const delay = Math.min(delayMs, MAX_TIMER_MS);
   reapTimers.set(
     id,
     setTimeout(() => {
@@ -328,24 +317,18 @@ const sessionActivityPublisher = createSessionActivityPublisher({
 
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(id: string) {
-  const a = activity.get(id) || {};
+  const a = activity.get(id);
+  // `cwd` rides along so the attention-sound player can pick up that directory's custom
+  // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.
   const cwd = ptys.get(id)?.cwd ?? null;
-  // A turn just ended (waiting) → capture the reply's tail for the roster.
-  if (a.waiting && cwd) refreshLastResponse(id, cwd);
-  sessionActivityPublisher.publish(id, { working: a.working ?? false, waiting: a.waiting ?? false });
-  pubsub?.publish(SESSIONS_CHANNEL, {
-    id,
-    // The session's working dir, so the attention-sound player can pick up that
-    // directory's custom sound (<cwd>/.mulmoterminal.json). Null for a session with
-    // no live PTY (a reaped background worker).
-    cwd,
-    working: a.working ?? false,
-    waiting: a.waiting ?? false,
-    event: a.event ?? null,
-    lastPrompt: lastPrompts.get(id) ?? null,
-    aiTitle: aiTitles.get(id) ?? null,
-    lastResponse: lastResponses.get(id) ?? null,
+  if (shouldRefreshReply(a, cwd)) refreshLastResponse(id, cwd);
+  const row = sessionRow(id, a, cwd, {
+    lastPrompt: lastPrompts.get(id),
+    aiTitle: aiTitles.get(id),
+    lastResponse: lastResponses.get(id),
   });
+  sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting });
+  pubsub?.publish(SESSIONS_CHANNEL, row);
 }
 
 // AI-title bookkeeping (session/session-title.ts). publishActivity stays here — it
@@ -359,9 +342,9 @@ const { forgetTitle, noteTitleTurn, maybeGenerateTitle, freshenRosterTitle } = c
 // Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
 // publish) when the state is unchanged.
 function setWorking(id: string, working: boolean, event?: string) {
-  const prev = activity.get(id) || {};
-  if ((prev.working ?? false) === working) return;
-  activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
+  const next = nextActivity(activity.get(id), { working }, event, Date.now());
+  if (!next) return;
+  activity.set(id, next);
   publishActivity(id);
   // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
@@ -378,9 +361,9 @@ function setWorking(id: string, working: boolean, event?: string) {
 // output the user hasn't seen (Stop). Cleared when brought to the foreground
 // (see the WebSocket connection handler).
 function setWaiting(id: string, waiting: boolean, event?: string) {
-  const prev = activity.get(id) || {};
-  if ((prev.waiting ?? false) === waiting) return;
-  activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
+  const next = nextActivity(activity.get(id), { waiting }, event, Date.now());
+  if (!next) return;
+  activity.set(id, next);
   publishActivity(id);
   // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
