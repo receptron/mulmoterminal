@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { ref, effectScope } from "vue";
+import { ref, effectScope, nextTick } from "vue";
 import { flushPromises } from "@vue/test-utils";
 
 const subscribers = new Map<string, (data: unknown) => void>();
@@ -41,17 +41,23 @@ function deferredHistory(rows: Row[]) {
 
 function mountFeed(sessionId = "session-1") {
   const items = ref<Row[]>([]);
+  const current = ref(sessionId);
   const scope = effectScope();
   scope.run(() =>
     useSessionFeed<Row>(items, {
-      sessionId: () => sessionId,
+      sessionId: () => current.value,
       historyUrl: (id) => `/api/history/${id}`,
       historyKey: "rows",
       channel: (id) => `feed:${id}`,
       identify: (row) => row.id,
     }),
   );
-  return { items, scope, deliver: (row: Row) => subscribers.get(`feed:${sessionId}`)?.(row) };
+  return {
+    items,
+    scope,
+    current,
+    deliver: (row: Row) => subscribers.get(`feed:${current.value}`)?.(row),
+  };
 }
 
 const ids = (rows: Row[]) => rows.map((row) => row.id);
@@ -119,5 +125,40 @@ describe("useSessionFeed", () => {
 
     deliver(LIVE_ROW);
     expect(ids(items.value)).toEqual(["from-history", "from-live"]);
+  });
+});
+
+// Codex on #626 found the same rollback one level up in the sibling composable: requests
+// overlap, and an older answer landing last puts back what the newer one replaced. Here two
+// loads for the SAME id can be in flight — switch away and back — so the id guard alone
+// does not catch it.
+describe("useSessionFeed — when loads overlap", () => {
+  it("ignores an older history that lands after a newer one", async () => {
+    const gates: Array<() => void> = [];
+    // Three loads: the initial one, the switch away, and the switch back.
+    const answers = [[{ id: "old", text: "older history" }], [{ id: "other", text: "other session" }], [{ id: "new", text: "newer history" }]];
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const mine = call++;
+        await new Promise<void>((resolve) => gates.push(resolve));
+        return { ok: true, json: async () => ({ rows: answers[mine] }) };
+      }),
+    );
+
+    const { items, current } = mountFeed("session-1");
+    current.value = "session-2";
+    await nextTick();
+    current.value = "session-1"; // back again: both loads are for an id that is current
+    await nextTick();
+
+    gates.at(-1)?.(); // the newest answers first
+    await flushPromises();
+    expect(ids(items.value)).toEqual(["new"]);
+
+    gates[0]?.(); // the stale one, arriving last
+    await flushPromises();
+    expect(ids(items.value)).toEqual(["new"]);
   });
 });
