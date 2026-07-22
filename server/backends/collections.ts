@@ -65,6 +65,7 @@ import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability
 // action so a view can never do more than the agent's own data plane.
 import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { hostLogger } from "./hostLogger.js";
+import { mutateStatus } from "./mutateStatus.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
 // (prefix, message, optional structured data) — shared with the other engines'
@@ -261,16 +262,6 @@ function csvParam(value: unknown): string[] | undefined {
   if (Array.isArray(value)) return value.map((entry) => String(entry));
   if (typeof value === "string" && value.length > 0) return value.split(",");
   return undefined;
-}
-
-/** HTTP status for a non-ok remote-view mutate (message via
- *  mutateRemoteViewFailureMessage): 404 for a missing view/record, 403 for a
- *  policy refusal, 400 otherwise. */
-function mutateStatus(kind: string): number {
-  if (kind === "view-not-found" || kind === "item-not-found") return 404;
-  if (kind === "read-only-collection") return 405;
-  if (kind === "not-writable" || kind === "delete-not-allowed" || kind === "field-not-editable" || kind === "path-escape") return 403;
-  return 400;
 }
 
 // ── Route handlers ──────────────────────────────────────────────────────────
