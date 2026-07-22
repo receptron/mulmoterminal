@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { reapDecisionFor, reapTimerDelay, parseWaitGraceMs, MAX_TIMER_MS } from "../../../server/session/reap-policy.js";
+import { reapDecisionFor, reapTimerDelay, parseWaitGraceMs, MAX_TIMER_MS, shouldForgetActivity } from "../../../server/session/reap-policy.js";
 
 const graces = { idleMs: 30_000, waitingMs: 1_800_000 };
 
@@ -128,5 +128,38 @@ describe("parseWaitGraceMs", () => {
     // The two compose — a bad env var must land on the default grace, not on "never".
     expect(reapTimerDelay(parseWaitGraceMs("abc", DEFAULT_MS))).toBe(DEFAULT_MS);
     expect(reapTimerDelay(parseWaitGraceMs("0", DEFAULT_MS))).toBeNull();
+  });
+});
+
+// Teardown removes the pty, but the row the user sees outlives it. Dropping the activity
+// record too early un-bolds a session that finished with output nobody has looked at yet.
+describe("shouldForgetActivity", () => {
+  it("forgets a session with no activity record at all", () => {
+    expect(shouldForgetActivity(undefined)).toBe(true);
+    expect(shouldForgetActivity({})).toBe(true);
+  });
+
+  it("forgets a session that is neither working nor waiting", () => {
+    expect(shouldForgetActivity({ working: false, waiting: false })).toBe(true);
+  });
+
+  it("keeps a session that still needs the user", () => {
+    // `waiting` is the bold-until-viewed window: the pty is gone, but the row must stay
+    // bold until someone actually looks at it.
+    expect(shouldForgetActivity({ waiting: true })).toBe(false);
+    expect(shouldForgetActivity({ working: false, waiting: true })).toBe(false);
+  });
+
+  it("keeps a session still marked working", () => {
+    expect(shouldForgetActivity({ working: true })).toBe(false);
+    expect(shouldForgetActivity({ working: true, waiting: false })).toBe(false);
+  });
+
+  it("keeps a session with both flags set", () => {
+    expect(shouldForgetActivity({ working: true, waiting: true })).toBe(false);
+  });
+
+  it("ignores fields that are not the two flags", () => {
+    expect(shouldForgetActivity({ event: "Stop", at: 1 } as never)).toBe(true);
   });
 });

@@ -52,8 +52,9 @@ import {
   ptys,
   titleInFlight,
 } from "./session/registry.js";
-import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay } from "./session/reap-policy.js";
+import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./session/reap-policy.js";
 import { nextActivity, sessionRow, shouldRefreshReply } from "./session/activity-transition.js";
+import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "./session/background-chat.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -281,12 +282,9 @@ function reap(id: string) {
   titleInFlight.delete(id);
   lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
   lastTitleAttemptMs.delete(id);
-  const a = activity.get(id);
-  if (!a || (!a.working && !a.waiting)) {
+  if (shouldForgetActivity(activity.get(id))) {
     activity.delete(id);
-    // Drop the hidden flag only when activity is dropped too — while `waiting`
-    // persists (the bold-until-viewed window), keep it so the row stays un-bold.
-    hiddenSessions.delete(id);
+    hiddenSessions.delete(id); // the hidden flag rides with the record — see shouldForgetActivity
   }
   try {
     entry.term.kill();
@@ -472,22 +470,19 @@ app.use(express.json({ limit: "25mb" }));
 // so the user reviews and presses Enter. Registered BEFORE mountAllRoutes so this
 // specific route wins over /api/plugin/:toolName.
 app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
-  const body = isRecord(req.body) ? req.body : {};
-  const message = typeof body.message === "string" ? body.message.trim() : "";
-  if (!message) {
-    return res.json({ message: "spawnBackgroundChat: `message` is required (non-empty string)." });
-  }
-  const draft = body.draft === true;
-  const agent = body.agent === "codex" ? "codex" : "claude";
+  const parsed = parseBackgroundChat(req.body);
+  if (!parsed.ok) return res.json({ message: parsed.message });
+  const { agent, draft, hidden, message } = parsed.request;
   const sessionId = randomUUID();
-  if (body.hidden === true) hiddenSessions.add(sessionId);
+  if (hidden) hiddenSessions.add(sessionId);
   // ws is null: the session runs headless until the user opens it (reattach replays the buffered
   // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
   // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
   // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
   try {
-    if (agent === "codex") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
-    else if (draft) spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
+    const mode = spawnModeFor(agent, draft);
+    if (mode === "codex-run") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
+    else if (mode === "claude-draft") spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
     else spawnClaudePty(sessionId, null, null, message);
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
@@ -495,12 +490,6 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   }
   return res.json({ message: backgroundChatMessage(agent, draft, sessionId), jsonData: { chatId: sessionId, agent } });
 });
-
-function backgroundChatMessage(agent: "claude" | "codex", draft: boolean, sessionId: string): string {
-  if (agent === "codex") return `Spawned a new codex session (chatId ${sessionId}) auto-running the prompt.`;
-  if (draft) return `Opened a new terminal session (chatId ${sessionId}) with the text prefilled in the input for the user to review and send.`;
-  return `Spawned a new terminal session (chatId ${sessionId}). It runs in parallel; the user can open it from the sidebar.`;
-}
 
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
