@@ -6,7 +6,6 @@
 // plugin-narration.ts for why a failed tool call must still be a 200.
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
-import type { WebSocket } from "ws";
 
 import { CLAUDE_CWD, PORT } from "../config/env.js";
 import { messageOf } from "../errors.js";
@@ -16,19 +15,11 @@ import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../ses
 import { codexifySkillSeed } from "../agents/codex-skills.js";
 import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
-import type { PtyEntry } from "../session/types.js";
-import type { SpawnClaudeOptions } from "../session/spawn-claude.js";
+import type { SpawnClaudePty, SpawnCodexPty } from "../session/spawners.js";
 
 export interface PluginRouteDeps {
-  spawnClaudePty: (sessionId: string, resume: string | null, ws: WebSocket | null, options?: SpawnClaudeOptions) => PtyEntry;
-  spawnCodexPty: (
-    sessionId: string,
-    ws: WebSocket | null,
-    resumeRolloutId: string | null,
-    cwd: string,
-    attachGuiMcp: boolean,
-    initialPrompt: string | null,
-  ) => PtyEntry;
+  spawnClaudePty: SpawnClaudePty;
+  spawnCodexPty: SpawnCodexPty;
 }
 
 export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
