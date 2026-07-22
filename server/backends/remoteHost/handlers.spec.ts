@@ -11,6 +11,7 @@ const unusedTerminalDeps = {
   listTerminalSessions: async () => [],
   captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
   writeToSession: () => false,
+  canClearBox: () => false,
 };
 
 describe("createRemoteHostHandlers", () => {

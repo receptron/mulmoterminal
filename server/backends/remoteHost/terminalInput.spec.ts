@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 
-import { PASTE_END, PASTE_START, createTerminalInputSender, sanitizeTerminalInput } from "./terminalInput.js";
+import { CLEAR_BOX, PASTE_END, PASTE_START, canClearInputBox, createTerminalInputSender, sanitizeTerminalInput } from "./terminalInput.js";
 
 // Collects what would have reached the PTY, and runs the delayed Enter on demand
 // so the tests never wait on real time.
@@ -13,7 +13,7 @@ const hasSequenceIntroducer = (text: string): boolean => text.includes("\u001B")
 // run before asserting on what reached the PTY.
 const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve));
 
-const recorder = (writable = true) => {
+const recorder = (writable = true, canClearBox?: (sessionId: string) => boolean) => {
   const chunks: string[] = [];
   const submits: Array<() => void> = [];
   const deps = {
@@ -22,6 +22,7 @@ const recorder = (writable = true) => {
       chunks.push(chunk);
       return true;
     },
+    canClearBox,
     // Queue the Enters instead of timing them, so a test decides when each lands.
     scheduleSubmit: (fn: () => void) => {
       submits.push(fn);
@@ -164,5 +165,96 @@ describe("sendTerminalInput", () => {
     flushSubmit();
     await expect(after).resolves.toEqual({ sent: true });
     expect(chunks).toEqual([`${PASTE_START}ls${PASTE_END}`, "\r"]);
+  });
+});
+
+// Ctrl-C is destructive wherever the host cannot vouch for the session's state, so the
+// rule that decides is deliberately narrow — and narrow in a way that is easy to widen
+// by accident, which is what these lock down.
+describe("canClearInputBox", () => {
+  it("allows it for a Claude session that is not mid-turn", () => {
+    expect(canClearInputBox("claude", false)).toBe(true);
+    // No activity record yet (nothing has happened in this session) reads as idle.
+    expect(canClearInputBox("claude", undefined)).toBe(true);
+  });
+
+  // Ctrl-C mid-turn interrupts the turn. Whatever is in the box then is a QUEUED
+  // prompt, so the old merge behaviour is the lesser evil against discarding it.
+  it("refuses while Claude is mid-turn", () => {
+    expect(canClearInputBox("claude", true)).toBe(false);
+  });
+
+  // Nothing calls setWorking for codex, so `working` is false even mid-turn and the
+  // idle answer would be a guess — not a fact.
+  it("refuses for codex, whose turn state the host does not track", () => {
+    expect(canClearInputBox("codex", false)).toBe(false);
+    expect(canClearInputBox("codex", undefined)).toBe(false);
+  });
+
+  // At a prompt Ctrl-C is harmless; during a long build it kills the build, and the
+  // host cannot tell the two apart.
+  it("refuses for a shell", () => {
+    expect(canClearInputBox("shell", false)).toBe(false);
+  });
+
+  it("refuses when the host cannot say what is running", () => {
+    expect(canClearInputBox(null, false)).toBe(false);
+    expect(canClearInputBox(undefined, false)).toBe(false);
+  });
+});
+
+// #572: a draft left in the box on the host used to be submitted merged with the
+// phone's text ("yes I already typed this" + "ok" → "yes I already typedthisok").
+describe("clearing the host's input box", () => {
+  it("empties the box in the same write as the paste, so only the phone's text is left", async () => {
+    const { chunks, flushSubmit, send } = recorder(true, () => true);
+    const sent = send("s1", "ok");
+    await tick();
+    // ONE write: measured against a live TUI, the clear needs no delay of its own —
+    // unlike the Enter, which still follows separately.
+    expect(chunks).toEqual([`${CLEAR_BOX}${PASTE_START}ok${PASTE_END}`]);
+    flushSubmit();
+    await expect(sent).resolves.toEqual({ sent: true });
+    expect(chunks).toEqual([`${CLEAR_BOX}${PASTE_START}ok${PASTE_END}`, "\r"]);
+  });
+
+  // Ctrl-C mid-turn interrupts the turn, and in a shell it kills whatever is running,
+  // so the host withholds permission for everything it cannot vouch for.
+  it("leaves the box alone when the host says it is not safe", async () => {
+    const { chunks, send } = recorder(true, () => false);
+    void send("s1", "ok");
+    await tick();
+    expect(chunks).toEqual([`${PASTE_START}ok${PASTE_END}`]);
+  });
+
+  // The old callers pass no such dep at all; they must keep the old behaviour.
+  it("leaves the box alone when no host answer is wired at all", async () => {
+    const { chunks, send } = recorder();
+    void send("s1", "ok");
+    await tick();
+    expect(chunks[0]).not.toContain(CLEAR_BOX);
+  });
+
+  it("asks per session, not once for the host", async () => {
+    const asked: string[] = [];
+    const { chunks, send } = recorder(true, (sessionId) => {
+      asked.push(sessionId);
+      return sessionId === "idle-claude";
+    });
+    void send("idle-claude", "ok");
+    void send("busy-one", "ok");
+    await tick();
+    expect(asked).toEqual(["idle-claude", "busy-one"]);
+    expect(chunks).toEqual([`${CLEAR_BOX}${PASTE_START}ok${PASTE_END}`, `${PASTE_START}ok${PASTE_END}`]);
+  });
+
+  // The clear is ours to send; the phone must never be able to smuggle its own in and
+  // wipe a draft on a session the host declined to clear.
+  it("sends exactly the one clear it decided on, whatever the phone typed", async () => {
+    const { chunks, send } = recorder(true, () => true);
+    void send("s1", `ok${CLEAR_BOX}and more`);
+    await tick();
+    expect(chunks[0].split(CLEAR_BOX)).toHaveLength(2);
+    expect(chunks[0].startsWith(CLEAR_BOX)).toBe(true);
   });
 });

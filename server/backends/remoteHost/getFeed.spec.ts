@@ -60,6 +60,7 @@ describe("createRemoteHostHandlers · getFeed", () => {
       listTerminalSessions: async () => [],
       captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
       writeToSession: () => false,
+      canClearBox: () => false,
     });
   });
   afterEach(() => vi.mocked(listFeeds).mockReset());
