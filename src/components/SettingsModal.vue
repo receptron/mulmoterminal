@@ -9,6 +9,7 @@ import SettingsButton from "./SettingsButton.vue";
 import SettingsField from "./SettingsField.vue";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
+import { canAddLauncher, canAddMcpServer, canAddRepo } from "./settingsValidators";
 
 const props = defineProps<{
   soundFile?: string | null;
@@ -30,20 +31,16 @@ const emit = defineEmits<{
 
 // Cross-repo PR view's repos ("owner/repo"). Editable list mirroring the saved value;
 // add/remove emits the new list up (App persists it).
-const REPO_RE = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 const repos = ref<string[]>([...(props.prRepos ?? [])]);
 watch(
   () => props.prRepos,
   (r) => (repos.value = [...(r ?? [])]),
 );
 const newRepo = ref("");
-const newRepoValid = computed(() => {
-  const r = newRepo.value.trim();
-  return REPO_RE.test(r) && !repos.value.includes(r);
-});
+const newRepoValid = computed(() => canAddRepo(newRepo.value, repos.value));
 function addRepo() {
   const r = newRepo.value.trim();
-  if (!REPO_RE.test(r) || repos.value.includes(r)) return;
+  if (!newRepoValid.value) return;
   repos.value = [...repos.value, r];
   newRepo.value = "";
   emit("update-repos", repos.value);
@@ -62,15 +59,11 @@ watch(
 );
 const newLauncherLabel = ref("");
 const newLauncherCommand = ref("");
-const newLauncherValid = computed(() => {
-  const label = newLauncherLabel.value.trim();
-  const command = newLauncherCommand.value.trim();
-  return !!label && !!command && !launcherList.value.some((l) => l.label === label);
-});
+const newLauncherValid = computed(() => canAddLauncher(newLauncherLabel.value, newLauncherCommand.value, launcherList.value));
 function addLauncher() {
   const label = newLauncherLabel.value.trim();
   const command = newLauncherCommand.value.trim();
-  if (!label || !command || launcherList.value.some((l) => l.label === label)) return;
+  if (!newLauncherValid.value) return;
   launcherList.value = [...launcherList.value, { label, command }];
   newLauncherLabel.value = "";
   newLauncherCommand.value = "";
@@ -83,7 +76,6 @@ function removeLauncher(label: string) {
 
 // User HTTP MCP servers (id + url) merged into the single-view Claude session. Editable
 // list mirroring the saved value; add/remove emits the new list up.
-const MCP_ID_RE = /^[A-Za-z0-9_-]+$/;
 const mcpServers = ref<UserMcpServer[]>([...(props.userMcpServers ?? [])]);
 watch(
   () => props.userMcpServers,
@@ -91,11 +83,7 @@ watch(
 );
 const newMcpId = ref("");
 const newMcpUrl = ref("");
-const newMcpValid = computed(() => {
-  const id = newMcpId.value.trim();
-  const url = newMcpUrl.value.trim();
-  return MCP_ID_RE.test(id) && /^https?:\/\/\S+$/.test(url) && !mcpServers.value.some((s) => s.id === id);
-});
+const newMcpValid = computed(() => canAddMcpServer(newMcpId.value, newMcpUrl.value, mcpServers.value));
 function addMcpServer() {
   const id = newMcpId.value.trim();
   const url = newMcpUrl.value.trim();
