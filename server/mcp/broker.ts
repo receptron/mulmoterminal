@@ -28,17 +28,10 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprot
 import { randomUUID } from "node:crypto";
 import { toolDefinitions } from "../infra/plugins-registry.js";
 import { offeredTools, routeToolCall, SUBMIT_TRANSLATION_TOOL_NAME } from "./tool-gate.js";
+import { interpretToolEnvelope } from "./tool-envelope.js";
 
 // Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
 // whether a toolResult is published to the GUI; the rest is narration/metadata.
-interface ToolEnvelope {
-  data?: unknown;
-  title?: unknown;
-  jsonData?: unknown;
-  message?: unknown;
-  instructions?: unknown;
-}
-
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 async function postJson(url: string, body: unknown) {
@@ -105,26 +98,15 @@ export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { su
       return { content: [{ type: "text", text: route.message }], isError: true };
     }
 
-    // 1. Dispatch to the plugin's server-side handler.
+    // Dispatch to the plugin's server-side handler, then interpret its envelope (tool-envelope.ts).
     const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();
-    const envelope: ToolEnvelope = isRecord(parsed) ? parsed : {};
+    const { publish, narration } = interpretToolEnvelope(isRecord(parsed) ? parsed : {});
 
-    // 2. Publish a toolResult to the GUI — only when there is data to render.
-    if (envelope.data !== undefined) {
-      await postJson(`${baseUrl}/api/agent/toolResult`, {
-        sessionId,
-        toolName: name,
-        uuid: randomUUID(),
-        title: envelope.title,
-        data: envelope.data,
-        jsonData: envelope.jsonData ?? envelope.data,
-        message: envelope.message,
-      });
+    // A GUI toolResult, only when there is data to render.
+    if (publish) {
+      await postJson(`${baseUrl}/api/agent/toolResult`, { sessionId, toolName: name, uuid: randomUUID(), ...publish });
     }
-
-    // 3. Return the narration to claude.
-    const parts = [envelope.message, envelope.instructions].filter(Boolean);
-    return { content: [{ type: "text", text: parts.length ? parts.join("\n") : "Done" }] };
+    return { content: [{ type: "text", text: narration }] };
   });
 
   return server;
