@@ -114,19 +114,25 @@ async function readRolloutSummary(file: string): Promise<(RolloutHead & { mtime:
   }
 }
 
-// Does a rollout with this id exist? The id is the filename suffix, so this checks names only (no
-// reads). Lets a sidebar-listed codex session be resumed by its rollout id (`codex resume <id>`).
-export function codexRolloutExists(root: string, id: string): boolean {
-  if (!UUID_RE.test(id) || !existsSync(root)) return false;
+// The rollout file for this id, or null. The id is the filename suffix, so the search reads
+// directory names only. Newest day first, so the answer is found near the front for a live session.
+export function codexRolloutPath(root: string, id: string): string | null {
+  if (!UUID_RE.test(id) || !existsSync(root)) return null;
   const suffix = `-${id}.jsonl`;
-  return dayDirsDesc(root).some((dayDir) => {
+  for (const dayDir of dayDirsDesc(root)) {
     try {
-      return readdirSync(dayDir).some((n) => ROLLOUT_RE.test(n) && n.endsWith(suffix));
+      const name = readdirSync(dayDir).find((n) => ROLLOUT_RE.test(n) && n.endsWith(suffix));
+      if (name) return path.join(dayDir, name);
     } catch {
-      return false;
+      // a day dir that vanished mid-scan — keep looking
     }
-  });
+  }
+  return null;
 }
+
+// Does a rollout with this id exist? Lets a sidebar-listed codex session be resumed by its
+// rollout id (`codex resume <id>`).
+export const codexRolloutExists = (root: string, id: string): boolean => codexRolloutPath(root, id) !== null;
 
 // codex sessions for a workspace, newest first — the single view's sidebar list. Scans the most
 // recent rollout files, keeps those whose recorded cwd matches, and returns the top `limit`.
