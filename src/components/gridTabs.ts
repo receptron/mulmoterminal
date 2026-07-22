@@ -353,3 +353,27 @@ export function resolveCellStatus(
   }
   return out;
 }
+
+// The toolbar's grid-wide, at-a-glance tally. Two decisions, and the asymmetry is deliberate:
+//
+// The badge shows only when something is actually RUNNING — blocked + done + working > 0.
+// Idle is NOT counted there: a grid of nothing but idle cells has nothing to triage, and
+// surfacing the strip on every quiet session is noise. But idle IS in the tooltip text, as
+// the trailing part, because once the strip is up "how many are idle" is useful context.
+//
+// Order is fixed: blocked (needs you) first, then done, working, idle — the reading order for
+// deciding which cell to look at.
+export interface GridStatusSummary {
+  show: boolean;
+  title: string;
+}
+
+export function gridStatusSummary(counts: StatusCounts | null | undefined): GridStatusSummary {
+  if (!counts) return { show: false, title: "" };
+  const parts: string[] = [];
+  if (counts.blocked) parts.push(`${counts.blocked} need input`);
+  if (counts.done) parts.push(`${counts.done} done (review)`);
+  if (counts.working) parts.push(`${counts.working} working`);
+  if (counts.idle) parts.push(`${counts.idle} idle`);
+  return { show: counts.blocked + counts.done + counts.working > 0, title: parts.join(" · ") };
+}

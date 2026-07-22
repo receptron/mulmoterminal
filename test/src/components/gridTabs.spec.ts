@@ -31,6 +31,7 @@ import {
   type CellStatus,
   type GridState,
   type Cell,
+  gridStatusSummary,
 } from "../../../src/components/gridTabs.js";
 
 const U = (n: number) => `${String(n % 10).repeat(8)}-aaaa-aaaa-aaaa-aaaaaaaaaaaa`;
@@ -518,5 +519,40 @@ describe("resolveCellStatus", () => {
 
   it("returns an empty map for no cells", () => {
     expect(resolveCellStatus([], new Map<string, CellStatus>(), {})).toEqual({});
+  });
+});
+
+describe("gridStatusSummary", () => {
+  const counts = (over: Partial<Record<"blocked" | "done" | "working" | "idle", number>> = {}) => ({ blocked: 0, done: 0, working: 0, idle: 0, ...over });
+
+  it("shows nothing when there are no counts", () => {
+    expect(gridStatusSummary(null)).toEqual({ show: false, title: "" });
+    expect(gridStatusSummary(undefined)).toEqual({ show: false, title: "" });
+  });
+
+  // The asymmetry this exists for: idle alone does not raise the badge — a wholly-idle grid
+  // has nothing to triage, and the strip would be noise on every quiet session.
+  it("does not show for a grid that is only idle", () => {
+    expect(gridStatusSummary(counts({ idle: 9 })).show).toBe(false);
+  });
+
+  it.each(["blocked", "done", "working"] as const)("shows as soon as one cell is %s", (key) => {
+    expect(gridStatusSummary(counts({ [key]: 1 })).show).toBe(true);
+  });
+
+  // …but idle IS in the tooltip text once the strip is up.
+  it("includes idle in the title even though it does not raise the badge", () => {
+    const s = gridStatusSummary(counts({ working: 1, idle: 3 }));
+    expect(s.show).toBe(true);
+    expect(s.title).toBe("1 working · 3 idle");
+  });
+
+  // Reading order: blocked (needs you) first.
+  it("orders the parts blocked, done, working, idle", () => {
+    expect(gridStatusSummary(counts({ blocked: 1, done: 2, working: 3, idle: 4 })).title).toBe("1 need input · 2 done (review) · 3 working · 4 idle");
+  });
+
+  it("omits a zero count from the title", () => {
+    expect(gridStatusSummary(counts({ blocked: 2, working: 1 })).title).toBe("2 need input · 1 working");
   });
 });
