@@ -10,6 +10,7 @@
 import path from "node:path";
 import { configureFileChangePublisher, publishFileChange } from "@mulmoclaude/core/file-change";
 import type { createPubSub } from "../infra/pubsub.js";
+import { isDocPath } from "./docPath.js";
 
 type PubSub = ReturnType<typeof createPubSub>;
 
@@ -17,13 +18,9 @@ const log = {
   warn: (message: string, data?: Record<string, unknown>) => console.warn(`[file-change] ${message}`, data ?? ""),
 };
 
-// Scope matchers mirror the host write sites exactly:
-//   markdown — artifacts/documents/**.md (the presentDocument View's isFilePath gate)
-//   html     — **.html                   (the presentHtml View)
-function isMarkdownDoc(posixPath: string): boolean {
-  return posixPath.startsWith("artifacts/documents/") && posixPath.endsWith(".md");
-}
-
+// Scope matchers mirror the host write sites exactly — the markdown one IS the write site's
+// predicate (docPath.ts), so the two cannot drift into a document that saves but never
+// refreshes.
 function isHtmlDoc(posixPath: string): boolean {
   return posixPath.endsWith(".html");
 }
@@ -39,7 +36,7 @@ export function initFileChangePublisher(deps: { workspace: string; pubsub: PubSu
     // separators (our rels are already "/"-joined, so this is a no-op on POSIX).
     toPosix: (relativePath) => relativePath.split(path.sep).join("/"),
     pluginScopes: [
-      { scope: "markdown", matches: isMarkdownDoc },
+      { scope: "markdown", matches: isDocPath },
       { scope: "html", matches: isHtmlDoc },
     ],
     warn: (message, data) => log.warn(message, data),
