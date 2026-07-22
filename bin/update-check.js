@@ -80,6 +80,17 @@ export function npmUpdateNotice(current, latest) {
   return `Update available: ${current} → ${latest}  ·  run: npm i -g mulmoterminal`;
 }
 
+// Whether `git status --porcelain` output means a tree too dirty to fast-forward. Untracked
+// files (`??`) don't count: build output, .env, logs and other scratch are normal in any
+// working clone and `git pull` proceeds past them, so an untracked-only tree is treated as
+// clean here — otherwise a checkout that is genuinely behind never hears about it just
+// because it has a stray file. Tracked modifications (anything not `??`) are the real block.
+export function isTreeDirtyForUpdate(porcelain) {
+  return String(porcelain ?? "")
+    .split("\n")
+    .some((line) => line.trim() !== "" && !line.startsWith("??"));
+}
+
 // Whether a git checkout should hear that an update exists, and what to say.
 // Silent whenever the notice could not be acted on or trusted: a dirty tree
 // cannot fast-forward, a missing sha means local or remote could not be read,

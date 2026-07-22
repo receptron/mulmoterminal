@@ -18,6 +18,7 @@ import {
   fetchLatestVersion,
   gitUpdateNotice,
   hasNodeModulesSegment,
+  isTreeDirtyForUpdate,
   isUpdateCheckDisabled,
   npmUpdateNotice,
   parseLsRemoteHead,
@@ -86,7 +87,7 @@ async function installKind() {
 // network — it can't fast-forward, so there is nothing worth asking the remote.
 async function gitUpdateMessage() {
   const status = await runGit(["status", "--porcelain"]);
-  if (status === null || status !== "") return null;
+  if (status === null || isTreeDirtyForUpdate(status)) return null;
   const [localSha, localShort, lsRemote] = await Promise.all([
     runGit(["rev-parse", "HEAD"]),
     runGit(["rev-parse", "--short", "HEAD"]),

@@ -7,6 +7,7 @@ import {
   classifyInstall,
   parseLsRemoteHead,
   npmUpdateNotice,
+  isTreeDirtyForUpdate,
   gitUpdateNotice,
 } from "../../bin/update-check.js";
 
@@ -185,5 +186,32 @@ describe("gitUpdateNotice", () => {
   // Falls back to a trimmed full sha if the short one was not captured.
   it("uses a trimmed sha when the short one is missing", () => {
     expect(gitUpdateNotice({ ...behind, localShort: null })).toContain("0123456 →");
+  });
+});
+
+describe("isTreeDirtyForUpdate", () => {
+  it("treats an empty tree as clean", () => {
+    expect(isTreeDirtyForUpdate("")).toBe(false);
+    expect(isTreeDirtyForUpdate(null)).toBe(false);
+    expect(isTreeDirtyForUpdate(undefined)).toBe(false);
+  });
+
+  // The whole point of the review fix: scratch files a working clone accumulates (build
+  // output, .env, logs) must not suppress the update notice — git pull proceeds past them.
+  it("treats an untracked-only tree as clean", () => {
+    expect(isTreeDirtyForUpdate("?? build/out.js")).toBe(false);
+    expect(isTreeDirtyForUpdate("?? a.log\n?? .env\n?? node_modules/")).toBe(false);
+  });
+
+  it("is dirty on a tracked modification", () => {
+    expect(isTreeDirtyForUpdate(" M src/app.ts")).toBe(true);
+    expect(isTreeDirtyForUpdate("M  staged.ts")).toBe(true);
+    expect(isTreeDirtyForUpdate("A  added.ts")).toBe(true);
+    expect(isTreeDirtyForUpdate("UU conflict.ts")).toBe(true);
+  });
+
+  // A tracked change hiding among untracked files still counts.
+  it("is dirty when a tracked change sits among untracked ones", () => {
+    expect(isTreeDirtyForUpdate("?? a.log\n M src/app.ts\n?? b.log")).toBe(true);
   });
 });
