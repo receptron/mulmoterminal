@@ -32,6 +32,7 @@ import { artifactsFileOps } from "../backends/artifacts.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
+import { missingRequiredEnv, soleExecutor } from "./server-tool-load.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // ../.. climbs server/infra/ → server/ → package root, where plugins/ lives.
@@ -96,11 +97,7 @@ async function loadPackage(name: string) {
   // and ship no `pluginCore` on the core entry (their origin host registers the tool
   // as a built-in). Fall back to a sole `execute*` function export so such packages
   // still load without hardcoding their name.
-  const soleExecuteStar = (() => {
-    const fns = Object.entries(mod).filter(([key, val]) => key.startsWith("execute") && typeof val === "function");
-    return fns.length === 1 ? (fns[0][1] as (...args: unknown[]) => unknown) : undefined;
-  })();
-  const execute = mod.pluginCore?.execute ?? mod.execute ?? soleExecuteStar;
+  const execute = mod.pluginCore?.execute ?? mod.execute ?? soleExecutor(mod);
   if (!definition || typeof execute !== "function") {
     throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
   }
@@ -136,7 +133,7 @@ async function loadServerToolPackage(name: string) {
   }
   return tools
     .filter((tool) => {
-      const missing = (tool.requiredEnv ?? []).filter((key) => !process.env[key]);
+      const missing = missingRequiredEnv(tool.requiredEnv, process.env);
       if (missing.length > 0) {
         console.warn(`[plugins] skipping server tool "${tool.definition.name}" — missing env: ${missing.join(", ")}`);
         return false;
