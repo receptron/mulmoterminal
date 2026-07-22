@@ -114,12 +114,32 @@ export function parseTmuxEnvironment(stdout: string): Map<string, string> {
 //
 // Session environments need no scrub either: tmux copies only `update-environment`
 // vars (DISPLAY, SSH_*, …) into them, never launcher vars.
+// Beyond the launcher vars: a session pointed at an Anthropic-compatible backend must not
+// see ANTHROPIC_API_KEY, which silently outranks the auth token that aims it there. The
+// settings `env` block cannot express a REMOVAL, and a pane inherits the tmux server's
+// environment rather than ours, so this is where it has to be taken out (#579).
+const SCRUBBED_NAMES = new Set(["ANTHROPIC_API_KEY"]);
+
 function scrubGlobalEnvironment(): void {
   const r = tmux(["show-environment", "-g"]);
   if (r.status !== 0) return;
   for (const name of parseTmuxEnvironment(r.stdout).keys()) {
-    if (isLauncherEnvVar(name)) tmux(["set-environment", "-g", "-r", name]);
+    if (isLauncherEnvVar(name) || SCRUBBED_NAMES.has(name)) tmux(["set-environment", "-g", "-r", name]);
   }
+}
+
+// Flag names for removal from the RUNNING tmux server's global environment, so panes
+// created from here on don't inherit them.
+//
+// ensureConf's scrub is not enough on its own: it only runs when a server already existed
+// when this process started. A server that a LATER spawn creates inherits that spawn's
+// environment instead — measured — so a first non-provider session can seed the server
+// with ANTHROPIC_API_KEY and every provider pane after it would inherit the key that
+// silently outranks its auth token (#579). Called before a provider spawn; a no-op (and
+// harmless failure) when no server is running yet, where the fresh server inherits the
+// already-stripped environment.
+export function tmuxScrubEnvNames(names: readonly string[]): void {
+  for (const name of names) tmux(["set-environment", "-g", "-r", name]);
 }
 
 function ensureConf(): void {

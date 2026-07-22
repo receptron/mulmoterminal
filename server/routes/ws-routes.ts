@@ -24,6 +24,7 @@ import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/regist
 import { sandboxWouldRun } from "../session/pty-spawn.js";
 import { handleCommandFrame } from "../session/pty-connection.js";
 import { closeWithError } from "../session/ws-frames.js";
+import { ProviderRefusedError } from "../session/provider-env.js";
 import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
@@ -257,6 +258,9 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: { u
     // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
     // must close just this connection — never crash the whole server.
     console.error(`[ws] failed to start session ${sessionId}: ${messageOf(err)}`);
+    // A provider refusal already says exactly what is wrong with the directory's config
+    // (#579); the generic hint below would bury it.
+    if (err instanceof ProviderRefusedError) return closeWithError(ws, err.message);
     closeWithError(ws, "Failed to start Claude. Is the `claude` CLI installed and on your PATH?");
     return;
   }
