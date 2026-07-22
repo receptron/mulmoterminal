@@ -22,6 +22,7 @@ import TimelineOverlay from "./TimelineOverlay.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
+import type { GridCellEmits, GridCellProps } from "./gridCell";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import { handoffTargets, pullLastTurn, type HandoffTarget } from "../composables/useHandoff";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
@@ -45,52 +46,46 @@ function onHeaderClick(event: MouseEvent) {
 // `initialCwd` is this cell's persisted working dir; `defaultCwd` is the server
 // default used to prefill the launch form; `presets` are quick-pick dirs; `home`
 // is the server home dir (to anchor the header path on ~).
-const props = defineProps<{
-  // The grid cell's stable uid — the durable-connection slot key for this cell's
-  // terminal, so flipping to an off-page tab detaches the view without reaping the PTY.
-  uid: number;
-  expanded: boolean;
-  // True while SOME cell in the grid is zoomed. A non-expanded cell then renders as a
-  // small filmstrip thumbnail, so it drops to a minimal header (dir + activity + zoom).
-  zoomed?: boolean;
-  initialSessionId: string | null;
-  initialCwd: string | null;
-  // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
-  // (or "claude") resumes as a normal Claude session.
-  initialAgent?: "codex" | null;
-  defaultCwd: string | null;
-  presets: CwdPreset[];
-  // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
-  launchers?: Launcher[];
-  home: string | null;
-  // Session ids open in other grid cells. Resuming one of them would detach that
-  // cell, so the launcher flags such rows and confirms before opening.
-  openSessionIds?: string[];
-  // Dirs with a running session in another cell, so the launcher can tint preset
-  // chips whose dir is already in use.
-  openCwds?: string[];
-  // An added (not the sole entry) launcher: show a ✕ to dismiss it before launching.
-  cancellable?: boolean;
-  // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
-  reorderable?: boolean;
-}>();
-const emit = defineEmits<{
-  (e: "toggle-expand" | "close"): void;
-  // `record-cwd`: auto-record a fresh launch's server-confirmed cwd as a preset.
-  // `remove-preset`: drop a preset (its ✕) from the shared list — value is the path.
-  (e: "session" | "cwd" | "record-cwd" | "remove-preset", value: string): void;
-  // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
-  // terminal's header menu, which must NOT replace the session — it runs in a new cell.
-  (e: "run" | "runSpare", value: RunCommand): void;
-  // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
-  (e: "launch", value: LaunchPick): void;
-  // Swap this cell left (-1) or right (+1) in manual sort mode.
-  (e: "move", dir: -1 | 1): void;
-  // Report live activity up so the grid can attention-sort in auto mode.
-  (e: "status", value: CellStatus): void;
-  // The agent chosen (Claude/Codex) for this fresh launch, so the grid persists it.
-  (e: "agent", value: "claude" | "codex"): void;
-}>();
+const props = defineProps<
+  GridCellProps & {
+    // The grid cell's stable uid — the durable-connection slot key for this cell's
+    // terminal, so flipping to an off-page tab detaches the view without reaping the PTY.
+    uid: number;
+    initialSessionId: string | null;
+    initialCwd: string | null;
+    // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
+    // (or "claude") resumes as a normal Claude session.
+    initialAgent?: "codex" | null;
+    defaultCwd: string | null;
+    presets: CwdPreset[];
+    // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
+    launchers?: Launcher[];
+    // Session ids open in other grid cells. Resuming one of them would detach that
+    // cell, so the launcher flags such rows and confirms before opening.
+    openSessionIds?: string[];
+    // Dirs with a running session in another cell, so the launcher can tint preset
+    // chips whose dir is already in use.
+    openCwds?: string[];
+    // An added (not the sole entry) launcher: show a ✕ to dismiss it before launching.
+    cancellable?: boolean;
+    // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
+    reorderable?: boolean;
+  }
+>();
+const emit = defineEmits<
+  GridCellEmits & {
+    // `record-cwd`: auto-record a fresh launch's server-confirmed cwd as a preset.
+    // `remove-preset`: drop a preset (its ✕) from the shared list — value is the path.
+    (e: "session" | "cwd" | "record-cwd" | "remove-preset", value: string): void;
+    // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
+    // terminal's header menu, which must NOT replace the session — it runs in a new cell.
+    (e: "run" | "runSpare", value: RunCommand): void;
+    // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
+    (e: "launch", value: LaunchPick): void;
+    // The agent chosen (Claude/Codex) for this fresh launch, so the grid persists it.
+    (e: "agent", value: "claude" | "codex"): void;
+  }
+>();
 
 // A cell with a persisted session relaunches (resumes) on mount; otherwise it
 // starts empty and lazy-launches when the user picks a dir and clicks Start.

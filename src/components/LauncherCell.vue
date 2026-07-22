@@ -3,7 +3,8 @@ import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
-import { isShellLauncher, type CellStatus, type CellLauncher } from "./gridTabs";
+import { isShellLauncher, type CellLauncher } from "./gridTabs";
+import type { GridCellEmits, GridCellProps } from "./gridCell";
 
 // A grid cell running a configured launch command (a plain shell, codex, any
 // interactive program) instead of Claude. Unlike CommandCell this is PERSISTENT: it
@@ -11,27 +12,22 @@ import { isShellLauncher, type CellStatus, type CellLauncher } from "./gridTabs"
 // switches and reconnects — but it has no Claude hooks, so its status is only
 // running (working) / exited (idle). `launcher.index` is the command's position in the
 // configured launcher list (the server's allowlist); it runs in `cwd`.
-const props = defineProps<{
-  uid: number;
-  expanded: boolean;
-  // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
-  // (unless it's the zoomed one). Only then does a header-background click zoom it.
-  zoomed?: boolean;
-  launcher: CellLauncher;
-  session: string | null;
-  cwd: string | null;
-  home: string | null;
-  // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
-  reorderable?: boolean;
-}>();
-const emit = defineEmits<{
-  (e: "toggle-expand" | "close"): void;
-  (e: "move", dir: -1 | 1): void;
-  // Report activity up so the grid can attention-sort in auto mode.
-  (e: "status", value: CellStatus): void;
-  // The server-assigned session id, so the parent persists it for reconnect.
-  (e: "session", id: string): void;
-}>();
+const props = defineProps<
+  GridCellProps & {
+    uid: number;
+    launcher: CellLauncher;
+    session: string | null;
+    cwd: string | null;
+    // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
+    reorderable?: boolean;
+  }
+>();
+const emit = defineEmits<
+  GridCellEmits & {
+    // The server-assigned session id, so the parent persists it for reconnect.
+    (e: "session", id: string): void;
+  }
+>();
 
 // Clicking the header background zooms (switches to) this cell, except the already-
 // expanded one. Buttons keep their action.
