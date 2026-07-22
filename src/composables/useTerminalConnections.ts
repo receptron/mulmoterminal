@@ -461,19 +461,24 @@ export function pasteText(key: string, text: string): boolean {
   return true;
 }
 
-// The connected slots that are an agent worth talking to — command cells (a finished
-// script's output) and plain shells are dropped, since pasting a conversation excerpt
-// into either does nothing useful. A snapshot, not a reactive view: the caller is a
-// menu that opens, gets picked from, and closes.
+// The connected slots whose conversation can be read — command cells (a finished
+// script's output) and plain shells are dropped, since neither keeps an agent log. A
+// snapshot, not a reactive view: the caller is a menu that opens, gets picked from,
+// and closes.
 export interface SlotInfo {
   key: string;
+  sessionId: string;
   cwd: string | null;
   agent: "claude" | "codex";
 }
 export function listSlots(): SlotInfo[] {
   return [...conns.values()]
     .filter((c) => c.ws?.readyState === WebSocket.OPEN && !c.target.command && !(c.target.launcher && "shell" in c.target.launcher))
-    .map((c) => ({ key: c.key, cwd: c.knownCwd ?? c.target.cwd, agent: c.target.codex ? "codex" : "claude" }));
+    .flatMap((c) =>
+      // No session id yet means no log to read — a cell that hasn't launched has
+      // nothing to offer, so it is absent rather than listed and unusable.
+      c.knownSessionId ? [{ key: c.key, sessionId: c.knownSessionId, cwd: c.knownCwd ?? c.target.cwd, agent: c.target.codex ? "codex" : "claude" }] : [],
+    );
 }
 
 // Insert text (a path, or space-joined paths) at the cursor via the normal input
