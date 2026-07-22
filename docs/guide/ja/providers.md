@@ -26,7 +26,7 @@ Moonshot や社内の LiteLLM ゲートウェイなど、他の Anthropic 互換
 
 | 何を | どこに | なぜそこか |
 |---|---|---|
-| **接続先**（URL・鍵の変数名） | `~/.mulmoterminal/config.json` の `providers` | アプリ全体で共有するため |
+| **接続先**（URL・鍵の変数名） | `~/.mulmoterminal/config.json` の `providers` | アプリ全体で共有するため。**組み込みの接続先は無いので、ここを書かないと何も選べません** |
 | **API キー** | サーバの環境変数（`.env` など） | **この設定ファイルはブラウザとスマホに配信される**ため、鍵を書いてはいけない |
 | **既定のモデル** | プロジェクトの `.mulmoterminal.json` | プロジェクトごとに変えたいため |
 
@@ -46,9 +46,44 @@ Moonshot や社内の LiteLLM ゲートウェイなど、他の Anthropic 互換
 
 ---
 
-## 2. 接続先を登録する
+## 2. 接続先を登録する（**必須**）
 
-`~/.mulmoterminal/config.json` に `providers` を足します。
+**この登録が無いと、モデル選択欄はそもそも出ません。** 組み込みの接続先は 1 つもありません。
+
+検証済みの 27 モデルはアプリに入っていますが、そこにあるのは**モデルの id と実測値だけ**です。
+**どこに繋ぐか（`baseUrl`）と、鍵をどの環境変数から読むか（`tokenEnv`）は入っていない**ため、
+登録するまで送信先が決まりません。実測すると差はこうなります。
+
+| `providers` | 選べるモデル | MODEL 選択欄 |
+|---|---|---|
+| 未設定（初期状態） | **0 件** | 出ない |
+| 登録済み | **27 件** | 出る |
+
+### 一発で追加する
+{: .no_toc }
+
+既存の設定を壊さずに追加します（`config.json.bak` にバックアップを取り、二重実行しても重複しません）。
+
+```bash
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path");
+const file = path.join(os.homedir(), ".mulmoterminal", "config.json");
+const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+if (fs.existsSync(file)) fs.copyFileSync(file, file + ".bak");
+config.providers = [
+  ...(config.providers ?? []).filter((p) => p.id !== "openrouter"),
+  { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api", tokenEnv: "OPENROUTER_API_KEY", maxOutputTokens: 16000 },
+];
+fs.mkdirSync(path.dirname(file), { recursive: true });
+fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+console.log("added openrouter to " + file);
+'
+```
+
+### 手で書く
+{: .no_toc }
+
+`~/.mulmoterminal/config.json` が**まだ無い**なら、これをそのまま貼れば完成です。
 
 ```json
 {
@@ -58,12 +93,40 @@ Moonshot や社内の LiteLLM ゲートウェイなど、他の Anthropic 互換
       "label": "OpenRouter",
       "baseUrl": "https://openrouter.ai/api",
       "tokenEnv": "OPENROUTER_API_KEY",
-      "maxOutputTokens": 16000,
-      "models": []
+      "maxOutputTokens": 16000
     }
   ]
 }
 ```
+
+**すでにファイルがある場合は、上書きせず `providers` の行だけを既存の `{ … }` の中に足してください。**
+丸ごと置き換えると `cwdPresets` やヘッダーのボタン設定が消えます。
+
+```json
+{
+  "cwdPresets": [ ... 既存のまま ... ],
+  "chips": [ ... 既存のまま ... ],
+
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api",
+      "tokenEnv": "OPENROUTER_API_KEY",
+      "maxOutputTokens": 16000
+    }
+  ]
+}
+```
+
+### LLM に頼む
+{: .no_toc }
+
+どのディレクトリでもいいので、Claude のセッションに `mulmoterminal の設定に OpenRouter を追加して` と
+頼めば、同梱の `mulmoterminal-config` スキルが既存の設定を保ったまま書いてくれます（**鍵は書きません**）。
+
+**モデルは書きません。** この `id` のプロバイダを登録した時点で、[検証済みの 27 モデル](#verified)が
+選択肢に出ます。書くのは、その一覧に**無いモデルを足したいとき**だけです（→ [モデルを足す](#add-models)）。
 
 | キー | 意味 |
 |---|---|
@@ -71,8 +134,8 @@ Moonshot や社内の LiteLLM ゲートウェイなど、他の Anthropic 互換
 | `label` | 選択画面に出る表示名 |
 | `baseUrl` | **末尾に `/v1` を付けない**（下の注意を参照） |
 | `tokenEnv` | 鍵が入っている環境変数の**名前**。鍵そのものではありません |
-| `maxOutputTokens` | 省略時 16000 |
-| `models` | プリセットに加えて選びたいモデル id（[後述](#add-models)） |
+| `maxOutputTokens` | 任意。省略時 16000 |
+| `models` | 任意。組み込み一覧に**無い**モデルを足すときだけ（→ [モデルを足す](#add-models)） |
 
 ### `baseUrl` に `/v1` を付けてはいけない
 {: .no_toc }
@@ -198,7 +261,7 @@ yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 qwen/qwen3-cod
 
 ---
 
-## 検証済みモデル一覧
+## 検証済みモデル一覧 {#verified}
 
 2026-07-22 時点、1 つの OpenRouter アカウントでの実測値です。**通過**は上のツール課題を完走した回数、
 **中央値**は成功した試行の所要時間。価格は 100 万トークンあたりの入力 / 出力。
@@ -253,7 +316,7 @@ yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 qwen/qwen3-cod
 | `404 No endpoints available …` | そのモデルが [Privacy 設定](https://openrouter.ai/settings/privacy)で除外されている |
 | 返事が空、固まったように見える | `maxOutputTokens` が小さすぎる。16000 以上に |
 | ツールを使わず、文章だけ返ってくる | そのモデルの限界。上の一覧か `model-trials.ts` で確認を |
-| モデル選択欄が出ない | 使えるプロバイダが 1 つも無い。フォームの「Use another model…」から不足箇所を確認できます |
+| モデル選択欄が出ない | `providers` が未登録（[2 章](#2-接続先を登録する必須)）か、鍵が無い。フォームの「Use another model…」から不足箇所を確認できます |
 | ヘッダーにモデル名が出ない | 設定の `chips` に `ctx` が入っていない |
 | Docker サンドボックスで起動できない | **併用できません**。コンテナは環境変数を引き継がず、そのままだと選んだはずのプロバイダではなく Anthropic に接続してしまうため、明示的に拒否しています |
 

@@ -26,7 +26,7 @@ Configuration lives in **three places**, each for a reason:
 
 | What | Where | Why there |
 |---|---|---|
-| **The backend** (URL, name of the key variable) | `providers` in `~/.mulmoterminal/config.json` | shared by the whole app |
+| **The backend** (URL, name of the key variable) | `providers` in `~/.mulmoterminal/config.json` | shared by the whole app. **Nothing ships built in — without this, there is nothing to choose** |
 | **The API key** | the server's environment (`.env`) | **that config file is served to the browser and the phone** — a key must never be in it |
 | **The default model** | a project's `.mulmoterminal.json` | it differs per project |
 
@@ -46,9 +46,45 @@ in the table below hit exactly that — **not a defect in the model**.
 
 ---
 
-## 2. Register the backend
+## 2. Register the backend (**required**)
 
-Add `providers` to `~/.mulmoterminal/config.json`:
+**Without this, there is no MODEL select at all.** No backend ships with the app.
+
+The 27 measured models are built in, but what they carry is only the model **id and its measurements**.
+**Where to send requests (`baseUrl`) and which environment variable holds the key (`tokenEnv`) are not
+in them**, so until a provider is registered there is nowhere to send anything. Measured:
+
+| `providers` | Models offered | MODEL select |
+|---|---|---|
+| unset (fresh install) | **0** | hidden |
+| registered | **27** | shown |
+
+### Add it in one command
+{: .no_toc }
+
+Adds the provider without disturbing the rest of your config — it backs the file up to
+`config.json.bak` first, and running it twice does not duplicate the entry.
+
+```bash
+node -e '
+const fs = require("fs"), os = require("os"), path = require("path");
+const file = path.join(os.homedir(), ".mulmoterminal", "config.json");
+const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+if (fs.existsSync(file)) fs.copyFileSync(file, file + ".bak");
+config.providers = [
+  ...(config.providers ?? []).filter((p) => p.id !== "openrouter"),
+  { id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api", tokenEnv: "OPENROUTER_API_KEY", maxOutputTokens: 16000 },
+];
+fs.mkdirSync(path.dirname(file), { recursive: true });
+fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\n");
+console.log("added openrouter to " + file);
+'
+```
+
+### Or write it by hand
+{: .no_toc }
+
+If `~/.mulmoterminal/config.json` does **not** exist yet, paste this as the whole file:
 
 ```json
 {
@@ -58,12 +94,42 @@ Add `providers` to `~/.mulmoterminal/config.json`:
       "label": "OpenRouter",
       "baseUrl": "https://openrouter.ai/api",
       "tokenEnv": "OPENROUTER_API_KEY",
-      "maxOutputTokens": 16000,
-      "models": []
+      "maxOutputTokens": 16000
     }
   ]
 }
 ```
+
+**If the file already exists, add the `providers` key inside the existing `{ … }` — do not replace the
+file.** Replacing it drops your `cwdPresets`, header buttons and everything else.
+
+```json
+{
+  "cwdPresets": [ ... keep yours ... ],
+  "chips": [ ... keep yours ... ],
+
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api",
+      "tokenEnv": "OPENROUTER_API_KEY",
+      "maxOutputTokens": 16000
+    }
+  ]
+}
+```
+
+### Or ask an LLM
+{: .no_toc }
+
+In any directory, tell a Claude session `add OpenRouter to my mulmoterminal config`. The bundled
+`mulmoterminal-config` skill keeps your existing settings and writes a valid entry — **without your
+key in it**.
+
+**Do not list models here.** Registering a provider with this `id` is enough — the
+[27 measured models](#verified) appear in the picker on their own. You only list models to add ones
+that are **not** in that list (→ [Adding models](#add-models)).
 
 | Key | Meaning |
 |---|---|
@@ -71,8 +137,8 @@ Add `providers` to `~/.mulmoterminal/config.json`:
 | `label` | what the picker shows |
 | `baseUrl` | **no trailing `/v1`** — see below |
 | `tokenEnv` | the **name** of the environment variable holding the key, never the key |
-| `maxOutputTokens` | defaults to 16000 |
-| `models` | extra model ids to offer beside the presets ([below](#add-models)) |
+| `maxOutputTokens` | optional; defaults to 16000 |
+| `models` | optional; only to add models **not** in the built-in list (→ [Adding models](#add-models)) |
 
 ### Never end `baseUrl` in `/v1`
 {: .no_toc }
@@ -199,7 +265,7 @@ numbers in the built-in presets (`common/modelPresets.ts`) were measured the sam
 
 ---
 
-## Measured models
+## Measured models {#verified}
 
 As of 2026-07-22, from a single OpenRouter account. **Passed** is how many attempts completed the
 tool-using probe above; **median** is over the attempts that passed; price is per million input / output
@@ -257,7 +323,7 @@ If you are unsure where to start, try **Kimi K2.7 Code** (fast, coding-oriented)
 | `404 No endpoints available …` | that model is excluded by your [privacy settings](https://openrouter.ai/settings/privacy) |
 | Empty replies, looks hung | `maxOutputTokens` too low — keep it at 16000+ |
 | Talks but never uses tools | the model's own limitation — check the table or `model-trials.ts` |
-| No MODEL select in the launch form | no provider is usable; "Use another model…" in the form names what's missing |
+| No MODEL select in the launch form | no provider is registered (step 2) or its key is missing; "Use another model…" in the form names what's missing |
 | No model in the header | `ctx` is not in your `chips` |
 | Can't start under the Docker sandbox | **not supported together.** The container inherits no environment, so the session would run against Anthropic instead of the backend you picked — it is refused rather than downgraded |
 
