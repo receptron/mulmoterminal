@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createConnectionHandlers, handleCommandFrame } from "../../../server/session/pty-connection.js";
 import type { PtyEntry } from "../../../server/session/types.js";
 
@@ -137,13 +137,21 @@ describe("handleClientFrame", () => {
     expect(calls).toEqual([]);
   });
 
-  it("never writes a non-JSON payload to the pty", () => {
+  it("never writes a non-JSON payload to the pty, and drops it silently", () => {
+    // Silently matters: a client can send anything, so a malformed frame must not
+    // reach the pty AND must not let that client flood the server log.
     const { handleClientFrame } = setup();
     const t = fakeTerm();
     const s = fakeSocket();
-    const entry = entryWith({ term: t.term as never, ws: s.ws as never });
-    handleClientFrame(entry, s.ws as never, "not json at all", SESSION);
-    expect(t.writes).toEqual([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const entry = entryWith({ term: t.term as never, ws: s.ws as never });
+      handleClientFrame(entry, s.ws as never, "not json at all", SESSION);
+      expect(t.writes).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("ignores an unknown frame type and a non-string input payload", () => {
@@ -193,12 +201,18 @@ describe("handleCommandFrame", () => {
     expect(t.resizes).toEqual([]);
   });
 
-  it("ignores malformed JSON and out-of-bounds resizes", () => {
+  it("drops malformed JSON silently, and ignores out-of-bounds resizes", () => {
     const t = fakeTerm();
-    handleCommandFrame(t.term as never, "{{{");
-    handleCommandFrame(t.term as never, frame({ type: "resize", cols: 9999, rows: 24 }));
-    expect(t.writes).toEqual([]);
-    expect(t.resizes).toEqual([]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      handleCommandFrame(t.term as never, "{{{");
+      expect(warn).not.toHaveBeenCalled();
+      handleCommandFrame(t.term as never, frame({ type: "resize", cols: 9999, rows: 24 }));
+      expect(t.writes).toEqual([]);
+      expect(t.resizes).toEqual([]);
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("survives a pty that throws", () => {
