@@ -20,8 +20,7 @@ import { renderMarpDeck, fillImagePlaceholders } from "@mulmoclaude/markdown-plu
 import type { MarkdownHostApp, ExportPdfOptions } from "@mulmoclaude/markdown-plugin";
 import { publishFileChange } from "./fileChange.js";
 import { generateImage } from "./image-gen.js";
-
-const DOCS_DIR = "artifacts/documents";
+import { DOCS_DIR, isDocPath } from "./docPath.js";
 
 // Set once at boot (server/index.ts) — workspace = CLAUDE_CWD. File-change
 // live-refresh is forwarded by the shared publisher (see fileChange.ts).
@@ -29,14 +28,6 @@ let workspace: string | null = null;
 
 export function initMarkdownBackend(deps: { workspace: string }): void {
   workspace = deps.workspace;
-}
-
-// Strict gate (matches the package's isFilePath + MulmoClaude's isMarkdownPath):
-// only `artifacts/documents/**.md`, normalized, no traversal.
-function isDocPath(rel: string): boolean {
-  if (!rel.startsWith(`${DOCS_DIR}/`) || !rel.endsWith(".md")) return false;
-  const normalized = path.posix.normalize(rel);
-  return normalized === rel && !normalized.includes("..");
 }
 
 function absFor(rel: string): string {
