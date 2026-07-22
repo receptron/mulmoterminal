@@ -5,6 +5,7 @@ import type { RunCommand } from "./runCommand";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import type { CellStatus } from "./gridTabs";
+import { browserLocale } from "../utils/browserLocale";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
 // a Claude session. Ephemeral: it has no session id and isn't persisted — a reload
@@ -67,7 +68,6 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 
 // The summary language follows the browser's base language — MulmoTerminal has no
 // locale picker (same signal as useVoiceInput / accountingUi / App.vue).
-const browserLocale = (): string => (navigator.language || "en").split("-")[0];
 
 async function postSummary(log: string): Promise<{ summary: string; truncated: boolean }> {
   const controller = new AbortController();

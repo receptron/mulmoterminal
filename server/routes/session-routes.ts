@@ -33,6 +33,7 @@ import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import type { SessionMeta } from "../session/types.js";
 import { parseActivityIds, selectSessionRows } from "../session/session-list.js";
+import { sessionDetailView } from "../session/session-detail-view.js";
 
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
@@ -56,27 +57,15 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   await activityStateHydrated; // a reconnect re-fetch must see the restored working/waiting, not idle
-  const a = activity.get(id) || {};
   const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context, workPhase } = await readSessionSummary(cwd, id);
-  const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
-  // The roster always shows OUR summary, never the external on-disk `ai-title` (MulmoClaude's).
-  // If we haven't titled it yet, kick off a summary and fall back to the prompt meanwhile.
+  // If we haven't titled it yet, kick off a summary; sessionDetailView falls back meanwhile.
   freshenRosterTitle(id, cwd, userTurns);
-  const aiTitle = aiTitles.get(id) ?? null;
-  const lastResponse = lastResponses.get(id) ?? transcriptResponse;
-  res.json({
-    id,
-    cwd,
-    working: a.working ?? false,
-    waiting: a.waiting ?? false,
-    event: a.event ?? null,
-    lastPrompt,
-    aiTitle,
-    lastResponse,
-    usage,
-    context,
-    workPhase,
-  });
+  const view = sessionDetailView(
+    { lastPrompt: lastPrompts.get(id), lastResponse: lastResponses.get(id), aiTitle: aiTitles.get(id) },
+    { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse },
+    activity.get(id) ?? {},
+  );
+  res.json({ id, cwd, ...view, usage, context, workPhase });
 }
 
 // Attention state (working / waiting / event) for an explicit set of session ids.

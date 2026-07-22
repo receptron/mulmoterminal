@@ -45,6 +45,7 @@ import {
 } from "./useCollectionBrowse";
 import PinToggle from "../components/PinToggle.vue";
 import { startCollectionChat } from "./useChatLauncher";
+import { browserLocale } from "../utils/browserLocale";
 
 // ── Modal teleport target (Shadow DOM) ──
 // PluginFrame mounts each card inside a per-instance shadow root, but
@@ -140,7 +141,7 @@ configureCollectionUi({
   confirm: (options) => Promise.resolve(window.confirm(options.message)),
   // MulmoTerminal has no host i18n; the plugin runs its own. Pick the browser's
   // base language, defaulting to English.
-  localeTag: () => (navigator.language || "en").split("-")[0],
+  localeTag: () => browserLocale(),
   generalRoleId: "general",
   personalRoleId: "personal",
   pinToggle: PinToggle,

@@ -31,3 +31,35 @@ export const isWorkPhase = (v: unknown): v is WorkPhase => v === "planning" || v
 
 // "editing" reads clearer than "implementing" in the tiny roster badge.
 export const WORK_WORD: Record<WorkPhase, string> = { planning: "planning", implementing: "editing" };
+
+// What the roster shows for a session after a metadata fetch, given what it already showed.
+//
+// Two opposite policies in one merge, and both are deliberate:
+//
+// The TEXT fields merge — an absent value keeps whatever is on screen. The summary can
+// transiently miss a transcript, and blanking every row on the first poll that comes up
+// empty would strip the cockpit exactly when the user is scanning it to decide which of nine
+// agents to look at.
+//
+// `workPhase` is taken AS-IS, including null, because a successful fetch is authoritative for
+// it: null means "no tools yet / not working", which is a real state. Merge it like the text
+// and a finished agent keeps a "planning" badge forever.
+export interface SessionMetaView {
+  lastPrompt: string | null;
+  aiTitle: string | null;
+  lastResponse: string | null;
+  workPhase: WorkPhase | null;
+}
+
+export const EMPTY_SESSION_META: SessionMetaView = { lastPrompt: null, aiTitle: null, lastResponse: null, workPhase: null };
+
+// `workPhase` is typed unknown because it arrives as untrusted JSON — isWorkPhase is the
+// only thing that may decide it is a phase.
+export function mergeSessionMeta(previous: SessionMetaView, fetched: Omit<Partial<SessionMetaView>, "workPhase"> & { workPhase?: unknown }): SessionMetaView {
+  return {
+    lastPrompt: fetched.lastPrompt ?? previous.lastPrompt,
+    aiTitle: fetched.aiTitle ?? previous.aiTitle,
+    lastResponse: fetched.lastResponse ?? previous.lastResponse,
+    workPhase: isWorkPhase(fetched.workPhase) ? fetched.workPhase : null,
+  };
+}

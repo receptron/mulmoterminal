@@ -30,6 +30,8 @@ import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
 import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
+import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
+import { codexResumeId } from "../agents/codex-resume.js";
 
 export interface WsRouteDeps {
   /** The http server these endpoints hang their `upgrade` handler off. */
@@ -151,19 +153,16 @@ function resolveLaunchSession(
 // after spawn and resume it with `codex resume <id>` once the live PTY is gone. Reattach a live
 // pty / surviving tmux session (running codex picked up, no resume); else cold-resume a known
 // rollout id; else a fresh session (a new minted key).
-// A rollout id to cold-resume for a requested session key: one we started here (key -> rollout id),
-// or a rollout id straight from the sidebar (its own id), or null (start fresh).
-function codexResumeIdFor(requested: string): string | null {
-  const mapped = codexRolloutIds.get(requested);
-  if (mapped) return mapped;
-  return codexRolloutExists(codexSessionsRoot(), requested) ? requested : null;
-}
-
 function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
   const hasLivePty = !!requested && ptys.has(requested);
   const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
+  const resumeRolloutId = codexResumeId(requested, {
+    mappedRolloutId: requested ? codexRolloutIds.get(requested) : null,
+    rolloutExists: () => !!requested && codexRolloutExists(codexSessionsRoot(), requested),
+    hasLivePty: !!live,
+    tmuxAlive,
+  });
   const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeRolloutId }, randomUUID);
   return { sessionId, live, resumeRolloutId };
 }
@@ -342,17 +341,15 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   // First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
   // with session discovery + resume. Its own endpoint so /ws stays claude-only.
   const runCodexWss = new WebSocketServer({ noServer: true });
-  function wssForPath(pathname: string): WebSocketServer | null {
-    if (pathname === "/ws") return wss;
-    if (pathname === "/ws/run") return runWss;
-    if (pathname === "/ws/launch") return runLaunchWss;
-    if (pathname === "/ws/codex") return runCodexWss;
-    return null; // e.g. /ws/pubsub — left to socket.io's own upgrade handler
-  }
+  const serverFor: Record<TerminalWsKind, WebSocketServer> = { claude: wss, run: runWss, launch: runLaunchWss, codex: runCodexWss };
   deps.server.on("upgrade", (req, socket, head) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
-    const target = wssForPath(pathname);
-    if (!target) return;
+    const kind = terminalWsKind(pathname);
+    // Not ours (e.g. /ws/pubsub) — leave it for socket.io's own upgrade handler. This
+    // returns BEFORE the origin check on purpose: rejecting here would destroy a socket
+    // socket.io is entitled to.
+    if (!kind) return;
+    const target = serverFor[kind];
     if (!deps.isAllowedOrigin(req.headers.origin)) {
       console.warn(`[ws] rejected cross-origin upgrade from ${req.headers.origin}`);
       socket.destroy();
