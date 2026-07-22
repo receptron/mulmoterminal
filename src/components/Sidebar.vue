@@ -1,18 +1,18 @@
 <script setup lang="ts">
-import { isUnread, type Session, type Filter } from "../composables/useSessions";
-import { useSessionFilter, type SessionListEmits } from "../composables/sessionList";
+import { isUnread } from "../composables/useSessions";
+import { useSessionFilter, type SessionListEmits, type SessionListProps } from "../composables/sessionList";
 import SessionFilters from "./SessionFilters.vue";
 
 // Presentational: the session list + filter are owned by App.vue (a single
 // useSessions instance shared across layouts) so toggling vertical/horizontal
 // doesn't reset or refetch them.
-const props = defineProps<{
-  sessions: Session[];
-  loading: boolean;
-  error: string | null;
-  activeId: string | null;
-  filter: Filter;
-}>();
+const props = defineProps<
+  SessionListProps & {
+    // Only the vertical layout has room to report these; the tab bar just shows what it has.
+    loading: boolean;
+    error: string | null;
+  }
+>();
 const emit = defineEmits<SessionListEmits>();
 
 const { unreadCount, filteredSessions } = useSessionFilter(props);
@@ -30,7 +30,7 @@ function relativeTime(ms: number): string {
 
 <template>
   <aside class="flex w-[260px] shrink-0 flex-col overflow-hidden border-r border-border bg-panel font-sans text-fg">
-    <div class="flex items-center justify-between px-3.5 py-2.5">
+    <div class="flex h-10 flex-none items-center justify-between border-b border-border px-3.5">
       <span class="text-[13px] font-semibold tracking-[0.05em] text-muted">Sessions</span>
       <button
         class="bg-transparent border-0 text-muted text-base leading-none cursor-pointer hover:text-fg"

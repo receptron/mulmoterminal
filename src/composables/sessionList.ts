@@ -9,9 +9,18 @@ export type SessionListEmits = {
   (e: "update:filter", f: Filter): void;
 };
 
+// What App.vue hands a session-list layout. The event half of this contract has been named
+// since both layouts were written; the props half was left inline in each of them, which is
+// how the same three lines ended up in both components (#646 B2).
+export interface SessionListProps {
+  sessions: Session[];
+  activeId: string | null;
+  filter: Filter;
+}
+
 // The Unread chip's count and the filter-applied list, shared by both layouts.
 // The horizontal bar caps `filteredSessions` to its most-recent tabs itself.
-export function useSessionFilter(props: { sessions: Session[]; filter: Filter }) {
+export function useSessionFilter(props: Pick<SessionListProps, "sessions" | "filter">) {
   const unreadCount = computed(() => props.sessions.filter(isUnread).length);
   const filteredSessions = computed(() => (props.filter === "unread" ? props.sessions.filter(isUnread) : props.sessions));
   return { unreadCount, filteredSessions };

@@ -1,16 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { isUnread, type Session, type Filter } from "../composables/useSessions";
-import { useSessionFilter, type SessionListEmits } from "../composables/sessionList";
+import { isUnread } from "../composables/useSessions";
+import { useSessionFilter, type SessionListEmits, type SessionListProps } from "../composables/sessionList";
 import SessionFilters from "./SessionFilters.vue";
 
 // Presentational: list + filter are owned by App.vue and shared with the
 // vertical Sidebar, so switching layouts preserves them (no refetch/reset).
-const props = defineProps<{
-  sessions: Session[];
-  activeId: string | null;
-  filter: Filter;
-}>();
+const props = defineProps<SessionListProps>();
 const emit = defineEmits<SessionListEmits>();
 
 const { unreadCount, filteredSessions } = useSessionFilter(props);
