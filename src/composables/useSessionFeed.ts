@@ -3,6 +3,7 @@
 // in, deduped by each item's identity (a re-emitted item updates in place).
 import { onUnmounted, watch, type Ref } from "vue";
 import { usePubSub } from "./usePubSub";
+import { mergeSnapshotWithLive } from "./snapshotMerge";
 
 interface SessionFeedOptions<T> {
   sessionId: () => string | null;
@@ -16,7 +17,13 @@ interface SessionFeedOptions<T> {
 export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T>) {
   const { sessionId, historyUrl, historyKey, channel, identify, onSessionChange } = options;
 
+  // Non-null while a history load is in flight, collecting what the live channel delivers
+  // meanwhile — the history answers as of the moment it was REQUESTED, so those items are
+  // newer than it and must survive being applied (#620 F1).
+  let arrivedDuringLoad: T[] | null = null;
+
   function upsert(item: T) {
+    arrivedDuringLoad?.push(item);
     const id = identify(item);
     const index = id === undefined ? -1 : items.value.findIndex((existing) => identify(existing) === id);
     if (index >= 0) items.value[index] = item;
@@ -24,6 +31,8 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
   }
 
   async function loadHistory(id: string) {
+    const live: T[] = [];
+    arrivedDuringLoad = live;
     try {
       const res = await fetch(historyUrl(id));
       // Guard against a session-switch race: a slow response for an old session must
@@ -32,9 +41,13 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (id !== sessionId()) return;
-      items.value = data[historyKey] ?? [];
+      items.value = mergeSnapshotWithLive(data[historyKey] ?? [], live, identify);
     } catch {
-      if (id === sessionId()) items.value = [];
+      // No history to show, but an event that arrived while asking is still this session's.
+      if (id === sessionId()) items.value = [...live];
+    } finally {
+      // A newer load has taken over: leave its buffer alone.
+      if (arrivedDuringLoad === live) arrivedDuringLoad = null;
     }
   }
 
