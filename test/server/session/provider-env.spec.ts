@@ -1,7 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 
-import { DEFAULT_MAX_OUTPUT_TOKENS, isUsableBaseUrl, resolveProvider, withoutUnset, type ProviderConfig } from "../../../server/session/provider-env.js";
+import {
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  ProviderRefusedError,
+  isUsableBaseUrl,
+  requireResolution,
+  resolveProvider,
+  withoutUnset,
+  type ProviderConfig,
+} from "../../../server/session/provider-env.js";
 
 const OPENROUTER: ProviderConfig = {
   id: "openrouter",
@@ -142,5 +150,31 @@ describe("withoutUnset", () => {
   it("returns the same object when there is nothing to remove", () => {
     const env = { PATH: "/usr/bin" };
     expect(withoutUnset(env, [])).toBe(env);
+  });
+});
+
+// A `{ ok: false }` a caller can quietly ignore is how the refusal contract gets lost —
+// it already happened once, with the spawn path downgrading refusals to a warning and
+// running the session on Anthropic instead.
+describe("requireResolution", () => {
+  it("throws the reason rather than returning something ignorable", () => {
+    const refused = resolveProvider({ provider: "openrouter", model: "m" }, PROVIDERS, {});
+    expect(() => requireResolution(refused)).toThrow(ProviderRefusedError);
+    expect(() => requireResolution(refused)).toThrow(/OPENROUTER_API_KEY/);
+  });
+
+  it("passes a good resolution straight through", () => {
+    const ok = resolveProvider(CHOICE, PROVIDERS, WITH_TOKEN);
+    expect(requireResolution(ok).model).toBe("z-ai/glm-5.2");
+  });
+
+  it("throws for every refusal reason, not just the missing token", () => {
+    for (const refused of [
+      resolveProvider({ provider: "typo", model: "m" }, PROVIDERS, WITH_TOKEN),
+      resolveProvider({ provider: "openrouter", model: null }, PROVIDERS, WITH_TOKEN),
+      resolveProvider(CHOICE, PROVIDERS, WITH_TOKEN, true),
+    ]) {
+      expect(() => requireResolution(refused)).toThrow(ProviderRefusedError);
+    }
   });
 });

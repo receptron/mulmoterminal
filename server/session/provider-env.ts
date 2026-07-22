@@ -95,6 +95,23 @@ export function resolveProvider(
   return { ok: true, value: { model: choice.model, env: providerEnv(provider, choice.model, token), unset: ["ANTHROPIC_API_KEY"] } };
 }
 
+// A directory asked for a backend that cannot be honoured. Thrown rather than downgraded:
+// staying on Anthropic would send the session's prompts to a backend the directory did
+// NOT select, which is the failure this whole module exists to prevent.
+export class ProviderRefusedError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "ProviderRefusedError";
+  }
+}
+
+// The resolution, or a throw. Callers get no third option — a `{ ok: false }` that a
+// caller can quietly ignore is how the contract above gets lost.
+export function requireResolution(result: ProviderResult): ProviderResolution {
+  if (!result.ok) throw new ProviderRefusedError(result.reason);
+  return result.value;
+}
+
 // Apply a resolution's `unset` to an environment copy. The settings `env` block can set
 // a variable but not remove one, so removal has to happen on the process environment.
 export function withoutUnset(env: NodeJS.ProcessEnv, unset: readonly string[]): NodeJS.ProcessEnv {

@@ -16,7 +16,7 @@ import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 import { loadDirConfig } from "../config/dir-config.js";
 import { getProviders } from "../config/config-routes.js";
-import { resolveProvider } from "./provider-env.js";
+import { requireResolution, resolveProvider } from "./provider-env.js";
 import { settingsArgument } from "./session-settings.js";
 
 export function createClaudeSpawner(deps: SpawnDeps) {
@@ -49,13 +49,12 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
 
-    // What this directory asked its sessions to run (#579). A refusal is NOT applied —
-    // the session stays on Anthropic, which is the safe outcome — but it is logged loudly,
-    // because silently ignoring the directory's choice is its own kind of surprise.
+    // What this directory asked its sessions to run (#579). A refusal THROWS: falling back
+    // to Anthropic would send this session's prompts to a backend the directory did not
+    // select, which is exactly what the provider contract exists to prevent. The ws route
+    // turns it into a message in the terminal.
     const dir = loadDirConfig(cwd);
-    const choice = resolveProvider({ provider: dir.provider, model: dir.model }, getProviders(), process.env, sandbox);
-    if (!choice.ok) console.warn(`[provider] ${cwd}: ${choice.reason} — staying on Anthropic`);
-    const resolved = choice.ok ? choice.value : { model: null, env: {}, unset: [] };
+    const resolved = requireResolution(resolveProvider({ provider: dir.provider, model: dir.model }, getProviders(), process.env, sandbox));
 
     const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
     const args = buildClaudeArgs({
@@ -83,7 +82,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     if (sandbox) {
       entry = spawnSandboxEntry(sessionId, args, cwd, ws);
     } else {
-      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true);
+      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, resolved.unset);
       console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
       entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
     }
