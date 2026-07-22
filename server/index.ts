@@ -4,10 +4,8 @@ import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./infra/pubsub.js";
 import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins-registry.js";
-import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getUserMcpServers, getWorklogConfig } from "./config/config-routes.js";
@@ -32,11 +30,13 @@ import { mcpConfigJson } from "./session/mcp-config.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
-import { createTranslationWorker, submitTranslation } from "./session/translation-worker.js";
+import { createTranslationWorker } from "./session/translation-worker.js";
 import { createTitleManager } from "./session/session-title.js";
 import { generateHeaderTitle } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { mountHookRoute } from "./routes/hook-routes.js";
+import { mountPluginRoutes } from "./routes/plugin-routes.js";
+import { mountMcpRoutes } from "./routes/mcp-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
@@ -51,14 +51,12 @@ import {
   lastResponses,
   lastTitleAttemptMs,
   lastTitledUserTurns,
-  translationWorkerIds,
   persistActivityState,
   ptys,
   titleInFlight,
 } from "./session/registry.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./session/reap-policy.js";
 import { nextActivity, sessionRow, shouldRefreshReply } from "./session/activity-transition.js";
-import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "./session/background-chat.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -71,12 +69,10 @@ import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { codexSessionsRoot } from "./agents/codex-session.js";
 import { codexRolloutExists } from "./agents/codex-sessions.js";
-import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { cleanupSessionSettings } from "./session/session-settings.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
-import { isRecord } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
@@ -86,7 +82,6 @@ import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initGoogleBackend, mountGoogleRoutes } from "./backends/google.js";
 import { initPluginRuntime } from "./infra/pluginRuntime.js";
-import { manageCollectionHandler } from "./infra/collection-tool.js";
 import { mountWikiRoutes } from "./backends/wiki.js";
 import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
 import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
@@ -401,36 +396,10 @@ const app = express();
 // the hook and leave its tool-call entry stuck on "running").
 app.use(express.json({ limit: "25mb" }));
 
-// Host tool: spawnBackgroundChat. Unlike a plugin (handled by mountAllRoutes'
-// catch-all), it needs server internals — it spawns a brand-new interactive Claude
-// terminal session, seeded with `message`, that the user can open from the sidebar.
-// `role` is ignored (MulmoTerminal has no roles). `hidden:true` marks it a background
-// worker: it still lists in the sidebar but never renders bold/unread when it
-// finishes. `draft:true` makes `message` an editable DRAFT — typed into the input box
-// but NOT auto-submitted (the collection-plugin's startNewChatDraft / template cards),
-// so the user reviews and presses Enter. Registered BEFORE mountAllRoutes so this
-// specific route wins over /api/plugin/:toolName.
-app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
-  const parsed = parseBackgroundChat(req.body);
-  if (!parsed.ok) return res.json({ message: parsed.message });
-  const { agent, draft, hidden, message } = parsed.request;
-  const sessionId = randomUUID();
-  if (hidden) hiddenSessions.add(sessionId);
-  // ws is null: the session runs headless until the user opens it (reattach replays the buffered
-  // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
-  // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
-  // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
-  try {
-    const mode = spawnModeFor(agent, draft);
-    if (mode === "codex-run") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
-    else if (mode === "claude-draft") spawnClaudePty(sessionId, null, null, { draft: message });
-    else spawnClaudePty(sessionId, null, null, { initialPrompt: message });
-  } catch (err) {
-    console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
-    return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
-  }
-  return res.json({ message: backgroundChatMessage(agent, draft, sessionId), jsonData: { chatId: sessionId, agent } });
-});
+// The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
+// manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede
+// mountAllRoutes' /api/plugin/:toolName catch-all below, which would otherwise take them.
+mountPluginRoutes(app, { spawnClaudePty, spawnCodexPty });
 
 // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
 // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
@@ -443,52 +412,6 @@ mountHtmlDispatchRoute(app);
 // (movie/PDF bytes for the View's fetchMediaBlob) has its own path.
 mountMulmoScriptDispatchRoute(app);
 mountMulmoScriptMediaRoute(app);
-
-// Host tool: manageAccounting. The accounting package exposes no gui-chat-protocol
-// `.` core (just the Vue View + the /api/accounting router), so — like MulmoClaude's
-// host-side passthrough execute — this route bridges the GUI MCP tool to that router.
-// The router's envelope ({ action, ...data, message }) flows straight back to the
-// broker: `data` (set for PREVIEW actions) gates the GUI publish, `message` narrates
-// to claude. Registered BEFORE mountAllRoutes so it wins over /api/plugin/:toolName.
-app.post("/api/plugin/manageAccounting", async (req, res) => {
-  try {
-    const upstream = await fetch(`http://127.0.0.1:${PORT}/api/accounting`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(isRecord(req.body) ? req.body : {}),
-    });
-    const body: unknown = await upstream.json().catch(() => ({}));
-    // The router 4xx's domain errors as { error }. Surface that as narration so claude
-    // can read + retry, rather than a thrown tool call (broker's postJson rejects non-2xx).
-    if (!upstream.ok) {
-      const errMsg = isRecord(body) && typeof body.error === "string" ? body.error : `accounting request failed (HTTP ${upstream.status})`;
-      return res.json({ message: errMsg });
-    }
-    return res.json(body);
-  } catch (err) {
-    console.error(`[manageAccounting] dispatch failed: ${messageOf(err)}`);
-    return res.json({ message: `accounting dispatch failed: ${messageOf(err)}` });
-  }
-});
-
-// Host tool: manageCollection — the shared collection data plane
-// (@mulmoclaude/core/collection/server, bound in server/infra/collection-tool.ts).
-// The engine runs in-process against the workspace configured by
-// initCollectionsBackend below, so the route calls the handler directly. The
-// result string (JSON for the read/write actions) narrates to claude via the
-// envelope `message`; no `data`, so nothing publishes to the GUI — same as
-// MulmoClaude. Errors surface as narration, not thrown tool calls, so the
-// agent can read and retry. Registered BEFORE mountAllRoutes so it wins over
-// /api/plugin/:toolName.
-app.post("/api/plugin/manageCollection", async (req, res) => {
-  try {
-    const message = await manageCollectionHandler(isRecord(req.body) ? req.body : {});
-    return res.json({ message });
-  } catch (err) {
-    console.error(`[manageCollection] dispatch failed: ${messageOf(err)}`);
-    return res.json({ message: `manageCollection failed: ${messageOf(err)}` });
-  }
-});
 
 // Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
 // POST /api/form). The GUI MCP server dispatches tool calls to these.
@@ -550,51 +473,9 @@ mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
 // sidebar (see session/translation-worker.ts).
 mountTranslationRoutes(app, { workspace: CLAUDE_CWD, translateBatch: translateViaHiddenChat });
 
-// The hidden translation worker reports its answer here, via the broker's worker-only
-// submitTranslation GUI tool (which POSTs { sessionId, translations }). We hand the
-// array to the waiting request and let translateViaHiddenChat validate it.
-app.post("/api/translation/submit", (req, res) => {
-  const { sessionId, translations } = isRecord(req.body) ? req.body : {};
-  if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
-  // No in-flight request for this id (already settled / timed out / not a worker).
-  if (!submitTranslation(sessionId, translations)) {
-    return res.status(404).json({ error: "no pending translation for this session" });
-  }
-  return res.json({ ok: true });
-});
-
-// In-process GUI MCP server, served over Streamable HTTP. claude (wired up via
-// mcpConfigJson) POSTs JSON-RPC here; the session id is in the URL path. We run in
-// STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
-// request, no session header / no initialize handshake required across requests.
-// The SDK forbids reusing a stateless transport, so we never cache it.
-const mcpReject = (_req: express.Request, res: express.Response) => res.status(405).set("Allow", "POST").json({ error: "method not allowed" });
-app.post("/api/mcp/:sessionId", async (req, res) => {
-  const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
-  // Hidden translation workers (and only they) get the worker-only submitTranslation
-  // tool, so a normal chat's tool list stays clean.
-  const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`, { submitTranslationTool: translationWorkerIds.has(sessionId) });
-  const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on("close", () => {
-    transport.close();
-    server.close();
-  });
-  try {
-    await server.connect(transport);
-    await transport.handleRequest(req, res, req.body);
-  } catch (err) {
-    console.error(`[mcp] request failed for ${sessionId}:`, err);
-    if (!res.headersSent) res.status(500).json({ error: "mcp error" });
-  }
-});
-// No SSE stream / session teardown in stateless mode — reject the rest.
-app.get("/api/mcp/:sessionId", mcpReject);
-app.delete("/api/mcp/:sessionId", mcpReject);
+// The agent-facing MCP surface (routes/mcp-routes.ts): the in-process GUI MCP server over
+// Streamable HTTP, and the worker-only landing point the hidden translation worker reports to.
+mountMcpRoutes(app);
 
 // Serve Vite build output
 app.use(express.static(path.join(__dirname, "../dist")));
