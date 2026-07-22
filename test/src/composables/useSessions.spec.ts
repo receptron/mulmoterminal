@@ -85,6 +85,32 @@ describe("useSessions — out-of-order responses", () => {
     expect(sessions.value.map((s) => s.id)).toEqual(["new"]);
   });
 
+  // Codex on #628: guarding against "a newer request exists" instead of "a newer answer is
+  // already on screen" throws away a perfectly good older answer whenever the newer request
+  // fails first — the user gets an error banner and an empty list although valid data arrived.
+  it("still applies an older answer when the newer request failed", async () => {
+    const settle: { resolve: (v: unknown) => void; reject: (e: Error) => void }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation((url: string) => {
+        if (String(url).includes("codex")) return Promise.resolve({ ok: true, json: async () => ({ sessions: [] }) });
+        return new Promise((resolve, reject) => settle.push({ resolve, reject }));
+      }),
+    );
+    const { sessions, load } = useSessions();
+    const older = load();
+    const newer = load();
+    await nextTick();
+
+    settle[1]?.reject(new Error("offline"));
+    await newer;
+    settle[0]?.resolve(listOf(["a"]));
+    await older;
+    await flushPromises();
+
+    expect(sessions.value.map((s) => s.id)).toEqual(["a"]);
+  });
+
   it("applies the answer when nothing newer was asked for", async () => {
     vi.stubGlobal(
       "fetch",
