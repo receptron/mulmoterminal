@@ -7,7 +7,8 @@
 // text in a pane you weren't looking at — possibly on another grid page — and left the
 // Enter to be pressed somewhere else. It is still never submitted for you, which is
 // what keeps another agent's output from acting as an instruction on its own.
-import { pasteText, listSlots, type SlotInfo } from "./useTerminalConnections";
+import { pasteText, listSlots } from "./useTerminalConnections";
+import type { SlotInfo } from "./readableSlot";
 import { formatCwd } from "../components/cwdDisplay";
 
 // A terminal whose last exchange can be pulled: how to name it in the menu, and what

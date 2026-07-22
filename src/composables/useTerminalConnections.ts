@@ -23,6 +23,7 @@ import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../components/wsUrl";
 import type { RunCommand } from "../components/runCommand";
+import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -461,24 +462,21 @@ export function pasteText(key: string, text: string): boolean {
   return true;
 }
 
-// The connected slots whose conversation can be read — command cells (a finished
-// script's output) and plain shells are dropped, since neither keeps an agent log. A
-// snapshot, not a reactive view: the caller is a menu that opens, gets picked from,
-// and closes.
-export interface SlotInfo {
-  key: string;
-  sessionId: string;
-  cwd: string | null;
-  agent: "claude" | "codex";
-}
+// The slots whose conversation another cell can read. A snapshot, not a reactive view:
+// the caller is a menu that opens, gets picked from, and closes. What counts as
+// readable lives in readableSlot — this only flattens each Conn for it to judge.
+const slotCandidate = (c: Conn): SlotCandidate => ({
+  key: c.key,
+  connected: c.ws?.readyState === WebSocket.OPEN,
+  isCommand: c.target.command !== null,
+  isShellLauncher: !!c.target.launcher && "shell" in c.target.launcher,
+  sessionId: c.knownSessionId,
+  cwd: c.knownCwd ?? c.target.cwd,
+  codex: !!c.target.codex,
+});
+
 export function listSlots(): SlotInfo[] {
-  return [...conns.values()]
-    .filter((c) => c.ws?.readyState === WebSocket.OPEN && !c.target.command && !(c.target.launcher && "shell" in c.target.launcher))
-    .flatMap((c) =>
-      // No session id yet means no log to read — a cell that hasn't launched has
-      // nothing to offer, so it is absent rather than listed and unusable.
-      c.knownSessionId ? [{ key: c.key, sessionId: c.knownSessionId, cwd: c.knownCwd ?? c.target.cwd, agent: c.target.codex ? "codex" : "claude" }] : [],
-    );
+  return [...conns.values()].map(slotCandidate).flatMap((candidate) => readableSlot(candidate) ?? []);
 }
 
 // Insert text (a path, or space-joined paths) at the cursor via the normal input
