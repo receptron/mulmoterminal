@@ -205,10 +205,11 @@ jobs:
             gh pr comment ${PR_NUMBER}
 
           Focus on: correctness, edge cases, security (XSS / SSRF /
-          path traversal / prompt injection), accessibility, i18n
-          lockstep (this repo has 8 locales under src/lang/), test
+          path traversal / prompt injection), accessibility, test
           coverage for the happy path + boundary cases, and
-          consistency with the rest of the codebase. Skip stylistic
+          consistency with the rest of the codebase. This repo has
+          no locale files — user-facing strings are written inline,
+          so there is no i18n lockstep to check. Skip stylistic
           nits unless they hide a real bug.
 
           At the END of your work, ALWAYS post ONE final top-level

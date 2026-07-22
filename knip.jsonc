@@ -1,0 +1,36 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["server/cli-init.ts", "server/cli-google.ts", "bin/update-check.js", "test/**/*.spec.ts", "*.config.ts"],
+  "project": ["server/**/*.ts", "src/**/*.{ts,vue}", "bin/**/*.js", "common/**/*.ts"],
+  "ignore": ["**/dist/**", "**/*.d.ts", "**/logs/**"],
+  // Only the dependencies knip structurally cannot see, each with the reason it is
+  // invisible. This was `.*` — every dependency ignored — which left the scan silent
+  // about dependency rot. Anything absent from this list is checked now, so a
+  // dependency whose last import disappears turns up in the report.
+  "ignoreDependencies": [
+    // Pulled in from CSS (`@import` in src/style.css and src/tailwind.css). knip reads
+    // TS/JS, not stylesheets, so it never sees these.
+    "material-symbols",
+    "tailwindcss",
+    // Loaded BY NAME at runtime from plugins/plugins.json (infra/plugins-registry.ts),
+    // so there is no import statement anywhere for knip to follow.
+    "@mulmoclaude/google-plugin",
+    "@mulmoclaude/x-plugin",
+  ],
+  "ignoreExportsUsedInFile": true,
+  "includeEntryExports": false,
+  "rules": {
+    "files": "off",
+    "dependencies": "warn",
+    "devDependencies": "warn",
+    "unlisted": "warn",
+    "unresolved": "off",
+    "binaries": "off",
+    "exports": "warn",
+    "types": "warn",
+    "nsExports": "off",
+    "nsTypes": "off",
+    "enumMembers": "off",
+    "duplicates": "off",
+  },
+}
