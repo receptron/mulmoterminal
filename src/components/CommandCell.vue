@@ -4,30 +4,21 @@ import TerminalView from "./Terminal.vue";
 import type { RunCommand } from "./runCommand";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
-import type { CellStatus } from "./gridTabs";
+import type { GridCellEmits, GridCellProps } from "./gridCell";
 import { browserLocale } from "../utils/browserLocale";
 
 // A grid cell that runs a `script.json` command (a cell launcher's Run) instead of
 // a Claude session. Ephemeral: it has no session id and isn't persisted — a reload
 // drops it. `command.index` is the script's position in `<command.cwd>/script.json`
 // (the server resolves it); the command runs in `command.cwd`.
-const props = defineProps<{
-  expanded: boolean;
-  // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
-  // (unless it's the zoomed one). Only then does a header-background click zoom it.
-  zoomed?: boolean;
-  command: RunCommand;
-  home: string | null;
-  // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
-  reorderable?: boolean;
-}>();
-const emit = defineEmits<{
-  (e: "toggle-expand" | "close"): void;
-  // Swap this cell left (-1) or right (+1) in manual sort mode.
-  (e: "move", dir: -1 | 1): void;
-  // Report activity up so the grid can attention-sort in auto mode.
-  (e: "status", value: CellStatus): void;
-}>();
+const props = defineProps<
+  GridCellProps & {
+    command: RunCommand;
+    // Manual sort mode: show ◀▶ to swap this cell with its neighbour.
+    reorderable?: boolean;
+  }
+>();
+const emit = defineEmits<GridCellEmits>();
 
 // connectKey forces Terminal.vue to (re)connect — bumped to re-run after exit.
 const connectKey = ref(0);
