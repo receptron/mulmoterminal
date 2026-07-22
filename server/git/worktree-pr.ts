@@ -5,6 +5,7 @@
 import { repoRoot, defaultBaseBranch, isManagedWorktree, git } from "./worktrees.js";
 import { resolveGithubUrl } from "./gitRemote.js";
 import { spawnCollect, type SpawnResult } from "./spawn-collect.js";
+import { lastGhUrl } from "./git-parse.js";
 
 type Reason = "not-worktree" | "no-branch" | "no-remote" | "no-github" | "push-failed" | "failed";
 
@@ -64,15 +65,6 @@ export async function pushWorktree(cwd: string): Promise<PushResult> {
   return pushed.ok ? { ok: true, branch } : { ok: false, reason: "push-failed", detail: pushed.stderr.trim().slice(0, DETAIL_LIMIT) };
 }
 
-// The last http(s) line of gh's output — `gh pr create` prints the PR URL last.
-function lastUrl(stdout: string): string | null {
-  const urls = stdout
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.startsWith("http"));
-  return urls.length ? urls[urls.length - 1] : null;
-}
-
 // Push, then create a PR via gh — falling back to the GitHub compare URL when gh is
 // absent/unauthed/errors. Returns the URL to open and which path produced it.
 export async function createOrOpenPR(cwd: string): Promise<PrResult> {
@@ -84,7 +76,7 @@ export async function createOrOpenPR(cwd: string): Promise<PrResult> {
   const base = await defaultBaseBranch(repo);
 
   const gh = await run("gh", ["pr", "create", "--base", base, "--head", branch, "--fill"], cwd);
-  const ghUrl = gh.ok ? lastUrl(gh.stdout) : null;
+  const ghUrl = gh.ok ? lastGhUrl(gh.stdout) : null;
   if (ghUrl) return { ok: true, url: ghUrl, via: "gh" };
 
   const githubUrl = await resolveGithubUrl(cwd);

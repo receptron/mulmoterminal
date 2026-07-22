@@ -4,6 +4,7 @@
 // the shared runner and never throw — a non-worktree dir is just `isWorktree:false`.
 import { git, repoRoot, defaultBaseBranch, isManagedWorktree } from "./worktrees.js";
 import { dirtyCount } from "./dirty-count.js";
+import { capPatch, parseNumstatLine } from "./git-parse.js";
 
 export interface WorktreeFile {
   path: string;
@@ -46,16 +47,14 @@ async function changedFiles(cwd: string, base: string): Promise<WorktreeFile[]> 
 }
 
 function parseNumstat(line: string): WorktreeFile {
-  const [add, del, ...rest] = line.split("\t");
-  const toNum = (s: string) => (s === "-" ? -1 : toCount(s));
-  return { path: rest.join("\t"), additions: toNum(add), deletions: toNum(del), status: "changed" };
+  return { ...parseNumstatLine(line, toCount), status: "changed" };
 }
 
 async function diffPatch(cwd: string, base: string): Promise<{ patch: string; truncated: boolean }> {
   const res = await git(["diff", base], cwd);
   if (!res.ok) return { patch: "", truncated: false };
   const full = res.stdout;
-  return full.length > PATCH_LIMIT_CHARS ? { patch: full.slice(0, PATCH_LIMIT_CHARS), truncated: true } : { patch: full, truncated: false };
+  return capPatch(full, PATCH_LIMIT_CHARS);
 }
 
 export async function worktreeDiff(cwd: string): Promise<WorktreeDiff> {
