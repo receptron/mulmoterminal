@@ -25,6 +25,7 @@ import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import { handoffTargets, pullLastTurn, type HandoffTarget } from "../composables/useHandoff";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { outcomeMessage } from "../composables/exchangeRules";
+import { worktreeFailureMessage } from "./cellChromeRules";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -891,15 +892,6 @@ function commitViaClaude() {
   const delivered = termRef.value?.submitText(COMMIT_PROMPT);
   prMsg.value = delivered ? "Asked Claude to commit…" : "Couldn't reach the session";
 }
-const REASON_MSG: Record<string, string> = {
-  "not-worktree": "Not a worktree",
-  "no-branch": "No branch to push",
-  "no-remote": "No git remote (origin) configured",
-  "no-github": "Not a GitHub repo — push succeeded; open the PR manually",
-  "push-failed": "Push failed",
-  failed: "Failed",
-};
-const reasonMsg = (reason?: string) => REASON_MSG[reason ?? ""] ?? "Failed";
 
 async function worktreeAction(endpoint: "push" | "pr"): Promise<Record<string, unknown> | null> {
   if (!cwd.value || prBusy.value) return null;
@@ -926,7 +918,7 @@ async function worktreeAction(endpoint: "push" | "pr"): Promise<Record<string, u
 
 async function pushBranch() {
   const data = await worktreeAction("push");
-  if (data) prMsg.value = data.ok ? `Pushed ${data.branch}` : reasonMsg(data.reason as string);
+  if (data) prMsg.value = data.ok ? `Pushed ${data.branch}` : worktreeFailureMessage(data.reason as string);
 }
 
 async function openPR() {
@@ -936,7 +928,7 @@ async function openPR() {
     window.open(data.url, "_blank", "noopener,noreferrer");
     prMsg.value = data.via === "gh" ? "PR created" : "Opened PR page";
   } else {
-    prMsg.value = reasonMsg(data.reason as string);
+    prMsg.value = worktreeFailureMessage(data.reason as string);
   }
 }
 

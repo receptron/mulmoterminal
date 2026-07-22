@@ -12,6 +12,7 @@ import type { RunCommand } from "./runCommand";
 import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
+import { flipTargetUid, shouldFlipZoom } from "./cellChromeRules";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -161,12 +162,9 @@ function flipCell(uid: number, first: DOMRect) {
 watch(
   () => props.expandedUid,
   (to, from) => {
-    const uid = to ?? from;
-    if (uid === null || uid === undefined) return;
-    // swapping between two already-zoomed cells (cockpit list click) has no on-screen
-    // source to fly from — the incoming cell sits off-screen in `.grid` — so skip the FLIP.
-    if (to !== null && from !== null) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const uid = flipTargetUid(to, from);
+    if (uid === null) return;
+    if (!shouldFlipZoom(to, from, window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
     const el = cellEl(uid);
     if (!el) return;
     const first = el.getBoundingClientRect();
