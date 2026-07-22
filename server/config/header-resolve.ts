@@ -128,3 +128,10 @@ export function resolveHeader(config: HeaderConfig, ctx: HeaderContext): Resolve
   const chips = config.chips === null ? null : config.chips.map((c) => resolveChip(c, ctx)).filter((c): c is ResolvedChip => c !== null);
   return { buttons, chips };
 }
+
+// POSIX/PowerShell single-arg quoting, so a substituted ${branch}/${repo}/${task} can't break out of the
+// command string. POSIX closes the quote, escapes the literal quote, reopens; PowerShell doubles quotes.
+export function shellQuoteFor(platform: NodeJS.Platform): (value: string) => string {
+  if (platform === "win32") return (value) => `'${value.replace(/'/g, "''")}'`;
+  return (value) => `'${value.replace(/'/g, "'\\''")}'`;
+}

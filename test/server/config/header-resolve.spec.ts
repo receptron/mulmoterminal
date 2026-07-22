@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { substitute, substituteShell, evalWhen, resolveHeader, resolveButtonCommand, headerHasPrButton } from "../../../server/config/header-resolve.js";
+import {
+  substitute,
+  substituteShell,
+  evalWhen,
+  resolveHeader,
+  resolveButtonCommand,
+  headerHasPrButton,
+  shellQuoteFor,
+} from "../../../server/config/header-resolve.js";
 import type { HeaderConfig, HeaderContext } from "../../../server/config/header-config.js";
 
 // POSIX single-quote escaping, matching the server's shellQuoteFor(non-win32).
@@ -175,5 +183,46 @@ describe("headerHasPrButton", () => {
   });
   it("checks DEFAULT_BUTTONS when unconfigured (they have no pr button)", () => {
     expect(headerHasPrButton({ buttons: null, chips: null })).toBe(false);
+  });
+});
+
+// A header button's command is a string the shell parses, and ${branch}/${repo}/${task}
+// come from the repo and the user's config. Quoting is the only thing standing between a
+// branch named `; rm -rf ~` and that command running.
+describe("shellQuoteFor", () => {
+  const posix = shellQuoteFor("darwin");
+  const win = shellQuoteFor("win32");
+
+  it("wraps a plain value in single quotes on posix", () => {
+    expect(posix("main")).toBe("'main'");
+  });
+
+  it("neutralizes shell metacharacters by quoting them", () => {
+    for (const evil of ["; rm -rf ~", "$(id)", "`id`", "a && b", "a | b", "a > f", "$HOME", "a\nb"]) {
+      const quoted = posix(evil);
+      expect(quoted.startsWith("'")).toBe(true);
+      expect(quoted.endsWith("'")).toBe(true);
+      // Nothing between the quotes may be a bare quote that ends the string early.
+      expect(quoted.slice(1, -1)).not.toContain("'");
+    }
+  });
+
+  it("escapes an embedded single quote by closing, escaping, reopening", () => {
+    // The classic break-out: a value containing ' would otherwise end the quoted string.
+    expect(posix("it's")).toBe("'it'\\''s'");
+  });
+
+  it("keeps a break-out attempt inside the quotes on posix", () => {
+    expect(posix("'; rm -rf ~; echo '")).toBe("''\\''; rm -rf ~; echo '\\'''");
+  });
+
+  it("doubles single quotes on powershell", () => {
+    expect(win("it's")).toBe("'it''s'");
+    expect(win("'; rm -rf ~")).toBe("'''; rm -rf ~'");
+  });
+
+  it("quotes an empty value rather than producing a bare gap", () => {
+    expect(posix("")).toBe("''");
+    expect(win("")).toBe("''");
   });
 });

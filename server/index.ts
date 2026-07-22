@@ -16,7 +16,7 @@ import { initArtifactsBackend } from "./backends/artifacts.js";
 import { mountConfigRoutes, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
-import { resolveButtonCommand } from "./config/header-resolve.js";
+import { resolveButtonCommand, shellQuoteFor } from "./config/header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import {
   tmuxAvailable,
@@ -41,7 +41,7 @@ import {
 } from "./infra/sandbox.js";
 import { dirConfigWriteTarget } from "./config/dir-config.js";
 import { resolveScript } from "./files/scripts.js";
-import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
+import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
@@ -1449,13 +1449,6 @@ runWss.on("connection", (ws, req) => {
   void startRunTerminal(ws, new URL(req.url ?? "/", "http://localhost"));
 });
 
-// POSIX/PowerShell single-arg quoting, so a substituted ${branch}/${repo}/${task} can't break out of the
-// command string. POSIX closes the quote, escapes the literal quote, reopens; PowerShell doubles quotes.
-function shellQuoteFor(platform: NodeJS.Platform): (value: string) => string {
-  if (platform === "win32") return (value) => `'${value.replace(/'/g, "''")}'`;
-  return (value) => `'${value.replace(/'/g, "'\\''")}'`;
-}
-
 async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
   const buttonId = url.searchParams.get("buttonId");
   if (!buttonId) return null;
@@ -1519,16 +1512,14 @@ function resolveLaunchSession(
   index: number,
   shell: boolean,
 ): { sessionId: string; live: PtyEntry | undefined; command: string } | null {
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const live = reattachId ? ptys.get(reattachId) : undefined;
+  const hasLivePty = !!requested && ptys.has(requested);
+  const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
   // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
   // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
   const launcher = live || tmuxAlive ? null : resolveLauncher(index);
-  // `shell` (the header "new terminal" button) runs the OS default shell with no configured
-  // index, so a fresh spawn is allowed without a resolvable launcher.
-  if (!live && !tmuxAlive && !launcher && !shell) return null;
-  const sessionId = reattachId ?? (tmuxAlive && requested ? requested : randomUUID());
+  if (!canStartLauncher({ hasLivePty, tmuxAlive, hasLauncher: !!launcher, isShell: shell })) return null;
+  const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: false }, randomUUID);
   return { sessionId, live, command: launcher?.command ?? DEFAULT_LAUNCH_CMD };
 }
 
@@ -1574,11 +1565,11 @@ function codexResumeIdFor(requested: string): string | null {
 }
 
 function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
-  const reattachId = requested && ptys.has(requested) ? requested : null;
-  const live = reattachId ? ptys.get(reattachId) : undefined;
+  const hasLivePty = !!requested && ptys.has(requested);
+  const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
   const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
-  const sessionId = reattachId ?? ((tmuxAlive || resumeRolloutId) && requested ? requested : randomUUID());
+  const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeRolloutId }, randomUUID);
   return { sessionId, live, resumeRolloutId };
 }
 
