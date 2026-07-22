@@ -357,14 +357,28 @@ const detailHandler: RequestHandler<{ slug: string }> = async (req, res) => {
   res.json({ collection: toDetail(collection), items, ...(issues.length > 0 ? { issues } : {}) });
 };
 
+// Both write handlers open the same way: find the collection, then find something to write
+// with. Either step answers the request itself when it cannot — a 404 for an unknown slug, a
+// 405 for a read-only store — so the caller's only job is to stop.
+async function resolveWriteRequest(
+  res: Response,
+  slug: string,
+  body: unknown,
+): Promise<{ collection: ResolvedCollection; target: { write: CollectionWriteFn; record: CollectionItem } } | null> {
+  const collection = await resolveCollection(res, slug);
+  if (!collection) return null;
+  const target = resolveWriteTarget(res, collection, body);
+  if (!target) return null;
+  return { collection, target };
+}
+
 // ── Record CRUD (Tier 1: interactive editing — e.g. checking a to-do item) ──
 // Create a record. The id is the schema's primaryKey value from the body, or a
 // generated one; a singleton collection pins every create to its fixed id.
 const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => {
-  const collection = await resolveCollection(res, req.params.slug);
-  if (!collection) return;
-  const target = resolveWriteTarget(res, collection, req.body);
-  if (!target) return;
+  const resolved = await resolveWriteRequest(res, req.params.slug, req.body);
+  if (!resolved) return;
+  const { collection, target } = resolved;
   const itemId = resolveCreateItemId(collection.schema, target.record) ?? generateItemId();
   const recordWithId: CollectionItem = { ...target.record, [collection.schema.primaryKey]: itemId };
   const result = await target.write(itemId, recordWithId, { refuseOverwrite: true });
@@ -382,10 +396,9 @@ const itemCreateHandler: RequestHandler<{ slug: string }> = async (req, res) => 
 // Update a record. The primaryKey is pinned to the URL itemId (the body can't
 // smuggle a different id). Singletons only accept their one fixed id.
 const itemUpdateHandler: RequestHandler<{ slug: string; itemId: string }> = async (req, res) => {
-  const collection = await resolveCollection(res, req.params.slug);
-  if (!collection) return;
-  const target = resolveWriteTarget(res, collection, req.body);
-  if (!target) return;
+  const resolved = await resolveWriteRequest(res, req.params.slug, req.body);
+  if (!resolved) return;
+  const { collection, target } = resolved;
   const { singleton, primaryKey } = collection.schema;
   if (singleton && req.params.itemId !== singleton) {
     res.status(400).json({ error: `collection '${collection.slug}' is a singleton; the only valid item id is '${singleton}'` });

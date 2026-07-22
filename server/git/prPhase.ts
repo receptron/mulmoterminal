@@ -10,6 +10,7 @@
 import { runGh } from "./gh.js";
 import { rollupCiState, type CiState } from "./prs.js";
 import { createTtlCache } from "./ttl-cache.js";
+import { branchQuery, type BranchQueryDeps } from "./branch-query.js";
 
 // Ordered roughly along the lifecycle so the client can pick a colour/label per phase.
 // `none` = no PR for this branch yet (still local work); `ready` = open, CI green, no
@@ -65,15 +66,10 @@ export interface PrPhaseResult {
   url: string | null;
 }
 
-const CACHE_TTL_MS = 30_000;
 const GH_FIELDS = "state,isDraft,reviewDecision,statusCheckRollup,url";
 const cache = createTtlCache<PrPhaseResult>();
 
-export interface PrPhaseDeps {
-  runGh?: typeof runGh;
-  now?: () => number;
-  ttlMs?: number;
-}
+export type PrPhaseDeps = BranchQueryDeps;
 
 const NONE: PrPhaseResult = { phase: "none", url: null };
 
@@ -95,10 +91,7 @@ async function listPr(run: typeof runGh, repo: string, branch: string, state: "o
 // resolves to `none` and is NOT cached, so the next roster poll retries instead of showing a
 // stale phase.
 export async function phaseForRepoBranch(repo: string, branch: string, deps: PrPhaseDeps = {}): Promise<PrPhaseResult> {
-  const run = deps.runGh ?? runGh;
-  const now = deps.now ?? Date.now;
-  const ttlMs = deps.ttlMs ?? CACHE_TTL_MS;
-  const key = `${repo}:${branch}`;
+  const { run, now, ttlMs, key } = branchQuery(deps, repo, branch);
   const hit = cache.get(key, now, ttlMs);
   if (hit !== undefined) return hit;
 
