@@ -30,7 +30,16 @@ describe("settingsArgument", () => {
     expect(readFileSync(arg, "utf8")).toBe(json);
   });
 
-  it("keeps the file readable only by its owner", () => {
+  // The file holds an API token, so who can read it is the point of writing it at all.
+  // How that is enforced differs by platform, so the assertion does too: POSIX has mode
+  // bits, Windows has none — node maps `mode` to the read-only attribute there and
+  // stat reports 0o666 — and the containment below is what protects it instead.
+  it("keeps the file inside the user's own profile directory", () => {
+    const arg = settingsArgument(SESSION, "{}", true);
+    expect(arg.startsWith(path.join(os.homedir(), ".mulmoterminal", "settings") + path.sep)).toBe(true);
+  });
+
+  it.skipIf(process.platform === "win32")("keeps the file readable only by its owner", () => {
     const arg = settingsArgument(SESSION, "{}", true);
     expect(statSync(arg).mode & 0o777).toBe(0o600);
   });
