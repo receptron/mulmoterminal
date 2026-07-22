@@ -129,8 +129,6 @@ async function seedMeta(id: string, cwd: string | null) {
   }
 }
 const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
-watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
-
 // The PR workflow phase per directory (GET /api/pr-phase), shown in the roster beside the
 // agent status. Keyed by cwd, not session — the phase is the branch's, so cells sharing a dir
 // share one fetch. Best-effort and cached server-side, so the roster poll can re-fetch cheaply.
@@ -149,10 +147,6 @@ async function seedPhase(cwd: string) {
     // best-effort — the next poll retries
   }
 }
-const refreshAllPhases = () => {
-  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
-  cwds.forEach((cwd) => void seedPhase(cwd));
-};
 // Drop what no cell asks for any more, so a day of relaunching cells doesn't leave an entry
 // behind for every session the grid ever showed.
 const forgetClosedCells = () => {
@@ -168,6 +162,22 @@ const forgetClosedCells = () => {
   });
 };
 
+// This watch runs whether or not the roster is on screen, and it is what fills sessionMeta,
+// so the cleanup has to hang off it too — pruning only on the roster poll leaves the cache
+// growing for anyone who never opens the roster.
+watch(
+  () => state.value.cells.map((c) => c.session ?? "").join(","),
+  () => {
+    forgetClosedCells();
+    refreshAllMeta();
+  },
+  { immediate: true },
+);
+
+const refreshAllPhases = () => {
+  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  cwds.forEach((cwd) => void seedPhase(cwd));
+};
 const refreshRoster = () => {
   forgetClosedCells();
   refreshAllMeta();
