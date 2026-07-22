@@ -53,6 +53,7 @@ import {
   titleInFlight,
 } from "./session/registry.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay } from "./session/reap-policy.js";
+import { nextActivity } from "./session/activity-transition.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -344,9 +345,9 @@ const { forgetTitle, noteTitleTurn, maybeGenerateTitle, freshenRosterTitle } = c
 // Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
 // publish) when the state is unchanged.
 function setWorking(id: string, working: boolean, event?: string) {
-  const prev = activity.get(id) || {};
-  if ((prev.working ?? false) === working) return;
-  activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
+  const next = nextActivity(activity.get(id), { working }, event, Date.now());
+  if (!next) return;
+  activity.set(id, next);
   publishActivity(id);
   // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
@@ -363,9 +364,9 @@ function setWorking(id: string, working: boolean, event?: string) {
 // output the user hasn't seen (Stop). Cleared when brought to the foreground
 // (see the WebSocket connection handler).
 function setWaiting(id: string, waiting: boolean, event?: string) {
-  const prev = activity.get(id) || {};
-  if ((prev.waiting ?? false) === waiting) return;
-  activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
+  const next = nextActivity(activity.get(id), { waiting }, event, Date.now());
+  if (!next) return;
+  activity.set(id, next);
   publishActivity(id);
   // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
