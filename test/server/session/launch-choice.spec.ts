@@ -33,6 +33,12 @@ describe("launchChoiceFromParams", () => {
     expect(launchChoiceFromParams(params("provider=openrouter"))).toEqual({ provider: "openrouter", model: null });
   });
 
+  // OpenRouter's "always the latest" aliases start with `~`; the id shape has to let them
+  // through, and a leading `-` still must not pass.
+  it("accepts an alias id beginning with a tilde", () => {
+    expect(launchChoiceFromParams(params("model=~anthropic%2Fclaude-opus-latest"))?.model).toBe("~anthropic/claude-opus-latest");
+  });
+
   it("trims surrounding whitespace", () => {
     expect(launchChoiceFromParams(params("model=%20glm-5.2%20"))?.model).toBe("glm-5.2");
   });

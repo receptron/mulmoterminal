@@ -58,6 +58,14 @@ describe("a model id from .mulmoterminal.json", () => {
     expect(reasonOf(result)).toContain("unusable model id");
   });
 
+  // Found by reading the live OpenRouter catalog rather than by reasoning about the regex:
+  // 10 of its 342 ids begin with `~` — the "always the latest" aliases. The shape rejected
+  // them, which would have made a perfectly valid configuration unlaunchable. `~` is safe
+  // where `-` is not: no argument parser reads it as a flag.
+  it.each(["~anthropic/claude-opus-latest", "~moonshotai/kimi-latest", "~google/gemini-flash-latest"])("accepts the alias id %s", (model) => {
+    expect(resolveDir({ provider: "openrouter", model }).ok).toBe(true);
+  });
+
   it("is refused when it is absurdly long", () => {
     expect(resolveDir({ model: "m".repeat(121) }).ok).toBe(false);
     expect(resolveDir({ model: "m".repeat(120) }).ok).toBe(true);
