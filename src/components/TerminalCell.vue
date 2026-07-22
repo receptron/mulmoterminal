@@ -16,7 +16,7 @@ import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
-import { handoffTargets, handoffLastTurn, type HandoffTarget } from "../composables/useHandoff";
+import { handoffTargets, pullLastTurn, type HandoffTarget } from "../composables/useHandoff";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -608,9 +608,10 @@ watch(ghMenuOpen, (open) => {
 });
 onUnmounted(() => document.removeEventListener("mousedown", onGhOutside));
 
-// "Ask another cell": paste this session's last completed exchange into a sibling
-// terminal's input box, so the two agents can be pointed at each other's work without
-// the user copying text between panes. The destination list is a snapshot taken when
+// "Bring another cell's last turn here": pull a sibling terminal's last completed
+// exchange into THIS cell's input box, so the two agents can be pointed at each other's
+// work without the user copying text between panes. Pulling rather than pushing keeps
+// the click and the Enter in one place (#574). The source list is a snapshot taken when
 // the menu opens, so it reflects what is connected right now.
 const askMenuOpen = ref(false);
 const askWrap = useTemplateRef<HTMLElement>("askWrap");
@@ -629,10 +630,9 @@ function showAskMsg(msg: string) {
   askMsgTimer = setTimeout(() => (askMsg.value = null), ASK_MSG_MS);
 }
 
-async function askCell(destKey: string) {
+async function askCell(target: HandoffTarget) {
   askMenuOpen.value = false;
-  if (!sessionId.value) return;
-  const error = await handoffLastTurn({ sessionId: sessionId.value, cwd: cwd.value, agent: agent.value }, destKey);
+  const error = await pullLastTurn(target, `cell-${props.uid}`);
   if (error) showAskMsg(error);
 }
 
@@ -1128,8 +1128,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               type="button"
               data-testid="cell-ask"
               class="cell-btn"
-              title="Paste this cell's last turn into another terminal"
-              aria-label="Ask another cell about this turn"
+              title="Bring another terminal's last turn into this input box"
+              aria-label="Bring another terminal's last turn here"
               aria-haspopup="true"
               :aria-expanded="askMenuOpen"
               @click="openAskMenu"
@@ -1148,11 +1148,11 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 type="button"
                 data-testid="cell-ask-item"
                 class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
-                @click="askCell(target.key)"
+                @click="askCell(target)"
               >
                 {{ target.label }}
               </button>
-              <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal is connected</p>
+              <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
             </div>
             <p
               v-if="askMsg"

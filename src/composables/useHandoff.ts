@@ -1,13 +1,22 @@
-// Hand one terminal's last completed exchange to another terminal (#550). The excerpt
-// is read from the agent's own log and rendered server-side; this side only picks the
-// destination and pastes. It is never submitted — the human reads what landed in the
-// input box and presses Enter, which is also what bounds the prompt-injection surface.
-import { pasteText, listSlots, type SlotInfo } from "./useTerminalConnections";
+// Bring another terminal's last completed exchange into THIS one's input box (#550).
+// The excerpt is read from that agent's own log and rendered server-side; this side
+// only picks which terminal to read and pastes the result locally.
+//
+// The direction is pull, not push (#574): the cell you clicked is the cell the text
+// lands in, so you read what arrived and press Enter without moving. Pushing put the
+// text in a pane you weren't looking at — possibly on another grid page — and left the
+// Enter to be pressed somewhere else. It is still never submitted for you, which is
+// what keeps another agent's output from acting as an instruction on its own.
+import { pasteText, listSlots } from "./useTerminalConnections";
+import type { SlotInfo } from "./readableSlot";
 import { formatCwd } from "../components/cwdDisplay";
 
+// A terminal whose last exchange can be pulled: how to name it in the menu, and what
+// the server needs to find its log.
 export interface HandoffTarget {
   key: string;
   label: string;
+  source: HandoffSource;
 }
 
 export interface HandoffSource {
@@ -26,7 +35,13 @@ const slotLabel = (slot: SlotInfo, home: string | null): string => {
 };
 
 export function pickHandoffTargets(slots: SlotInfo[], selfKey: string, home: string | null): HandoffTarget[] {
-  return slots.filter((slot) => slot.key !== selfKey).map((slot) => ({ key: slot.key, label: slotLabel(slot, home) }));
+  return slots
+    .filter((slot) => slot.key !== selfKey)
+    .map((slot) => ({
+      key: slot.key,
+      label: slotLabel(slot, home),
+      source: { sessionId: slot.sessionId, cwd: slot.cwd, agent: slot.agent },
+    }));
 }
 
 export const handoffTargets = (selfKey: string, home: string | null): HandoffTarget[] => pickHandoffTargets(listSlots(), selfKey, home);
@@ -56,17 +71,17 @@ export interface HandoffDeps {
 }
 const defaultDeps: HandoffDeps = { fetchText: fetchHandoffText, paste: pasteText };
 
-// Returns null on success, or a short message to show on the cell. "Nothing to hand
-// over" is its own outcome because it is the EXPECTED one on a fresh session, and on a
-// codex session whose newest turn hasn't been flushed to its rollout yet — neither is
+// Returns null on success, or a short message to show on the cell. "Nothing to bring
+// over" is its own outcome because it is the EXPECTED one for a fresh session, and for
+// a codex session whose newest turn hasn't been flushed to its rollout yet — neither is
 // a failure the user should read as broken.
-export async function handoffLastTurn(source: HandoffSource, destKey: string, deps: HandoffDeps = defaultDeps): Promise<string | null> {
+export async function pullLastTurn(target: HandoffTarget, ownKey: string, deps: HandoffDeps = defaultDeps): Promise<string | null> {
   let text: string;
   try {
-    text = await deps.fetchText(source);
+    text = await deps.fetchText(target.source);
   } catch {
-    return "Could not read the last turn";
+    return "Could not read that terminal's last turn";
   }
-  if (!text) return "No completed turn to hand over yet";
-  return deps.paste(destKey, text) ? null : "That terminal is not connected";
+  if (!text) return "That terminal has no completed turn yet";
+  return deps.paste(ownKey, text) ? null : "This terminal is not connected";
 }
