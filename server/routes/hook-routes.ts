@@ -6,6 +6,7 @@ import type { Express, Request, Response } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
 import { activityHookEffects, pushKindFor, resolveHookSessionId } from "../session/activity-hook.js";
+import { headerHookEffect } from "../session/header-hook.js";
 import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/task-push.js";
@@ -13,7 +14,6 @@ import { preferredHeaderPrompt } from "../session/transcript.js";
 import { failPendingTranslation } from "../session/translation-worker.js";
 
 // The header shows one line, so a longer prompt is stored truncated rather than in full.
-const LAST_PROMPT_CAP = 200;
 
 export interface HookDeps {
   setWorking: (id: string, working: boolean, event?: string) => void;
@@ -115,15 +115,15 @@ function clearHeaderPrompt(deps: HookDeps, sessionId: string): void {
 // doesn't inflate the handler. Runs before handleActivityHook so the activity publish it
 // triggers already carries the new lastPrompt.
 async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
-  if (event === "UserPromptSubmit" && typeof body.prompt === "string" && body.prompt.trim()) {
-    const prompt = body.prompt.trim().slice(0, LAST_PROMPT_CAP);
-    await trackPromptForHeader(sessionId, prompt, cwd);
-    deps.noteTitleTurn(sessionId, prompt);
-  } else if (event === "SessionStart" && body.source === "clear") {
-    clearHeaderPrompt(deps, sessionId);
-  } else if (event === "Stop") {
-    void deps.maybeGenerateTitle(sessionId, cwd);
+  const effect = headerHookEffect(event, body);
+  if (!effect) return;
+  if (effect.kind === "prompt") {
+    await trackPromptForHeader(sessionId, effect.text, cwd);
+    deps.noteTitleTurn(sessionId, effect.text);
+    return;
   }
+  if (effect.kind === "clear") return clearHeaderPrompt(deps, sessionId);
+  void deps.maybeGenerateTitle(sessionId, cwd);
 }
 
 // Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
