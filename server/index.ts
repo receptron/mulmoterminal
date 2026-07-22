@@ -52,7 +52,7 @@ import {
   ptys,
   titleInFlight,
 } from "./session/registry.js";
-import { reapDecisionFor } from "./session/reap-policy.js";
+import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -204,17 +204,10 @@ const REAP_GRACE_MS = 30_000;
 // unfinished task: reaping it loses work. So it gets a much longer grace than an
 // idle one, long enough that you can switch away, do other things, and come back
 // to answer it. Override with WAIT_REAP_GRACE_MS=0 to never auto-close these.
-const WAIT_REAP_GRACE_MS = (() => {
-  const def = 30 * 60_000;
-  const raw = process.env.WAIT_REAP_GRACE_MS;
-  if (raw === undefined) return def;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) {
-    console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${def}ms`);
-    return def;
-  }
-  return n; // a non-positive value means "never auto-reap waiting sessions" (see scheduleReap)
-})();
+const WAIT_REAP_GRACE_DEFAULT_MS = 30 * 60_000;
+const WAIT_REAP_GRACE_MS = parseWaitGraceMs(process.env.WAIT_REAP_GRACE_MS, WAIT_REAP_GRACE_DEFAULT_MS, (raw) =>
+  console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${WAIT_REAP_GRACE_DEFAULT_MS}ms`),
+);
 const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function cancelReap(id: string) {
@@ -225,17 +218,12 @@ function cancelReap(id: string) {
   }
 }
 
-// Node's setTimeout delay is a signed 32-bit int; a larger value overflows and
-// fires at ~1ms. Clamp to the max so a big grace doesn't become an instant reap.
-const MAX_TIMER_MS = 2_147_483_647;
-
 function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
-  // Non-positive or non-finite (e.g. a bad env value yielding NaN) => never
-  // auto-reap; the session stays until reattached or explicitly terminated.
-  // Guarding here matters because setTimeout(..., NaN) would fire ~immediately.
-  if (!Number.isFinite(delayMs) || delayMs <= 0) return;
+  // null => never auto-reap; the session stays until reattached or explicitly
+  // terminated (see reapTimerDelay for why a bad value must not reach setTimeout).
+  const delay = reapTimerDelay(delayMs);
+  if (delay === null) return;
   if (reapTimers.has(id)) return;
-  const delay = Math.min(delayMs, MAX_TIMER_MS);
   reapTimers.set(
     id,
     setTimeout(() => {
