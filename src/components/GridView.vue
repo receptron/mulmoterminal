@@ -36,6 +36,7 @@ import {
   resolveCellStatus,
   MAX_TERMINALS,
 } from "./gridTabs";
+import { rosterCellsKey, staleCacheKeys } from "./rosterCache";
 import type { RunCommand } from "./runCommand";
 import { EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type PrPhase, type WorkPhase } from "./rosterPhase";
 import { useGridActivity } from "../composables/useGridActivity";
@@ -109,39 +110,78 @@ const sessionMeta = reactive(new Map<string, SessionMeta>());
 // Seed on appearance, then poll while the roster is on screen. Merge, never overwrite: a
 // fetch that can't find the transcript (absent/mismatched cwd) returns nulls that must not
 // wipe a value already shown. (The status badge is separate — it rides `statusForSort`.)
+// The roster polls every few seconds, so a slow answer can still be in flight when the next
+// one goes out. Only the newest may be applied: an older one describes a moment already
+// overtaken, and its fields would put back what the newer answer replaced (#620).
+const latestMetaSeed = new Map<string, number>();
 async function seedMeta(id: string, cwd: string | null) {
+  const seed = (latestMetaSeed.get(id) ?? 0) + 1;
+  latestMetaSeed.set(id, seed);
   try {
     const query = cwd ? `?cwd=${encodeURIComponent(cwd)}` : "";
     const res = await fetch(`/api/session/${id}${query}`);
-    if (!res.ok) return;
+    if (!res.ok || latestMetaSeed.get(id) !== seed) return;
     const d = (await res.json()) as Partial<SessionMeta>;
+    if (latestMetaSeed.get(id) !== seed) return;
     sessionMeta.set(id, mergeSessionMeta(sessionMeta.get(id) ?? EMPTY_SESSION_META, d));
   } catch {
     // best-effort — the next poll retries
   }
 }
 const refreshAllMeta = () => state.value.cells.forEach((c) => c.session && void seedMeta(c.session, c.cwd));
-watch(() => state.value.cells.map((c) => c.session ?? "").join(","), refreshAllMeta, { immediate: true });
-
 // The PR workflow phase per directory (GET /api/pr-phase), shown in the roster beside the
 // agent status. Keyed by cwd, not session — the phase is the branch's, so cells sharing a dir
 // share one fetch. Best-effort and cached server-side, so the roster poll can re-fetch cheaply.
 const phaseByCwd = reactive(new Map<string, PrPhase>());
+const latestPhaseSeed = new Map<string, number>();
 async function seedPhase(cwd: string) {
+  const seed = (latestPhaseSeed.get(cwd) ?? 0) + 1;
+  latestPhaseSeed.set(cwd, seed);
   try {
     const res = await fetch(`/api/pr-phase?cwd=${encodeURIComponent(cwd)}`);
-    if (!res.ok) return;
+    if (!res.ok || latestPhaseSeed.get(cwd) !== seed) return;
     const d = (await res.json()) as { phase?: unknown };
+    if (latestPhaseSeed.get(cwd) !== seed) return;
     if (isPrPhase(d.phase)) phaseByCwd.set(cwd, d.phase);
   } catch {
     // best-effort — the next poll retries
   }
 }
+// Drop what no cell asks for any more, so a day of relaunching cells doesn't leave an entry
+// behind for every session the grid ever showed.
+const forgetClosedCells = () => {
+  const sessions = new Set(state.value.cells.map((c) => c.session).filter((s): s is string => !!s));
+  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  staleCacheKeys(sessionMeta.keys(), sessions).forEach((id) => {
+    sessionMeta.delete(id);
+    latestMetaSeed.delete(id);
+  });
+  staleCacheKeys(phaseByCwd.keys(), cwds).forEach((cwd) => {
+    phaseByCwd.delete(cwd);
+    latestPhaseSeed.delete(cwd);
+  });
+};
+
+// This watch runs whether or not the roster is on screen, and it is what fills sessionMeta,
+// so the cleanup has to hang off it too — pruning only on the roster poll leaves the cache
+// growing for anyone who never opens the roster.
+// Keyed on the cwd as well as the session: a cell that keeps its session and only moves
+// directory still retires a phaseByCwd entry, and the roster may be hidden for hours.
+watch(
+  () => rosterCellsKey(state.value.cells),
+  () => {
+    forgetClosedCells();
+    refreshAllMeta();
+  },
+  { immediate: true },
+);
+
 const refreshAllPhases = () => {
   const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
   cwds.forEach((cwd) => void seedPhase(cwd));
 };
 const refreshRoster = () => {
+  forgetClosedCells();
   refreshAllMeta();
   refreshAllPhases();
 };
