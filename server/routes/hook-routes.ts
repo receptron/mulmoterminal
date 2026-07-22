@@ -196,5 +196,8 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
 export function mountHookRoute(app: Express, deps: HookDeps) {
   // Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
   // we can flag which background sessions have new activity / build tool history.
-  app.post("/api/hook", (req, res) => void handleHookRequest(deps, req, res));
+  // Return the promise rather than dropping it: express 5 forwards a rejected handler
+  // to its error middleware, and swallowing it here would turn a failed hook into an
+  // unhandled rejection instead of a 500.
+  app.post("/api/hook", (req, res) => handleHookRequest(deps, req, res));
 }
