@@ -18,7 +18,6 @@ import { resolveButtonCommand, shellQuoteFor } from "../config/header-resolve.js
 import { resolveScript } from "../files/scripts.js";
 import { refreshHostKeychainIfExpired, writeSandboxCredentials } from "../infra/sandbox.js";
 import { tmuxHasSession } from "../infra/tmux.js";
-import type { SpawnClaudeOptions } from "../session/spawn-claude.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
@@ -30,6 +29,7 @@ import { ProviderRefusedError } from "../session/provider-env.js";
 import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
+import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
 
 export interface WsRouteDeps {
   /** The http server these endpoints hang their `upgrade` handler off. */
@@ -41,18 +41,11 @@ export interface WsRouteDeps {
   reattachPty: (entry: PtyEntry, ws: WebSocket, sessionId: string) => PtyEntry;
   handleClientFrame: (entry: PtyEntry, ws: WebSocket, raw: { toString(): string }, sessionId: string) => void;
   handleClientClose: (entry: PtyEntry, ws: WebSocket, sessionId: string) => void;
-  spawnClaudePty: (sessionId: string, resume: string | null, ws: WebSocket | null, options?: SpawnClaudeOptions) => PtyEntry;
-  spawnCodexPty: (
-    sessionId: string,
-    ws: WebSocket | null,
-    resumeRolloutId: string | null,
-    cwd: string,
-    attachGuiMcp: boolean,
-    initialPrompt: string | null,
-  ) => PtyEntry;
-  spawnCommandPty: (command: string, cwd: string, ws: WebSocket) => IPty;
-  spawnLauncherPty: (sessionId: string, ws: WebSocket, command: string, cwd: string) => PtyEntry;
-  resolveLauncher: (index: number) => { label: string; command: string } | null;
+  spawnClaudePty: SpawnClaudePty;
+  spawnCodexPty: SpawnCodexPty;
+  spawnCommandPty: SpawnCommandPty;
+  spawnLauncherPty: SpawnLauncherPty;
+  resolveLauncher: ResolveLauncher;
 }
 
 // Pick the effective session id for a /ws connection: reattach a same-process live pty,
