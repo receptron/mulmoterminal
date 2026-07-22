@@ -48,6 +48,16 @@ describe("answersOurSend", () => {
   it("matches a short message in full", () => {
     expect(answersOurSend("please review this", "please review this")).toBe(true);
   });
+
+  it("still distinguishes two long messages that were both truncated", () => {
+    // The 160-char window reaches back into the excerpt, past the shared "… (truncated)"
+    // and "--- end ---" tail, so distinct content before the mark still separates them.
+    const truncated = (body: string) => sentText(body + "\n… (truncated)");
+    const a = truncated("A".repeat(2900) + "distinct-alpha");
+    const b = truncated("B".repeat(2900) + "distinct-bravo");
+    expect(answersOurSend(a, a)).toBe(true);
+    expect(answersOurSend(a, b)).toBe(false);
+  });
 });
 
 describe("waitVerdict", () => {
