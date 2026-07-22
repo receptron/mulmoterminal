@@ -13,3 +13,18 @@
 export function staleCacheKeys(cached: Iterable<string>, inUse: ReadonlySet<string>): string[] {
   return [...cached].filter((key) => !inUse.has(key));
 }
+
+/**
+ * What the cleanup watch keys on.
+ *
+ * Both caches have to retire together, and they are keyed differently: sessionMeta by
+ * session, phaseByCwd by directory. Keying the watch on the session ids alone means a cell
+ * that keeps its session and only moves directory never fires it, so the old directory's
+ * entry stays for as long as the page does.
+ *
+ * The parts are joined with a NUL, which cannot appear in a session id or a path, so a cwd
+ * containing the separator cannot forge a boundary and make two different rosters look alike.
+ */
+export function rosterCellsKey(cells: readonly { session: string | null; cwd: string | null }[]): string {
+  return cells.map((cell) => `${cell.session ?? ""}\u0000${cell.cwd ?? ""}`).join("\u0000\u0000");
+}

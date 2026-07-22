@@ -36,7 +36,7 @@ import {
   resolveCellStatus,
   MAX_TERMINALS,
 } from "./gridTabs";
-import { staleCacheKeys } from "./rosterCache";
+import { rosterCellsKey, staleCacheKeys } from "./rosterCache";
 import type { RunCommand } from "./runCommand";
 import { EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type PrPhase, type WorkPhase } from "./rosterPhase";
 import { useGridActivity } from "../composables/useGridActivity";
@@ -165,8 +165,10 @@ const forgetClosedCells = () => {
 // This watch runs whether or not the roster is on screen, and it is what fills sessionMeta,
 // so the cleanup has to hang off it too — pruning only on the roster poll leaves the cache
 // growing for anyone who never opens the roster.
+// Keyed on the cwd as well as the session: a cell that keeps its session and only moves
+// directory still retires a phaseByCwd entry, and the roster may be hidden for hours.
 watch(
-  () => state.value.cells.map((c) => c.session ?? "").join(","),
+  () => rosterCellsKey(state.value.cells),
   () => {
     forgetClosedCells();
     refreshAllMeta();
