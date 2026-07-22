@@ -18,6 +18,7 @@ import path from "node:path";
 import { createReadStream } from "node:fs";
 import type { Express, Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
+import { parseByteRange } from "./byte-range.js";
 
 const MAX_RAW_BYTES = 25 * 1024 * 1024; // images / text / generic
 const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // audio / video (streamed via Range)
@@ -47,18 +48,6 @@ const MIME_BY_EXT: Record<string, string> = {
 
 function isMedia(mime: string): boolean {
   return mime.startsWith("audio/") || mime.startsWith("video/");
-}
-
-function parseRange(header: string, size: number): { start: number; end: number } | null {
-  const match = /^bytes=(\d*)-(\d*)$/.exec(header.trim());
-  if (!match) return null;
-  const [, startStr, endStr] = match;
-  if (startStr === "" && endStr === "") return null;
-  const start = startStr === "" ? size - Number(endStr) : Number(startStr);
-  const end = endStr === "" ? size - 1 : Number(endStr);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  if (start < 0 || end < start || end >= size) return null;
-  return { start, end };
 }
 
 export function mountFilesRoutes(app: Express, deps: { workspace: string }): void {
@@ -98,7 +87,7 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
     // Range support (required for <video>/<audio> seeking in Safari).
     const rangeHeader = req.headers.range;
     if (rangeHeader) {
-      const range = parseRange(rangeHeader, stat.size);
+      const range = parseByteRange(rangeHeader, stat.size);
       if (!range) {
         res.status(416).setHeader("Content-Range", `bytes */${stat.size}`);
         res.json({ error: "invalid range" });
