@@ -34,6 +34,8 @@ import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
 import { createTranslationWorker, failPendingTranslation, submitTranslation } from "./session/translation-worker.js";
+import { createTitleManager } from "./session/session-title.js";
+import { generateHeaderTitle } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
@@ -51,10 +53,7 @@ import {
   translationWorkerIds,
   persistActivityState,
   ptys,
-  titleEpoch,
   titleInFlight,
-  titlePending,
-  titleTurnCounts,
 } from "./session/registry.js";
 import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
@@ -74,19 +73,12 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
-import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
+import { isRecord, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
 import { mountPickFileRoute } from "./files/pick-file.js";
 import { mountCommandSummaryRoute } from "./session/command-summary.js";
-import {
-  generateHeaderTitle,
-  shouldRegenerateTitle,
-  shouldFreshenViewedTitle,
-  TITLE_REGEN_EVERY_TURNS,
-  VIEW_TITLE_REGEN_TURNS,
-} from "./config/header-title.js";
 import { mountCostRoute } from "./session/cost.js";
 import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
 import { initGoogleBackend, mountGoogleRoutes } from "./backends/google.js";
@@ -207,7 +199,6 @@ function refreshLastResponse(id: string, cwd: string): void {
   const text = readLatestResponse(id, cwd);
   if (text) lastResponses.set(id, text); // a failed read leaves any prior value
 }
-const VIEW_TITLE_RETRY_MS = 30_000;
 
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
@@ -372,6 +363,14 @@ function publishActivity(id: string) {
     lastResponse: lastResponses.get(id) ?? null,
   });
 }
+
+// AI-title bookkeeping (session/session-title.ts). publishActivity stays here — it
+// publishes the whole session row, of which the title is one field.
+const { forgetTitle, noteTitleTurn, maybeGenerateTitle, freshenRosterTitle } = createTitleManager({
+  publishActivity: (id) => publishActivity(id),
+  now: () => Date.now(),
+  generateTitle: (raw) => generateHeaderTitle(raw),
+});
 
 // Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
 // publish) when the state is unchanged.
@@ -815,77 +814,6 @@ function clearHeaderPrompt(sessionId: string): void {
   lastResponses.set(sessionId, "");
   forgetTitle(sessionId);
   publishActivity(sessionId);
-}
-
-// Drop all AI-title bookkeeping for a session (on /clear or teardown). Bumping the epoch
-// voids any in-flight generation started before this reset — its (now pre-clear) title
-// must not resurface after the header was cleared.
-function forgetTitle(sessionId: string): void {
-  aiTitles.delete(sessionId);
-  titleTurnCounts.delete(sessionId);
-  titlePending.delete(sessionId);
-  titleEpoch.set(sessionId, (titleEpoch.get(sessionId) ?? 0) + 1);
-}
-
-// Count a user turn and flag the session for a title (re)generation at the next Stop when
-// one is due (no title yet, a trivial/stale-inducing ack, or every N turns).
-function noteTitleTurn(sessionId: string, prompt: string): void {
-  const turnsSinceTitle = (titleTurnCounts.get(sessionId) ?? 0) + 1;
-  titleTurnCounts.set(sessionId, turnsSinceTitle);
-  const due = shouldRegenerateTitle({
-    hasTitle: aiTitles.has(sessionId),
-    promptIsTrivial: isTrivialPrompt(prompt),
-    turnsSinceTitle,
-    maxTurns: TITLE_REGEN_EVERY_TURNS,
-  });
-  if (due) titlePending.add(sessionId);
-}
-
-// Read the transcript, summarize its recent turns into a title, and store + publish it.
-// Epoch-guarded: a /clear or teardown mid-generation bumps the epoch, so the now-stale
-// result is dropped. In-flight-guarded so overlapping triggers (a Stop hook and a roster
-// view) don't both summarize. Never throws — a failed/timed-out CLI just leaves the prior title.
-async function generateAndStoreTitle(sessionId: string, cwd: string): Promise<void> {
-  if (titleInFlight.has(sessionId)) return;
-  titleInFlight.add(sessionId);
-  const epoch = titleEpoch.get(sessionId) ?? 0;
-  try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${sessionId}.jsonl`), "utf8").catch(() => null);
-    const title = raw ? await generateHeaderTitle(raw) : null;
-    if (title && (titleEpoch.get(sessionId) ?? 0) === epoch) {
-      aiTitles.set(sessionId, title);
-      titleTurnCounts.set(sessionId, 0);
-      lastTitledUserTurns.set(sessionId, raw ? countUserTurnsFromJsonl(raw) : 0);
-      publishActivity(sessionId);
-    }
-  } finally {
-    titleInFlight.delete(sessionId);
-  }
-}
-
-// At Stop (the assistant's reply is now on disk), regenerate a pending title from the
-// recent turns and publish it. Fire-and-forget; a failure leaves the last prompt showing.
-async function maybeGenerateTitle(sessionId: string, cwd: string | undefined): Promise<void> {
-  if (!cwd || !titlePending.has(sessionId) || titleInFlight.has(sessionId)) return;
-  titlePending.delete(sessionId);
-  await generateAndStoreTitle(sessionId, cwd);
-}
-
-// The grid roster summarizes on our side even for sessions the hook path never runs on
-// (unmanaged / resumed / post-restart), so it never shows a stale externally-written title.
-// Fire-and-forget from the view; the freshened title lands on the next roster poll.
-function freshenRosterTitle(sessionId: string, cwd: string, currentUserTurns: number): void {
-  if (titleInFlight.has(sessionId)) return;
-  const stale = shouldFreshenViewedTitle({
-    lastTitledUserTurns: lastTitledUserTurns.get(sessionId) ?? null,
-    currentUserTurns,
-    regenEveryTurns: VIEW_TITLE_REGEN_TURNS,
-  });
-  if (!stale) return;
-  const now = Date.now();
-  if (now - (lastTitleAttemptMs.get(sessionId) ?? 0) < VIEW_TITLE_RETRY_MS) return;
-  lastTitleAttemptMs.set(sessionId, now);
-  void generateAndStoreTitle(sessionId, cwd);
 }
 
 // Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt
