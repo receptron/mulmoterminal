@@ -23,9 +23,12 @@ import {
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox, rewriteLoopbackForDocker } from "./infra/sandbox.js";
+import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox } from "./infra/sandbox.js";
+import { isAllowedOrigin } from "./infra/allowed-origin.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
+import { hookSettingsJson } from "./session/hook-settings.js";
+import { mcpConfigJson } from "./session/mcp-config.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
@@ -133,20 +136,6 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
-
-// Only same-machine browser origins may open the terminal / pub-sub sockets, so
-// a malicious website the user visits can't drive the local Claude PTY (a
-// cross-site WebSocket hijack). A missing Origin (non-browser local client) is
-// allowed; any localhost host on any port is allowed (covers the Vite dev proxy).
-function isAllowedOrigin(origin?: string) {
-  if (!origin) return true;
-  try {
-    const host = new URL(origin).hostname;
-    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
-  } catch {
-    return false;
-  }
-}
 
 // Pub/sub channel the sidebar subscribes to for live session-activity changes.
 const SESSIONS_CHANNEL = "sessions";
@@ -373,60 +362,9 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   if (waiting) armReapForDetached(id);
 }
 
-// Hook config injected via `claude --settings <json>`. Each event POSTs the full
-// hook payload to /api/hook. UserPromptSubmit => working, Stop => idle,
-// Notification => waiting for input. PreToolUse/PostToolUse/PostToolUseFailure
-// (matcher "" => every tool, including built-ins and MCP tools) feed the
-// per-session tool-call history that the GUI's tools pane shows. A failed tool
-// fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
-// entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson(host: string, sessionId: string, env: Record<string, string> = {}) {
-  // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own session_id
-  // on /clear and /compact, but the PTY — and the id the client tracks — stays this one, so attributing
-  // hooks by this header keeps activity / header prompt / tool history correlated across a clear.
-  const cmd = `curl -s -X POST http://${host}:${PORT}/api/hook ` + `-H 'content-type: application/json' -H 'x-mt-session: ${sessionId}' -d @- >/dev/null 2>&1`;
-  const entry = [{ hooks: [{ type: "command", command: cmd }] }];
-  // Tool hooks take a matcher; "" matches all tools.
-  const toolEntry = [{ matcher: "", hooks: [{ type: "command", command: cmd }] }];
-  // `env` aims a provider session at its backend (#579). Claude Code applies this block
-  // itself, so it lands identically on the host, under tmux — where a pane inherits the
-  // tmux SERVER's environment, not ours — and in a container.
-  return JSON.stringify({
-    ...(Object.keys(env).length ? { env } : {}),
-    hooks: {
-      UserPromptSubmit: entry,
-      Stop: entry,
-      Notification: entry,
-      // SessionStart fires with source "clear" on /clear — we use it to reset the header prompt.
-      SessionStart: entry,
-      PreToolUse: toolEntry,
-      PostToolUse: toolEntry,
-      PostToolUseFailure: toolEntry,
-    },
-  });
-}
-
-// MCP config injected via `claude --mcp-config <json>`. Points claude at the
-// in-process GUI MCP server served over Streamable HTTP. The session id rides in
-// the URL path (the MCP server is otherwise stateless), so no env or subprocess is
-// needed — the agent just makes an HTTP call back to this server. Using
-// 127.0.0.1 (not localhost) avoids an IPv6/IPv4 resolution mismatch against the
-// server's listen address.
-function mcpConfigJson(sessionId: string, host: string = "127.0.0.1", sandbox: boolean = false) {
-  const mcpServers: Record<string, { type: string; url: string }> = {};
-  // User-added HTTP MCP servers (Settings). In the sandbox their loopback host is
-  // rewritten so the container can reach a server running on the host. Added FIRST so
-  // the built-in GUI entry below always wins (sanitizeUserMcpServers already reserves
-  // its id, this is defense in depth).
-  for (const s of getUserMcpServers()) {
-    mcpServers[s.id] = { type: "http", url: sandbox ? rewriteLoopbackForDocker(s.url) : s.url };
-  }
-  mcpServers["mulmoterminal-gui"] = { type: "http", url: `http://${host}:${PORT}/api/mcp/${sessionId}` };
-  return JSON.stringify({ mcpServers });
-}
-
 // The PTY spawners (session/spawn-*.ts). They take what index.ts still owns — the session
-// lifecycle it drives and the config it builds the hook/MCP json from — as deps.
+// lifecycle it drives, and this file's port and live user config bound into the two payload
+// builders (session/hook-settings.ts, session/mcp-config.ts) — as deps.
 const spawnDeps: SpawnDeps = {
   claudeBin: CLAUDE_BIN,
   codexBin: CODEX_BIN,
@@ -434,8 +372,9 @@ const spawnDeps: SpawnDeps = {
   permissionMode: CLAUDE_PERMISSION_MODE,
   guiMcpTools: GUI_MCP_TOOLS,
   outputBufferLimit: OUTPUT_BUFFER_LIMIT,
-  hookSettingsJson,
-  mcpConfigJson,
+  hookSettingsJson: (host, sessionId, env) => hookSettingsJson({ host, port: PORT, sessionId, env }),
+  // The user's MCP servers are read per spawn, so a settings edit applies to the next session.
+  mcpConfigJson: (sessionId, host, sandbox) => mcpConfigJson({ sessionId, host, port: PORT, userMcpServers: getUserMcpServers(), sandbox }),
   reap: (id) => reap(id),
   setWorking: (id, working, event) => setWorking(id, working, event),
   setWaiting: (id, waiting, event) => setWaiting(id, waiting, event),
