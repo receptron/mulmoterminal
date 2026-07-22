@@ -23,8 +23,9 @@ import {
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
 import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox } from "./infra/sandbox.js";
 import { isAllowedOrigin } from "./infra/allowed-origin.js";
+import { serverErrorExit } from "./infra/server-exit.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
-import { hasErrnoCode, messageOf } from "./errors.js";
+import { messageOf } from "./errors.js";
 import { hookSettingsJson } from "./session/hook-settings.js";
 import { mcpConfigJson } from "./session/mcp-config.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
@@ -64,7 +65,7 @@ import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
 import { claudeOnDiskSessionIds, readLatestResponse } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
-import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
+import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { codexSessionsRoot } from "./agents/codex-session.js";
@@ -736,19 +737,16 @@ startCollectionCompletionWatchers().catch((err) => {
 // never finishes a turn, so the hook-driven reap can miss it entirely — hence the
 // registry, which bounds them by count and age whatever their hooks did (#541).
 
-// Would killing this session take it away from someone? Two answers are needed: our own
-// viewer (a local fact) and any OTHER server process holding it, which only tmux can tell
-// us — see heldByAnotherProcess for the arithmetic.
-function scheduledSessionInUse(id: string): boolean {
+// The rule lives with heldByAnotherProcess (pure/tested); this only reads the live facts.
+const sessionInUse = (id: string): boolean => {
   const entry = ptys.get(id);
-  if (entry?.ws) return true; // our own user is looking at it
-  return heldByAnotherProcess(tmuxAttachedClientCount(id), !!entry);
-}
+  return scheduledSessionInUse({ hasViewer: !!entry?.ws, weHoldAPty: !!entry }, () => tmuxAttachedClientCount(id));
+};
 
 const scheduledSessions = createScheduledSessionRegistry({
   dir: scheduledSessionsDir(CLAUDE_CWD, MULMOTERMINAL_HOME),
   isValidId: (id) => SESSION_ID_RE.test(id),
-  isInUse: scheduledSessionInUse,
+  isInUse: sessionInUse,
   reapSession: reap,
   hasTmux: tmuxHasSession,
   killTmux: tmuxKillSession,
@@ -805,19 +803,13 @@ mountTerminalWebSockets({
   resolveLauncher,
 });
 
-// Exit code the launcher (bin/mulmoterminal.js) treats as "port was taken at
-// bind time" so it can retry on a fresh port. Keep in sync with the launcher.
-const PORT_IN_USE_EXIT_CODE = 75;
-
-// A bind failure (most often the port already in use) must not surface as an
-// unhandled 'error' event / stack trace — exit with a clear message instead.
+// A bind failure (most often the port already in use) must not surface as an unhandled
+// 'error' event / stack trace — exit with a clear message and the code the launcher reads
+// (infra/server-exit.ts).
 server.on("error", (err) => {
-  if (hasErrnoCode(err) && err.code === "EADDRINUSE") {
-    console.error(`[mulmoterminal] Port ${PORT} is already in use — set PORT=<n> or pass --port <n>.`);
-    process.exit(PORT_IN_USE_EXIT_CODE);
-  }
-  console.error(`[mulmoterminal] server error: ${messageOf(err)}`);
-  process.exit(1);
+  const { message, code } = serverErrorExit(err, PORT);
+  console.error(message);
+  process.exit(code);
 });
 
 server.listen(PORT, () => {

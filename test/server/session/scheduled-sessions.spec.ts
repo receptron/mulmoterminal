@@ -5,6 +5,7 @@ import path from "node:path";
 import {
   createScheduledSessionRegistry,
   heldByAnotherProcess,
+  scheduledSessionInUse,
   parseScheduledSessionRecord,
   scheduledSessionsDir,
   selectExpiredScheduledSessions,
@@ -95,6 +96,47 @@ describe("parseScheduledSessionRecord", () => {
     expect(parseScheduledSessionRecord("a", "nope", anyId)).toBeNull();
     expect(parseScheduledSessionRecord("a", null, anyId)).toBeNull();
     expect(parseScheduledSessionRecord("a", [1], anyId)).toBeNull();
+  });
+});
+
+describe("scheduledSessionInUse", () => {
+  const tmuxSays = (count: number | null) => vi.fn().mockReturnValue(count);
+
+  // Someone is looking at it right now — nothing tmux could say changes the answer.
+  it("is in use when our own viewer is attached", () => {
+    expect(scheduledSessionInUse({ hasViewer: true, weHoldAPty: true }, tmuxSays(0))).toBe(true);
+  });
+
+  // Asking costs a tmux subprocess, and the sweep runs over every session.
+  it("does not ask tmux when a viewer is attached", () => {
+    const attachedClients = tmuxSays(0);
+    scheduledSessionInUse({ hasViewer: true, weHoldAPty: true }, attachedClients);
+    expect(attachedClients).not.toHaveBeenCalled();
+  });
+
+  // The whole point of the registry: our own DETACHED pty is reapable, even though it still
+  // holds a tmux client of its own.
+  it("is free when only our own detached pty holds it", () => {
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: true }, tmuxSays(1))).toBe(false);
+  });
+
+  it("is in use when a second client holds it alongside our pty", () => {
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: true }, tmuxSays(2))).toBe(true);
+  });
+
+  // A session that outlived our process: we hold nothing, so any client is someone else's.
+  it("is in use when a client holds it and we hold no pty", () => {
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: false }, tmuxSays(1))).toBe(true);
+  });
+
+  it("is free when nothing holds it", () => {
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: false }, tmuxSays(0))).toBe(false);
+  });
+
+  // No tmux session to take from anyone.
+  it("is free when tmux cannot answer", () => {
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: false }, tmuxSays(null))).toBe(false);
+    expect(scheduledSessionInUse({ hasViewer: false, weHoldAPty: true }, tmuxSays(null))).toBe(false);
   });
 });
 

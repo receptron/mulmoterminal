@@ -74,6 +74,15 @@ export function heldByAnotherProcess(attachedClients: number | null, weHoldAPty:
   return attachedClients > (weHoldAPty ? 1 : 0);
 }
 
+/** Would killing this session take it away from someone? Two answers are needed: our own
+ *  viewer (a local fact) and any OTHER server process holding it, which only tmux can tell
+ *  us. The count is a thunk because asking tmux spawns a process: a session someone is
+ *  watching is in use whatever tmux would say, and the sweep runs over every session. */
+export function scheduledSessionInUse(local: { hasViewer: boolean; weHoldAPty: boolean }, attachedClients: () => number | null): boolean {
+  if (local.hasViewer) return true;
+  return heldByAnotherProcess(attachedClients(), local.weHoldAPty);
+}
+
 // A path can't be used as a filename raw: on Windows it carries `\` and `:`, which are a
 // separator and a stream marker, so the write would fail (or land somewhere unintended)
 // and Windows would silently lose restart-time cleanup. Fold everything unsafe to "-" and
