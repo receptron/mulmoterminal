@@ -93,12 +93,24 @@ export const createBuildRemoteView =
 
 export const buildRemoteView = createBuildRemoteView({ readCustomViewHtml, readCustomViewI18n });
 
+/** The message a failure kind nobody wrote a branch for gets.
+ *
+ * These strings are the ENTIRE error UI on the phone — no stack trace, no log the user can
+ * reach — so a new kind inheriting the previous branch's sentence sends them after the wrong
+ * problem entirely. The `never` parameter makes adding a kind a compile error here rather
+ * than a plausible-looking lie at runtime. */
+function unhandledFailure(result: never, slug: string): string {
+  return `unhandled failure on collection '${slug}': ${JSON.stringify(result)}`;
+}
+
 /** One message per failure kind, thrown by the channel handler. */
 export function remoteViewFailureMessage(result: Exclude<RemoteViewBuildResult, { kind: "ok" }>, slug: string): string {
   if (result.kind === "view-not-found") return `custom view '${result.viewId}' not found on collection '${slug}'`;
   if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
   if (result.kind === "file-missing") return `view file '${result.file}' not found — author it at data/skills/${slug}/${result.file}`;
-  return `mobile view srcdoc is ${result.bytes} bytes — over the ${REMOTE_VIEW_MAX_BYTES}-byte command-channel budget; slim the HTML`;
+  if (result.kind === "too-large")
+    return `mobile view srcdoc is ${result.bytes} bytes — over the ${REMOTE_VIEW_MAX_BYTES}-byte command-channel budget; slim the HTML`;
+  return unhandledFailure(result, slug);
 }
 
 // ── Mutate (writable views) ──
@@ -293,7 +305,8 @@ export function remoteViewItemsFailureMessage(result: Exclude<RemoteViewItemsRes
   if (result.kind === "not-mobile") return `custom view '${result.viewId}' is not a mobile view — declare target: "mobile" in its views[] entry`;
   if (result.kind === "too-large")
     return `mobile view page is ${result.bytes} bytes — over the ${REMOTE_VIEW_ITEMS_MAX_BYTES}-byte command-channel budget; narrow \`fields\` (drop an embed column), lower \`limit\`, or slim the records`;
-  return `custom view '${result.viewId}' not found on collection '${slug}'`;
+  if (result.kind === "view-not-found") return `custom view '${result.viewId}' not found on collection '${slug}'`;
+  return unhandledFailure(result, slug);
 }
 
 /** Message per non-ok mutate kind, thrown by the channel handler. */
@@ -312,5 +325,6 @@ export function mutateRemoteViewFailureMessage(result: Exclude<MutateRemoteViewR
   if (result.kind === "invalid-id") return `invalid item id: ${result.id}`;
   if (result.kind === "too-large")
     return `update succeeded but its response is ${result.bytes} bytes — over the ${REMOTE_VIEW_ITEMS_MAX_BYTES}-byte command-channel budget; slim the record and re-fetch with \`getItems\``;
-  return `data directory for collection '${slug}' escapes the workspace`;
+  if (result.kind === "path-escape") return `data directory for collection '${slug}' escapes the workspace`;
+  return unhandledFailure(result, slug);
 }
