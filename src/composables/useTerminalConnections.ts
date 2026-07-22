@@ -465,6 +465,23 @@ export function pasteText(key: string, text: string): boolean {
   return true;
 }
 
+// Paste a MULTI-LINE block and submit it. Two separate writes: same-burst text+CR reads
+// as a paste in claude's TUI and the CR is swallowed, and a CR glued onto a bracketed
+// paste can arrive before the paste has been committed to the input box. Both writes pin
+// to the socket captured now, so a slot that reconnects mid-flight never gets a stray CR
+// that would submit whatever the user had typed there instead.
+const PASTE_SUBMIT_MS = 200;
+export function pasteAndSubmit(key: string, text: string): boolean {
+  const c = conns.get(key);
+  const sock = c?.ws;
+  if (!text || !c || !sock || sock.readyState !== WebSocket.OPEN) return false;
+  sock.send(JSON.stringify({ type: "input", data: `${PASTE_START}${text}${PASTE_END}` }));
+  setTimeout(() => {
+    if (c.ws === sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify({ type: "input", data: "\r" }));
+  }, PASTE_SUBMIT_MS);
+  return true;
+}
+
 // The slots whose conversation another cell can read. A snapshot, not a reactive view:
 // the caller is a menu that opens, gets picked from, and closes. What counts as
 // readable lives in readableSlot — this only flattens each Conn for it to judge.
