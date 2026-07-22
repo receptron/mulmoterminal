@@ -6,7 +6,7 @@ import { CLAUDE_CWD } from "../config/env.js";
 import { getUserMcpServers } from "../config/config-routes.js";
 import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
-import { knownSessions, ptys } from "./registry.js";
+import { knownSessions, launchChoices, ptys } from "./registry.js";
 import { ptySpawn, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
 import { attachDraftInjection } from "./draft-injection.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -58,8 +58,16 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // select, which is exactly what the provider contract exists to prevent. The ws route
     // turns it into a message in the terminal.
     const dir = loadDirConfig(cwd);
-    const choice = effectiveChoice(launch, { provider: dir.provider, model: dir.model });
+    const choice = effectiveChoice({
+      launch,
+      remembered: launchChoices.get(sessionId),
+      dir: { provider: dir.provider, model: dir.model },
+      resuming: canResume,
+    });
     const resolved = requireResolution(resolveProvider(choice, getProviders(), process.env, sandbox));
+    // Remembered so a later resume continues on the backend this session began on, instead
+    // of silently moving to the directory's default mid-conversation.
+    if (launch) launchChoices.set(sessionId, choice);
 
     const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
     const args = buildClaudeArgs({

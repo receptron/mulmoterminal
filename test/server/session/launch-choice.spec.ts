@@ -60,9 +60,18 @@ describe("launchChoiceFromParams", () => {
 
   // One bad half must not silently promote the other half into a pair the user never
   // chose — but the good half is still a choice, so it travels and resolveProvider judges it.
-  it("keeps the usable half when the other is rejected", () => {
+  // The finding that made this all-or-nothing (Codex, PR #587): dropping the provider while
+  // keeping the model resolves to ANTHROPIC running another vendor's model id — the exact
+  // silent wrong-backend this feature exists to prevent. The whole pick goes instead, and
+  // the directory's own default decides.
+  it("drops the whole pair when the model half is unusable", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(launchChoiceFromParams(params("provider=openrouter&model=%20"))).toEqual({ provider: "openrouter", model: null });
+    expect(launchChoiceFromParams(params("provider=openrouter&model=%20"))).toBeUndefined();
+  });
+
+  it("drops the whole pair when the provider half is unusable", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(launchChoiceFromParams(params("provider=not%20an%20id&model=z-ai%2Fglm-5.2"))).toBeUndefined();
   });
 
   it("says which param it ignored", () => {
@@ -74,27 +83,57 @@ describe("launchChoiceFromParams", () => {
 
 describe("effectiveChoice", () => {
   const DIR = { provider: "openrouter", model: "moonshotai/kimi-k2.6" };
+  const fresh = (over: Partial<Parameters<typeof effectiveChoice>[0]> = {}) => effectiveChoice({ dir: DIR, resuming: false, ...over });
 
   it("uses the directory's default when the form picked nothing", () => {
-    expect(effectiveChoice(undefined, DIR)).toEqual(DIR);
+    expect(fresh()).toEqual(DIR);
   });
 
   it("lets the launch pick win over the directory's default", () => {
     const picked = { provider: "openrouter", model: "z-ai/glm-5.2" };
-    expect(effectiveChoice(picked, DIR)).toEqual(picked);
+    expect(fresh({ launch: picked })).toEqual(picked);
   });
 
   // The pairing is the part that has to be right: keeping the directory's provider while
   // taking the form's model would aim one vendor's id at another vendor's endpoint.
   it("does not blend the two — a picked model drops the directory's provider", () => {
-    expect(effectiveChoice({ provider: null, model: "claude-opus-4-8" }, DIR)).toEqual({ provider: null, model: "claude-opus-4-8" });
+    expect(fresh({ launch: { provider: null, model: "claude-opus-4-8" } })).toEqual({ provider: null, model: "claude-opus-4-8" });
   });
 
   it("passes a picked provider with no model through, for resolveProvider to refuse", () => {
-    expect(effectiveChoice({ provider: "openrouter", model: null }, DIR)).toEqual({ provider: "openrouter", model: null });
+    expect(fresh({ launch: { provider: "openrouter", model: null } })).toEqual({ provider: "openrouter", model: null });
   });
 
   it("works from a directory with no provider or model at all", () => {
-    expect(effectiveChoice(undefined, { provider: null, model: null })).toEqual({ provider: null, model: null });
+    expect(effectiveChoice({ dir: { provider: null, model: null }, resuming: false })).toEqual({ provider: null, model: null });
+  });
+});
+
+// Codex's other finding on PR #587: the cell re-sends its pick on every reconnect, so a
+// resume could apply a choice belonging to a different session.
+describe("effectiveChoice while resuming", () => {
+  const DIR = { provider: null, model: null };
+  const STALE = { provider: "openrouter", model: "z-ai/glm-5.2" };
+  const STARTED_ON = { provider: "openrouter", model: "moonshotai/kimi-k2.7-code" };
+
+  it("ignores the browser's pick and continues on what the session started on", () => {
+    expect(effectiveChoice({ launch: STALE, remembered: STARTED_ON, dir: DIR, resuming: true })).toEqual(STARTED_ON);
+  });
+
+  // The dangerous shape: a cell holding a stale pick reattaches a session that was never
+  // started on a provider at all. Resuming it must not move the conversation elsewhere.
+  it("does not apply a stale pick to a session this server never started on one", () => {
+    expect(effectiveChoice({ launch: STALE, remembered: undefined, dir: DIR, resuming: true })).toEqual(DIR);
+  });
+
+  it("falls back to the directory's default, not to nothing, when the memory is gone", () => {
+    const dir = { provider: "openrouter", model: "moonshotai/kimi-k2.6" };
+    expect(effectiveChoice({ dir, resuming: true })).toEqual(dir);
+  });
+
+  // A resume keeps the provider it began on rather than silently sliding to the directory
+  // default halfway through a conversation.
+  it("keeps a remembered provider even when the directory names none", () => {
+    expect(effectiveChoice({ remembered: STARTED_ON, dir: DIR, resuming: true })).toEqual(STARTED_ON);
   });
 });

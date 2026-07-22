@@ -43,6 +43,7 @@ import {
   devTerminalSessionsHydrated,
   hiddenSessions,
   knownSessions,
+  launchChoices,
   lastPrompts,
   lastResponses,
   lastTitleAttemptMs,
@@ -274,6 +275,7 @@ function reap(id: string) {
   // An unpersisted new session vanishes with its pty; a persisted one stays
   // visible via its on-disk record.
   knownSessions.delete(id);
+  launchChoices.delete(id); // the picked backend dies with the session that used it
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);

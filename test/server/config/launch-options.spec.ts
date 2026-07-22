@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 
 import { launchOptions } from "../../../server/config/launch-options.js";
 import { resolveProvider, type ProviderConfig } from "../../../server/session/provider-env.js";
+import { sanitizeProviders } from "../../../server/config/app-config.js";
+import { launchChoiceFromParams } from "../../../server/session/launch-choice.js";
 
 const OPENROUTER: ProviderConfig = {
   id: "openrouter",
@@ -79,5 +81,32 @@ describe("launchOptions", () => {
   it("is ready when any one of several providers is", () => {
     const broken = { ...OPENROUTER, id: "moonshot", label: "Moonshot", tokenEnv: "MOONSHOT_API_KEY" };
     expect(launchOptions([broken, OPENROUTER], WITH_KEY).anyReady).toBe(true);
+  });
+});
+
+// Codex on PR #587: the config schema accepted ids the launch parser then dropped, and a
+// dropped provider whose model survived would have started the session on Anthropic. The
+// two now share one id shape — this pins them together rather than trusting they agree.
+describe("what config accepts and what the launch path accepts", () => {
+  const provider = (id: string) => ({ id, label: "X", baseUrl: "https://x.example/api", tokenEnv: "X_KEY" });
+
+  it("keeps a provider whose id the launch parser would also accept", () => {
+    expect(sanitizeProviders([provider("open-router.v2")]).map((p) => p.id)).toEqual(["open-router.v2"]);
+  });
+
+  it.each(["has space", "-leading-dash", "pipe|char", ""])("refuses the id %j that the launch parser would drop", (id) => {
+    expect(sanitizeProviders([provider(id)])).toEqual([]);
+  });
+
+  it("drops only the malformed model, not the provider's whole list", () => {
+    const [saved] = sanitizeProviders([{ ...provider("openrouter"), models: ["z-ai/glm-5.2", "bad id", 42] }]);
+    expect(saved.models).toEqual(["z-ai/glm-5.2"]);
+  });
+
+  // The round trip that matters: anything config keeps must survive the ws query.
+  it("round-trips every id config keeps through the launch parser", () => {
+    for (const { id } of sanitizeProviders([provider("openrouter"), provider("moonshot"), provider("gw.internal:8080")])) {
+      expect(launchChoiceFromParams(new URLSearchParams({ provider: id, model: "m" }))).toEqual({ provider: id, model: "m" });
+    }
   });
 });
