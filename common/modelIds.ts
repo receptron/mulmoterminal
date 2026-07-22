@@ -21,3 +21,8 @@ export const MODEL_ID_MAX_LENGTH = 120;
 const MODEL_ID_RE = /^[A-Za-z0-9~][A-Za-z0-9._:/~-]*$/;
 
 export const isUsableModelId = (value: string): boolean => value.length <= MODEL_ID_MAX_LENGTH && MODEL_ID_RE.test(value);
+
+// What to tell someone whose id was refused. Lives beside the rule because the two drifted
+// apart the moment they were written twice: `~` was added to the shape and the refusal went
+// on listing the old set.
+export const MODEL_ID_ALLOWED = "letters, digits and . _ : / - ~";

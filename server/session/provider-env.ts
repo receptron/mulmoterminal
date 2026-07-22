@@ -15,7 +15,7 @@
 //   - ANTHROPIC_API_KEY must be UNSET, not empty — a leftover value silently outranks the
 //     auth token. It cannot be expressed here as a value, hence `unset`.
 
-import { isUsableModelId } from "../../common/modelIds.js";
+import { isUsableModelId, MODEL_ID_ALLOWED } from "../../common/modelIds.js";
 
 export interface ProviderConfig {
   id: string;
@@ -104,7 +104,7 @@ export function resolveProvider(
   // names a provider typo or omits its model is already refused, so this is the same
   // contract, not a new one.
   if (choice.model && !isUsableModelId(choice.model)) {
-    return { ok: false, reason: `unusable model id ${JSON.stringify(choice.model)} — letters, digits and . _ : / - only` };
+    return { ok: false, reason: `unusable model id ${JSON.stringify(choice.model)} — ${MODEL_ID_ALLOWED} only` };
   }
   if (!choice.provider) {
     // No provider named: stay on Anthropic, honour a bare model choice.

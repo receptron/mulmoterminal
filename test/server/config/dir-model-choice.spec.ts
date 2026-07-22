@@ -18,6 +18,7 @@ import { loadDirConfig } from "../../../server/config/dir-config.js";
 import { effectiveChoice } from "../../../server/session/launch-choice.js";
 import { resolveProvider, type ProviderConfig, type ProviderResult } from "../../../server/session/provider-env.js";
 import { buildClaudeArgs } from "../../../server/agents/claude-args.js";
+import { MODEL_ID_ALLOWED } from "../../../common/modelIds.js";
 
 const PROVIDERS: ProviderConfig[] = [{ id: "openrouter", label: "OpenRouter", baseUrl: "https://openrouter.ai/api", tokenEnv: "OPENROUTER_API_KEY" }];
 const ENV = { OPENROUTER_API_KEY: "sk-test" } as NodeJS.ProcessEnv;
@@ -87,6 +88,15 @@ describe("a model id from .mulmoterminal.json", () => {
     const result = resolveDir({ provider: "not a provider", model: "z-ai/glm-5.2" });
     expect(result.ok).toBe(false);
     expect(reasonOf(result)).toContain("unknown provider");
+  });
+
+  // The message and the rule were written twice and drifted: `~` was allowed while the
+  // refusal still listed the old set (Codex, PR #594). They share a constant now, and this
+  // fails if anyone hardcodes a list again.
+  it("describes the allowed characters from the same place the rule reads them", () => {
+    const reason = reasonOf(resolveDir({ model: "not a model id" }));
+    expect(reason).toContain(MODEL_ID_ALLOWED);
+    expect(MODEL_ID_ALLOWED).toContain("~");
   });
 
   it("quotes the offending value rather than pasting it into the message raw", () => {
