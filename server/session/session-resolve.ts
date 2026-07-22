@@ -35,3 +35,27 @@ export function resolveSession(requested: string | null, facts: SessionFacts, mi
   const sessionId = reattachId ?? (requested && (facts.tmuxAlive || resume) ? requested : mintId());
   return { reattachId, resume, sessionId };
 }
+
+// ── the same decision for the two non-claude terminals ─────────────────────────
+
+/** Which id a launcher or codex connection runs as. A live pty in this process always
+ *  wins; otherwise the requested id is reused only when something can actually serve it
+ *  (a surviving tmux session, or — for codex — a rollout to resume). Anything else mints
+ *  a fresh id, because reusing an id nothing can serve strands the client on a dead one. */
+export function resolveReattachableId(
+  requested: string | null,
+  facts: { hasLivePty: boolean; tmuxAlive: boolean; canResume: boolean },
+  mintId: () => string,
+): { reattachId: string | null; sessionId: string } {
+  const reattachId = requested && facts.hasLivePty ? requested : null;
+  const sessionId = reattachId ?? (requested && (facts.tmuxAlive || facts.canResume) ? requested : mintId());
+  return { reattachId, sessionId };
+}
+
+/** Whether a launcher connection may start at all. A reattach needs no launcher index —
+ *  the pty already IS the chosen program — and the header's "new terminal" button runs the
+ *  default shell with no configured index. Otherwise the index must name a real launcher,
+ *  or there is nothing to run. */
+export function canStartLauncher(facts: { hasLivePty: boolean; tmuxAlive: boolean; hasLauncher: boolean; isShell: boolean }): boolean {
+  return facts.hasLivePty || facts.tmuxAlive || facts.hasLauncher || facts.isShell;
+}
