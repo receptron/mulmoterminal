@@ -172,8 +172,9 @@ const cellChips = computed<CellChipView[]>(() => {
   return views;
 });
 
-const { subscribe } = usePubSub();
+const { subscribe, onReconnect } = usePubSub();
 let unsubscribe: (() => void) | null = null;
+let offReconnect: (() => void) | null = null;
 
 interface ActivityMsg {
   id: string;
@@ -185,7 +186,12 @@ interface ActivityMsg {
 }
 const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" && d !== null && "id" in d;
 
+// Bumped on every applied activity change. A seed (loadInitial) reads the state as of the
+// moment it ASKED; a live push that lands while it is in flight is newer, so the seed must
+// not overwrite it — the #620 race, scoped to one cell.
+let activityGen = 0;
 function applyActivity(d: ActivityMsg) {
+  activityGen++;
   const next = applyActivityPush(
     { working: working.value, waiting: waiting.value, event: activityEvent.value, lastPrompt: lastPrompt.value, aiTitle: aiTitle.value },
     d,
@@ -228,9 +234,13 @@ function applyBadges(data: SessionDetail) {
 }
 
 async function loadInitial(id: string) {
+  const genBeforeFetch = activityGen;
   const data = await fetchSessionDetail(id);
   if (!data) return;
-  applyActivity(data);
+  // A live push landed while we were fetching: it is newer than this snapshot, so keep it
+  // and don't let a stale seed put the cell back to idle. Badges have no such push, so they
+  // always refresh.
+  if (activityGen === genBeforeFetch) applyActivity(data);
   applyBadges(data);
 }
 
@@ -247,6 +257,13 @@ onMounted(() => {
   unsubscribe = subscribe("sessions", (d) => {
     if (isActivityMsg(d) && d.id === sessionId.value) applyActivity(d);
   });
+  // A dropped socket misses the pushes sent while it was down, and this cell's status is
+  // derived state that pub/sub only replays room membership for — not the missed events. So
+  // on reconnect re-seed from the authoritative snapshot (guarded by activityGen), or a turn
+  // that started during the outage stays showing idle until it ends.
+  offReconnect = onReconnect(() => {
+    if (sessionId.value) loadInitial(sessionId.value);
+  });
   if (sessionId.value) {
     loadInitial(sessionId.value);
     loadDiff(); // a resumed worktree cell shows its diff on restore
@@ -258,6 +275,7 @@ onMounted(() => {
 });
 onUnmounted(() => {
   unsubscribe?.();
+  offReconnect?.();
   if (resumableTimer) clearTimeout(resumableTimer);
 });
 
