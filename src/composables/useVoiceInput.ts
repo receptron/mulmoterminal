@@ -12,6 +12,7 @@
 import { onScopeDispose, ref, type Ref } from "vue";
 import { createVoiceCapture, localeToWhisperLanguage, type VoiceCaptureTransport } from "@mulmoclaude/core/whisper/client";
 import { browserLocale } from "../utils/browserLocale";
+import { modelReadiness, voiceAction } from "./voiceAction";
 
 interface VoiceModelStatusResponse {
   capable: boolean;
@@ -68,8 +69,9 @@ function createVoiceTransport(capable: Ref<boolean>, downloading: Ref<boolean>):
     async getStatus() {
       const status = await fetchModelStatus();
       capable.value = status?.capable ?? false;
-      downloading.value = status?.model?.state === "downloading";
-      return { ready: status?.capable === true && status?.model?.state === "ready", downloading: downloading.value };
+      const readiness = modelReadiness(status);
+      downloading.value = readiness.downloading;
+      return readiness;
     },
   };
 }
@@ -114,16 +116,14 @@ export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
   }
 
   async function toggle(): Promise<void> {
-    if (listening.value) {
-      capture.stop();
-      return;
-    }
-    if (available.value) {
+    const action = voiceAction({ listening: listening.value, available: available.value, downloading: downloading.value });
+    if (action === "stop") return capture.stop();
+    if (action === "start") {
       error.value = null;
       await capture.start();
       return;
     }
-    if (!downloading.value) await requestDownload();
+    if (action === "download") await requestDownload();
   }
 
   onScopeDispose(() => capture.dispose());
