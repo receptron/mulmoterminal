@@ -5,11 +5,10 @@ import fs from "fs/promises";
 import { randomUUID } from "crypto";
 import { fileURLToPath } from "url";
 import { createPubSub } from "./infra/pubsub.js";
-import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins-registry.js";
+import { toolSummaries } from "./infra/plugins-registry.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getUserMcpServers, getWorklogConfig } from "./config/config-routes.js";
-import { mountFilesBrowseRoutes } from "./files/files-browse.js";
+import { getUserMcpServers, getWorklogConfig } from "./config/config-routes.js";
 import {
   tmuxAvailable,
   tmuxHasSession,
@@ -18,10 +17,8 @@ import {
   tmuxPaneCommand,
   tmuxAttachedClientCount,
   tmuxCaptureStyledPane,
-  isResumableTmuxSession,
 } from "./infra/tmux.js";
-import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox } from "./infra/sandbox.js";
+import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage } from "./infra/sandbox.js";
 import { isAllowedOrigin } from "./infra/allowed-origin.js";
 import { serverErrorExit } from "./infra/server-exit.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
@@ -35,76 +32,39 @@ import { createTranslationWorker } from "./session/translation-worker.js";
 import { createTitleManager } from "./session/session-title.js";
 import { generateHeaderTitle } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
-import { mountHookRoute } from "./routes/hook-routes.js";
-import { mountPluginRoutes } from "./routes/plugin-routes.js";
-import { mountMcpRoutes } from "./routes/mcp-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
-import {
-  activity,
-  aiTitles,
-  devTerminalSessions,
-  devTerminalSessionsHydrated,
-  hiddenSessions,
-  knownSessions,
-  launchChoices,
-  lastPrompts,
-  lastResponses,
-  lastTitleAttemptMs,
-  lastTitledUserTurns,
-  persistActivityState,
-  ptys,
-  titleInFlight,
-} from "./session/registry.js";
-import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./session/reap-policy.js";
-import { nextActivity, sessionRow, shouldRefreshReply } from "./session/activity-transition.js";
-import { resolveWorkspace } from "./config/workspace.js";
-import { mountSessionRoutes } from "./routes/session-routes.js";
+import { activity, aiTitles, hiddenSessions, knownSessions, ptys } from "./session/registry.js";
 import { createToolStores } from "./session/tool-store.js";
-import { mountToolRoutes } from "./routes/tool-routes.js";
-import { mountRepoRoutes } from "./routes/repo-routes.js";
-import { claudeOnDiskSessionIds, readLatestResponse } from "./session/session-reads.js";
-import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
-import { codexSessionsRoot } from "./agents/codex-session.js";
-import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { renderScreen } from "./session/headlessScreen.js";
-import { cleanupSessionSettings } from "./session/session-settings.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
-import { mountOpenDirRoute } from "./files/open-dir.js";
-import { mountGitRemoteRoute } from "./git/gitRemote.js";
-import { mountWorktreeRoutes } from "./git/worktree-routes.js";
-import { mountPickFileRoute } from "./files/pick-file.js";
-import { mountCommandSummaryRoute } from "./session/command-summary.js";
-import { mountCostRoute } from "./session/cost.js";
-import { initCollectionsBackend, mountCollectionRoutes } from "./backends/collections.js";
-import { initGoogleBackend, mountGoogleRoutes } from "./backends/google.js";
+import { initCollectionsBackend } from "./backends/collections.js";
+import { initGoogleBackend } from "./backends/google.js";
 import { initPluginRuntime } from "./infra/pluginRuntime.js";
-import { mountWikiRoutes } from "./backends/wiki.js";
-import { initAccountingBackend, mountAccountingRoutes } from "./backends/accounting.js";
-import { initFeedsBackend, mountFeedsRoutes } from "./backends/feeds.js";
-import { HOST_ID as REMOTE_HOST_ID, initRemoteHostBackend, mountRemoteHostRoutes } from "./backends/remoteHost/index.js";
+import { initAccountingBackend } from "./backends/accounting.js";
+import { initFeedsBackend } from "./backends/feeds.js";
+import { HOST_ID as REMOTE_HOST_ID, initRemoteHostBackend } from "./backends/remoteHost/index.js";
 import { createSessionActivityPublisher, firestoreSessionActivityStore } from "./backends/remoteHost/sessionActivity.js";
 import { currentFirestore, currentUid } from "./backends/remoteHost/session.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
 import { installConfigSkill } from "./infra/install-config-skill.js";
 import { initFileChangePublisher } from "./backends/fileChange.js";
-import { initNotifier, mountNotificationRoutes } from "./backends/notifier.js";
-import { mountWhisperRoutes, stopWhisperSidecar } from "./backends/whisper.js";
+import { initNotifier } from "./backends/notifier.js";
+import { stopWhisperSidecar } from "./backends/whisper.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
-import { initUserTaskScheduler, mountSchedulerRoutes } from "./backends/scheduler.js";
+import { initUserTaskScheduler } from "./backends/scheduler.js";
 import { worklogSystemTask } from "./backends/worklog.js";
 import type { TaskDefinition } from "@mulmoclaude/core/scheduler";
-import { mountFilesRoutes } from "./backends/files.js";
-import { mountShortcutsRoutes } from "./backends/shortcuts.js";
-import { mountTranslationRoutes } from "./backends/translation.js";
-import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "./backends/html.js";
-import { initMulmoScriptBackend, mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "./backends/mulmoscript.js";
-import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
+import { initMulmoScriptBackend } from "./backends/mulmoscript.js";
+import { createSessionLifecycle, SESSIONS_CHANNEL } from "./session/lifecycle.js";
+import { mountAppRoutes } from "./routes/app-routes.js";
+import { allowedToolNames } from "./infra/plugins-registry.js";
+import { resumableSessionPredicate } from "./session/resumable-sessions.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
 
@@ -134,11 +94,9 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 installConfigSkill();
 
 // Pub/sub channel the sidebar subscribes to for live session-activity changes.
-const SESSIONS_CHANNEL = "sessions";
 
 // Pub/sub channel telling the client a directory's .mulmoterminal.json changed, so it re-reads that
 // dir's config and recolours its cells without a page reload. Fed by the tool hooks, not a watcher.
-const DIR_CONFIG_CHANNEL = "dir-config";
 
 // Per-session pub/sub channel the GUI panel subscribes to. The MCP broker POSTs a
 // toolResult to /api/agent/toolResult, which stores it keyed by session id and
@@ -163,12 +121,6 @@ const GUI_MCP_TOOLS = [...allowedToolNames(), "mcp__mulmoterminal-gui__submitTra
 const toolStores = createToolStores({
   publish: (channel, data) => pubsub?.publish(channel, data),
 });
-const { recordToolCallStart, recordToolCallEnd } = toolStores;
-
-function refreshLastResponse(id: string, cwd: string): void {
-  const text = readLatestResponse(id, cwd);
-  if (text) lastResponses.set(id, text); // a failed read leaves any prior value
-}
 
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
@@ -182,67 +134,6 @@ let pubsub: ReturnType<typeof createPubSub> | null = null;
 // what keeps a finished/needs-attention background session bold (via its
 // on-disk record) until the user opens it. This keeps `activity` from growing
 // unbounded while preserving the bold-until-viewed behavior.
-// On disconnect we don't kill an idle session immediately — a page reload is a
-// brief disconnect, and reaping then would throw away a perfectly good live
-// terminal (and its scrollback). Instead we keep the pty for a grace window; a
-// reattach within it cancels the reap, so a reload just re-attaches to the same
-// running terminal. Only after the window with no reattach do we reap.
-const REAP_GRACE_MS = 30_000;
-// A detached session that still needs the user — mid-turn output the user hasn't
-// seen, or blocked on a permission/question prompt (the `waiting` flag) — is an
-// unfinished task: reaping it loses work. So it gets a much longer grace than an
-// idle one, long enough that you can switch away, do other things, and come back
-// to answer it. Override with WAIT_REAP_GRACE_MS=0 to never auto-close these.
-const WAIT_REAP_GRACE_DEFAULT_MS = 30 * 60_000;
-const WAIT_REAP_GRACE_MS = parseWaitGraceMs(process.env.WAIT_REAP_GRACE_MS, WAIT_REAP_GRACE_DEFAULT_MS, (raw) =>
-  console.warn(`[pty] ignoring non-numeric WAIT_REAP_GRACE_MS=${JSON.stringify(raw)}; using default ${WAIT_REAP_GRACE_DEFAULT_MS}ms`),
-);
-const reapTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function cancelReap(id: string) {
-  const t = reapTimers.get(id);
-  if (t) {
-    clearTimeout(t);
-    reapTimers.delete(id);
-  }
-}
-
-function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
-  // null => never auto-reap; the session stays until reattached or explicitly
-  // terminated (see reapTimerDelay for why a bad value must not reach setTimeout).
-  const delay = reapTimerDelay(delayMs);
-  if (delay === null) return;
-  if (reapTimers.has(id)) return;
-  reapTimers.set(
-    id,
-    setTimeout(() => {
-      reapTimers.delete(id);
-      const entry = ptys.get(id);
-      if (entry && !entry.ws) reap(id); // still detached after the grace window
-    }, delay),
-  );
-}
-
-// Decide whether/when to reap a detached session based on its activity. A session
-// that's actively thinking (`working`) is never reaped — that's "clearly working,
-// don't close it". One that needs the user (`waiting`) gets the long grace. A
-// genuinely idle session (finished AND already viewed, so neither flag) gets the
-// short grace — that's the "auto-close inactive ones" behaviour. The ordering rule
-// lives in reapDecisionFor (pure/tested).
-function armReapForDetached(id: string) {
-  const entry = ptys.get(id);
-  if (!entry || entry.ws) return; // still attached: nothing to reap
-  // Recompute from scratch: state may have escalated (idle -> waiting) since the
-  // last arm, and a stale short timer must not survive to reap a session that now
-  // needs the user. cancelReap clears it so scheduleReap re-arms with the right grace.
-  cancelReap(id);
-  const decision = reapDecisionFor(activity.get(id), { idleMs: REAP_GRACE_MS, waitingMs: WAIT_REAP_GRACE_MS });
-  if (decision.kind === "keep") {
-    console.log(`[pty] keeping working session ${id} alive (detached)`);
-    return;
-  }
-  scheduleReap(id, decision.delayMs);
-}
 
 // Per-connection plumbing (session/pty-connection.ts). The reap decisions stay here —
 // they read activity state and schedule timers that outlive any one connection.
@@ -252,43 +143,6 @@ const { reattachPty, handleClientFrame, handleClientClose } = createConnectionHa
   setWaiting: (id, waiting) => setWaiting(id, waiting),
   armReapForDetached: (id) => armReapForDetached(id),
 });
-
-function reap(id: string) {
-  cancelReap(id);
-  const entry = ptys.get(id);
-  if (!entry) return; // already reaped
-  ptys.delete(id);
-  // An unpersisted new session vanishes with its pty; a persisted one stays
-  // visible via its on-disk record.
-  knownSessions.delete(id);
-  launchChoices.delete(id); // the picked backend dies with the session that used it
-  lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
-  lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
-  forgetTitle(id);
-  sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
-  titleInFlight.delete(id);
-  lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
-  lastTitleAttemptMs.delete(id);
-  if (shouldForgetActivity(activity.get(id))) {
-    activity.delete(id);
-    hiddenSessions.delete(id); // the hidden flag rides with the record — see shouldForgetActivity
-  }
-  try {
-    entry.term.kill();
-  } catch {
-    // already gone
-  }
-  // Killing the pty only DETACHES a tmux client — end the tmux session too so an
-  // explicit close / idle reap actually stops the program (no orphan within a live
-  // server). A server crash never runs this, so sessions survive that (the point).
-  if (entry.tmux) tmuxKillSession(id);
-  // A sandbox container likewise outlives its killed `docker run` client — force-remove
-  // it (and drop the throwaway per-session config).
-  if (entry.sandbox) cleanupSandbox(id);
-  // A provider session's settings file holds its token — drop it with the session (#579).
-  cleanupSessionSettings(id);
-  pubsub?.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
-}
 
 // Mirrors session activity into Firestore so the phone's terminal viewer can refresh
 // on a real transition instead of polling (#439). Deduped and fire-and-forget inside;
@@ -300,21 +154,14 @@ const sessionActivityPublisher = createSessionActivityPublisher({
   onError: (err) => console.warn("[remote-host] session activity publish failed:", err),
 });
 
-// Publish a session's current activity (working + waiting) to subscribers.
-function publishActivity(id: string) {
-  const a = activity.get(id);
-  // `cwd` rides along so the attention-sound player can pick up that directory's custom
-  // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.
-  const cwd = ptys.get(id)?.cwd ?? null;
-  if (shouldRefreshReply(a, cwd)) refreshLastResponse(id, cwd);
-  const row = sessionRow(id, a, cwd, {
-    lastPrompt: lastPrompts.get(id),
-    aiTitle: aiTitles.get(id),
-    lastResponse: lastResponses.get(id),
-  });
-  sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting });
-  pubsub?.publish(SESSIONS_CHANNEL, row);
-}
+// Session teardown + activity publishing (session/lifecycle.ts). `forgetTitle` is bound
+// lazily because the title manager below needs publishActivity — the cycle is real.
+const lifecycle = createSessionLifecycle({
+  publish: (channel, data) => pubsub?.publish(channel, data),
+  forgetTitle: (id) => forgetTitle(id),
+  sessionActivityPublisher,
+});
+const { cancelReap, reap, armReapForDetached, publishActivity, setWorking, setWaiting } = lifecycle;
 
 // AI-title bookkeeping (session/session-title.ts). publishActivity stays here — it
 // publishes the whole session row, of which the title is one field.
@@ -323,40 +170,6 @@ const { forgetTitle, noteTitleTurn, maybeGenerateTitle, freshenRosterTitle } = c
   now: () => Date.now(),
   generateTitle: (raw) => generateHeaderTitle(raw),
 });
-
-// Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
-// publish) when the state is unchanged.
-function setWorking(id: string, working: boolean, event?: string) {
-  const next = nextActivity(activity.get(id), { working }, event, Date.now());
-  if (!next) return;
-  activity.set(id, next);
-  publishActivity(id);
-  // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
-  persistActivityState((id) => hiddenSessions.has(id));
-
-  // A background session (no attached client) that just finished a turn is no
-  // longer `working`. Don't kill it outright — if it ended its turn to ask the
-  // user something (it'll be flagged `waiting`), reaping now would lose the task
-  // before the user can answer. Arm a reap whose grace matches its state.
-  if (!working) armReapForDetached(id);
-}
-
-// A background session needs the user's attention: it is waiting for input
-// (Notification: permission / question / idle) or has finished a turn with
-// output the user hasn't seen (Stop). Cleared when brought to the foreground
-// (see the WebSocket connection handler).
-function setWaiting(id: string, waiting: boolean, event?: string) {
-  const next = nextActivity(activity.get(id), { waiting }, event, Date.now());
-  if (!next) return;
-  activity.set(id, next);
-  publishActivity(id);
-  // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
-  persistActivityState((id) => hiddenSessions.has(id));
-
-  // A detached session that just started needing the user escalates from the short
-  // idle grace to the long one — re-arm so it isn't reaped before they can return.
-  if (waiting) armReapForDetached(id);
-}
 
 // The PTY spawners (session/spawn-*.ts). They take what index.ts still owns — the session
 // lifecycle it drives, and this file's port and live user config bound into the two payload
@@ -395,200 +208,24 @@ const app = express();
 // Generous body limit: PostToolUse hook payloads carry the tool's full output
 // (a big Read/Bash result can blow past Express's 100kb default, which would 413
 // the hook and leave its tool-call entry stuck on "running").
-app.use(express.json({ limit: "25mb" }));
-
-// The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
-// manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede
-// mountAllRoutes' /api/plugin/:toolName catch-all below, which would otherwise take them.
-mountPluginRoutes(app, { spawnClaudePty, spawnCodexPty });
-
-// presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
-// /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
-// catch-all (which handles the tool-call); a request without `kind` falls through.
-mountHtmlDispatchRoute(app);
-
-// presentMulmoScript: the View's dispatch (kind router) AND the tool-call both
-// handled by the mulmoscript backend (realpath guard + autoGenerateMovie trigger
-// the generic catch-all lacks). MUST precede mountAllRoutes. The media route
-// (movie/PDF bytes for the View's fetchMediaBlob) has its own path.
-mountMulmoScriptDispatchRoute(app);
-mountMulmoScriptMediaRoute(app);
-
-// Mount each enabled GUI plugin's REST routes (e.g. POST /api/markdown,
-// POST /api/form). The GUI MCP server dispatches tool calls to these.
-mountAllRoutes(app);
-
-// Read-side collection routes (GET /api/collections/list + /:slug/detail) over the
-// shared workspace, backing the @mulmoclaude/collection-plugin presentCollection
-// card and (later) the collections toolbar. The engine itself is configured below
-// once CLAUDE_CWD is the confirmed workspace.
-mountCollectionRoutes(app);
-
-// Read-only wiki routes (GET /api/wiki[?slug=] + /graph + /lint) over the shared
-// workspace, thin consumers of @mulmoclaude/core/wiki/server. Claude authors the wiki
-// via the real CLI in the terminal; MT's overlay only browses. Mounted before the /api
-// SPA fallback.
-mountWikiRoutes(app, { workspace: CLAUDE_CWD });
-
-// Accounting dispatch route (POST /api/accounting) from @mulmoclaude/accounting-plugin.
-// Drives BOTH the AccountingView (configureAccountingHost.apiCall) and the
-// manageAccounting host tool below. The engine is configured (workspace + pub/sub)
-// further down, once CLAUDE_CWD + pubsub exist.
-mountAccountingRoutes(app);
-
-// Collection Refresh route (POST /api/collections/:slug/refresh) from
-// @mulmoclaude/core/feeds — fetches declarative feeds or dispatches an agent-ingest
-// worker. Backs the collection-view Refresh button. The engine is configured below.
-mountFeedsRoutes(app);
-
-// Notification REST surface (list active / history, dismiss one) — backs the toolbar
-// bell. The engine is configured below once pubsub + the workspace exist.
-mountNotificationRoutes(app);
-
-// Scheduler REST surface (read-only list of user cron tasks) — backs a future tasks
-// UI. The tasks themselves are loaded + started below, once the spawn infra exists.
-mountSchedulerRoutes(app, { workspace: CLAUDE_CWD });
-
-// Raw workspace-file serving (GET /api/files/raw?path=) — backs collection image/file
-// fields and custom-view <img> URLs. Rooted at the shared workspace.
-mountFilesRoutes(app, { workspace: CLAUDE_CWD });
-
-// Serve presentHtml pages for the View's iframe (GET /artifacts/html/<rest>) with an
-// HTML preview CSP. The View navigates the iframe to this URL (htmlArtifactPreviewUrl).
-mountHtmlPreviewRoute(app, { workspace: CLAUDE_CWD });
-
-// Shared launcher favorites (GET/PUT /api/shortcuts) over the same
-// <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
-mountShortcutsRoutes(app, { workspace: CLAUDE_CWD });
-
-// Local voice input (POST /api/transcribe + model status/download) — macOS only,
-// whisper.cpp via @mulmoclaude/core/whisper. Models live in the shared
-// <workspace>/models dir, so a download by either app is reused.
-mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
-
-// Runtime UI-string translation (POST /api/translation), backing the shared
-// @mulmoclaude/core/translation/client. The HTTP contract + on-disk cache schema
-// match MulmoClaude (so the <workspace>/data/translation cache is shared between the
-// apps), but the LLM step is MulmoTerminal's own: translateViaHiddenChat spawns a
-// hidden background claude session (NEVER `claude -p`) and is filtered from the
-// sidebar (see session/translation-worker.ts).
-mountTranslationRoutes(app, { workspace: CLAUDE_CWD, translateBatch: translateViaHiddenChat });
-
-// The agent-facing MCP surface (routes/mcp-routes.ts): the in-process GUI MCP server over
-// Streamable HTTP, and the worker-only landing point the hidden translation worker reports to.
-mountMcpRoutes(app);
-
-// Serve Vite build output
-app.use(express.static(path.join(__dirname, "../dist")));
-
-// SPA fallback for vue-router history mode: a hard reload / deep-link of a client
-// route (e.g. /terminals, /collections/foo) must serve index.html. Mounted AFTER
-// express.static so real asset files win, and after the /artifacts/html preview
-// route (registered above) so it wins too. SPA_FALLBACK_RE reserves the single /api
-// prefix — see server/spa-fallback.ts for why that's sufficient.
-app.get(SPA_FALLBACK_RE, (_req, res) => res.sendFile(path.join(__dirname, "../dist/index.html")));
-
-// The Claude hook endpoint (routes/hook-routes.ts). Session lifecycle, the title
-// bookkeeping and the tool stores stay here; the fan-out that reads them moves out.
-mountHookRoute(app, {
-  setWorking: (id, working, event) => setWorking(id, working, event),
-  setWaiting: (id, waiting, event) => setWaiting(id, waiting, event),
-  publishActivity: (id) => publishActivity(id),
+mountAppRoutes(app, {
+  clientDir: __dirname,
+  isAllowedOrigin,
+  publish: (channel, data) => pubsub?.publish(channel, data),
+  sessionChannel,
+  toolStores,
+  toolSummaries,
+  spawnClaudePty,
+  spawnCodexPty,
+  translateViaHiddenChat,
+  freshenRosterTitle,
   forgetTitle,
   noteTitleTurn,
   maybeGenerateTitle,
-  recordToolCallStart,
-  recordToolCallEnd,
-  publishDirConfig: (cwd) => pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd }),
-  // Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server,
-  // whose port the backend only knows when CLIENT_PORT is set in its environment.
-  uiPort: String(process.env.CLIENT_PORT || PORT),
-});
-
-// The tools pane: the toolResult sink, its replay, the available-tool list and the
-// call history (see routes/tool-routes.ts).
-mountToolRoutes(app, { stores: toolStores, toolSummaries, publish: (c, d) => pubsub?.publish(c, d), sessionChannel });
-
-// The /prs and /issues views (see routes/repo-routes.ts).
-mountRepoRoutes(app);
-
-// GET/POST /api/config (workspace dir + directory presets) — in its own module.
-// GRID-ONLY (dev_tool): backs the grid launcher's default dir + the settings
-// modal's directory presets. The single view never calls it.
-mountConfigRoutes(app, CLAUDE_CWD);
-
-// Project-scoped file browsing + editing for the full-screen Files view
-// (GET /api/files/browse/{list,text,md}, PUT .../write — all ?cwd=&path=). Each
-// terminal browses its own session's project dir; paths are contained within it.
-mountFilesBrowseRoutes(app, { defaultCwd: CLAUDE_CWD });
-
-// Directory-scoped reads for a terminal cell: scripts, skills, dir config, git status,
-// PR phase, resolved header, custom sound. All keyed by ?cwd= (see routes/dir-routes.ts).
-mountDirRoutes(app);
-
-// GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
-// OS file manager (a browser tab can't, but this local server can).
-mountOpenDirRoute(app, { isAllowedOrigin });
-
-// GRID-ONLY (dev_tool): POST /api/git-remote reports a cell dir's GitHub repository
-// URL (null if it isn't a GitHub repo), so the header can offer an "open on GitHub" link.
-mountGitRemoteRoute(app, { isAllowedOrigin });
-
-// GRID-ONLY (dev_tool): /api/worktrees — detect a git repo, list/create/remove the
-// per-agent worktrees a cell launches into, so several agents work one repo in
-// isolated working trees.
-mountWorktreeRoutes(app, { isAllowedOrigin });
-
-// POST /api/pick-file opens the OS file dialog and returns the chosen absolute
-// path(s) — how a browser tab inserts a real filesystem path into the terminal
-// (the browser hides paths from drag/drop and <input type=file>).
-mountPickFileRoute(app, { isAllowedOrigin });
-
-// POST /api/command/summarize runs `claude -p` headless over a Run cell's captured
-// terminal output and returns a short Errors/Warnings/cause/fix summary (issue #246).
-// Same-origin guarded like the other local-action routes.
-mountCommandSummaryRoute(app, { isAllowedOrigin });
-
-// GET /api/cost — estimated $ cost (session + today/month roll-up) for a project's
-// sessions, from public per-model pricing. Read-only; shown in the Settings modal (#245).
-mountCostRoute(app, { resolveCwd: resolveWorkspace });
-
-// POST /api/remote-host/connect|disconnect + GET /status — start/stop the
-// Firestore host loop from the toolbar Connect control. Same-origin guarded like
-// the other local-only routes; the connect idToken is never logged.
-mountRemoteHostRoutes(app, { isAllowedOrigin });
-
-// GET /api/google/status + POST /api/google/authorize|unlink — the Settings modal's
-// Google account link. Consent needs a browser on THIS machine (loopback listener),
-// which is exactly the local-browser case; `mulmoterminal google login` is the
-// fallback for remote setups. Same-origin guarded; tokens never reach a response.
-mountGoogleRoutes(app, { isAllowedOrigin });
-
-// Sidebar listing, one session's detail, the grid's attention poll, the tool timeline and
-// codex's own sessions (see routes/session-routes.ts).
-mountSessionRoutes(app, { freshenRosterTitle });
-
-// Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
-// module so the origin guard / id validation / orphan-selection boundary are testable.
-// Shared by the orphan cleanup (which must never reap a resumable session) and the phone's
-// session picker (which must never OFFER a non-resumable one) — the same rule read from
-// both directions, so they can't drift apart.
-const resumableSessionPredicate = async (): Promise<(id: string) => boolean> => {
-  await devTerminalSessionsHydrated;
-  const live = new Set(ptys.keys());
-  const claudeOnDisk = claudeOnDiskSessionIds();
-  const codexRoot = codexSessionsRoot();
-  return (id) => isResumableTmuxSession(id, live, devTerminalSessions, claudeOnDisk, (i) => codexRolloutExists(codexRoot, i));
-};
-
-mountTmuxRoutes(app, {
-  isAllowedOrigin,
-  isValidSessionId: (id) => SESSION_ID_RE.test(id),
-  reapSession: reap,
-  hasTmux: tmuxHasSession,
-  killTmux: tmuxKillSession,
-  listTmuxIds: tmuxListSessionIds,
-  resumablePredicate: resumableSessionPredicate,
+  reap,
+  setWorking,
+  setWaiting,
+  publishActivity,
 });
 
 const server = http.createServer(app);
