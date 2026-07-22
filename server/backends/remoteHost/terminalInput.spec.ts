@@ -172,10 +172,16 @@ describe("sendTerminalInput", () => {
 // rule that decides is deliberately narrow — and narrow in a way that is easy to widen
 // by accident, which is what these lock down.
 describe("canClearInputBox", () => {
-  it("allows it for a Claude session that is not mid-turn", () => {
+  it("allows it for a Claude the host has seen finish a turn", () => {
     expect(canClearInputBox("claude", false)).toBe(true);
-    // No activity record yet (nothing has happened in this session) reads as idle.
-    expect(canClearInputBox("claude", undefined)).toBe(true);
+  });
+
+  // A missing activity record is "nobody has reported yet", NOT "idle". A session
+  // spawned with an initialPrompt runs its first turn before any hook fires, and
+  // setWorking(id, false) does not even create a record — so reading unknown as idle
+  // would interrupt that turn.
+  it("refuses when no activity has been reported for the session", () => {
+    expect(canClearInputBox("claude", undefined)).toBe(false);
   });
 
   // Ctrl-C mid-turn interrupts the turn. Whatever is in the box then is a QUEUED
@@ -191,9 +197,7 @@ describe("canClearInputBox", () => {
     expect(canClearInputBox("codex", undefined)).toBe(false);
   });
 
-  // At a prompt Ctrl-C is harmless; during a long build it kills the build, and the
-  // host cannot tell the two apart.
-  it("refuses for a shell", () => {
+  it("refuses for a shell even once it has reported idle", () => {
     expect(canClearInputBox("shell", false)).toBe(false);
   });
 

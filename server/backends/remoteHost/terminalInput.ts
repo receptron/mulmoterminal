@@ -36,12 +36,19 @@ export const CLEAR_BOX = "\x03";
 
 // Who may have their box cleared. Ctrl-C is destructive everywhere the host cannot
 // vouch for the session's state — mid-turn it interrupts the turn, and in a shell it
-// kills whatever is running — so this says yes only for an IDLE CLAUDE.
+// kills whatever is running — so this says yes only for a Claude the host has SEEN
+// finish a turn.
+//
+// `working === false`, not `!== true`: a missing activity record means nobody has
+// reported on this session yet, which is emphatically not the same as idle. A session
+// spawned with an initialPrompt runs its first turn before any hook has fired
+// (spawn-claude.ts), and setWorking(id, false) doesn't even create a record — so
+// "unknown" covers a live turn, and reading it as idle would interrupt one.
 //
 // Codex is excluded despite its TUI clearing identically: nothing calls setWorking for
 // a codex session (only Claude's activity hooks do), so `working` never turns true there
 // and "idle" would be a guess. Include it once its turn state is tracked.
-export const canClearInputBox = (agent: SessionAgent | null | undefined, working: boolean | undefined): boolean => agent === "claude" && working !== true;
+export const canClearInputBox = (agent: SessionAgent | null | undefined, working: boolean | undefined): boolean => agent === "claude" && working === false;
 
 // Matches DRAFT_SUBMIT_MS in server/index.ts: the same TUI, the same reason.
 export const SUBMIT_DELAY_MS = 150;

@@ -33,6 +33,7 @@
 Ctrl-C は**ターン実行中に送ると中断させる**ため、「ホストがアイドルだと確実に分かっている場合」のみに限定する:
 
 - **Claude セッションのみ** — `setWorking` を呼ぶのは Claude の activity hook だけで、codex の working 状態はホストが追跡していない。追跡していない以上アイドル判定ができない
+- **「ターンの完了をホストが見た」場合のみ**（`working === false`、`!== true` ではない）— activity レコードが無いのは「まだ誰も報告していない」であってアイドルではない。`initialPrompt` 付きで spawn されたセッションは hook が飛ぶ前に最初のターンを走らせており（`spawn-claude.ts`）、`setWorking(id, false)` はレコードを作りすらしない。未知をアイドルと読むとそのターンを中断してしまう
 - **shell は対象外** — プロンプトに居るのか長時間コマンド実行中なのか分からず、後者では実行中のプロセスを殺す
 - **ターン実行中の Claude も対象外** — 従来どおり連結になるが、実行中に入力欄にあるのは「キューされたプロンプト」であり、黙って捨てる方が危険
 
@@ -59,14 +60,16 @@ export interface TerminalInputDeps {
 
 ```ts
 const remoteHostCanClearBox = (sessionId: string): boolean =>
-  ptys.get(sessionId)?.agent === "claude" && activity.get(sessionId)?.working !== true;
+  canClearInputBox(ptys.get(sessionId)?.agent, activity.get(sessionId)?.working);
 ```
+
+判定そのものは純粋関数 `canClearInputBox(agent, working)` として `terminalInput.ts` に置く（`index.ts` に埋めると起動しないとテストできないため）。
 
 `handlers.ts` / `remoteHost/index.ts` の deps 型も追随。
 
 ## テスト
 
 - `canClearBox` が true のとき、ペーストと**同じ 1 回の書き込み**で Ctrl-C が先行すること
-- false のとき（ターン実行中 / codex / shell / dep 省略）先行しないこと
+- false のとき（ターン実行中 / activity レコード無し / codex / shell / dep 省略）先行しないこと
 - スマホの文字自体に Ctrl-C を混ぜても `sanitizeTerminalInput` が落とすので、我々が付けた 1 個だけであること
 - 既存の直列化・失敗時のチェーン維持の回帰テストが通ること
