@@ -80,12 +80,18 @@ describe("the translation worker's tool gate", () => {
       expect(routeToolCall("anything-at-all", false)).toEqual({ kind: "dispatch" });
     });
 
-    // Current behaviour, pinned rather than endorsed: the submit branch is checked before
-    // the worker branch, so an ordinary session that guesses the name reaches it too. It
-    // can only ever submit for its OWN session id (the broker captures it), and with no
-    // translation pending that answers 404 — but "worker-only" is not what the code enforces.
-    it("also reaches the submit path if it names the worker tool", () => {
-      expect(routeToolCall(SUBMIT_TRANSLATION_TOOL_NAME, false)).toEqual({ kind: "submit-translation" });
+    // The tool is not offered to an ordinary session, so naming it is the same move the
+    // refusal above exists for. What used to stop it was the session having no translation
+    // pending — a 404 raised elsewhere, not a decision taken here.
+    it("is refused the worker-only tool rather than reaching the hand-off", () => {
+      expect(routeToolCall(SUBMIT_TRANSLATION_TOOL_NAME, false).kind).toBe("refused");
+    });
+
+    // The worker's refusal tells it to call submitTranslation instead; saying that to a
+    // session that has no such tool would send it back for another try at the same wall.
+    it("is not told to call submitTranslation instead", () => {
+      const route = routeToolCall(SUBMIT_TRANSLATION_TOOL_NAME, false);
+      expect(route.kind === "refused" && route.message).toBe('Tool "submitTranslation" is not available.');
     });
   });
 

@@ -49,9 +49,15 @@ export type ToolRoute =
   | { kind: "dispatch" };
 
 export function routeToolCall(name: string, isTranslationWorker: boolean): ToolRoute {
-  if (name === SUBMIT_TRANSLATION_TOOL_NAME) return { kind: "submit-translation" };
+  const isWorkerTool = name === SUBMIT_TRANSLATION_TOOL_NAME;
   if (isTranslationWorker) {
+    if (isWorkerTool) return { kind: "submit-translation" };
     return { kind: "refused", message: `Tool "${name}" is not available; call submitTranslation with the translations.` };
   }
+  // The hand-off is the worker's, and an ordinary session is never offered it. Naming it
+  // anyway is refused rather than dispatched: what stops it today is that the session has no
+  // translation pending, which is a 404 from another module rather than a decision made here
+  // — and the layer above already assumes a model can name a tool it was never shown.
+  if (isWorkerTool) return { kind: "refused", message: `Tool "${name}" is not available.` };
   return { kind: "dispatch" };
 }
