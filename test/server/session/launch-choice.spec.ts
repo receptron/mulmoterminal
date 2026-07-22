@@ -136,4 +136,13 @@ describe("effectiveChoice while resuming", () => {
   it("keeps a remembered provider even when the directory names none", () => {
     expect(effectiveChoice({ remembered: STARTED_ON, dir: DIR, resuming: true })).toEqual(STARTED_ON);
   });
+
+  // Pinned as a decision rather than left to fall out of the code (Codex asked for the
+  // opposite on PR #587): a directory's own default stays LIVE across a resume, exactly as
+  // it was before the picker existed and as every other .mulmoterminal.json field behaves.
+  // Only the picker's choice is sticky, because only it has nowhere else to live.
+  it("lets a directory's edited default apply on resume", () => {
+    const edited = { provider: "openrouter", model: "z-ai/glm-5.2" };
+    expect(effectiveChoice({ dir: edited, resuming: true })).toEqual(edited);
+  });
 });

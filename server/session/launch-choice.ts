@@ -58,6 +58,13 @@ export interface ChoiceInputs {
 // necessarily to the one being resumed. What the session was actually started on is the
 // only defensible answer; the directory's default is the fallback when this server never
 // saw it start.
+//
+// Only the PICKER'S choice is remembered, and the asymmetry is deliberate. That choice has
+// nowhere else to live, so losing it drops the session onto a backend its user never chose
+// for it. The directory's default IS that backend — and like every other field in
+// .mulmoterminal.json (theme, colours, the skill list) it is read fresh on each spawn, so
+// editing the file takes effect. Making these two keys uniquely sticky would also read
+// differently either side of a server restart, since this memory is in-process.
 export function effectiveChoice({ launch, remembered, dir, resuming }: ChoiceInputs): DirModelChoice {
   if (resuming) return remembered ?? dir;
   return launch ?? dir;
