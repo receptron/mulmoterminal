@@ -14,7 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchLatestVersion, isNewerVersion } from "./update-check.js";
-import { chooseCwd, parsePortArg, portInUseMessage } from "./cli-args.js";
+import { chooseCwd, parsePortArg, portInUseAction, portInUseMessage, saysYes, secondInstancePrompt, SECOND_INSTANCE_NOTE } from "./cli-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -69,7 +69,7 @@ function promptYesNo(question) {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     rl.question(question, (answer) => {
       rl.close();
-      res(/^y(es)?$/i.test(answer.trim()));
+      res(saysYes(answer));
     });
   });
 }
@@ -226,18 +226,42 @@ function resolveCwd(args) {
   return abs;
 }
 
+// Ask the OS for a free port (listen on 0) and return the one it assigned, or null. Only
+// reached once someone has said yes to a second instance.
+function findEphemeralPort() {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once("error", () => resolve(null));
+    probe.once("listening", () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+    probe.listen(0);
+  });
+}
+
 async function choosePort(requested, explicit) {
   if (await isPortFree(requested)) return requested;
-  // No silent fallback to another port: that is what quietly puts a second server on the
-  // same home directory, where the two disagree about state neither sees the other change.
-  error(portInUseMessage(requested, explicit));
-  process.exit(1);
+  // No SILENT fallback: starting a second server on another port without saying so is how
+  // someone ends up with two sharing one home directory without knowing (#611).
+  if (portInUseAction(explicit, process.stdin.isTTY) === "stop") {
+    error(portInUseMessage(requested, explicit));
+    process.exit(1);
+  }
+  if (!(await promptYesNo(secondInstancePrompt(requested)))) process.exit(1);
+  const fallback = await findEphemeralPort();
+  if (fallback === null) {
+    error("No free port could be found for a second instance.");
+    process.exit(1);
+  }
+  log(SECOND_INSTANCE_NOTE);
+  return fallback;
 }
 
 // Spawn the server on `port` and report the child via `onChild` (so signal
 // handlers target the live process). Resolves only when the server exits because
 // the port was taken at bind time before it became ready — the caller then
-// retries on a fresh port. In every other case (clean shutdown, fatal error,
+// reports that and stops. In every other case (clean shutdown, fatal error,
 // or the server simply running) the process exits with the server's code.
 function runServer(port, noOpen, cwd, onChild) {
   return new Promise((resolveExit) => {
@@ -290,7 +314,9 @@ Commands:
 
 Options:
   --cwd <dir>       Working directory claude runs in (default: current directory; relative paths allowed)
-  --port <number>   Server port (default: ${DEFAULT_PORT}; startup stops if it is in use)
+  --port <number>   Server port (default: ${DEFAULT_PORT}). If it is in use, you are asked
+                    whether to start a second instance on a free port; with --port, or
+                    with no terminal to ask, startup stops instead.
   --no-open         Don't open the browser automatically
   --version         Show version
   --help            Show this help

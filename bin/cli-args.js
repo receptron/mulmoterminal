@@ -1,4 +1,5 @@
-// What the launcher's two flags resolve to, decided without touching the process.
+// What the launcher decides before it starts anything, kept out of the executable so each
+// decision can be checked without a process to exit or a terminal to type into.
 //
 // `--cwd` picks the workspace claude runs in and whose sessions the sidebar lists, so it is
 // a data-scope boundary: getting it wrong points the whole app at someone else's project.
@@ -61,3 +62,52 @@ export function portInUseMessage(port, explicit) {
   lines.push(explicit ? "  Pick a different --port, or stop the other process." : "  To start a second one anyway: --port <number>");
   return lines.join("\n");
 }
+
+/**
+ * What to do when the wanted port is taken: "ask" whether to start a second instance,
+ * or "stop".
+ *
+ * Two conditions rule the question out. An explicit --port already named the port that
+ * was wanted, so offering a different one answers a question nobody asked; and with no
+ * terminal to type into (a script, a service, CI) a prompt has nobody to answer it and
+ * would hang the start instead of failing it.
+ */
+export function portInUseAction(explicit, isTTY) {
+  return explicit || !isTTY ? "stop" : "ask";
+}
+
+/**
+ * The question asked when the default port is taken and there is somebody to answer.
+ *
+ * Two servers is not a supported setup (#611), but it is a legitimate thing to want on
+ * purpose — so the answer is a question rather than a refusal, and the default is no.
+ */
+export function secondInstancePrompt(port) {
+  return [`Port ${port} is already in use — MulmoTerminal may already be running at http://localhost:${port}`, "Start a second instance anyway? [y/N] "].join(
+    "\n",
+  );
+}
+
+/**
+ * Whether an answer to that question is a yes.
+ *
+ * Only an explicit yes counts. The prompt says [y/N], so Enter — and anything unrecognised —
+ * means no: starting a second server by misreading a stray keystroke is the outcome worth
+ * avoiding, and saying no costs one retyped command.
+ */
+export function saysYes(answer) {
+  return /^y(es)?$/i.test(String(answer ?? "").trim());
+}
+
+/**
+ * What someone who said yes should know before the second one comes up.
+ *
+ * One line, and only the part that is still true: config and the hidden-session list are
+ * safe across instances, but a session's tool history is cached per process and its live
+ * updates never cross — so the instance that did not start a session shows a frozen history
+ * for it (#611).
+ */
+export const SECOND_INSTANCE_NOTE = [
+  "  Note: both share ~/.mulmoterminal. A session's tool history does not live-update",
+  "  in the instance that did not start it.",
+].join("\n");
