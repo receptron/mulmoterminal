@@ -10,8 +10,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getUserMcpServers, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
-import { sendWebPush } from "./infra/web-push.js";
+import { mountConfigRoutes, getUserMcpServers, getWorklogConfig } from "./config/config-routes.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import {
   tmuxAvailable,
@@ -25,17 +24,16 @@ import {
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
 import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox, rewriteLoopbackForDocker } from "./infra/sandbox.js";
-import { dirConfigWriteTarget } from "./config/dir-config.js";
-import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
-import { createTranslationWorker, failPendingTranslation, submitTranslation } from "./session/translation-worker.js";
+import { createTranslationWorker, submitTranslation } from "./session/translation-worker.js";
 import { createTitleManager } from "./session/session-title.js";
 import { generateHeaderTitle } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
+import { mountHookRoute } from "./routes/hook-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
@@ -60,7 +58,7 @@ import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
 import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
-import { claudeOnDiskSessionIds, latestUserPrompt, readLatestResponse } from "./session/session-reads.js";
+import { claudeOnDiskSessionIds, readLatestResponse } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -71,7 +69,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
-import { isRecord, preferredHeaderPrompt } from "./session/transcript.js";
+import { isRecord } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
@@ -177,8 +175,6 @@ const toolStores = createToolStores({
   publish: (channel, data) => pubsub?.publish(channel, data),
 });
 const { recordToolCallStart, recordToolCallEnd } = toolStores;
-
-const LAST_PROMPT_CAP = 200;
 
 function refreshLastResponse(id: string, cwd: string): void {
   const text = readLatestResponse(id, cwd);
@@ -688,161 +684,21 @@ app.use(express.static(path.join(__dirname, "../dist")));
 // prefix — see server/spa-fallback.ts for why that's sufficient.
 app.get(SPA_FALLBACK_RE, (_req, res) => res.sendFile(path.join(__dirname, "../dist/index.html")));
 
-// Activity hooks update a session's working / needs-attention flags. `active` (this
-// session is the user's actively-viewed pane) suppresses the attention flag — see
-// activityHookEffects for why a mere attached socket doesn't count in the grid.
-function handleActivityHook(sessionId: string, event: string, active: boolean, message: string) {
-  for (const eff of activityHookEffects(event, active)) {
-    if (eff.kind === "working") setWorking(sessionId, eff.value, event);
-    else setWaiting(sessionId, eff.value, event);
-  }
-  // Push regardless of `active` — the phone is elsewhere, unlike the attention beep.
-  // A finished turn (Stop) and a blocked one (Notification) both reach here; the kind
-  // decides the wording. Stop is one event per finished turn, so this fires once even
-  // though a background Stop publishes twice.
-  const kind = pushKindFor(event);
-  if (kind) notifyTaskFinished(sessionId, kind, message);
-}
-
-const PUSH_TITLE_MAX = 80;
-const PUSH_BODY_MAX = 160;
-// Which port this host's UI answers on, so a receiver can open it instead of guessing.
-// Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server, whose
-// port the backend only knows when CLIENT_PORT is set in its environment (vite.config.ts
-// defaults it separately). Reaching it still requires a receiver on this machine — see the
-// data payload below.
-const UI_PORT = String(process.env.CLIENT_PORT || PORT);
-// Notify the user's devices that a background task finished, when Web Push is enabled.
-// Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
-function notifyTaskFinished(sessionId: string, kind: PushKind, message: string): void {
-  if (!getPushEnabled()) return;
-  // Internal helper turns flow through /api/hook with active=false too — hidden background
-  // workers and translation workers aren't real user tasks, so never push for them.
-  if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
-  const cwd = ptys.get(sessionId)?.cwd ?? null;
-  const where = cwd ? path.basename(cwd) : "session";
-  // A finished turn should say what the agent DID — the prompt is what the user already
-  // knows, and reading it back tells them nothing about the outcome. Read it HERE instead
-  // of taking `lastResponses`: publishActivity skips its refresh for an actively-viewed
-  // session (no `waiting` flag) while the push still fires, and the cache deliberately
-  // survives a failed read — either way the map can hold the previous turn's reply, which
-  // is worse than saying nothing. No reply to read falls through to the prompt.
-  const reply = kind === "finished" && cwd ? readLatestResponse(sessionId, cwd) : null;
-  if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
-  const detail = (reply ?? "").trim() || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
-  const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
-  // The session id is what lets the phone open this session from the notification;
-  // the host id is what lets it know WHOSE session. Without it the phone opens with
-  // no host selected — it never persists one — and can only offer the picker, which
-  // is where every notification tap used to land (receptron/mulmoserver#86).
-  // `port` is for a receiver running ON this machine, which can then open the local UI
-  // directly (http://localhost:<port>). A phone cannot use it — its own localhost is the
-  // phone — so the receiver has to treat it as optional and keep the existing routing.
-  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID, port: UI_PORT });
-}
-
-interface HookToolPayload {
-  tool_use_id?: string;
-  tool_name?: string;
-  tool_input?: unknown;
-  tool_output?: unknown;
-  tool_response?: unknown;
-  duration_ms?: number;
-}
-
-// Pre/PostToolUse hooks feed the per-session tool-call history. A failed tool
-// fires PostToolUseFailure (NOT PostToolUse), so both complete the entry.
-async function handleToolHook(sessionId: string, event: string, p: HookToolPayload) {
-  if (event === "PreToolUse") {
-    await recordToolCallStart(sessionId, { toolUseId: p.tool_use_id, toolName: p.tool_name, toolInput: p.tool_input });
-  } else if (event === "PostToolUse" || event === "PostToolUseFailure") {
-    await recordToolCallEnd(sessionId, {
-      toolUseId: p.tool_use_id,
-      toolName: p.tool_name,
-      toolInput: p.tool_input,
-      toolOutput: p.tool_output ?? p.tool_response,
-      durationMs: p.duration_ms,
-      status: event === "PostToolUseFailure" ? "failed" : "completed",
-    });
-  }
-  // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
-  // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
-  if (event === "PostToolUse") {
-    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input, ptys.get(sessionId)?.cwd ?? null);
-    if (cwd) pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd });
-  }
-}
-
-// Track the prompt the cell header shows for a session, from a UserPromptSubmit
-// hook. On the FIRST live prompt after a (re)start/resume the in-memory baseline is
-// empty, so seed it from the transcript's meaningful prompt — otherwise a trivial
-// ack ("ok") would overwrite the restored task. (Brand-new sessions have no
-// transcript yet => null => the new prompt becomes the first shown.) Then keep the
-// last MEANINGFUL prompt (preferredHeaderPrompt) while still tracking the latest for
-// an all-trivial session.
-async function trackPromptForHeader(sessionId: string, prompt: string, cwd: string | undefined) {
-  if (!lastPrompts.has(sessionId)) {
-    const seeded = cwd ? await latestUserPrompt(cwd, sessionId) : null;
-    if (seeded) lastPrompts.set(sessionId, seeded);
-  }
-  lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
-}
-
-// `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
-// (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
-// resurface) and publish; the next UserPromptSubmit sets the new query. `forgetTitle` drops the AI title
-// so it's regenerated fresh on the next turn (leaving it in `aiTitles` — even as "" — would read as
-// "already titled" and suppress that regeneration). The cockpit's last reply is blanked the same way as
-// the prompt (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
-function clearHeaderPrompt(sessionId: string): void {
-  lastPrompts.set(sessionId, "");
-  lastResponses.set(sessionId, "");
-  forgetTitle(sessionId);
-  publishActivity(sessionId);
-}
-
-// Header-prompt / AI-title side effects of a hook, per event: track the submitted prompt
-// (UserPromptSubmit), drop it on `/clear` (SessionStart source=clear), or (re)generate the
-// AI title once a turn's reply is on disk (Stop). Kept out of the route so its branching
-// doesn't inflate the handler. Runs before handleActivityHook so the activity publish it
-// triggers already carries the new lastPrompt.
-async function applyHeaderHooks(sessionId: string, event: string, body: Record<string, unknown>, cwd: string | undefined): Promise<void> {
-  if (event === "UserPromptSubmit" && typeof body.prompt === "string" && body.prompt.trim()) {
-    const prompt = body.prompt.trim().slice(0, LAST_PROMPT_CAP);
-    await trackPromptForHeader(sessionId, prompt, cwd);
-    noteTitleTurn(sessionId, prompt);
-  } else if (event === "SessionStart" && body.source === "clear") {
-    clearHeaderPrompt(sessionId);
-  } else if (event === "Stop") {
-    void maybeGenerateTitle(sessionId, cwd);
-  }
-}
-
-// Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
-// we can flag which background sessions have new activity / build tool history.
-app.post("/api/hook", async (req, res) => {
-  const body = req.body || {};
-  const sessionId = resolveHookSessionId(req.headers["x-mt-session"], body.session_id, (id) => SESSION_ID_RE.test(id));
-  const event = body.hook_event_name;
-  if (!sessionId && body.session_id) {
-    // Rejecting silently would make hooks look simply broken; the id shape is the
-    // precondition for using it as a Firestore doc id and as push routing.
-    console.warn(`[hook] ignoring ${event} — session id is not a canonical uuid`);
-  }
-  if (sessionId) {
-    const entry = ptys.get(sessionId);
-    const active = !!(entry && entry.active);
-    const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
-    await applyHeaderHooks(sessionId, event, body, cwd);
-    handleActivityHook(sessionId, event, active, typeof body.message === "string" ? body.message : "");
-    await handleToolHook(sessionId, event, body);
-    // A hidden translation worker that ends its turn while still pending never called
-    // submitTranslation — fail it now rather than hang until the timeout. (When it DID
-    // submit, the entry is already resolved and this reject is a no-op.)
-    if (event === "Stop") failPendingTranslation(sessionId, "[translation] worker ended its turn without calling submitTranslation");
-    console.log(`[hook] ${event} for ${sessionId}`);
-  }
-  res.json({ ok: true });
+// The Claude hook endpoint (routes/hook-routes.ts). Session lifecycle, the title
+// bookkeeping and the tool stores stay here; the fan-out that reads them moves out.
+mountHookRoute(app, {
+  setWorking: (id, working, event) => setWorking(id, working, event),
+  setWaiting: (id, waiting, event) => setWaiting(id, waiting, event),
+  publishActivity: (id) => publishActivity(id),
+  forgetTitle,
+  noteTitleTurn,
+  maybeGenerateTitle,
+  recordToolCallStart,
+  recordToolCallEnd,
+  publishDirConfig: (cwd) => pubsub?.publish(DIR_CONFIG_CHANNEL, { cwd }),
+  // Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server,
+  // whose port the backend only knows when CLIENT_PORT is set in its environment.
+  uiPort: String(process.env.CLIENT_PORT || PORT),
 });
 
 // The tools pane: the toolResult sink, its replay, the available-tool list and the
