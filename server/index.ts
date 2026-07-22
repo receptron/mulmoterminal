@@ -1,7 +1,5 @@
 import express from "express";
 import http from "http";
-import { WebSocketServer, WebSocket } from "ws";
-import type { IPty } from "node-pty";
 import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
@@ -13,10 +11,8 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import { mountConfigRoutes, getUserMcpServers, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
-import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
-import { resolveButtonCommand, shellQuoteFor } from "./config/header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
 import {
   tmuxAvailable,
@@ -29,34 +25,21 @@ import {
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import {
-  sandboxEnabled,
-  sandboxPlatformSupported,
-  dockerAvailable,
-  ensureSandboxImage,
-  writeSandboxCredentials,
-  refreshHostKeychainIfExpired,
-  cleanupSandbox,
-  rewriteLoopbackForDocker,
-} from "./infra/sandbox.js";
+import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage, cleanupSandbox, rewriteLoopbackForDocker } from "./infra/sandbox.js";
 import { dirConfigWriteTarget } from "./config/dir-config.js";
-import { resolveScript } from "./files/scripts.js";
-import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
-import type { PtyEntry } from "./session/types.js";
-import { sandboxWouldRun } from "./session/pty-spawn.js";
-import { closeWithError } from "./session/ws-frames.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
-import { createConnectionHandlers, handleCommandFrame } from "./session/pty-connection.js";
+import { createTranslationWorker, failPendingTranslation, submitTranslation } from "./session/translation-worker.js";
+import { mountTerminalWebSockets } from "./routes/ws-routes.js";
+import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
   activity,
   aiTitles,
-  codexRolloutIds,
   devTerminalSessions,
   devTerminalSessionsHydrated,
   hiddenSessions,
@@ -65,7 +48,6 @@ import {
   lastResponses,
   lastTitleAttemptMs,
   lastTitledUserTurns,
-  markDevTerminalSession,
   translationWorkerIds,
   persistActivityState,
   ptys,
@@ -78,10 +60,9 @@ import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
-import { buildTranslationPrompt, isValidTranslationResult } from "./session/translation-prompt.js";
 import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
-import { claudeOnDiskSessionIds, latestUserPrompt, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
+import { claudeOnDiskSessionIds, latestUserPrompt, LAST_RESPONSE_MAX } from "./session/session-reads.js";
 import { projectSessionsDir } from "./session/project-dir.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -159,13 +140,6 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
-
-// sessionId → settlers for a hidden translation worker's in-flight request.
-// `resolve` is called from POST /api/translation/submit when the worker reports its
-// answer (via the submitTranslation GUI tool); `reject` from the Stop hook if the
-// worker ends its turn WITHOUT submitting (a misbehaved turn), so we fail fast
-// instead of waiting out the full timeout.
-const pendingTranslations = new Map<string, { resolve: (translations: string[]) => void; reject: (err: Error) => void }>();
 
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
 // a malicious website the user visits can't drive the local Claude PTY (a
@@ -499,6 +473,16 @@ const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
 const { spawnCodexPty } = createCodexSpawner(spawnDeps);
 const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
+// The hidden translation worker (session/translation-worker.ts). It drives a headless
+// claude session, so it needs the spawner above and the reap this file owns.
+const { translateViaHiddenChat } = createTranslationWorker({
+  reap: (id) => reap(id),
+  spawnHiddenChat: (sessionId, prompt) => {
+    // ws=null → headless; the worker buffers output nobody reads. Default cwd = CLAUDE_CWD (trusted).
+    spawnClaudePty(sessionId, null, null, prompt);
+  },
+});
+
 const app = express();
 // Generous body limit: PostToolUse hook payloads carry the tool's full output
 // (a big Read/Bash result can blow past Express's 100kb default, which would 413
@@ -660,8 +644,7 @@ mountWhisperRoutes(app, { workspace: CLAUDE_CWD });
 // match MulmoClaude (so the <workspace>/data/translation cache is shared between the
 // apps), but the LLM step is MulmoTerminal's own: translateViaHiddenChat spawns a
 // hidden background claude session (NEVER `claude -p`) and is filtered from the
-// sidebar. translateViaHiddenChat is a hoisted function declaration defined alongside
-// spawnClaudePty below.
+// sidebar (see session/translation-worker.ts).
 mountTranslationRoutes(app, { workspace: CLAUDE_CWD, translateBatch: translateViaHiddenChat });
 
 // The hidden translation worker reports its answer here, via the broker's worker-only
@@ -672,12 +655,10 @@ app.post("/api/translation/submit", (req, res) => {
   if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
   }
-  const pending = pendingTranslations.get(sessionId);
-  if (!pending) {
-    // No in-flight request for this id (already settled / timed out / not a worker).
+  // No in-flight request for this id (already settled / timed out / not a worker).
+  if (!submitTranslation(sessionId, translations)) {
     return res.status(404).json({ error: "no pending translation for this session" });
   }
-  pending.resolve(Array.isArray(translations) ? (translations as string[]) : []);
   return res.json({ ok: true });
 });
 
@@ -944,7 +925,7 @@ app.post("/api/hook", async (req, res) => {
     // A hidden translation worker that ends its turn while still pending never called
     // submitTranslation — fail it now rather than hang until the timeout. (When it DID
     // submit, the entry is already resolved and this reject is a no-op.)
-    if (event === "Stop") pendingTranslations.get(sessionId)?.reject(new Error("[translation] worker ended its turn without calling submitTranslation"));
+    if (event === "Stop") failPendingTranslation(sessionId, "[translation] worker ended its turn without calling submitTranslation");
     console.log(`[hook] ${event} for ${sessionId}`);
   }
   res.json({ ok: true });
@@ -1230,382 +1211,20 @@ try {
   console.error("[scheduler] init failed (non-fatal)", err);
 }
 
-// Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
-// HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
-// libraries fighting over the "upgrade" event.
-const wss = new WebSocketServer({ noServer: true });
-// Command terminals (the grid's Run menu) get their own WS so the plain-command
-// PTY relay stays clear of the session/hook/transcript machinery on /ws.
-const runWss = new WebSocketServer({ noServer: true });
-// Launcher terminals (a plain shell / codex / any configured command) get their own WS
-// too. Unlike /ws/run these are PERSISTENT & reattachable (they share the /ws session
-// lifecycle — ptys map, reattach, reap grace) but carry no Claude hooks/transcript.
-const runLaunchWss = new WebSocketServer({ noServer: true });
-// First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
-// with session discovery + resume. Its own endpoint so /ws stays claude-only.
-const runCodexWss = new WebSocketServer({ noServer: true });
-function wssForPath(pathname: string): WebSocketServer | null {
-  if (pathname === "/ws") return wss;
-  if (pathname === "/ws/run") return runWss;
-  if (pathname === "/ws/launch") return runLaunchWss;
-  if (pathname === "/ws/codex") return runCodexWss;
-  return null; // e.g. /ws/pubsub — left to socket.io's own upgrade handler
-}
-server.on("upgrade", (req, socket, head) => {
-  const { pathname } = new URL(req.url ?? "/", "http://localhost");
-  const target = wssForPath(pathname);
-  if (!target) return;
-  if (!isAllowedOrigin(req.headers.origin)) {
-    console.warn(`[ws] rejected cross-origin upgrade from ${req.headers.origin}`);
-    socket.destroy();
-    return;
-  }
-  target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
-});
-
-// How long to wait for a hidden translation worker to call submitTranslation before
-// giving up (cold claude startup + one short turn). Generous; the result is cached.
-const TRANSLATION_TIMEOUT_MS = 120_000;
-
-// Tear down a finished/failed translation worker: kill any lingering pty and drop its
-// bookkeeping + transcript so the activity maps and the workspace don't accumulate
-// throwaway translation sessions.
-function cleanupTranslationWorker(sessionId: string): void {
-  reap(sessionId); // idempotent — already reaped if Stop fired
-  activity.delete(sessionId);
-  hiddenSessions.delete(sessionId);
-  translationWorkerIds.delete(sessionId);
-  lastPrompts.delete(sessionId);
-  pendingTranslations.delete(sessionId);
-  fs.rm(path.join(projectSessionsDir(CLAUDE_CWD), `${sessionId}.jsonl`), { force: true }).catch(() => {});
-}
-
-// Most a worker request retries before failing. The model occasionally answers in
-// text instead of calling submitTranslation (caught fast by the Stop hook); a fresh
-// worker almost always succeeds. Misses are cached, so retries are rare in practice.
-const TRANSLATION_MAX_ATTEMPTS = 3;
-
-// Run ONE hidden translation worker: spawn it, wait for it to call submitTranslation
-// (or fail via the Stop hook / timeout), validate, and tear it down.
-async function runTranslationWorkerOnce(prompt: string, expected: number): Promise<string[]> {
-  const sessionId = randomUUID();
-  hiddenSessions.add(sessionId);
-  translationWorkerIds.add(sessionId);
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const submitted = new Promise<string[]>((resolve, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`[translation] hidden chat timed out after ${TRANSLATION_TIMEOUT_MS}ms`)), TRANSLATION_TIMEOUT_MS);
-    pendingTranslations.set(sessionId, { resolve, reject });
-  });
-
-  try {
-    // ws=null → headless; the worker buffers output nobody reads. Default cwd =
-    // CLAUDE_CWD (trusted). submitTranslation (or the Stop hook) settles `submitted`.
-    spawnClaudePty(sessionId, null, null, prompt);
-    // spawnClaudePty registers a pending session + emits a "created" event; drop the
-    // pending entry now so this internal worker never surfaces as a sidebar row (the
-    // /api/sessions filter on translationWorkerIds covers its on-disk transcript).
-    knownSessions.delete(sessionId);
-    const translations: unknown = await submitted;
-    if (!isValidTranslationResult(translations, expected)) {
-      const got = Array.isArray(translations) ? `${translations.length} strings` : "a non-array";
-      throw new Error(`[translation] submitTranslation returned ${got} for ${expected} inputs`);
-    }
-    return translations;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-    cleanupTranslationWorker(sessionId);
-  }
-}
-
-// The injected LLM step for /api/translation. Drives MulmoTerminal's EXISTING hidden
-// background chat (spawnClaudePty) — explicitly NOT `claude -p`, which is banned in
-// MulmoTerminal. It seeds a headless worker that translates the strings and reports
-// them by calling the worker-only `submitTranslation` GUI tool (POST
-// /api/translation/submit). Retries a fresh worker if one answers without submitting.
-async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
-  const expected = sentences.length;
-  const prompt = buildTranslationPrompt(targetLanguage, sentences);
-
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= TRANSLATION_MAX_ATTEMPTS; attempt++) {
-    try {
-      return await runTranslationWorkerOnce(prompt, expected);
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[translation] attempt ${attempt}/${TRANSLATION_MAX_ATTEMPTS} failed: ${messageOf(err)}`);
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
-}
-
-// Pick the effective session id for a /ws connection: reattach a same-process live pty,
-// resume an on-disk transcript, attach a live tmux session, else a fresh id. The flag
-// decision lives in resolveSession (pure/tested); this only gathers the live facts —
-// lazily, so a live pty short-circuits the tmux + disk probes.
-function resolveClaudeSession(requested: string | null, cwd: string): SessionResolution {
-  const hasLivePty = !!requested && ptys.has(requested);
-  const tmuxAlive = !hasLivePty && !!requested && tmuxHasSession(requested);
-  const onDisk = !hasLivePty && !!requested && sessionExistsOnDisk(requested, cwd);
-  return resolveSession(requested, { hasLivePty, tmuxAlive, onDisk }, randomUUID);
-}
-
-// The params every terminal WebSocket reads: the request URL, the validated
-// session id, and the resolved cwd. A non-UUID session id is treated as "no
-// session" — it could otherwise smuggle path/flag fragments into
-// sessionExistsOnDisk / --resume — and cwd (?cwd=<abs>) falls back to CLAUDE_CWD.
-function wsConnectionContext(req: { url?: string }): { url: URL; requested: string | null; cwd: string } {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const raw = url.searchParams.get("session");
-  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
-  return { url, requested, cwd };
-}
-
-wss.on("connection", async (ws, req) => {
-  // ?session=<id> resumes an existing conversation; absent => fresh session. For
-  // new sessions we generate the id ourselves (--session-id) so the server always
-  // knows the current session's id, even before any file exists.
-  const { url, requested, cwd } = wsConnectionContext(req);
-  // A bad id is never silently reused — closing the socket without a replacement
-  // makes the client auto-reconnect with the same bad id forever, so we warn and
-  // fall through to mint a fresh session, then tell the browser the new id.
-  const rawSession = url.searchParams.get("session");
-  if (rawSession && !requested) console.warn(`[ws] ignoring non-UUID session id: ${JSON.stringify(rawSession)} — starting fresh`);
-
-  // ?gui=0 (the grid's dev terminals) spawns claude WITHOUT the GUI plugin MCP /
-  // --strict-mcp-config, so the user's + project's MCP servers load normally. Absent
-  // (the single view) keeps main's behavior: GUI MCP attached + strict.
-  const attachGuiMcp = url.searchParams.get("gui") !== "0";
-
-  // Decide the effective session id BEFORE telling the browser. A requested id
-  // is honored only if it can actually be served: a live pty (reattach) or an
-  // on-disk transcript (`--resume`). A requested id that's neither — e.g. a cell
-  // reloading an idle session claude never persisted — can't be reused: claude
-  // exits with "session id already in use" if we retry `--session-id <same>`.
-  // So mint a fresh id; the browser adopts it from this `session` message and
-  // re-persists, so the reload just reopens a working terminal seamlessly.
-  const { reattachId, resume, sessionId } = resolveClaudeSession(requested, cwd);
-  const live = reattachId ? ptys.get(reattachId) : undefined;
-
-  // A dev terminal (gui=0) is a multi-terminal GRID cell: remember its session id so
-  // it's excluded from the chat sidebar (see devTerminalSessions). This is the single
-  // choke point for every grid attach — new, resumed, or reattached — so the mark is
-  // recorded (and re-recorded after a reboot when the cell reconnects) exactly once.
-  if (!attachGuiMcp) markDevTerminalSession(sessionId);
-
-  // Tell the browser which session this is (it learns the id of new sessions) and
-  // the EFFECTIVE cwd — where claude really runs. On reattach that's the live
-  // PTY's own cwd (NOT this request's ?cwd=, which it ignores); otherwise it's the
-  // resolved cwd the new PTY will spawn in.
-  const reportedCwd = live?.cwd ?? cwd;
-  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: reportedCwd }));
-
-  // Before touching the Keychain for a sandbox session, refresh it if the token expired
-  // (macOS refreshes into the Keychain, not the file — so an untouched export can be a
-  // stale token the container 401s on). No-op unless a sandbox spawn/reattach applies.
-  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) {
-    await refreshHostKeychainIfExpired(CLAUDE_BIN);
-    // Renewal can block for seconds (it drives the host CLI). If the client vanished
-    // during that window the close handlers aren't wired yet, so spawning now would
-    // leak a PTY nobody reaps — bail instead.
-    if (ws.readyState !== ws.OPEN) {
-      console.log(`[ws] client left during credential refresh — abandoning ${sessionId}`);
-      return;
-    }
-  }
-
-  let entry: PtyEntry;
-  try {
-    // A sandbox session's credential is snapshotted at spawn onto its mounted per-session
-    // file. On reconnect, re-sync it from the (now-refreshed) Keychain so a token that
-    // rotated since spawn doesn't leave the reattached session stuck at "Not logged in".
-    if (live?.sandbox) writeSandboxCredentials(sessionId);
-    entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
-  } catch (err) {
-    // A failed spawn (claude missing, or node-pty's spawn-helper not executable)
-    // must close just this connection — never crash the whole server.
-    console.error(`[ws] failed to start session ${sessionId}: ${messageOf(err)}`);
-    closeWithError(ws, "Failed to start Claude. Is the `claude` CLI installed and on your PATH?");
-    return;
-  }
-
-  // Single view (gui) = the attached session IS the actively-viewed pane, so mark it
-  // read. A grid dev-terminal cell (gui=0) is only "viewed" once focused/zoomed (the
-  // client then sends a `view` frame), so it stays inactive here and can surface
-  // blocked/done while the user is on another cell or page.
-  entry.active = attachGuiMcp;
-  if (entry.active) setWaiting(sessionId, false);
-
-  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
-  ws.on("close", () => handleClientClose(entry, ws, sessionId));
-});
-
-// Command terminal: resolve the command SERVER-SIDE (the browser never sends a raw command) and run it
-// in an ephemeral PTY. `?index=<n>&cwd=<dir>` runs <dir>/script.json[n]; `?buttonId=<id>&cwd&session&
-// agent&model` runs a header run:"shell" button, re-resolved from config against the session context with
-// shell-escaped ${vars}. When the socket closes, the process is killed.
-runWss.on("connection", (ws, req) => {
-  void startRunTerminal(ws, new URL(req.url ?? "/", "http://localhost"));
-});
-
-async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
-  const buttonId = url.searchParams.get("buttonId");
-  if (!buttonId) return null;
-  const sessionRaw = url.searchParams.get("session");
-  const session = sessionRaw && SESSION_ID_RE.test(sessionRaw) ? sessionRaw : null;
-  const agent = url.searchParams.get("agent") === "codex" ? "codex" : "claude";
-  const config = loadHeaderConfig(cwd, getHeaderConfig());
-  const context = await buildHeaderContext(cwd, { session, agent, model: url.searchParams.get("model") });
-  const command = resolveButtonCommand(config, context, buttonId, shellQuoteFor(process.platform));
-  return command ? { command, cwd } : null;
-}
-
-async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: string } | null> {
-  const cwd = resolveWorkspace(url.searchParams.get("cwd"));
-  const byButton = await resolveButtonRun(url, cwd);
-  if (byButton) return byButton;
-  const indexRaw = url.searchParams.get("index");
-  const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
-  return resolveScript(cwd, index);
-}
-
-async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
-  const resolved = await resolveRunTarget(url);
-  if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
-  let term: IPty;
-  try {
-    term = spawnCommandPty(resolved.command, resolved.cwd, ws);
-  } catch (err) {
-    console.error(`[ws/run] failed to start command: ${messageOf(err)}`);
-    return closeWithError(ws, "Failed to start the command.");
-  }
-  ws.on("message", (raw) => handleCommandFrame(term, raw));
-  ws.on("close", () => {
-    try {
-      term.kill(); // ephemeral: no reattach/grace window — the viewer is gone, so end the process
-    } catch {
-      // already exited — nothing to kill
-    }
-  });
-}
-
-// The command a launcher runs when spawned fresh. On a tmux reattach it's ignored
-// (tmux new-session -A attaches the running program), so a surviving session with no
-// resolvable launcher index still reattaches via this harmless fallback.
-const DEFAULT_LAUNCH_CMD = process.env.SHELL || "/bin/sh";
-
-// Reattach a same-process live PTY, else spawn a launcher (which itself reattaches a
-// surviving tmux session or creates one). `command` is the resolved launcher command,
-// or the fallback for a tmux reattach with no launcher index.
-function startLaunchEntry(sessionId: string, ws: WebSocket, live: PtyEntry | undefined, command: string, cwd: string): PtyEntry {
-  if (live) return reattachPty(live, ws, sessionId);
-  return spawnLauncherPty(sessionId, ws, command, cwd);
-}
-
-// Resolve a launcher ws request to a session: reattach a live pty / surviving tmux
-// session (id kept, running program picked up via `tmux new-session -A`, command ignored),
-// or a fresh spawn of the indexed launcher command. Returns null when there's nothing to
-// reattach AND the index isn't a configured launcher.
-function resolveLaunchSession(
-  requested: string | null,
-  index: number,
-  shell: boolean,
-): { sessionId: string; live: PtyEntry | undefined; command: string } | null {
-  const hasLivePty = !!requested && ptys.has(requested);
-  const live = hasLivePty && requested ? ptys.get(requested) : undefined;
-  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  // A live PTY / surviving tmux session reattaches regardless of the index; only a fresh
-  // spawn needs the launcher resolved (the pty already IS the chosen program on reattach).
-  const launcher = live || tmuxAlive ? null : resolveLauncher(index);
-  if (!canStartLauncher({ hasLivePty, tmuxAlive, hasLauncher: !!launcher, isShell: shell })) return null;
-  const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: false }, randomUUID);
-  return { sessionId, live, command: launcher?.command ?? DEFAULT_LAUNCH_CMD };
-}
-
-// Launcher terminal (?launcher=<index>&cwd=<dir>, ?session=<id> to reattach): run a
-// configured launch command as a persistent, reattachable PTY. Reuses the /ws session
-// lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
-// and is marked a dev-terminal session so it stays out of the chat sidebar.
-runLaunchWss.on("connection", (ws, req) => {
-  const { url, requested, cwd } = wsConnectionContext(req);
-  const indexRaw = url.searchParams.get("launcher");
-  const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
-  const shell = url.searchParams.get("shell") === "1";
-
-  const resolved = resolveLaunchSession(requested, index, shell);
-  if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
-  const { sessionId, live, command } = resolved;
-  markDevTerminalSession(sessionId);
-  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
-
-  let entry: PtyEntry;
-  try {
-    entry = startLaunchEntry(sessionId, ws, live, command, cwd);
-  } catch (err) {
-    console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
-    return closeWithError(ws, "Failed to start the launch command.");
-  }
-
-  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
-  ws.on("close", () => handleClientClose(entry, ws, sessionId));
-});
-
-// codex is a first-class agent like claude, but it mints its own session id (no --session-id),
-// so the browser-facing id is a mulmoterminal-minted key; we discover codex's real rollout id
-// after spawn and resume it with `codex resume <id>` once the live PTY is gone. Reattach a live
-// pty / surviving tmux session (running codex picked up, no resume); else cold-resume a known
-// rollout id; else a fresh session (a new minted key).
-// A rollout id to cold-resume for a requested session key: one we started here (key -> rollout id),
-// or a rollout id straight from the sidebar (its own id), or null (start fresh).
-function codexResumeIdFor(requested: string): string | null {
-  const mapped = codexRolloutIds.get(requested);
-  if (mapped) return mapped;
-  return codexRolloutExists(codexSessionsRoot(), requested) ? requested : null;
-}
-
-function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
-  const hasLivePty = !!requested && ptys.has(requested);
-  const live = hasLivePty && requested ? ptys.get(requested) : undefined;
-  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
-  const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeRolloutId }, randomUUID);
-  return { sessionId, live, resumeRolloutId };
-}
-
-function startCodexEntry(
-  sessionId: string,
-  ws: WebSocket,
-  live: PtyEntry | undefined,
-  resumeRolloutId: string | null,
-  cwd: string,
-  attachGuiMcp: boolean,
-): PtyEntry {
-  if (live) return reattachPty(live, ws, sessionId);
-  return spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, null); // interactive: no seed
-}
-
-// codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs
-// codex without the GUI MCP and keeps it out of the sidebar; absent (single view) attaches the GUI
-// MCP so codex drives the GUI panel like claude.
-runCodexWss.on("connection", (ws, req) => {
-  const { url, requested, cwd } = wsConnectionContext(req);
-  const attachGuiMcp = url.searchParams.get("gui") !== "0";
-
-  const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
-  if (!attachGuiMcp) markDevTerminalSession(sessionId);
-  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
-
-  let entry: PtyEntry;
-  try {
-    entry = startCodexEntry(sessionId, ws, live, resumeRolloutId, cwd, attachGuiMcp);
-  } catch (err) {
-    console.error(`[ws/codex] failed to start ${sessionId}: ${messageOf(err)}`);
-    return closeWithError(ws, "Failed to start codex. Is the `codex` CLI installed and on your PATH?");
-  }
-
-  ws.on("message", (raw) => handleClientFrame(entry, ws, raw, sessionId));
-  ws.on("close", () => handleClientClose(entry, ws, sessionId));
+// The terminal WebSocket endpoints (routes/ws-routes.ts).
+mountTerminalWebSockets({
+  server,
+  isAllowedOrigin,
+  claudeBin: CLAUDE_BIN,
+  setWaiting: (id, waiting) => setWaiting(id, waiting),
+  reattachPty,
+  handleClientFrame,
+  handleClientClose,
+  spawnClaudePty,
+  spawnCodexPty,
+  spawnCommandPty,
+  spawnLauncherPty,
+  resolveLauncher,
 });
 
 // Exit code the launcher (bin/mulmoterminal.js) treats as "port was taken at
