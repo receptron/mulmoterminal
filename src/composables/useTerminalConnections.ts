@@ -440,6 +440,36 @@ export function submitText(key: string, text: string): boolean {
   return true;
 }
 
+// Insert a MULTI-LINE block at the cursor, wrapped as a bracketed paste. Without the
+// wrapper each newline in the block reads as Enter and the agent submits a fragment per
+// line; inside it, the TUI takes the whole thing as one edit. No trailing CR — the user
+// reads what arrived and sends it themselves. The text must already be free of control
+// bytes (the server sanitizes it), or it could close the paste early.
+const PASTE_START = "\x1b[200~";
+const PASTE_END = "\x1b[201~";
+export function pasteText(key: string, text: string): boolean {
+  const c = conns.get(key);
+  if (!text || c?.ws?.readyState !== WebSocket.OPEN) return false;
+  c.ws.send(JSON.stringify({ type: "input", data: `${PASTE_START}${text}${PASTE_END}` }));
+  c.term.focus();
+  return true;
+}
+
+// The connected slots that are an agent worth talking to — command cells (a finished
+// script's output) and plain shells are dropped, since pasting a conversation excerpt
+// into either does nothing useful. A snapshot, not a reactive view: the caller is a
+// menu that opens, gets picked from, and closes.
+export interface SlotInfo {
+  key: string;
+  cwd: string | null;
+  agent: "claude" | "codex";
+}
+export function listSlots(): SlotInfo[] {
+  return [...conns.values()]
+    .filter((c) => c.ws?.readyState === WebSocket.OPEN && !c.target.command && !(c.target.launcher && "shell" in c.target.launcher))
+    .map((c) => ({ key: c.key, cwd: c.knownCwd ?? c.target.cwd, agent: c.target.codex ? "codex" : "claude" }));
+}
+
 // Insert text (a path, or space-joined paths) at the cursor via the normal input
 // channel — no trailing CR, so the user reviews and submits.
 export function insertText(key: string, text: string) {
