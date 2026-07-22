@@ -1,0 +1,48 @@
+/* App-wide Tailwind. Deliberately WITHOUT preflight: the app already has its own
+   reset in style.css, and every existing component is styled with scoped CSS —
+   adding Tailwind's base reset would restyle all of them. This pulls in only the
+   theme + utility layers, so utility classes become available without touching
+   anything that doesn't use them. (The plugin Shadow DOM has its own separate
+   Tailwind build — see plugin-tailwind.css.) */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Map the runtime theme tokens (defined and theme-switched in style.css) into
+   Tailwind's color namespace. `inline` makes each utility reference the source
+   var directly (e.g. bg-elevated -> var(--bg-elevated)), so switching data-theme
+   still recolors everything. Names drop the property prefix so utilities read
+   naturally: bg-elevated, text-muted, hover:bg-hover, border-border. */
+@theme inline {
+  --color-base: var(--bg-base);
+  --color-deep: var(--bg-deep);
+  --color-panel: var(--bg-panel);
+  --color-subtle: var(--bg-subtle);
+  --color-elevated: var(--bg-elevated);
+  --color-input: var(--bg-input);
+  --color-hover: var(--bg-hover);
+  --color-selected: var(--bg-selected);
+  --color-selected-hover: var(--bg-selected-hover);
+
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-bg-hover: var(--accent-bg-hover);
+  --color-on-accent: var(--on-accent);
+
+  --color-fg: var(--text);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
+  --color-dim: var(--text-dim);
+
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-amber: var(--amber);
+  --color-err: var(--err);
+  --color-err-text: var(--err-text);
+
+  /* The app's two type families, so font-sans / font-mono match existing
+     components exactly instead of Tailwind's default stacks. */
+  --font-sans: system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", monospace;
+}

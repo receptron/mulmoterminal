@@ -101,6 +101,19 @@ const RECONNECT_MAX_MS = 5000;
 // The heavy per-slot runtime (non-reactive — Vue never needs to track these).
 const conns = new Map<string, Conn>();
 
+// Fit the terminal to its host, push the new size to the PTY, and stick to the
+// bottom. The fit() can throw when the host isn't laid out yet — the caller's
+// ResizeObserver fit() then follows — so it's swallowed.
+function fitAndSyncSize(c: Conn): void {
+  try {
+    c.fitAddon.fit();
+  } catch {
+    // host not laid out yet
+  }
+  if (c.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "resize", cols: c.term.cols, rows: c.term.rows }));
+  c.term.scrollToBottom();
+}
+
 // The reactive projection the view binds to (status pill, RunMenu cwd). Keyed by
 // the same slot key; a slot that hasn't connected yet (or was released) is absent.
 export const connView = reactive(new Map<string, { status: ConnStatus; serverCwd: string | null }>());
@@ -339,14 +352,7 @@ export function attach(key: string, target: ConnTarget, handlers: ConnHandlers, 
   el.appendChild(c.host);
   if (theme) c.term.options.theme = theme;
   if (created) connect(c);
-  // Fit to the (now on-screen) host, sync the PTY size, and stick to the bottom.
-  try {
-    c.fitAddon.fit();
-  } catch {
-    // host not laid out yet — the ResizeObserver fit() will follow
-  }
-  if (c.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "resize", cols: c.term.cols, rows: c.term.rows }));
-  c.term.scrollToBottom();
+  fitAndSyncSize(c);
   c.term.focus();
   // The persisted xterm was just re-parented into a new host. The sync fit() above can no-op (same size)
   // or run before layout, leaving the canvas renderer blank until a scroll. Re-fit + force a repaint next
@@ -508,14 +514,7 @@ export function readBuffer(key: string): string {
 export function fit(key: string) {
   const c = conns.get(key);
   if (!c || !c.attachedEl) return;
-  try {
-    c.fitAddon.fit();
-  } catch {
-    // host has no size yet
-  }
-  if (c.ws?.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "resize", cols: c.term.cols, rows: c.term.rows }));
-  // Reflow after a resize can leave the viewport scrolled up; stick to the bottom.
-  c.term.scrollToBottom();
+  fitAndSyncSize(c);
   // Force the canvas renderer to repaint. `fit()` only redraws when cols/rows actually change, so a
   // re-parent / KeepAlive reactivation with the SAME size (attach, onActivated) would otherwise leave
   // the viewport blank until a scroll. The buffer is intact — this just repaints it.

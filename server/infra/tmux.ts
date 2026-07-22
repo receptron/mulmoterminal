@@ -181,6 +181,24 @@ export function tmuxPaneCommand(id: string): string | null {
   return name === "" ? null : name;
 }
 
+// Parse `#{session_attached}`. Its own function so the "unreadable means nobody" rule is
+// testable: a caller deciding whether to KILL a session must not read a failure as 0.
+export function parseAttachedClientCount(stdout: string): number | null {
+  const text = stdout.trim();
+  if (text === "") return null; // Number("") is 0 — which would read as "nobody is attached"
+  const n = Number(text);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+// How many clients are attached to a session, or null when tmux can't say. Each
+// mulmoterminal server holds ONE tmux client per live session, so a count above our own
+// means ANOTHER server process is holding it — the only cross-process signal we have for
+// "someone else would lose this session if we killed it".
+export function tmuxAttachedClientCount(id: string): number | null {
+  const r = tmux(["display-message", "-p", "-t", tmuxSessionName(id), "#{session_attached}"]);
+  return r.status === 0 ? parseAttachedClientCount(r.stdout) : null;
+}
+
 // Ids of sessions that survived (e.g. across a crash), for startup visibility.
 export function tmuxListSessionIds(): string[] {
   const r = tmux(["list-sessions", "-F", "#{session_name}"]);

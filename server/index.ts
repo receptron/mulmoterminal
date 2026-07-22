@@ -1,13 +1,11 @@
 import express from "express";
 import http from "http";
 import { WebSocketServer, WebSocket, type RawData } from "ws";
-import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "path";
-import os from "os";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { existsSync, statSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./infra/pubsub.js";
@@ -15,85 +13,88 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getPrRepos, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import { mountConfigRoutes, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
-import { buildHeaderContext, loadHeaderConfig, repoFromWebUrl } from "./config/header-context.js";
-import { resolveHeader, resolveButtonCommand, headerHasPrButton } from "./config/header-resolve.js";
-import { prUrlForBranch } from "./git/pr-for-branch.js";
+import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
+import { resolveButtonCommand } from "./config/header-resolve.js";
 import { mountFilesBrowseRoutes } from "./files/files-browse.js";
-import { gitStatus } from "./git/git-status.js";
 import {
   tmuxAvailable,
-  tmuxNewSessionArgs,
   tmuxHasSession,
   tmuxKillSession,
   tmuxListSessionIds,
   tmuxPaneCommand,
+  tmuxAttachedClientCount,
   tmuxCapturePane,
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
-import { sanitizePtyEnv } from "./infra/pty-env.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
   dockerAvailable,
-  sandboxImageExists,
   ensureSandboxImage,
-  buildDockerRunArgs,
-  writeSandboxClaudeConfig,
   writeSandboxCredentials,
+  refreshHostKeychainIfExpired,
   cleanupSandbox,
   rewriteLoopbackForDocker,
-  SANDBOX_HOST,
 } from "./infra/sandbox.js";
-import { listPrsAcrossRepos } from "./git/prs.js";
-import { listIssuesAcrossRepos } from "./git/issues.js";
-import { publicDirConfig, dirSoundFile, dirConfigWriteTarget, loadDirConfig } from "./config/dir-config.js";
-import { loadScripts, resolveScript } from "./files/scripts.js";
-import { buildClaudeArgs } from "./agents/claude-args.js";
+import { dirConfigWriteTarget } from "./config/dir-config.js";
+import { resolveScript } from "./files/scripts.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
-import { buildActivitySnapshot, parseActivityState } from "./session/activity-state.js";
+import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
+import { hasErrnoCode, messageOf } from "./errors.js";
+import type { PtyEntry } from "./session/types.js";
+import { sandboxWouldRun } from "./session/pty-spawn.js";
+import { closeWithError, isResizeFrame } from "./session/ws-frames.js";
+import { createClaudeSpawner } from "./session/spawn-claude.js";
+import { createCodexSpawner } from "./session/spawn-codex.js";
+import { createShellSpawners } from "./session/spawn-shell.js";
+import type { SpawnDeps } from "./session/spawn-deps.js";
+import {
+  activity,
+  aiTitles,
+  codexRolloutIds,
+  devTerminalSessions,
+  devTerminalSessionsHydrated,
+  hiddenSessions,
+  knownSessions,
+  lastPrompts,
+  lastResponses,
+  lastTitleAttemptMs,
+  lastTitledUserTurns,
+  markDevTerminalSession,
+  translationWorkerIds,
+  persistActivityState,
+  ptys,
+  titleEpoch,
+  titleInFlight,
+  titlePending,
+  titleTurnCounts,
+} from "./session/registry.js";
+import { reapDecisionFor } from "./session/reap-policy.js";
+import { resolveWorkspace } from "./config/workspace.js";
+import { mountSessionRoutes } from "./routes/session-routes.js";
+import { createToolStores } from "./session/tool-store.js";
+import { buildTranslationPrompt, isValidTranslationResult } from "./session/translation-prompt.js";
+import { mountToolRoutes } from "./routes/tool-routes.js";
+import { mountRepoRoutes } from "./routes/repo-routes.js";
+import { claudeOnDiskSessionIds, latestUserPrompt, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
+import { projectSessionsDir } from "./session/project-dir.js";
+import { mountDirRoutes } from "./routes/dir-routes.js";
+import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
-import { buildCodexArgs } from "./agents/codex-args.js";
-import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
-import { listCodexSessions, codexRolloutExists, codexRolloutPath } from "./agents/codex-sessions.js";
+import { codexSessionsRoot } from "./agents/codex-session.js";
+import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
-import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
-import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
+import { stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
-import { agentFromPaneCommand, buildSessionList, captureSessionScreen, type SessionAgent } from "./backends/remoteHost/terminalScreen.js";
-import {
-  isRecord,
-  parseJsonl,
-  userPromptText,
-  isTrivialPrompt,
-  aiTitleFromParsed,
-  countUserTurnsFromJsonl,
-  countUserTurnsFromParsed,
-  latestMeaningfulUserPromptFromJsonl,
-  latestMeaningfulUserPromptFromParsed,
-  latestAssistantTextFromJsonl,
-  latestAssistantTextFromParsed,
-  preferredHeaderPrompt,
-  sessionUsageFromParsed,
-  latestTurnContextFromParsed,
-  timelineFromJsonl,
-  currentTurnToolNamesFromParsed,
-  type SessionUsage,
-  type LatestTurnContext,
-  type TimelineEvent,
-} from "./session/transcript.js";
-import { classifyWorkPhase, type WorkPhase } from "./session/workPhase.js";
-import { createFileCache, type FileStamp } from "./session/file-cache.js";
-import { sanitizeDraftText } from "./session/pty-text.js";
-import { lastTurnFromClaudeParsed, lastTurnFromCodexRollout, EMPTY_TURN, type LastTurn } from "./session/last-turn.js";
-import { formatHandoff } from "./session/handoff-text.js";
+import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
+import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
-import { mountGitRemoteRoute, resolveGithubUrl } from "./git/gitRemote.js";
-import { phaseForRepoBranch } from "./git/prPhase.js";
+import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
 import { mountPickFileRoute } from "./files/pick-file.js";
 import { mountCommandSummaryRoute } from "./session/command-summary.js";
@@ -133,97 +134,9 @@ import { initMulmoScriptBackend, mountMulmoScriptDispatchRoute, mountMulmoScript
 import { SPA_FALLBACK_RE } from "./infra/spa-fallback.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
-interface Activity {
-  working?: boolean;
-  waiting?: boolean;
-  event?: string | null;
-  at?: number;
-}
-
-// A live PTY and its (possibly detached) browser socket.
-interface PtyEntry {
-  term: IPty;
-  ws: WebSocket | null;
-  buffer: string;
-  cwd: string; // the dir the PTY actually runs in (reported on reattach)
-  // True when this session is the user's actively-viewed pane: the single-view open
-  // session, or a focused/zoomed grid cell. Gates the attention flag — a socket being
-  // attached is NOT enough (every on-screen grid cell has one), so `ws != null` can't
-  // stand in for "the user is looking at THIS cell". Set at attach (by gui mode) and
-  // updated by the client's `view` frame.
-  active: boolean;
-  // True when `term` is a tmux client (persistent): killing it only detaches, so reap
-  // must kill the tmux session to actually end the program.
-  tmux?: boolean;
-  // True when `term` is a `docker run` client (single-view sandbox): reap force-removes
-  // the container, since killing the client alone can leave it running.
-  sandbox?: boolean;
-  // What is running in this PTY. Recorded at spawn because nothing else can recover it
-  // later, and the phone needs it to offer input that suits the session (mulmoserver#84).
-  agent: SessionAgent;
-}
-
-interface KnownSession {
-  createdAt: number;
-  title: string;
-}
-
-// A GUI plugin result, deduped by uuid; the rest of the payload is opaque here.
-interface ToolResult {
-  uuid: string;
-  [key: string]: unknown;
-}
-
-// One entry in a session's tool-call history (Pre/PostToolUse hooks).
-interface ToolCall {
-  toolUseId?: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolOutput?: unknown;
-  durationMs?: number;
-  status: string;
-  at: number;
-}
-
-// A sidebar session row (resolved from disk or a pending in-memory session).
-interface SessionMeta {
-  id: string;
-  title: string;
-  mtime: number;
-  working: boolean;
-  waiting: boolean;
-  /** The hook that set the current state (e.g. "Stop" | "Notification"), or null.
-   *  Lets the client split `waiting` into "done, unreviewed" (Stop) vs "blocked on
-   *  input" (Notification). */
-  event: string | null;
-  /** Spawned as a hidden background worker (spawnBackgroundChat hidden:true). The
-   *  tab still lists, but it never renders bold/unread — a background helper
-   *  finishing shouldn't pull the user's attention. */
-  hidden: boolean;
-}
-
-// Recency rank for an on-disk .jsonl, before its contents are read.
-interface DiskStat {
-  kind: "disk";
-  id: string;
-  file: string;
-  mtime: number;
-}
-
-// An in-memory session not yet persisted to disk.
-interface PendingSession extends SessionMeta {
-  kind: "pending";
-}
-
-// Node fs errors carry a `code` (e.g. "ENOENT"); narrow before reading it.
-const hasErrnoCode = (e: unknown): e is { code?: string } => typeof e === "object" && e !== null;
-
-// Error message extracted defensively from an unknown thrown value.
-const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const PORT = process.env.PORT || 34567;
 const CLAUDE_BIN = claudeAdapter.bin();
 const CODEX_BIN = codexAdapter.bin();
 // Model override for codex sessions (--model); null uses codex's own configured default.
@@ -232,7 +145,6 @@ const CODEX_MODEL = process.env.CODEX_MODEL || null;
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
 const CLAUDE_PERMISSION_MODE = process.env.CLAUDE_PERMISSION_MODE || "auto";
-const CLAUDE_CWD = process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaude");
 
 // CLAUDE_CWD is the workspace used as the PTY cwd and as the root for persisted
 // session state, so it must exist before we spawn anything into it.
@@ -248,78 +160,12 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
 
-// MulmoTerminal's own per-session GUI state (tool-result render data + tool-call
-// history) lives here, keyed by sessionId (a global UUID) — NOT under the
-// workspace dir, so it stays valid regardless of which directory is active.
-const MULMOTERMINAL_HOME = path.join(os.homedir(), ".mulmoterminal");
-
-// Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
-// already trusted — because claude blocks on its workspace-trust dialog in any
-// untrusted dir (no input ever comes, so the worker would hang). Their session ids
-// are tracked here so they're FILTERED OUT of /api/sessions: a translation worker is
-// a transient internal helper, not a chat the user should see in the sidebar.
-const translationWorkerIds = new Set<string>();
-
 // sessionId → settlers for a hidden translation worker's in-flight request.
 // `resolve` is called from POST /api/translation/submit when the worker reports its
 // answer (via the submitTranslation GUI tool); `reject` from the Stop hook if the
 // worker ends its turn WITHOUT submitting (a misbehaved turn), so we fail fast
 // instead of waiting out the full timeout.
 const pendingTranslations = new Map<string, { resolve: (translations: string[]) => void; reject: (err: Error) => void }>();
-
-// A session id is always a UUID (server-generated, or a .jsonl basename). Reject
-// anything else so a client can't smuggle CLI flags (e.g. "--resume" followed by
-// a value that claude re-parses as a flag) into the spawned process.
-const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Session ids that belong to the multi-terminal GRID — dev terminals, spawned with
-// gui=0 (no GUI MCP; see the ?gui handling in the WS connection handler). They're
-// FILTERED OUT of the chat sidebar's /api/sessions so a grid terminal never surfaces
-// as a clickable chat row: selecting it in chat would reattach its live PTY and
-// SUPERSEDE the grid cell (the "chat hijacked my multi-terminal session" bug). The
-// set is persisted so the exclusion survives a reboot and outlives the live PTY — a
-// reaped grid session's on-disk transcript still shouldn't reappear as a chat. NOTE:
-// the exclusion applies ONLY to the unscoped (chat) query; the grid's OWN cwd-scoped
-// resume picker (/api/sessions?cwd=…) must keep listing these so they stay resumable.
-const devTerminalSessions = new Set<string>();
-const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-sessions.json");
-
-// Hydrate the set once at boot (best-effort — absent on first run / unreadable =>
-// empty). Exposed as a promise so readers/writers can wait for it: a request served
-// (or a mark persisted) before this resolves would otherwise see an empty set and
-// either leak hidden grid transcripts into chat or clobber the file with a snapshot
-// missing the on-disk ids.
-const devTerminalSessionsHydrated: Promise<void> = (async () => {
-  try {
-    const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
-    if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
-  } catch {
-    // no file yet or unreadable => start empty
-  }
-})();
-
-// Serialize every persist into ONE chain so concurrent marks can't run overlapping
-// writeFile()s that interleave and leave an older snapshot on disk (dropping ids).
-// Each link waits for hydration first (so it never persists a set missing the on-disk
-// ids) and stringifies the CURRENT set at write time, so the last link always writes
-// the complete, up-to-date set. A failed write is logged and the chain continues.
-let devTerminalPersist: Promise<void> = Promise.resolve();
-function persistDevTerminalSessions(): void {
-  devTerminalPersist = devTerminalPersist
-    .then(() => devTerminalSessionsHydrated)
-    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
-    .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
-}
-
-// Record a grid/dev-terminal session id, then persist. A no-op once the id is known,
-// so repeated reattaches of the same cell — or a reconnect after a reboot — don't
-// rewrite the file.
-function markDevTerminalSession(id: string): void {
-  if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
-  devTerminalSessions.add(id);
-  persistDevTerminalSessions();
-}
 
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
 // a malicious website the user visits can't drive the local Claude PTY (a
@@ -360,255 +206,33 @@ const sessionChannel = (id: string) => `session:${id}`;
 // worker can call it without a permission prompt.
 const GUI_MCP_TOOLS = [...allowedToolNames(), "mcp__mulmoterminal-gui__submitTranslation"].join(",");
 
-// A per-session list store mirrored to disk so it survives a server reboot — one
-// JSON file per session under <workspace>/<dirName>/<sessionId>.json
-// (<workspace> = CLAUDE_CWD). The in-memory Map is the working copy; the file is
-// rewritten on each change and lazy-loaded on first access. Session ids are
-// validated UUIDs (SESSION_ID_RE), so they're safe to use as filenames.
-function createSessionStore<T>(dirName: string) {
-  const dir = path.join(MULMOTERMINAL_HOME, dirName);
-  const fileFor = (id: string) => path.join(dir, `${id}.json`);
-  const map = new Map<string, T[]>(); // id -> list (the working copy; mutate in place)
-  const loading = new Map<string, Promise<T[]>>(); // id -> Promise<list>, dedupes concurrent loads
+// The panel's per-session stores. `publish` is a closure rather than the pubsub object
+// because pub/sub only exists once the HTTP server does, and these are built before it.
+const toolStores = createToolStores({
+  publish: (channel, data) => pubsub?.publish(channel, data),
+});
+const { recordToolCallStart, recordToolCallEnd } = toolStores;
 
-  // Lazily load a session's list from disk, then keep using the in-memory copy.
-  function get(sessionId: string): Promise<T[]> {
-    const cached = map.get(sessionId);
-    if (cached) return Promise.resolve(cached);
-    const inflight = loading.get(sessionId);
-    if (inflight) return inflight;
-    const p = (async () => {
-      let list: T[] = [];
-      if (SESSION_ID_RE.test(sessionId)) {
-        try {
-          const parsed = JSON.parse(await fs.readFile(fileFor(sessionId), "utf8"));
-          if (Array.isArray(parsed)) list = parsed;
-        } catch {
-          // No file yet (or unreadable) => start empty.
-        }
-      }
-      map.set(sessionId, list);
-      loading.delete(sessionId);
-      return list;
-    })();
-    loading.set(sessionId, p);
-    return p;
-  }
-
-  // Persist a session's list (best-effort, fire-and-forget).
-  async function save(sessionId: string) {
-    if (!SESSION_ID_RE.test(sessionId)) return;
-    try {
-      await fs.mkdir(dir, { recursive: true });
-      await fs.writeFile(fileFor(sessionId), JSON.stringify(map.get(sessionId) || []));
-    } catch (e) {
-      console.error(`[${dirName}] failed to persist ${sessionId}: ${messageOf(e)}`);
-    }
-  }
-
-  return { get, save };
-}
-
-// GUI toolResults per session, persisted under ~/.mulmoterminal/toolresults so
-// the panel replays the rendered views even after a server reboot. (Chat +
-// message history live in the terminal and Claude's .jsonl; this is the GUI-side
-// store.) Each entry is an array of toolResults, capped to the most recent N.
-const toolResultsStore = createSessionStore<ToolResult>("toolresults");
-const GUI_HISTORY_LIMIT = 50;
-
-// Upsert a toolResult into a session's list, deduped by uuid — a re-emitted result
-// (e.g. a form whose viewState changed after the user submitted) updates in place.
-// Mirrors MulmoClaude's applyToolResultToSession.
-async function storeToolResult(sessionId: string, result: ToolResult) {
-  const list = await toolResultsStore.get(sessionId);
-  const idx = list.findIndex((r) => r.uuid === result.uuid);
-  if (idx >= 0) {
-    list[idx] = result;
-  } else {
-    list.push(result);
-    if (list.length > GUI_HISTORY_LIMIT) list.splice(0, list.length - GUI_HISTORY_LIMIT);
-  }
-  toolResultsStore.save(sessionId);
-}
-
-// Per-session tool-call history, fed by Claude's PreToolUse/PostToolUse hooks so
-// it captures EVERY tool call — built-ins (Bash, Read, …), the user's MCP tools,
-// AND our GUI plugin tools — not just the GUI ones the broker sees. Published on a
-// per-session channel the tools pane subscribes to. (The broker's toolResults
-// store above is separate; it only drives rendering of GUI views.)
-//
-// Persisted under ~/.mulmoterminal/toolcalls via the same disk-backed store as
-// the toolResults, so the history survives a server reboot.
-const toolCallsStore = createSessionStore<ToolCall>("toolcalls");
-const TOOLCALLS_LIMIT = 200;
-const toolCallsChannel = (id: string) => `toolcalls:${id}`;
-// Stored tool outputs are capped so one verbose tool can't bloat the on-disk
-// history (and the pane). The raw output still reaches the LLM via the terminal;
-// this is only the history copy.
-const TOOL_OUTPUT_CAP = 20_000;
-
-function capToolOutput(output: unknown): unknown {
-  if (typeof output === "string" && output.length > TOOL_OUTPUT_CAP) {
-    return output.slice(0, TOOL_OUTPUT_CAP) + `\n… (truncated ${output.length - TOOL_OUTPUT_CAP} chars)`;
-  }
-  return output;
-}
-
-// PreToolUse: a tool started. Append a "running" entry (deduped by tool_use_id).
-async function recordToolCallStart(sessionId: string, { toolUseId, toolName, toolInput }: { toolUseId?: string; toolName?: string; toolInput?: unknown }) {
-  const list = await toolCallsStore.get(sessionId);
-  if (toolUseId && list.some((c) => c.toolUseId === toolUseId)) return;
-  const call = { toolUseId, toolName, toolInput, status: "running", at: Date.now() };
-  list.push(call);
-  if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
-  pubsub?.publish(toolCallsChannel(sessionId), call);
-  toolCallsStore.save(sessionId);
-}
-
-// PostToolUse (status "completed") or PostToolUseFailure (status "failed"):
-// complete the matching entry by tool_use_id (or add one if we never saw the
-// start). A failed tool fires PostToolUseFailure, NOT PostToolUse, so both route
-// here — otherwise the entry would be stuck on "running".
-async function recordToolCallEnd(
-  sessionId: string,
-  {
-    toolUseId,
-    toolName,
-    toolInput,
-    toolOutput,
-    durationMs,
-    status,
-  }: {
-    toolUseId?: string;
-    toolName?: string;
-    toolInput?: unknown;
-    toolOutput?: unknown;
-    durationMs?: number;
-    status: string;
-  },
-) {
-  const list = await toolCallsStore.get(sessionId);
-  const output = capToolOutput(toolOutput);
-  let call = toolUseId ? list.find((c) => c.toolUseId === toolUseId) : undefined;
-  if (call) {
-    call.status = status;
-    call.toolOutput = output;
-    call.durationMs = durationMs;
-  } else {
-    call = { toolUseId, toolName, toolInput, toolOutput: output, status, at: Date.now(), durationMs };
-    list.push(call);
-    if (list.length > TOOLCALLS_LIMIT) list.splice(0, list.length - TOOLCALLS_LIMIT);
-  }
-  pubsub?.publish(toolCallsChannel(sessionId), call);
-  toolCallsStore.save(sessionId);
-}
-
-// Only the most-recent N sessions are listed in the sidebar; older ones aren't
-// read or parsed, keeping /api/sessions cheap for projects with many sessions.
-const SESSION_LIST_LIMIT = 50;
-// Cap on ids per /api/activity request — a grid can't show more cells than this, and
-// it bounds the query string a client can make us parse.
-const ACTIVITY_IDS_LIMIT = 200;
-
-// Per-session "working" state, driven by Claude hooks (see /api/hook):
-// UserPromptSubmit => Claude started thinking; Stop => it finished.
-const activity = new Map<string, Activity>(); // id -> { working, event, at }
-
-// Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a
-// --watch hot reload), so a live session doesn't reattach as idle. `waiting` matters because
-// Claude won't re-fire Notification while already sitting at a prompt; `working` because a
-// turn usually outlives the ~1s restart and its later Stop hook self-corrects a stale flag
-// (the only stale case is a turn that finished DURING the restart window — corrected on the
-// user's next turn). Read paths await hydration (see /api/activity, /api/session) so a
-// reconnect re-fetch can't race it back to idle. Mirrors the dev-terminal-sessions pattern.
-const ACTIVITY_STATE_FILE = path.join(MULMOTERMINAL_HOME, "activity-state.json");
-const activityStateHydrated: Promise<void> = (async () => {
-  try {
-    const parsed = JSON.parse(await fs.readFile(ACTIVITY_STATE_FILE, "utf8"));
-    for (const { id, working, waiting, event } of parseActivityState(parsed, (x) => SESSION_ID_RE.test(x))) {
-      // Don't clobber a live update that already landed while hydration was in flight.
-      if (!activity.has(id)) activity.set(id, { working, waiting, event, at: Date.now() });
-    }
-  } catch {
-    // no file yet / unreadable => nothing to restore
-  }
-})();
-
-// Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
-// CURRENT working/waiting entries at write time, so the last link always writes the complete set.
-let activityPersist: Promise<void> = Promise.resolve();
-function persistActivityState(): void {
-  activityPersist = activityPersist
-    .then(() => activityStateHydrated)
-    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(ACTIVITY_STATE_FILE, JSON.stringify(buildActivitySnapshot(activity, (id) => hiddenSessions.has(id)))))
-    .catch((e) => console.error(`[activity-state] failed to persist: ${messageOf(e)}`));
-}
-
-// Latest MEANINGFUL user prompt per session (from the UserPromptSubmit hook), shown
-// on the grid cell header so you can tell at a glance what each terminal is about. A
-// trivial ack ("ok", "merge") doesn't replace it (see the hook handler), so a short
-// follow-up can't hide the task.
-const lastPrompts = new Map<string, string>(); // id -> prompt text
 const LAST_PROMPT_CAP = 200;
 
-// AI header title per session (issue #316): a short summary of the recent turns that
-// stays meaningful when the session turns into a back-and-forth, where the raw last
-// prompt goes stale ("ok") or context-dependent ("2番目にして"). Generated by a cheap
-// model, it takes precedence over lastPrompt in the cell header. Kept in memory (never
-// written into Claude's transcript); a resumed session falls back to any on-disk title.
-const aiTitles = new Map<string, string>(); // id -> AI title
-// the last few lines of the agent's most recent reply, refreshed when
-// a turn ends (waiting), so the roster can show "what it just said" without the terminal open.
-const lastResponses = new Map<string, string>(); // id -> last assistant text (truncated)
-const LAST_RESPONSE_MAX = 400;
-function refreshLastResponse(id: string, cwd: string): void {
+// The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
+// the cache below because the two want opposite things on failure: the roster would rather
+// keep showing the last reply it had, while a push must never describe a finished turn with
+// the PREVIOUS turn's text — for that caller, null has to stay null.
+function readLatestResponse(id: string, cwd: string): string | null {
   try {
     const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
     const text = latestAssistantTextFromJsonl(raw);
-    if (text) lastResponses.set(id, text.slice(0, LAST_RESPONSE_MAX));
+    return text ? text.slice(0, LAST_RESPONSE_MAX) : null;
   } catch {
-    // no transcript yet / unreadable — leave any prior value
+    return null; // no transcript yet / unreadable
   }
 }
-const titleTurnCounts = new Map<string, number>(); // id -> user turns since last title
-const titlePending = new Set<string>(); // ids whose next Stop should (re)generate a title
-const titleInFlight = new Set<string>(); // ids currently generating, to avoid overlap
-const titleEpoch = new Map<string, number>(); // bumped on /clear or teardown to void an in-flight generation
-// The transcript's user-turn count when we last titled a session, so the roster's view-triggered
-// re-titling knows when a session has advanced enough to be worth re-summarizing. Kept across
-// /clear (dropped only on teardown) so a just-cleared session isn't re-titled from its frozen
-// pre-clear transcript.
-const lastTitledUserTurns = new Map<string, number>();
-// Wall-clock of the last view-triggered title attempt per session, so a session whose generation
-// keeps failing backs off instead of re-spawning the summarizer on every 4s roster poll.
-const lastTitleAttemptMs = new Map<string, number>();
+function refreshLastResponse(id: string, cwd: string): void {
+  const text = readLatestResponse(id, cwd);
+  if (text) lastResponses.set(id, text); // a failed read leaves any prior value
+}
 const VIEW_TITLE_RETRY_MS = 30_000;
-
-// Live ptys keyed by session id. A pty outlives its WebSocket while the session
-// is still "working", so switching away doesn't interrupt Claude mid-turn; it
-// is reaped once the session goes idle (Stop hook) or the process exits. `ws`
-// is null while the session runs in the background.
-const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
-
-// mulmoterminal session key -> the codex rollout id it maps to. codex mints its own id, so we
-// discover it after spawn and keep it here to `codex resume <id>` once the live PTY is gone.
-const codexRolloutIds = new Map<string, string>();
-// Rollout files already attributed to a session, so a single rollout is never mapped to two keys
-// (which would let both cold-resume the same conversation). Serialized by the single event loop.
-const claimedCodexRollouts = new Set<string>();
-
-// New sessions started in this process that have no .jsonl on disk yet (Claude
-// only writes the file on the first prompt). Merged into /api/sessions so a
-// freshly created session shows in the sidebar immediately. An entry is dropped
-// once the file exists (the on-disk record takes over) or the pty is reaped.
-const knownSessions = new Map<string, KnownSession>(); // id -> { createdAt, title }
-
-// Sessions spawned as hidden background workers (spawnBackgroundChat hidden:true).
-// They list normally but never render bold/unread. Process-lifetime only (not
-// persisted) — and tied to `activity`'s lifecycle in reap() so a finished hidden
-// worker that stays `waiting` doesn't lose its hidden flag and re-bold.
-const hiddenSessions = new Set<string>(); // id
 
 // Bytes of recent output kept per pty and replayed when a client reattaches to
 // a background session, so the user sees context instead of a blank screen.
@@ -679,7 +303,8 @@ function scheduleReap(id: string, delayMs: number = REAP_GRACE_MS) {
 // that's actively thinking (`working`) is never reaped — that's "clearly working,
 // don't close it". One that needs the user (`waiting`) gets the long grace. A
 // genuinely idle session (finished AND already viewed, so neither flag) gets the
-// short grace — that's the "auto-close inactive ones" behaviour.
+// short grace — that's the "auto-close inactive ones" behaviour. The ordering rule
+// lives in reapDecisionFor (pure/tested).
 function armReapForDetached(id: string) {
   const entry = ptys.get(id);
   if (!entry || entry.ws) return; // still attached: nothing to reap
@@ -687,12 +312,12 @@ function armReapForDetached(id: string) {
   // last arm, and a stale short timer must not survive to reap a session that now
   // needs the user. cancelReap clears it so scheduleReap re-arms with the right grace.
   cancelReap(id);
-  const a = activity.get(id);
-  if (a?.working) {
+  const decision = reapDecisionFor(activity.get(id), { idleMs: REAP_GRACE_MS, waitingMs: WAIT_REAP_GRACE_MS });
+  if (decision.kind === "keep") {
     console.log(`[pty] keeping working session ${id} alive (detached)`);
     return;
   }
-  scheduleReap(id, a?.waiting ? WAIT_REAP_GRACE_MS : REAP_GRACE_MS);
+  scheduleReap(id, decision.delayMs);
 }
 
 function reap(id: string) {
@@ -772,7 +397,7 @@ function setWorking(id: string, working: boolean, event?: string) {
   activity.set(id, { ...prev, working, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
   // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
-  persistActivityState();
+  persistActivityState((id) => hiddenSessions.has(id));
 
   // A background session (no attached client) that just finished a turn is no
   // longer `working`. Don't kill it outright — if it ended its turn to ask the
@@ -791,7 +416,7 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
   activity.set(id, { ...prev, waiting, event: event ?? prev.event ?? null, at: Date.now() });
   publishActivity(id);
   // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
-  persistActivityState();
+  persistActivityState((id) => hiddenSessions.has(id));
 
   // A detached session that just started needing the user escalates from the short
   // idle grace to the long one — re-arm so it isn't reaped before they can return.
@@ -846,171 +471,24 @@ function mcpConfigJson(sessionId: string, host: string = "127.0.0.1", sandbox: b
   return JSON.stringify({ mcpServers });
 }
 
-// Claude stores each project's sessions under ~/.claude/projects/<encoded-cwd>/,
-// where the absolute cwd has its "/" and "." characters replaced by "-".
-function projectSessionsDir(cwd: string) {
-  const encoded = path.resolve(cwd).replace(/[/.]/g, "-");
-  return path.join(os.homedir(), ".claude", "projects", encoded);
-}
-
-// Whether a session has an on-disk transcript (claude only writes it after the
-// first prompt) in the given workspace. Determines whether `--resume` will work.
-function sessionExistsOnDisk(id: string, cwd: string): boolean {
-  return existsSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`));
-}
-
-// readdirSync that yields [] instead of throwing on a missing / unreadable dir.
-function safeReaddir(dir: string): string[] {
-  try {
-    return readdirSync(dir);
-  } catch {
-    return [];
-  }
-}
-
-// Every session id with a Claude transcript on disk, across ALL project dirs — so the
-// orphan-tmux cleanup can tell a resumable session from a pure orphan (per-cwd
-// sessionExistsOnDisk can't, since a tmux orphan carries no cwd). A non-dir entry under
-// the projects root reads as empty, so it's harmlessly skipped.
-function claudeOnDiskSessionIds(): Set<string> {
-  const ids = new Set<string>();
-  const root = path.join(os.homedir(), ".claude", "projects");
-  for (const project of safeReaddir(root)) {
-    for (const f of safeReaddir(path.join(root, project))) {
-      if (f.endsWith(".jsonl")) ids.add(f.slice(0, -".jsonl".length));
-    }
-  }
-  return ids;
-}
-
-// Validate a client-supplied workspace dir: must be an absolute, existing
-// directory. Anything else (relative, missing, a file) falls back to CLAUDE_CWD,
-// so a cell can launch a terminal in a chosen dir without trusting raw input.
-function resolveWorkspace(cwd: string | null): string {
-  if (cwd && path.isAbsolute(cwd)) {
-    try {
-      if (statSync(cwd).isDirectory()) return cwd;
-    } catch {
-      // not a dir / doesn't exist — fall through
-    }
-  }
-  return CLAUDE_CWD;
-}
-
-// The most recent user prompt from a resumed session's on-disk transcript, so a
-// freshly-resumed cell can show its last prompt instead of just the id. null if
-// there's no transcript yet (a never-prompted session) or it can't be read.
-async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
-  try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    return latestMeaningfulUserPromptFromJsonl(raw);
-  } catch {
-    return null;
-  }
-}
-
-const EMPTY_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
-const EMPTY_CONTEXT: LatestTurnContext = { model: null, contextTokens: 0 };
-interface SessionSummary {
-  lastPrompt: string | null;
-  aiTitle: string | null;
-  lastResponse: string | null;
-  userTurns: number;
-  usage: SessionUsage;
-  context: LatestTurnContext;
-  workPhase: WorkPhase | null;
-}
-const EMPTY_SUMMARY: SessionSummary = {
-  lastPrompt: null,
-  aiTitle: null,
-  lastResponse: null,
-  userTurns: 0,
-  usage: EMPTY_USAGE,
-  context: EMPTY_CONTEXT,
-  workPhase: null,
+// The PTY spawners (session/spawn-*.ts). They take what index.ts still owns — the session
+// lifecycle it drives and the config it builds the hook/MCP json from — as deps.
+const spawnDeps: SpawnDeps = {
+  claudeBin: CLAUDE_BIN,
+  codexBin: CODEX_BIN,
+  codexModel: CODEX_MODEL,
+  permissionMode: CLAUDE_PERMISSION_MODE,
+  guiMcpTools: GUI_MCP_TOOLS,
+  outputBufferLimit: OUTPUT_BUFFER_LIMIT,
+  hookSettingsJson,
+  mcpConfigJson,
+  reap: (id) => reap(id),
+  setWorking: (id, working) => setWorking(id, working),
+  publishSessionCreated: (sessionId) => pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" }),
 };
-
-// Transcripts are append-only and can be hundreds of MB; /api/session/:id is hit on every
-// window focus and by each grid cell as turns finish, so re-reading + re-parsing the whole
-// .jsonl each time blocked the event loop and janked the terminals. Memoize by (mtime,size):
-// an unchanged transcript returns instantly, and a changed one is read + parsed ONCE (the six
-// derived values share one parse pass, vs. one parse per helper before).
-const sessionSummaryCache = createFileCache<SessionSummary>();
-
-async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
-  const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
-  let stamp: FileStamp;
-  try {
-    const st = await fs.stat(file);
-    stamp = { mtimeMs: st.mtimeMs, size: st.size };
-  } catch {
-    return EMPTY_SUMMARY; // no transcript on disk yet
-  }
-  const cached = sessionSummaryCache.get(file, stamp);
-  if (cached) return cached;
-  let records: Record<string, unknown>[];
-  try {
-    records = parseJsonl(await fs.readFile(file, "utf8"));
-  } catch {
-    return EMPTY_SUMMARY;
-  }
-  const summary: SessionSummary = {
-    lastPrompt: latestMeaningfulUserPromptFromParsed(records),
-    aiTitle: aiTitleFromParsed(records),
-    lastResponse: latestAssistantTextFromParsed(records)?.slice(0, LAST_RESPONSE_MAX) ?? null,
-    userTurns: countUserTurnsFromParsed(records),
-    usage: sessionUsageFromParsed(records),
-    context: latestTurnContextFromParsed(records),
-    workPhase: classifyWorkPhase(currentTurnToolNamesFromParsed(records)),
-  };
-  sessionSummaryCache.set(file, stamp, summary);
-  return summary;
-}
-
-// The tool-activity timeline for a session, capped to the most recent events so the
-// payload stays bounded on a long session. A missing transcript is an empty list.
-const TIMELINE_MAX_EVENTS = 300;
-async function sessionTimeline(cwd: string, id: string): Promise<{ events: TimelineEvent[]; truncated: boolean }> {
-  try {
-    const raw = await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    const all = timelineFromJsonl(raw);
-    return { events: all.slice(-TIMELINE_MAX_EVENTS), truncated: all.length > TIMELINE_MAX_EVENTS };
-  } catch {
-    return { events: [], truncated: false };
-  }
-}
-
-// Scan a session JSONL for a human-friendly title and last activity.
-async function readSessionMeta(dir: string, file: string): Promise<SessionMeta> {
-  const full = path.join(dir, file);
-  const [raw, stat] = await Promise.all([fs.readFile(full, "utf8"), fs.stat(full)]);
-
-  let aiTitle: string | null = null;
-  let lastPrompt: string | null = null;
-  let firstUserMsg: string | null = null;
-
-  for (const o of parseJsonl(raw)) {
-    if (o.type === "ai-title" && o.aiTitle) aiTitle = String(o.aiTitle);
-    else if (o.type === "last-prompt" && o.lastPrompt) lastPrompt = String(o.lastPrompt);
-    else if (o.type === "user" && firstUserMsg === null) {
-      firstUserMsg = userPromptText(isRecord(o.message) ? o.message.content : undefined);
-    }
-  }
-
-  const id = path.basename(file, ".jsonl");
-  // The live in-memory title (this process run) wins over the on-disk record.
-  const title = aiTitles.get(id) || aiTitle || lastPrompt || firstUserMsg || "(untitled session)";
-  const a = activity.get(id);
-  return {
-    id,
-    title,
-    mtime: stat.mtimeMs,
-    working: a?.working ?? false,
-    waiting: a?.waiting ?? false,
-    event: a?.event ?? null,
-    hidden: hiddenSessions.has(id),
-  };
-}
+const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
+const { spawnCodexPty } = createCodexSpawner(spawnDeps);
+const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
 const app = express();
 // Generous body limit: PostToolUse hook payloads carry the tool's full output
@@ -1253,6 +731,12 @@ function handleActivityHook(sessionId: string, event: string, active: boolean, m
 
 const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
+// Which port this host's UI answers on, so a receiver can open it instead of guessing.
+// Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server, whose
+// port the backend only knows when CLIENT_PORT is set in its environment (vite.config.ts
+// defaults it separately). Reaching it still requires a receiver on this machine — see the
+// data payload below.
+const UI_PORT = String(process.env.CLIENT_PORT || PORT);
 // Notify the user's devices that a background task finished, when Web Push is enabled.
 // Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
 function notifyTaskFinished(sessionId: string, kind: PushKind, message: string): void {
@@ -1262,13 +746,24 @@ function notifyTaskFinished(sessionId: string, kind: PushKind, message: string):
   if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = cwd ? path.basename(cwd) : "session";
-  const detail = lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  // A finished turn should say what the agent DID — the prompt is what the user already
+  // knows, and reading it back tells them nothing about the outcome. Read it HERE instead
+  // of taking `lastResponses`: publishActivity skips its refresh for an actively-viewed
+  // session (no `waiting` flag) while the push still fires, and the cache deliberately
+  // survives a failed read — either way the map can hold the previous turn's reply, which
+  // is worse than saying nothing. No reply to read falls through to the prompt.
+  const reply = kind === "finished" && cwd ? readLatestResponse(sessionId, cwd) : null;
+  if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
+  const detail = (reply ?? "").trim() || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
   const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;
   // the host id is what lets it know WHOSE session. Without it the phone opens with
   // no host selected — it never persists one — and can only offer the picker, which
   // is where every notification tap used to land (receptron/mulmoserver#86).
-  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID });
+  // `port` is for a receiver running ON this machine, which can then open the local UI
+  // directly (http://localhost:<port>). A phone cannot use it — its own localhost is the
+  // phone — so the receiver has to treat it as optional and keep the existing routing.
+  void sendWebPush(title, body, { sessionId, hostId: REMOTE_HOST_ID, port: UI_PORT });
 }
 
 interface HookToolPayload {
@@ -1446,71 +941,12 @@ app.post("/api/hook", async (req, res) => {
   res.json({ ok: true });
 });
 
-// The GUI toolResult sink. Two callers POST here:
-//   - the MCP broker, after a plugin produces a result (data gates rendering);
-//   - the GUI panel, to persist a plugin view's state change (e.g. a submitted
-//     form's viewState) under the same uuid.
-// We store the result keyed by session id and publish it on that session's channel
-// so the active panel renders/updates it live. Mirrors MulmoClaude's internal
-// toolResult route + applyToolResultToSession.
-app.post("/api/agent/toolResult", async (req, res) => {
-  const { sessionId, toolName, uuid } = req.body || {};
-  // The session id flows from env (broker) / the client and ends up in a pub/sub
-  // channel name — keep it to the known UUID shape.
-  if (!sessionId || !SESSION_ID_RE.test(sessionId)) {
-    return res.status(400).json({ error: "invalid sessionId" });
-  }
-  if (typeof toolName !== "string" || !toolName) {
-    return res.status(400).json({ error: "invalid toolName" });
-  }
-  if (typeof uuid !== "string" || !uuid) {
-    return res.status(400).json({ error: "invalid uuid" });
-  }
+// The tools pane: the toolResult sink, its replay, the available-tool list and the
+// call history (see routes/tool-routes.ts).
+mountToolRoutes(app, { stores: toolStores, toolSummaries, publish: (c, d) => pubsub?.publish(c, d), sessionChannel });
 
-  // Store everything except the routing fields; the result itself is the payload
-  // the panel renders.
-  // `persistOnly` (set by the GUI panel when a view persists its own state change)
-  // means: store, but do NOT re-publish on the session channel. Re-publishing would
-  // echo the update back to the originating panel as a fresh result, which re-seeds
-  // the view and re-emits — an infinite flicker loop. The broker (new tool calls)
-  // omits the flag, so its results still publish and render live.
-  const result = { ...req.body };
-  delete result.sessionId;
-  const persistOnly = result.persistOnly === true;
-  delete result.persistOnly;
-  await storeToolResult(sessionId, result);
-
-  if (!persistOnly) {
-    pubsub?.publish(sessionChannel(sessionId), result);
-    console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
-  }
-  res.json({ ok: true });
-});
-
-// Replay a session's stored toolResults so the panel can render them when the
-// user (re)selects that session. Loads from disk (~/.mulmoterminal/toolresults) on
-// first access so the views survive a reboot.
-app.get("/api/agent/toolResults/:sessionId", async (req, res) => {
-  const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
-  res.json({ sessionId, toolResults: await toolResultsStore.get(sessionId) });
-});
-
-// The GUI plugin tools available this session (for the tools pane's "Available
-// Tools" list). The full set claude can call — built-ins, other MCP — is not
-// enumerable server-side; those still show up in the tool-call history below.
-app.get("/api/tools", (_req, res) => {
-  res.json({ tools: toolSummaries });
-});
-
-// Replay a session's tool-call history (every tool, via the Pre/PostToolUse hooks)
-// so the tools pane can render it when the user (re)selects that session. Loads
-// from disk (~/.mulmoterminal/toolcalls) on first access so it survives a reboot.
-app.get("/api/tool-calls/:sessionId", async (req, res) => {
-  const { sessionId } = req.params;
-  if (!SESSION_ID_RE.test(sessionId)) return res.status(400).json({ error: "invalid sessionId" });
-  res.json({ sessionId, toolCalls: await toolCallsStore.get(sessionId) });
-});
+// The /prs and /issues views (see routes/repo-routes.ts).
+mountRepoRoutes(app);
 
 // GET/POST /api/config (workspace dir + directory presets) — in its own module.
 // GRID-ONLY (dev_tool): backs the grid launcher's default dir + the settings
@@ -1522,46 +958,9 @@ mountConfigRoutes(app, CLAUDE_CWD);
 // terminal browses its own session's project dir; paths are contained within it.
 mountFilesBrowseRoutes(app, { defaultCwd: CLAUDE_CWD });
 
-// Cross-repo PR list (the /prs view): aggregate open PRs for the configured repos via
-// the server's `gh` login. Repos come from config (never the request).
-app.get("/api/prs", async (_req, res) => {
-  try {
-    res.json({ repos: await listPrsAcrossRepos(getPrRepos()) });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// Sibling of /api/prs: the same configured repos' open issues (capped per repo).
-app.get("/api/issues", async (_req, res) => {
-  try {
-    res.json({ repos: await listIssuesAcrossRepos(getPrRepos()) });
-  } catch (err) {
-    res.status(500).json({ error: String(err) });
-  }
-});
-
-// GRID-ONLY (dev_tool): the `script.json` entries a cell's launcher offers for its
-// chosen directory (?cwd=<dir>, falling back to CLAUDE_CWD). The browser shows
-// these and sends back only an INDEX + the cwd (see /ws/run), so the file is the
-// allowlist of what can run. The resolved `cwd` is returned so the cell runs the
-// script in the same dir it listed scripts for.
-app.get("/api/scripts", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json({ cwd, scripts: loadScripts(cwd).map((s, index) => ({ index, label: s.label, command: s.command, cwd: s.cwd })) });
-});
-
-// The `.claude/skills` (user + project scope) discoverable for ?cwd=<dir>, so the
-// terminal header's Skill menu can list them — working-dir skills first. Mirrors
-// /api/scripts: the picked skill is invoked in the running session by typing its
-// /<slug> (agent-side), so the browser only needs the slug + a description tooltip.
-// A per-dir `.mulmoterminal.json` `skills` allowlist narrows/orders the list;
-// absent => show all.
-app.get("/api/skills", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const skills = applySkillFilter(await discoverSkills({ workspaceRoot: cwd }), loadDirConfig(cwd).skills);
-  res.json({ cwd, skills });
-});
+// Directory-scoped reads for a terminal cell: scripts, skills, dir config, git status,
+// PR phase, resolved header, custom sound. All keyed by ?cwd= (see routes/dir-routes.ts).
+mountDirRoutes(app);
 
 // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
 // OS file manager (a browser tab can't, but this local server can).
@@ -1601,260 +1000,9 @@ mountRemoteHostRoutes(app, { isAllowedOrigin });
 // fallback for remote setups. Same-origin guarded; tokens never reach a response.
 mountGoogleRoutes(app, { isAllowedOrigin });
 
-// GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
-// can render its header immediately (live updates then arrive via the "sessions"
-// pub/sub channel). The single view reads activity straight from that channel.
-// ?cwd= locates the transcript so a freshly-resumed session shows its most recent
-// prompt; the live in-memory prompt (this process run) takes precedence.
-app.get("/api/session/:id", async (req, res) => {
-  const { id } = req.params;
-  if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  await activityStateHydrated; // a reconnect re-fetch must see the restored working/waiting, not idle
-  const a = activity.get(id) || {};
-  const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context, workPhase } = await readSessionSummary(cwd, id);
-  const lastPrompt = lastPrompts.get(id) ?? transcriptPrompt;
-  // The roster always shows OUR summary, never the external on-disk `ai-title` (MulmoClaude's).
-  // If we haven't titled it yet, kick off a summary and fall back to the prompt meanwhile.
-  freshenRosterTitle(id, cwd, userTurns);
-  const aiTitle = aiTitles.get(id) ?? null;
-  const lastResponse = lastResponses.get(id) ?? transcriptResponse;
-  res.json({
-    id,
-    cwd,
-    working: a.working ?? false,
-    waiting: a.waiting ?? false,
-    event: a.event ?? null,
-    lastPrompt,
-    aiTitle,
-    lastResponse,
-    usage,
-    context,
-    workPhase,
-  });
-});
-
-// Attention state (working / waiting / event) for an explicit set of session ids.
-// The grid uses this to seed the status of its OFF-PAGE cells, which /api/sessions
-// can't serve: it hides dev-terminal sessions and is capped by the list limit. Reads
-// only the in-memory activity map (no disk), so it's cheap to call per grid render.
-app.get("/api/activity", async (req, res) => {
-  await activityStateHydrated; // the grid re-seeds this on reconnect — must not race hydration back to idle
-  const raw = typeof req.query.ids === "string" ? req.query.ids : "";
-  const ids = raw
-    .split(",")
-    .filter((id) => SESSION_ID_RE.test(id))
-    .slice(0, ACTIVITY_IDS_LIMIT);
-  const out: Record<string, { working: boolean; waiting: boolean; event: string | null }> = {};
-  for (const id of ids) {
-    const a = activity.get(id) || {};
-    out[id] = { working: a.working ?? false, waiting: a.waiting ?? false, event: a.event ?? null };
-  }
-  res.json(out);
-});
-
-// Per-directory overrides (<cwd>/.mulmoterminal.json): the badge/name/theme a
-// terminal opened in this directory should use. cwd is validated like every other
-// cwd-scoped route; the raw sound path stays server-side (see /api/dir-sound).
-app.get("/api/dir-config", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(publicDirConfig(cwd));
-});
-
-// Live git status (branch / dirty / ahead·behind) for a terminal's dir, so the
-// header can show it without the user typing `git status`. A non-git dir is
-// `repo:false`, not an error.
-app.get("/api/git-status", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(await gitStatus(cwd));
-});
-
-// GRID-ONLY: the workflow phase of a cell's branch — no PR yet / in the review loop / ready
-// to merge / merged (server/git/prPhase.ts). The cockpit roster shows it alongside the agent
-// status. Resolves the branch's repo here (same as the header's PR button); a non-repo dir,
-// detached HEAD, or non-GitHub remote yields `none`. Read-only; the gh call is cached.
-app.get("/api/pr-phase", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const status = await gitStatus(cwd);
-  const repo = status.repo && status.branch ? repoFromWebUrl(await resolveGithubUrl(cwd)) : null;
-  if (!repo || !status.branch) return res.json({ phase: "none", url: null });
-  res.json(await phaseForRepoBranch(repo, status.branch));
-});
-
-// The resolved terminal-header config (buttons + chips) for a session: global config merged with the
-// dir's, with `when` evaluated and ${vars} substituted for this session's live context. `chips:null`
-// means unconfigured, so the client keeps its default header (see plans/feat-header-toolbar-config.md).
-app.get("/api/header", async (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const session = typeof req.query.session === "string" && SESSION_ID_RE.test(req.query.session) ? req.query.session : null;
-  const agent = req.query.agent === "codex" ? "codex" : "claude";
-  const model = typeof req.query.model === "string" ? req.query.model : null;
-  const config = loadHeaderConfig(cwd, getHeaderConfig());
-  const context = await buildHeaderContext(cwd, { session, agent, model });
-  // Resolve the branch's PR URL only when a `pr` button is present (a cached gh call); an open.pr
-  // button then opens that URL, or is dropped when there's no open PR.
-  if (headerHasPrButton(config) && context.repo && context.branch) {
-    context.prUrl = await prUrlForBranch(context.repo, context.branch);
-  }
-  res.json(resolveHeader(config, context));
-});
-
-// The tool-activity timeline for a session (what the agent ran, newest last), so a
-// cell can show "what did it do?" without scrolling the raw transcript.
-app.get("/api/transcript/timeline", async (req, res) => {
-  const { session } = req.query;
-  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  res.json(await sessionTimeline(cwd, session));
-});
-
-// A session's last completed exchange, already rendered as the text to paste into
-// ANOTHER session's input box. Reading the agent's own log instead of the terminal's
-// screen buffer is the whole point: no ANSI frames, no spinner debris, no lines lost
-// to scrollback, and a turn boundary that is recorded rather than guessed. The origin
-// line is composed here from what the server knows, so nothing the client sends ends
-// up inside the text another agent will read.
-async function claudeLastTurn(cwd: string, id: string): Promise<LastTurn> {
-  try {
-    return lastTurnFromClaudeParsed(parseJsonl(await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8")));
-  } catch {
-    return EMPTY_TURN; // no transcript on disk yet
-  }
-}
-
-async function codexLastTurn(sessionKey: string): Promise<LastTurn> {
-  const rolloutId = codexResumeIdFor(sessionKey);
-  const file = rolloutId ? codexRolloutPath(codexSessionsRoot(), rolloutId) : null;
-  if (!file) return EMPTY_TURN;
-  try {
-    return lastTurnFromCodexRollout(await fs.readFile(file, "utf8"));
-  } catch {
-    return EMPTY_TURN;
-  }
-}
-
-// Under /api/transcript, not /api/session: the `/api/session/:id` route above would
-// otherwise match first and read "last-turn" as the session id.
-app.get("/api/transcript/last-turn", async (req, res) => {
-  const { session } = req.query;
-  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
-  const agent = req.query.agent === "codex" ? "codex" : "claude";
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const turn = agent === "codex" ? await codexLastTurn(session) : await claudeLastTurn(cwd, session);
-  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn) });
-});
-
-// Stream a directory's custom attention sound. The path never comes from the
-// request — it's read from that dir's .mulmoterminal.json and confined to the dir —
-// so there's no traversal surface. 404 when unset/missing (the client falls back to
-// the global sound, then the built-in chime).
-app.get("/api/dir-sound", (req, res) => {
-  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
-  const file = dirSoundFile(cwd);
-  if (!file) return res.status(404).end();
-  // dotfiles:"allow" — the conventional location is a hidden <cwd>/.mulmoterminal/
-  // dir, which send() would otherwise 404. The path is already confined to cwd, so
-  // serving from a dot-segment is safe here.
-  res.sendFile(file, { dotfiles: "allow" }, (err) => {
-    if (err && !res.headersSent) res.status(404).end();
-  });
-});
-
-// Cheap recency pass: stat (don't read) every session file just for its mtime, so the
-// list can be ranked by recency. Files that vanished between readdir and stat are skipped.
-async function collectOnDiskSessionStats(dir: string, files: string[]): Promise<DiskStat[]> {
-  const stats = await Promise.all(
-    files.map(async (file): Promise<DiskStat | null> => {
-      try {
-        const st = await fs.stat(path.join(dir, file));
-        return { kind: "disk", id: path.basename(file, ".jsonl"), file, mtime: st.mtimeMs };
-      } catch {
-        return null;
-      }
-    }),
-  );
-  return stats.filter((s): s is DiskStat => s !== null);
-}
-
-// In-memory sessions not yet written to disk. Prune (delete from knownSessions) any that
-// have since been persisted — the on-disk record (with its real title) wins.
-function collectPendingSessions(onDisk: Set<string>, includePending: boolean): PendingSession[] {
-  const pending: PendingSession[] = [];
-  for (const [id, meta] of includePending ? knownSessions : []) {
-    if (onDisk.has(id)) {
-      knownSessions.delete(id);
-      continue;
-    }
-    pending.push({
-      kind: "pending",
-      id,
-      title: meta.title,
-      mtime: meta.createdAt,
-      working: activity.get(id)?.working ?? false,
-      waiting: activity.get(id)?.waiting ?? false,
-      event: activity.get(id)?.event ?? null,
-      hidden: hiddenSessions.has(id),
-    });
-  }
-  return pending;
-}
-
-// List the chat sessions for the current project (CLAUDE_CWD), including
-// newly-created sessions that aren't persisted to disk yet.
-app.get("/api/sessions", async (req, res) => {
-  try {
-    await activityStateHydrated; // list working/waiting from the restored state, not a racing idle
-    // Optional ?cwd= scopes the list to that project's on-disk sessions (the grid
-    // cell's resume picker). Without it, the classic single view's behavior is
-    // unchanged: CLAUDE_CWD + in-memory pending sessions.
-    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
-    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
-    const includePending = !cwdParam;
-    // Wait for the persisted grid-session set before filtering (below), so a chat
-    // request racing server boot can't leak previously-hidden grid transcripts.
-    if (includePending) await devTerminalSessionsHydrated;
-    const dir = projectSessionsDir(cwd);
-    let files: string[] = [];
-    try {
-      files = (await fs.readdir(dir)).filter((f) => f.endsWith(".jsonl"));
-    } catch (err) {
-      if (!hasErrnoCode(err) || err.code !== "ENOENT") throw err;
-    }
-
-    const onDiskStats = await collectOnDiskSessionStats(dir, files);
-    const onDisk = new Set(onDiskStats.map((s) => s.id));
-    // Pending is skipped for a cwd-scoped query (pending sessions aren't tracked per dir).
-    const pending = collectPendingSessions(onDisk, includePending);
-
-    // Keep only the most-recent N, then read & parse contents for just those
-    // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation
-    // workers are dropped first — they're transient internal helpers, not user chats.
-    const top = [...onDiskStats, ...pending]
-      .filter((s) => !translationWorkerIds.has(s.id))
-      // Hide multi-terminal GRID sessions from the CHAT sidebar (the unscoped query
-      // only). The grid's own resume picker passes ?cwd= (includePending=false) and
-      // must keep listing them, so gate the exclusion on includePending.
-      .filter((s) => !includePending || !devTerminalSessions.has(s.id))
-      .sort((a, b) => b.mtime - a.mtime)
-      .slice(0, SESSION_LIST_LIMIT);
-    const sessions = (
-      await Promise.all(
-        top.map((s) =>
-          s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, event: s.event, hidden: s.hidden }
-            : readSessionMeta(dir, s.file).catch(() => null),
-        ),
-      )
-    )
-      .filter((s): s is SessionMeta => s !== null)
-      .sort((a, b) => b.mtime - a.mtime);
-
-    res.json({ cwd, sessions });
-  } catch (err) {
-    console.error("[api] /api/sessions failed:", err);
-    res.status(500).json({ error: String(err) });
-  }
-});
+// Sidebar listing, one session's detail, the grid's attention poll, the tool timeline and
+// codex's own sessions (see routes/session-routes.ts).
+mountSessionRoutes(app, { freshenRosterTitle });
 
 // Explicit close (reliable reap over HTTP) + one-shot orphan cleanup. Extracted to a
 // module so the origin guard / id validation / orphan-selection boundary are testable.
@@ -1877,20 +1025,6 @@ mountTmuxRoutes(app, {
   killTmux: tmuxKillSession,
   listTmuxIds: tmuxListSessionIds,
   resumablePredicate: resumableSessionPredicate,
-});
-
-// codex's own sessions for a workspace (?cwd=, default CLAUDE_CWD), read from ~/.codex rollouts —
-// the single view's sidebar lists these so past codex conversations are switchable + resumable.
-app.get("/api/codex/sessions", async (req, res) => {
-  try {
-    const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
-    const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
-    const sessions = await listCodexSessions(codexSessionsRoot(), cwd, SESSION_LIST_LIMIT);
-    res.json({ cwd, sessions });
-  } catch (err) {
-    console.error("[api] /api/codex/sessions failed:", err);
-    res.status(500).json({ error: String(err) });
-  }
 });
 
 const server = http.createServer(app);
@@ -2029,10 +1163,39 @@ startCollectionCompletionWatchers().catch((err) => {
 // and spawn a NEW chat seeded with the task's prompt (e.g. the workout-log weekly
 // nudge). The run-binding spawns a VISIBLE session so the user sees the result.
 // Non-fatal: a scheduler failure must never abort startup.
+//
+// Nobody ever presses ✕ on a scheduled session, and one blocked on a permission prompt
+// never finishes a turn, so the hook-driven reap can miss it entirely — hence the
+// registry, which bounds them by count and age whatever their hooks did (#541).
+
+// Would killing this session take it away from someone? Two answers are needed: our own
+// viewer (a local fact) and any OTHER server process holding it, which only tmux can tell
+// us — see heldByAnotherProcess for the arithmetic.
+function scheduledSessionInUse(id: string): boolean {
+  const entry = ptys.get(id);
+  if (entry?.ws) return true; // our own user is looking at it
+  return heldByAnotherProcess(tmuxAttachedClientCount(id), !!entry);
+}
+
+const scheduledSessions = createScheduledSessionRegistry({
+  dir: scheduledSessionsDir(CLAUDE_CWD, MULMOTERMINAL_HOME),
+  isValidId: (id) => SESSION_ID_RE.test(id),
+  isInUse: scheduledSessionInUse,
+  reapSession: reap,
+  hasTmux: tmuxHasSession,
+  killTmux: tmuxKillSession,
+});
+// Sweep at startup (catching sessions that outlived a restart — tmux survives one by
+// design) and hourly, so the age cap holds even after the schedule is turned off.
+const SCHEDULED_SWEEP_INTERVAL_MS = 60 * 60_000;
+void scheduledSessions.sweep();
+setInterval(() => void scheduledSessions.sweep(), SCHEDULED_SWEEP_INTERVAL_MS).unref();
+
 function spawnScheduledChat(message: string): void {
   const sessionId = randomUUID();
   try {
     spawnClaudePty(sessionId, null, null, message);
+    scheduledSessions.register(sessionId);
   } catch (err) {
     console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);
   }
@@ -2160,9 +1323,10 @@ async function runTranslationWorkerOnce(prompt: string, expected: number): Promi
     // pending entry now so this internal worker never surfaces as a sidebar row (the
     // /api/sessions filter on translationWorkerIds covers its on-disk transcript).
     knownSessions.delete(sessionId);
-    const translations = await submitted;
-    if (translations.length !== expected || !translations.every((s) => typeof s === "string")) {
-      throw new Error(`[translation] submitTranslation returned ${translations.length} strings for ${expected} inputs`);
+    const translations: unknown = await submitted;
+    if (!isValidTranslationResult(translations, expected)) {
+      const got = Array.isArray(translations) ? `${translations.length} strings` : "a non-array";
+      throw new Error(`[translation] submitTranslation returned ${got} for ${expected} inputs`);
     }
     return translations;
   } finally {
@@ -2178,13 +1342,7 @@ async function runTranslationWorkerOnce(prompt: string, expected: number): Promi
 // /api/translation/submit). Retries a fresh worker if one answers without submitting.
 async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
   const expected = sentences.length;
-  const prompt =
-    `You are an automated translation service. Translate each of the ${expected} English strings in ` +
-    `the JSON array below into the target language (BCP-47 code: ${targetLanguage}), preserving ` +
-    `placeholders like {name}, {count}, %s and any HTML tags verbatim. You MUST deliver the result by ` +
-    `calling the submitTranslation tool with a "translations" array of exactly ${expected} strings in ` +
-    `the same order — that tool call is the ONLY way to return the result; a text reply is discarded. ` +
-    `Do not call any other tool.\n\nInput: ${JSON.stringify(sentences)}`;
+  const prompt = buildTranslationPrompt(targetLanguage, sentences);
 
   let lastErr: unknown;
   for (let attempt = 1; attempt <= TRANSLATION_MAX_ATTEMPTS; attempt++) {
@@ -2196,238 +1354,6 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
-}
-
-// Claude must have its input box + bracketed-paste mode up before it will capture a
-// typed `draft`; too early and the bytes are echoed into the scrollback instead. We
-// wait for its status line to paint (the "shift+tab to cycle" mode hint), settle
-// briefly, then type. A fallback fires if that marker never shows (UI string drift).
-const DRAFT_READY_MARKER = claudeAdapter.draftReadyMarker;
-const DRAFT_SETTLE_MS = 250;
-const DRAFT_FALLBACK_MS = 6000;
-// Claude's TUI commits a bracketed paste to its input box asynchronously; a CR glued
-// onto the same write can arrive before the paste lands and be dropped — leaving an
-// auto-run prompt typed-but-unsent. Send the submitting Enter as a SEPARATE chunk a
-// beat after the paste so it actually registers.
-const DRAFT_SUBMIT_MS = 150;
-
-// Spawn a fresh claude PTY for this session, register it, and wire its output /
-// exit back to the browser socket. `ws` may be null for a session spawned without
-// a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
-// reattaches. `initialPrompt`, when given, is passed to claude as the first turn
-// so the session starts working immediately, before anyone opens it. `draft` is the
-// opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
-// into the input box (no Enter) so the user can review / edit / send it. Pass one or
-// the other, never both.
-const PTY_COLS = 120;
-const PTY_ROWS = 30;
-
-// pty.spawn with the binary as a PARAMETER (never a string literal at the call site),
-// so the tmux/shell/claude spawns aren't flagged as spawn-of-a-string-literal.
-// The env is sanitized: package-manager launcher vars (yarn's PREFIX kills nvm
-// in spawned shells — see infra/pty-env.ts) must not leak into PTYs.
-function spawnPty(bin: string, args: string[], cwd: string): IPty {
-  return pty.spawn(bin, args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
-}
-
-// Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
-// `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
-// (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
-function ptySpawn(sessionId: string, file: string, args: string[], cwd: string, persistent: boolean): { term: IPty; tmux: boolean } {
-  if (persistent && tmuxAvailable()) {
-    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd), tmux: true };
-  }
-  return { term: spawnPty(file, args, cwd), tmux: false };
-}
-
-// Spawn the single-view session inside a Docker container (the sandbox path). Exports the
-// host's live Keychain credential so the containerized claude is authenticated — without
-// it the container reads a stale/absent ~/.claude/.credentials.json and shows "Not logged in".
-function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string, ws: WebSocket | null): PtyEntry {
-  cleanupSandbox(sessionId); // clear any stale container/config/credential with this name
-  const claudeConfig = writeSandboxClaudeConfig(sessionId, cwd);
-  const credentials = writeSandboxCredentials(sessionId);
-  if (credentials === null)
-    console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
-  const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials), cwd);
-  console.log(`[pty] spawned claude (pid=${term.pid} via docker sandbox) in ${cwd}`);
-  return { term, ws, buffer: "", cwd, sandbox: true, active: false, agent: "claude" };
-}
-
-// Deliver an auto-run prompt (initialPrompt) or an editable draft by TYPING it into
-// claude's input box once it's ready — NOT as a `claude` CLI arg, which a large prompt
-// would overflow tmux's `new-session` command-length limit with ("command too long",
-// killing the session). ALL control bytes are stripped first — C0/C1, including ESC,
-// Ctrl-C, CR/LF and an embedded bracketed-paste terminator (\e[201~) — so untrusted text
-// (collection / custom-view) can't inject sequences that break out of the paste. It's
-// wrapped in bracketed paste (\e[200~…\e[201~); initialPrompt then presses Enter to run
-// it, while a draft gets NO Enter so the user reviews + sends. Returns a scanner to feed
-// the pty output to: it types once the input-box readiness marker paints (after a settle),
-// or after DRAFT_FALLBACK_MS if the marker never appears (UI drift). No-op when neither.
-function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined, draft: string | undefined): (data: string) => void {
-  const pendingText = draft ?? initialPrompt;
-  const autoSubmit = draft === undefined && initialPrompt !== undefined;
-  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
-  if (!draftText) return () => {};
-  let done = false;
-  let scan = "";
-  const typeDraft = () => {
-    if (done) return;
-    done = true;
-    try {
-      // Type the paste first; for an auto-run, submit with a CR in a SEPARATE write a beat
-      // later (DRAFT_SUBMIT_MS) so the Enter isn't dropped while Claude's TUI is still
-      // committing the paste. A draft gets no CR — the user reviews + sends.
-      entry.term.write(`\x1b[200~${draftText}\x1b[201~`);
-      if (autoSubmit) {
-        setTimeout(() => {
-          try {
-            entry.term.write("\r");
-          } catch {
-            // pty already gone — nothing to submit
-          }
-        }, DRAFT_SUBMIT_MS);
-      }
-    } catch {
-      // pty already gone — nothing to draft into
-    }
-  };
-  // Fallback: type even if the readiness marker never appears (UI string drift).
-  setTimeout(typeDraft, DRAFT_FALLBACK_MS);
-  return (data: string) => {
-    if (done) return;
-    // Type the draft once claude's input box has painted (its mode-hint status line),
-    // then settle briefly so the paste lands in the input rather than the scrollback.
-    scan = (scan + data).slice(-4096);
-    if (DRAFT_READY_MARKER.test(scan)) {
-      scan = "";
-      setTimeout(typeDraft, DRAFT_SETTLE_MS);
-    }
-  };
-}
-
-// codex's TUI has no stable "input ready" marker (its placeholder rotates), so instead of matching
-// a string we wait for its startup output to SETTLE — the boot banner + MCP-boot spinner keep
-// emitting until the input prompt is ready, so a quiet gap means codex is waiting for input. Then
-// paste the seed + Enter to auto-run it. Same reason as attachDraftInjection: a long prompt can't go
-// through tmux's new-session command-length limit ("command too long"). Returns a scanner fed the
-// pty output.
-const CODEX_READY_QUIET_MS = 1000;
-const CODEX_AUTORUN_MAX_WAIT_MS = 15_000;
-function attachCodexAutoRun(entry: PtyEntry, prompt: string): (data: string) => void {
-  const text = sanitizeDraftText(prompt);
-  if (!text) return () => {};
-  let done = false;
-  let quiet: ReturnType<typeof setTimeout> | null = null;
-  const type = () => {
-    if (done) return;
-    done = true;
-    if (quiet) clearTimeout(quiet);
-    try {
-      entry.term.write(`\x1b[200~${text}\x1b[201~`);
-      setTimeout(() => {
-        try {
-          entry.term.write("\r");
-        } catch {
-          // pty already gone — nothing to submit
-        }
-      }, DRAFT_SUBMIT_MS);
-    } catch {
-      // pty already gone — nothing to type into
-    }
-  };
-  const cap = setTimeout(type, CODEX_AUTORUN_MAX_WAIT_MS);
-  return () => {
-    if (done) return;
-    if (quiet) clearTimeout(quiet);
-    quiet = setTimeout(() => {
-      clearTimeout(cap);
-      type();
-    }, CODEX_READY_QUIET_MS);
-  };
-}
-
-function spawnClaudePty(
-  sessionId: string,
-  resume: string | null,
-  ws: WebSocket | null,
-  initialPrompt?: string,
-  cwd: string = CLAUDE_CWD,
-  attachGuiMcp: boolean = true,
-  draft?: string,
-): PtyEntry {
-  // attachGuiMcp picks the MCP mode (see buildClaudeArgs): the single view (default)
-  // attaches the GUI MCP + --strict-mcp-config (main's classic behavior); the grid's
-  // dev terminals attach neither, so the user's + project's MCP servers load normally.
-  // Only --resume when the session has an on-disk transcript — claude doesn't write
-  // a session's .jsonl until its first prompt, so a started-but-unused session can't
-  // be resumed; we restart fresh (reusing the id via --session-id) instead.
-  // Sandbox only the SINGLE-VIEW interactive session: attachGuiMcp=true excludes grid
-  // dev terminals (?gui=0), and ws!==null excludes hidden background/translation workers.
-  // Falls back to the host spawn if the Docker daemon isn't reachable.
-  const sandbox = sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && ws !== null && dockerAvailable() && sandboxImageExists();
-  const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
-  const args = buildClaudeArgs({
-    sessionId,
-    resume,
-    canResume,
-    // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
-    permissionMode: CLAUDE_PERMISSION_MODE,
-    attachGuiMcp,
-    mcpConfig: mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),
-    // Auto-allow the GUI tools + the user's own configured MCP servers (mcp__<id>), so
-    // their tools don't trip a permission prompt on every call.
-    guiMcpTools: [GUI_MCP_TOOLS, ...getUserMcpServers().map((s) => `mcp__${s.id}`)].join(","),
-  });
-
-  console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
-
-  // Sandbox → run claude inside a fresh container (no tmux). Otherwise the host path:
-  // a live tmux session for this id (survived a restart) reattaches; else create it.
-  let entry: PtyEntry;
-  if (sandbox) {
-    entry = spawnSandboxEntry(sessionId, args, cwd, ws);
-  } else {
-    const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
-    console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-    entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
-  }
-  ptys.set(sessionId, entry);
-
-  if (!canResume) {
-    // Brand-new (or restarted-idle) session: surface it in the sidebar before
-    // it's persisted. A spawned session (initialPrompt or a draft) gets a title from
-    // that text so it's recognizable in the sidebar before anyone opens it.
-    const seed = initialPrompt ?? draft;
-    const title = seed ? seed.replace(/\s+/g, " ").trim().slice(0, 60) || "New session" : "New session";
-    knownSessions.set(sessionId, { createdAt: Date.now(), title });
-    pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
-  }
-
-  // The auto-run prompt / editable draft is typed into the input box once ready (see
-  // attachDraftInjection) — its scanner is fed the pty output below.
-  const scanForDraftReady = attachDraftInjection(entry, initialPrompt, draft);
-
-  // PTY -> browser (buffering a bounded tail for reattach).
-  entry.term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-    scanForDraftReady(data);
-  });
-
-  entry.term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    // Clear the dot if it died mid-turn, then tear down everything (deletes
-    // ptys/knownSessions/activity and publishes "closed") so a process that
-    // exits on its own — e.g. a brand-new session that never persisted —
-    // doesn't linger in the sidebar.
-    setWorking(sessionId, false);
-    reap(sessionId);
-  });
-
-  return entry;
 }
 
 // browser -> PTY. The protocol is client-controlled, so validate every frame
@@ -2461,62 +1387,6 @@ function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, session
     // e.g. a write/resize that races the PTY exiting — drop it, never crash.
     console.warn(`[ws] dropped message for ${sessionId}: ${messageOf(err)}`);
   }
-}
-
-// Run an arbitrary shell command in a PTY and relay its I/O to the browser. Unlike
-// spawnClaudePty this is NOT a Claude session — no id, no hooks, no transcript, no
-// reap/grace. It's an ephemeral grid terminal (the Run menu); the caller kills it
-// when the viewer's socket closes.
-function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
-  const isWindows = process.platform === "win32";
-  const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-  const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
-  const term = pty.spawn(shell, args, { name: "xterm-256color", cols: 120, rows: 30, cwd, env: sanitizePtyEnv(process.env, path.delimiter) });
-  console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
-
-  term.onData((data) => {
-    sendFrame(ws, { type: "output", data });
-  });
-  term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] command exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(ws, exitCode, signal);
-  });
-  return term;
-}
-
-// Resolve a launcher by its position in the user's configured list — the browser
-// sends only an INDEX (the config is the allowlist), never a raw command.
-function resolveLauncher(index: number): { label: string; command: string } | null {
-  const list = getLaunchers();
-  return Number.isInteger(index) && index >= 0 && index < list.length ? list[index] : null;
-}
-
-// Spawn a configured launcher command as a PERSISTENT, reattachable PTY that shares
-// the Claude session lifecycle (ptys map, reattach, reap grace) but has NO hooks,
-// transcript, or resume. The command is run via the login shell with `exec` so it
-// becomes the single foreground process ($SHELL, codex, etc.) — env vars in the
-// command (e.g. $SHELL) expand, and the process stays interactive in the PTY.
-function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd: string): PtyEntry {
-  const isWindows = process.platform === "win32";
-  const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-  const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", `exec ${command}`];
-  // Persistent: reattaches a surviving tmux session (command ignored) or creates one.
-  const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
-  console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
-
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "shell" };
-  ptys.set(sessionId, entry);
-
-  term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-  });
-  term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] launcher exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    reap(sessionId);
-  });
-  return entry;
 }
 
 // browser -> command PTY. Like handleClientFrame but for the session-less command
@@ -2580,7 +1450,7 @@ function wsConnectionContext(req: { url?: string }): { url: URL; requested: stri
   return { url, requested, cwd };
 }
 
-wss.on("connection", (ws, req) => {
+wss.on("connection", async (ws, req) => {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
@@ -2619,12 +1489,25 @@ wss.on("connection", (ws, req) => {
   const reportedCwd = live?.cwd ?? cwd;
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: reportedCwd }));
 
+  // Before touching the Keychain for a sandbox session, refresh it if the token expired
+  // (macOS refreshes into the Keychain, not the file — so an untouched export can be a
+  // stale token the container 401s on). No-op unless a sandbox spawn/reattach applies.
+  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) {
+    await refreshHostKeychainIfExpired(CLAUDE_BIN);
+    // Renewal can block for seconds (it drives the host CLI). If the client vanished
+    // during that window the close handlers aren't wired yet, so spawning now would
+    // leak a PTY nobody reaps — bail instead.
+    if (ws.readyState !== ws.OPEN) {
+      console.log(`[ws] client left during credential refresh — abandoning ${sessionId}`);
+      return;
+    }
+  }
+
   let entry: PtyEntry;
   try {
-    // A sandbox session's credential is snapshotted at spawn onto its read-only mount. On
-    // reconnect, re-sync it from the Keychain (overwrites the mounted per-session file in
-    // place) so a token that rotated since spawn doesn't leave the reattached session stuck
-    // at "Not logged in".
+    // A sandbox session's credential is snapshotted at spawn onto its mounted per-session
+    // file. On reconnect, re-sync it from the (now-refreshed) Keychain so a token that
+    // rotated since spawn doesn't leave the reattached session stuck at "Not logged in".
     if (live?.sandbox) writeSandboxCredentials(sessionId);
     entry = live ? reattachPty(live, ws, sessionId) : spawnClaudePty(sessionId, resume, ws, undefined, cwd, attachGuiMcp);
   } catch (err) {
@@ -2700,43 +1583,6 @@ async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
       // already exited — nothing to kill
     }
   });
-}
-
-// Bounds a resize frame must satisfy before it reaches the PTY: a crafted or buggy
-// client must not be able to ask for a 0-column or absurdly large terminal.
-const MIN_TERM_COLS = 2;
-const MAX_TERM_COLS = 500;
-const MIN_TERM_ROWS = 1;
-const MAX_TERM_ROWS = 200;
-
-/** A well-formed `resize` frame with both dimensions inside the allowed bounds. */
-function isResizeFrame(msg: { type?: unknown; cols?: unknown; rows?: unknown }): msg is { type: "resize"; cols: number; rows: number } {
-  if (msg.type !== "resize" || !Number.isInteger(msg.cols) || !Number.isInteger(msg.rows)) return false;
-  const cols = Number(msg.cols);
-  const rows = Number(msg.rows);
-  return cols >= MIN_TERM_COLS && cols <= MAX_TERM_COLS && rows >= MIN_TERM_ROWS && rows <= MAX_TERM_ROWS;
-}
-
-// Send a JSON frame if the socket is still there and open. Null-tolerant so the PTY
-// handlers don't each repeat the readyState guard; reports whether it went out.
-function sendFrame(socket: WebSocket | null | undefined, payload: unknown): boolean {
-  if (!socket || socket.readyState !== socket.OPEN) return false;
-  socket.send(JSON.stringify(payload));
-  return true;
-}
-
-// Report a PTY exit to the browser, then hang up — shared by every PTY kind. The
-// socket is read at exit time because a reattach can swap it after wiring.
-function sendExitAndClose(socket: WebSocket | null | undefined, exitCode: number, signal: number | undefined): void {
-  if (sendFrame(socket, { type: "exit", exitCode, signal })) socket?.close();
-}
-
-// Send a terminal error to the socket and close it (no reconnect on the client side).
-function closeWithError(ws: WebSocket, message: string): void {
-  if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ type: "error", message }));
-    ws.close();
-  }
 }
 
 // The command a launcher runs when spawned fresh. On a tmux reattach it's ignored
@@ -2822,66 +1668,6 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
   const sessionId = reattachId ?? ((tmuxAlive || resumeRolloutId) && requested ? requested : randomUUID());
   return { sessionId, live, resumeRolloutId };
-}
-
-function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
-  entry.term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-    onOutput?.(data);
-  });
-  entry.term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    reap(sessionId);
-  });
-}
-
-// codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
-// (stop once its pty is gone) and capture the minted id so a later cold reconnect can
-// `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
-function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
-  watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => !ptys.has(sessionId) })
-    .then((meta) => {
-      if (!meta) return;
-      claimedCodexRollouts.add(meta.file);
-      codexRolloutIds.set(sessionId, meta.id);
-    })
-    .catch(() => {});
-}
-
-function spawnCodexPty(
-  sessionId: string,
-  ws: WebSocket | null,
-  resumeRolloutId: string | null,
-  cwd: string,
-  attachGuiMcp: boolean,
-  initialPrompt: string | null,
-): PtyEntry {
-  const root = codexSessionsRoot();
-  const before = snapshotSessions(root);
-  // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
-  // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
-  const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
-  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl });
-  const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
-  const via = tmux ? " via tmux" : "";
-  const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
-  console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
-  ptys.set(sessionId, entry);
-  if (resumeRolloutId) {
-    codexRolloutIds.set(sessionId, resumeRolloutId);
-  } else {
-    // Discover the id only for a FRESH session. On resume we already know it; running the watcher
-    // could overwrite the known id with a mis-attributed concurrent rollout.
-    rememberCodexRollout(sessionId, root, before, cwd);
-  }
-  // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
-  // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
-  const autoRun = initialPrompt ? attachCodexAutoRun(entry, initialPrompt) : undefined;
-  wireCodexRelay(entry, sessionId, autoRun);
-  return entry;
 }
 
 function startCodexEntry(

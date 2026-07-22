@@ -314,7 +314,7 @@ function configureAppearance() {
 </script>
 
 <template>
-  <div class="shell">
+  <div class="flex flex-col h-screen w-screen overflow-hidden">
     <AppToolbar
       :add-terminal-active="launchOpen"
       :auto-sort="state.sortMode === 'auto'"
@@ -323,13 +323,23 @@ function configureAppearance() {
       @toggle-sort="toggleSortMode"
       @settings="showSettings = true"
     />
-    <nav v-if="pages > 1 && expandedUid === null" class="tabbar" aria-label="Grid tabs">
-      <button v-for="p in pages" :key="p" :class="['tab', { active: p - 1 === state.page }]" :aria-pressed="p - 1 === state.page" @click="switchTo(p - 1)">
+    <nav
+      v-if="pages > 1 && expandedUid === null"
+      class="flex-none flex items-center gap-1 h-[30px] px-4 bg-panel border-b border-border"
+      aria-label="Grid tabs"
+    >
+      <button
+        v-for="p in pages"
+        :key="p"
+        class="border border-border bg-base text-muted font-mono text-xs min-w-[28px] py-[3px] px-2 rounded-md cursor-pointer hover:bg-hover hover:text-fg aria-pressed:bg-hover aria-pressed:text-fg aria-pressed:border-accent"
+        :aria-pressed="p - 1 === state.page"
+        @click="switchTo(p - 1)"
+      >
         {{ p }}
       </button>
     </nav>
     <TerminalGrid
-      class="main"
+      class="flex-1 min-h-0 min-w-0"
       :cells="displayCells"
       :expanded-uid="expandedUid"
       :list-rows="listRows"
@@ -372,50 +382,3 @@ function configureAppearance() {
     />
   </div>
 </template>
-
-<style scoped>
-.shell {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-}
-
-.tabbar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  height: 30px;
-  padding: 0 16px;
-  background: var(--bg-panel);
-  border-bottom: 1px solid var(--border);
-}
-.tab {
-  border: 1px solid var(--border);
-  background: var(--bg-base);
-  color: var(--text-muted);
-  font-family: ui-monospace, monospace;
-  font-size: 12px;
-  min-width: 28px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.tab:hover {
-  background: var(--bg-hover);
-  color: var(--text);
-}
-.tab.active {
-  background: var(--bg-hover);
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.main {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-}
-</style>

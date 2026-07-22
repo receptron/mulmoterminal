@@ -27,19 +27,19 @@ describe("Sidebar", () => {
     const wrapper = mountSidebar({
       sessions: [row({ id: "a", title: "Alpha", working: true }), row({ id: "b", title: "Beta" })],
     });
-    const items = wrapper.findAll(".item");
+    const items = wrapper.findAll('[data-testid="session-item"]');
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Alpha");
     // Only the working session shows the spinner.
-    expect(items[0].find(".spinner").exists()).toBe(true);
-    expect(items[1].find(".spinner").exists()).toBe(false);
+    expect(items[0].find('[data-testid="session-spinner"]').exists()).toBe(true);
+    expect(items[1].find('[data-testid="session-spinner"]').exists()).toBe(false);
   });
 
   it("bolds a waiting session via the .waiting class", () => {
     const wrapper = mountSidebar({
       sessions: [row({ id: "a", waiting: true }), row({ id: "b", waiting: false })],
     });
-    const items = wrapper.findAll(".item");
+    const items = wrapper.findAll('[data-testid="session-item"]');
     expect(items[0].classes()).toContain("waiting");
     expect(items[1].classes()).not.toContain("waiting");
   });
@@ -48,8 +48,8 @@ describe("Sidebar", () => {
     // A waiting session keeps `working` true server-side, but it is blocked on
     // the user — spinning there reads as "thinking", so suppress it.
     const wrapper = mountSidebar({ sessions: [row({ id: "a", working: true, waiting: true })] });
-    const item = wrapper.find(".item");
-    expect(item.find(".spinner").exists()).toBe(false);
+    const item = wrapper.find('[data-testid="session-item"]');
+    expect(item.find('[data-testid="session-spinner"]').exists()).toBe(false);
     expect(item.classes()).toContain("waiting");
   });
 
@@ -58,9 +58,9 @@ describe("Sidebar", () => {
       sessions: [row({ id: "a", working: true }), row({ id: "b", working: true })],
       activeId: "a",
     });
-    const items = wrapper.findAll(".item");
-    expect(items[0].find(".spinner").exists()).toBe(false); // active
-    expect(items[1].find(".spinner").exists()).toBe(true); // background
+    const items = wrapper.findAll('[data-testid="session-item"]');
+    expect(items[0].find('[data-testid="session-spinner"]').exists()).toBe(false); // active
+    expect(items[1].find('[data-testid="session-spinner"]').exists()).toBe(true); // background
   });
 
   it("shows only unread rows when the filter prop is 'unread'", () => {
@@ -68,7 +68,7 @@ describe("Sidebar", () => {
       sessions: [row({ id: "a", waiting: true }), row({ id: "b", waiting: false })],
       filter: "unread",
     });
-    const items = wrapper.findAll(".item");
+    const items = wrapper.findAll('[data-testid="session-item"]');
     expect(items).toHaveLength(1);
     expect(items[0].text()).toContain("a");
   });
@@ -77,7 +77,7 @@ describe("Sidebar", () => {
     const wrapper = mountSidebar({
       sessions: [row({ id: "a", waiting: true }), row({ id: "b" })],
     });
-    const unreadChip = wrapper.findAll(".chip")[1];
+    const unreadChip = wrapper.findAll("[aria-pressed]")[1];
     expect(unreadChip.text()).toContain("(1)");
     await unreadChip.trigger("click");
     expect(wrapper.emitted("update:filter")?.[0]).toEqual(["unread"]);
@@ -85,20 +85,20 @@ describe("Sidebar", () => {
 
   it("emits refresh when the sort button is clicked", async () => {
     const wrapper = mountSidebar({ sessions: [row({ id: "a" })] });
-    await wrapper.find(".sort-btn").trigger("click");
+    await wrapper.find('[aria-label="Sort by most recent"]').trigger("click");
     expect(wrapper.emitted("refresh")).toHaveLength(1);
   });
 
   it("emits select with the session id + agent on click", async () => {
     const wrapper = mountSidebar({ sessions: [row({ id: "a", title: "Alpha" })] });
-    await wrapper.find(".item").trigger("click");
+    await wrapper.find('[data-testid="session-item"]').trigger("click");
     expect(wrapper.emitted("select")?.[0]).toEqual(["a", "claude"]);
   });
 
   it("emits the codex agent + shows a badge for a codex row", async () => {
     const wrapper = mountSidebar({ sessions: [row({ id: "c", title: "Cx", agent: "codex" })] });
-    expect(wrapper.find(".agent-badge").exists()).toBe(true);
-    await wrapper.find(".item").trigger("click");
+    expect(wrapper.find('[data-testid="agent-badge"]').exists()).toBe(true);
+    await wrapper.find('[data-testid="session-item"]').trigger("click");
     expect(wrapper.emitted("select")?.[0]).toEqual(["c", "codex"]);
   });
 });

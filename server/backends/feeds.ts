@@ -11,13 +11,11 @@
 // `spawnWorker` is INJECTED from server/index.ts (where the PTY spawn lives) so this
 // backend never imports the session layer — the same workspace→routes-cycle avoidance
 // MulmoClaude's host shim documents.
-import { mkdir, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { randomUUID } from "node:crypto";
 import type { Express, Request, Response } from "express";
 import { configureFeedsHost, refreshOne, listFeeds, readFeedState, removeFeed, type AgentWorkerRunner, type FeedsLogger } from "@mulmoclaude/core/feeds/server";
 import { loadCollection } from "@mulmoclaude/core/collection/server";
 import type { FeedSummary } from "@mulmoclaude/core/collection";
+import { writeFileAtomic } from "../files/atomic-write.js";
 
 const log: FeedsLogger = {
   error: (prefix, msg, data) => console.error(`[${prefix}] ${msg}`, data ?? ""),
@@ -25,16 +23,6 @@ const log: FeedsLogger = {
   info: (prefix, msg, data) => console.log(`[${prefix}] ${msg}`, data ?? ""),
   debug: (prefix, msg, data) => console.debug(`[${prefix}] ${msg}`, data ?? ""),
 };
-
-// Atomic state-file write (feeds/<slug>/_state.json, data/ingest-state/<slug>.json):
-// write a unique temp then rename, mkdir -p the parent first. Matches the engine's
-// expectation of a plain (filePath, content) atomic writer.
-async function writeFileAtomic(filePath: string, content: string): Promise<void> {
-  await mkdir(path.dirname(filePath), { recursive: true });
-  const tmp = `${filePath}.${randomUUID()}.tmp`;
-  await writeFile(tmp, content);
-  await rename(tmp, filePath);
-}
 
 let workspaceRoot = "";
 

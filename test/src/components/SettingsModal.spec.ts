@@ -5,7 +5,7 @@ import SettingsModal from "../../../src/components/SettingsModal.vue";
 const mountModal = (props: Record<string, unknown> = {}) => mount(SettingsModal, { props });
 
 function clickBtn(w: ReturnType<typeof mount>, match: (text: string) => boolean) {
-  const btn = w.findAll(".btn").find((b) => match(b.text()));
+  const btn = w.findAll("button").find((b) => match(b.text()));
   if (!btn) throw new Error("button not found");
   return btn.trigger("click");
 }
@@ -34,7 +34,7 @@ describe("SettingsModal", () => {
 
   it("shows the configured custom sound and emits update-sound on edit / clear", async () => {
     const w = mountModal({ soundFile: "/snd/alert.wav" });
-    const field = w.find(".sound-field");
+    const field = w.find('[aria-label="Custom notification sound file"]');
     expect((field.element as HTMLInputElement).value).toBe("/snd/alert.wav");
 
     await field.setValue("  /snd/new.mp3  ");
@@ -47,14 +47,14 @@ describe("SettingsModal", () => {
 
   it("reflects pushEnabled and emits update-push-enabled on toggle", async () => {
     const w = mountModal({ pushEnabled: true });
-    const box = w.find<HTMLInputElement>(".push-row input");
+    const box = w.find<HTMLInputElement>('[aria-label="Send a Web Push when a task finishes"]');
     expect(box.element.checked).toBe(true);
     await box.setValue(false);
     expect(w.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(false);
 
     // Defaults to unchecked when the prop is unset, and emits true when toggled on.
     const w2 = mountModal({});
-    const box2 = w2.find<HTMLInputElement>(".push-row input");
+    const box2 = w2.find<HTMLInputElement>('[aria-label="Send a Web Push when a task finishes"]');
     expect(box2.element.checked).toBe(false);
     await box2.setValue(true);
     expect(w2.emitted("update-push-enabled")?.at(-1)?.[0]).toBe(true);
@@ -65,13 +65,13 @@ describe("SettingsModal", () => {
     const w = mountModal({ soundFile: null });
     await clickBtn(w, (t) => t.includes("Browse"));
     await Promise.resolve();
-    expect((w.find(".sound-field").element as HTMLInputElement).value).toBe("/picked/sound.ogg");
+    expect((w.find('[aria-label="Custom notification sound file"]').element as HTMLInputElement).value).toBe("/picked/sound.ogg");
     expect(w.emitted("update-sound")?.at(-1)?.[0]).toBe("/picked/sound.ogg");
   });
 
   it("theme picker honors the radiogroup keyboard contract (arrows + roving tabindex)", async () => {
     const w = mountModal();
-    const cards = () => w.findAll(".theme-card");
+    const cards = () => w.findAll('[role="radio"]');
     const n = cards().length;
     expect(n).toBeGreaterThanOrEqual(2);
     const checked = () => cards().findIndex((c) => c.attributes("aria-checked") === "true");
@@ -105,7 +105,7 @@ describe("SettingsModal", () => {
 
       const w = mountModal();
       await flushPromises();
-      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      const signInBtn = w.findAll("button").find((b) => b.text().includes("Sign in"));
       expect(signInBtn).toBeTruthy();
       expect(signInBtn?.attributes("disabled")).toBe("");
     });
@@ -119,7 +119,7 @@ describe("SettingsModal", () => {
 
       const w = mountModal();
       await flushPromises();
-      const signInBtn = w.findAll(".btn").find((b) => b.text().includes("Sign in"));
+      const signInBtn = w.findAll("button").find((b) => b.text().includes("Sign in"));
       expect(signInBtn).toBeTruthy();
       expect(signInBtn?.attributes("disabled")).toBeUndefined();
     });
@@ -133,7 +133,7 @@ describe("SettingsModal", () => {
 
       const w = mountModal();
       await flushPromises();
-      const warning = w.find(".google-warn");
+      const warning = w.find('[data-testid="google-warn"]');
       expect(warning.exists()).toBe(false);
     });
 
@@ -146,7 +146,7 @@ describe("SettingsModal", () => {
 
       const w = mountModal();
       await flushPromises();
-      const warning = w.find(".google-warn");
+      const warning = w.find('[data-testid="google-warn"]');
       expect(warning.exists()).toBe(true);
       expect(warning.text()).toContain("client_secret");
     });

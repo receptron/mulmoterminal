@@ -36,6 +36,29 @@ export interface CockpitRow {
 const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
 // A working cell shows what it's doing (planning / editing) when known, else the plain word.
 const statusWord = (row: CockpitRow): string => (row.status === "working" && row.workPhase ? WORK_WORD[row.workPhase] : STATUS_WORD[row.status]);
+// Roster colours. These hues are hardcoded and token-less, so they come through as
+// arbitrary utilities; returning fill+text together keeps the pair in one place.
+const DOT_CLASS: Record<CellStatus, string> = {
+  working: "bg-[#4a9eff]",
+  done: "bg-[#22c55e]",
+  blocked: "bg-[#f59e0b]",
+  idle: "bg-[#666]",
+};
+const BADGE_CLASS: Record<CellStatus, string> = {
+  working: "bg-[#4a9eff] text-[#04121f]",
+  done: "bg-[#22c55e] text-[#04120a]",
+  blocked: "bg-[#f59e0b] text-[#1f1300]",
+  idle: "bg-[#333] text-[#ddd]",
+};
+// Outlined pill, coloured by PR lifecycle; anything unlisted keeps the neutral grey.
+const PHASE_CLASS: Record<string, string> = {
+  "ci-running": "text-[#4a9eff]",
+  "ci-failing": "text-[#f87171]",
+  "changes-requested": "text-[#f59e0b]",
+  ready: "text-[#22c55e]",
+  merged: "text-[#a78bfa]",
+};
+const phaseClass = (phase: PrPhase): string => PHASE_CLASS[phase] ?? "text-[#9aa4b2]";
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
@@ -158,7 +181,8 @@ watch(
     <button
       v-if="zoomed"
       type="button"
-      class="view-toggle"
+      data-testid="view-toggle"
+      class="absolute right-3 top-2 z-10 h-[26px] w-[26px] cursor-pointer rounded-md border border-border bg-panel text-[13px] leading-none text-fg"
       :title="listMode ? 'Show thumbnails' : 'Show list'"
       :aria-label="listMode ? 'Switch to thumbnail strip' : 'Switch to list'"
       @click="listMode = !listMode"
@@ -167,26 +191,42 @@ watch(
     </button>
     <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
          reply). Click a row to swap which terminal is enlarged. -->
-    <aside v-if="zoomed && listMode" class="cockpit">
+    <aside v-if="zoomed && listMode" data-testid="cockpit" class="flex min-w-0 shrink-0 grow-0 basis-[360px] flex-col gap-[5px] overflow-y-auto bg-deep p-1.5">
       <button
         v-for="row in listRows"
         :key="row.uid"
         type="button"
-        :class="['cockpit-row', `st-${row.status}`, { active: row.uid === expandedUid }]"
+        data-testid="cockpit-row"
+        class="flex cursor-pointer flex-col gap-1 rounded-lg border border-l-[3px] bg-panel px-2.5 py-2 text-left text-fg [font:inherit] hover:brightness-[1.15]"
+        :class="row.uid === expandedUid ? 'border-[#4a9eff] border-l-[#4a9eff]' : 'border-border border-l-transparent'"
         @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
       >
-        <span class="cockpit-head">
-          <span class="cockpit-dot" :class="`st-${row.status}`" aria-hidden="true" />
-          <span class="cockpit-badge" :class="`st-${row.status}`">{{ statusWord(row) }}</span>
-          <span v-if="phaseDisplay(row.phase)" class="cockpit-phase" :class="`ph-${row.phase}`" :title="phaseDisplay(row.phase)?.title">
+        <span class="flex min-w-0 items-center gap-1.5">
+          <span class="h-2 w-2 flex-none rounded-full" :class="DOT_CLASS[row.status]" aria-hidden="true" />
+          <span data-testid="cockpit-badge" class="flex-none rounded-full px-1.5 py-px text-[10px] font-bold" :class="BADGE_CLASS[row.status]">{{
+            statusWord(row)
+          }}</span>
+          <span
+            v-if="phaseDisplay(row.phase)"
+            data-testid="cockpit-phase"
+            class="flex-none whitespace-nowrap rounded-full border border-current px-1.5 text-[10px] font-bold"
+            :class="[`ph-${row.phase}`, phaseClass(row.phase)]"
+            :title="phaseDisplay(row.phase)?.title"
+          >
             {{ phaseDisplay(row.phase)?.label }}
           </span>
-          <span v-if="row.agent === 'codex'" class="cockpit-agent">codex</span>
-          <span class="cockpit-dir">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
+          <span v-if="row.agent === 'codex'" class="flex-none rounded-[4px] border border-border px-1 text-[10px] text-[#9ab]">codex</span>
+          <span class="min-w-0 flex-auto truncate text-[11px] text-dim">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
         </span>
-        <span v-if="row.summary" class="cockpit-line"><b>summary</b> {{ row.summary }}</span>
-        <span class="cockpit-line"><b>prompt</b> {{ row.prompt || row.fallback || "—" }}</span>
-        <span v-if="row.response" class="cockpit-line cockpit-response"><b>reply</b> {{ row.response }}</span>
+        <span v-if="row.summary" data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
+          ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
+        >
+        <span data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
+          ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">prompt</b> {{ row.prompt || row.fallback || "—" }}</span
+        >
+        <span v-if="row.response" data-testid="cockpit-line" class="line-clamp-3 overflow-hidden text-[12px] leading-[1.35] text-dim"
+          ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">reply</b> {{ row.response }}</span
+        >
       </button>
     </aside>
     <div ref="zoomMain" class="zoom-main" />
@@ -278,6 +318,7 @@ watch(
   padding: 6px;
   box-sizing: border-box;
 }
+
 /* The focused cell grows via `transform: scale` (see `.focused`). That growth is a fraction
    of the cell's size, which for a wide/tall edge cell can push its edge past the viewport's
    `overflow:hidden` and clip the outermost characters. Inset the tiled grid by an amount that
@@ -298,6 +339,7 @@ watch(
   min-width: 0;
   min-height: 0;
 }
+
 .stage.zoomed .zoom-main {
   display: flex;
   flex: 1;
@@ -309,9 +351,11 @@ watch(
 .stage.zoomed.listmode {
   flex-direction: row;
 }
+
 .stage.zoomed.listmode .zoom-main {
   padding: 6px 6px 6px 0;
 }
+
 /* Keep the non-expanded cells mounted (connections + metadata stay live) but OFF the visible
    layout. A real off-screen box means xterm never fits to zero. */
 .stage.zoomed.listmode .grid {
@@ -324,6 +368,7 @@ watch(
   overflow: hidden;
   padding: 0;
 }
+
 .stage.zoomed.listmode .grid > * {
   width: 900px;
   height: 600px;
@@ -333,9 +378,11 @@ watch(
 .stage.zoomed:not(.listmode) {
   flex-direction: column;
 }
+
 .stage.zoomed:not(.listmode) .zoom-main {
   padding: 6px 6px 0;
 }
+
 .stage.zoomed:not(.listmode) .grid {
   flex: 0 0 150px;
   display: flex;
@@ -343,158 +390,11 @@ watch(
   overflow-x: auto;
   overflow-y: hidden;
 }
+
 .stage.zoomed:not(.listmode) .grid > * {
   flex: 0 0 260px;
   height: 100%;
   min-width: 0;
-}
-
-.view-toggle {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  z-index: 10;
-  width: 26px;
-  height: 26px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 13px;
-  line-height: 1;
-}
-
-.cockpit {
-  flex: 0 0 360px;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  background: var(--bg-deep);
-}
-.cockpit-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  text-align: left;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-left: 3px solid transparent;
-  border-radius: 8px;
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  font: inherit;
-}
-.cockpit-row:hover {
-  filter: brightness(1.15);
-}
-.cockpit-row.active {
-  border-color: #4a9eff;
-  border-left-color: #4a9eff;
-}
-.cockpit-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-.cockpit-dot {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #666;
-}
-.cockpit-badge {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: #333;
-  color: #ddd;
-}
-.cockpit-dot.st-working,
-.cockpit-badge.st-working {
-  background: #4a9eff;
-  color: #04121f;
-}
-.cockpit-dot.st-done,
-.cockpit-badge.st-done {
-  background: #22c55e;
-  color: #04120a;
-}
-.cockpit-dot.st-blocked,
-.cockpit-badge.st-blocked {
-  background: #f59e0b;
-  color: #1f1300;
-}
-/* The PR workflow phase — an OUTLINED pill, so it reads as a distinct signal from the
-   filled agent-status badge next to it. Coloured by lifecycle: blue in-progress, red
-   failing, amber needs-attention, green ready, violet merged, grey draft/closed. */
-.cockpit-phase {
-  flex: 0 0 auto;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 0 6px;
-  border-radius: 999px;
-  border: 1px solid currentColor;
-  color: #9aa4b2;
-  white-space: nowrap;
-}
-.cockpit-phase.ph-ci-running {
-  color: #4a9eff;
-}
-.cockpit-phase.ph-ci-failing {
-  color: #f87171;
-}
-.cockpit-phase.ph-changes-requested {
-  color: #f59e0b;
-}
-.cockpit-phase.ph-ready {
-  color: #22c55e;
-}
-.cockpit-phase.ph-merged {
-  color: #a78bfa;
-}
-.cockpit-agent {
-  flex: 0 0 auto;
-  font-size: 10px;
-  color: #9ab;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 0 4px;
-}
-.cockpit-dir {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: 11px;
-  color: var(--text-dim, #9ab);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.cockpit-line {
-  font-size: 12px;
-  line-height: 1.35;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.cockpit-line b {
-  font-size: 10px;
-  font-weight: 700;
-  color: #7a8aa0;
-  margin-right: 4px;
-}
-.cockpit-response {
-  color: var(--text-dim, #9ab);
-  -webkit-line-clamp: 3;
 }
 
 /* The keyboard-focused cell lifts and grows slightly, in place — tiled grid only, so it never
@@ -505,11 +405,13 @@ watch(
     transform 140ms ease,
     box-shadow 140ms ease;
 }
+
 .stage:not(.zoomed) .grid > .focused {
   transform: scale(1.03);
   z-index: 5;
   box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
+
 @media (prefers-reduced-motion: reduce) {
   .stage:not(.zoomed) .grid > *:not(.flipping) {
     transition: none;
@@ -534,6 +436,7 @@ watch(
 .stage.flipping .grid > *:not(.flipping) {
   animation: cell-in var(--flip-ms) var(--flip-ease);
 }
+
 .stage.flipping.zoomed .grid > *:not(.flipping) {
   animation-name: strip-in;
 }

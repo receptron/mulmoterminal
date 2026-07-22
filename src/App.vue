@@ -286,9 +286,9 @@ function onSession(id: string) {
   <KeepAlive>
     <GridView v-if="isGrid" />
   </KeepAlive>
-  <div v-if="!isGrid" class="shell">
+  <div v-if="!isGrid" class="flex h-screen w-screen flex-col overflow-hidden">
     <AppToolbar @settings="showSettings = true" />
-    <div :class="['app', layout === 'horizontal' ? 'app-horizontal' : 'app-vertical']">
+    <div :class="['flex min-h-0 w-full flex-1 overflow-hidden', layout === 'horizontal' ? 'flex-col' : 'flex-row']">
       <Sidebar
         v-if="layout === 'vertical'"
         v-model:filter="filter"
@@ -313,16 +313,25 @@ function onSession(id: string) {
         @toggle-layout="toggleLayout"
         @refresh="refresh"
       />
-      <div class="main">
-        <Transition name="draft-hint-fade">
-          <div v-if="draftHint" class="draft-hint" role="status">
-            <span class="material-symbols-outlined" aria-hidden="true">edit_note</span>
+      <div class="relative flex min-h-0 min-w-0 flex-1">
+        <Transition
+          enter-active-class="transition-opacity duration-[250ms] ease-[ease]"
+          leave-active-class="transition-opacity duration-[250ms] ease-[ease]"
+          enter-from-class="opacity-0"
+          leave-to-class="opacity-0"
+        >
+          <div
+            v-if="draftHint"
+            class="pointer-events-none absolute left-1/2 top-3 z-20 flex max-w-[min(90%,640px)] -translate-x-1/2 items-center gap-2 rounded-lg border-2 border-[#c98a00] bg-[#ffd54a] px-4 py-2.5 font-sans text-[13px] font-semibold leading-[1.4] text-[#1a1a2e] shadow-[0_4px_16px_rgba(0,0,0,0.45)]"
+            role="status"
+          >
+            <span class="material-symbols-outlined shrink-0 text-[18px]" aria-hidden="true">edit_note</span>
             <span>{{ draftHintText }}</span>
           </div>
         </Transition>
         <TerminalView
           ref="terminalRef"
-          class="terminal-pane"
+          class="min-w-0"
           :style="{ flex: `0 0 ${terminalWidth}px` }"
           persist-key="single"
           :session-id="activeId"
@@ -341,7 +350,7 @@ function onSession(id: string) {
           @run="onRunScript"
         />
         <div
-          class="splitter"
+          class="shrink-0 grow-0 basis-[5px] cursor-col-resize border-l border-r border-border bg-panel hover:bg-hover focus-visible:bg-accent focus-visible:outline-none"
           role="separator"
           tabindex="0"
           aria-orientation="vertical"
@@ -389,103 +398,3 @@ function onSession(id: string) {
     />
   </div>
 </template>
-
-<style scoped>
-.shell {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  width: 100vw;
-  overflow: hidden;
-}
-
-.app {
-  display: flex;
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  overflow: hidden;
-}
-
-/* Vertical: Sidebar | [ Terminal | GuiPanel ]. */
-.app-vertical {
-  flex-direction: row;
-}
-
-/* Horizontal: SessionTabBar stacked above [ Terminal | GuiPanel ]. */
-.app-horizontal {
-  flex-direction: column;
-}
-
-/* [ Terminal | GuiPanel ] — the unified two-panel view in miniature. Bounded to
-   the leftover height (full viewport in vertical mode, viewport minus the tab
-   bar in horizontal mode) so the panes fill it exactly instead of overflowing
-   under `.app { overflow: hidden }`. Panes size to height:100% of this. */
-.main {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  position: relative; /* anchor the draft hint overlay */
-}
-
-/* Transient "preparing your draft…" hint, overlaid at the top of the terminal area.
-   Bright yellow + bold border so it clearly stands out over the dark terminal; uses
-   the app's system UI font (not the inherited default) to match the rest of the UI. */
-.draft-hint {
-  position: absolute;
-  top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  max-width: min(90%, 640px);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  border-radius: 8px;
-  background: #ffd54a;
-  color: #1a1a2e;
-  border: 2px solid #c98a00;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
-  font-family: system-ui, sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  line-height: 1.4;
-  pointer-events: none; /* never intercept clicks meant for the terminal */
-}
-.draft-hint .material-symbols-outlined {
-  font-size: 18px;
-  flex-shrink: 0;
-}
-.draft-hint-fade-enter-active,
-.draft-hint-fade-leave-active {
-  transition: opacity 0.25s ease;
-}
-.draft-hint-fade-enter-from,
-.draft-hint-fade-leave-to {
-  opacity: 0;
-}
-
-/* Terminal pane: fixed flex-basis (set inline from terminalWidth); the GUI
-   panel beside it absorbs the remaining width. */
-.terminal-pane {
-  min-width: 0;
-}
-
-/* Draggable divider between the terminal and the GUI panel. */
-.splitter {
-  flex: 0 0 5px;
-  cursor: col-resize;
-  background: var(--bg-panel);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
-}
-.splitter:hover {
-  background: var(--bg-hover);
-}
-.splitter:focus-visible {
-  outline: none;
-  background: var(--accent);
-}
-</style>

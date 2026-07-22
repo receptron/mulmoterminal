@@ -18,6 +18,7 @@ aux_links:
 
 # Keep the internal design docs out of the guide site's build/nav.
 exclude:
+  - codex-vs-claude.md
   - collection-plugin-integration.md
   - gui-protocol-spike.md
   - spawn-architecture.md

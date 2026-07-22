@@ -45,14 +45,14 @@ useEscapeToClose(isOpen, close);
 </script>
 
 <template>
-  <div v-if="isOpen" class="overlay-root" role="region" aria-label="Collections">
-    <div class="browse-bar">
-      <span class="browse-bar-label">Launch with</span>
-      <div class="agent-toggle" role="radiogroup" aria-label="Launch agent">
+  <div v-if="isOpen" class="fixed inset-x-0 top-10 bottom-0 z-50 bg-deep flex flex-col" role="region" aria-label="Collections">
+    <div class="flex flex-none items-center gap-2.5 border-b border-border px-3 py-1.5 font-sans">
+      <span class="text-[11px] uppercase tracking-[0.05em] text-dim">Launch with</span>
+      <div class="inline-flex gap-0.5 rounded-[7px] border border-border bg-panel p-0.5" role="radiogroup" aria-label="Launch agent">
         <button
           type="button"
-          class="agent-btn"
-          :class="{ active: launchAgent === 'claude' }"
+          class="cursor-pointer rounded-[5px] border-0 px-3.5 py-[3px] font-sans text-[12px] font-medium"
+          :class="launchAgent === 'claude' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="launchAgent === 'claude'"
           @click="launchAgent = 'claude'"
@@ -61,8 +61,8 @@ useEscapeToClose(isOpen, close);
         </button>
         <button
           type="button"
-          class="agent-btn"
-          :class="{ active: launchAgent === 'codex' }"
+          class="cursor-pointer rounded-[5px] border-0 px-3.5 py-[3px] font-sans text-[12px] font-medium"
+          :class="launchAgent === 'codex' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           role="radio"
           :aria-checked="launchAgent === 'codex'"
           @click="launchAgent = 'codex'"
@@ -71,7 +71,7 @@ useEscapeToClose(isOpen, close);
         </button>
       </div>
     </div>
-    <div class="browse-body">
+    <div class="min-h-0 flex-1">
       <PluginFrame :css="collectionShadowCss" height="100%">
         <div ref="probe" style="height: 100%">
           <CollectionsIndexView v-if="view.mode === 'index'" />
@@ -81,54 +81,3 @@ useEscapeToClose(isOpen, close);
     </div>
   </div>
 </template>
-
-<style scoped src="./overlay.css"></style>
-<style scoped>
-/* A thin bar picking which agent a collection action / chat launches. */
-.browse-bar {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  font-family: system-ui, sans-serif;
-}
-.browse-bar-label {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-dim);
-}
-.agent-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--bg-panel);
-}
-.agent-btn {
-  border: none;
-  background: transparent;
-  color: var(--text-dim);
-  cursor: pointer;
-  font:
-    500 12px system-ui,
-    sans-serif;
-  padding: 3px 14px;
-  border-radius: 5px;
-}
-.agent-btn:hover {
-  color: var(--text);
-}
-.agent-btn.active {
-  background: var(--bg-elevated);
-  color: var(--text);
-}
-
-.browse-body {
-  flex: 1;
-  min-height: 0;
-}
-</style>

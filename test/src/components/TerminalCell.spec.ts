@@ -34,7 +34,7 @@ vi.mock("../../../src/components/Terminal.vue", () => ({
   },
 }));
 
-const promptText = (w: ReturnType<typeof mount>) => w.find(".cell-prompt").text();
+const promptText = (w: ReturnType<typeof mount>) => w.find('[data-testid="cell-prompt"]').text();
 const dotClass = (w: ReturnType<typeof mount>) => w.find(".cell-dot").classes();
 
 // Route by URL: /api/scripts (run list), /api/sessions (resume list), or
@@ -130,9 +130,9 @@ describe("TerminalCell", () => {
   it("launches in the dir typed in the form and sends it to the terminal", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect(w.find(".cell-launch").exists()).toBe(true);
-    await w.find(".cell-dir-input").setValue("/home/me/picked");
-    await w.find(".cell-dir-input").trigger("keydown.enter");
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/picked");
+    await w.find('[data-testid="cell-dir-input"]').trigger("keydown.enter");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/home/me/picked");
@@ -141,8 +141,8 @@ describe("TerminalCell", () => {
   it("launches via the go button next to the field (alternative to Enter)", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("/home/me/picked");
-    await w.find(".cell-dir-go").trigger("click");
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/picked");
+    await w.find('[data-testid="cell-dir-go"]').trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/home/me/picked");
@@ -151,10 +151,10 @@ describe("TerminalCell", () => {
   it("disables the go button when the field is empty", async () => {
     const w = mountCell(null, { defaultCwd: null });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("   ");
-    expect((w.find(".cell-dir-go").element as HTMLButtonElement).disabled).toBe(true);
-    await w.find(".cell-dir-input").setValue("/home/me/picked");
-    expect((w.find(".cell-dir-go").element as HTMLButtonElement).disabled).toBe(false);
+    await w.find('[data-testid="cell-dir-input"]').setValue("   ");
+    expect((w.find('[data-testid="cell-dir-go"]').element as HTMLButtonElement).disabled).toBe(true);
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/picked");
+    expect((w.find('[data-testid="cell-dir-go"]').element as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("the folder button opens the OS folder picker and fills the working directory", async () => {
@@ -169,20 +169,20 @@ describe("TerminalCell", () => {
       }
       return Promise.resolve({ ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) });
     }) as unknown as typeof fetch;
-    await w.find(".cell-dir-pick").trigger("click");
+    await w.find('[aria-label="Choose the working directory"]').trigger("click");
     await flushPromises();
     expect(body).toContain('"directory":true');
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/picked/dir");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/picked/dir");
   });
 
   it("shows a cancel ✕ on a cancellable launcher that emits close, but not otherwise", async () => {
     const plain = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect(plain.find(".cell-launch-cancel").exists()).toBe(false);
+    expect(plain.find('[data-testid="cell-launch-cancel"]').exists()).toBe(false);
 
     const w = mountCell(null, { defaultCwd: "/home/me/default", cancellable: true });
     await flushPromises();
-    await w.find(".cell-launch-cancel").trigger("click");
+    await w.find('[data-testid="cell-launch-cancel"]').trigger("click");
     expect(w.emitted("close")).toHaveLength(1);
   });
 
@@ -190,9 +190,9 @@ describe("TerminalCell", () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    const item = w.find(".cell-resume-item");
+    const item = w.find('[data-testid="cell-resume-item"]');
     expect(item.exists()).toBe(true);
-    expect(item.find(".ri-title").text()).toBe("fix the parser");
+    expect(item.find('[data-testid="ri-title"]').text()).toBe("fix the parser");
     await item.trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
@@ -208,11 +208,11 @@ describe("TerminalCell", () => {
     ]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    const items = w.findAll(".cell-resume-item");
+    const items = w.findAll('[data-testid="cell-resume-item"]');
     expect(items[0].classes()).toContain("is-open");
-    expect(items[0].find(".ri-open").exists()).toBe(true);
+    expect(items[0].find('[data-testid="ri-open"]').exists()).toBe(true);
     expect(items[1].classes()).not.toContain("is-open");
-    expect(items[1].find(".ri-open").exists()).toBe(false);
+    expect(items[1].find('[data-testid="ri-open"]').exists()).toBe(false);
   });
 
   it("confirms before resuming a session open elsewhere, and bails on cancel", async () => {
@@ -221,7 +221,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
     confirmSpy.mockRestore();
@@ -233,7 +233,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: [openId] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).toHaveBeenCalledOnce();
     expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(openId);
     confirmSpy.mockRestore();
@@ -245,7 +245,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm");
     const w = mountCell(null, { defaultCwd: "/home/me/proj", openSessionIds: ["other-id"] });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(confirmSpy).not.toHaveBeenCalled();
     expect(w.findComponent({ name: "TerminalView" }).props("sessionId")).toBe(id);
     confirmSpy.mockRestore();
@@ -261,7 +261,7 @@ describe("TerminalCell", () => {
     );
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    const items = w.findAll(".cell-script-item");
+    const items = w.findAll('[data-testid="cell-script-item"]');
     expect(items).toHaveLength(2);
     expect(items[0].text()).toContain("Build");
     await items[0].trigger("click");
@@ -280,14 +280,14 @@ describe("TerminalCell", () => {
     const w = mountCell(id, { initialCwd: "/home/me/proj" });
     await flushPromises();
 
-    expect(w.find(".cell-prompt").text()).toBe("refactor the parser");
+    expect(w.find('[data-testid="cell-prompt"]').text()).toBe("refactor the parser");
     expect(urls.some((u) => u.includes(`/api/session/${id}`) && u.includes("cwd=%2Fhome%2Fme%2Fproj"))).toBe(true);
   });
 
   it("shows no resume list when the dir has no sessions", async () => {
     const w = mountCell(null);
     await flushPromises();
-    expect(w.find(".cell-resume").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-resume"]').exists()).toBe(false);
   });
 
   it("ignores an out-of-order session-list response (keeps the latest dir's rows)", async () => {
@@ -301,16 +301,16 @@ describe("TerminalCell", () => {
 
     const w = mountCell(null, { defaultCwd: "/A", presets: [{ label: "B", path: "/B" }] });
     await nextTick(); // mount → fetch #1 (dir A) in flight
-    const chipB = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "B");
+    const chipB = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "B");
     if (!chipB) throw new Error("preset B not found");
-    await chipB.find(".cell-chip-main").trigger("click"); // main click = fillDir → fetch #2 (dir B)
+    await chipB.find('[data-testid="cell-chip-main"]').trigger("click"); // main click = fillDir → fetch #2 (dir B)
 
     second.resolve({ ok: true, json: async () => ({ cwd: "/B", sessions: [{ id: "b-id", title: "B-sess", mtime: 1 }] }) });
     await flushPromises();
     first.resolve({ ok: true, json: async () => ({ cwd: "/A", sessions: [{ id: "a-id", title: "A-sess", mtime: 1 }] }) });
     await flushPromises();
 
-    expect(w.findAll(".ri-title").map((x) => x.text())).toEqual(["B-sess"]);
+    expect(w.findAll('[data-testid="ri-title"]').map((x) => x.text())).toEqual(["B-sess"]);
   });
 
   it("resumes with the resolved cwd from the API, not the typed input", async () => {
@@ -322,27 +322,27 @@ describe("TerminalCell", () => {
 
     const w = mountCell(null, { defaultCwd: "/typed" });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     expect(w.findComponent({ name: "TerminalView" }).props("cwd")).toBe("/resolved");
   });
 
   it("clicking a preset chip's main button fills the dir WITHOUT launching (so the user can resume or start)", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const main = w.findAll(".cell-chip-main").find((b) => b.text() === "proj");
+    const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "proj");
     if (!main) throw new Error("preset chip not found");
     await main.trigger("click");
     // No terminal — the main click only selects the directory (fill, not launch).
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/work/proj");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/work/proj");
   });
 
   it("the chip's ▶ launch button quick-starts a fresh session in its dir", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    const chip = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "proj");
     if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-launch").trigger("click");
+    await chip.find('[data-testid="cell-chip-launch"]').trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/work/proj");
@@ -357,7 +357,7 @@ describe("TerminalCell", () => {
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
       const before = sessionCalls();
 
-      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "x");
       if (!main) throw new Error("preset chip not found");
       await main.trigger("click"); // fillDir → one immediate /api/sessions load
       await flushPromises();
@@ -382,10 +382,10 @@ describe("TerminalCell", () => {
       const sessionCalls = () =>
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((c) => String(c[0]).includes("/api/sessions")).length;
 
-      await w.find(".cell-dir-input").setValue("/typed"); // schedules a 300ms debounced load
+      await w.find('[data-testid="cell-dir-input"]').setValue("/typed"); // schedules a 300ms debounced load
       const before = sessionCalls();
 
-      const main = w.findAll(".cell-chip-main").find((b) => b.text() === "x");
+      const main = w.findAll('[data-testid="cell-chip-main"]').find((b) => b.text() === "x");
       if (!main) throw new Error("preset chip not found");
       await main.trigger("click"); // fillDir → immediate load + must cancel the pending /typed debounce
       await flushPromises();
@@ -407,8 +407,8 @@ describe("TerminalCell", () => {
     // auto-record that dir as a preset (the parent persists it to config).
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("/home/me/alpha");
-    await w.find(".cell-dir-input").trigger("keydown.enter");
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/alpha");
+    await w.find('[data-testid="cell-dir-input"]').trigger("keydown.enter");
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/alpha");
     await flushPromises();
     expect(w.emitted("record-cwd")?.at(-1)).toEqual(["/home/me/alpha"]);
@@ -417,9 +417,9 @@ describe("TerminalCell", () => {
   it("emits remove-preset (and does NOT launch) when a chip's ✕ is clicked", async () => {
     const w = mountCell(null, { presets: [{ label: "proj", path: "/work/proj" }] });
     await flushPromises();
-    const chip = w.findAll(".cell-chip").find((c) => c.find(".cell-chip-main").text() === "proj");
+    const chip = w.findAll('[data-testid="cell-chip"]').find((c) => c.find('[data-testid="cell-chip-main"]').text() === "proj");
     if (!chip) throw new Error("preset chip not found");
-    await chip.find(".cell-chip-del").trigger("click");
+    await chip.find('[data-testid="cell-chip-del"]').trigger("click");
     expect(w.emitted("remove-preset")?.at(-1)).toEqual(["/work/proj"]);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(false);
   });
@@ -438,7 +438,7 @@ describe("TerminalCell", () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "fix the parser", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click");
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
     expect(w.emitted("record-cwd")).toBeUndefined();
@@ -450,11 +450,11 @@ describe("TerminalCell", () => {
     mockFetch([{ id: "77777777-7777-7777-7777-777777777777", title: "t", mtime: Date.now() }]);
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("/home/me/fresh");
-    await w.find(".cell-dir-input").trigger("keydown.enter"); // flag = true, no cwd yet
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/fresh");
+    await w.find('[data-testid="cell-dir-input"]').trigger("keydown.enter"); // flag = true, no cwd yet
     await w.find(".cell-close").trigger("click"); // teardown must clear the flag
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click"); // resume an existing session
+    await w.find('[data-testid="cell-resume-item"]').trigger("click"); // resume an existing session
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/proj");
     await flushPromises();
     expect(w.emitted("record-cwd")).toBeUndefined();
@@ -463,7 +463,7 @@ describe("TerminalCell", () => {
   it("prefills the launch field with the most recent preset (not the server default)", async () => {
     const w = mountCell(null, { presets: [{ label: "last", path: "/home/me/last-used" }], defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/last-used");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/last-used");
   });
 
   it("syncs a late-arriving preset into the pristine launch field (open-before-config-load)", async () => {
@@ -471,36 +471,36 @@ describe("TerminalCell", () => {
     // and the field falls back to the server default.
     const w = mountCell(null, { presets: [], defaultCwd: "/home/me/default" });
     await flushPromises();
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/default");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/default");
     // /api/config resolves, delivering the most-recent preset — the pristine field upgrades.
     await w.setProps({ presets: [{ label: "alpha", path: "/home/me/alpha" }] });
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/alpha");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/alpha");
   });
 
   it("does NOT override a user-edited launch field when presets arrive late", async () => {
     const w = mountCell(null, { presets: [], defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("/home/me/typed");
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/typed");
     await w.setProps({ presets: [{ label: "alpha", path: "/home/me/alpha" }] });
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/typed");
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/typed");
   });
 
   it("resets the launch form to the default dir after close", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("/home/me/picked");
-    await w.find(".cell-dir-input").trigger("keydown.enter");
+    await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/picked");
+    await w.find('[data-testid="cell-dir-input"]').trigger("keydown.enter");
     await w.find(".cell-close").trigger("click");
     await nextTick();
-    expect(w.find(".cell-launch").exists()).toBe(true);
-    expect((w.find(".cell-dir-input").element as HTMLInputElement).value).toBe("/home/me/default");
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
+    expect((w.find('[data-testid="cell-dir-input"]').element as HTMLInputElement).value).toBe("/home/me/default");
   });
 
   it("adopts the EFFECTIVE cwd the server reports (persists/shows that, not the typed one)", async () => {
     const w = mountCell(null, { defaultCwd: "/home/me/default" });
     await flushPromises();
-    await w.find(".cell-dir-input").setValue("relative/bad/path");
-    await w.find(".cell-dir-input").trigger("keydown.enter");
+    await w.find('[data-testid="cell-dir-input"]').setValue("relative/bad/path");
+    await w.find('[data-testid="cell-dir-input"]').trigger("keydown.enter");
     // Server rejected the bad path and fell back; it reports the real cwd.
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/default");
     await nextTick();
@@ -546,7 +546,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id);
     await flushPromises();
-    const badge = w.find(".cell-usage");
+    const badge = w.find('[data-testid="cell-usage"]');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toContain("2.0k"); // input 1200 + cacheRead 800 = 2000
     expect(badge.text()).toContain("3.4k"); // output 3400
@@ -565,7 +565,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id);
     await flushPromises();
-    const badge = w.find(".cell-model");
+    const badge = w.find('[data-testid="model-badge"]');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toBe("Opus · ctx 35%"); // 70k / 200k
   });
@@ -601,9 +601,9 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id, { initialCwd: "/home/me/proj" });
     await flushPromises();
-    expect(w.find(".cell-hdr-chip").text()).toBe("prod"); // custom chip renders its substituted text
-    expect(w.find(".cell-usage").exists()).toBe(true); // usage is listed
-    expect(w.find(".cell-model").exists()).toBe(false); // ctx omitted from the list → hidden despite context set
+    expect(w.find('[data-testid="cell-hdr-chip"]').text()).toBe("prod"); // custom chip renders its substituted text
+    expect(w.find('[data-testid="cell-usage"]').exists()).toBe(true); // usage is listed
+    expect(w.find('[data-testid="model-badge"]').exists()).toBe(false); // ctx omitted from the list → hidden despite context set
   });
 
   it("renders duplicate built-in chips without key collisions", async () => {
@@ -636,7 +636,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id, { initialCwd: "/home/me/proj" });
     await flushPromises();
-    expect(w.findAll(".cell-usage")).toHaveLength(2); // both duplicates render, unique keys → no collision
+    expect(w.findAll('[data-testid="cell-usage"]')).toHaveLength(2); // both duplicates render, unique keys → no collision
   });
 
   it("shows no model badge when the session has no model yet", async () => {
@@ -648,7 +648,7 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(id);
     await flushPromises();
-    expect(w.find(".cell-model").exists()).toBe(false);
+    expect(w.find('[data-testid="model-badge"]').exists()).toBe(false);
   });
 
   it("clears a stale prompt when the server sends lastPrompt: null", async () => {
@@ -705,19 +705,19 @@ describe("TerminalCell", () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-gh").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-gh"]').exists()).toBe(true);
   });
 
   it("hides the GitHub button for a non-GitHub repo (null) and on lookup failure", async () => {
     mockFetchWithGithub(null);
     const a = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(a.find(".cell-gh").exists()).toBe(false);
+    expect(a.find('[data-testid="cell-gh"]').exists()).toBe(false);
 
     mockFetchWithGithub("https://github.com/owner/repo", false); // res.ok = false
     const b = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(b.find(".cell-gh").exists()).toBe(false);
+    expect(b.find('[data-testid="cell-gh"]').exists()).toBe(false);
   });
 
   it("opens repository / issues / pull requests from the popover", async () => {
@@ -727,8 +727,8 @@ describe("TerminalCell", () => {
     await flushPromises();
 
     const openItem = async (label: string) => {
-      await w.find(".cell-gh").trigger("click");
-      const item = w.findAll(".cell-gh-item").find((b) => b.text() === label);
+      await w.find('[data-testid="cell-gh"]').trigger("click");
+      const item = w.findAll('[data-testid="cell-gh-item"]').find((b) => b.text() === label);
       await item?.trigger("click");
     };
     await openItem("Repository");
@@ -747,11 +747,11 @@ describe("TerminalCell", () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-gh-menu").exists()).toBe(false);
-    await w.find(".cell-gh").trigger("click");
-    expect(w.find(".cell-gh-menu").exists()).toBe(true);
-    await w.find(".cell-gh-menu").trigger("keydown", { key: "Escape" });
-    expect(w.find(".cell-gh-menu").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(false);
+    await w.find('[data-testid="cell-gh"]').trigger("click");
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(true);
+    await w.find('[data-testid="cell-gh-menu"]').trigger("keydown", { key: "Escape" });
+    expect(w.find('[data-testid="cell-gh-menu"]').exists()).toBe(false);
   });
 
   it("ignores an out-of-order /api/git-remote response after a fast cwd change", async () => {
@@ -776,9 +776,9 @@ describe("TerminalCell", () => {
     await flushPromises();
 
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
-    await w.find(".cell-gh").trigger("click");
+    await w.find('[data-testid="cell-gh"]').trigger("click");
     await w
-      .findAll(".cell-gh-item")
+      .findAll('[data-testid="cell-gh-item"]')
       .find((b) => b.text() === "Repository")
       ?.trigger("click");
     expect(openSpy.mock.calls.at(-1)?.[0]).toBe("https://github.com/owner/repoB");
@@ -812,8 +812,8 @@ describe("TerminalCell", () => {
     mockFetchWithWorktrees([{ path: "/wt/fix-login", branch: "agent/fix-login", task: "fix-login", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".cell-worktrees").exists()).toBe(true);
-    const rows = w.findAll(".wt-reuse");
+    expect(w.find('[data-testid="cell-worktrees"]').exists()).toBe(true);
+    const rows = w.findAll('[data-testid="worktree-reuse"]');
     expect(rows).toHaveLength(1);
     expect(rows[0].text()).toContain("fix-login");
   });
@@ -822,15 +822,15 @@ describe("TerminalCell", () => {
     mockFetch(); // default mock reports no isGit
     const w = mountCell(null, { defaultCwd: "/home/me/proj" });
     await flushPromises();
-    expect(w.find(".cell-worktrees").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-worktrees"]').exists()).toBe(false);
   });
 
   it("creates a worktree for the typed task and launches claude in it", async () => {
     const posts = mockFetchWithWorktrees([], { path: "/wt/fix-login", branch: "agent/fix-login" });
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-task").setValue("fix login");
-    await w.find(".wt-start").trigger("click");
+    await w.find('[data-testid="wt-task"]').setValue("fix login");
+    await w.find('[data-testid="wt-start"]').trigger("click");
     await flushPromises();
     const create = posts.find((p) => p.url.includes("/api/worktrees/create"));
     if (!create) throw new Error("create not called");
@@ -844,7 +844,7 @@ describe("TerminalCell", () => {
     mockFetchWithWorktrees([{ path: "/wt/old-task", branch: "agent/old-task", task: "old-task", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-reuse").trigger("click");
+    await w.find('[data-testid="worktree-reuse"]').trigger("click");
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/wt/old-task");
@@ -854,7 +854,7 @@ describe("TerminalCell", () => {
     const posts = mockFetchWithWorktrees([{ path: "/wt/done", branch: "agent/done", task: "done", dirty: false }]);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-del").trigger("click");
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
     if (!remove) throw new Error("remove not called");
@@ -866,8 +866,8 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    expect(w.find(".wt-dirty").exists()).toBe(true); // the ● uncommitted-changes marker
-    await w.find(".wt-del").trigger("click");
+    expect(w.find('[data-testid="wt-dirty"]').exists()).toBe(true); // the ● uncommitted-changes marker
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     expect(confirmSpy).toHaveBeenCalled();
     const remove = posts.find((p) => p.url.includes("/api/worktrees/remove"));
@@ -881,7 +881,7 @@ describe("TerminalCell", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
-    await w.find(".wt-del").trigger("click");
+    await w.find('[data-testid="wt-del"]').trigger("click");
     await flushPromises();
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
     confirmSpy.mockRestore();
@@ -915,35 +915,35 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
 
-    const badge = w.find(".cell-wt-badge");
+    const badge = w.find('[data-testid="cell-wt-badge"]');
     expect(badge.exists()).toBe(true);
-    expect(badge.find(".wt-ahead").text()).toBe("+3");
-    expect(badge.find(".wt-dirty-count").text()).toBe("●2");
+    expect(badge.find('[data-testid="wt-ahead"]').text()).toBe("+3");
+    expect(badge.find('[data-testid="wt-dirty-count"]').text()).toBe("●2");
 
-    expect(w.find(".cell-diff").exists()).toBe(false); // panel closed initially
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // panel closed initially
     await badge.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
-    expect(w.findAll(".cell-diff-file")).toHaveLength(2);
-    expect(w.find(".df-new").exists()).toBe(true); // the untracked file
-    expect(w.find(".cell-diff-patch").text()).toContain("hello");
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
+    expect(w.findAll('[data-testid="cell-diff-file"]')).toHaveLength(2);
+    expect(w.find('[data-testid="df-new"]').exists()).toBe(true); // the untracked file
+    expect(w.find('[data-testid="cell-diff-patch"]').text()).toContain("hello");
 
-    await w.find(".cell-diff .cell-btn").trigger("click"); // ✕ closes it
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    await w.find('[data-testid="cell-diff"] .cell-btn').trigger("click"); // ✕ closes it
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("shows no diff badge for a clean worktree (0 ahead / 0 dirty)", async () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 0, dirty: 0, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("never shows the diff badge for a non-worktree cell", async () => {
     mockFetchWithDiff({ isWorktree: false, base: null, ahead: 9, dirty: 9, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: "/home/me/regular-proj" });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("bootstraps the diff badge when RESUMING an idle worktree session", async () => {
@@ -956,21 +956,21 @@ describe("TerminalCell", () => {
     }) as unknown as typeof fetch;
     const w = mountCell(null, { defaultCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-resume-item").trigger("click"); // resume the idle worktree session
+    await w.find('[data-testid="cell-resume-item"]').trigger("click"); // resume the idle worktree session
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true);
-    expect(w.find(".wt-ahead").text()).toBe("+2");
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true);
+    expect(w.find('[data-testid="wt-ahead"]').text()).toBe("+2");
   });
 
   it("clears the diff badge when the cwd falls back to a non-worktree dir", async () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 3, dirty: 1, files: [], patch: "", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true);
     // server confirms a different, non-worktree dir → badge must not linger
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/plain-proj");
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   it("auto-closes the open diff panel when the cwd leaves the worktree (no empty overlay)", async () => {
@@ -985,44 +985,44 @@ describe("TerminalCell", () => {
     });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     // leaving the worktree clears `diff`; the panel must not linger as an empty overlay
     w.findComponent({ name: "TerminalView" }).vm.$emit("cwd", "/home/me/plain-proj");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("does not auto-reopen the diff panel after leaving and re-entering a worktree", async () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 2, dirty: 0, files: [], patch: "x", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click"); // user opens the panel
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click"); // user opens the panel
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
 
     const term = w.findComponent({ name: "TerminalView" });
     term.vm.$emit("cwd", "/home/me/plain-proj"); // leave the worktree → panel closes
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
 
     term.vm.$emit("cwd", WT_CWD); // re-enter a worktree
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(true); // badge returns…
-    expect(w.find(".cell-diff").exists()).toBe(false); // …but the panel stays closed until clicked
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(true); // badge returns…
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false); // …but the panel stays closed until clicked
   });
 
   it("closes the diff panel on Escape (document-level handler)", async () => {
     mockFetchWithDiff({ isWorktree: true, base: "main", ahead: 1, dirty: 0, files: [], patch: "x", truncated: false });
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); // focus may be on the badge/terminal
     await flushPromises();
-    expect(w.find(".cell-diff").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-diff"]').exists()).toBe(false);
   });
 
   it("ignores an in-flight diff fetch that resolves after the cwd left the worktree", async () => {
@@ -1042,7 +1042,7 @@ describe("TerminalCell", () => {
     // the stale worktree diff now resolves — it must not repopulate the badge
     diffFetch.resolve({ ok: true, json: async () => ({ isWorktree: true, base: "main", ahead: 5, dirty: 5, files: [], patch: "", truncated: false }) });
     await flushPromises();
-    expect(w.find(".cell-wt-badge").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-wt-badge"]').exists()).toBe(false);
   });
 
   // Slice 2 — push / open-PR actions in the diff panel footer.
@@ -1069,7 +1069,7 @@ describe("TerminalCell", () => {
     truncated: false,
   });
   const openPanel = async (w: ReturnType<typeof mountCell>) => {
-    await w.find(".cell-wt-badge").trigger("click");
+    await w.find('[data-testid="cell-wt-badge"]').trigger("click");
     await flushPromises();
   };
 
@@ -1090,7 +1090,7 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const btns = w.findAll(".cell-diff-btn");
+    const btns = w.findAll('[data-testid="cell-diff-btn"]');
     const labelled = (text: string) => btns.find((b) => b.text().includes(text));
     expect(labelled("Push")?.attributes("disabled")).toBeDefined(); // no commits ahead
     expect(labelled("Open PR")?.attributes("disabled")).toBeDefined();
@@ -1102,14 +1102,14 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     if (!push) throw new Error("Push button not found");
     await push.trigger("click");
     await flushPromises();
     const req = posts.find((p) => p.url.includes("/api/worktrees/push"));
     if (!req) throw new Error("push not called");
     expect(JSON.parse(req.body)).toEqual({ cwd: WT_CWD });
-    expect(w.find(".cell-diff-msg").text()).toBe("Pushed agent/fix-login");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toBe("Pushed agent/fix-login");
   });
 
   it("Open PR opens the returned url in a new tab", async () => {
@@ -1118,12 +1118,12 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const pr = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Open PR"));
+    const pr = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Open PR"));
     if (!pr) throw new Error("Open PR button not found");
     await pr.trigger("click");
     await flushPromises();
     expect(openSpy).toHaveBeenCalledWith("https://github.com/owner/repo/pull/9", "_blank", "noopener,noreferrer");
-    expect(w.find(".cell-diff-msg").text()).toBe("PR created");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toBe("PR created");
     openSpy.mockRestore();
   });
 
@@ -1132,13 +1132,13 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     await push?.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff-msg").text()).toContain("No git remote");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("No git remote");
   });
 
-  const commitBtn = (w: ReturnType<typeof mountCell>) => w.findAll(".cell-diff-btn").find((b) => b.text().includes("Commit"));
+  const commitBtn = (w: ReturnType<typeof mountCell>) => w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Commit"));
 
   it("Commit asks the Claude session to commit when there are uncommitted changes", async () => {
     // ahead 0, dirty 2 → the badge shows (dirty) and the Commit button is enabled
@@ -1167,7 +1167,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     expect(submit).toHaveBeenCalledTimes(1);
     expect(submit.mock.calls[0][0]).toContain("Commit all current changes");
-    expect(w.find(".cell-diff-msg").text()).toContain("Asked Claude to commit");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("Asked Claude to commit");
   });
 
   it("disables Commit when there are no uncommitted changes (dirty=0)", async () => {
@@ -1219,7 +1219,7 @@ describe("TerminalCell", () => {
     vi.spyOn(term.vm as unknown as { submitText: (t: string) => boolean }, "submitText").mockReturnValue(false);
     await commitBtn(w)?.trigger("click");
     await flushPromises();
-    expect(w.find(".cell-diff-msg").text()).toContain("Couldn't reach the session");
+    expect(w.find('[data-testid="cell-diff-msg"]').text()).toContain("Couldn't reach the session");
   });
 
   it("does not get stuck on 'Pushing…' when the response has no JSON body (403)", async () => {
@@ -1240,10 +1240,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await openPanel(w);
-    const push = w.findAll(".cell-diff-btn").find((b) => b.text().includes("Push"));
+    const push = w.findAll('[data-testid="cell-diff-btn"]').find((b) => b.text().includes("Push"));
     await push?.trigger("click");
     await flushPromises();
-    const msg = w.find(".cell-diff-msg").text();
+    const msg = w.find('[data-testid="cell-diff-msg"]').text();
     expect(msg).not.toBe("Pushing…");
     expect(msg).toContain("Not allowed");
   });
@@ -1268,7 +1268,7 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true); // session not torn down yet
   });
 
@@ -1277,8 +1277,8 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await nextTick();
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
-    expect(w.find(".cell-launch").exists()).toBe(true); // torn down to the launcher
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true); // torn down to the launcher
   });
 
   it("Keep worktree tears the cell down WITHOUT removing the room", async () => {
@@ -1286,10 +1286,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    await w.find(".ccx-keep").trigger("click");
+    await w.find('[data-testid="ccx-keep"]').trigger("click");
     await flushPromises();
     expect(posts.some((p) => p.url.includes("/api/worktrees/remove"))).toBe(false);
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
   });
 
   it("Remove worktree posts a forced remove (path+repoDir = the worktree) then closes", async () => {
@@ -1298,12 +1298,12 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises(); // the close() diff refresh enables the Remove button
-    await w.find(".ccx-remove").trigger("click");
+    await w.find('[data-testid="ccx-remove"]').trigger("click");
     await flushPromises();
     const rm = posts.find((p) => p.url.includes("/api/worktrees/remove"));
     if (!rm) throw new Error("remove not called");
     expect(JSON.parse(rm.body)).toMatchObject({ repoDir: WT_CWD, path: WT_CWD, deleteBranch: true, force: true });
-    expect(w.find(".cell-launch").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(true);
   });
 
   it("holds Remove (Checking…) until the fresh diff load completes", async () => {
@@ -1323,10 +1323,10 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click"); // close() refresh is pending on `gate`
     await nextTick();
-    expect(w.find(".ccx-remove").attributes("disabled")).toBeDefined(); // held while checking
+    expect(w.find('[data-testid="ccx-remove"]').attributes("disabled")).toBeDefined(); // held while checking
     gate.resolve({ ok: true, json: async () => cleanWtDiff });
     await flushPromises();
-    expect(w.find(".ccx-remove").attributes("disabled")).toBeUndefined(); // released
+    expect(w.find('[data-testid="ccx-remove"]').attributes("disabled")).toBeUndefined(); // released
   });
 
   it("keeps the confirm open with an error when the remove fails (no false success)", async () => {
@@ -1341,11 +1341,11 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises();
-    await w.find(".ccx-remove").trigger("click");
+    await w.find('[data-testid="ccx-remove"]').trigger("click");
     await flushPromises();
-    expect(w.find(".cell-close-confirm").exists()).toBe(true); // NOT torn down
-    expect(w.find(".cell-launch").exists()).toBe(false);
-    expect(w.find(".ccx-warn").text()).toContain("Couldn't remove");
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true); // NOT torn down
+    expect(w.find('[data-testid="cell-launch"]').exists()).toBe(false);
+    expect(w.find('[data-testid="ccx-warn"]').text()).toContain("Couldn't remove");
   });
 
   it("Escape dismisses the close confirmation", async () => {
@@ -1353,10 +1353,10 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(true);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(true);
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     await nextTick();
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true);
   });
 
@@ -1365,8 +1365,8 @@ describe("TerminalCell", () => {
     const w = mountCell("66666666-6666-6666-6666-666666666666", { initialCwd: WT_CWD });
     await flushPromises();
     await w.find(".cell-close").trigger("click");
-    await w.find(".ccx-cancel").trigger("click");
-    expect(w.find(".cell-close-confirm").exists()).toBe(false);
+    await w.find('[data-testid="ccx-cancel"]').trigger("click");
+    expect(w.find('[data-testid="cell-close-confirm"]').exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).exists()).toBe(true);
   });
 
@@ -1384,11 +1384,11 @@ describe("TerminalCell", () => {
     await flushPromises();
     await w.find(".cell-close").trigger("click");
     await flushPromises(); // the close() diff refresh
-    const warn = w.find(".ccx-warn");
+    const warn = w.find('[data-testid="ccx-warn"]');
     expect(warn.exists()).toBe(true);
     expect(warn.text()).toContain("2 unpushed");
     expect(warn.text()).toContain("1 uncommitted");
-    expect(w.find(".ccx-remove").text()).toContain("Discard");
+    expect(w.find('[data-testid="ccx-remove"]').text()).toContain("Discard");
   });
 
   it("keeps expand + close on row 1 (cell-header); the other icons live on row 2", async () => {
@@ -1408,12 +1408,12 @@ describe("TerminalCell", () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
     await flushPromises();
     // The info (dot / dir / chips / prompt) lives in the shrinkable, clipping track…
-    expect(w.find(".cell-header > .cell-header-main").exists()).toBe(true);
-    expect(w.find(".cell-header-main .cell-dir").exists()).toBe(true);
-    expect(w.find(".cell-header-main .cell-prompt").exists()).toBe(true);
+    expect(w.find('.cell-header > [data-testid="cell-header-main"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-header-main"] .cell-dir').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-header-main"] [data-testid="cell-prompt"]').exists()).toBe(true);
     // …while the actions are a SIBLING of it, so they can never be pushed out of the cell.
     expect(w.find(".cell-header > .cell-actions").exists()).toBe(true);
-    expect(w.find(".cell-header-main .cell-actions").exists()).toBe(false);
+    expect(w.find('[data-testid="cell-header-main"] .cell-actions').exists()).toBe(false);
     expect(w.find('.cell-actions [aria-label="Expand terminal"]').exists()).toBe(true);
     expect(w.find(".cell-actions .cell-close").exists()).toBe(true);
   });
@@ -1429,8 +1429,8 @@ describe("TerminalCell", () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
     await flushPromises();
     // Info stripped: no git chip / usage; the second (terminal) header row is hidden.
-    expect(w.find(".git-chip").exists()).toBe(false);
-    expect(w.find(".cell-usage").exists()).toBe(false);
+    expect(w.find('[data-testid="git-chip"]').exists()).toBe(false);
+    expect(w.find('[data-testid="cell-usage"]').exists()).toBe(false);
     expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
     // Row 1 keeps dir + prompt + the expand/close actions (row 2 is hidden).
     expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
@@ -1512,6 +1512,10 @@ describe("TerminalCell", () => {
     expect(style).toContain("--cell-border: #2a2a4e");
     expect(style).toContain("--cell-dot: #00e676");
     expect(style).toContain("--cell-btn: #c7cdf0");
+    // …and the idle frame must actually CONSUME --cell-border, not just emit it:
+    // the border colour lived in a scoped rule until it moved to a utility, and
+    // dropping the consumer would silently lose the per-dir tint.
+    expect(w.find(".cell").classes()).toContain("border-[var(--cell-border,var(--border))]");
   });
 
   it("tints a preset chip whose dir already has a running session elsewhere", () => {
@@ -1522,16 +1526,16 @@ describe("TerminalCell", () => {
       ],
       openCwds: ["/home/me/a"],
     });
-    const chips = w.findAll(".cell-chip");
+    const chips = w.findAll('[data-testid="cell-chip"]');
     const running = chips.find((c) => c.text().includes("proj-a"));
     const idle = chips.find((c) => c.text().includes("proj-b"));
     expect(running?.classes()).toContain("is-running");
-    expect(running?.find(".cell-chip-dot").exists()).toBe(true);
+    expect(running?.find('[data-testid="cell-chip-dot"]').exists()).toBe(true);
     // a11y: the running state is exposed in text (on the ▶ launch button — the action that
     // would actually double-launch there), not just color/hover.
-    expect(running?.find(".cell-chip-launch").attributes("aria-label")).toContain("already running");
+    expect(running?.find('[data-testid="cell-chip-launch"]').attributes("aria-label")).toContain("already running");
     expect(idle?.classes()).not.toContain("is-running");
-    expect(idle?.find(".cell-chip-dot").exists()).toBe(false);
-    expect(idle?.find(".cell-chip-launch").attributes("aria-label")).not.toContain("already running");
+    expect(idle?.find('[data-testid="cell-chip-dot"]').exists()).toBe(false);
+    expect(idle?.find('[data-testid="cell-chip-launch"]').attributes("aria-label")).not.toContain("already running");
   });
 });

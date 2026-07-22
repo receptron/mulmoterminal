@@ -16,40 +16,40 @@ afterEach(() => {
 describe("TimelineOverlay", () => {
   it("renders nothing when closed", () => {
     const w = mount(TimelineOverlay, { props: { sessionId: "s", cwd: "/x", open: false } });
-    expect(w.find(".tl-modal").exists()).toBe(false);
+    expect(w.find('[data-testid="tl-modal"]').exists()).toBe(false);
   });
 
   it("loads and lists tool events newest-first when opened", async () => {
     vi.stubGlobal("fetch", mockFetch({ events, truncated: false }));
     const w = mount(TimelineOverlay, { props: { sessionId: "s", cwd: "/x", open: true } });
     await flushPromises();
-    const rows = w.findAll(".tl-row");
+    const rows = w.findAll('[data-testid="tl-row"]');
     expect(rows).toHaveLength(2);
     // newest (Read) first
-    expect(rows[0].find(".tl-tool").text()).toBe("Read");
-    expect(rows[1].find(".tl-tool").text()).toBe("Bash");
-    expect(w.find(".tl-count").text()).toContain("2 steps");
+    expect(rows[0].find('[data-testid="tl-tool"]').text()).toBe("Read");
+    expect(rows[1].find('[data-testid="tl-tool"]').text()).toBe("Bash");
+    expect(w.find('[data-testid="tl-count"]').text()).toContain("2 steps");
   });
 
   it("shows an empty state when there is no activity", async () => {
     vi.stubGlobal("fetch", mockFetch({ events: [], truncated: false }));
     const w = mount(TimelineOverlay, { props: { sessionId: "s", cwd: "/x", open: true } });
     await flushPromises();
-    expect(w.find(".tl-empty").text()).toContain("No tool activity");
+    expect(w.find('[data-testid="tl-empty"]').text()).toContain("No tool activity");
   });
 
   it("shows an error state when the fetch fails", async () => {
     vi.stubGlobal("fetch", mockFetch({}, false));
     const w = mount(TimelineOverlay, { props: { sessionId: "s", cwd: "/x", open: true } });
     await flushPromises();
-    expect(w.find(".tl-empty").text()).toContain("Couldn't load");
+    expect(w.find('[data-testid="tl-empty"]').text()).toContain("Couldn't load");
   });
 
   it("emits close from the ✕ button", async () => {
     vi.stubGlobal("fetch", mockFetch({ events, truncated: false }));
     const w = mount(TimelineOverlay, { props: { sessionId: "s", cwd: "/x", open: true } });
     await flushPromises();
-    await w.find(".tl-close").trigger("click");
+    await w.find('[data-testid="tl-close"]').trigger("click");
     expect(w.emitted("close")).toBeTruthy();
   });
 
@@ -81,7 +81,7 @@ describe("TimelineOverlay", () => {
     resolveStale(resp({ events: [{ ts: "t", tool: "Bash", summary: "A" }], truncated: false }));
     await flushPromises();
 
-    expect(w.findAll(".tl-row .tl-tool").map((n) => n.text())).toEqual(["Read"]); // newest wins, stale ignored
+    expect(w.findAll('[data-testid="tl-tool"]').map((n) => n.text())).toEqual(["Read"]); // newest wins, stale ignored
     w.unmount();
   });
 
@@ -92,10 +92,10 @@ describe("TimelineOverlay", () => {
     vi.stubGlobal("fetch", fetchMock);
     const w = mount(TimelineOverlay, { props: { sessionId: "a", cwd: "/x", open: true } });
     await flushPromises();
-    expect(w.find(".tl-count").text()).toContain("+");
+    expect(w.find('[data-testid="tl-count"]').text()).toContain("+");
     await w.setProps({ sessionId: "b" }); // reload → error
     await flushPromises();
-    expect(w.find(".tl-count").text()).not.toContain("+");
+    expect(w.find('[data-testid="tl-count"]').text()).not.toContain("+");
     w.unmount();
   });
 

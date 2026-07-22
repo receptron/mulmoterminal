@@ -20,8 +20,8 @@ const emit = defineEmits<{
   <FilterChip label="All" :active="filter === 'all'" @click="emit('update:filter', 'all')" />
   <FilterChip label="Unread" :count="unreadCount" :active="filter === 'unread'" @click="emit('update:filter', 'unread')" />
   <button
-    class="icon-btn sort-btn"
-    :class="{ 'push-end': alignRefreshEnd }"
+    class="cursor-pointer border-0 bg-transparent text-[14px] leading-none text-muted hover:text-fg"
+    :class="{ 'ml-auto': alignRefreshEnd }"
     title="Sort by most recent"
     aria-label="Sort by most recent"
     @click="emit('refresh')"
@@ -29,13 +29,3 @@ const emit = defineEmits<{
     <span class="material-symbols-outlined">refresh</span>
   </button>
 </template>
-
-<style scoped src="./sessionList.css"></style>
-<style scoped>
-.sort-btn {
-  font-size: 14px;
-}
-.sort-btn.push-end {
-  margin-left: auto;
-}
-</style>

@@ -61,14 +61,31 @@ function pick(s: RunnableScript) {
 </script>
 
 <template>
-  <div v-if="scripts.length" ref="root" class="menu-root">
-    <button class="menu-trigger" :class="{ active: open }" :aria-expanded="open" aria-haspopup="menu" title="Run a script in a spare terminal" @click="toggle">
+  <div v-if="scripts.length" ref="root" class="relative inline-flex">
+    <button
+      class="border border-border bg-base text-secondary font-sans text-[12px] leading-none py-[5px] px-2.5 rounded-md cursor-pointer hover:bg-hover hover:text-fg aria-expanded:bg-hover aria-expanded:text-fg"
+      :aria-expanded="open"
+      aria-haspopup="menu"
+      title="Run a script in a spare terminal"
+      @click="toggle"
+    >
       ▶ Run ▾
     </button>
-    <div v-if="open" class="menu-pop" role="menu">
-      <button v-for="s in scripts" :key="s.index" class="menu-item" role="menuitem" :title="s.command" @click="pick(s)">▶ {{ s.label }}</button>
+    <div
+      v-if="open"
+      class="absolute top-[calc(100%+4px)] left-0 z-20 min-w-[180px] max-h-80 overflow-y-auto flex flex-col p-1 bg-panel border border-border rounded-md shadow-[0_6px_20px_rgba(0,0,0,0.35)]"
+      role="menu"
+    >
+      <button
+        v-for="s in scripts"
+        :key="s.index"
+        class="text-left border-0 bg-transparent text-secondary font-mono text-[12px] py-1.5 px-2 rounded cursor-pointer whitespace-nowrap hover:bg-hover hover:text-fg"
+        role="menuitem"
+        :title="s.command"
+        @click="pick(s)"
+      >
+        ▶ {{ s.label }}
+      </button>
     </div>
   </div>
 </template>
-
-<style scoped src="./headerMenu.css"></style>
