@@ -73,6 +73,7 @@ import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
+import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
 import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
@@ -1124,6 +1125,10 @@ const remoteHostWriteToSession = (sessionId: string, chunk: string): boolean => 
   }
 };
 
+// Whether the phone's typing may empty the input box before pasting, so only the
+// phone's text is submitted (#572). The rule itself lives with the sender.
+const remoteHostCanClearBox = (sessionId: string): boolean => canClearInputBox(ptys.get(sessionId)?.agent, activity.get(sessionId)?.working);
+
 const remoteHostCaptureTerminalScreen = (sessionId: string) =>
   captureSessionScreen(sessionId, {
     captureStyledPane: tmuxCaptureStyledPane,
@@ -1140,6 +1145,7 @@ initRemoteHostBackend({
   listTerminalSessions: remoteHostListTerminalSessions,
   captureTerminalScreen: remoteHostCaptureTerminalScreen,
   writeToSession: remoteHostWriteToSession,
+  canClearBox: remoteHostCanClearBox,
 });
 
 // Mount per-collection fs.watchers → completion bells via the notifier. After the
