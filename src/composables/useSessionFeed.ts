@@ -21,6 +21,10 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
   // authoritative as of when it was SENT, so these have to survive it (#620 F1).
   let loadingSession: string | null = null;
   let arrivedDuringLoad: T[] = [];
+  // The session id is not enough to tell two loads apart: switching away and back leaves two
+  // in flight for the id that is current, so both pass the guard below. Only the newest may
+  // apply — an older answer describes a moment already overtaken (#620).
+  let latestLoad = 0;
 
   function upsert(item: T) {
     if (loadingSession !== null) arrivedDuringLoad.push(item);
@@ -31,23 +35,26 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
   }
 
   async function loadHistory(id: string) {
+    const loadId = ++latestLoad;
     loadingSession = id;
     arrivedDuringLoad = [];
+    // A slow response for an old session must not clobber the pane after the user has
+    // switched away — nor an older response for the session they switched back to.
+    const overtaken = () => id !== sessionId() || loadId !== latestLoad;
     try {
       const res = await fetch(historyUrl(id));
-      // Guard against a session-switch race: a slow response for an old session must
-      // not clobber the pane after the user has switched to a newer one.
-      if (id !== sessionId()) return;
+      if (overtaken()) return;
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (id !== sessionId()) return;
+      if (overtaken()) return;
       items.value = mergeLiveIntoSnapshot(data[historyKey] ?? [], arrivedDuringLoad, identify);
     } catch {
       // A failed history read must not take the live events with it.
-      if (id === sessionId()) items.value = mergeLiveIntoSnapshot([], arrivedDuringLoad, identify);
+      if (!overtaken()) items.value = mergeLiveIntoSnapshot([], arrivedDuringLoad, identify);
     } finally {
-      // Only if a newer load has not already taken over the tracking.
-      if (loadingSession === id) {
+      // Only if a newer load has not already taken over the tracking. Comparing the load,
+      // not the session id: switching back gives the newer load the same id as this one.
+      if (loadId === latestLoad) {
         loadingSession = null;
         arrivedDuringLoad = [];
       }
