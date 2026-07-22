@@ -1602,7 +1602,7 @@
   resolved "https://registry.yarnpkg.com/@marijn/find-cluster-break/-/find-cluster-break-1.0.3.tgz#bdbe907e00c17c84e33fc51b1519d9aa211e7e8e"
   integrity sha512-FY+MKLBoTsLNJF/eLWaOsXGdz6uh3Iu1axjPf6TUq92IYumcTcXWHoS747JARLkcdlJ/Waiaxc5wQfFO8jC6NA==
 
-"@marp-team/marp-core@^4.3.0", "@marp-team/marp-core@^4.3.1":
+"@marp-team/marp-core@^4.3.0":
   version "4.3.1"
   resolved "https://registry.yarnpkg.com/@marp-team/marp-core/-/marp-core-4.3.1.tgz#f90fd3eeab77b5b1fa5755104ba8e168f0ecd82e"
   integrity sha512-qBNf+NZTGXAbxFLYax7A409C1HXnvNmxgK28zX+20Nv88plfTI54jkr41s0KJtWRnH/Ni0+1n4AqwNFOw5/gIg==
@@ -3126,11 +3126,6 @@
   version "0.9.10"
   resolved "https://registry.yarnpkg.com/@xmldom/xmldom/-/xmldom-0.9.10.tgz#a0ad5a26fe8aa996310870726e1704977f769dee"
   integrity sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==
-
-"@xterm/addon-attach@^0.12.0":
-  version "0.12.0"
-  resolved "https://registry.yarnpkg.com/@xterm/addon-attach/-/addon-attach-0.12.0.tgz#58d9b1feb8e9e7b5403ccc1491623497c522e704"
-  integrity sha512-1lxvXM4JYSm60lbFmE8WMOy2oF2ip3Ye8jWorSAmwy7x8FiC53netEJ5RguL8+FSRj79MUQsNCb2hprY2QA2ig==
 
 "@xterm/addon-canvas@^0.7.0":
   version "0.7.0"
