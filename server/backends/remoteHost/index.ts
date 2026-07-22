@@ -39,6 +39,8 @@ export interface RemoteHostBackendDeps {
   captureTerminalScreen: (sessionId: string) => Promise<SessionScreen>;
   // Type into a session's live PTY (#445); false when none is attached here.
   writeToSession: (sessionId: string, chunk: string) => boolean;
+  // Whether typing may empty that session's input box first (#572).
+  canClearBox: (sessionId: string) => boolean;
 }
 
 export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
@@ -63,6 +65,7 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
       listTerminalSessions: deps.listTerminalSessions,
       captureTerminalScreen: deps.captureTerminalScreen,
       writeToSession: deps.writeToSession,
+      canClearBox: deps.canClearBox,
     }),
     log: {
       info: (msg) => console.log(PREFIX, msg),

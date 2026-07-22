@@ -1,6 +1,6 @@
 {
   "name": "mulmoterminal",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "MulmoTerminal — browser terminal + GUI panel for Claude Code. One command to start.",
   "type": "module",
   "license": "MIT",
@@ -56,7 +56,6 @@
     "@codemirror/state": "^6.7.0",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@google/genai": "^2.12.0",
-    "@marp-team/marp-core": "^4.3.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@mulmobridge/web-push": "^0.2.0",
     "@mulmocast/deck-web": "^1.1.1",
@@ -74,7 +73,6 @@
     "@mulmoclaude/mulmoscript-plugin": "^0.2.3",
     "@mulmoclaude/x-plugin": "^0.1.2",
     "@receptron/task-scheduler": "^0.1.0",
-    "@xterm/addon-attach": "^0.12.0",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-clipboard": "^0.2.0",
     "@xterm/addon-fit": "^0.11.0",

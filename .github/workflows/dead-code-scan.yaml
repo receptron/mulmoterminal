@@ -16,13 +16,13 @@ name: dead-code-scan
 #      real and whether this PR made it worse — not a gate. Revisit gating once the
 #      config is tuned enough to be trustworthy.
 #
-# Config lives in `knip.json`; run it locally with `yarn knip`.
+# Config lives in `knip.jsonc`; run it locally with `yarn knip`.
 
 on:
   pull_request:
     branches: [main]
     # Dead exports can only change when an analyzed input changes. Keep in sync with
-    # knip.json's entry/project globs and tsconfig (module resolution). package.json
+    # knip.jsonc's entry/project globs and tsconfig (module resolution). package.json
     # and yarn.lock are included too: knip auto-detects entry points from package.json
     # (bin/scripts/main) and resolves imports through the installed dependency graph,
     # so a PR touching only those can still orphan code.
@@ -31,7 +31,7 @@ on:
       - "**/*.vue"
       - "**/*.js"
       - "**/tsconfig*.json"
-      - "knip.json"
+      - "knip.jsonc"
       - "package.json"
       - "yarn.lock"
       - ".github/workflows/dead-code-scan.yaml"

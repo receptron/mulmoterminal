@@ -44,6 +44,10 @@ export interface RemoteHostHandlerDeps {
   // in this process — a tmux session that outlived a restart stays viewable but not
   // writable from here.
   writeToSession: (sessionId: string, chunk: string) => boolean;
+  // Whether typing may empty the session's input box first, so only the phone's text
+  // is submitted (#572). Answered in server/index.ts, where the agent kind and the
+  // turn state live.
+  canClearBox: (sessionId: string) => boolean;
 }
 
 // Parse the optional `attachments` param ([{ storage_id }]) into storage ids. A
@@ -137,11 +141,11 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
 // since #445 — type into it. Screens are bounded by the terminal's own geometry
 // (rows x cols), so unlike collections they need no paging to stay under the 1 MiB
 // command-doc ceiling.
-type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession">;
+type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession" | "canClearBox">;
 
-const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession }: TerminalScreenDeps): CommandHandlers => {
+const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession, canClearBox }: TerminalScreenDeps): CommandHandlers => {
   // One sender per host, so its per-session ordering actually spans every command.
-  const sendInput = createTerminalInputSender({ writeToSession });
+  const sendInput = createTerminalInputSender({ writeToSession, canClearBox });
   return {
     listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 
