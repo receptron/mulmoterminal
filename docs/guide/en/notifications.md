@@ -2,7 +2,7 @@
 title: Mobile notifications (Web Push)
 layout: default
 parent: English
-nav_order: 5
+nav_order: 6
 ---
 
 # Mobile notifications (Web Push)
