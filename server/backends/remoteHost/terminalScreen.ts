@@ -2,6 +2,8 @@
 //
 // Both entry points are dependency-injected and free of server/index.ts internals, so the
 // join rules and the capture fallback are unit-testable without a live PTY or tmux.
+import { parseStyledRows, rowsToScreen, suggestionFromRows, type ScreenRow } from "../../session/screen-rows.js";
+
 // What is running in a session, so the phone can offer input that suits it: shell
 // command suggestions are useful in zsh and meaningless to an agent that reads prose
 // (mulmoserver#84). Null when the host cannot tell — a session that outlived a restart
@@ -75,18 +77,31 @@ export interface ScreenSource {
 }
 
 export interface CaptureScreenDeps {
-  capturePane: (id: string) => string | null;
+  captureStyledPane: (id: string) => string | null;
   sourceOf: (id: string) => ScreenSource | undefined;
-  render: (input: ScreenSource) => Promise<string>;
+  render: (input: ScreenSource) => Promise<ScreenRow[]>;
+}
+
+export interface SessionScreen {
+  screen: string;
+  // The follow-up prompt the agent is offering as dim ghost text, "" when it offers none.
+  // The phone cannot press Tab to accept it, so it is handed over as its own value for
+  // the phone to offer as a chip (#563).
+  suggestion: string;
 }
 
 // tmux first: it renders the real screen, works while detached, and survives a restart.
 // Falling back to the in-process buffer covers the tmux-less host, the non-persistent
 // spawn, AND the race where the session ends between listing and reading.
-export async function captureSessionScreen(id: string, { capturePane, sourceOf, render }: CaptureScreenDeps): Promise<string> {
-  const captured = capturePane(id);
-  if (captured !== null) return captured.trimEnd();
+const screenRowsOf = async (id: string, { captureStyledPane, sourceOf, render }: CaptureScreenDeps): Promise<ScreenRow[]> => {
+  const captured = captureStyledPane(id);
+  if (captured !== null) return parseStyledRows(captured);
   const source = sourceOf(id);
   if (!source) throw new Error(`terminal session '${id}' not found`);
   return render(source);
+};
+
+export async function captureSessionScreen(id: string, deps: CaptureScreenDeps): Promise<SessionScreen> {
+  const rows = await screenRowsOf(id, deps);
+  return { screen: rowsToScreen(rows).trimEnd(), suggestion: suggestionFromRows(rows) };
 }

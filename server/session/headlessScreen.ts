@@ -10,6 +10,8 @@
 // back to CJS and can't statically see the named export — a bare named import throws at
 // startup under `node --import tsx`, even though bundlers (and vitest) resolve it fine.
 import headless from "@xterm/headless";
+import type { IBufferLine } from "@xterm/headless";
+import type { ScreenRow } from "./screen-rows.js";
 
 const { Terminal } = headless;
 
@@ -19,18 +21,29 @@ export interface HeadlessScreenInput {
   rows: number;
 }
 
+// Dim is read off the cells rather than re-parsed out of the buffer, so this path yields
+// the same ScreenRow shape as a tmux capture and the suggestion rule stays single.
+const rowOf = (line: IBufferLine | undefined, cols: number): ScreenRow => {
+  if (!line) return { text: "", dim: "" };
+  const cells = Array.from({ length: cols }, (_, column) => line.getCell(column));
+  return {
+    text: line.translateToString(true),
+    dim: cells.flatMap((cell) => (cell?.isDim() ? [cell.getChars()] : [])).join(""),
+  };
+};
+
 // `term.write` is ASYNC — the callback fires once the parser has consumed the chunk, and
 // reading `buffer.active` before that yields an EMPTY screen. The await is load-bearing.
-export async function renderScreen({ buffer, cols, rows }: HeadlessScreenInput): Promise<string> {
-  // `buffer` is still proposed API in xterm 6; reading it throws without this opt-in.
+export async function renderScreen({ buffer, cols, rows }: HeadlessScreenInput): Promise<ScreenRow[]> {
+  // `buffer` is still proposed API in xterm 6; reading it (and the cells below) throws
+  // without this opt-in.
   const term = new Terminal({ cols, rows, allowProposedApi: true });
   try {
     await new Promise<void>((resolve) => term.write(buffer, resolve));
     const active = term.buffer.active;
     // baseY is the top of the viewport, so this reads the CURRENT screen rather than the
-    // emulator's whole scrollback — matching what `tmux capture-pane -p` returns.
-    const lines = Array.from({ length: rows }, (_, row) => active.getLine(active.baseY + row)?.translateToString(true) ?? "");
-    return lines.join("\n").trimEnd();
+    // emulator's whole scrollback — matching what `tmux capture-pane` returns.
+    return Array.from({ length: rows }, (_, row) => rowOf(active.getLine(active.baseY + row), cols));
   } finally {
     term.dispose();
   }

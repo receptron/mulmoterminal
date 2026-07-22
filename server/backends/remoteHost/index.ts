@@ -17,7 +17,7 @@ import type { Express } from "express";
 import { createRemoteHost, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
 
 import { createRemoteHostHandlers } from "./handlers.js";
-import type { TerminalSessionSummary } from "./terminalScreen.js";
+import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
@@ -36,7 +36,7 @@ export interface RemoteHostBackendDeps {
   workspace: string;
   spawnChat: (message: string) => { chatId: string };
   listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
-  captureTerminalScreen: (sessionId: string) => Promise<string>;
+  captureTerminalScreen: (sessionId: string) => Promise<SessionScreen>;
   // Type into a session's live PTY (#445); false when none is attached here.
   writeToSession: (sessionId: string, chunk: string) => boolean;
 }

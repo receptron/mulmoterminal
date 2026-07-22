@@ -159,10 +159,13 @@ export function tmuxKillSession(id: string): void {
 // The rendered contents of a session's visible pane — what the user would see right now,
 // available even while the session is DETACHED and across a server restart (tmux outlives
 // the node process). Null when tmux has no such session, which is also how a tmux-less
-// host reports "ask someone else". Colour sequences are dropped (no `-e`): the headless
-// fallback can only produce plain text, and one contract beats two.
-export function tmuxCapturePane(id: string): string | null {
-  const r = tmux(["capture-pane", "-p", "-t", tmuxSessionName(id)]);
+// host reports "ask someone else".
+//
+// `-e` keeps the escape sequences, which the caller strips back out (session/screen-rows).
+// Only one attribute is actually wanted — dim, the thing that marks an agent's ghost
+// suggestion apart from text the user typed — but tmux has no way to emit that alone.
+export function tmuxCaptureStyledPane(id: string): string | null {
+  const r = tmux(["capture-pane", "-p", "-e", "-t", tmuxSessionName(id)]);
   return r.status === 0 ? r.stdout : null;
 }
 
