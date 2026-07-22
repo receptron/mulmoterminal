@@ -21,7 +21,8 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, type LaunchChoice } from "../components/wsUrl";
+import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
+import { reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 
@@ -98,9 +99,6 @@ interface Conn {
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   attachedEl: HTMLElement | null;
 }
-
-const RECONNECT_BASE_MS = 500;
-const RECONNECT_MAX_MS = 5000;
 
 // The heavy per-slot runtime (non-reactive — Vue never needs to track these).
 const conns = new Map<string, Conn>();
@@ -220,36 +218,13 @@ function ensure(key: string, target: ConnTarget): Conn {
 }
 
 function scheduleReconnect(c: Conn) {
-  // A command/Run process is unique and unresumable — never reconnect it. A
-  // released or intentionally-ended slot stays down too.
-  if (c.released || c.sawExit || c.reconnectTimer || c.target.command) return;
-  const delay = Math.min(RECONNECT_BASE_MS * 2 ** c.reconnectAttempts, RECONNECT_MAX_MS);
+  if (!shouldReconnect({ released: c.released, sawExit: c.sawExit, reconnectPending: c.reconnectTimer !== null, isCommand: !!c.target.command })) return;
+  const delay = reconnectDelayMs(c.reconnectAttempts);
   c.reconnectAttempts++;
   c.reconnectTimer = setTimeout(() => {
     c.reconnectTimer = null;
     if (!c.released) connect(c);
   }, delay);
-}
-
-// A command cell's endpoint: a script.json entry by index, or a header shell button by id (+ the session
-// context to re-resolve it server-side). Either way the browser sends a reference, never a raw command.
-function runCommandUrl(command: RunCommand, host: string, secure: boolean): string {
-  return command.source === "button"
-    ? buildRunWsUrl({ host, secure, cwd: command.cwd, buttonId: command.buttonId, session: command.session, agent: command.agent, model: command.model })
-    : buildRunWsUrl({ host, secure, cwd: command.cwd, index: command.index });
-}
-
-// Pick the endpoint for a target: a Run command (ephemeral), a launcher (persistent
-// shell/codex), or a Claude session (default). Kept flat to avoid a nested ternary.
-function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): string {
-  const host = location.host;
-  if (target.command) return runCommandUrl(target.command, host, secure);
-  if (target.launcher)
-    return "shell" in target.launcher
-      ? buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, shell: true })
-      : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
-  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
-  return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal, launch: target.launch });
 }
 
 function connect(c: Conn) {
@@ -272,7 +247,7 @@ function connect(c: Conn) {
   // same session instead of spawning a fresh one each retry.
   const resumeId = c.knownSessionId ?? c.target.sessionId;
   const secure = location.protocol === "https:";
-  const url = connUrl(c.target, resumeId, secure);
+  const url = connWsUrl(c.target, resumeId, location.host, secure);
   const sock = new WebSocket(url);
   c.ws = sock;
 

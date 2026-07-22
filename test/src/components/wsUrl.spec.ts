@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../../../src/components/wsUrl.js";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl.js";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {
@@ -160,5 +160,71 @@ describe("buildTerminalWsUrl — the launch picker's choice (#584)", () => {
   it("keeps carrying session, cwd and gui alongside it", () => {
     const q = new URL(buildTerminalWsUrl({ host: "h", secure: false, sessionId: "abc", cwd: "/w", devTerminal: true, launch: { model: "m" } })).searchParams;
     expect([q.get("session"), q.get("cwd"), q.get("gui"), q.get("model")]).toEqual(["abc", "/w", "0", "m"]);
+  });
+});
+
+// Which endpoint a slot connects to. The precedence is the rule, and every way of getting it
+// wrong is silent: the cell reconnects, looks alive, and is the wrong thing.
+describe("connWsUrl — endpoint precedence", () => {
+  const HOST = "localhost:3456";
+  const target = (over: Partial<ConnTargetUrlInput> = {}): ConnTargetUrlInput => ({
+    cwd: "/work/proj",
+    devTerminal: false,
+    command: null,
+    launcher: null,
+    ...over,
+  });
+  const pathOf = (url: string) => new URL(url).pathname;
+
+  it("defaults to the Claude session endpoint", () => {
+    expect(pathOf(connWsUrl(target(), "abc", HOST, false))).toBe("/ws");
+  });
+
+  it("sends a codex slot to the codex endpoint, not the Claude one", () => {
+    expect(pathOf(connWsUrl(target({ codex: true }), "abc", HOST, false))).toBe("/ws/codex");
+  });
+
+  it("sends a launcher slot to the launch endpoint", () => {
+    expect(pathOf(connWsUrl(target({ launcher: { index: 2 } }), "abc", HOST, false))).toBe("/ws/launch");
+  });
+
+  it("sends a command slot to the run endpoint", () => {
+    const url = connWsUrl(target({ command: { source: "script", index: 3, label: "build", cwd: "/work/proj" } }), null, HOST, false);
+    expect(pathOf(url)).toBe("/ws/run");
+    expect(new URL(url).searchParams.get("index")).toBe("3");
+  });
+
+  // The order matters, not just the mapping: a command slot that also carries a launcher or
+  // codex flag is still a one-off Run, and reconnecting it as a session would re-run it.
+  it("lets a command outrank a launcher and codex", () => {
+    const command = { source: "script", index: 0, label: "x", cwd: null } as const;
+    expect(pathOf(connWsUrl(target({ command, launcher: { shell: true }, codex: true }), "abc", HOST, false))).toBe("/ws/run");
+  });
+
+  it("lets a launcher outrank codex", () => {
+    expect(pathOf(connWsUrl(target({ launcher: { shell: true }, codex: true }), "abc", HOST, false))).toBe("/ws/launch");
+  });
+
+  it("distinguishes the OS shell launcher from a configured one", () => {
+    const shell = new URL(connWsUrl(target({ launcher: { shell: true } }), "abc", HOST, false)).searchParams;
+    const indexed = new URL(connWsUrl(target({ launcher: { index: 4 } }), "abc", HOST, false)).searchParams;
+    expect([shell.get("shell"), shell.get("launcher")]).toEqual(["1", null]);
+    expect([indexed.get("shell"), indexed.get("launcher")]).toEqual([null, "4"]);
+  });
+
+  it("re-resolves a header button server-side, sending its context rather than a command", () => {
+    const command = { source: "button", buttonId: "diff", label: "Diff", cwd: "/w", session: "s1", agent: "codex", model: "opus" } as const;
+    const q = new URL(connWsUrl(target({ command }), null, HOST, false)).searchParams;
+    expect([q.get("buttonId"), q.get("session"), q.get("agent"), q.get("model")]).toEqual(["diff", "s1", "codex", "opus"]);
+  });
+
+  it("carries the resume id, cwd, dev-terminal flag and launch pick to the session endpoint", () => {
+    const url = connWsUrl(target({ devTerminal: true, launch: { provider: "openrouter", model: "z-ai/glm-5.2" } }), "sess-1", HOST, false);
+    const q = new URL(url).searchParams;
+    expect([q.get("session"), q.get("cwd"), q.get("gui"), q.get("provider")]).toEqual(["sess-1", "/work/proj", "0", "openrouter"]);
+  });
+
+  it("uses wss over https", () => {
+    expect(connWsUrl(target(), null, HOST, true).startsWith("wss://")).toBe(true);
   });
 });
