@@ -15,23 +15,17 @@
 import { computed, defineComponent, h, markRaw, provide, ref, type Component, type Ref } from "vue";
 import { PLUGIN_RUNTIME_KEY, type BrowserPluginRuntime } from "gui-chat-protocol/vue";
 import { usePubSub } from "./usePubSub";
+import { isOpenablePluginUrl } from "./pluginUrlPolicy";
 
 function pluginChannelName(scope: string, eventName: string): string {
   return `plugin:${scope}:${eventName}`;
 }
 
-const OPEN_URL_ALLOWED_SCHEMES: ReadonlySet<string> = new Set(["http:", "https:"]);
 function makeOpenUrl(scope: string): BrowserPluginRuntime["openUrl"] {
   return (url: string) => {
-    let parsed: URL;
-    try {
-      parsed = new URL(url);
-    } catch {
-      console.warn(`[plugin/${scope}] openUrl rejected unparseable URL`, { url });
-      return;
-    }
-    if (!OPEN_URL_ALLOWED_SCHEMES.has(parsed.protocol)) {
-      console.warn(`[plugin/${scope}] openUrl rejected non-http(s) scheme`, { scheme: parsed.protocol });
+    // The scheme allowlist is the security boundary — see pluginUrlPolicy.ts.
+    if (!isOpenablePluginUrl(url)) {
+      console.warn(`[plugin/${scope}] openUrl rejected non-http(s) or unparseable URL`, { url });
       return;
     }
     window.open(url, "_blank", "noopener,noreferrer");
