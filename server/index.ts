@@ -447,7 +447,8 @@ const spawnDeps: SpawnDeps = {
   hookSettingsJson,
   mcpConfigJson,
   reap: (id) => reap(id),
-  setWorking: (id, working) => setWorking(id, working),
+  setWorking: (id, working, event) => setWorking(id, working, event),
+  setWaiting: (id, waiting, event) => setWaiting(id, waiting, event),
   publishSessionCreated: (sessionId) => pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" }),
 };
 const { spawnClaudePty } = createClaudeSpawner(spawnDeps);

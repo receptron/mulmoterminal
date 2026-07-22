@@ -5,6 +5,8 @@ import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
 import { buildCodexArgs } from "../agents/codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "../agents/codex-session.js";
+import { codexRolloutPath } from "../agents/codex-sessions.js";
+import { trackCodexActivity } from "./codex-activity-track.js";
 import { claimedCodexRollouts, codexRolloutIds, ptys } from "./registry.js";
 import { ptySpawn } from "./pty-spawn.js";
 import { attachCodexAutoRun } from "./draft-injection.js";
@@ -14,6 +16,13 @@ import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 
 export function createCodexSpawner(deps: SpawnDeps) {
+  const activityDeps = {
+    setWorking: deps.setWorking,
+    setWaiting: deps.setWaiting,
+    isActive: (id: string) => ptys.get(id)?.active ?? false,
+    isAlive: (id: string) => ptys.has(id),
+  };
+
   function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
     entry.term.onData((data) => {
       entry.buffer = appendBoundedOutput(entry.buffer, data, deps.outputBufferLimit);
@@ -36,6 +45,9 @@ export function createCodexSpawner(deps: SpawnDeps) {
         if (!meta) return;
         claimedCodexRollouts.add(meta.file);
         codexRolloutIds.set(sessionId, meta.id);
+        // A rollout only discovered now is one this session just created, so it is read
+        // whole: its first turn is in there and hasn't been reported yet.
+        trackCodexActivity(sessionId, meta.file, false, activityDeps);
       })
       .catch(() => {});
   }
@@ -62,6 +74,8 @@ export function createCodexSpawner(deps: SpawnDeps) {
     ptys.set(sessionId, entry);
     if (resumeRolloutId) {
       codexRolloutIds.set(sessionId, resumeRolloutId);
+      const file = codexRolloutPath(root, resumeRolloutId);
+      if (file) trackCodexActivity(sessionId, file, true, activityDeps);
     } else {
       // Discover the id only for a FRESH session. On resume we already know it; running the watcher
       // could overwrite the known id with a mis-attributed concurrent rollout.
