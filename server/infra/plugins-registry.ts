@@ -30,6 +30,7 @@ import { generateImage } from "../backends/image-gen.js";
 import { markdownHostApp } from "../backends/markdown.js";
 import { artifactsFileOps } from "../backends/artifacts.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
+import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -178,12 +179,25 @@ export const plugins = [
   ...(await Promise.all(config.local.map(loadLocal))),
 ];
 
-const byName = Object.fromEntries(plugins.map((p) => [p.toolName, p]));
+// A name can be claimed twice; tool-precedence.ts decides who keeps it, so the advertised
+// list below is built from the same answer the dispatch map is. Both collisions used to pass
+// silently, with the list describing one implementation while another ran.
+const { dispatched: dispatchablePlugins, collisions } = resolvePluginTools(
+  plugins,
+  (p) => p.toolName,
+  HOST_TOOL_DEFINITIONS.map((d) => d.name),
+);
+for (const { name, shadowedBy } of collisions) {
+  const keeper = shadowedBy === "host" ? "a built-in host tool" : "the last plugin to declare it";
+  console.warn(`[plugins] tool "${name}" is declared more than once — ${keeper} keeps the name; the other is not offered`);
+}
+
+const byName = Object.fromEntries(dispatchablePlugins.map((p) => [p.toolName, p]));
 
 // MCP tool definitions the broker registers — gui-chat-protocol ToolDefinitions
-// ({ name, description, prompt?, parameters }), one per enabled plugin plus the
+// ({ name, description, prompt?, parameters }), one per DISPATCHABLE plugin plus the
 // built-in host tools (which the server dispatches itself; see host-tools.ts).
-export const toolDefinitions = [...plugins.map((p) => p.definition), ...HOST_TOOL_DEFINITIONS];
+export const toolDefinitions = [...dispatchablePlugins.map((p) => p.definition), ...HOST_TOOL_DEFINITIONS];
 
 // JSON-serializable summaries (no schema) for the GUI's tools pane.
 export const toolSummaries = toolDefinitions.map((d) => ({

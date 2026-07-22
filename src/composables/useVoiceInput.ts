@@ -11,6 +11,7 @@
 
 import { onScopeDispose, ref, type Ref } from "vue";
 import { createVoiceCapture, localeToWhisperLanguage, type VoiceCaptureTransport } from "@mulmoclaude/core/whisper/client";
+import { browserLocale } from "../utils/browserLocale";
 
 interface VoiceModelStatusResponse {
   capable: boolean;
@@ -36,12 +37,6 @@ export interface UseVoiceInput {
 export interface UseVoiceInputOptions {
   /** Called with each segment's transcript once recognized (never empty). */
   onTranscript: (text: string) => void;
-}
-
-// Browser UI language is a strong prior for the spoken language. No vue-i18n here,
-// so derive it from the browser like the collection composables do.
-function browserLocale(): string {
-  return (navigator.language || "en").split("-")[0];
 }
 
 async function fetchModelStatus(): Promise<VoiceModelStatusResponse | null> {

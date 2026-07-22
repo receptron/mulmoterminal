@@ -11,6 +11,7 @@ import { configureAccountingHost } from "@mulmoclaude/accounting-plugin/vue";
 import type { ApiResult } from "@mulmoclaude/accounting-plugin/vue";
 import { fetchJson } from "../utils/fetchJson";
 import { usePubSub } from "./usePubSub";
+import { browserLocale } from "../utils/browserLocale";
 
 const { subscribe } = usePubSub();
 
@@ -31,5 +32,5 @@ configureAccountingHost({
   // Raw `accounting:<bookId>` / `accounting:books` channels: the engine publishes
   // book changes (server/backends/accounting.ts) and the View live-refreshes.
   subscribe,
-  localeTag: () => (navigator.language || "en").split("-")[0],
+  localeTag: () => browserLocale(),
 });

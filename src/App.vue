@@ -25,6 +25,7 @@ import { usePendingScript, type PendingCommand } from "./composables/usePendingS
 import { useSoundEnabled } from "./composables/useSoundEnabled";
 import { useAttentionSound } from "./composables/useAttentionSound";
 import { useUnloadGuard, reportActiveTerminals } from "./composables/useUnloadGuard";
+import { browserLocale } from "./utils/browserLocale";
 
 // View mode is now the URL: the multi-terminal grid is /terminals, everything else
 // (chat + the collection/accounting overlays) lives under the single-view shell.
@@ -222,7 +223,7 @@ let draftHintTimer: ReturnType<typeof setTimeout> | undefined;
 // this keeps the one new user-facing string from being English-only. Translated once
 // per session; the server cache makes it instant thereafter.
 async function localizeDraftHint() {
-  const locale = (navigator.language || "en").split("-")[0];
+  const locale = browserLocale();
   if (locale === "en" || draftHintText.value !== DRAFT_HINT_EN) return;
   try {
     const res = await fetch("/api/translation", {

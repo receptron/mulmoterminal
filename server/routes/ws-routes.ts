@@ -31,6 +31,7 @@ import { canStartLauncher, resolveReattachableId, resolveSession, type SessionRe
 import type { PtyEntry } from "../session/types.js";
 import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
 import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
+import { codexResumeId } from "../agents/codex-resume.js";
 
 export interface WsRouteDeps {
   /** The http server these endpoints hang their `upgrade` handler off. */
@@ -152,19 +153,16 @@ function resolveLaunchSession(
 // after spawn and resume it with `codex resume <id>` once the live PTY is gone. Reattach a live
 // pty / surviving tmux session (running codex picked up, no resume); else cold-resume a known
 // rollout id; else a fresh session (a new minted key).
-// A rollout id to cold-resume for a requested session key: one we started here (key -> rollout id),
-// or a rollout id straight from the sidebar (its own id), or null (start fresh).
-function codexResumeIdFor(requested: string): string | null {
-  const mapped = codexRolloutIds.get(requested);
-  if (mapped) return mapped;
-  return codexRolloutExists(codexSessionsRoot(), requested) ? requested : null;
-}
-
 function resolveCodexSession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeRolloutId: string | null } {
   const hasLivePty = !!requested && ptys.has(requested);
   const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
+  const resumeRolloutId = codexResumeId(requested, {
+    mappedRolloutId: requested ? codexRolloutIds.get(requested) : null,
+    rolloutExists: () => !!requested && codexRolloutExists(codexSessionsRoot(), requested),
+    hasLivePty: !!live,
+    tmuxAlive,
+  });
   const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeRolloutId }, randomUUID);
   return { sessionId, live, resumeRolloutId };
 }
