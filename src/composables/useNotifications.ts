@@ -41,6 +41,9 @@ let initialized = false;
 // meanwhile. The response answers as of the moment it was REQUESTED, so applying it as-is
 // hands back a notification the user has since dismissed (#620 F2).
 let changesDuringFetch: LiveChange<NotifierEntry>[] | null = null;
+// Fetches overlap: the bell asks on init and again on every pub/sub reconnect. Only the
+// newest answer may be applied — an older one describes a moment already overtaken.
+let latestFetch = 0;
 
 /** Parse a collection deep-link (`/collections/<slug>?selected=<itemId>`) into its
  *  parts. String ops + URLSearchParams only — no regex (lint bans backtracking-prone
@@ -98,15 +101,19 @@ function applyEvent(event: NotifierEvent): void {
 }
 
 async function fetchActive(): Promise<void> {
+  const fetchId = ++latestFetch;
   const changes: LiveChange<NotifierEntry>[] = [];
   changesDuringFetch = changes;
   try {
     const res = await fetch("/api/notifications");
+    // Overtaken while we waited: leave the list to the fetch that overtook us.
+    if (fetchId !== latestFetch) return;
     if (!res.ok) {
       console.error(`[notifications] list failed: HTTP ${res.status}`);
       return;
     }
     const data = (await res.json()) as { active?: NotifierEntry[] };
+    if (fetchId !== latestFetch) return;
     const snapshot = Array.isArray(data.active) ? data.active : [];
     active.value = applyLiveChanges(snapshot, changes, (entry) => entry.id);
   } catch (err) {

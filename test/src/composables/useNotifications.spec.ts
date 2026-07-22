@@ -3,6 +3,9 @@ import { flushPromises } from "@vue/test-utils";
 import { parseCollectionTarget, type NotifierEntry } from "../../../src/composables/useNotifications";
 
 const subscribers = new Map<string, (data: unknown) => void>();
+// The bell re-fetches its list on every pub/sub reconnect, which is how a second request
+// starts while the first is still out.
+let fireReconnect: (() => void) | undefined;
 
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
@@ -10,7 +13,10 @@ vi.mock("../../../src/composables/usePubSub", () => ({
       subscribers.set(channel, handler);
       return () => subscribers.delete(channel);
     },
-    onReconnect: () => {},
+    onReconnect: (handler: () => void) => {
+      fireReconnect = handler;
+      return () => {};
+    },
   }),
 }));
 
@@ -152,6 +158,33 @@ describe("useNotifications — the list fetched while the channel is live", () =
     await flushPromises();
 
     expect(active.value.map((e) => e.title)).toEqual(["Build finished again"]);
+  });
+
+  // Codex on #626, applied here too: the bell fetches on init AND on every reconnect, so an
+  // older list can land after a newer one and put back what it replaced.
+  it("ignores an older list that lands after a newer one", async () => {
+    const gates: Array<() => void> = [];
+    const answers = [[BELL], [OTHER]];
+    let call = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const mine = call++;
+        await new Promise<void>((resolve) => gates.push(resolve));
+        return { ok: true, json: async () => ({ active: answers[mine] }) };
+      }),
+    );
+    const { useNotifications } = await freshModule();
+    const { active } = useNotifications();
+    fireReconnect?.(); // a reconnect asks again while the first request is still out
+
+    gates[1]?.(); // the newer answer arrives first
+    await flushPromises();
+    expect(active.value.map((e) => e.id)).toEqual(["n2"]);
+
+    gates[0]?.(); // the stale one, arriving last
+    await flushPromises();
+    expect(active.value.map((e) => e.id)).toEqual(["n2"]);
   });
 
   it("shows the fetched list when nothing happened meanwhile", async () => {
