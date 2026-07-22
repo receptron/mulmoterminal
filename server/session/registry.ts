@@ -13,6 +13,7 @@ import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
+import { devTerminalSessionLine, parseDevTerminalSessionIds } from "./dev-terminal-sessions.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
 
 // Per-session "working" state, driven by Claude hooks (see /api/hook):
@@ -105,26 +106,30 @@ const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-s
 // (or a mark persisted) before this resolves would otherwise see an empty set and
 // either leak hidden grid transcripts into chat or clobber the file with a snapshot
 // missing the on-disk ids.
-export const devTerminalSessionsHydrated: Promise<void> = (async () => {
+const isValidSessionId = (id: string) => SESSION_ID_RE.test(id);
+
+// Best-effort read of the shared file: absent or unreadable => nothing.
+async function readPersistedDevTerminalIds(): Promise<string[]> {
   try {
-    const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
-    if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
+    return parseDevTerminalSessionIds(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"), isValidSessionId);
   } catch {
-    // no file yet or unreadable => start empty
+    return [];
   }
+}
+
+export const devTerminalSessionsHydrated: Promise<void> = (async () => {
+  for (const id of await readPersistedDevTerminalIds()) devTerminalSessions.add(id);
 })();
 
-// Serialize every persist into ONE chain so concurrent marks can't run overlapping
-// writeFile()s that interleave and leave an older snapshot on disk (dropping ids).
-// Each link waits for hydration first (so it never persists a set missing the on-disk
-// ids) and stringifies the CURRENT set at write time, so the last link always writes
-// the complete, up-to-date set. A failed write is logged and the chain continues.
+// Appended, never rewritten: another instance shares this file, and a read-merge-write
+// loses whichever of the two finishes first however small the window is made. An append
+// needs no read, and nothing here is ever removed. Chained so our own writes stay ordered
+// and a failure is logged without stopping the next one.
 let devTerminalPersist: Promise<void> = Promise.resolve();
-function persistDevTerminalSessions(): void {
+function appendDevTerminalSession(id: string): void {
   devTerminalPersist = devTerminalPersist
-    .then(() => devTerminalSessionsHydrated)
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
+    .then(() => fs.appendFile(DEV_TERMINAL_SESSIONS_FILE, devTerminalSessionLine(id)))
     .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
 }
 
@@ -134,7 +139,7 @@ function persistDevTerminalSessions(): void {
 export function markDevTerminalSession(id: string): void {
   if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
   devTerminalSessions.add(id);
-  persistDevTerminalSessions();
+  appendDevTerminalSession(id);
 }
 
 // Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a
@@ -157,7 +162,7 @@ export const activityStateHydrated: Promise<void> = (async () => {
   }
 })();
 
-// Serialize writes into one chain (like persistDevTerminalSessions) and snapshot the
+// Serialize writes into one chain (like appendDevTerminalSession) and snapshot the
 // CURRENT working/waiting entries at write time, so the last link always writes the complete set.
 // `isHidden` comes from the caller rather than closing over `hiddenSessions`: which sessions
 // are hidden is the session layer's policy, and this module owns storage, not policy.
