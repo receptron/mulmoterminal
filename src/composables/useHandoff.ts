@@ -48,8 +48,16 @@ export const handoffTargets = (selfKey: string, home: string | null): HandoffTar
 
 const REQUEST_TIMEOUT_MS = 10_000;
 
-async function fetchHandoffText(source: HandoffSource): Promise<string> {
+export interface FetchedTurn {
+  prompt: string | null;
+  reply: string | null;
+  text: string;
+}
+
+// `shape: "reply"` asks for the answer alone — see the server's HandoffShape.
+export async function fetchLastTurn(source: HandoffSource, shape: "exchange" | "reply" = "exchange"): Promise<FetchedTurn> {
   const params = new URLSearchParams({ session: source.sessionId, agent: source.agent });
+  if (shape === "reply") params.set("as", "reply");
   if (source.cwd) params.set("cwd", source.cwd);
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
@@ -57,11 +65,15 @@ async function fetchHandoffText(source: HandoffSource): Promise<string> {
     const res = await fetch(`/api/transcript/last-turn?${params.toString()}`, { signal: abort.signal });
     if (!res.ok) throw new Error(`last-turn request failed (${res.status})`);
     const data: unknown = await res.json();
-    return isRecord(data) && typeof data.text === "string" ? data.text : "";
+    if (!isRecord(data)) return { prompt: null, reply: null, text: "" };
+    const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+    return { prompt: str(data.prompt), reply: str(data.reply), text: str(data.text) ?? "" };
   } finally {
     clearTimeout(timer);
   }
 }
+
+const fetchHandoffText = async (source: HandoffSource): Promise<string> => (await fetchLastTurn(source)).text;
 
 // The excerpt fetch and the paste, injected so the outcome rules below can be tested
 // without a server or a live socket.

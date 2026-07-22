@@ -27,7 +27,7 @@ import {
   sessionLastTurn,
   sessionTimeline,
 } from "../session/session-reads.js";
-import { formatHandoff } from "../session/handoff-text.js";
+import { formatHandoff, type HandoffShape } from "../session/handoff-text.js";
 import { projectSessionsDir } from "../session/project-dir.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
@@ -116,7 +116,10 @@ async function lastTurn(req: Request, res: Response) {
   const agent = req.query.agent === "codex" ? "codex" : "claude";
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const turn = await sessionLastTurn(cwd, session, agent);
-  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn) });
+  // ?as=reply drops the prompt block: the caller is relaying an ANSWER back to whoever
+  // asked, and that prompt is the asker's own text coming home.
+  const shape: HandoffShape = req.query.as === "reply" ? "reply" : "exchange";
+  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn, undefined, shape) });
 }
 
 // List the chat sessions for the current project (CLAUDE_CWD), including
