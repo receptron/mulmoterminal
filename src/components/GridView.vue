@@ -37,7 +37,7 @@ import {
   MAX_TERMINALS,
 } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
-import { isPrPhase, isWorkPhase, type PrPhase, type WorkPhase } from "./rosterPhase";
+import { EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type PrPhase, type WorkPhase } from "./rosterPhase";
 import { useGridActivity } from "../composables/useGridActivity";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
 import { usePendingScript } from "../composables/usePendingScript";
@@ -115,15 +115,7 @@ async function seedMeta(id: string, cwd: string | null) {
     const res = await fetch(`/api/session/${id}${query}`);
     if (!res.ok) return;
     const d = (await res.json()) as Partial<SessionMeta>;
-    const prev = sessionMeta.get(id) ?? { lastPrompt: null, aiTitle: null, lastResponse: null, workPhase: null };
-    sessionMeta.set(id, {
-      lastPrompt: d.lastPrompt ?? prev.lastPrompt,
-      aiTitle: d.aiTitle ?? prev.aiTitle,
-      lastResponse: d.lastResponse ?? prev.lastResponse,
-      // A successful fetch is authoritative for workPhase (unlike the text fields, which the
-      // summary can transiently miss), so take it as-is — including null (no tools / not working).
-      workPhase: isWorkPhase(d.workPhase) ? d.workPhase : null,
-    });
+    sessionMeta.set(id, mergeSessionMeta(sessionMeta.get(id) ?? EMPTY_SESSION_META, d));
   } catch {
     // best-effort — the next poll retries
   }
