@@ -1,83 +1,90 @@
 import { describe, it, expect } from "vitest";
 
-import { parseDevTerminalSessionIds, mergeDevTerminalSessionIds } from "../../../server/session/dev-terminal-sessions.js";
+import { parseDevTerminalSessionIds, devTerminalSessionLine } from "../../../server/session/dev-terminal-sessions.js";
 
 const A = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const B = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
 const C = "16fd2706-8baf-433b-82eb-8c7fada847da";
 const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+const parse = (contents: string) => parseDevTerminalSessionIds(contents, isUuid);
 
-describe("parseDevTerminalSessionIds", () => {
-  it("keeps the ids from a well-formed file", () => {
-    expect(parseDevTerminalSessionIds([A, B], isUuid)).toEqual([A, B]);
+describe("devTerminalSessionLine", () => {
+  // The newline is what makes concurrent appends land as separate records.
+  it("ends the record so the next append starts its own line", () => {
+    expect(devTerminalSessionLine(A)).toBe(`${A}\n`);
   });
 
-  it("reads an empty file as no ids", () => {
-    expect(parseDevTerminalSessionIds([], isUuid)).toEqual([]);
-  });
-
-  // The ids end up as filenames elsewhere, so anything that is not one is dropped rather
-  // than carried along.
-  it("drops entries that are not a session id", () => {
-    expect(parseDevTerminalSessionIds([A, "../../etc/passwd", "", B], isUuid)).toEqual([A, B]);
-  });
-
-  it("drops entries that are not strings", () => {
-    expect(parseDevTerminalSessionIds([A, 42, null, { id: B }, [B]], isUuid)).toEqual([A]);
-  });
-
-  describe("a file that is not a list of ids", () => {
-    it.each([
-      ["an object", { ids: [A] }],
-      ["a string", A],
-      ["a number", 7],
-      ["null", null],
-      ["undefined", undefined],
-    ])("reads %s as no ids", (_label, raw) => {
-      expect(parseDevTerminalSessionIds(raw, isUuid)).toEqual([]);
-    });
+  it("round-trips through the parser", () => {
+    expect(parse(devTerminalSessionLine(A) + devTerminalSessionLine(B))).toEqual([A, B]);
   });
 });
 
-// Two servers share ~/.mulmoterminal — launching twice is the ordinary way to get there,
-// since the launcher falls back to another port when the default is busy. Writing only our
-// own set drops what the peer marked, and a dropped id means that grid cell's transcript
-// reappears in the chat sidebar.
-describe("mergeDevTerminalSessionIds", () => {
-  it("keeps ids only the other instance knows about", () => {
-    expect(mergeDevTerminalSessionIds([A], [B])).toEqual([A, B].sort());
+describe("parseDevTerminalSessionIds", () => {
+  describe("the append log", () => {
+    it("reads one id per line", () => {
+      expect(parse(`${A}\n${B}\n`)).toEqual([A, B]);
+    });
+
+    it("reads a file with no trailing newline", () => {
+      expect(parse(`${A}\n${B}`)).toEqual([A, B]);
+    });
+
+    it("reads an empty file as no ids", () => {
+      expect(parse("")).toEqual([]);
+      expect(parse("\n\n")).toEqual([]);
+    });
+
+    it("ignores surrounding whitespace on a line", () => {
+      expect(parse(`  ${A}  \n\t${B}\n`)).toEqual([A, B]);
+    });
+
+    // Two instances can each append an id both of them marked.
+    it("keeps one copy of an id appended twice", () => {
+      expect(parse(`${A}\n${B}\n${A}\n`)).toEqual([A, B]);
+    });
+
+    it("keeps the order the ids were first appended in", () => {
+      expect(parse(`${C}\n${A}\n${B}\n`)).toEqual([C, A, B]);
+    });
+
+    // The ids end up as filenames elsewhere, so anything that is not one is dropped.
+    it("drops lines that are not a session id", () => {
+      expect(parse(`${A}\n../../etc/passwd\nnot-a-uuid\n${B}\n`)).toEqual([A, B]);
+    });
   });
 
-  it("keeps our own when the file is empty", () => {
-    expect(mergeDevTerminalSessionIds([], [A, B])).toEqual([A, B].sort());
-  });
+  // An existing install has the old single-line JSON array. It keeps working, and simply
+  // stops being rewritten.
+  describe("the legacy JSON array", () => {
+    it("reads the ids out of it", () => {
+      expect(parse(JSON.stringify([A, B]))).toEqual([A, B]);
+    });
 
-  it("keeps the file's when we know nothing", () => {
-    expect(mergeDevTerminalSessionIds([A, B], [])).toEqual([A, B].sort());
-  });
+    it("reads an empty array as no ids", () => {
+      expect(parse("[]")).toEqual([]);
+    });
 
-  it("does not duplicate an id both know", () => {
-    expect(mergeDevTerminalSessionIds([A, B], [B, C])).toEqual([A, B, C].sort());
-  });
+    it("drops entries that are not a session id", () => {
+      expect(parse(JSON.stringify([A, "nope", 42, null]))).toEqual([A]);
+    });
 
-  it("returns nothing when neither has any", () => {
-    expect(mergeDevTerminalSessionIds([], [])).toEqual([]);
-  });
+    // What the file looks like after the first append to a legacy file: the array on the
+    // first line, then plain ids. Both halves have to survive, or upgrading loses the ids
+    // that were already hidden.
+    it("reads a legacy array followed by appended ids", () => {
+      expect(parse(`${JSON.stringify([A, B])}\n${C}\n`)).toEqual([A, B, C]);
+    });
 
-  it("accepts a Set, which is what the registry holds", () => {
-    expect(mergeDevTerminalSessionIds([A], new Set([B, A]))).toEqual([A, B].sort());
-  });
+    it("does not lose the legacy ids when an appended one repeats them", () => {
+      expect(parse(`${JSON.stringify([A])}\n${A}\n${B}\n`)).toEqual([A, B]);
+    });
 
-  // A stable order keeps the file from churning between writes that changed nothing.
-  it("orders the result the same way whatever order it was given", () => {
-    expect(mergeDevTerminalSessionIds([C, A], [B])).toEqual(mergeDevTerminalSessionIds([B, C], [A]));
-  });
+    it("ignores a truncated array rather than guessing at it", () => {
+      expect(parse(`["${A}"\n${B}\n`)).toEqual([B]);
+    });
 
-  // The scenario in one test: A boots and marks x, B boots and marks y, and B writes last.
-  it("does not let the last writer drop the other's ids", () => {
-    const bootedFrom = [A];
-    const serverAWrites = mergeDevTerminalSessionIds(bootedFrom, new Set([A, B]));
-    const serverBWrites = mergeDevTerminalSessionIds(serverAWrites, new Set([A, C]));
-    expect(serverBWrites).toEqual([A, B, C].sort());
+    it("ignores a line that is an array of the wrong shape", () => {
+      expect(parse(`{"ids":["${A}"]}\n${B}\n`)).toEqual([B]);
+    });
   });
 });

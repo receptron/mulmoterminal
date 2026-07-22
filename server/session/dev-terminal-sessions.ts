@@ -5,21 +5,42 @@
 //
 // It is shared between INSTANCES, not just between requests. MULMOTERMINAL_HOME is
 // ~/.mulmoterminal for every server on the machine, and launching twice is the ordinary way
-// to get two: the launcher falls back to another port when the default is busy. Writing the
-// in-memory set alone therefore drops whatever a peer added since we booted, so a write
-// unions with what is on disk first — the same thing POST /api/config does, for the same
-// reason (#611 B1).
+// to get two: the launcher falls back to another port when the default is busy.
 //
-// A union is the whole answer only because the set is append-only: nothing removes an id, so
-// there is no removal for a peer's copy to resurrect.
+// So the file is an APPEND LOG, one id per line, rather than a rewritten snapshot. That is
+// what makes it safe without a lock: a snapshot has to be read, merged and written back, and
+// two instances doing that at once lose whichever finishes first — narrowing the window does
+// not close it. Appending needs no read at all, and an id is the only thing ever added
+// (nothing removes one), so there is no ordering to get wrong (#611 B1).
+//
+// The old format was a single JSON array. It is still read, so an existing file keeps
+// working and simply stops being rewritten.
 
-/** Ids from a parsed file, keeping only what is usable as a session id (and a filename). */
-export function parseDevTerminalSessionIds(raw: unknown, isValidId: (id: string) => boolean): string[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.filter((id): id is string => typeof id === "string" && isValidId(id));
+/** One line of the log: a bare id, or the whole legacy JSON array. */
+function idsFromLine(line: string, isValidId: (id: string) => boolean): string[] {
+  const text = line.trim();
+  if (!text) return [];
+  if (text.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(text);
+      return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string" && isValidId(id)) : [];
+    } catch {
+      return []; // a truncated legacy line is not worth guessing at
+    }
+  }
+  return isValidId(text) ? [text] : [];
 }
 
-/** What to write: everything on disk plus everything we know, in a stable order. */
-export function mergeDevTerminalSessionIds(onDisk: readonly string[], inMemory: Iterable<string>): string[] {
-  return [...new Set([...onDisk, ...inMemory])].sort();
+/**
+ * The ids a file holds, in either format. Anything unusable as a session id is dropped
+ * rather than carried along — these end up as filenames elsewhere.
+ */
+export function parseDevTerminalSessionIds(contents: string, isValidId: (id: string) => boolean): string[] {
+  const ids = contents.split("\n").flatMap((line) => idsFromLine(line, isValidId));
+  return [...new Set(ids)];
+}
+
+/** What to append for a newly marked id. */
+export function devTerminalSessionLine(id: string): string {
+  return `${id}\n`;
 }
