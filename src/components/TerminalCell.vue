@@ -1192,6 +1192,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 <button
                   type="button"
                   data-testid="cell-exchange-item"
+                  :aria-label="`Exchange one turn with ${target.label}`"
                   class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
                   :disabled="exchanging"
                   title="Send this cell's turn there and bring the answer back, both submitted"
@@ -1206,6 +1207,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               v-if="exchanging"
               type="button"
               data-testid="cell-exchange-stop"
+              aria-label="Stop the exchange in progress"
               class="absolute right-0 top-full z-20 mt-1 cursor-pointer whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1.5 font-sans text-[12px] text-secondary shadow-[0_6px_18px_rgba(0,0,0,0.35)] hover:text-fg"
               @click="stopExchange"
             >

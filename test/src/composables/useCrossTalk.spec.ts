@@ -23,7 +23,8 @@ function harness(options: { autoAnswer?: boolean } = {}) {
     submit: (key, text) => {
       submitted.push([key, text]);
       if (options.autoAnswer) {
-        // The agent reads what was submitted and answers, exactly as a real one would.
+        // A real agent records what it was sent as its prompt; that is what the exchange
+        // correlates on, so the fake has to do the same.
         const id = key === partner.key ? "B" : "A";
         round += 1;
         turns[id] = { prompt: text, reply: `reply-${round}`, text: `TEXT-${id}-${round}` };
@@ -35,8 +36,10 @@ function harness(options: { autoAnswer?: boolean } = {}) {
     },
     now: () => clock,
     isAborted: () => aborted,
+    runsSession: () => sessionsIntact,
   };
-  return { deps, submitted, turns, abort: () => (aborted = true), clockMs: () => clock };
+  let sessionsIntact = true;
+  return { deps, submitted, turns, abort: () => (aborted = true), switchSession: () => (sessionsIntact = false) };
 }
 
 describe("runOneExchange", () => {
@@ -64,6 +67,36 @@ describe("runOneExchange", () => {
     const { outcome } = await runOneExchange(self, partner, h.deps);
     expect(outcome).toBe("timed-out");
     expect(h.submitted).toHaveLength(1);
+  });
+
+  it("ignores a turn the partner was ALREADY running when we sent", async () => {
+    // The regression this guards: waiting on "any new turn" would take that unrelated
+    // completion for our answer and relay its content back.
+    const h = harness();
+    let polls = 0;
+    const deps: CrossTalkDeps = {
+      ...h.deps,
+      submit: (key, text) => {
+        h.submitted.push([key, text]);
+        if (key === partner.key) {
+          // A turn they were already running lands first; ours only after a poll or two.
+          h.turns.B = { prompt: "something they were already doing", reply: "unrelated answer", text: "TEXT-UNRELATED" };
+          answerAfter = { prompt: text, reply: "our answer", text: "TEXT-OURS" };
+        } else {
+          h.turns.A = { prompt: text, reply: "acknowledged", text: "TEXT-A-2" }; // our own cell answers the return leg
+        }
+        return true;
+      },
+      fetchTurn: async (source) => {
+        if (source.sessionId === "B" && ++polls === 3 && answerAfter) h.turns.B = answerAfter;
+        return { ...h.turns[source.sessionId] };
+      },
+    };
+    let answerAfter: TurnFetch | null = null;
+    const { outcome } = await runOneExchange(self, partner, deps);
+    expect(outcome).toBe("answered");
+    // The unrelated turn was on disk first and was NOT what came back to us.
+    expect(h.submitted.map(([, text]) => text)).toEqual(["TEXT-A", "TEXT-OURS"]);
   });
 
   it("stops mid-wait when the user stops it, without sending the return leg", async () => {
@@ -120,17 +153,13 @@ describe("runOneExchange", () => {
     expect(shapes.every((s) => s === "reply")).toBe(true);
   });
 
-  it("re-reads our own turn before the return leg, so a turn we ran meanwhile is not lost", async () => {
-    const reads: string[] = [];
+  it("refuses to submit into a cell that switched session mid-exchange", async () => {
+    // Submitting addresses a slot, not a conversation. Without this the answer lands in
+    // whatever conversation the user just switched that cell to.
     const h = harness({ autoAnswer: true });
-    await runOneExchange(self, partner, {
-      ...h.deps,
-      fetchTurn: async (source, shape) => {
-        reads.push(`${source.sessionId}:${shape}`);
-        return { ...h.turns[source.sessionId] };
-      },
-    });
-    // A read of our own cell happens after the partner has been read, not only at the start.
-    expect(reads.indexOf("A:exchange", 1)).toBeGreaterThan(reads.indexOf("B:reply"));
+    h.switchSession();
+    const { outcome } = await runOneExchange(self, partner, h.deps);
+    expect(outcome).toBe("session-changed");
+    expect(h.submitted).toEqual([]);
   });
 });
