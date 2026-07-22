@@ -29,7 +29,8 @@ import {
   titleInFlight,
 } from "./registry.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
-import { nextActivity, sessionRow, shouldRefreshReply } from "./activity-transition.js";
+import { sessionRow, shouldRefreshReply } from "./activity-transition.js";
+import { flagEffect, type ActivityFlag } from "./activity-flag.js";
 import { readLatestResponse } from "./session-reads.js";
 import { cleanupSessionSettings } from "./session-settings.js";
 import { cleanupSandbox } from "../infra/sandbox.js";
@@ -169,38 +170,18 @@ function publishActivity(deps: SessionLifecycleDeps, id: string) {
   deps.publish(SESSIONS_CHANNEL, row);
 }
 
-// Claude is thinking (UserPromptSubmit) until it finishes (Stop). No-op (and no
-// publish) when the state is unchanged.
-function setWorking(deps: SessionLifecycleDeps, id: string, working: boolean, event?: string) {
-  const next = nextActivity(activity.get(id), { working }, event, Date.now());
-  if (!next) return;
-  activity.set(id, next);
+// Set a session's working (thinking, UserPromptSubmit→Stop) or waiting (needs the user)
+// flag, publish the change, persist it, and re-arm the reap on the edge that calls for it.
+// A no-op when the flag's value did not actually move — flagEffect returns null and every
+// hook calls through here, so an unchanged publish would flood the socket.
+function setFlag(deps: SessionLifecycleDeps, id: string, flag: ActivityFlag, value: boolean, event?: string) {
+  const effect = flagEffect(activity.get(id), flag, value, event, Date.now());
+  if (!effect.next) return;
+  activity.set(id, effect.next);
   publishActivity(deps, id);
-  // Persist `working` so an in-progress turn survives a restart (see ACTIVITY_STATE_FILE).
+  // Persist so an in-progress turn / the blocked-or-done set survives a restart (ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
-
-  // A background session (no attached client) that just finished a turn is no
-  // longer `working`. Don't kill it outright — if it ended its turn to ask the
-  // user something (it'll be flagged `waiting`), reaping now would lose the task
-  // before the user can answer. Arm a reap whose grace matches its state.
-  if (!working) armReapForDetached(deps, id);
-}
-
-// A background session needs the user's attention: it is waiting for input
-// (Notification: permission / question / idle) or has finished a turn with
-// output the user hasn't seen (Stop). Cleared when brought to the foreground
-// (see the WebSocket connection handler).
-function setWaiting(deps: SessionLifecycleDeps, id: string, waiting: boolean, event?: string) {
-  const next = nextActivity(activity.get(id), { waiting }, event, Date.now());
-  if (!next) return;
-  activity.set(id, next);
-  publishActivity(deps, id);
-  // Persist the blocked/done set so it survives a server restart (see ACTIVITY_STATE_FILE).
-  persistActivityState((id) => hiddenSessions.has(id));
-
-  // A detached session that just started needing the user escalates from the short
-  // idle grace to the long one — re-arm so it isn't reaped before they can return.
-  if (waiting) armReapForDetached(deps, id);
+  if (effect.rearmReap) armReapForDetached(deps, id);
 }
 
 export function createSessionLifecycle(deps: SessionLifecycleDeps) {
@@ -211,7 +192,7 @@ export function createSessionLifecycle(deps: SessionLifecycleDeps) {
     armReapForDetached: (id: string) => armReapForDetached(deps, id),
     reap: (id: string) => reap(deps, id),
     publishActivity: (id: string) => publishActivity(deps, id),
-    setWorking: (id: string, working: boolean, event?: string) => setWorking(deps, id, working, event),
-    setWaiting: (id: string, waiting: boolean, event?: string) => setWaiting(deps, id, waiting, event),
+    setWorking: (id: string, working: boolean, event?: string) => setFlag(deps, id, "working", working, event),
+    setWaiting: (id: string, waiting: boolean, event?: string) => setFlag(deps, id, "waiting", waiting, event),
   };
 }
