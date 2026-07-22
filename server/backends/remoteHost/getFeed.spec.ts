@@ -58,7 +58,7 @@ describe("createRemoteHostHandlers · getFeed", () => {
       spawnChat: () => ({ chatId: "x" }),
       ingest: async () => [],
       listTerminalSessions: async () => [],
-      captureTerminalScreen: async () => "",
+      captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
       writeToSession: () => false,
     });
   });

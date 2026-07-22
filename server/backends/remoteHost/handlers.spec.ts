@@ -9,7 +9,7 @@ import { initCollectionsBackend } from "../collections.js";
 
 const unusedTerminalDeps = {
   listTerminalSessions: async () => [],
-  captureTerminalScreen: async () => "",
+  captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
   writeToSession: () => false,
 };
 

@@ -9,6 +9,8 @@ import {
   type SessionListInput,
 } from "../../../../server/backends/remoteHost/terminalScreen.js";
 
+const ESC = String.fromCharCode(0x1b);
+
 const listInput = (over: Partial<SessionListInput> = {}): SessionListInput => ({
   liveIds: [],
   tmuxIds: [],
@@ -121,22 +123,22 @@ describe("buildSessionList", () => {
 });
 
 const captureDeps = (over: Partial<CaptureScreenDeps> = {}): CaptureScreenDeps => ({
-  capturePane: () => null,
+  captureStyledPane: () => null,
   sourceOf: () => ({ buffer: "buffered", cols: 80, rows: 24 }),
-  render: async ({ buffer }) => `rendered:${buffer}`,
+  render: async ({ buffer }) => [{ text: `rendered:${buffer}`, dim: "" }],
   ...over,
 });
 
 describe("captureSessionScreen", () => {
   it("prefers tmux, which renders the real screen even while detached", async () => {
     const render = vi.fn();
-    const screen = await captureSessionScreen("a", captureDeps({ capturePane: () => "from tmux\n\n", render }));
-    expect(screen).toBe("from tmux");
+    const captured = await captureSessionScreen("a", captureDeps({ captureStyledPane: () => "from tmux\n\n", render }));
+    expect(captured.screen).toBe("from tmux");
     expect(render).not.toHaveBeenCalled();
   });
 
   it("renders the in-process buffer when tmux has no such session", async () => {
-    expect(await captureSessionScreen("a", captureDeps())).toBe("rendered:buffered");
+    expect((await captureSessionScreen("a", captureDeps())).screen).toBe("rendered:buffered");
   });
 
   // The session can end between the phone listing it and reading it.
@@ -145,7 +147,7 @@ describe("captureSessionScreen", () => {
   });
 
   it("passes the terminal's own geometry to the renderer", async () => {
-    const render = vi.fn(async () => "ok");
+    const render = vi.fn(async () => []);
     await captureSessionScreen("a", captureDeps({ sourceOf: () => ({ buffer: "b", cols: 120, rows: 30 }), render }));
     expect(render).toHaveBeenCalledWith({ buffer: "b", cols: 120, rows: 30 });
   });
@@ -153,7 +155,18 @@ describe("captureSessionScreen", () => {
   // An empty pane is a real answer, not a miss — it must not fall through to the buffer.
   it("treats an empty tmux capture as authoritative", async () => {
     const render = vi.fn();
-    expect(await captureSessionScreen("a", captureDeps({ capturePane: () => "", render }))).toBe("");
+    expect((await captureSessionScreen("a", captureDeps({ captureStyledPane: () => "", render }))).screen).toBe("");
     expect(render).not.toHaveBeenCalled();
+  });
+
+  // The phone has no Tab key, so the agent's ghost text has to arrive as its own value.
+  it("hands the agent's dim suggestion over beside the screen", async () => {
+    const styled = `${ESC}[38;5;246m────${ESC}[39m\n${ESC}[39m❯ ${ESC}[2mwrite the tests${ESC}[0m\n${ESC}[38;5;246m────${ESC}[39m`;
+    const captured = await captureSessionScreen("a", captureDeps({ captureStyledPane: () => styled }));
+    expect(captured).toEqual({ screen: "────\n❯ write the tests\n────", suggestion: "write the tests" });
+  });
+
+  it("reports no suggestion when the fallback renderer is the source", async () => {
+    expect((await captureSessionScreen("a", captureDeps())).suggestion).toBe("");
   });
 });

@@ -27,7 +27,7 @@ import {
 } from "../remoteView.js";
 import type { Attachment } from "./ingestAttachments.js";
 import { createTerminalInputSender } from "./terminalInput.js";
-import type { TerminalSessionSummary } from "./terminalScreen.js";
+import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
@@ -39,7 +39,7 @@ export interface RemoteHostHandlerDeps {
   // The phone's remote terminal view (#435) — the picker's list and one session's
   // current screen. Wired in server/index.ts, where the PTY table lives.
   listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
-  captureTerminalScreen: (sessionId: string) => Promise<string>;
+  captureTerminalScreen: (sessionId: string) => Promise<SessionScreen>;
   // Type into one session's live PTY (#445). Returns false when no PTY is attached
   // in this process — a tmux session that outlived a restart stays viewable but not
   // writable from here.
@@ -145,10 +145,13 @@ const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, w
   return {
     listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 
+    // `suggestion` is the agent's own dim ghost text — the phone offers it as a chip,
+    // since it has no Tab key to accept it with (#563).
     getTerminalScreen: async (params: JsonObject) => {
       const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
       if (!sessionId) throw new Error("sessionId is required");
-      return { screen: await captureTerminalScreen(sessionId) };
+      const { screen, suggestion } = await captureTerminalScreen(sessionId);
+      return { screen, suggestion };
     },
 
     // Type a line into the session and press Enter, as if the user were at the

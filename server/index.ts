@@ -25,7 +25,7 @@ import {
   tmuxListSessionIds,
   tmuxPaneCommand,
   tmuxAttachedClientCount,
-  tmuxCapturePane,
+  tmuxCaptureStyledPane,
   isResumableTmuxSession,
 } from "./infra/tmux.js";
 import { mountTmuxRoutes } from "./infra/tmux-routes.js";
@@ -1136,7 +1136,7 @@ const remoteHostWriteToSession = (sessionId: string, chunk: string): boolean => 
 
 const remoteHostCaptureTerminalScreen = (sessionId: string) =>
   captureSessionScreen(sessionId, {
-    capturePane: tmuxCapturePane,
+    captureStyledPane: tmuxCaptureStyledPane,
     sourceOf: (id) => {
       const entry = ptys.get(id);
       return entry ? { buffer: entry.buffer, cols: entry.term.cols, rows: entry.term.rows } : undefined;
