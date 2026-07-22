@@ -13,6 +13,7 @@ import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
+import { gridStatusSummary } from "./gridTabs";
 
 // The standard header, shared by the single (App.vue) and grid (GridView.vue) views so
 // both show one identical toolbar. Every launcher button now just pushes a route — the
@@ -27,17 +28,9 @@ const emit = defineEmits<{ (e: "add-terminal" | "toggle-sort" | "settings"): voi
 const route = useRoute();
 // Grid-wide, at-a-glance tally: how many cells are blocked (need input) / done
 // (review) / working, across every page. Shown only when something is running.
-const summaryTitle = computed(() => {
-  const c = props.statusCounts;
-  if (!c) return "";
-  const parts: string[] = [];
-  if (c.blocked) parts.push(`${c.blocked} need input`);
-  if (c.done) parts.push(`${c.done} done (review)`);
-  if (c.working) parts.push(`${c.working} working`);
-  if (c.idle) parts.push(`${c.idle} idle`);
-  return parts.join(" · ");
-});
-const hasSummary = computed(() => !!props.statusCounts && props.statusCounts.blocked + props.statusCounts.done + props.statusCounts.working > 0);
+const summary = computed(() => gridStatusSummary(props.statusCounts));
+const summaryTitle = computed(() => summary.value.title);
+const hasSummary = computed(() => summary.value.show);
 const { shortcuts } = useShortcuts();
 const { view: browseView } = useCollectionBrowse();
 const { isOpen: accountingOpen } = useAccountingView();
