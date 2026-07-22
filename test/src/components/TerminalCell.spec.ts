@@ -552,6 +552,33 @@ describe("TerminalCell", () => {
     expect(badge.text()).toContain("3.4k"); // output 3400
   });
 
+  // Codex on #642: a guard that only skips an unrenderable payload leaves the badge showing
+  // the previous turn's numbers as if they were current. The server always sends both fields
+  // (zeroed when it has nothing to report), so an unrenderable one means something is broken
+  // — and the honest answer is to stop claiming a number.
+  it("hides the usage badge when a later payload is unrenderable", async () => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    let usage: unknown = { inputTokens: 1200, outputTokens: 3400, cacheReadTokens: 800, cacheCreationTokens: 0 };
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage }) };
+    }) as unknown as typeof fetch;
+    const w = mountCell(id);
+    await flushPromises();
+    expect(w.find('[data-testid="cell-usage"]').exists()).toBe(true);
+
+    // A field the server could not compute. The refresh fires on working → settled.
+    usage = { inputTokens: 1200, outputTokens: null, cacheReadTokens: 800, cacheCreationTokens: 0 };
+    captured?.({ id, working: true, waiting: false });
+    await flushPromises();
+    captured?.({ id, working: false, waiting: false, event: "Stop" });
+    await flushPromises();
+
+    expect(w.find('[data-testid="cell-usage"]').exists()).toBe(false);
+  });
+
   it("shows the model/context badge from /api/session/:id context", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {

@@ -214,8 +214,12 @@ async function loadInitial(id: string) {
     // while the fetch was in flight — don't leak old status into the new state.
     if (id === sessionId.value) {
       applyActivity(data);
-      if (isCellUsage(data.usage)) usage.value = data.usage;
-      if (isCellContext(data.context)) context.value = data.context;
+      // Cleared rather than kept when the shape is wrong: the server always sends both
+      // (EMPTY_USAGE / EMPTY_CONTEXT when it has nothing to report), so an unrenderable one
+      // means something is actually broken — and a badge showing the previous turn's numbers
+      // as if they were current is the failure this guard exists to stop.
+      usage.value = isCellUsage(data.usage) ? data.usage : null;
+      context.value = isCellContext(data.context) ? data.context : null;
     }
   } catch {
     // best-effort — pub/sub will fill it in on the next event
@@ -233,8 +237,8 @@ async function refreshUsage() {
     if (!res.ok) return;
     const data = await res.json();
     if (id !== sessionId.value) return;
-    if (isCellUsage(data.usage)) usage.value = data.usage;
-    if (isCellContext(data.context)) context.value = data.context;
+    usage.value = isCellUsage(data.usage) ? data.usage : null;
+    context.value = isCellContext(data.context) ? data.context : null;
   } catch {
     // best-effort
   }
