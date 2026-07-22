@@ -14,6 +14,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchLatestVersion, isNewerVersion } from "./update-check.js";
+import { chooseCwd, parsePortArg } from "./cli-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -220,35 +221,23 @@ function printReadyBanner(url) {
   console.log(`${bar}\n`);
 }
 
-function parsePortArg(args) {
-  const idx = args.indexOf("--port");
-  if (idx === -1) return { requestedPort: DEFAULT_PORT, portExplicit: false };
-  const raw = args[idx + 1];
-  const parsed = Number.parseInt(raw ?? "", 10);
-  if (!Number.isInteger(parsed) || String(parsed) !== raw || parsed < 1 || parsed > 65535) {
-    error(`Invalid --port value: "${raw ?? ""}" (expected integer 1..65535)`);
+// The two flag decisions live in cli-args.js so they can be checked without a process to
+// exit; this turns a decision into the message and the exit.
+function decideOrExit(choice) {
+  if ("error" in choice) {
+    error(choice.error);
     process.exit(1);
   }
-  return { requestedPort: parsed, portExplicit: true };
+  return choice;
 }
 
 // Resolve the workspace directory claude runs in (and whose sessions the sidebar
-// lists). Precedence: --cwd (relative paths allowed) > CLAUDE_CWD env > the
-// directory npx was run from. Always returned absolute. An explicit --cwd that
-// isn't an existing directory is a hard error (catches typos before launch).
+// lists), always absolute. An explicit --cwd that isn't an existing directory is a hard
+// error (catches typos before launch); an inherited one is the workspace the server creates.
 function resolveCwd(args) {
-  const idx = args.indexOf("--cwd");
-  let flagValue;
-  if (idx !== -1) {
-    flagValue = args[idx + 1];
-    if (flagValue === undefined || flagValue.startsWith("-")) {
-      error("--cwd requires a directory path");
-      process.exit(1);
-    }
-  }
-  const chosen = flagValue ?? process.env.CLAUDE_CWD ?? ".";
+  const { path: chosen, mustExist } = decideOrExit(chooseCwd(args, process.env));
   const abs = resolve(process.cwd(), chosen);
-  if (idx !== -1 && (!existsSync(abs) || !statSync(abs).isDirectory())) {
+  if (mustExist && (!existsSync(abs) || !statSync(abs).isDirectory())) {
     error(`--cwd is not a directory: ${abs}`);
     process.exit(1);
   }
@@ -369,7 +358,7 @@ async function main() {
     process.exit(1);
   }
 
-  const { requestedPort, portExplicit } = parsePortArg(args);
+  const { port: requestedPort, explicit: portExplicit } = decideOrExit(parsePortArg(args, DEFAULT_PORT));
   const noOpen = args.includes("--no-open");
   const cwd = resolveCwd(args);
   log(`Workspace: ${cwd}`);
