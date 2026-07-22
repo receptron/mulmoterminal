@@ -14,14 +14,13 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { fetchLatestVersion, isNewerVersion } from "./update-check.js";
-import { chooseCwd, parsePortArg } from "./cli-args.js";
+import { chooseCwd, parsePortArg, portInUseMessage } from "./cli-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
 const SERVER_ENTRY = join(PKG_DIR, "server", "index.ts");
 const DEFAULT_PORT = 34567;
 const READY_TIMEOUT_MS = 15_000;
-const MAX_BIND_RETRIES = 5;
 // Server exit code meaning "port taken at bind time" — keep in sync with
 // server/index.ts (PORT_IN_USE_EXIT_CODE).
 const PORT_IN_USE_EXIT_CODE = 75;
@@ -165,23 +164,6 @@ function isPortFree(port) {
   });
 }
 
-// Ask the OS for a free port (listen on 0) and return the one it assigned, or
-// null. An effectively-random fallback when the preferred port is taken; the
-// bind-retry in main() closes the small probe-to-bind race so concurrent starts
-// don't clash.
-function findEphemeralPort() {
-  return new Promise((resolve) => {
-    const probe = createServer();
-    probe.once("error", () => resolve(null));
-    probe.once("listening", () => {
-      const addr = probe.address();
-      const assigned = addr && typeof addr === "object" ? addr.port : null;
-      probe.close(() => resolve(assigned));
-    });
-    probe.listen(0);
-  });
-}
-
 // Poll the server until it answers, then call onReady; give up after the timeout
 // so the launcher never hangs on a crash loop. Returns a cancel function — a
 // raced/abandoned attempt stops polling so it can't fire a stale banner.
@@ -246,17 +228,10 @@ function resolveCwd(args) {
 
 async function choosePort(requested, explicit) {
   if (await isPortFree(requested)) return requested;
-  if (explicit) {
-    error(`Port ${requested} is already in use. Stop the other process or pick a different --port.`);
-    process.exit(1);
-  }
-  const fallback = await findEphemeralPort();
-  if (fallback === null) {
-    error(`Port ${requested} is in use and no free port could be found.`);
-    process.exit(1);
-  }
-  log(`Port ${requested} busy → using ${fallback} instead. (Pass --port <N> to pin.)`);
-  return fallback;
+  // No silent fallback to another port: that is what quietly puts a second server on the
+  // same home directory, where the two disagree about state neither sees the other change.
+  error(portInUseMessage(requested, explicit));
+  process.exit(1);
 }
 
 // Spawn the server on `port` and report the child via `onChild` (so signal
@@ -315,7 +290,7 @@ Commands:
 
 Options:
   --cwd <dir>       Working directory claude runs in (default: current directory; relative paths allowed)
-  --port <number>   Server port (default: ${DEFAULT_PORT}; a free port is chosen if it's busy)
+  --port <number>   Server port (default: ${DEFAULT_PORT}; startup stops if it is in use)
   --no-open         Don't open the browser automatically
   --version         Show version
   --help            Show this help
@@ -372,27 +347,14 @@ async function main() {
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 
-  // Start on the chosen port; if the server loses the rare probe-to-bind race,
-  // fall back to a fresh OS-assigned port and retry. An explicit --port is not
-  // second-guessed. `runServer` only returns when the port was raced.
-  let port = await choosePort(requestedPort, portExplicit);
-  for (let attempt = 0; attempt <= MAX_BIND_RETRIES; attempt++) {
-    await runServer(port, noOpen, cwd, (c) => {
-      child = c;
-    });
-    if (portExplicit) {
-      error(`Port ${port} is already in use. Stop the other process or pick a different --port.`);
-      process.exit(1);
-    }
-    const next = await findEphemeralPort();
-    if (next === null) {
-      error("No free port available to retry on.");
-      process.exit(1);
-    }
-    log(`Port ${port} was taken at bind time → retrying on ${next}.`);
-    port = next;
-  }
-  error(`Could not bind a free port after ${MAX_BIND_RETRIES + 1} attempts.`);
+  // The probe above can still lose to something binding the port in the same instant, in
+  // which case the server exits 75 and runServer returns. Same answer as the probe: say who
+  // has it rather than moving to a port nobody asked for.
+  const port = await choosePort(requestedPort, portExplicit);
+  await runServer(port, noOpen, cwd, (c) => {
+    child = c;
+  });
+  error(portInUseMessage(port, portExplicit));
   process.exit(1);
 }
 
