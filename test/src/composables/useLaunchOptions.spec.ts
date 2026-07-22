@@ -2,6 +2,7 @@
 // asks the server once. That state has to be reset between tests, hence the fresh import
 // per case rather than a shared top-level one.
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { flushPromises } from "@vue/test-utils";
 
 const READY = { providers: [{ id: "openrouter", label: "OpenRouter", ready: true, tokenEnv: "OPENROUTER_API_KEY", models: [] }], anyReady: true };
 
@@ -42,6 +43,21 @@ describe("useLaunchOptions", () => {
     const { useLaunchOptions } = await freshModule();
     const { launchOptions } = useLaunchOptions();
     await vi.waitFor(() => expect(launchOptions.value.anyReady).toBe(true));
+    useLaunchOptions();
+    useLaunchOptions();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  // "Nothing is configured" is an answer, and it is the one a fresh install gets. Since it
+  // looks exactly like the failure fallback, only the success flag separates them — take it
+  // for a failure and a grid would ask once per cell forever.
+  it("treats an empty list as an answer, not a failure", async () => {
+    const fetchMock = ok({ providers: [], anyReady: false });
+    vi.stubGlobal("fetch", fetchMock);
+    const { useLaunchOptions } = await freshModule();
+    const { launchOptions } = useLaunchOptions();
+    await flushPromises();
+    expect(launchOptions.value).toEqual({ providers: [], anyReady: false });
     useLaunchOptions();
     useLaunchOptions();
     expect(fetchMock).toHaveBeenCalledTimes(1);
