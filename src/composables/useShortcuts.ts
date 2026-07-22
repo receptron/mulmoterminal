@@ -9,6 +9,7 @@
 // with rollback, and serialized so overlapping replace-all PUTs can't reorder.
 import { computed, ref, type ComputedRef } from "vue";
 import { sameShortcut, type Shortcut, type ShortcutKind } from "../types/shortcuts";
+import { reconcileShortcuts } from "./reconcileShortcuts";
 import { fetchJson } from "../utils/fetchJson";
 
 const shortcuts = ref<Shortcut[]>([]);
@@ -107,21 +108,7 @@ function reconcile(kind: ShortcutKind, live: { slug: string; title: string; icon
   return enqueue(async () => {
     await load();
     if (!loaded.value) return;
-    const liveBySlug = new Map(live.map((entry) => [entry.slug, entry]));
-    let drifted = false;
-    const next = shortcuts.value.flatMap((entry) => {
-      if (entry.kind !== kind) return [entry];
-      const fresh = liveBySlug.get(entry.slug);
-      if (!fresh) {
-        drifted = true;
-        return [];
-      }
-      if (fresh.title !== entry.title || fresh.icon !== entry.icon) {
-        drifted = true;
-        return [{ ...entry, title: fresh.title, icon: fresh.icon }];
-      }
-      return [entry];
-    });
+    const { next, drifted } = reconcileShortcuts(shortcuts.value, kind, live);
     if (drifted) await persist(next, shortcuts.value);
   });
 }
