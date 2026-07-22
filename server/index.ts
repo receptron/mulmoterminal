@@ -59,7 +59,7 @@ import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
 import { buildCodexArgs } from "./agents/codex-args.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
-import { listCodexSessions, codexRolloutExists } from "./agents/codex-sessions.js";
+import { listCodexSessions, codexRolloutExists, codexRolloutPath } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { discoverSkills, applySkillFilter } from "./backends/remoteHost/skills.js";
 import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
@@ -88,6 +88,9 @@ import {
 } from "./session/transcript.js";
 import { classifyWorkPhase, type WorkPhase } from "./session/workPhase.js";
 import { createFileCache, type FileStamp } from "./session/file-cache.js";
+import { sanitizeDraftText } from "./session/pty-text.js";
+import { lastTurnFromClaudeParsed, lastTurnFromCodexRollout, EMPTY_TURN, type LastTurn } from "./session/last-turn.js";
+import { formatHandoff } from "./session/handoff-text.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute, resolveGithubUrl } from "./git/gitRemote.js";
 import { phaseForRepoBranch } from "./git/prPhase.js";
@@ -1705,6 +1708,42 @@ app.get("/api/transcript/timeline", async (req, res) => {
   res.json(await sessionTimeline(cwd, session));
 });
 
+// A session's last completed exchange, already rendered as the text to paste into
+// ANOTHER session's input box. Reading the agent's own log instead of the terminal's
+// screen buffer is the whole point: no ANSI frames, no spinner debris, no lines lost
+// to scrollback, and a turn boundary that is recorded rather than guessed. The origin
+// line is composed here from what the server knows, so nothing the client sends ends
+// up inside the text another agent will read.
+async function claudeLastTurn(cwd: string, id: string): Promise<LastTurn> {
+  try {
+    return lastTurnFromClaudeParsed(parseJsonl(await fs.readFile(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8")));
+  } catch {
+    return EMPTY_TURN; // no transcript on disk yet
+  }
+}
+
+async function codexLastTurn(sessionKey: string): Promise<LastTurn> {
+  const rolloutId = codexResumeIdFor(sessionKey);
+  const file = rolloutId ? codexRolloutPath(codexSessionsRoot(), rolloutId) : null;
+  if (!file) return EMPTY_TURN;
+  try {
+    return lastTurnFromCodexRollout(await fs.readFile(file, "utf8"));
+  } catch {
+    return EMPTY_TURN;
+  }
+}
+
+// Under /api/transcript, not /api/session: the `/api/session/:id` route above would
+// otherwise match first and read "last-turn" as the session id.
+app.get("/api/transcript/last-turn", async (req, res) => {
+  const { session } = req.query;
+  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
+  const agent = req.query.agent === "codex" ? "codex" : "claude";
+  const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
+  const turn = agent === "codex" ? await codexLastTurn(session) : await claudeLastTurn(cwd, session);
+  res.json({ ...turn, text: formatHandoff({ label: agent, cwd }, turn) });
+});
+
 // Stream a directory's custom attention sound. The path never comes from the
 // request — it's read from that dir's .mulmoterminal.json and confined to the dir —
 // so there's no traversal surface. 404 when unset/missing (the client falls back to
@@ -2171,16 +2210,6 @@ const DRAFT_FALLBACK_MS = 6000;
 // auto-run prompt typed-but-unsent. Send the submitting Enter as a SEPARATE chunk a
 // beat after the paste so it actually registers.
 const DRAFT_SUBMIT_MS = 150;
-
-// Sanitize a draft before typing it into a PTY: strip ALL control bytes (C0/C1 —
-// ESC, Ctrl-C, CR/LF, and an embedded bracketed-paste terminator) so untrusted draft
-// content can't inject terminal control sequences that break out of the paste and
-// submit/interrupt. Only printable text survives, with whitespace collapsed.
-// eslint-disable-next-line no-control-regex -- intentional: match terminal control bytes (C0/C1) to strip them
-const DRAFT_CONTROL_BYTES_RE = /[\u0000-\u001F\u007F-\u009F]+/g;
-function sanitizeDraftText(text: string): string {
-  return text.replace(DRAFT_CONTROL_BYTES_RE, " ").replace(/\s+/g, " ").trim();
-}
 
 // Spawn a fresh claude PTY for this session, register it, and wire its output /
 // exit back to the browser socket. `ws` may be null for a session spawned without
