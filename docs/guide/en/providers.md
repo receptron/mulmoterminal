@@ -198,6 +198,10 @@ In that project's `.mulmoterminal.json`:
 
 Omit `provider` and give only `model` to pick a different model **on Anthropic itself**.
 
+Ids may contain letters, digits and `. _ : / -` — the same rule as a provider's `id`. A value shaped
+differently (whitespace, a leading dash) makes sessions in that directory **refuse to start**, rather
+than quietly running on some other model. The directory's other settings still load.
+
 ### What happens on resume
 {: .no_toc }
 
