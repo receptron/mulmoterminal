@@ -51,6 +51,7 @@ import { closeWithError } from "./session/ws-frames.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
+import { createTranslationWorker, failPendingTranslation, submitTranslation } from "./session/translation-worker.js";
 import { createConnectionHandlers, handleCommandFrame } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
@@ -78,7 +79,6 @@ import { reapDecisionFor } from "./session/reap-policy.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
-import { buildTranslationPrompt, isValidTranslationResult } from "./session/translation-prompt.js";
 import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
 import { claudeOnDiskSessionIds, latestUserPrompt, sessionExistsOnDisk, LAST_RESPONSE_MAX } from "./session/session-reads.js";
@@ -159,13 +159,6 @@ initWorkspaceSetup({ workspace: CLAUDE_CWD });
 // launched terminal can run `/mulmoterminal-config` to author a .mulmoterminal.json.
 // Best-effort + never clobbers a user's own same-named skill (see install-config-skill.ts).
 installConfigSkill();
-
-// sessionId → settlers for a hidden translation worker's in-flight request.
-// `resolve` is called from POST /api/translation/submit when the worker reports its
-// answer (via the submitTranslation GUI tool); `reject` from the Stop hook if the
-// worker ends its turn WITHOUT submitting (a misbehaved turn), so we fail fast
-// instead of waiting out the full timeout.
-const pendingTranslations = new Map<string, { resolve: (translations: string[]) => void; reject: (err: Error) => void }>();
 
 // Only same-machine browser origins may open the terminal / pub-sub sockets, so
 // a malicious website the user visits can't drive the local Claude PTY (a
@@ -499,6 +492,16 @@ const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
 const { spawnCodexPty } = createCodexSpawner(spawnDeps);
 const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
+// The hidden translation worker (session/translation-worker.ts). It drives a headless
+// claude session, so it needs the spawner above and the reap this file owns.
+const { translateViaHiddenChat } = createTranslationWorker({
+  reap: (id) => reap(id),
+  spawnHiddenChat: (sessionId, prompt) => {
+    // ws=null → headless; the worker buffers output nobody reads. Default cwd = CLAUDE_CWD (trusted).
+    spawnClaudePty(sessionId, null, null, prompt);
+  },
+});
+
 const app = express();
 // Generous body limit: PostToolUse hook payloads carry the tool's full output
 // (a big Read/Bash result can blow past Express's 100kb default, which would 413
@@ -672,12 +675,10 @@ app.post("/api/translation/submit", (req, res) => {
   if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) {
     return res.status(400).json({ error: "invalid sessionId" });
   }
-  const pending = pendingTranslations.get(sessionId);
-  if (!pending) {
-    // No in-flight request for this id (already settled / timed out / not a worker).
+  // No in-flight request for this id (already settled / timed out / not a worker).
+  if (!submitTranslation(sessionId, translations)) {
     return res.status(404).json({ error: "no pending translation for this session" });
   }
-  pending.resolve(Array.isArray(translations) ? (translations as string[]) : []);
   return res.json({ ok: true });
 });
 
@@ -944,7 +945,7 @@ app.post("/api/hook", async (req, res) => {
     // A hidden translation worker that ends its turn while still pending never called
     // submitTranslation — fail it now rather than hang until the timeout. (When it DID
     // submit, the entry is already resolved and this reject is a no-op.)
-    if (event === "Stop") pendingTranslations.get(sessionId)?.reject(new Error("[translation] worker ended its turn without calling submitTranslation"));
+    if (event === "Stop") failPendingTranslation(sessionId, "[translation] worker ended its turn without calling submitTranslation");
     console.log(`[hook] ${event} for ${sessionId}`);
   }
   res.json({ ok: true });
@@ -1262,82 +1263,6 @@ server.on("upgrade", (req, socket, head) => {
   }
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
 });
-
-// How long to wait for a hidden translation worker to call submitTranslation before
-// giving up (cold claude startup + one short turn). Generous; the result is cached.
-const TRANSLATION_TIMEOUT_MS = 120_000;
-
-// Tear down a finished/failed translation worker: kill any lingering pty and drop its
-// bookkeeping + transcript so the activity maps and the workspace don't accumulate
-// throwaway translation sessions.
-function cleanupTranslationWorker(sessionId: string): void {
-  reap(sessionId); // idempotent — already reaped if Stop fired
-  activity.delete(sessionId);
-  hiddenSessions.delete(sessionId);
-  translationWorkerIds.delete(sessionId);
-  lastPrompts.delete(sessionId);
-  pendingTranslations.delete(sessionId);
-  fs.rm(path.join(projectSessionsDir(CLAUDE_CWD), `${sessionId}.jsonl`), { force: true }).catch(() => {});
-}
-
-// Most a worker request retries before failing. The model occasionally answers in
-// text instead of calling submitTranslation (caught fast by the Stop hook); a fresh
-// worker almost always succeeds. Misses are cached, so retries are rare in practice.
-const TRANSLATION_MAX_ATTEMPTS = 3;
-
-// Run ONE hidden translation worker: spawn it, wait for it to call submitTranslation
-// (or fail via the Stop hook / timeout), validate, and tear it down.
-async function runTranslationWorkerOnce(prompt: string, expected: number): Promise<string[]> {
-  const sessionId = randomUUID();
-  hiddenSessions.add(sessionId);
-  translationWorkerIds.add(sessionId);
-
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const submitted = new Promise<string[]>((resolve, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(`[translation] hidden chat timed out after ${TRANSLATION_TIMEOUT_MS}ms`)), TRANSLATION_TIMEOUT_MS);
-    pendingTranslations.set(sessionId, { resolve, reject });
-  });
-
-  try {
-    // ws=null → headless; the worker buffers output nobody reads. Default cwd =
-    // CLAUDE_CWD (trusted). submitTranslation (or the Stop hook) settles `submitted`.
-    spawnClaudePty(sessionId, null, null, prompt);
-    // spawnClaudePty registers a pending session + emits a "created" event; drop the
-    // pending entry now so this internal worker never surfaces as a sidebar row (the
-    // /api/sessions filter on translationWorkerIds covers its on-disk transcript).
-    knownSessions.delete(sessionId);
-    const translations: unknown = await submitted;
-    if (!isValidTranslationResult(translations, expected)) {
-      const got = Array.isArray(translations) ? `${translations.length} strings` : "a non-array";
-      throw new Error(`[translation] submitTranslation returned ${got} for ${expected} inputs`);
-    }
-    return translations;
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
-    cleanupTranslationWorker(sessionId);
-  }
-}
-
-// The injected LLM step for /api/translation. Drives MulmoTerminal's EXISTING hidden
-// background chat (spawnClaudePty) — explicitly NOT `claude -p`, which is banned in
-// MulmoTerminal. It seeds a headless worker that translates the strings and reports
-// them by calling the worker-only `submitTranslation` GUI tool (POST
-// /api/translation/submit). Retries a fresh worker if one answers without submitting.
-async function translateViaHiddenChat(targetLanguage: string, sentences: readonly string[]): Promise<string[]> {
-  const expected = sentences.length;
-  const prompt = buildTranslationPrompt(targetLanguage, sentences);
-
-  let lastErr: unknown;
-  for (let attempt = 1; attempt <= TRANSLATION_MAX_ATTEMPTS; attempt++) {
-    try {
-      return await runTranslationWorkerOnce(prompt, expected);
-    } catch (err) {
-      lastErr = err;
-      console.warn(`[translation] attempt ${attempt}/${TRANSLATION_MAX_ATTEMPTS} failed: ${messageOf(err)}`);
-    }
-  }
-  throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
-}
 
 // Pick the effective session id for a /ws connection: reattach a same-process live pty,
 // resume an on-disk transcript, attach a live tmux session, else a fresh id. The flag
