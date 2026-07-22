@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { pickHandoffTargets, pullLastTurn, type HandoffDeps, type HandoffTarget } from "../../../src/composables/useHandoff";
-import type { SlotInfo } from "../../../src/composables/useTerminalConnections";
+import type { SlotInfo } from "../../../src/composables/readableSlot";
 
 const slot = (key: string, agent: "claude" | "codex" = "claude", cwd: string | null = "/Users/me/work/proj", sessionId = `sess-${key}`): SlotInfo => ({
   key,
