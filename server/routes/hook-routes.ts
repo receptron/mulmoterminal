@@ -12,6 +12,7 @@ import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript.js";
 import { failPendingTranslation } from "../session/translation-worker.js";
+import { publishesDirConfig, toolHookRecord } from "../session/tool-hook.js";
 
 // The header shows one line, so a longer prompt is stored truncated rather than in full.
 
@@ -58,24 +59,15 @@ interface HookToolPayload {
   duration_ms?: number;
 }
 
-// Pre/PostToolUse hooks feed the per-session tool-call history. A failed tool
-// fires PostToolUseFailure (NOT PostToolUse), so both complete the entry.
+// Pre/PostToolUse hooks feed the per-session tool-call history; toolHookRecord decides what
+// each event means and this applies it.
 async function handleToolHook(deps: HookDeps, sessionId: string, event: string, p: HookToolPayload) {
-  if (event === "PreToolUse") {
-    await deps.recordToolCallStart(sessionId, { toolUseId: p.tool_use_id, toolName: p.tool_name, toolInput: p.tool_input });
-  } else if (event === "PostToolUse" || event === "PostToolUseFailure") {
-    await deps.recordToolCallEnd(sessionId, {
-      toolUseId: p.tool_use_id,
-      toolName: p.tool_name,
-      toolInput: p.tool_input,
-      toolOutput: p.tool_output ?? p.tool_response,
-      durationMs: p.duration_ms,
-      status: event === "PostToolUseFailure" ? "failed" : "completed",
-    });
-  }
+  const record = toolHookRecord(event, p);
+  if (record?.phase === "start") await deps.recordToolCallStart(sessionId, record.call);
+  if (record?.phase === "end") await deps.recordToolCallEnd(sessionId, record.call);
   // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
   // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
-  if (event === "PostToolUse") {
+  if (publishesDirConfig(event)) {
     const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input, ptys.get(sessionId)?.cwd ?? null);
     if (cwd) deps.publishDirConfig(cwd);
   }
