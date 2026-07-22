@@ -13,7 +13,7 @@ import { mountAllRoutes, allowedToolNames, toolSummaries } from "./infra/plugins
 import { buildGuiMcpServer } from "./mcp/broker.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
-import { mountConfigRoutes, getLaunchers, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
+import { mountConfigRoutes, getUserMcpServers, getHeaderConfig, getPushEnabled, getWorklogConfig } from "./config/config-routes.js";
 import { sendWebPush } from "./infra/web-push.js";
 import { buildHeaderContext, loadHeaderConfig } from "./config/header-context.js";
 import { resolveButtonCommand } from "./config/header-resolve.js";
@@ -38,22 +38,23 @@ import {
   refreshHostKeychainIfExpired,
   cleanupSandbox,
   rewriteLoopbackForDocker,
-  SANDBOX_HOST,
 } from "./infra/sandbox.js";
 import { dirConfigWriteTarget } from "./config/dir-config.js";
 import { resolveScript } from "./files/scripts.js";
-import { buildClaudeArgs } from "./agents/claude-args.js";
 import { resolveSession, type SessionResolution } from "./session/session-resolve.js";
 import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId, type PushKind } from "./session/activity-hook.js";
 import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
 import { hasErrnoCode, messageOf } from "./errors.js";
 import type { PtyEntry } from "./session/types.js";
-import { spawnPty, ptySpawn, spawnSandboxEntry, sandboxWouldRun } from "./session/pty-spawn.js";
-import { attachDraftInjection, attachCodexAutoRun } from "./session/draft-injection.js";
+import { sandboxWouldRun } from "./session/pty-spawn.js";
+import { closeWithError, isResizeFrame } from "./session/ws-frames.js";
+import { createClaudeSpawner } from "./session/spawn-claude.js";
+import { createCodexSpawner } from "./session/spawn-codex.js";
+import { createShellSpawners } from "./session/spawn-shell.js";
+import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
   activity,
   aiTitles,
-  claimedCodexRollouts,
   codexRolloutIds,
   devTerminalSessions,
   devTerminalSessionsHydrated,
@@ -85,11 +86,10 @@ import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
-import { buildCodexArgs } from "./agents/codex-args.js";
-import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "./agents/codex-session.js";
+import { codexSessionsRoot } from "./agents/codex-session.js";
 import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
-import { appendBoundedOutput, stripTerminalQueries } from "./session/terminal-replay.js";
+import { stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
@@ -470,6 +470,25 @@ function mcpConfigJson(sessionId: string, host: string = "127.0.0.1", sandbox: b
   mcpServers["mulmoterminal-gui"] = { type: "http", url: `http://${host}:${PORT}/api/mcp/${sessionId}` };
   return JSON.stringify({ mcpServers });
 }
+
+// The PTY spawners (session/spawn-*.ts). They take what index.ts still owns — the session
+// lifecycle it drives and the config it builds the hook/MCP json from — as deps.
+const spawnDeps: SpawnDeps = {
+  claudeBin: CLAUDE_BIN,
+  codexBin: CODEX_BIN,
+  codexModel: CODEX_MODEL,
+  permissionMode: CLAUDE_PERMISSION_MODE,
+  guiMcpTools: GUI_MCP_TOOLS,
+  outputBufferLimit: OUTPUT_BUFFER_LIMIT,
+  hookSettingsJson,
+  mcpConfigJson,
+  reap: (id) => reap(id),
+  setWorking: (id, working) => setWorking(id, working),
+  publishSessionCreated: (sessionId) => pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" }),
+};
+const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
+const { spawnCodexPty } = createCodexSpawner(spawnDeps);
+const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
 const app = express();
 // Generous body limit: PostToolUse hook payloads carry the tool's full output
@@ -1337,97 +1356,6 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
   throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
 }
 
-// Spawn a fresh claude PTY for this session, register it, and wire its output /
-// exit back to the browser socket. `ws` may be null for a session spawned without
-// a viewer yet (e.g. spawnBackgroundChat) — output just buffers until a client
-// reattaches. `initialPrompt`, when given, is passed to claude as the first turn
-// so the session starts working immediately, before anyone opens it. `draft` is the
-// opposite: it is NOT auto-submitted — once claude's UI is ready the text is typed
-// into the input box (no Enter) so the user can review / edit / send it. Pass one or
-// the other, never both.
-function spawnClaudePty(
-  sessionId: string,
-  resume: string | null,
-  ws: WebSocket | null,
-  initialPrompt?: string,
-  cwd: string = CLAUDE_CWD,
-  attachGuiMcp: boolean = true,
-  draft?: string,
-): PtyEntry {
-  // attachGuiMcp picks the MCP mode (see buildClaudeArgs): the single view (default)
-  // attaches the GUI MCP + --strict-mcp-config (main's classic behavior); the grid's
-  // dev terminals attach neither, so the user's + project's MCP servers load normally.
-  // Only --resume when the session has an on-disk transcript — claude doesn't write
-  // a session's .jsonl until its first prompt, so a started-but-unused session can't
-  // be resumed; we restart fresh (reusing the id via --session-id) instead.
-  // Sandbox only the SINGLE-VIEW interactive session: attachGuiMcp=true excludes grid
-  // dev terminals (?gui=0), and ws!==null excludes hidden background/translation workers.
-  // Falls back to the host spawn if the Docker daemon isn't reachable.
-  const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
-  const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
-  const args = buildClaudeArgs({
-    sessionId,
-    resume,
-    canResume,
-    // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-    settings: hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
-    permissionMode: CLAUDE_PERMISSION_MODE,
-    attachGuiMcp,
-    mcpConfig: mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),
-    // Auto-allow the GUI tools + the user's own configured MCP servers (mcp__<id>), so
-    // their tools don't trip a permission prompt on every call.
-    guiMcpTools: [GUI_MCP_TOOLS, ...getUserMcpServers().map((s) => `mcp__${s.id}`)].join(","),
-  });
-
-  console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
-
-  // Sandbox → run claude inside a fresh container (no tmux). Otherwise the host path:
-  // a live tmux session for this id (survived a restart) reattaches; else create it.
-  let entry: PtyEntry;
-  if (sandbox) {
-    entry = spawnSandboxEntry(sessionId, args, cwd, ws);
-  } else {
-    const { term, tmux } = ptySpawn(sessionId, CLAUDE_BIN, args, cwd, true);
-    console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-    entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
-  }
-  ptys.set(sessionId, entry);
-
-  if (!canResume) {
-    // Brand-new (or restarted-idle) session: surface it in the sidebar before
-    // it's persisted. A spawned session (initialPrompt or a draft) gets a title from
-    // that text so it's recognizable in the sidebar before anyone opens it.
-    const seed = initialPrompt ?? draft;
-    const title = seed ? seed.replace(/\s+/g, " ").trim().slice(0, 60) || "New session" : "New session";
-    knownSessions.set(sessionId, { createdAt: Date.now(), title });
-    pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" });
-  }
-
-  // The auto-run prompt / editable draft is typed into the input box once ready (see
-  // attachDraftInjection) — its scanner is fed the pty output below.
-  const scanForDraftReady = attachDraftInjection(entry, initialPrompt, draft);
-
-  // PTY -> browser (buffering a bounded tail for reattach).
-  entry.term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-    scanForDraftReady(data);
-  });
-
-  entry.term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    // Clear the dot if it died mid-turn, then tear down everything (deletes
-    // ptys/knownSessions/activity and publishes "closed") so a process that
-    // exits on its own — e.g. a brand-new session that never persisted —
-    // doesn't linger in the sidebar.
-    setWorking(sessionId, false);
-    reap(sessionId);
-  });
-
-  return entry;
-}
-
 // browser -> PTY. The protocol is client-controlled, so validate every frame
 // before touching node-pty (bad cols/rows or non-string input can throw).
 function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, sessionId: string) {
@@ -1459,62 +1387,6 @@ function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, session
     // e.g. a write/resize that races the PTY exiting — drop it, never crash.
     console.warn(`[ws] dropped message for ${sessionId}: ${messageOf(err)}`);
   }
-}
-
-// Run an arbitrary shell command in a PTY and relay its I/O to the browser. Unlike
-// spawnClaudePty this is NOT a Claude session — no id, no hooks, no transcript, no
-// reap/grace. It's an ephemeral grid terminal (the Run menu); the caller kills it
-// when the viewer's socket closes.
-function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
-  const isWindows = process.platform === "win32";
-  const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-  const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", command];
-  const term = spawnPty(shell, args, cwd);
-  console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
-
-  term.onData((data) => {
-    sendFrame(ws, { type: "output", data });
-  });
-  term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] command exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(ws, exitCode, signal);
-  });
-  return term;
-}
-
-// Resolve a launcher by its position in the user's configured list — the browser
-// sends only an INDEX (the config is the allowlist), never a raw command.
-function resolveLauncher(index: number): { label: string; command: string } | null {
-  const list = getLaunchers();
-  return Number.isInteger(index) && index >= 0 && index < list.length ? list[index] : null;
-}
-
-// Spawn a configured launcher command as a PERSISTENT, reattachable PTY that shares
-// the Claude session lifecycle (ptys map, reattach, reap grace) but has NO hooks,
-// transcript, or resume. The command is run via the login shell with `exec` so it
-// becomes the single foreground process ($SHELL, codex, etc.) — env vars in the
-// command (e.g. $SHELL) expand, and the process stays interactive in the PTY.
-function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd: string): PtyEntry {
-  const isWindows = process.platform === "win32";
-  const shell = isWindows ? "powershell.exe" : process.env.SHELL || "/bin/bash";
-  const args = isWindows ? ["-NoLogo", "-Command", command] : ["-lc", `exec ${command}`];
-  // Persistent: reattaches a surviving tmux session (command ignored) or creates one.
-  const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
-  console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
-
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "shell" };
-  ptys.set(sessionId, entry);
-
-  term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-  });
-  term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] launcher exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    reap(sessionId);
-  });
-  return entry;
 }
 
 // browser -> command PTY. Like handleClientFrame but for the session-less command
@@ -1713,43 +1585,6 @@ async function startRunTerminal(ws: WebSocket, url: URL): Promise<void> {
   });
 }
 
-// Bounds a resize frame must satisfy before it reaches the PTY: a crafted or buggy
-// client must not be able to ask for a 0-column or absurdly large terminal.
-const MIN_TERM_COLS = 2;
-const MAX_TERM_COLS = 500;
-const MIN_TERM_ROWS = 1;
-const MAX_TERM_ROWS = 200;
-
-/** A well-formed `resize` frame with both dimensions inside the allowed bounds. */
-function isResizeFrame(msg: { type?: unknown; cols?: unknown; rows?: unknown }): msg is { type: "resize"; cols: number; rows: number } {
-  if (msg.type !== "resize" || !Number.isInteger(msg.cols) || !Number.isInteger(msg.rows)) return false;
-  const cols = Number(msg.cols);
-  const rows = Number(msg.rows);
-  return cols >= MIN_TERM_COLS && cols <= MAX_TERM_COLS && rows >= MIN_TERM_ROWS && rows <= MAX_TERM_ROWS;
-}
-
-// Send a JSON frame if the socket is still there and open. Null-tolerant so the PTY
-// handlers don't each repeat the readyState guard; reports whether it went out.
-function sendFrame(socket: WebSocket | null | undefined, payload: unknown): boolean {
-  if (!socket || socket.readyState !== socket.OPEN) return false;
-  socket.send(JSON.stringify(payload));
-  return true;
-}
-
-// Report a PTY exit to the browser, then hang up — shared by every PTY kind. The
-// socket is read at exit time because a reattach can swap it after wiring.
-function sendExitAndClose(socket: WebSocket | null | undefined, exitCode: number, signal: number | undefined): void {
-  if (sendFrame(socket, { type: "exit", exitCode, signal })) socket?.close();
-}
-
-// Send a terminal error to the socket and close it (no reconnect on the client side).
-function closeWithError(ws: WebSocket, message: string): void {
-  if (ws.readyState === ws.OPEN) {
-    ws.send(JSON.stringify({ type: "error", message }));
-    ws.close();
-  }
-}
-
 // The command a launcher runs when spawned fresh. On a tmux reattach it's ignored
 // (tmux new-session -A attaches the running program), so a surviving session with no
 // resolvable launcher index still reattaches via this harmless fallback.
@@ -1833,66 +1668,6 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   const resumeRolloutId = !live && !tmuxAlive && requested ? codexResumeIdFor(requested) : null;
   const sessionId = reattachId ?? ((tmuxAlive || resumeRolloutId) && requested ? requested : randomUUID());
   return { sessionId, live, resumeRolloutId };
-}
-
-function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
-  entry.term.onData((data) => {
-    entry.buffer = appendBoundedOutput(entry.buffer, data, OUTPUT_BUFFER_LIMIT);
-    sendFrame(entry.ws, { type: "output", data });
-    onOutput?.(data);
-  });
-  entry.term.onExit(({ exitCode, signal }) => {
-    console.log(`[pty] codex exited code=${exitCode} signal=${signal}`);
-    sendExitAndClose(entry.ws, exitCode, signal);
-    reap(sessionId);
-  });
-}
-
-// codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
-// (stop once its pty is gone) and capture the minted id so a later cold reconnect can
-// `codex resume <id>`. Attribution is unambiguous-only (see pickFreshSession).
-function rememberCodexRollout(sessionId: string, root: string, before: Set<string>, cwd: string): void {
-  watchForCodexSession(root, before, { cwd, claimed: claimedCodexRollouts, isCancelled: () => !ptys.has(sessionId) })
-    .then((meta) => {
-      if (!meta) return;
-      claimedCodexRollouts.add(meta.file);
-      codexRolloutIds.set(sessionId, meta.id);
-    })
-    .catch(() => {});
-}
-
-function spawnCodexPty(
-  sessionId: string,
-  ws: WebSocket | null,
-  resumeRolloutId: string | null,
-  cwd: string,
-  attachGuiMcp: boolean,
-  initialPrompt: string | null,
-): PtyEntry {
-  const root = codexSessionsRoot();
-  const before = snapshotSessions(root);
-  // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
-  // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
-  const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
-  const args = buildCodexArgs({ resume: resumeRolloutId, model: CODEX_MODEL, guiMcpUrl });
-  const { term, tmux } = ptySpawn(sessionId, CODEX_BIN, args, cwd, true);
-  const via = tmux ? " via tmux" : "";
-  const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
-  console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
-  const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
-  ptys.set(sessionId, entry);
-  if (resumeRolloutId) {
-    codexRolloutIds.set(sessionId, resumeRolloutId);
-  } else {
-    // Discover the id only for a FRESH session. On resume we already know it; running the watcher
-    // could overwrite the known id with a mis-attributed concurrent rollout.
-    rememberCodexRollout(sessionId, root, before, cwd);
-  }
-  // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
-  // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
-  const autoRun = initialPrompt ? attachCodexAutoRun(entry, initialPrompt) : undefined;
-  wireCodexRelay(entry, sessionId, autoRun);
-  return entry;
 }
 
 function startCodexEntry(
