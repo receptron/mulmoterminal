@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parsePortArg, chooseCwd } from "../../bin/cli-args.js";
+import { parsePortArg, chooseCwd, portInUseMessage } from "../../bin/cli-args.js";
 
 const DEFAULT_PORT = 34567;
 const port = (args: string[]) => parsePortArg(args, DEFAULT_PORT);
@@ -121,5 +121,43 @@ describe("chooseCwd", () => {
     it("refuses a lone dash-prefixed value", () => {
       expect(cwd(["--cwd", "-"])).toHaveProperty("error");
     });
+  });
+});
+
+// Running two servers is not a supported setup: they share ~/.mulmoterminal and the
+// workspace while keeping their own PTYs, pub/sub and caches, so each is wrong about state
+// it cannot see the other change. Starting a second one on another port without saying so —
+// what a plain second `npx mulmoterminal` used to do — is how someone gets there by accident.
+describe("portInUseMessage", () => {
+  it("says the port is taken", () => {
+    expect(portInUseMessage(34567, false)).toContain("Port 34567 is already in use");
+  });
+
+  // The first thing the user wants is the one that is already running.
+  it("points at the server that is probably already there", () => {
+    expect(portInUseMessage(34567, false)).toContain("http://localhost:34567");
+  });
+
+  it("uses the port it was given", () => {
+    expect(portInUseMessage(3000, false)).toContain("http://localhost:3000");
+    expect(portInUseMessage(3000, false)).not.toContain("34567");
+  });
+
+  describe("what to do about it", () => {
+    // Without --port, the way to insist is to name one.
+    it("offers --port when the port was the default", () => {
+      expect(portInUseMessage(34567, false)).toContain("--port <number>");
+    });
+
+    // With --port already given, suggesting --port again says nothing.
+    it("does not offer --port again when one was already given", () => {
+      const explicit = portInUseMessage(3000, true);
+      expect(explicit).not.toContain("--port <number>");
+      expect(explicit).toContain("stop the other process");
+    });
+  });
+
+  it("puts each part on its own line", () => {
+    expect(portInUseMessage(34567, false).split("\n")).toHaveLength(3);
   });
 });

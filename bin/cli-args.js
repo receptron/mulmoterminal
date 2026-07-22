@@ -42,3 +42,22 @@ export function chooseCwd(args, env) {
   if (value === undefined || value.startsWith("-")) return { error: "--cwd requires a directory path" };
   return { path: value, mustExist: true };
 }
+
+/**
+ * What to say when the port is taken.
+ *
+ * Running a second server is not a supported setup: both share ~/.mulmoterminal and the
+ * workspace, but each keeps its own PTYs, pub/sub and in-memory caches, so the two disagree
+ * about state neither can see the other change. Starting one silently on another port —
+ * which is what a plain second `npx mulmoterminal` used to do — is how someone ends up in
+ * that setup without knowing (#611).
+ *
+ * So the message has to answer the two things the user actually wants: where the running one
+ * is, and how to insist if a second is really wanted.
+ */
+export function portInUseMessage(port, explicit) {
+  const lines = [`Port ${port} is already in use.`];
+  lines.push(`  If that is MulmoTerminal, it is already running at http://localhost:${port}`);
+  lines.push(explicit ? "  Pick a different --port, or stop the other process." : "  To start a second one anyway: --port <number>");
+  return lines.join("\n");
+}
