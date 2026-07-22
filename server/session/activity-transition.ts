@@ -1,5 +1,6 @@
-// What a working/waiting flag change does to a session's activity record — the decision
-// only, with no publish, no persistence and no reap. Split from index.ts (#548 step 3h):
+// Pure derivations from a session's activity record: what a flag change makes it, and what
+// the row published to subscribers looks like. The decisions only — no publish, no
+// persistence, no reap. Split from index.ts (#548 step 3h):
 // setWorking and setWaiting differed by one field but each re-derived the same rules, and
 // both are load-bearing. The "unchanged" answer is what keeps an idle session from
 // republishing on every hook, and the event fallback is what keeps a row labelled with the
@@ -20,4 +21,44 @@ export function nextActivity(
   const value = "working" in patch ? patch.working : patch.waiting;
   if ((current[key] ?? false) === value) return null;
   return { ...current, [key]: value, event: event ?? current.event ?? null, at: now };
+}
+
+/** The session row published to subscribers. Every field is defaulted here rather than at
+ *  the receiving end, so a session with no activity yet still reads as idle instead of
+ *  arriving with holes. */
+export interface SessionRow {
+  id: string;
+  cwd: string | null;
+  working: boolean;
+  waiting: boolean;
+  event: string | null;
+  lastPrompt: string | null;
+  aiTitle: string | null;
+  lastResponse: string | null;
+}
+
+export function sessionRow(
+  id: string,
+  activity: Activity | undefined,
+  cwd: string | null,
+  texts: { lastPrompt?: string; aiTitle?: string; lastResponse?: string },
+): SessionRow {
+  const a = activity ?? {};
+  return {
+    id,
+    cwd,
+    working: a.working ?? false,
+    waiting: a.waiting ?? false,
+    event: a.event ?? null,
+    lastPrompt: texts.lastPrompt ?? null,
+    aiTitle: texts.aiTitle ?? null,
+    lastResponse: texts.lastResponse ?? null,
+  };
+}
+
+/** Whether to re-read the transcript's tail before publishing. `waiting` means a turn just
+ *  ended, which is the moment the roster's copy of the reply goes stale; without a cwd
+ *  there is no transcript to read. */
+export function shouldRefreshReply(activity: Activity | undefined, cwd: string | null): cwd is string {
+  return !!(activity?.waiting && cwd);
 }

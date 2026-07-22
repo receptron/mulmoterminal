@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextActivity } from "../../../server/session/activity-transition.js";
+import { nextActivity, sessionRow, shouldRefreshReply } from "../../../server/session/activity-transition.js";
 
 const NOW = 1_700_000_000_000;
 
@@ -87,5 +87,71 @@ describe("nextActivity", () => {
     const prev = { event: "Stop", at: 1 };
     expect(nextActivity(prev, { working: true }, undefined, NOW)).toEqual({ working: true, event: "Stop", at: NOW });
     expect(nextActivity(prev, { waiting: true }, undefined, NOW)).toEqual({ waiting: true, event: "Stop", at: NOW });
+  });
+});
+
+// The row every subscribed client renders from. Defaults are applied here so a session
+// with no activity yet reads as idle rather than arriving with holes the UI must guess at.
+describe("sessionRow", () => {
+  it("fills every field for a session with no activity yet", () => {
+    expect(sessionRow("S", undefined, null, {})).toEqual({
+      id: "S",
+      cwd: null,
+      working: false,
+      waiting: false,
+      event: null,
+      lastPrompt: null,
+      aiTitle: null,
+      lastResponse: null,
+    });
+  });
+
+  it("carries the activity flags and label through", () => {
+    const row = sessionRow("S", { working: true, waiting: true, event: "Stop", at: 1 }, "/ws", {});
+    expect(row).toMatchObject({ working: true, waiting: true, event: "Stop", cwd: "/ws" });
+  });
+
+  it("does not leak `at` — it is bookkeeping, not part of the row", () => {
+    expect(Object.keys(sessionRow("S", { working: true, at: 999 }, null, {}))).not.toContain("at");
+  });
+
+  it("carries the roster texts, defaulting each missing one to null", () => {
+    expect(sessionRow("S", undefined, null, { lastPrompt: "p", lastResponse: "r" })).toMatchObject({
+      lastPrompt: "p",
+      aiTitle: null,
+      lastResponse: "r",
+    });
+  });
+
+  it("keeps an empty text as empty rather than turning it into null", () => {
+    // `/clear` blanks the prompt deliberately: "" beats the transcript fallback the
+    // reader applies, while null would let the pre-clear prompt resurface.
+    expect(sessionRow("S", undefined, null, { lastPrompt: "", lastResponse: "" })).toMatchObject({
+      lastPrompt: "",
+      lastResponse: "",
+    });
+  });
+
+  it("keeps a null cwd, which is what a reaped session has", () => {
+    expect(sessionRow("S", { working: true }, null, {}).cwd).toBeNull();
+  });
+});
+
+describe("shouldRefreshReply", () => {
+  it("refreshes when a turn just ended and there is a transcript to read", () => {
+    expect(shouldRefreshReply({ waiting: true }, "/ws")).toBe(true);
+  });
+
+  it("does not refresh a session that is not waiting", () => {
+    // Re-reading on every publish would put a file read in the path of each hook.
+    expect(shouldRefreshReply({ working: true }, "/ws")).toBe(false);
+    expect(shouldRefreshReply({ waiting: false }, "/ws")).toBe(false);
+    expect(shouldRefreshReply({}, "/ws")).toBe(false);
+    expect(shouldRefreshReply(undefined, "/ws")).toBe(false);
+  });
+
+  it("does not refresh without a cwd — there is no transcript to read", () => {
+    expect(shouldRefreshReply({ waiting: true }, null)).toBe(false);
+    expect(shouldRefreshReply({ waiting: true }, "")).toBe(false);
   });
 });

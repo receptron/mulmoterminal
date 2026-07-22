@@ -53,7 +53,7 @@ import {
   titleInFlight,
 } from "./session/registry.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay } from "./session/reap-policy.js";
-import { nextActivity } from "./session/activity-transition.js";
+import { nextActivity, sessionRow, shouldRefreshReply } from "./session/activity-transition.js";
 import { resolveWorkspace } from "./config/workspace.js";
 import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
@@ -314,24 +314,18 @@ const sessionActivityPublisher = createSessionActivityPublisher({
 
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(id: string) {
-  const a = activity.get(id) || {};
+  const a = activity.get(id);
+  // `cwd` rides along so the attention-sound player can pick up that directory's custom
+  // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.
   const cwd = ptys.get(id)?.cwd ?? null;
-  // A turn just ended (waiting) → capture the reply's tail for the roster.
-  if (a.waiting && cwd) refreshLastResponse(id, cwd);
-  sessionActivityPublisher.publish(id, { working: a.working ?? false, waiting: a.waiting ?? false });
-  pubsub?.publish(SESSIONS_CHANNEL, {
-    id,
-    // The session's working dir, so the attention-sound player can pick up that
-    // directory's custom sound (<cwd>/.mulmoterminal.json). Null for a session with
-    // no live PTY (a reaped background worker).
-    cwd,
-    working: a.working ?? false,
-    waiting: a.waiting ?? false,
-    event: a.event ?? null,
-    lastPrompt: lastPrompts.get(id) ?? null,
-    aiTitle: aiTitles.get(id) ?? null,
-    lastResponse: lastResponses.get(id) ?? null,
+  if (shouldRefreshReply(a, cwd)) refreshLastResponse(id, cwd);
+  const row = sessionRow(id, a, cwd, {
+    lastPrompt: lastPrompts.get(id),
+    aiTitle: aiTitles.get(id),
+    lastResponse: lastResponses.get(id),
   });
+  sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting });
+  pubsub?.publish(SESSIONS_CHANNEL, row);
 }
 
 // AI-title bookkeeping (session/session-title.ts). publishActivity stays here — it
