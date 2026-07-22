@@ -1,6 +1,7 @@
 // Pure builder for the terminal WebSocket URL. Kept separate from Terminal.vue so
 // the query it sends — including ?gui=0, which tells the server to run a plain dev
 // terminal (no GUI MCP) — is unit-testable without xterm/WebSocket.
+import type { RunCommand } from "./runCommand";
 
 // What the launch form picked for THIS session (#584), overriding the directory's own
 // default. Either half may be absent: a bare model is a valid pick on the default
@@ -99,4 +100,45 @@ export interface CodexWsUrlInput {
 // to codex's own rollout id. ?gui=0 (grid) runs codex without the GUI MCP.
 export function buildCodexWsUrl(input: CodexWsUrlInput): string {
   return sessionTerminalWsUrl("ws/codex", input);
+}
+
+// What a connection slot is pointed at, as far as choosing an endpoint is concerned. Named
+// separately from the connection manager's own `ConnTarget` so this module stays free of it
+// — TypeScript is structural, so a `ConnTarget` satisfies this.
+export interface ConnTargetUrlInput {
+  cwd: string | null;
+  devTerminal: boolean;
+  // An ephemeral Run cell: the browser sends a REFERENCE (script index / button id), never a command.
+  command: RunCommand | null;
+  // A configured launcher by index, or the OS default shell.
+  launcher: { index: number } | { shell: true } | null;
+  codex?: boolean;
+  launch?: LaunchChoice | null;
+}
+
+// A command cell's endpoint: a script.json entry by index, or a header shell button by id
+// (+ the session context to re-resolve it server-side).
+function runCommandWsUrl(command: RunCommand, host: string, secure: boolean): string {
+  return command.source === "button"
+    ? buildRunWsUrl({ host, secure, cwd: command.cwd, buttonId: command.buttonId, session: command.session, agent: command.agent, model: command.model })
+    : buildRunWsUrl({ host, secure, cwd: command.cwd, index: command.index });
+}
+
+// Which endpoint a slot connects to. The order is the rule: a Run command is ephemeral and
+// outranks everything; then a configured launcher; then codex; then a Claude session, the
+// default. Getting it wrong is silent and destructive-adjacent — a restored codex cell that
+// falls through to `/ws` comes back as Claude, and a command cell that does re-runs its
+// script as an agent session.
+//
+// `host`/`secure` are parameters rather than reads of `location`, which is what lets this be
+// exercised at all.
+export function connWsUrl(target: ConnTargetUrlInput, resumeId: string | null, host: string, secure: boolean): string {
+  if (target.command) return runCommandWsUrl(target.command, host, secure);
+  if (target.launcher) {
+    return "shell" in target.launcher
+      ? buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, shell: true })
+      : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
+  }
+  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+  return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal, launch: target.launch });
 }
