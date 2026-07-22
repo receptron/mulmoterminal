@@ -6,6 +6,7 @@
 // Everything here is pure: the tailing itself lives in session/codex-activity-watch.ts.
 
 import { isRecord } from "../session/transcript.js";
+import { activityHookEffects, pushKindFor, type ActivityEffect, type PushKind } from "../session/activity-hook.js";
 
 export type CodexTurnBoundary = "started" | "completed";
 
@@ -53,4 +54,17 @@ export function turnBoundaries(lines: string[]): CodexTurnBoundary[] {
     if (type === "task_started") return ["started" as const];
     return type === "task_complete" ? ["completed" as const] : [];
   });
+}
+
+// What a boundary does: the flag changes, and whether the phone should hear about it.
+// Both come from claude's tables so the two agents cannot drift apart — a codex turn that
+// finishes has to notify exactly as a claude Stop does, or half the grid stays silent.
+export interface BoundaryOutcome {
+  effects: ActivityEffect[];
+  push: PushKind | null;
+}
+
+export function boundaryOutcome(boundary: CodexTurnBoundary, active: boolean): BoundaryOutcome {
+  const event = HOOK_EVENT_FOR[boundary];
+  return { effects: activityHookEffects(event, active), push: pushKindFor(event) };
 }

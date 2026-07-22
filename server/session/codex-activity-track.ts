@@ -4,8 +4,8 @@
 // a PTY.
 
 import { promises as fs } from "node:fs";
-import { HOOK_EVENT_FOR, type CodexTurnBoundary } from "../agents/codex-activity.js";
-import { activityHookEffects } from "./activity-hook.js";
+import { HOOK_EVENT_FOR, boundaryOutcome, type CodexTurnBoundary } from "../agents/codex-activity.js";
+import { notifyTaskFinished } from "./task-push.js";
 import { watchCodexActivity } from "./codex-activity-watch.js";
 
 export interface CodexActivityTrackDeps {
@@ -13,6 +13,8 @@ export interface CodexActivityTrackDeps {
   setWaiting: (id: string, waiting: boolean, event?: string) => void;
   /** Is this session the user's actively-viewed pane? Suppresses the attention flag. */
   isActive: () => boolean;
+  /** Which port this host's UI answers on, so a notification can open it. */
+  uiPort: string;
   /** False once THIS pty is gone. Must identify the pty, not just its session id: a
    *  session reaped and respawned under the same id within one poll would otherwise
    *  leave this tail running beside the new one, reporting every boundary twice. */
@@ -42,10 +44,14 @@ const sizeOf = (file: string) => async (): Promise<number | null> => {
 
 function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: CodexActivityTrackDeps): void {
   const event = HOOK_EVENT_FOR[boundary];
-  for (const eff of activityHookEffects(event, deps.isActive())) {
+  const { effects, push } = boundaryOutcome(boundary, deps.isActive());
+  for (const eff of effects) {
     if (eff.kind === "working") deps.setWorking(sessionId, eff.value, event);
     else deps.setWaiting(sessionId, eff.value, event);
   }
+  // `message` is empty: codex has no Notification equivalent, and a finished turn's body
+  // comes from its reply, not from a hook payload.
+  if (push) void notifyTaskFinished(sessionId, push, "", deps.uiPort);
 }
 
 // Start tailing; it stops on its own once the session is gone. `startAtEnd` skips a

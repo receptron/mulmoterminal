@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { nextReadRange, takeCompleteLines, turnBoundaries, HOOK_EVENT_FOR } from "../../../server/agents/codex-activity.js";
+import { nextReadRange, takeCompleteLines, turnBoundaries, boundaryOutcome, HOOK_EVENT_FOR } from "../../../server/agents/codex-activity.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 const started = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_started", turn_id: turnId } });
@@ -92,5 +92,31 @@ describe("HOOK_EVENT_FOR", () => {
   it("routes codex boundaries through claude's effect table, so the rules live in one place", () => {
     expect(HOOK_EVENT_FOR.started).toBe("UserPromptSubmit");
     expect(HOOK_EVENT_FOR.completed).toBe("Stop");
+  });
+});
+
+describe("boundaryOutcome", () => {
+  it("notifies the phone when a turn finishes, exactly as claude's Stop does", () => {
+    // The regression this guards: setting the flags but never reaching the push path, so
+    // a finished codex turn left the phone silent while a claude one notified.
+    const { effects, push } = boundaryOutcome("completed", false);
+    expect(push).toBe("finished");
+    expect(effects).toEqual([
+      { kind: "waiting", value: true },
+      { kind: "working", value: false },
+    ]);
+  });
+
+  it("does not notify when a turn merely starts", () => {
+    const { effects, push } = boundaryOutcome("started", false);
+    expect(push).toBeNull();
+    expect(effects).toEqual([{ kind: "working", value: true }]);
+  });
+
+  it("suppresses the attention flag for the pane the user is looking at", () => {
+    const { effects, push } = boundaryOutcome("completed", true);
+    expect(effects).toEqual([{ kind: "working", value: false }]);
+    // The phone is elsewhere, so it is told regardless of what is on screen here.
+    expect(push).toBe("finished");
   });
 });

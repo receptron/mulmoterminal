@@ -15,16 +15,17 @@ import { appendBoundedOutput } from "./terminal-replay.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 
-export function createCodexSpawner(deps: SpawnDeps) {
-  // Bound to ONE pty: `ptys.has(id)` would keep a stale tail alive after a reap-then-
-  // respawn under the same id, and both tails would report the same boundaries.
-  const activityDepsFor = (sessionId: string, entry: PtyEntry) => ({
-    setWorking: deps.setWorking,
-    setWaiting: deps.setWaiting,
-    isActive: () => ptys.get(sessionId)?.active ?? false,
-    isAlive: () => ptys.get(sessionId) === entry,
-  });
+// Bound to ONE pty: `ptys.has(id)` would keep a stale tail alive after a reap-then-
+// respawn under the same id, and both tails would report the same boundaries.
+const activityDepsFor = (sessionId: string, entry: PtyEntry, deps: SpawnDeps) => ({
+  setWorking: deps.setWorking,
+  setWaiting: deps.setWaiting,
+  isActive: () => ptys.get(sessionId)?.active ?? false,
+  uiPort: deps.uiPort,
+  isAlive: () => ptys.get(sessionId) === entry,
+});
 
+export function createCodexSpawner(deps: SpawnDeps) {
   function wireCodexRelay(entry: PtyEntry, sessionId: string, onOutput?: (data: string) => void): void {
     entry.term.onData((data) => {
       entry.buffer = appendBoundedOutput(entry.buffer, data, deps.outputBufferLimit);
@@ -49,7 +50,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
         codexRolloutIds.set(sessionId, meta.id);
         // A rollout only discovered now is one this session just created, so it is read
         // whole: its first turn is in there and hasn't been reported yet.
-        trackCodexActivity(sessionId, meta.file, false, activityDepsFor(sessionId, entry));
+        trackCodexActivity(sessionId, meta.file, false, activityDepsFor(sessionId, entry, deps));
       })
       .catch(() => {});
   }
@@ -77,7 +78,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
     if (resumeRolloutId) {
       codexRolloutIds.set(sessionId, resumeRolloutId);
       const file = codexRolloutPath(root, resumeRolloutId);
-      if (file) trackCodexActivity(sessionId, file, true, activityDepsFor(sessionId, entry));
+      if (file) trackCodexActivity(sessionId, file, true, activityDepsFor(sessionId, entry, deps));
     } else {
       // Discover the id only for a FRESH session. On resume we already know it; running the watcher
       // could overwrite the known id with a mis-attributed concurrent rollout.
