@@ -20,7 +20,7 @@ import { renderMarpDeck, fillImagePlaceholders } from "@mulmoclaude/markdown-plu
 import type { MarkdownHostApp, ExportPdfOptions } from "@mulmoclaude/markdown-plugin";
 import { publishFileChange } from "./fileChange.js";
 import { generateImage } from "./image-gen.js";
-import { DOCS_DIR, isDocPath } from "./docPath.js";
+import { buildDocPath, isDocPath } from "./docPath.js";
 
 // Set once at boot (server/index.ts) — workspace = CLAUDE_CWD. File-change
 // live-refresh is forwarded by the shared publisher (see fileChange.ts).
@@ -33,25 +33,6 @@ export function initMarkdownBackend(deps: { workspace: string }): void {
 function absFor(rel: string): string {
   if (!workspace) throw new Error("markdown backend not initialised (missing workspace)");
   return path.join(workspace, rel);
-}
-
-function sanitizePrefix(prefix: string): string {
-  const cleaned = String(prefix || "document")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    // Runs are already collapsed to a single "-" above, so trim one at each end
-    // (no quantifier — keeps the regex trivially linear).
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
-  return cleaned || "document";
-}
-
-function buildNewDocPath(prefix: string): string {
-  const now = new Date();
-  const yyyy = String(now.getFullYear());
-  const mm = String(now.getMonth() + 1).padStart(2, "0");
-  const rand = randomUUID().slice(0, 8);
-  return `${DOCS_DIR}/${yyyy}/${mm}/${sanitizePrefix(prefix)}-${rand}.md`;
 }
 
 const MARKDOWN_PDF_CSS = `
@@ -76,7 +57,7 @@ export const markdownHostApp: MarkdownHostApp = {
   },
 
   async saveNewDoc(prefix, markdown) {
-    const rel = buildNewDocPath(prefix);
+    const rel = buildDocPath(prefix, new Date(), randomUUID().slice(0, 8));
     const abs = absFor(rel);
     await fs.promises.mkdir(path.dirname(abs), { recursive: true });
     await fs.promises.writeFile(abs, markdown);
