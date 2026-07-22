@@ -37,17 +37,26 @@ function deferredSeed(payload: Record<string, CellActivity>) {
 
 function mountGrid(ids: string[] = [SESSION]) {
   let activity!: Map<string, CellActivity>;
+  const sessionIds = ref(ids);
   const component = defineComponent({
     setup() {
-      activity = useGridActivity(ref(ids)).activity;
+      activity = useGridActivity(sessionIds).activity;
       return () => h("div");
     },
   });
   const wrapper = mount(component);
-  return { wrapper, get: () => activity };
+  // Re-run the seed the way the cell-list watch does, so a second request overlaps the first.
+  const seedAgain = async () => {
+    sessionIds.value = [...sessionIds.value, `extra-${sessionIds.value.length}`];
+    await wrapper.vm.$nextTick();
+  };
+  return { wrapper, get: () => activity, seedAgain };
 }
 
 const push = (data: unknown) => subscribers.get("sessions")?.(data);
+
+// Sentinel for twoSeeds: the second request answers !ok.
+const FAILS: Record<string, CellActivity> = {};
 
 beforeEach(() => subscribers.clear());
 afterEach(() => vi.unstubAllGlobals());
@@ -110,6 +119,58 @@ describe("useGridActivity", () => {
 
     expect(get().get("other")?.working).toBe(true);
     expect(get().get(SESSION)?.working).toBe(true);
+  });
+
+  // Codex on #626: seeds overlap (mount + the cell-list watch + reconnect), and an older
+  // answer landing last put back what the newer state had replaced — the same rollback this
+  // PR is about, one level up.
+  describe("when seeds overlap", () => {
+    // Two gates, so the test can land the OLDER answer last.
+    function twoSeeds(first: Record<string, CellActivity>, second: Record<string, CellActivity>) {
+      let answerFirst!: () => void;
+      let answerSecond!: () => void;
+      const firstGate = new Promise<void>((r) => (answerFirst = r));
+      const secondGate = new Promise<void>((r) => (answerSecond = r));
+      let call = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => {
+          const mine = ++call;
+          await (mine === 1 ? firstGate : secondGate);
+          if (mine === 2 && second === FAILS) return { ok: false, status: 500 };
+          return { ok: true, json: async () => (mine === 1 ? first : second) };
+        }),
+      );
+      return { answerFirst, answerSecond };
+    }
+
+    it("ignores an older answer that lands after a newer one", async () => {
+      const { answerFirst, answerSecond } = twoSeeds({ [SESSION]: IDLE }, { [SESSION]: { working: true, waiting: false, event: "newer" } });
+      const { get, seedAgain } = mountGrid();
+      await seedAgain();
+
+      answerSecond();
+      await flushPromises();
+      expect(get().get(SESSION)?.working).toBe(true);
+
+      answerFirst(); // the stale one, arriving last
+      await flushPromises();
+      expect(get().get(SESSION)?.working).toBe(true);
+    });
+
+    it("does not lose a push when the newer seed fails", async () => {
+      const { answerFirst, answerSecond } = twoSeeds({ [SESSION]: IDLE }, FAILS);
+      const { get, seedAgain } = mountGrid();
+      await seedAgain();
+
+      push({ id: SESSION, working: true, waiting: false, event: "started" });
+      answerSecond(); // fails, so nothing is applied and nothing needs undoing
+      await flushPromises();
+      answerFirst(); // stale: must not put the idle snapshot back
+      await flushPromises();
+
+      expect(get().get(SESSION)?.working).toBe(true);
+    });
   });
 
   it("applies a push that arrives after the seed has landed", async () => {

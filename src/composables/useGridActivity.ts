@@ -16,6 +16,10 @@ export function useGridActivity(sessionIds: Ref<string[]>) {
   // and has to go back on top of it — otherwise a cell that just started working is seeded
   // back to idle, and one that just closed reappears (#620 F3).
   let pushedDuringSeed: unknown[] | null = null;
+  // Seeds overlap — mount, the cell-list watch and a reconnect all ask. Only the newest
+  // answer may be applied: an older one describes a moment that has already been overtaken,
+  // and applying it puts back what the newer state replaced.
+  let latestSeed = 0;
 
   function apply(data: unknown): void {
     pushedDuringSeed?.push(data);
@@ -28,12 +32,16 @@ export function useGridActivity(sessionIds: Ref<string[]>) {
   async function seed(): Promise<void> {
     const ids = [...new Set(sessionIds.value.filter(Boolean))];
     if (ids.length === 0) return;
+    const seedId = ++latestSeed;
     const pushed: unknown[] = [];
     pushedDuringSeed = pushed;
     try {
       const res = await fetch(`/api/activity?ids=${encodeURIComponent(ids.join(","))}`);
-      if (!res.ok) return;
+      // Overtaken while we waited: this answer is older than what is on screen. Returning
+      // also leaves the newer seed's record alone — it is the one that will replay.
+      if (seedId !== latestSeed || !res.ok) return;
       const data: Record<string, CellActivity> = await res.json();
+      if (seedId !== latestSeed) return;
       for (const [id, a] of Object.entries(data)) {
         activity.set(id, { working: !!a.working, waiting: !!a.waiting, event: a.event ?? null });
       }
