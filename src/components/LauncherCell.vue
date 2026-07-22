@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
+import CellChromeButtons from "./CellChromeButtons.vue";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import { isShellLauncher, type CellLauncher } from "./gridTabs";
@@ -69,15 +70,7 @@ function relaunch() {
         <button v-if="reorderable" class="cell-btn" title="Move left" aria-label="Move launcher left" @click="emit('move', -1)">◀</button>
         <button v-if="reorderable" class="cell-btn" title="Move right" aria-label="Move launcher right" @click="emit('move', 1)">▶</button>
         <button v-if="finished" class="cell-btn" title="Relaunch" aria-label="Relaunch" @click="relaunch">↻</button>
-        <button
-          class="cell-btn"
-          :title="expanded ? 'Restore' : 'Expand'"
-          :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
-          @click="emit('toggle-expand')"
-        >
-          {{ expanded ? "⤡" : "⤢" }}
-        </button>
-        <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="emit('close')">✕</button>
+        <CellChromeButtons :expanded="expanded" @toggle-expand="emit('toggle-expand')" @close="emit('close')" />
       </span>
     </div>
     <TerminalView
