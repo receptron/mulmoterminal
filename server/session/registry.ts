@@ -13,6 +13,7 @@ import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
+import { mergeDevTerminalSessionIds, parseDevTerminalSessionIds } from "./dev-terminal-sessions.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
 
 // Per-session "working" state, driven by Claude hooks (see /api/hook):
@@ -105,13 +106,19 @@ const DEV_TERMINAL_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "dev-terminal-s
 // (or a mark persisted) before this resolves would otherwise see an empty set and
 // either leak hidden grid transcripts into chat or clobber the file with a snapshot
 // missing the on-disk ids.
-export const devTerminalSessionsHydrated: Promise<void> = (async () => {
+const isValidSessionId = (id: string) => SESSION_ID_RE.test(id);
+
+// Best-effort read of the shared file: absent / unreadable / not an array => nothing.
+async function readPersistedDevTerminalIds(): Promise<string[]> {
   try {
-    const parsed = JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8"));
-    if (Array.isArray(parsed)) for (const id of parsed) if (typeof id === "string" && SESSION_ID_RE.test(id)) devTerminalSessions.add(id);
+    return parseDevTerminalSessionIds(JSON.parse(await fs.readFile(DEV_TERMINAL_SESSIONS_FILE, "utf8")), isValidSessionId);
   } catch {
-    // no file yet or unreadable => start empty
+    return [];
   }
+}
+
+export const devTerminalSessionsHydrated: Promise<void> = (async () => {
+  for (const id of await readPersistedDevTerminalIds()) devTerminalSessions.add(id);
 })();
 
 // Serialize every persist into ONE chain so concurrent marks can't run overlapping
@@ -124,7 +131,12 @@ function persistDevTerminalSessions(): void {
   devTerminalPersist = devTerminalPersist
     .then(() => devTerminalSessionsHydrated)
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify([...devTerminalSessions])))
+    // Union with disk, not just our own set: another instance sharing this file may have
+    // marked cells we never saw, and writing without them un-hides their transcripts.
+    .then(async () => {
+      const merged = mergeDevTerminalSessionIds(await readPersistedDevTerminalIds(), devTerminalSessions);
+      await fs.writeFile(DEV_TERMINAL_SESSIONS_FILE, JSON.stringify(merged));
+    })
     .catch((e) => console.error(`[dev-terminal-sessions] failed to persist: ${messageOf(e)}`));
 }
 
