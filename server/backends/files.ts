@@ -19,36 +19,7 @@ import { createReadStream } from "node:fs";
 import type { Express, Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
 import { parseByteRange } from "./byte-range.js";
-
-const MAX_RAW_BYTES = 25 * 1024 * 1024; // images / text / generic
-const MAX_MEDIA_BYTES = 500 * 1024 * 1024; // audio / video (streamed via Range)
-
-const MIME_BY_EXT: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".gif": "image/gif",
-  ".webp": "image/webp",
-  ".avif": "image/avif",
-  ".svg": "image/svg+xml",
-  ".bmp": "image/bmp",
-  ".ico": "image/x-icon",
-  ".pdf": "application/pdf",
-  ".mp3": "audio/mpeg",
-  ".m4a": "audio/mp4",
-  ".wav": "audio/wav",
-  ".ogg": "audio/ogg",
-  ".mp4": "video/mp4",
-  ".webm": "video/webm",
-  ".mov": "video/quicktime",
-  ".txt": "text/plain; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".csv": "text/csv; charset=utf-8",
-};
-
-function isMedia(mime: string): boolean {
-  return mime.startsWith("audio/") || mime.startsWith("video/");
-}
+import { rawServingPlan } from "./rawServingPlan.js";
 
 export function mountFilesRoutes(app: Express, deps: { workspace: string }): void {
   const root = path.resolve(deps.workspace);
@@ -69,19 +40,17 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
     const stat = statFileOr404(res, abs);
     if (!stat) return;
 
-    const ext = path.extname(abs).toLowerCase();
-    const mime = MIME_BY_EXT[ext] ?? "application/octet-stream";
-    const cap = isMedia(mime) ? MAX_MEDIA_BYTES : MAX_RAW_BYTES;
-    if (stat.size > cap) {
-      res.status(413).json({ error: `file too large (${stat.size} bytes, limit ${cap})` });
+    const plan = rawServingPlan(abs, stat.size);
+    if (plan.tooLarge) {
+      res.status(413).json({ error: `file too large (${stat.size} bytes)` });
       return;
     }
 
-    res.setHeader("Content-Type", mime);
+    res.setHeader("Content-Type", plan.contentType);
     res.setHeader("X-Content-Type-Options", "nosniff");
-    // Sandbox the response so an SVG/HTML with embedded JS can't escape into the app
-    // origin. PDFs skip it (WebKit won't render sandbox-opaque PDFs).
-    if (mime !== "application/pdf") res.setHeader("Content-Security-Policy", "sandbox");
+    // An SVG/HTML with embedded JS must not escape into the app origin; PDFs are the sole
+    // exception (WebKit won't render a sandbox-opaque PDF). See rawServingPlan.
+    if (plan.sandbox) res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("Accept-Ranges", "bytes");
 
     // Range support (required for <video>/<audio> seeking in Safari).
