@@ -99,3 +99,34 @@ describe("useSessionFeed", () => {
     await vi.waitFor(() => expect(items.value).toEqual([{ id: "a", text: "newer" }]));
   });
 });
+
+// The second layer of the same race, raised by Codex on the sibling PR (#626): the id guard
+// above cannot tell two loads apart when the user switches AWAY and BACK, because both are
+// for the session that is current. An older answer landing last then puts back what the
+// newer one replaced — and the `finally` clears the newer load's tracking along with it.
+describe("useSessionFeed — overlapping loads for the same session", () => {
+  it("ignores an older history that lands after a newer one", async () => {
+    const gates: Array<() => void> = [];
+    // Three loads: the initial one, the switch away, and the switch back.
+    const answers = [[{ id: "old", text: "older" }], [{ id: "other", text: "other session" }], [{ id: "new", text: "newer" }]];
+    let call = 0;
+    const { items, sessionId } = mountFeed(async () => {
+      const mine = call++;
+      await new Promise<void>((resolve) => gates.push(resolve));
+      return { ok: true, json: async () => ({ items: answers[mine] }) };
+    });
+
+    sessionId.value = "s2";
+    await nextTick();
+    sessionId.value = "s1"; // back again: two loads are in flight for "s1"
+    await nextTick();
+
+    gates.at(-1)?.(); // the newest answers first
+    await flushPromises();
+    expect(items.value.map((item) => item.id)).toEqual(["new"]);
+
+    gates[0]?.(); // the stale one, arriving last
+    await flushPromises();
+    expect(items.value.map((item) => item.id)).toEqual(["new"]);
+  });
+});
