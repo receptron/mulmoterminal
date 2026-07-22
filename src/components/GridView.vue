@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated } from "vue";
 import TerminalGrid from "./TerminalGrid.vue";
-import SettingsModal from "./SettingsModal.vue";
+import AppSettingsModal from "./AppSettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
 import { startCollectionChat } from "../composables/useChatLauncher";
 import { router } from "../router";
@@ -306,24 +306,7 @@ onDeactivated(detachNewTerminal);
 onBeforeUnmount(detachNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
-const {
-  defaultCwd,
-  home,
-  presets,
-  soundFile,
-  pushEnabled,
-  prRepos,
-  launchers,
-  userMcpServers,
-  loadConfig,
-  recordPreset,
-  removePreset,
-  saveSound,
-  savePushEnabled,
-  savePrRepos,
-  saveLaunchers,
-  saveUserMcpServers,
-} = useAppConfig();
+const { defaultCwd, home, presets, launchers, loadConfig, recordPreset, removePreset } = useAppConfig();
 const showSettings = ref(false);
 onMounted(loadConfig);
 
@@ -392,20 +375,6 @@ function configureAppearance() {
       @status="onStatus"
       @list-mode="onListMode"
     />
-    <SettingsModal
-      v-if="showSettings"
-      :sound-file="soundFile"
-      :push-enabled="pushEnabled"
-      :pr-repos="prRepos"
-      :launchers="launchers"
-      :user-mcp-servers="userMcpServers"
-      @update-sound="saveSound"
-      @update-push-enabled="savePushEnabled"
-      @update-repos="savePrRepos"
-      @update-launchers="saveLaunchers"
-      @update-user-mcp="saveUserMcpServers"
-      @configure-appearance="configureAppearance"
-      @close="closeSettings"
-    />
+    <AppSettingsModal v-if="showSettings" @configure-appearance="configureAppearance" @close="closeSettings" />
   </div>
 </template>
