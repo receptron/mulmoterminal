@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { mergeLiveIntoSnapshot } from "../../../src/composables/liveMerge";
+import { mergeLiveIntoSnapshot, applyLiveChanges } from "../../../src/composables/liveMerge";
 
 interface Item {
   id?: string;
@@ -88,5 +88,57 @@ describe("mergeLiveIntoSnapshot", () => {
     mergeLiveIntoSnapshot(snapshot, arrived, identify);
     expect(snapshot).toEqual([{ id: "a", text: "A" }]);
     expect(arrived).toEqual([{ id: "a", text: "A2" }]);
+  });
+});
+
+// The bell's list loses entries while it is being fetched, not just gains them, so what is
+// recorded is what the channel DID — in order (#620 F2).
+describe("applyLiveChanges", () => {
+  interface Row {
+    id: string;
+    text: string;
+  }
+  const identify = (row: Row) => row.id;
+  const SNAPSHOT: Row[] = [
+    { id: "a", text: "first" },
+    { id: "b", text: "second" },
+  ];
+  const texts = (rows: Row[]) => rows.map((row) => row.text);
+
+  it("keeps the snapshot when nothing happened", () => {
+    expect(applyLiveChanges(SNAPSHOT, [], identify)).toEqual(SNAPSHOT);
+  });
+
+  it("drops an entry removed while the snapshot was in flight", () => {
+    expect(texts(applyLiveChanges(SNAPSHOT, [{ kind: "remove", id: "a" }], identify))).toEqual(["second"]);
+  });
+
+  it("ignores a removal for something the snapshot never had", () => {
+    expect(applyLiveChanges(SNAPSHOT, [{ kind: "remove", id: "zzz" }], identify)).toEqual(SNAPSHOT);
+  });
+
+  it("adds an entry that arrived while the snapshot was in flight", () => {
+    expect(texts(applyLiveChanges(SNAPSHOT, [{ kind: "upsert", item: { id: "c", text: "third" } }], identify))).toEqual(["first", "second", "third"]);
+  });
+
+  it("updates in place", () => {
+    expect(texts(applyLiveChanges(SNAPSHOT, [{ kind: "upsert", item: { id: "a", text: "first, updated" } }], identify))).toEqual(["first, updated", "second"]);
+  });
+
+  // Order is the whole point: a set of touched ids could not tell these two apart.
+  it("leaves nothing when an entry was added and then removed", () => {
+    const changes = [
+      { kind: "upsert" as const, item: { id: "c", text: "third" } },
+      { kind: "remove" as const, id: "c" },
+    ];
+    expect(applyLiveChanges(SNAPSHOT, changes, identify)).toEqual(SNAPSHOT);
+  });
+
+  it("keeps the entry when it was removed and then added again", () => {
+    const changes = [
+      { kind: "remove" as const, id: "a" },
+      { kind: "upsert" as const, item: { id: "a", text: "first, again" } },
+    ];
+    expect(texts(applyLiveChanges(SNAPSHOT, changes, identify))).toEqual(["second", "first, again"]);
   });
 });

@@ -22,3 +22,26 @@ export function mergeLiveIntoSnapshot<T>(snapshot: readonly T[], arrivedSince: r
   }
   return merged;
 }
+
+// Some lists lose entries while a snapshot is in flight, not just gain them: the bell's list
+// is fetched whole while the channel is clearing entries out of it. A merge that only knows
+// about arrivals hands a dismissed notification straight back (#620 F2).
+export type LiveChange<T> = { kind: "upsert"; item: T } | { kind: "remove"; id: string };
+
+// Replayed IN ORDER, because the order is the answer: publish-then-clear leaves nothing,
+// clear-then-publish leaves the item, and a set of touched ids could not tell them apart.
+export function applyLiveChanges<T>(snapshot: readonly T[], changes: readonly LiveChange<T>[], identify: (item: T) => string | undefined): T[] {
+  const merged = [...snapshot];
+  for (const change of changes) {
+    if (change.kind === "remove") {
+      const at = merged.findIndex((existing) => identify(existing) === change.id);
+      if (at >= 0) merged.splice(at, 1);
+      continue;
+    }
+    const id = identify(change.item);
+    const at = id === undefined ? -1 : merged.findIndex((existing) => identify(existing) === id);
+    if (at >= 0) merged[at] = change.item;
+    else merged.push(change.item);
+  }
+  return merged;
+}
