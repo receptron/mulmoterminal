@@ -197,28 +197,41 @@ function applyActivity(d: ActivityMsg) {
   aiTitle.value = next.aiTitle;
 }
 
-async function loadInitial(id: string) {
+// This session's detail, or nothing to apply. Nothing covers three cases the callers all
+// treat the same: the read failed (best-effort — pub/sub fills it in on the next event), the
+// server refused, or the cell has since closed or switched session, in which case applying
+// the answer would leak the old session's state into the new one.
+//
+// The cell's dir goes along so the server can read the transcript and report the session's
+// most recent prompt rather than the bare id after a resume.
+type SessionDetail = ActivityMsg & { usage?: unknown; context?: unknown };
+
+async function fetchSessionDetail(id: string): Promise<SessionDetail | null> {
   try {
-    // Pass the cell's dir so the server can read the transcript and report the
-    // session's most recent prompt (not just the bare id) after a resume.
     const q = cwd.value ? `?cwd=${encodeURIComponent(cwd.value)}` : "";
     const res = await fetch(`/api/session/${id}${q}`);
-    if (!res.ok) return;
+    if (!res.ok) return null;
     const data = await res.json();
-    // Guard against a stale response: the cell may have closed / switched session
-    // while the fetch was in flight — don't leak old status into the new state.
-    if (id === sessionId.value) {
-      applyActivity(data);
-      // Cleared rather than kept when the shape is wrong: the server always sends both
-      // (EMPTY_USAGE / EMPTY_CONTEXT when it has nothing to report), so an unrenderable one
-      // means something is actually broken — and a badge showing the previous turn's numbers
-      // as if they were current is the failure this guard exists to stop.
-      usage.value = isCellUsage(data.usage) ? data.usage : null;
-      context.value = isCellContext(data.context) ? data.context : null;
-    }
+    return id === sessionId.value ? data : null;
   } catch {
-    // best-effort — pub/sub will fill it in on the next event
+    return null;
   }
+}
+
+// Cleared rather than kept when the shape is wrong: the server always sends both
+// (EMPTY_USAGE / EMPTY_CONTEXT when it has nothing to report), so an unrenderable one means
+// something is actually broken — and a badge showing the previous turn's numbers as if they
+// were current is the failure the guards exist to stop.
+function applyBadges(data: SessionDetail) {
+  usage.value = isCellUsage(data.usage) ? data.usage : null;
+  context.value = isCellContext(data.context) ? data.context : null;
+}
+
+async function loadInitial(id: string) {
+  const data = await fetchSessionDetail(id);
+  if (!data) return;
+  applyActivity(data);
+  applyBadges(data);
 }
 
 // Refresh ONLY the token usage (not the live activity — that's pub/sub's job). Called
@@ -226,17 +239,8 @@ async function loadInitial(id: string) {
 async function refreshUsage() {
   const id = sessionId.value;
   if (!id) return;
-  try {
-    const q = cwd.value ? `?cwd=${encodeURIComponent(cwd.value)}` : "";
-    const res = await fetch(`/api/session/${id}${q}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    if (id !== sessionId.value) return;
-    usage.value = isCellUsage(data.usage) ? data.usage : null;
-    context.value = isCellContext(data.context) ? data.context : null;
-  } catch {
-    // best-effort
-  }
+  const data = await fetchSessionDetail(id);
+  if (data) applyBadges(data);
 }
 
 onMounted(() => {

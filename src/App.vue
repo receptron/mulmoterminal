@@ -13,7 +13,7 @@ import WikiBrowseOverlay from "./components/WikiBrowseOverlay.vue";
 import PrsOverlay from "./components/PrsOverlay.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
 import GridView from "./components/GridView.vue";
-import SettingsModal from "./components/SettingsModal.vue";
+import AppSettingsModal from "./components/AppSettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
 import { browseClose } from "./composables/useCollectionBrowse";
@@ -150,8 +150,7 @@ onMounted(() => window.addEventListener("resize", onViewportResize));
 
 // Settings (theme + notification sound), shared with the grid view via useAppConfig
 // and opened from the toolbar's gear button.
-const { defaultCwd, loadConfig, saveSound, pushEnabled, savePushEnabled, prRepos, savePrRepos, launchers, saveLaunchers, userMcpServers, saveUserMcpServers } =
-  useAppConfig();
+const { defaultCwd, loadConfig } = useAppConfig();
 // Drive the single view's dir overrides off the dir the terminal ACTUALLY runs in
 // (reported by the server, which may resolve/fall back), not the static default — so
 // the badge/theme/colors always track the active session. Falls back to the default
@@ -379,22 +378,6 @@ function onSession(id: string) {
     <PrsOverlay />
     <!-- Full-screen file explorer + editor; opened by a terminal header's Files button. -->
     <FilesOverlay />
-    <SettingsModal
-      v-if="showSettings"
-      :sound-file="soundFile"
-      :push-enabled="pushEnabled"
-      :pr-repos="prRepos"
-      :launchers="launchers"
-      :user-mcp-servers="userMcpServers"
-      :cwd="effectiveCwd"
-      :session-id="activeId"
-      @update-sound="saveSound"
-      @update-push-enabled="savePushEnabled"
-      @update-repos="savePrRepos"
-      @update-launchers="saveLaunchers"
-      @update-user-mcp="saveUserMcpServers"
-      @configure-appearance="configureAppearance"
-      @close="closeSettings"
-    />
+    <AppSettingsModal v-if="showSettings" :cwd="effectiveCwd" :session-id="activeId" @configure-appearance="configureAppearance" @close="closeSettings" />
   </div>
 </template>
