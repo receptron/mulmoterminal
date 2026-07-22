@@ -11,7 +11,14 @@ import { parseSessionActivityPayload, type CellActivity } from "./sessionActivit
 export function useGridActivity(sessionIds: Ref<string[]>) {
   const activity = reactive(new Map<string, CellActivity>());
 
+  // Non-null while a seed is in flight, keeping what the channel pushed meanwhile. /api/activity
+  // answers as of the moment it was ASKED, so anything after that is newer than the answer
+  // and has to go back on top of it — otherwise a cell that just started working is seeded
+  // back to idle, and one that just closed reappears (#620 F3).
+  let pushedDuringSeed: unknown[] | null = null;
+
   function apply(data: unknown): void {
+    pushedDuringSeed?.push(data);
     const update = parseSessionActivityPayload(data);
     if (!update) return;
     if ("closed" in update) activity.delete(update.id);
@@ -21,6 +28,8 @@ export function useGridActivity(sessionIds: Ref<string[]>) {
   async function seed(): Promise<void> {
     const ids = [...new Set(sessionIds.value.filter(Boolean))];
     if (ids.length === 0) return;
+    const pushed: unknown[] = [];
+    pushedDuringSeed = pushed;
     try {
       const res = await fetch(`/api/activity?ids=${encodeURIComponent(ids.join(","))}`);
       if (!res.ok) return;
@@ -28,8 +37,15 @@ export function useGridActivity(sessionIds: Ref<string[]>) {
       for (const [id, a] of Object.entries(data)) {
         activity.set(id, { working: !!a.working, waiting: !!a.waiting, event: a.event ?? null });
       }
+      // Stop recording before replaying, or each replayed update records itself again.
+      if (pushedDuringSeed === pushed) pushedDuringSeed = null;
+      // In arrival order: a session that went working then closed must end up closed.
+      pushed.forEach((update) => apply(update));
     } catch {
       // Transient — the pub/sub stream catches up on the next activity change.
+    } finally {
+      // A newer seed has taken over: leave its record alone.
+      if (pushedDuringSeed === pushed) pushedDuringSeed = null;
     }
   }
 
