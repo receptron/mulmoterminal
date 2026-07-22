@@ -59,6 +59,9 @@ Claude Code can talk to any Anthropic-compatible backend. MulmoTerminal reads th
 `config.json`, and their keys from the environment the **server** was started with — a key never
 lives in a config file.
 
+> Anthropic's own authentication, what reaches the session, the full list of credentials and
+> permissions, and how a resume behaves are covered in [Models and backends](models.html).
+
 ### 1. Add the backend to `~/.mulmoterminal/config.json`
 
 ```json

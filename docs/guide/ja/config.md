@@ -59,6 +59,9 @@ nav_order: 4
 Claude Code は Anthropic 互換のバックエンドなら何にでも接続できます。MulmoTerminal はその接続先を
 `config.json` から、**鍵はサーバを起動したときの環境変数から**読みます。鍵が設定ファイルに入ることはありません。
 
+> Anthropic 自体の認証、セッションに渡る環境変数、必要な許可の一覧、再開時の挙動は
+> [モデルとバックエンド](models.html) にまとめてあります。
+
 ### 1. 接続先を `~/.mulmoterminal/config.json` に足す
 
 ```json

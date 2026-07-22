@@ -58,5 +58,6 @@ npx mulmoterminal@latest    # → http://localhost:34567 が開く
 2. [応用編 — シナリオ別の使い方](scenarios.html)
 3. [機能一覧](features.html)（4 本柱で整理）
 4. [設定方法](config.html)（設定モーダル・`config.json`・`.mulmoterminal.json`・**DSL 拡張**）
+5. [モデルとバックエンド](models.html)（Anthropic の認証・別バックエンド・**必要な許可と鍵**）
 
 > 英語版は [English guide](../en/) にあります。

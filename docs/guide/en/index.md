@@ -58,5 +58,6 @@ npx mulmoterminal@latest    # opens http://localhost:34567
 2. [Scenarios — workflows by example](scenarios.html)
 3. [Feature reference](features.html) (grouped by the four pillars)
 4. [Configuration](config.html) (settings modal · `config.json` · `.mulmoterminal.json` · the **DSL**)
+5. [Models and backends](models.html) (Anthropic auth · other backends · **the credentials and permissions each needs**)
 
 > The Japanese guide is here: [日本語ガイド](../ja/).
