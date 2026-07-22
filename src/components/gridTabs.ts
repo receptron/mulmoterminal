@@ -171,8 +171,16 @@ function expandNeighbour(order: number[] | undefined, uid: number, remaining: Ce
   return neighbour !== undefined && remaining.some((c) => c.uid === neighbour) ? neighbour : null;
 }
 
+// Zooming shows one cell big with the others as a filmstrip beside it, so it only means
+// anything when there IS another cell to switch to. With a single occupied cell the ⤢ button
+// used to swap a working layout for a filmstrip containing nothing, and squeeze the
+// terminal's status bar and input off the bottom of the viewport for no gain (#374).
+//
+// Collapsing is never refused: whatever a state got into, ⤡ has to get out of it.
 export function toggleExpand(state: GridState, uid: number): GridState {
-  return { ...state, expanded: state.expanded === uid ? null : uid };
+  if (state.expanded === uid) return { ...state, expanded: null };
+  if (runningCount(state.cells) < 2) return state;
+  return { ...state, expanded: uid };
 }
 
 export function setSortMode(state: GridState, sortMode: SortMode): GridState {

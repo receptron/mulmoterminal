@@ -163,6 +163,30 @@ describe("setSession / setCwd / toggleExpand", () => {
     expect(toggleExpand(make(running(2)), 1).expanded).toBe(1);
     expect(toggleExpand(make(running(2), { expanded: 1 }), 1).expanded).toBeNull();
   });
+
+  // #374: zooming shows one cell big with the others as a filmstrip, so with nothing to
+  // switch to it swaps a working layout for an empty filmstrip and squeezes the terminal's
+  // status bar and input off the bottom of the viewport, for no gain.
+  it("refuses to zoom when there is only one occupied cell", () => {
+    const single = make([cell(0, U(0)), cell(1)]);
+    expect(toggleExpand(single, 0)).toBe(single);
+  });
+
+  it("refuses to zoom a grid of nothing but launch cells", () => {
+    const empty = make([cell(0), cell(1)]);
+    expect(toggleExpand(empty, 0)).toBe(empty);
+  });
+
+  it("zooms as soon as a second cell is occupied", () => {
+    expect(toggleExpand(make([cell(0, U(0)), cell(1, U(1)), cell(2)]), 0).expanded).toBe(0);
+  });
+
+  // Whatever a state got into, the collapse button has to get out of it — including a state
+  // that was zoomed when its sibling closed.
+  it("always allows collapsing, even down to one cell", () => {
+    const stranded = make([cell(0, U(0)), cell(1)], { expanded: 0 });
+    expect(toggleExpand(stranded, 0).expanded).toBeNull();
+  });
 });
 
 describe("switchPage", () => {
