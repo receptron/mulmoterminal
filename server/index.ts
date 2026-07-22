@@ -1,6 +1,6 @@
 import express from "express";
 import http from "http";
-import { WebSocketServer, WebSocket, type RawData } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 import type { IPty } from "node-pty";
 import path from "path";
 import fs from "fs/promises";
@@ -47,10 +47,11 @@ import { PORT, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/en
 import { hasErrnoCode, messageOf } from "./errors.js";
 import type { PtyEntry } from "./session/types.js";
 import { sandboxWouldRun } from "./session/pty-spawn.js";
-import { closeWithError, isResizeFrame } from "./session/ws-frames.js";
+import { closeWithError } from "./session/ws-frames.js";
 import { createClaudeSpawner } from "./session/spawn-claude.js";
 import { createCodexSpawner } from "./session/spawn-codex.js";
 import { createShellSpawners } from "./session/spawn-shell.js";
+import { createConnectionHandlers, handleCommandFrame } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import {
   activity,
@@ -89,7 +90,6 @@ import { codexAdapter } from "./agents/codex.js";
 import { codexSessionsRoot } from "./agents/codex-session.js";
 import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
-import { stripTerminalQueries } from "./session/terminal-replay.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { isRecord, isTrivialPrompt, countUserTurnsFromJsonl, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
@@ -319,6 +319,15 @@ function armReapForDetached(id: string) {
   }
   scheduleReap(id, decision.delayMs);
 }
+
+// Per-connection plumbing (session/pty-connection.ts). The reap decisions stay here —
+// they read activity state and schedule timers that outlive any one connection.
+const { reattachPty, handleClientFrame, handleClientClose } = createConnectionHandlers({
+  cancelReap: (id) => cancelReap(id),
+  reap: (id) => reap(id),
+  setWaiting: (id, waiting) => setWaiting(id, waiting),
+  armReapForDetached: (id) => armReapForDetached(id),
+});
 
 function reap(id: string) {
   cancelReap(id);
@@ -1254,32 +1263,6 @@ server.on("upgrade", (req, socket, head) => {
   target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
 });
 
-// Reattach a live background PTY to a new socket: drop any stale socket, swap in
-// the new one, and replay the buffered tail for context.
-function reattachPty(entry: PtyEntry, ws: WebSocket, sessionId: string): PtyEntry {
-  cancelReap(sessionId); // a reattach within the grace window keeps the session
-  console.log(`[ws] reattach ${sessionId} (pid=${entry.term.pid})`);
-  // Drop any socket still attached (e.g. the same session open in another tab).
-  // Tell it it's been superseded FIRST so it stops instead of auto-reconnecting —
-  // otherwise two clients on one session ping-pong (each reattach kicks the other,
-  // the kicked one reconnects, …) into a storm.
-  if (entry.ws && entry.ws !== ws && entry.ws.readyState === entry.ws.OPEN) {
-    try {
-      entry.ws.send(JSON.stringify({ type: "superseded" }));
-    } catch {
-      // socket already going away — closing below is enough
-    }
-    entry.ws.close();
-  }
-  entry.ws = ws;
-  if (entry.buffer && ws.readyState === ws.OPEN) {
-    // Strip terminal queries from the replay so xterm doesn't re-answer them as stray input
-    // (e.g. a DA reply surfacing as "0;276;0c" in the prompt) — see terminal-replay.ts.
-    ws.send(JSON.stringify({ type: "output", data: stripTerminalQueries(entry.buffer) }));
-  }
-  return entry;
-}
-
 // How long to wait for a hidden translation worker to call submitTranslation before
 // giving up (cold claude startup + one short turn). Generous; the result is cached.
 const TRANSLATION_TIMEOUT_MS = 120_000;
@@ -1354,77 +1337,6 @@ async function translateViaHiddenChat(targetLanguage: string, sentences: readonl
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error("[translation] hidden chat failed");
-}
-
-// browser -> PTY. The protocol is client-controlled, so validate every frame
-// before touching node-pty (bad cols/rows or non-string input can throw).
-function handleClientFrame(entry: PtyEntry, ws: WebSocket, raw: RawData, sessionId: string) {
-  // Ignore frames from a socket that a newer client has already superseded.
-  if (entry.ws !== ws) return;
-  let msg;
-  try {
-    msg = JSON.parse(raw.toString());
-  } catch {
-    return; // not JSON — never write arbitrary payloads to the PTY
-  }
-  try {
-    if (msg.type === "terminate") {
-      // Explicit close (the cell's ✕) — reap now instead of waiting out the
-      // disconnect grace window, so the session slot frees immediately.
-      reap(sessionId);
-    } else if (msg.type === "view" && typeof msg.active === "boolean") {
-      // The user's focus moved onto/off this pane (a grid cell zoomed/opened, or
-      // blurred). An active pane suppresses the attention flag and marks it read;
-      // an inactive grid cell can surface blocked/done among its siblings.
-      entry.active = msg.active;
-      if (msg.active) setWaiting(sessionId, false);
-    } else if (msg.type === "input" && typeof msg.data === "string") {
-      entry.term.write(msg.data);
-    } else if (isResizeFrame(msg)) {
-      entry.term.resize(msg.cols, msg.rows);
-    }
-  } catch (err) {
-    // e.g. a write/resize that races the PTY exiting — drop it, never crash.
-    console.warn(`[ws] dropped message for ${sessionId}: ${messageOf(err)}`);
-  }
-}
-
-// browser -> command PTY. Like handleClientFrame but for the session-less command
-// terminal: only input/resize (no terminate/session machinery).
-function handleCommandFrame(term: IPty, raw: RawData) {
-  let msg;
-  try {
-    msg = JSON.parse(raw.toString());
-  } catch {
-    return; // not JSON — never write arbitrary payloads to the PTY
-  }
-  try {
-    if (msg.type === "input" && typeof msg.data === "string") {
-      term.write(msg.data);
-    } else if (isResizeFrame(msg)) {
-      term.resize(msg.cols, msg.rows);
-    }
-  } catch (err) {
-    console.warn(`[ws/run] dropped message: ${messageOf(err)}`);
-  }
-}
-
-// Socket closed: detach it and decide the PTY's fate by activity — working stays
-// alive, needs-the-user gets a long grace, idle gets the short grace.
-function handleClientClose(entry: PtyEntry, ws: WebSocket, sessionId: string) {
-  // Ignore if a newer client already reattached to this session.
-  if (entry.ws !== ws) return;
-  entry.ws = null;
-  // A session with no live socket is by definition not being viewed. Clear `active`
-  // so an UNCLEAN disconnect (crash / network drop / killed tab, where the client
-  // can't send `view active:false`) can't leave the attention flag suppressed until
-  // reconnect. A reattach re-asserts `active` (attach default + the client's view frame).
-  entry.active = false;
-  // Keep a working session alive indefinitely, give a session that needs the user
-  // the long grace, and reap a genuinely idle one after the short grace. A reload
-  // reconnects in a moment and re-attaches (cancelling the reap) regardless.
-  console.log(`[ws] disconnected ${sessionId}`);
-  armReapForDetached(sessionId);
 }
 
 // Pick the effective session id for a /ws connection: reattach a same-process live pty,
