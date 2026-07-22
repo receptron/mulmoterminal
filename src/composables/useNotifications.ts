@@ -9,6 +9,7 @@
 import { ref, computed } from "vue";
 import { usePubSub } from "./usePubSub";
 import { browseNavigateToRecord } from "./useCollectionBrowse";
+import { applyLiveTouches, type LiveTouch } from "./liveMerge";
 
 // Must match server/backends/notifier.ts NOTIFIER_CHANNEL.
 const NOTIFIER_CHANNEL = "notifications";
@@ -66,13 +67,20 @@ export function parseCollectionTarget(target: string | undefined): { slug: strin
   }
 }
 
+// What the live channel did to the list while a fetch was in flight (#620 F2). The response
+// is authoritative as of when it was SENT, so these have to survive it.
+let fetchInFlight = false;
+let touchedDuringFetch = new Map<string, LiveTouch<NotifierEntry>>();
+
 function upsert(entry: NotifierEntry): void {
+  if (fetchInFlight) touchedDuringFetch.set(entry.id, { kind: "upsert", item: entry });
   const idx = active.value.findIndex((existing) => existing.id === entry.id);
   if (idx === -1) active.value.push(entry);
   else active.value.splice(idx, 1, entry);
 }
 
 function remove(id: string): void {
+  if (fetchInFlight) touchedDuringFetch.set(id, { kind: "remove" });
   const idx = active.value.findIndex((existing) => existing.id === id);
   if (idx !== -1) active.value.splice(idx, 1);
 }
@@ -91,6 +99,8 @@ function applyEvent(event: NotifierEvent): void {
 }
 
 async function fetchActive(): Promise<void> {
+  fetchInFlight = true;
+  touchedDuringFetch = new Map();
   try {
     const res = await fetch("/api/notifications");
     if (!res.ok) {
@@ -98,9 +108,13 @@ async function fetchActive(): Promise<void> {
       return;
     }
     const data = (await res.json()) as { active?: NotifierEntry[] };
-    active.value = Array.isArray(data.active) ? data.active : [];
+    const snapshot = Array.isArray(data.active) ? data.active : [];
+    active.value = applyLiveTouches(snapshot, touchedDuringFetch, (entry) => entry.id);
   } catch (err) {
     console.error("[notifications] list failed", err);
+  } finally {
+    fetchInFlight = false;
+    touchedDuringFetch = new Map();
   }
 }
 
