@@ -20,6 +20,8 @@ const EMPTY = {
   buttons: null,
   chips: null,
   skills: null,
+  provider: null,
+  model: null,
 };
 
 function withConfig(body: unknown): { dir: string; cleanup: () => void } {
@@ -131,6 +133,8 @@ describe("loadDirConfig", () => {
       buttons: null,
       chips: null,
       skills: ["review", "commit"], // trimmed, deduped, empties dropped
+      provider: null,
+      model: null,
     });
     cleanup();
   });

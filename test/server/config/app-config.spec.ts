@@ -123,6 +123,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     pushEnabled: false,
     worklogEnabled: false,
     worklogIntervalHours: 6,
+    providers: [],
   };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
@@ -138,6 +139,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       pushEnabled: true,
       worklogEnabled: true,
       worklogIntervalHours: 12,
+      providers: [],
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -178,6 +180,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       pushEnabled: false,
       worklogEnabled: false,
       worklogIntervalHours: 6,
+      providers: [],
     });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -211,6 +214,7 @@ describe("mergeConfigUpdate", () => {
     pushEnabled: false,
     worklogEnabled: false,
     worklogIntervalHours: 6,
+    providers: [],
     ...over,
   });
 

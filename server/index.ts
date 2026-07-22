@@ -71,6 +71,7 @@ import { codexSessionsRoot } from "./agents/codex-session.js";
 import { codexRolloutExists } from "./agents/codex-sessions.js";
 import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
+import { cleanupSessionSettings } from "./session/session-settings.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
 import { isRecord, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
@@ -329,6 +330,8 @@ function reap(id: string) {
   // A sandbox container likewise outlives its killed `docker run` client — force-remove
   // it (and drop the throwaway per-session config).
   if (entry.sandbox) cleanupSandbox(id);
+  // A provider session's settings file holds its token — drop it with the session (#579).
+  cleanupSessionSettings(id);
   pubsub?.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
 }
 
@@ -413,7 +416,7 @@ function setWaiting(id: string, waiting: boolean, event?: string) {
 // per-session tool-call history that the GUI's tools pane shows. A failed tool
 // fires PostToolUseFailure (NOT PostToolUse), so we register both to complete the
 // entry either way — otherwise a failed call would stay stuck on "running".
-function hookSettingsJson(host: string, sessionId: string) {
+function hookSettingsJson(host: string, sessionId: string, env: Record<string, string> = {}) {
   // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own session_id
   // on /clear and /compact, but the PTY — and the id the client tracks — stays this one, so attributing
   // hooks by this header keeps activity / header prompt / tool history correlated across a clear.
@@ -421,7 +424,11 @@ function hookSettingsJson(host: string, sessionId: string) {
   const entry = [{ hooks: [{ type: "command", command: cmd }] }];
   // Tool hooks take a matcher; "" matches all tools.
   const toolEntry = [{ matcher: "", hooks: [{ type: "command", command: cmd }] }];
+  // `env` aims a provider session at its backend (#579). Claude Code applies this block
+  // itself, so it lands identically on the host, under tmux — where a pane inherits the
+  // tmux SERVER's environment, not ours — and in a container.
   return JSON.stringify({
+    ...(Object.keys(env).length ? { env } : {}),
     hooks: {
       UserPromptSubmit: entry,
       Stop: entry,

@@ -14,6 +14,10 @@ import { appendBoundedOutput } from "./terminal-replay.js";
 import { sessionExistsOnDisk } from "./session-reads.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
+import { loadDirConfig } from "../config/dir-config.js";
+import { getProviders } from "../config/config-routes.js";
+import { resolveProvider } from "./provider-env.js";
+import { settingsArgument } from "./session-settings.js";
 
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
@@ -44,12 +48,25 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // Falls back to the host spawn if the Docker daemon isn't reachable.
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
+
+    // What this directory asked its sessions to run (#579). A refusal is NOT applied —
+    // the session stays on Anthropic, which is the safe outcome — but it is logged loudly,
+    // because silently ignoring the directory's choice is its own kind of surprise.
+    const dir = loadDirConfig(cwd);
+    const choice = resolveProvider({ provider: dir.provider, model: dir.model }, getProviders(), process.env, sandbox);
+    if (!choice.ok) console.warn(`[provider] ${cwd}: ${choice.reason} — staying on Anthropic`);
+    const resolved = choice.ok ? choice.value : { model: null, env: {}, unset: [] };
+
+    const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
     const args = buildClaudeArgs({
+      model: resolved.model,
       sessionId,
       resume,
       canResume,
-      // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-      settings: deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
+      // In the sandbox the hooks + GUI MCP are reached over host.docker.internal. A
+      // provider session's settings carry its token, so they go to a 0600 file instead of
+      // argv — see session-settings.ts.
+      settings: settingsArgument(sessionId, hookSettings, Object.keys(resolved.env).length > 0),
       permissionMode: deps.permissionMode,
       attachGuiMcp,
       mcpConfig: deps.mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),

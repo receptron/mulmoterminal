@@ -17,10 +17,15 @@ export interface ClaudeArgsInput {
   attachGuiMcp: boolean;
   mcpConfig: string; // GUI MCP config JSON (--mcp-config), used only when attachGuiMcp
   guiMcpTools: string; // comma-joined GUI tool names (--allowedTools), used only when attachGuiMcp
+  // What this session runs (#579): an alias (sonnet/opus/haiku) or a backend's own model
+  // name. Null leaves the choice to Claude Code. `--model` outranks both the settings
+  // `model` key and ANTHROPIC_MODEL, so it is the one place the decision has to be made.
+  model?: string | null;
 }
 
 export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
   const guiArgs = ["--permission-mode", input.permissionMode];
+  if (input.model) guiArgs.push("--model", input.model);
   if (input.attachGuiMcp) {
     guiArgs.push("--mcp-config", input.mcpConfig, "--strict-mcp-config", "--allowedTools", input.guiMcpTools);
   }

@@ -114,11 +114,17 @@ export function parseTmuxEnvironment(stdout: string): Map<string, string> {
 //
 // Session environments need no scrub either: tmux copies only `update-environment`
 // vars (DISPLAY, SSH_*, …) into them, never launcher vars.
+// Beyond the launcher vars: a session pointed at an Anthropic-compatible backend must not
+// see ANTHROPIC_API_KEY, which silently outranks the auth token that aims it there. The
+// settings `env` block cannot express a REMOVAL, and a pane inherits the tmux server's
+// environment rather than ours, so this is where it has to be taken out (#579).
+const SCRUBBED_NAMES = new Set(["ANTHROPIC_API_KEY"]);
+
 function scrubGlobalEnvironment(): void {
   const r = tmux(["show-environment", "-g"]);
   if (r.status !== 0) return;
   for (const name of parseTmuxEnvironment(r.stdout).keys()) {
-    if (isLauncherEnvVar(name)) tmux(["set-environment", "-g", "-r", name]);
+    if (isLauncherEnvVar(name) || SCRUBBED_NAMES.has(name)) tmux(["set-environment", "-g", "-r", name]);
   }
 }
 
