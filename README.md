@@ -731,13 +731,13 @@ Favorited collections get their own toolbar buttons.
 
 - **Timeline** (🕘) — a read-only per-session activity timeline (tools run, newest first),
   from `GET /api/transcript/timeline`.
-- **Ask another cell** (💬) — hand this session's **last completed turn** to another
-  terminal in the grid: pick the destination and the exchange is pasted into its input
-  box, so you can have Claude and Codex look at each other's work (or ask a session in a
-  different repo). The excerpt comes from the agent's own log, not the screen buffer, so
-  it carries no ANSI debris and nothing lost to scrollback. It is **pasted, never sent** —
-  you read what arrived and press Enter. A turn still running isn't available yet (Codex
-  writes its rollout only once the turn ends).
+- **Bring another cell's turn here** (💬) — pick another terminal in the grid and its
+  **last completed turn** is pasted into *this* cell's input box, so you can have Claude
+  and Codex look at each other's work (or pull in a session running in a different repo).
+  The excerpt comes from the agent's own log, not the screen buffer, so it carries no
+  ANSI debris and nothing lost to scrollback. It is **pasted, never sent** — you read
+  what arrived and press Enter, in the cell you were already in. A turn still running
+  isn't available yet (Codex writes its rollout only once the turn ends).
 - **Tools pane** — the available GUI tools plus a live tool-call history for the active
   session.
 - **Notifications** (🔔) — a toolbar bell with an unread badge and a dropdown of active
