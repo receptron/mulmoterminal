@@ -6,7 +6,17 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { sanitizePresets } from "./cwd-presets.js";
 import { sanitizeButtons, sanitizeChips } from "./header-config.js";
-import { launcherSchema, userMcpServerSchema, type CwdPreset, type Launcher, type UserMcpServer, type HeaderButton, type HeaderChip } from "./config-schema.js";
+import {
+  launcherSchema,
+  userMcpServerSchema,
+  providerSchema,
+  type CwdPreset,
+  type Provider,
+  type Launcher,
+  type UserMcpServer,
+  type HeaderButton,
+  type HeaderChip,
+} from "./config-schema.js";
 
 export interface AppConfig {
   cwdPresets: CwdPreset[];
@@ -32,6 +42,9 @@ export interface AppConfig {
   // session on each run, so it costs tokens). `worklogIntervalHours` is the cadence.
   worklogEnabled: boolean;
   worklogIntervalHours: number;
+  // Anthropic-compatible backends a directory can point its sessions at (#579). Safe to
+  // serve: an entry names the env var holding its key (`tokenEnv`), never the key.
+  providers: Provider[];
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -137,7 +150,19 @@ const emptyConfig = (): AppConfig => ({
   pushEnabled: false,
   worklogEnabled: false,
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
+  providers: [],
 });
+
+// Drop malformed entries rather than rejecting the whole config: one bad provider must
+// not cost the user their launchers and presets. A bad entry surfaces at spawn time,
+// where resolveProvider names the actual problem.
+export function sanitizeProviders(input: unknown): Provider[] {
+  if (!Array.isArray(input)) return [];
+  return input.flatMap((entry) => {
+    const parsed = providerSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  });
+}
 
 export function loadAppConfig(file: string): AppConfig {
   try {
@@ -154,6 +179,7 @@ export function loadAppConfig(file: string): AppConfig {
       pushEnabled: sanitizePushEnabled(raw?.pushEnabled),
       worklogEnabled: sanitizeWorklogEnabled(raw?.worklogEnabled),
       worklogIntervalHours: sanitizeWorklogIntervalHours(raw?.worklogIntervalHours),
+      providers: sanitizeProviders(raw?.providers),
     };
   } catch {
     return emptyConfig();
@@ -177,6 +203,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     pushEnabled: body.pushEnabled !== undefined ? sanitizePushEnabled(body.pushEnabled) : base.pushEnabled,
     worklogEnabled: body.worklogEnabled !== undefined ? sanitizeWorklogEnabled(body.worklogEnabled) : base.worklogEnabled,
     worklogIntervalHours: body.worklogIntervalHours !== undefined ? sanitizeWorklogIntervalHours(body.worklogIntervalHours) : base.worklogIntervalHours,
+    providers: body.providers !== undefined ? sanitizeProviders(body.providers) : base.providers,
   };
 }
 
@@ -186,6 +213,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
 export function toPublicAppConfig(config: AppConfig): AppConfig {
   return {
     cwdPresets: config.cwdPresets,
+    providers: config.providers,
     soundFile: config.soundFile,
     prRepos: config.prRepos,
     launchers: config.launchers,

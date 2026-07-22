@@ -10,10 +10,15 @@ export interface SpawnDeps {
   guiMcpTools: string;
   /** Bytes of pty output kept for a client that reattaches later. */
   outputBufferLimit: number;
-  hookSettingsJson: (host: string, sessionId: string) => string;
+  hookSettingsJson: (host: string, sessionId: string, env?: Record<string, string>) => string;
   mcpConfigJson: (sessionId: string, host?: string, sandbox?: boolean) => string;
   reap: (id: string) => void;
-  setWorking: (id: string, working: boolean) => void;
+  setWorking: (id: string, working: boolean, event?: string) => void;
+  /** Needed alongside setWorking because a finished codex turn flags the cell for attention,
+   *  exactly as claude's Stop hook does — see codex-activity-watch. */
+  setWaiting: (id: string, waiting: boolean, event?: string) => void;
+  /** Which port this host's UI answers on, so a codex completion notification can open it. */
+  uiPort: string;
   /** Surface a brand-new session in the sidebar before it is persisted. */
   publishSessionCreated: (sessionId: string) => void;
 }

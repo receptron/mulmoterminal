@@ -14,6 +14,10 @@ import { appendBoundedOutput } from "./terminal-replay.js";
 import { sessionExistsOnDisk } from "./session-reads.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
+import { loadDirConfig } from "../config/dir-config.js";
+import { getProviders } from "../config/config-routes.js";
+import { requireResolution, resolveProvider } from "./provider-env.js";
+import { settingsArgument, withSettingsCleanup } from "./session-settings.js";
 
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
@@ -44,12 +48,24 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // Falls back to the host spawn if the Docker daemon isn't reachable.
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
+
+    // What this directory asked its sessions to run (#579). A refusal THROWS: falling back
+    // to Anthropic would send this session's prompts to a backend the directory did not
+    // select, which is exactly what the provider contract exists to prevent. The ws route
+    // turns it into a message in the terminal.
+    const dir = loadDirConfig(cwd);
+    const resolved = requireResolution(resolveProvider({ provider: dir.provider, model: dir.model }, getProviders(), process.env, sandbox));
+
+    const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
     const args = buildClaudeArgs({
+      model: resolved.model,
       sessionId,
       resume,
       canResume,
-      // In the sandbox the hooks + GUI MCP are reached over host.docker.internal.
-      settings: deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId),
+      // In the sandbox the hooks + GUI MCP are reached over host.docker.internal. A
+      // provider session's settings carry its token, so they go to a 0600 file instead of
+      // argv — see session-settings.ts.
+      settings: settingsArgument(sessionId, hookSettings, Object.keys(resolved.env).length > 0),
       permissionMode: deps.permissionMode,
       attachGuiMcp,
       mcpConfig: deps.mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox),
@@ -62,13 +78,16 @@ export function createClaudeSpawner(deps: SpawnDeps) {
 
     // Sandbox → run claude inside a fresh container (no tmux). Otherwise the host path:
     // a live tmux session for this id (survived a restart) reattaches; else create it.
-    let entry: PtyEntry;
-    if (sandbox) {
-      entry = spawnSandboxEntry(sessionId, args, cwd, ws);
-    } else {
-      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true);
+    // The settings file is already on disk and may hold a provider token, so a failed
+    // spawn has to take it with it — a session that never starts never reaches reap(),
+    // where the cleanup normally happens (#579).
+    const entry = withSettingsCleanup(sessionId, spawnEntry);
+
+    function spawnEntry(): PtyEntry {
+      if (sandbox) return spawnSandboxEntry(sessionId, args, cwd, ws);
+      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, resolved.unset);
       console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-      entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
+      return { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
     }
     ptys.set(sessionId, entry);
 
