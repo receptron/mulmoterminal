@@ -3,7 +3,6 @@ import http from "http";
 import path from "path";
 import fs from "fs/promises";
 import { randomUUID } from "crypto";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "url";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createPubSub } from "./infra/pubsub.js";
@@ -61,8 +60,7 @@ import { mountSessionRoutes } from "./routes/session-routes.js";
 import { createToolStores } from "./session/tool-store.js";
 import { mountToolRoutes } from "./routes/tool-routes.js";
 import { mountRepoRoutes } from "./routes/repo-routes.js";
-import { claudeOnDiskSessionIds, latestUserPrompt, LAST_RESPONSE_MAX } from "./session/session-reads.js";
-import { projectSessionsDir } from "./session/project-dir.js";
+import { claudeOnDiskSessionIds, latestUserPrompt, readLatestResponse } from "./session/session-reads.js";
 import { mountDirRoutes } from "./routes/dir-routes.js";
 import { createScheduledSessionRegistry, heldByAnotherProcess, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -73,7 +71,7 @@ import { codexifySkillSeed } from "./agents/codex-skills.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import { agentFromPaneCommand, buildSessionList, captureSessionScreen } from "./backends/remoteHost/terminalScreen.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
-import { isRecord, latestAssistantTextFromJsonl, preferredHeaderPrompt } from "./session/transcript.js";
+import { isRecord, preferredHeaderPrompt } from "./session/transcript.js";
 import { mountOpenDirRoute } from "./files/open-dir.js";
 import { mountGitRemoteRoute } from "./git/gitRemote.js";
 import { mountWorktreeRoutes } from "./git/worktree-routes.js";
@@ -182,19 +180,6 @@ const { recordToolCallStart, recordToolCallEnd } = toolStores;
 
 const LAST_PROMPT_CAP = 200;
 
-// The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
-// the cache below because the two want opposite things on failure: the roster would rather
-// keep showing the last reply it had, while a push must never describe a finished turn with
-// the PREVIOUS turn's text — for that caller, null has to stay null.
-function readLatestResponse(id: string, cwd: string): string | null {
-  try {
-    const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
-    const text = latestAssistantTextFromJsonl(raw);
-    return text ? text.slice(0, LAST_RESPONSE_MAX) : null;
-  } catch {
-    return null; // no transcript yet / unreadable
-  }
-}
 function refreshLastResponse(id: string, cwd: string): void {
   const text = readLatestResponse(id, cwd);
   if (text) lastResponses.set(id, text); // a failed read leaves any prior value

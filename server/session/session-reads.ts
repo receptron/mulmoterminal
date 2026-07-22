@@ -8,7 +8,7 @@
 // own module: the dependency runs one way. One of them also WRITES — collectPendingSessions
 // drops a session from knownSessions once disk has it — so "reads" describes the direction
 // of the data, not a guarantee of purity.
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -20,6 +20,7 @@ import {
   countUserTurnsFromParsed,
   latestMeaningfulUserPromptFromJsonl,
   latestMeaningfulUserPromptFromParsed,
+  latestAssistantTextFromJsonl,
   latestAssistantTextFromParsed,
   sessionUsageFromParsed,
   latestTurnContextFromParsed,
@@ -40,6 +41,20 @@ import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
 
 // Bytes of an assistant reply kept for the roster; the same cap the push body uses.
 export const LAST_RESPONSE_MAX = 400;
+
+// The reply as it is on disk RIGHT NOW, or null when there is none to read. Separate from
+// the cache below because the two want opposite things on failure: the roster would rather
+// keep showing the last reply it had, while a push must never describe a finished turn with
+// the PREVIOUS turn's text — for that caller, null has to stay null.
+export function readLatestResponse(id: string, cwd: string): string | null {
+  try {
+    const raw = readFileSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`), "utf8");
+    const text = latestAssistantTextFromJsonl(raw);
+    return text ? text.slice(0, LAST_RESPONSE_MAX) : null;
+  } catch {
+    return null; // no transcript yet / unreadable
+  }
+}
 
 // Whether a session has an on-disk transcript (claude only writes it after the
 // first prompt) in the given workspace. Determines whether `--resume` will work.
