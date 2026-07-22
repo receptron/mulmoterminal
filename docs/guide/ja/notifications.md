@@ -2,7 +2,7 @@
 title: スマホ通知（Web Push）
 layout: default
 parent: 日本語
-nav_order: 5
+nav_order: 6
 ---
 
 # スマホ通知（Web Push）

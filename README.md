@@ -233,8 +233,8 @@ serves. A directory sets its default in `.mulmoterminal.json` (`provider` / `mod
 each grid cell's launch form has a **MODEL** select that overrides it for one session,
 listing ~27 curated models with the measured pass rate of a real tool-using task beside
 each. A provider whose token can't be resolved **refuses to start** rather than falling
-back to Anthropic, and providers can't be combined with the Docker sandbox. See
-[Configuration → providers](https://receptron.github.io/mulmoterminal/guide/en/config.html#providers).
+back to Anthropic, and providers can't be combined with the Docker sandbox. Full walkthrough — setup, the measured model list, adding your own models, troubleshooting:
+[Using another model via OpenRouter](https://receptron.github.io/mulmoterminal/guide/en/providers.html).
 
 **Skills for Codex.** Codex has no `/<slug>` slash commands, so on session setup
 MulmoTerminal **mirrors the workspace's `.claude/skills` into `~/.codex/skills`** (each
