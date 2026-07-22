@@ -17,7 +17,7 @@ import type { SpawnDeps } from "./spawn-deps.js";
 import { loadDirConfig } from "../config/dir-config.js";
 import { getProviders } from "../config/config-routes.js";
 import { requireResolution, resolveProvider } from "./provider-env.js";
-import { settingsArgument } from "./session-settings.js";
+import { settingsArgument, withSettingsCleanup } from "./session-settings.js";
 
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
@@ -78,13 +78,16 @@ export function createClaudeSpawner(deps: SpawnDeps) {
 
     // Sandbox → run claude inside a fresh container (no tmux). Otherwise the host path:
     // a live tmux session for this id (survived a restart) reattaches; else create it.
-    let entry: PtyEntry;
-    if (sandbox) {
-      entry = spawnSandboxEntry(sessionId, args, cwd, ws);
-    } else {
+    // The settings file is already on disk and may hold a provider token, so a failed
+    // spawn has to take it with it — a session that never starts never reaches reap(),
+    // where the cleanup normally happens (#579).
+    const entry = withSettingsCleanup(sessionId, spawnEntry);
+
+    function spawnEntry(): PtyEntry {
+      if (sandbox) return spawnSandboxEntry(sessionId, args, cwd, ws);
       const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, resolved.unset);
       console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
-      entry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
+      return { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
     }
     ptys.set(sessionId, entry);
 

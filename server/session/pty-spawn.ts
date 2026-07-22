@@ -8,7 +8,7 @@ import path from "node:path";
 import type { WebSocket } from "ws";
 import { sanitizePtyEnv } from "../infra/pty-env.js";
 import { withoutUnset } from "./provider-env.js";
-import { tmuxAvailable, tmuxNewSessionArgs } from "../infra/tmux.js";
+import { tmuxAvailable, tmuxNewSessionArgs, tmuxScrubEnvNames } from "../infra/tmux.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -55,6 +55,9 @@ export function ptySpawn(
   unset: readonly string[] = [],
 ): { term: IPty; tmux: boolean } {
   if (persistent && tmuxAvailable()) {
+    // A pane inherits the tmux SERVER's environment, so stripping our own copy is not
+    // enough — the server may already carry the name from an earlier session.
+    if (unset.length > 0) tmuxScrubEnvNames(unset);
     return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd, unset), tmux: true };
   }
   return { term: spawnPty(file, args, cwd, unset), tmux: false };

@@ -128,6 +128,20 @@ function scrubGlobalEnvironment(): void {
   }
 }
 
+// Flag names for removal from the RUNNING tmux server's global environment, so panes
+// created from here on don't inherit them.
+//
+// ensureConf's scrub is not enough on its own: it only runs when a server already existed
+// when this process started. A server that a LATER spawn creates inherits that spawn's
+// environment instead — measured — so a first non-provider session can seed the server
+// with ANTHROPIC_API_KEY and every provider pane after it would inherit the key that
+// silently outranks its auth token (#579). Called before a provider spawn; a no-op (and
+// harmless failure) when no server is running yet, where the fresh server inherits the
+// already-stripped environment.
+export function tmuxScrubEnvNames(names: readonly string[]): void {
+  for (const name of names) tmux(["set-environment", "-g", "-r", name]);
+}
+
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });

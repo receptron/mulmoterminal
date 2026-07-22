@@ -27,6 +27,18 @@ export function settingsArgument(sessionId: string, json: string, secret: boolea
   return file;
 }
 
+// Run a spawn, taking the session's settings file with it if the spawn throws. A session
+// that never starts never reaches reap(), where the cleanup normally happens — so without
+// this a failed spawn leaves a token-bearing file behind (#579).
+export function withSettingsCleanup<T>(sessionId: string, spawn: () => T): T {
+  try {
+    return spawn();
+  } catch (err) {
+    cleanupSessionSettings(sessionId);
+    throw err;
+  }
+}
+
 // Drop a session's settings file. Safe to call for sessions that never wrote one.
 export function cleanupSessionSettings(sessionId: string): void {
   rmSync(settingsFile(sessionId), { force: true });
