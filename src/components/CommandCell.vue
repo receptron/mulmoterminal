@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import TerminalView from "./Terminal.vue";
+import CellChromeButtons from "./CellChromeButtons.vue";
 import type { RunCommand } from "./runCommand";
 import { formatCwd } from "./cwdDisplay";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
@@ -161,15 +162,7 @@ function onHeaderClick(event: MouseEvent) {
         >
           {{ summaryState === "loading" ? "⋯" : "✦" }}
         </button>
-        <button
-          class="cell-btn"
-          :title="expanded ? 'Restore' : 'Expand'"
-          :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
-          @click="emit('toggle-expand')"
-        >
-          {{ expanded ? "⤡" : "⤢" }}
-        </button>
-        <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click="emit('close')">✕</button>
+        <CellChromeButtons :expanded="expanded" @toggle-expand="emit('toggle-expand')" @close="emit('close')" />
       </span>
     </div>
     <TerminalView
