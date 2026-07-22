@@ -26,6 +26,7 @@ import { useSoundEnabled } from "./composables/useSoundEnabled";
 import { useAttentionSound } from "./composables/useAttentionSound";
 import { useUnloadGuard, reportActiveTerminals } from "./composables/useUnloadGuard";
 import { browserLocale } from "./utils/browserLocale";
+import { clampTerminalWidth, maxTerminalWidth, MIN_TERMINAL, splitterKeyWidth } from "./components/splitterWidth";
 
 // View mode is now the URL: the multi-terminal grid is /terminals, everything else
 // (chat + the collection/accounting overlays) lives under the single-view shell.
@@ -87,17 +88,16 @@ useFaviconState(sessions);
 // and the GUI panel; the GUI panel absorbs whatever is left. Persisted across
 // reloads. The terminal's own ResizeObserver refits xterm's cols/rows as this
 // changes, so a drag live-resizes the PTY.
-const MIN_TERMINAL = 320;
-const MIN_GUI = 360;
+
 const terminalWidth = ref<number>(Number(localStorage.getItem("terminal_width")) || 560);
 
 // Track the viewport so the splitter's max (and aria-valuemax) stays correct and
 // the saved width re-clamps when the window shrinks.
 const viewportWidth = ref(window.innerWidth);
-const maxTerminal = computed(() => Math.max(MIN_TERMINAL, viewportWidth.value - MIN_GUI));
+const maxTerminal = computed(() => maxTerminalWidth(viewportWidth.value));
 
 function clampWidth(w: number): number {
-  return Math.max(MIN_TERMINAL, Math.min(w, maxTerminal.value));
+  return clampTerminalWidth(w, viewportWidth.value);
 }
 
 function persistWidth() {
@@ -133,12 +133,11 @@ function startDrag(e: MouseEvent) {
 // Keyboard resize for the separator (arrows nudge, Home/End jump to the limits)
 // so the splitter is operable without a mouse.
 function onSplitterKey(e: KeyboardEvent) {
-  const STEP = 16;
-  if (e.key === "ArrowLeft") terminalWidth.value = clampWidth(terminalWidth.value - STEP);
-  else if (e.key === "ArrowRight") terminalWidth.value = clampWidth(terminalWidth.value + STEP);
-  else if (e.key === "Home") terminalWidth.value = MIN_TERMINAL;
-  else if (e.key === "End") terminalWidth.value = maxTerminal.value;
-  else return;
+  const next = splitterKeyWidth(e.key, terminalWidth.value, viewportWidth.value);
+  // Null means the key is not ours — returning BEFORE preventDefault is what keeps the
+  // separator from swallowing Tab and Escape while it has focus.
+  if (next === null) return;
+  terminalWidth.value = next;
   e.preventDefault();
   persistWidth();
 }
