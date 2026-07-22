@@ -67,6 +67,16 @@ export default [
     },
   },
   {
+    // The launcher's job is to run the user's installed CLIs — claude, gh, tmux,
+    // codex, git — which have no portable absolute path and are found on PATH by
+    // design. no-os-command-from-path fights that premise on every spawn, so it
+    // is off here rather than suppressed inline at each call.
+    files: ["bin/**/*.js"],
+    rules: {
+      "sonarjs/no-os-command-from-path": "off",
+    },
+  },
+  {
     // Complexity / size guards. Cognitive complexity is already covered by sonarjs
     // (error@15). All ERRORS (enforced going forward) except max-params, which stays WARN
     // for its one intentional offender: spawnClaudePty's 7 params (hot path, not worth
