@@ -19,6 +19,8 @@ import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
 import { shouldZoomOnHeaderClick } from "./cellHeaderZoom";
 import { handoffTargets, pullLastTurn, type HandoffTarget } from "../composables/useHandoff";
+import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
+import { outcomeMessage } from "../composables/exchangeRules";
 
 // How long a handoff failure stays on the cell before it clears itself.
 const ASK_MSG_MS = 4000;
@@ -643,6 +645,32 @@ async function askCell(target: HandoffTarget) {
   if (error) showAskMsg(error);
 }
 
+// One automatic exchange: our turn goes out, their answer comes back, both submitted.
+// `exchangeStop` is the only way a running exchange ends early, so it is also what the
+// cell unmounting sets — a loop typing into terminals must not outlive its cell.
+const exchanging = ref(false);
+let exchangeStop = false;
+
+function stopExchange() {
+  exchangeStop = true;
+}
+
+async function exchangeWith(target: HandoffTarget) {
+  askMenuOpen.value = false;
+  if (!sessionId.value || exchanging.value) return;
+  exchanging.value = true;
+  exchangeStop = false;
+  const self = { key: `cell-${props.uid}`, source: { sessionId: sessionId.value, cwd: cwd.value, agent: agent.value } };
+  const { outcome } = await runOneExchange(
+    self,
+    target,
+    liveCrossTalkDeps(() => exchangeStop),
+  );
+  exchanging.value = false;
+  const message = outcomeMessage(outcome);
+  if (message) showAskMsg(message);
+}
+
 function onAskOutside(e: MouseEvent) {
   if (askWrap.value && !askWrap.value.contains(e.target as Node)) askMenuOpen.value = false;
 }
@@ -653,6 +681,7 @@ watch(askMenuOpen, (open) => {
 onUnmounted(() => {
   document.removeEventListener("mousedown", onAskOutside);
   if (askMsgTimer) clearTimeout(askMsgTimer);
+  exchangeStop = true; // never leave an exchange typing into terminals after this cell is gone
 });
 
 // Reap the session and reset the cell back to the empty launcher. The cell isn't
@@ -1150,20 +1179,40 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               class="absolute right-0 top-full z-20 mt-1 flex min-w-[180px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
               @keydown.escape="askMenuOpen = false"
             >
-              <button
-                v-for="target in askTargets"
-                :key="target.key"
-                type="button"
-                data-testid="cell-ask-item"
-                class="cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
-                @click="askCell(target)"
-              >
-                {{ target.label }}
-              </button>
+              <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
+                <button
+                  type="button"
+                  data-testid="cell-ask-item"
+                  class="flex-1 cursor-pointer rounded-[4px] border-none bg-transparent px-2 py-1.5 text-left font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+                  :title="`Bring ${target.label}'s last turn here`"
+                  @click="askCell(target)"
+                >
+                  {{ target.label }}
+                </button>
+                <button
+                  type="button"
+                  data-testid="cell-exchange-item"
+                  class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
+                  :disabled="exchanging"
+                  title="Send this cell's turn there and bring the answer back, both submitted"
+                  @click="exchangeWith(target)"
+                >
+                  ⇄
+                </button>
+              </div>
               <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
             </div>
+            <button
+              v-if="exchanging"
+              type="button"
+              data-testid="cell-exchange-stop"
+              class="absolute right-0 top-full z-20 mt-1 cursor-pointer whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1.5 font-sans text-[12px] text-secondary shadow-[0_6px_18px_rgba(0,0,0,0.35)] hover:text-fg"
+              @click="stopExchange"
+            >
+              ⇄ exchanging — stop
+            </button>
             <p
-              v-if="askMsg"
+              v-else-if="askMsg"
               data-testid="cell-ask-msg"
               role="status"
               class="absolute right-0 top-full z-20 m-0 mt-1 whitespace-nowrap rounded-md border border-border bg-panel px-2 py-1.5 font-sans text-[12px] text-dim shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
