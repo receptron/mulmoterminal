@@ -18,6 +18,7 @@ import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderBut
 import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
 import type { RunCommand } from "./runCommand";
+import type { LaunchChoice } from "./wsUrl";
 
 // `null` => start a fresh session; otherwise resume the given session id.
 // `connectKey` increments on every user action so re-selecting the same
@@ -49,6 +50,8 @@ const props = defineProps<{
   launcher?: { index: number } | { shell: true } | null;
   // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
   codex?: boolean;
+  // Provider/model picked in the launch form, for this session only (#584).
+  launch?: LaunchChoice | null;
   runMenu?: boolean;
   // Hide this terminal's own header row (used when a grid cell is zoomed: the cell's
   // header already shows dir + activity, so the embedded header would just be clutter).
@@ -90,6 +93,7 @@ function currentTarget(): conn.ConnTarget {
     command: props.command ?? null,
     launcher: props.launcher ?? null,
     codex: !!props.codex,
+    launch: props.launch ?? null,
   };
 }
 

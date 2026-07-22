@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, and header buttons/chips. Walks a beginner through it: pick directories with checkboxes, start from a colour preset (warm / tropical / cool / bold), apply it and look at the real cell, then refine. Configures the current directory OR several of your recent MulmoTerminal directories at once. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal — for one project or across many.
+description: Create or edit a .mulmoterminal.json to customize how a directory looks and behaves in MulmoTerminal — its name badge, chrome colors, xterm palette, attention sound, header buttons/chips, and which model/provider its sessions run on. Also sets up an Anthropic-compatible backend (OpenRouter, Moonshot, a gateway) in the global config. Walks a beginner through it: pick directories with checkboxes, start from a colour preset (warm / tropical / cool / bold), apply it and look at the real cell, then refine. Configures the current directory OR several of your recent MulmoTerminal directories at once. Use when the user wants to configure, theme, color-code, rename, or add header buttons/chips to a project's terminal — for one project or across many.
 ---
 
 # Configure a MulmoTerminal directory
@@ -40,7 +40,7 @@ no `cwdPresets`, say there's no history yet and ask for the paths.
 ### 2. Pick what to configure — checkboxes again
 
 One `multiSelect` question: **Name badge + chrome colors** / **Terminal palette** / **Header buttons** /
-**Header chips** / **Attention sound**. Configure only what they ticked.
+**Header chips** / **Attention sound** / **Which model it runs on**. Configure only what they ticked.
 
 ### 3. Choose a colour direction — preset first, never a blank hex
 
@@ -129,6 +129,26 @@ malformed, so an invalid field just won't take effect — get it right so the us
 > Working/attention state colors override these (they show while a session is busy or waiting);
 > your colors show when the cell is idle.
 
+### Model — `provider` and `model`
+
+| Key | Meaning |
+|---|---|
+| `provider` | `id` of a backend in `~/.mulmoterminal/config.json` under `providers`. Omit to stay on Anthropic. |
+| `model` | Passed to `claude --model`. With no `provider`, this picks a different Anthropic model. |
+
+Both are defaults for the directory — the launch form can override them for a single session.
+
+**Never invent a model id.** Read `common/modelPresets.ts` in the MulmoTerminal repo and offer what
+is listed there, with its measured pass rate. Each entry records how many attempts of a real
+tool-using task the model completed: a model can answer fluently and still never call a tool, so
+`3/3` and `0/4` are the difference between a usable session and a broken one. Prefer entries whose
+`trials` are `measured` with `passed === of`. If the user names a model that is not listed, add it
+to that provider's `models` array in the global config rather than silently trusting it, and say it
+is untested.
+
+A directory naming a `provider` that is missing its key does not fall back — its sessions refuse to
+start. Check the provider exists in the global config before writing `provider` here.
+
 ### Terminal palette — `colors` and `theme`
 
 `headerColor` etc. tint the **chrome** around the terminal. `colors` (and `theme`) paint the
@@ -206,6 +226,39 @@ that don't resolve to a real skill are simply ignored.
 Atoms: `isGitRepo`, `!isGitRepo`, `key == value`, `key != value` (keys = the `${var}` names).
 Combine with `&&` (binds tighter) and `||`. No parentheses. Empty/absent → always shown.
 Example: `agent == claude && isGitRepo`.
+
+## Setting up a backend — `~/.mulmoterminal/config.json`
+
+Only when the user wants a model that is not Anthropic's. This is a **different file** from the
+per-directory one, and the rules below were measured against a working setup — each of them breaks
+the session in a way that is hard to diagnose from inside it.
+
+```json
+{
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api",
+      "tokenEnv": "OPENROUTER_API_KEY",
+      "maxOutputTokens": 16000,
+      "models": []
+    }
+  ]
+}
+```
+
+- **Never write the API key into this file, or into any file.** `tokenEnv` is the *name* of an
+  environment variable; the key belongs in the shell that starts the server, or a `.env` beside it.
+  If the user pastes a key at you, tell them where it goes — do not store it.
+- `baseUrl` must **not** end in `/v1`. Claude Code appends `/v1/messages` itself, so a trailing
+  `/v1` produces `/v1/v1/messages` and every request 404s.
+- Keep `maxOutputTokens` at 16000 or above. A thinking model given less spends the whole budget
+  thinking and returns empty visible text, which reads as a hung session.
+- This is a partial `POST /api/config` merge — write only `providers`, so the user's other settings
+  survive.
+- The server reads the environment at startup: after adding a key, it has to be restarted.
+- Providers do not work in the Docker sandbox; say so rather than letting the user find out.
 
 ## Example result
 

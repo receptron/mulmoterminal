@@ -21,7 +21,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl } from "../components/wsUrl";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, type LaunchChoice } from "../components/wsUrl";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 
@@ -67,6 +67,9 @@ export interface ConnTarget {
   // A first-class codex session (/ws/codex) instead of a Claude one. Persistent &
   // reattachable like a Claude cell; the server discovers + resumes codex's own id.
   codex?: boolean;
+  // The provider/model the launch form picked for this session (#584). Claude only —
+  // it rides the /ws query and overrides the directory's default.
+  launch?: LaunchChoice | null;
 }
 
 // Forwarded to whatever component is currently attached, so the parent's existing
@@ -246,7 +249,7 @@ function connUrl(target: ConnTarget, resumeId: string | null, secure: boolean): 
       ? buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, shell: true })
       : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
   if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
-  return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+  return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal, launch: target.launch });
 }
 
 function connect(c: Conn) {

@@ -43,6 +43,7 @@ import {
   devTerminalSessionsHydrated,
   hiddenSessions,
   knownSessions,
+  launchChoices,
   lastPrompts,
   lastResponses,
   lastTitleAttemptMs,
@@ -275,6 +276,7 @@ function reap(id: string) {
   // An unpersisted new session vanishes with its pty; a persisted one stays
   // visible via its on-disk record.
   knownSessions.delete(id);
+  launchChoices.delete(id); // the picked backend dies with the session that used it
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   forgetTitle(id);
@@ -450,7 +452,7 @@ const { translateViaHiddenChat } = createTranslationWorker({
   reap: (id) => reap(id),
   spawnHiddenChat: (sessionId, prompt) => {
     // ws=null → headless; the worker buffers output nobody reads. Default cwd = CLAUDE_CWD (trusted).
-    spawnClaudePty(sessionId, null, null, prompt);
+    spawnClaudePty(sessionId, null, null, { initialPrompt: prompt });
   },
 });
 
@@ -482,8 +484,8 @@ app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
   try {
     const mode = spawnModeFor(agent, draft);
     if (mode === "codex-run") spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
-    else if (mode === "claude-draft") spawnClaudePty(sessionId, null, null, undefined, CLAUDE_CWD, true, message);
-    else spawnClaudePty(sessionId, null, null, message);
+    else if (mode === "claude-draft") spawnClaudePty(sessionId, null, null, { draft: message });
+    else spawnClaudePty(sessionId, null, null, { initialPrompt: message });
   } catch (err) {
     console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
     return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
@@ -824,7 +826,7 @@ const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden }) => {
   try {
     const sessionId = randomUUID();
     if (hidden) hiddenSessions.add(sessionId);
-    spawnClaudePty(sessionId, null, null, message);
+    spawnClaudePty(sessionId, null, null, { initialPrompt: message });
     return { ok: true, chatId: sessionId };
   } catch (err) {
     return { ok: false, error: messageOf(err) };
@@ -838,7 +840,7 @@ initFeedsBackend({ workspace: CLAUDE_CWD, spawnWorker: feedsSpawnWorker });
 // signs in as the user) starts the actual Firestore runner + presence heartbeat.
 const remoteHostSpawnChat = (message: string) => {
   const sessionId = randomUUID();
-  spawnClaudePty(sessionId, null, null, message);
+  spawnClaudePty(sessionId, null, null, { initialPrompt: message });
   return { chatId: sessionId };
 };
 // The phone's remote terminal view (#435). Both accessors live here because the PTY table
@@ -940,7 +942,7 @@ setInterval(() => void scheduledSessions.sweep(), SCHEDULED_SWEEP_INTERVAL_MS).u
 function spawnScheduledChat(message: string): void {
   const sessionId = randomUUID();
   try {
-    spawnClaudePty(sessionId, null, null, message);
+    spawnClaudePty(sessionId, null, null, { initialPrompt: message });
     scheduledSessions.register(sessionId);
   } catch (err) {
     console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);

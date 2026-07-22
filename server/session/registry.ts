@@ -10,6 +10,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
+import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
@@ -29,6 +30,13 @@ export const ptys = new Map<string, PtyEntry>(); // id -> { term, ws, buffer }
 // freshly created session shows in the sidebar immediately. An entry is dropped
 // once the file exists (the on-disk record takes over) or the pty is reaped.
 export const knownSessions = new Map<string, KnownSession>(); // id -> { createdAt, title }
+
+// What each session was STARTED on, when the launch form picked it rather than the
+// directory (#584). Read back on resume: the browser re-sends its cell's pick on every
+// reconnect, and that value belongs to the session the cell launched, not necessarily to
+// the one being resumed. Process-lifetime only — after a restart a resumed session falls
+// back to the directory's default, same as one this server never started.
+export const launchChoices = new Map<string, DirModelChoice>(); // id -> { provider, model }
 
 // Sessions spawned as hidden background workers (spawnBackgroundChat hidden:true).
 // They list normally but never render bold/unread. Process-lifetime only (not

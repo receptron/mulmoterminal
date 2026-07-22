@@ -128,3 +128,37 @@ describe("buildCodexWsUrl", () => {
     expect(u.searchParams.has("gui")).toBe(false);
   });
 });
+
+describe("buildTerminalWsUrl — the launch picker's choice (#584)", () => {
+  const base = { host: "h", secure: false, sessionId: null };
+
+  // Absent params are what tell the server to use the directory's own .mulmoterminal.json,
+  // so the default launch must send neither.
+  it("sends neither param when nothing was picked", () => {
+    const q = new URL(buildTerminalWsUrl({ ...base, launch: null })).searchParams;
+    expect(q.has("provider")).toBe(false);
+    expect(q.has("model")).toBe(false);
+  });
+
+  it("sends the picked provider and model", () => {
+    const q = new URL(buildTerminalWsUrl({ ...base, launch: { provider: "openrouter", model: "moonshotai/kimi-k2.7-code" } })).searchParams;
+    expect(q.get("provider")).toBe("openrouter");
+    expect(q.get("model")).toBe("moonshotai/kimi-k2.7-code");
+  });
+
+  // Picking an Anthropic model ("run this one on Opus") names no provider.
+  it("sends a bare model with no provider", () => {
+    const q = new URL(buildTerminalWsUrl({ ...base, launch: { provider: null, model: "claude-opus-4-8" } })).searchParams;
+    expect(q.get("model")).toBe("claude-opus-4-8");
+    expect(q.has("provider")).toBe(false);
+  });
+
+  it("escapes a model id containing a slash", () => {
+    expect(buildTerminalWsUrl({ ...base, launch: { model: "z-ai/glm-5.2" } })).toContain("model=z-ai%2Fglm-5.2");
+  });
+
+  it("keeps carrying session, cwd and gui alongside it", () => {
+    const q = new URL(buildTerminalWsUrl({ host: "h", secure: false, sessionId: "abc", cwd: "/w", devTerminal: true, launch: { model: "m" } })).searchParams;
+    expect([q.get("session"), q.get("cwd"), q.get("gui"), q.get("model")]).toEqual(["abc", "/w", "0", "m"]);
+  });
+});

@@ -24,6 +24,8 @@ export interface ProviderConfig {
   // server's own environment, so no secret is stored in a config file the app serves.
   tokenEnv: string;
   maxOutputTokens?: number;
+  // Extra model ids the user listed for this provider; offered alongside the presets.
+  models?: readonly string[];
 }
 
 export interface DirModelChoice {
@@ -55,6 +57,19 @@ export const isUsableBaseUrl = (baseUrl: string): boolean => /^https?:\/\/\S+$/.
 
 const NOTHING: ProviderResolution = { model: null, env: {}, unset: [] };
 
+// Whether a provider can be used at all, independent of which model is picked — and its
+// token when it can. The launch picker asks this to decide what to offer and what to say
+// when it can't, so the wording a session refuses with and the wording the UI explains
+// with are the same sentence.
+export function usableProvider(provider: ProviderConfig, env: NodeJS.ProcessEnv): { ok: true; token: string } | { ok: false; reason: string } {
+  if (!isUsableBaseUrl(provider.baseUrl)) {
+    return { ok: false, reason: `provider '${provider.id}' has an unusable baseUrl '${provider.baseUrl}' — an http(s) URL without a trailing /v1` };
+  }
+  const token = env[provider.tokenEnv];
+  if (!token) return { ok: false, reason: `provider '${provider.id}' needs ${provider.tokenEnv} in the server's environment — refusing to start` };
+  return { ok: true, token };
+}
+
 const providerEnv = (provider: ProviderConfig, model: string, token: string): Record<string, string> => ({
   ANTHROPIC_BASE_URL: provider.baseUrl,
   ANTHROPIC_AUTH_TOKEN: token,
@@ -84,15 +99,10 @@ export function resolveProvider(
   const provider = providers.find((candidate) => candidate.id === choice.provider);
   if (!provider) return { ok: false, reason: `unknown provider '${choice.provider}' — add it to config.json under "providers"` };
   if (sandbox) return { ok: false, reason: `provider '${provider.id}' cannot run in the Docker sandbox yet` };
-  if (!isUsableBaseUrl(provider.baseUrl)) {
-    return { ok: false, reason: `provider '${provider.id}' has an unusable baseUrl '${provider.baseUrl}' — an http(s) URL without a trailing /v1` };
-  }
+  const usable = usableProvider(provider, env);
+  if (!usable.ok) return usable;
   if (!choice.model) return { ok: false, reason: `provider '${provider.id}' needs a model — set "model" in .mulmoterminal.json` };
-  const token = env[provider.tokenEnv];
-  if (!token) {
-    return { ok: false, reason: `provider '${provider.id}' needs ${provider.tokenEnv} in the server's environment — refusing to start` };
-  }
-  return { ok: true, value: { model: choice.model, env: providerEnv(provider, choice.model, token), unset: ["ANTHROPIC_API_KEY"] } };
+  return { ok: true, value: { model: choice.model, env: providerEnv(provider, choice.model, usable.token), unset: ["ANTHROPIC_API_KEY"] } };
 }
 
 // A directory asked for a backend that cannot be honoured. Thrown rather than downgraded:

@@ -51,10 +51,111 @@ Open it from the ⚙ in the toolbar.
 | `launchers` | The launch commands that appear under "OR LAUNCH" in a grid cell |
 | `prRepos` | The repos targeted by the cross-repo PR/Issue view |
 | `buttons` / `chips` | Header buttons / chips (merged with project settings → [Customizing the header](#header)) |
+| `providers` | Anthropic-compatible backends (→ [Running on another model](#providers)) |
+
+## Running on another model (providers) {#providers}
+
+Claude Code can talk to any Anthropic-compatible backend. MulmoTerminal reads those backends from
+`config.json`, and their keys from the environment the **server** was started with — a key never
+lives in a config file.
+
+### 1. Add the backend to `~/.mulmoterminal/config.json`
+
+```json
+{
+  "providers": [
+    {
+      "id": "openrouter",
+      "label": "OpenRouter",
+      "baseUrl": "https://openrouter.ai/api",
+      "tokenEnv": "OPENROUTER_API_KEY",
+      "maxOutputTokens": 16000,
+      "models": []
+    }
+  ]
+}
+```
+
+| Key | Role |
+|---|---|
+| `id` | The name `.mulmoterminal.json` and the launch picker refer to |
+| `baseUrl` | **No trailing `/v1`** — Claude Code appends `/v1/messages` itself, so a trailing `/v1` produces `/v1/v1/messages` and 404s |
+| `tokenEnv` | The **name** of the environment variable holding the key, never the key |
+| `maxOutputTokens` | Defaults to 16000. Starved of output headroom, a thinking model spends its whole budget thinking and returns **empty** visible text |
+| `models` | Extra model ids to offer alongside the built-in presets |
+
+### 2. Put the key in the server's environment
+
+In the shell that starts MulmoTerminal, or a `.env` beside it:
+
+```bash
+OPENROUTER_API_KEY=sk-or-…
+```
+
+Restart the server after adding one. A provider whose token cannot be resolved **refuses to
+launch** — quietly falling back to Anthropic would send the session's prompts to a backend the
+directory did not select.
+
+### 3. A default for one project (optional)
+
+```json
+{
+  "provider": "openrouter",
+  "model": "moonshotai/kimi-k2.7-code"
+}
+```
+
+Every session opened in that directory starts on it.
+
+### Choosing at launch
+
+When at least one provider is usable, the empty cell's launch form grows a **MODEL** select. The
+choice applies to **that session only** — it does not rewrite `.mulmoterminal.json`. Leaving it
+alone uses the directory's default.
+
+The numbers beside each option are measured:
+
+```
+Kimi K2.7 Code · 3/3 · 14s · 262k
+```
+
+`3/3` is how many attempts of a real read-a-file-write-a-file task the model **completed**, out of
+attempts made. Models that answer fluently but never call a tool are exactly why that number is
+there. `14s` is the median run, `262k` the context window.
+
+- `0/4 — never used a tool` — answers arrive, the tool loop never fires
+- `not reachable from this account` — the OpenRouter account used for the measurement had every
+  serving provider excluded by its [privacy settings](https://openrouter.ai/settings/privacy).
+  **Not a defect in the model**; another account may run it fine
+- `not tested` — a model you added yourself under `models`
+
+The list lives in `common/modelPresets.ts`; re-measure with `scripts/model-trials.ts`:
+
+```bash
+yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 <model-id>
+```
+
+### Limitation
+
+Providers cannot be combined with the Docker sandbox (`MULMOTERMINAL_SANDBOX`). The container
+inherits no environment, so such a session would silently run against **Anthropic instead of the
+backend you picked** — it is refused outright rather than downgraded.
 
 ## Per-project `.mulmoterminal.json` {#per-dir}
 
 Place this at the project root to change the appearance, sound, and header of **terminals (grid cells) opened in that directory**.
+
+### Which model to use
+
+```json
+{
+  "provider": "openrouter",
+  "model": "moonshotai/kimi-k2.7-code"
+}
+```
+
+The backend and model this directory's sessions start on. Omit `provider` and give only `model` to
+pick a different model on Anthropic itself. → [Running on another model](#providers)
 
 ### Name badge and colors
 

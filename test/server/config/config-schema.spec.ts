@@ -90,6 +90,14 @@ describe("dirConfigJsonSchema", () => {
     expect(props).toEqual(expect.arrayContaining(["name", "badgeColor", "headerColor", "theme", "colors", "sound", "buttons", "chips", "skills"]));
   });
 
+  // The skill writes a directory's config from this schema, so a key the runtime honours but the
+  // schema omits is a key the skill will refuse to write — which is what happened to provider /
+  // model between the backend landing (#579) and the picker (#584).
+  it("includes the keys that choose a backend, so the config skill can write them", () => {
+    const props = isRecord(dirConfigJsonSchema().properties) ? dirConfigJsonSchema().properties : {};
+    expect(Object.keys(isRecord(props) ? props : {})).toEqual(expect.arrayContaining(["provider", "model"]));
+  });
+
   it("caps the skills allowlist at MAX_SKILL_FILTER", () => {
     const schema = dirConfigJsonSchema();
     const props = isRecord(schema.properties) ? schema.properties : {};

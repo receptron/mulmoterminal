@@ -10,6 +10,8 @@ import type { Express } from "express";
 import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
+import { launchOptions } from "./launch-options.js";
+import { badArrayField, badNullableArrayField } from "./config-body.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -56,25 +58,6 @@ export function getWorklogConfig(): { enabled: boolean; intervalHours: number } 
   return { enabled: config.worklogEnabled, intervalHours: config.worklogIntervalHours };
 }
 
-// Body fields that must be an array when present (a partial POST /api/config may omit any).
-const ARRAY_FIELDS = ["cwdPresets", "prRepos", "launchers", "userMcpServers"] as const;
-function badArrayField(body: Record<string, unknown>): string | null {
-  for (const field of ARRAY_FIELDS) {
-    if (body[field] !== undefined && !Array.isArray(body[field])) return field;
-  }
-  return null;
-}
-
-// `buttons`/`chips` are nullable (null = unconfigured), so they can't join ARRAY_FIELDS: reject any present
-// value that is neither an array nor null instead of letting the sanitizer silently coerce it to null.
-const NULLABLE_ARRAY_FIELDS = ["buttons", "chips"] as const;
-function badNullableArrayField(body: Record<string, unknown>): string | null {
-  for (const field of NULLABLE_ARRAY_FIELDS) {
-    if (body[field] !== undefined && body[field] !== null && !Array.isArray(body[field])) return field;
-  }
-  return null;
-}
-
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
   // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
   // everything it can write — buttons/chips included — and round-trip it.
@@ -102,6 +85,13 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });
     config = next;
     res.json(configResponse());
+  });
+
+  // What the launch form may offer (#584): the configured backends, whether each can be
+  // reached right now, and the models it can run. Never the tokens themselves — only the
+  // NAME of the variable each is read from, which is what the setup help has to say.
+  app.get("/api/launch-options", (_req, res) => {
+    res.json(launchOptions(config.providers, process.env));
   });
 
   // Stream the user's custom attention sound (their own file, set in config). The

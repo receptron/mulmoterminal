@@ -9,6 +9,8 @@ import { badgeStyleFor } from "./dirBadge";
 import { headerStyleFor, cellStyleFor } from "./cellHeaderStyle";
 import GitBranchChip from "./GitBranchChip.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
+import ModelPicker from "./ModelPicker.vue";
+import type { LaunchChoice } from "./wsUrl";
 import type { RunCommand } from "./runCommand";
 import { useHeaderButtons } from "../composables/useHeaderButtons";
 import TimelineOverlay from "./TimelineOverlay.vue";
@@ -275,6 +277,11 @@ function launchIn(dir: string | null) {
   recordNextCwd = true;
   loadDiff(); // no-op for a non-worktree dir
 }
+// The provider/model picked in the launch form, for the session this cell is about to
+// start. Null — the usual case — means the directory's own default decides. Kept for the
+// life of the cell so a relaunch in the same cell repeats the choice.
+const launchChoice = ref<LaunchChoice | null>(null);
+
 function launch() {
   launchIn(dirInput.value.trim() || props.defaultCwd);
 }
@@ -1057,6 +1064,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         :connect-key="connectKey"
         :cwd="cwd"
         :codex="agent === 'codex'"
+        :launch="launchChoice"
         :dir-theme="dirConfig.theme"
         :dir-colors="dirConfig.colors"
         :dir-header-color="dirConfig.headerColor"
@@ -1417,6 +1425,8 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           </button>
         </span>
       </label>
+      <!-- Codex has its own model configuration and doesn't read this one. -->
+      <ModelPicker v-if="agent === 'claude'" v-model="launchChoice" />
       <div v-if="isGitRepo" data-testid="cell-worktrees" class="flex w-full max-w-[360px] flex-col items-stretch gap-1.5">
         <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or isolate in a worktree (git repo)</span>
         <div class="flex gap-1.5">

@@ -14,6 +14,7 @@ import { z } from "zod";
 // Shared with the client dir-config parser so the two can't drift — see common/themeColors.ts.
 import { THEME_COLOR_KEYS } from "../../common/themeColors.js";
 import { THEME_IDS } from "../../common/themeIds.js";
+import { isUsableModelId } from "../../common/modelIds.js";
 
 // ---- shared constants ---------------------------------------------------------------------
 
@@ -134,16 +135,30 @@ export const dirColorsField = z
   .nullable()
   .catch(null);
 
+// A provider/model id the launch path will actually accept. Enforced here too, so the
+// picker can never offer an id that the ws query drops on the way to the spawn — a
+// dropped provider whose model survives would start the session on Anthropic instead.
+const modelIdSchema = z.string().trim().refine(isUsableModelId);
+
 // An Anthropic-compatible backend a directory can point its sessions at (#579). The key
 // itself is never stored here — `tokenEnv` names the env var the SERVER reads it from,
 // because this config is served over HTTP to the browser and the phone.
 export const providerSchema = z.object({
-  id: z.string().min(1),
+  id: modelIdSchema,
   label: z.string().min(1),
   // No trailing /v1: Claude Code appends /v1/messages itself.
   baseUrl: z.string().min(1),
   tokenEnv: z.string().min(1),
   maxOutputTokens: z.number().int().positive().optional(),
+  // Extra model ids to offer in the launch picker, on top of the built-in presets
+  // (common/modelPresets.ts). Listed here rather than measured, so the picker shows them
+  // without the pass-rate the presets carry. A malformed entry is dropped on its own —
+  // one typo must not take the provider's other models with it.
+  models: z
+    .array(z.unknown())
+    .transform((entries) => entries.filter((entry): entry is string => typeof entry === "string" && isUsableModelId(entry.trim())).map((entry) => entry.trim()))
+    .catch([])
+    .default([]),
 });
 export type Provider = z.infer<typeof providerSchema>;
 
@@ -239,6 +254,10 @@ const writableDirConfigSchema = z.object({
   chips: z.array(writableHeaderChipSchema).max(MAX_CHIPS).optional(),
   // Header Skill-menu allowlist: show only these skill slugs, in this order. Omit to show all.
   skills: z.array(nonEmptyText).max(MAX_SKILL_FILTER).optional(),
+  // Which backend this directory's sessions run on (#579). `provider` names an entry in the
+  // global config's `providers`; `model` alone picks a different model on Anthropic itself.
+  provider: nonEmptyText.optional(),
+  model: nonEmptyText.optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {
