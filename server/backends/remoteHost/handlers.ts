@@ -28,6 +28,7 @@ import {
 import type { Attachment } from "./ingestAttachments.js";
 import { createTerminalInputSender } from "./terminalInput.js";
 import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
+import { feedSummary } from "../feed-summary.js";
 
 export interface RemoteHostHandlerDeps {
   workspace: string;
@@ -197,15 +198,7 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
       const summaries = [];
       for (const feed of feeds) {
         const state = await readFeedState(workspace, feed);
-        const { ingest } = feed.schema;
-        summaries.push({
-          slug: feed.slug,
-          title: feed.schema.title,
-          icon: feed.schema.icon,
-          kind: ingest?.kind ?? "rss",
-          schedule: ingest?.schedule ?? "on-demand",
-          lastFetchedAt: state.lastFetchedAt,
-        });
+        summaries.push(feedSummary(feed, state.lastFetchedAt));
       }
       return { feeds: summaries } as unknown as JsonObject;
     },
