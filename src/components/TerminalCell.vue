@@ -193,6 +193,11 @@ let activityGen = 0;
 // Seeds also overlap each other — mount racing a reconnect, or reconnect flaps. Only the
 // newest may apply; an older one, even resolving last, describes a moment already overtaken.
 let latestSeed = 0;
+// The usage/context badges are filled from two async sources — a seed (loadInitial) and
+// refreshUsage on turn end — so back-to-back turns can leave two /api/session reads in
+// flight at once. Neither path bumps latestSeed for badges, so a stale read resolving last
+// would clobber the newer numbers. This token makes the newest badge fetch win. (#620.)
+let latestBadgeReq = 0;
 function applyActivity(d: ActivityMsg) {
   activityGen++;
   const next = applyActivityPush(
@@ -238,6 +243,7 @@ function applyBadges(data: SessionDetail) {
 
 async function loadInitial(id: string) {
   const seedId = ++latestSeed;
+  const badgeReq = ++latestBadgeReq;
   const genBeforeFetch = activityGen;
   const data = await fetchSessionDetail(id);
   // A newer seed superseded this one while it was in flight: its answer is the current one,
@@ -245,9 +251,9 @@ async function loadInitial(id: string) {
   if (!data || seedId !== latestSeed) return;
   // A live push landed while we were fetching: it is newer than this snapshot, so keep it
   // and don't let a stale seed put the cell back to idle. Badges have no such push, so they
-  // always refresh.
+  // always refresh — unless a newer badge fetch has since superseded this one.
   if (activityGen === genBeforeFetch) applyActivity(data);
-  applyBadges(data);
+  if (badgeReq === latestBadgeReq) applyBadges(data);
 }
 
 // Refresh ONLY the token usage (not the live activity — that's pub/sub's job). Called
@@ -255,8 +261,9 @@ async function loadInitial(id: string) {
 async function refreshUsage() {
   const id = sessionId.value;
   if (!id) return;
+  const badgeReq = ++latestBadgeReq;
   const data = await fetchSessionDetail(id);
-  if (data) applyBadges(data);
+  if (data && badgeReq === latestBadgeReq) applyBadges(data);
 }
 
 onMounted(() => {
