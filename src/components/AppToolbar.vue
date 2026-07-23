@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import { useRoute } from "vue-router";
 import { router } from "../router";
 import NotificationBell from "./NotificationBell.vue";
@@ -11,6 +11,8 @@ import { useAccountingView, accountingViewOpen } from "../composables/useAccount
 import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
+import { useUpdateStatus } from "../composables/useUpdateStatus";
+import { useDropdownMenu } from "../composables/useDropdownMenu";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
 import { gridStatusSummary } from "./gridTabs";
@@ -37,6 +39,30 @@ const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = usePrsView();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
+const { badge: updateBadge } = useUpdateStatus();
+
+// Clicking the badge opens a popover that spells out what to run — a silent clipboard copy
+// gave no hint of what happened or which command it even was.
+const updateRoot = useTemplateRef<HTMLElement>("updateRoot");
+const { open: updateOpen, toggle: toggleUpdate } = useDropdownMenu(updateRoot);
+const copied = ref(false);
+let copiedTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Copy the command shown in the popover; a brief "Copied" confirms it. Clipboard can be
+// unavailable (older browser, insecure context) — then it's a no-op and the command stays on
+// screen to copy by hand.
+async function copyUpdateCommand(): Promise<void> {
+  const command = updateBadge.value?.command;
+  if (!command) return;
+  try {
+    await navigator.clipboard.writeText(command);
+    copied.value = true;
+    if (copiedTimer) clearTimeout(copiedTimer);
+    copiedTimer = setTimeout(() => (copied.value = false), 1500);
+  } catch {
+    // best-effort — the command is on screen to copy by hand
+  }
+}
 
 const inGrid = computed(() => route.name === "terminals");
 const inSingle = computed(() => !inGrid.value);
@@ -132,6 +158,39 @@ function showPrs(): void {
     </nav>
     <NotificationBell class="ml-auto" />
     <RemoteHostControl />
+    <div v-if="updateBadge" ref="updateRoot" class="relative mr-1 flex-none">
+      <button
+        type="button"
+        class="inline-flex items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[12px] leading-none text-accent hover:bg-selected"
+        :class="{ 'bg-selected': updateOpen }"
+        :title="updateBadge.text"
+        :aria-label="updateBadge.text"
+        :aria-expanded="updateOpen"
+        aria-haspopup="true"
+        @click="toggleUpdate"
+      >
+        <span class="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">upgrade</span>
+        Update
+      </button>
+      <div
+        v-if="updateOpen"
+        class="absolute right-0 top-full z-50 mt-1 w-64 rounded-md border border-border bg-panel p-3 text-[13px] text-fg shadow-lg"
+        role="group"
+        aria-label="Update available"
+      >
+        <p class="mb-2 font-semibold">A newer version is available</p>
+        <template v-if="updateBadge.command">
+          <p class="mb-1 text-muted">Run this to update:</p>
+          <div class="flex items-center gap-2">
+            <code class="min-w-0 flex-1 overflow-x-auto rounded bg-selected px-2 py-1 font-mono text-[12px] whitespace-nowrap">{{ updateBadge.command }}</code>
+            <button type="button" class="flex-none rounded border border-border px-2 py-1 text-[12px] hover:bg-selected" @click="copyUpdateCommand">
+              {{ copied ? "Copied" : "Copy" }}
+            </button>
+          </div>
+        </template>
+        <p v-else class="text-muted">{{ updateBadge.text }}</p>
+      </div>
+    </div>
     <LauncherButton
       :icon="soundEnabled ? 'notifications_active' : 'notifications_off'"
       :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"

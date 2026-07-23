@@ -6,9 +6,12 @@ import {
   hasNodeModulesSegment,
   classifyInstall,
   parseLsRemoteHead,
+  parseLsRemoteDefaultBranch,
+  isSafeBranchName,
   npmUpdateNotice,
   isTreeDirtyForUpdate,
   gitUpdateNotice,
+  computeUpdateNotice,
 } from "../../bin/update-check.js";
 
 describe("isNewerVersion", () => {
@@ -141,6 +144,47 @@ describe("parseLsRemoteHead", () => {
   it("rejects a non-sha in the HEAD line", () => {
     expect(parseLsRemoteHead("not-a-sha\tHEAD")).toBeNull();
   });
+
+  // The sha is still readable from --symref output (the ref: line's first field isn't a sha).
+  it("reads the sha out of --symref output too", () => {
+    expect(parseLsRemoteHead("ref: refs/heads/main\tHEAD\nd451b53dfcda7ef7395bed8a04cf5e1060d6e55f\tHEAD")).toBe("d451b53dfcda7ef7395bed8a04cf5e1060d6e55f");
+  });
+});
+
+describe("parseLsRemoteDefaultBranch", () => {
+  it("reads the default branch from a --symref line", () => {
+    expect(parseLsRemoteDefaultBranch("ref: refs/heads/main\tHEAD\nd451b53\tHEAD")).toBe("main");
+    expect(parseLsRemoteDefaultBranch("ref: refs/heads/master\tHEAD\nabc\tHEAD")).toBe("master");
+  });
+
+  // Without --symref (or on odd output) there's no ref line — fall back to null → bare git pull.
+  it("is null when there is no ref line", () => {
+    expect(parseLsRemoteDefaultBranch("d451b53\tHEAD")).toBeNull();
+    expect(parseLsRemoteDefaultBranch("")).toBeNull();
+    expect(parseLsRemoteDefaultBranch(null)).toBeNull();
+  });
+});
+
+describe("isSafeBranchName", () => {
+  it("accepts ordinary branch names", () => {
+    for (const name of ["main", "master", "develop", "release/2.x", "feat/update-badge", "v1.2.3", "a_b-c"]) {
+      expect(isSafeBranchName(name), name).toBe(true);
+    }
+  });
+
+  // The name comes from an untrusted remote and lands in a copy/paste shell command; anything
+  // that could break out of `git pull origin <name>` must be refused.
+  it("rejects names with shell metacharacters", () => {
+    for (const name of ["main;rm -rf ~", "main$(whoami)", "a`id`", "a|b", "a&b", "a b", "a>b", "'x'", '"x"', ""]) {
+      expect(isSafeBranchName(name), name).toBe(false);
+    }
+  });
+
+  it("rejects non-strings", () => {
+    expect(isSafeBranchName(null)).toBe(false);
+    expect(isSafeBranchName(undefined)).toBe(false);
+    expect(isSafeBranchName(42)).toBe(false);
+  });
 });
 
 describe("npmUpdateNotice", () => {
@@ -164,8 +208,22 @@ describe("gitUpdateNotice", () => {
   // tell whether the notice used the captured short sha or re-sliced the full one.
   const behind = { localSha: "0123456789abcdef", localShort: "short12", remoteSha: "fedcba9876543210", dirty: false };
 
-  it("names the local short sha and git pull when behind and clean", () => {
+  it("names the local short sha and a bare git pull when the default branch is unknown", () => {
     expect(gitUpdateNotice(behind)).toBe("Update available: short12 → origin  ·  run: git pull");
+  });
+
+  // `git pull` alone pulls the current branch's upstream, not the release. Naming the remote's
+  // default branch is what actually updates a clone that's on it (or behind it).
+  it("names origin + the default branch when it is known", () => {
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "main" })).toBe("Update available: short12 → origin  ·  run: git pull origin main");
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "master" })).toContain("git pull origin master");
+  });
+
+  // The branch is untrusted remote metadata pasted into a shell — a metachar name must fall
+  // back to a bare `git pull`, never inject.
+  it("falls back to a bare git pull for an unsafe branch name", () => {
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "main;rm -rf ~" })).toBe("Update available: short12 → origin  ·  run: git pull");
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "$(whoami)" })).not.toContain("whoami");
   });
 
   // Dirty stops it even when the shas differ — a checkout with local edits can't
@@ -220,5 +278,68 @@ describe("isTreeDirtyForUpdate", () => {
   // A tracked change hiding among untracked files still counts.
   it("is dirty when a tracked change sits among untracked ones", () => {
     expect(isTreeDirtyForUpdate("?? a.log\n M src/app.ts\n?? b.log")).toBe(true);
+  });
+});
+
+describe("computeUpdateNotice", () => {
+  // A checkout under node_modules is an npm install: it must NOT run git, and the answer
+  // comes from the registry vs the bundled version.
+  it("takes the npm path for a node_modules dir, without touching git", async () => {
+    let gitCalls = 0;
+    const notice = await computeUpdateNotice("/proj/node_modules/mulmoterminal", "0.7.0", {
+      runGit: async () => {
+        gitCalls++;
+        return null;
+      },
+      fetchLatest: async () => "0.8.0",
+    });
+    expect(notice).toBe("Update available: 0.7.0 → 0.8.0  ·  run: npm i -g mulmoterminal");
+    expect(gitCalls).toBe(0);
+  });
+
+  it("is silent on the npm path when already latest", async () => {
+    const notice = await computeUpdateNotice("/proj/node_modules/mulmoterminal", "0.8.0", {
+      runGit: async () => null,
+      fetchLatest: async () => "0.8.0",
+    });
+    expect(notice).toBeNull();
+  });
+
+  // A bare checkout is a git install: local HEAD vs the remote's, read via ls-remote.
+  it("takes the git path for a checkout and reports behind", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return ""; // clean
+      if (args[0] === "rev-parse" && args[1] === "HEAD") return "0123456789abcdef";
+      if (args[0] === "rev-parse" && args[1] === "--short") return "0123456";
+      if (args[0] === "ls-remote") return "ref: refs/heads/main\tHEAD\nfedcba9876543210\tHEAD";
+      return null;
+    };
+    const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
+    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull origin main");
+  });
+
+  // End to end: a hostile remote whose default branch carries a shell metachar must not reach
+  // the pasteable command — the notice falls back to a bare git pull.
+  it("does not inject an unsafe remote default branch into the command", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return "";
+      if (args[0] === "rev-parse" && args[1] === "HEAD") return "0123456789abcdef";
+      if (args[0] === "rev-parse" && args[1] === "--short") return "0123456";
+      if (args[0] === "ls-remote") return "ref: refs/heads/main;rm$IFS-rf\tHEAD\nfedcba9876543210\tHEAD";
+      return null;
+    };
+    const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
+    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull");
+  });
+
+  it("is silent on the git path when the checkout is dirty", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return " M src/app.ts"; // tracked change => dirty
+      return "whatever";
+    };
+    expect(await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null })).toBeNull();
   });
 });

@@ -12,6 +12,7 @@ import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import { launchOptions } from "./launch-options.js";
 import { badArrayField, badNullableArrayField } from "./config-body.js";
+import { getUpdateStatus } from "./update-status.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -65,6 +66,13 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
 
   app.get("/api/config", (_req, res) => {
     res.json({ ...configResponse(), home: os.homedir() });
+  });
+
+  // The update notice for the header's "update available" badge, from the check the server
+  // ran at startup (refreshUpdateStatus). Served from memory; the client re-fetches once so a
+  // request that beat the async check still picks the notice up.
+  app.get("/api/update-status", (_req, res) => {
+    res.json(getUpdateStatus());
   });
 
   app.post("/api/config", (req, res) => {
