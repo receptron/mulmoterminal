@@ -154,6 +154,12 @@ function measureCells(uids: number[]): Map<number, DOMRect> {
 }
 
 function flipCells(before: Map<number, DOMRect>) {
+  // Cancel the previous batch FIRST: a transform still on a cell would move its box, so
+  // the `after` measurement below has to read resting layout, not a mid-flight rect.
+  running.forEach((a) => a.cancel());
+  running = [];
+  flippingUids.value = new Set();
+
   const after = measureCells([...before.keys()]);
   const animations = flipPairs(before, after)
     .map(({ uid, first, last }) => {
@@ -164,7 +170,6 @@ function flipCells(before: Map<number, DOMRect>) {
     .filter((x): x is { uid: number; anim: Animation } => x !== null);
   if (!animations.length) return;
 
-  running.forEach((a) => a.cancel());
   const batch = animations.map((a) => a.anim);
   running = batch;
   flippingUids.value = new Set(animations.map((a) => a.uid));
