@@ -11,6 +11,7 @@ import { CLAUDE_CWD, PORT } from "../config/env.js";
 import { messageOf } from "../errors.js";
 import { isRecord } from "../session/transcript.js";
 import { hiddenSessions } from "../session/registry.js";
+import { runWithHiddenMarker } from "../session/hiddenMarker.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../session/background-chat.js";
 import { codexifySkillSeed } from "../agents/codex-skills.js";
 import { manageCollectionHandler } from "../infra/collection-tool.js";
@@ -36,16 +37,17 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
     if (!parsed.ok) return res.json({ message: parsed.message });
     const { agent, draft, hidden, message } = parsed.request;
     const sessionId = randomUUID();
-    if (hidden) hiddenSessions.add(sessionId);
     // ws is null: the session runs headless until the user opens it (reattach replays the buffered
     // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
     // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
     // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
     try {
-      const mode = spawnModeFor(agent, draft);
-      if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
-      else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
-      else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
+      runWithHiddenMarker(hidden, sessionId, hiddenSessions, () => {
+        const mode = spawnModeFor(agent, draft);
+        if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
+        else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
+        else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
+      });
     } catch (err) {
       console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
       return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });
