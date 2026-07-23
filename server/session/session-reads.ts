@@ -32,6 +32,7 @@ import {
 } from "./transcript.js";
 import { createFileCache, type FileStamp } from "./file-cache.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
+import { sessionListTitle } from "./sessionListTitle.js";
 import { activity, aiTitles, codexRolloutIds, hiddenSessions, knownSessions } from "./registry.js";
 import { projectSessionsDir } from "./project-dir.js";
 import { lastTurnFromClaudeParsed, lastTurnFromCodexRollout, EMPTY_TURN, type LastTurn } from "./last-turn.js";
@@ -211,8 +212,7 @@ export async function readSessionMeta(dir: string, file: string): Promise<Sessio
   }
 
   const id = path.basename(file, ".jsonl");
-  // The live in-memory title (this process run) wins over the on-disk record.
-  const title = aiTitles.get(id) || aiTitle || lastPrompt || firstUserMsg || "(untitled session)";
+  const title = sessionListTitle({ liveAiTitle: aiTitles.get(id), diskAiTitle: aiTitle, diskLastPrompt: lastPrompt, firstUserMsg });
   const a = activity.get(id);
   return {
     id,
