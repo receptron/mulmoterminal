@@ -33,6 +33,23 @@ export function buildActivitySnapshot(
   return snapshot;
 }
 
+// Merge this instance's snapshot of the sessions IT owns onto whatever is currently on disk,
+// leaving entries owned by another instance untouched. The file is shared by every server
+// rooted at the same MULMOTERMINAL_HOME, so writing a full in-memory snapshot would drop the
+// other instance's sessions (they're not in this map) and revive ones it already cleared.
+// Owned ids present in `owned` are written; owned ids absent from it (gone idle / reaped) are
+// removed; every foreign id on disk is preserved as-is.
+export function mergeOwnedActivity(
+  onDisk: Record<string, PersistedActivity>,
+  owned: Record<string, PersistedActivity>,
+  isOwned: (id: string) => boolean,
+): Record<string, PersistedActivity> {
+  const merged: Record<string, PersistedActivity> = {};
+  for (const [id, a] of Object.entries(onDisk)) if (!isOwned(id)) merged[id] = a;
+  for (const [id, a] of Object.entries(owned)) merged[id] = a;
+  return merged;
+}
+
 // Parse a persisted snapshot back into activity records, dropping anything that isn't a valid
 // session id / well-formed entry (a corrupt/tampered file must not smuggle entries into the map).
 export function parseActivityState(raw: unknown, isValidId: (id: string) => boolean): Array<{ id: string } & PersistedActivity> {
