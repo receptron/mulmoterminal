@@ -51,10 +51,11 @@ check("an unchanged Dockerfile does not rebuild (same image id)", imageId(), idA
 //    A trailing comment changes the file (so the sha) without adding a layer, so the
 //    rebuild is cache-fast. Restored afterwards so the checkout is left as found.
 const original = readFileSync(DOCKERFILE);
+const shaBeforeEdit = dockerfileSha();
 try {
   appendFileSync(DOCKERFILE, "\n# ci-sandbox-image.ts: temporary edit to force a rebuild\n");
   const editedSha = dockerfileSha();
-  check("the edit changed the Dockerfile sha", editedSha === original.toString() ? "unchanged" : "changed", "changed");
+  check("the edit changed the Dockerfile sha", editedSha === shaBeforeEdit ? "unchanged" : "changed", "changed");
   check("a changed Dockerfile rebuilds", ensureSandboxImage(), true);
   check("the label follows the changed Dockerfile", imageLabel(), editedSha);
 } finally {
