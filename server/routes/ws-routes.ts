@@ -31,6 +31,7 @@ import { canStartLauncher, resolveReattachableId, resolveSession, type SessionRe
 import type { PtyEntry } from "../session/types.js";
 import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
 import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
+import { normalizeAgent, parseIndexParam } from "./routeParams.js";
 import { codexResumeId } from "../agents/codex-resume.js";
 
 export interface WsRouteDeps {
@@ -83,7 +84,7 @@ async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: strin
   if (!buttonId) return null;
   const sessionRaw = url.searchParams.get("session");
   const session = sessionRaw && SESSION_ID_RE.test(sessionRaw) ? sessionRaw : null;
-  const agent = url.searchParams.get("agent") === "codex" ? "codex" : "claude";
+  const agent = normalizeAgent(url.searchParams.get("agent"));
   const config = loadHeaderConfig(cwd, getHeaderConfig());
   const context = await buildHeaderContext(cwd, { session, agent, model: url.searchParams.get("model") });
   const command = resolveButtonCommand(config, context, buttonId, shellQuoteFor(process.platform));
@@ -94,9 +95,7 @@ async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: strin
   const cwd = resolveWorkspace(url.searchParams.get("cwd"));
   const byButton = await resolveButtonRun(url, cwd);
   if (byButton) return byButton;
-  const indexRaw = url.searchParams.get("index");
-  const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
-  return resolveScript(cwd, index);
+  return resolveScript(cwd, parseIndexParam(url.searchParams.get("index")));
 }
 
 async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, url: URL): Promise<void> {
@@ -292,8 +291,7 @@ function handleRunConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: stri
 // and is marked a dev-terminal session so it stays out of the chat sidebar.
 function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
-  const indexRaw = url.searchParams.get("launcher");
-  const index = indexRaw !== null && /^\d+$/.test(indexRaw) ? Number(indexRaw) : NaN;
+  const index = parseIndexParam(url.searchParams.get("launcher"));
   const shell = url.searchParams.get("shell") === "1";
 
   const resolved = resolveLaunchSession(deps, requested, index, shell);

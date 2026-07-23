@@ -36,6 +36,7 @@ import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
 import { activity, aiTitles, hiddenSessions, knownSessions, ptys } from "./session/registry.js";
+import { runWithHiddenMarker } from "./session/hiddenMarker.js";
 import { createToolStores } from "./session/tool-store.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
@@ -282,10 +283,9 @@ initAccountingBackend({ workspace: CLAUDE_CWD, pubsub });
 // watch; `onComplete` is honoured only for hidden (scheduled) workers, which MulmoTerminal
 // doesn't register yet, so it's unused for now. `roleId` is ignored (no role system).
 const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden }) => {
+  const sessionId = randomUUID();
   try {
-    const sessionId = randomUUID();
-    if (hidden) hiddenSessions.add(sessionId);
-    spawnClaudePty(sessionId, null, null, { initialPrompt: message });
+    runWithHiddenMarker(hidden, sessionId, hiddenSessions, () => spawnClaudePty(sessionId, null, null, { initialPrompt: message }));
     return { ok: true, chatId: sessionId };
   } catch (err) {
     return { ok: false, error: messageOf(err) };

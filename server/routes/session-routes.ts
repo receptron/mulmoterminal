@@ -7,6 +7,7 @@
 import type { Express, Request, Response } from "express";
 import { promises as fs } from "node:fs";
 import { CLAUDE_CWD, SESSION_ID_RE } from "../config/env.js";
+import { normalizeAgent } from "./routeParams.js";
 import { resolveWorkspace } from "../config/workspace.js";
 import { hasErrnoCode } from "../errors.js";
 import {
@@ -102,7 +103,7 @@ async function toolTimeline(req: Request, res: Response) {
 async function lastTurn(req: Request, res: Response) {
   const { session } = req.query;
   if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
-  const agent = req.query.agent === "codex" ? "codex" : "claude";
+  const agent = normalizeAgent(req.query.agent);
   const cwd = resolveWorkspace(typeof req.query.cwd === "string" ? req.query.cwd : null);
   const turn = await sessionLastTurn(cwd, session, agent);
   // ?as=reply drops the prompt block: the caller is relaying an ANSWER back to whoever
