@@ -68,3 +68,79 @@ describe("cellFlip", () => {
     });
   });
 });
+
+import { flipPairs } from "../../../src/components/cellFlip.js";
+
+describe("flipPairs", () => {
+  const r = (n: number) => rect(n, n, 10, 10);
+  const map = (entries: Array<[number, ReturnType<typeof rect>]>) => new Map(entries);
+
+  it("pairs each cell present before and after with its own start and end", () => {
+    const before = map([
+      [1, r(0)],
+      [2, r(10)],
+    ]);
+    const after = map([
+      [1, r(100)],
+      [2, r(110)],
+    ]);
+    expect(flipPairs(before, after)).toEqual([
+      { uid: 1, first: r(0), last: r(100) },
+      { uid: 2, first: r(10), last: r(110) },
+    ]);
+  });
+
+  it("skips a cell with no BEFORE — another tab's cell arriving in the filmstrip", () => {
+    const before = map([[1, r(0)]]);
+    const after = map([
+      [1, r(100)],
+      [9, r(200)], // appeared only once expanded
+    ]);
+    expect(flipPairs(before, after).map((p) => p.uid)).toEqual([1]);
+  });
+
+  it("skips a cell with no AFTER — one that left when the grid collapsed", () => {
+    const before = map([
+      [1, r(0)],
+      [9, r(50)],
+    ]);
+    const after = map([[1, r(100)]]);
+    expect(flipPairs(before, after).map((p) => p.uid)).toEqual([1]);
+  });
+
+  it("is empty when nothing survives the patch", () => {
+    expect(flipPairs(map([[1, r(0)]]), map([[2, r(0)]]))).toEqual([]);
+    expect(flipPairs(new Map(), new Map())).toEqual([]);
+  });
+});
+
+import { onScreen } from "../../../src/components/cellFlip.js";
+
+describe("onScreen", () => {
+  const VW = 1000;
+  const VH = 800;
+
+  it("accepts a rect inside the viewport", () => {
+    expect(onScreen(rect(100, 100, 200, 150), VW, VH)).toBe(true);
+  });
+
+  it("rejects the cockpit list-mode park at left:-99999px", () => {
+    expect(onScreen(rect(-99999, 0, 300, 200), VW, VH)).toBe(false);
+  });
+
+  it("accepts a rect straddling the left edge", () => {
+    expect(onScreen(rect(-50, 100, 200, 150), VW, VH)).toBe(true);
+  });
+
+  it("rejects a rect entirely off the right edge", () => {
+    expect(onScreen(rect(1000, 100, 200, 150), VW, VH)).toBe(false);
+  });
+
+  it("rejects a rect scrolled off the bottom", () => {
+    expect(onScreen(rect(100, 800, 200, 150), VW, VH)).toBe(false);
+  });
+
+  it("rejects a zero-area rect (a cell not laid out yet)", () => {
+    expect(onScreen(rect(100, 100, 0, 0), VW, VH)).toBe(false);
+  });
+});

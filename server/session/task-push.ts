@@ -3,13 +3,13 @@
 // boundaries off its rollout (no hooks exist to POST for it), and a codex turn has to
 // reach the same notification, or the phone stays silent for half the grid.
 
-import path from "node:path";
 import { getPushEnabled } from "../config/config-routes.js";
 import { sendWebPush } from "../infra/web-push.js";
 import { HOST_ID as REMOTE_HOST_ID } from "../backends/remoteHost/index.js";
 import { buildPushText, type PushKind } from "./activity-hook.js";
 import { aiTitles, hiddenSessions, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
 import { sessionLastTurn, LAST_RESPONSE_MAX } from "./session-reads.js";
+import { buildPushDetail, pushWhere, shouldSuppressPush } from "./taskPushRules.js";
 
 const PUSH_TITLE_MAX = 80;
 const PUSH_BODY_MAX = 160;
@@ -34,14 +34,14 @@ async function latestReply(sessionId: string, cwd: string): Promise<string | nul
 // Fire-and-forget; sendWebPush no-ops when RemoteHost (its Firebase auth) isn't connected.
 export async function notifyTaskFinished(sessionId: string, kind: PushKind, message: string, uiPort: string): Promise<void> {
   if (!getPushEnabled()) return;
-  // Internal helper turns flow through /api/hook with active=false too — hidden background
-  // workers and translation workers aren't real user tasks, so never push for them.
-  if (hiddenSessions.has(sessionId) || translationWorkerIds.has(sessionId)) return;
+  // Internal helper turns flow through /api/hook with active=false too — the suppression gate
+  // keeps those (hidden background workers, translation workers) from ever reaching the phone.
+  if (shouldSuppressPush(hiddenSessions.has(sessionId), translationWorkerIds.has(sessionId))) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
-  const where = cwd ? path.basename(cwd) : "session";
+  const where = pushWhere(cwd);
   const reply = kind === "finished" && cwd ? await latestReply(sessionId, cwd) : null;
   if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
-  const detail = reply || lastPrompts.get(sessionId) || aiTitles.get(sessionId) || "";
+  const detail = buildPushDetail({ reply, lastPrompt: lastPrompts.get(sessionId), aiTitle: aiTitles.get(sessionId) });
   const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });
   // The session id is what lets the phone open this session from the notification;
   // the host id is what lets it know WHOSE session. Without it the phone opens with

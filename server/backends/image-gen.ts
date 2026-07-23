@@ -9,6 +9,7 @@
 // binds that straight into `<img src>`, so MulmoTerminal needs no image storage or
 // serving route. Mirrors MulmoClaude's server/utils/gemini.ts (same model + config).
 import { GoogleGenAI } from "@google/genai";
+import { extractImageResult } from "./imageResult.js";
 
 // Mirrors MulmoClaude's default. This is a PREVIEW model Google schedules for
 // retirement (~mid-2026); override with GEMINI_IMAGE_MODEL to pin a stable model
@@ -18,10 +19,6 @@ const DEFAULT_IMAGE_CONFIG = {
   responseModalities: ["TEXT", "IMAGE"],
   imageConfig: { aspectRatio: "16:9" },
 };
-
-// The MIME type comes from the (untrusted) model response and is embedded into a
-// `data:` URL, so constrain it to a safe image allowlist and default to PNG.
-const ALLOWED_IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 let client: GoogleGenAI | null = null;
 function getClient() {
@@ -48,21 +45,8 @@ export async function generateImage(prompt: string) {
     return { message: `Image generation failed: ${e instanceof Error ? e.message : String(e)}` };
   }
 
-  // Reduce the response parts to the first inline image + any text (mirrors
-  // gemini.ts#extractImageResult).
   const parts = response?.candidates?.[0]?.content?.parts ?? [];
-  let imageData;
-  let mimeType = "image/png";
-  let text;
-  for (const part of parts) {
-    if (part.inlineData?.data) {
-      imageData = part.inlineData.data;
-      const mt = part.inlineData.mimeType;
-      if (mt && ALLOWED_IMAGE_MIME.has(mt)) mimeType = mt;
-    } else if (part.text) {
-      text = part.text;
-    }
-  }
+  const { imageData, mimeType, text } = extractImageResult(parts);
 
   if (!imageData) {
     return { message: text || "Gemini returned no image (the prompt may have been filtered)." };
