@@ -22,6 +22,7 @@ import {
   lastPrompts,
   lastResponses,
   lastTitleAttemptMs,
+  claimActivityOwnership,
   lastTitledUserTurns,
   launchChoices,
   persistActivityState,
@@ -178,6 +179,7 @@ function setFlag(deps: SessionLifecycleDeps, id: string, flag: ActivityFlag, val
   const effect = flagEffect(activity.get(id), flag, value, event, Date.now());
   if (!effect.next) return;
   activity.set(id, effect.next);
+  claimActivityOwnership(id); // this instance drives this session — persist may write/remove it
   publishActivity(deps, id);
   // Persist so an in-progress turn / the blocked-or-done set survives a restart (ACTIVITY_STATE_FILE).
   persistActivityState((id) => hiddenSessions.has(id));
