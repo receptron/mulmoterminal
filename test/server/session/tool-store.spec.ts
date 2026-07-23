@@ -103,6 +103,36 @@ describe("createSessionStore", () => {
     await expect(fs.stat(path.join(root, "escape.json"))).rejects.toThrow();
     await expect(fs.stat(path.join(root, "things"))).rejects.toThrow();
   });
+
+  // A second server rooted at the same MULMOTERMINAL_HOME owns this session and appends to its
+  // file; a non-owning server that already cached the list must pick up the change on the next
+  // read instead of holding the stale copy until it restarts. (#705)
+  it("re-reads when the file changed since it was cached (another instance appended)", async () => {
+    await fs.mkdir(path.join(root, "things"), { recursive: true });
+    const file = path.join(root, "things", `${SESSION}.json`);
+    await fs.writeFile(file, JSON.stringify([{ n: 1 }]));
+    let mtime = 100;
+    const store = createSessionStore<{ n: number }>("things", root, async () => mtime);
+    expect(await store.get(SESSION)).toEqual([{ n: 1 }]); // cached at mtime 100
+
+    await fs.writeFile(file, JSON.stringify([{ n: 1 }, { n: 2 }])); // the owning instance appended
+    mtime = 200;
+    expect(await store.get(SESSION)).toEqual([{ n: 1 }, { n: 2 }]); // newer mtime => re-read
+
+    expect(await store.get(SESSION)).toEqual([{ n: 1 }, { n: 2 }]); // unchanged now => cached, no re-read
+  });
+
+  // The owning server writes via save(), which records the post-write mtime — so its next get()
+  // returns the same working array it mutates in place, never re-reading its own write.
+  it("does not re-read the store's own write (keeps the working array)", async () => {
+    let mtime = 0;
+    const store = createSessionStore<{ n: number }>("things", root, async () => mtime);
+    const list = await store.get(SESSION);
+    list.push({ n: 1 });
+    mtime = 500; // the write below lands at this mtime
+    await store.save(SESSION);
+    expect(await store.get(SESSION)).toBe(list); // same array, no re-read
+  });
 });
 
 describe("createToolStores", () => {
