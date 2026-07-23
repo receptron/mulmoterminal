@@ -14,7 +14,17 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { computeUpdateNotice, isUpdateCheckDisabled } from "./update-check.js";
-import { chooseCwd, parsePortArg, portInUseAction, portInUseMessage, saysYes, secondInstancePrompt, SECOND_INSTANCE_NOTE } from "./cli-args.js";
+import {
+  chooseCwd,
+  parsePortArg,
+  portInUseAction,
+  portInUseMessage,
+  saysYes,
+  secondInstancePrompt,
+  SECOND_INSTANCE_NOTE,
+  nodeMeetsMinimum,
+  MIN_NODE_LABEL,
+} from "./cli-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -78,9 +88,8 @@ function promptYesNo(question) {
 async function runInit(initArgs) {
   log("Setting up MulmoTerminal…\n");
 
-  const [maj, min] = process.versions.node.split(".").map((n) => Number.parseInt(n, 10));
-  const nodeOk = maj > 22 || (maj === 22 && min >= 9);
-  console.log(nodeOk ? `  ✓ Node ${process.versions.node}` : `  ✗ Node ${process.versions.node} — MulmoTerminal needs ≥ 22.9`);
+  const nodeOk = nodeMeetsMinimum(process.versions.node);
+  console.log(nodeOk ? `  ✓ Node ${process.versions.node}` : `  ✗ Node ${process.versions.node} — MulmoTerminal needs ≥ ${MIN_NODE_LABEL}`);
 
   const hasClaude = claudeInstalled();
   if (hasClaude) {
