@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 import { createSessionLifecycle } from "../../../server/session/lifecycle.js";
+import type { WorkPhase } from "../../../server/session/workPhase.js";
 import { activity, aiTitles, hiddenSessions, knownSessions, lastPrompts, lastResponses, launchChoices, ptys } from "../../../server/session/registry.js";
 
 vi.mock("../../../server/infra/tmux.js", () => ({ tmuxKillSession: vi.fn() }));
@@ -15,10 +16,12 @@ vi.mock("../../../server/session/session-settings.js", () => ({ cleanupSessionSe
 
 const ID = "11111111-2222-4333-8444-555555555555";
 
-const makeDeps = () => ({
+const makeDeps = (workPhase: WorkPhase | null = null) => ({
   publish: vi.fn(),
   forgetTitle: vi.fn(),
   sessionActivityPublisher: { publish: vi.fn(), forget: vi.fn() },
+  workPhaseOf: vi.fn(() => workPhase),
+  forgetWorkPhase: vi.fn(),
 });
 
 // A pty entry with just the fields the lifecycle reads.
@@ -112,11 +115,18 @@ describe("setWorking / setWaiting", () => {
     expect(deps.publish).not.toHaveBeenCalled();
   });
 
-  it("mirrors the flags to the phone", () => {
-    const deps = makeDeps();
+  // The phone renders the same status vocabulary as the cockpit roster, which needs the event
+  // (blocked vs done) and the live work phase (planning vs editing) alongside the flags (#727).
+  it("mirrors the flags, the event and the work phase to the phone", () => {
+    const deps = makeDeps("implementing");
     ptys.set(ID, fakeEntry({ ws: {} }));
     createSessionLifecycle(deps).setWaiting(ID, true, "Notification");
-    expect(deps.sessionActivityPublisher.publish).toHaveBeenCalledWith(ID, { working: false, waiting: true });
+    expect(deps.sessionActivityPublisher.publish).toHaveBeenCalledWith(ID, {
+      working: false,
+      waiting: true,
+      event: "Notification",
+      workPhase: "implementing",
+    });
   });
 });
 

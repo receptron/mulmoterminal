@@ -10,10 +10,17 @@
 // Deliberately fire-and-forget: the caller sits on the synchronous hook path that
 // serves Claude Code's own requests, and a Firestore hiccup must never disturb it.
 import { deleteDoc, doc, serverTimestamp, setDoc, type DocumentReference, type Firestore } from "firebase/firestore";
+import type { WorkPhase } from "../../session/workPhase.js";
 
 export interface SessionActivity {
   working: boolean;
   waiting: boolean;
+  // The two fields the phone needs to speak the same status vocabulary as the cockpit roster
+  // (#727): `event` splits a `waiting` session into blocked (Notification) vs done (Stop), and
+  // `workPhase` splits a `working` one into planning vs editing. Optional so a host that hasn't
+  // observed them yet simply omits them and the reader degrades to working/waiting.
+  event?: string | null;
+  workPhase?: WorkPhase | null;
 }
 
 // `rev` is monotonic per session so a watcher can distinguish "changed again" from a
@@ -52,7 +59,10 @@ export interface SessionActivityPublisherDeps {
 export function createSessionActivityPublisher(deps: SessionActivityPublisherDeps) {
   const revisions = new Map<string, number>();
   const published = new Map<string, string>();
-  const stateKey = ({ working, waiting }: SessionActivity): string => `${working}:${waiting}`;
+  // Every field the phone renders belongs in the key: a turn that moves planning → implementing,
+  // or a waiting one that changes from blocked to done, keeps the same working/waiting pair and
+  // would otherwise be deduped away — leaving the phone showing the superseded status (#727).
+  const stateKey = ({ working, waiting, event, workPhase }: SessionActivity): string => `${working}:${waiting}:${event ?? ""}:${workPhase ?? ""}`;
 
   // Not every caller of the host's publishActivity is a state transition — generating
   // an AI title or clearing the header republishes an unchanged working/waiting pair.

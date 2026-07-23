@@ -22,6 +22,8 @@ export interface HookDeps {
   publishActivity: (id: string) => void;
   forgetTitle: (id: string) => void;
   noteTitleTurn: (id: string, prompt: string) => void;
+  /** Feed the live turn's tool names, so the published status can say planning vs editing (#727). */
+  noteWorkPhase: (id: string, event: string, toolName?: string) => void;
   maybeGenerateTitle: (id: string, cwd: string | undefined) => Promise<void>;
   recordToolCallStart: (sessionId: string, call: { toolUseId?: string; toolName?: string; toolInput?: unknown }) => Promise<void>;
   recordToolCallEnd: (
@@ -136,6 +138,9 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     const active = !!(entry && entry.active);
     const cwd = resolveHookCwd(body.cwd, entry?.cwd);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
+    // Before the activity publish below, so the row it mirrors to the phone already carries this
+    // hook's phase (a turn's first Edit must read as "editing" in the same push, not the next one).
+    deps.noteWorkPhase(sessionId, event, typeof body.tool_name === "string" ? body.tool_name : undefined);
     handleActivityHook(deps, sessionId, event, active, typeof body.message === "string" ? body.message : "");
     await handleToolHook(deps, sessionId, event, body, cwd);
     // A hidden translation worker that ends its turn while still pending never called
