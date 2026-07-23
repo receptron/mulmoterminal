@@ -59,5 +59,6 @@ npx mulmoterminal@latest    # opens http://localhost:34567
 3. [Feature reference](features.html) (grouped by the four pillars)
 4. [Configuration](config.html) (settings modal · `config.json` · `.mulmoterminal.json` · the **DSL**)
 5. [Using another model via OpenRouter](providers.html) (run Kimi / DeepSeek / Gemini, with measured data)
+6. [Local models with claude-ollama](claude-ollama.html) (fully local, offline, via Ollama)
 
 > The Japanese guide is here: [日本語ガイド](../ja/).

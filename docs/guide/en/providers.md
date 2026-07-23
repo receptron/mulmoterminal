@@ -341,47 +341,11 @@ If you are unsure where to start, try **Kimi K2.7 Code** (fast, coding-oriented)
 - An unresolvable key **refuses the launch**, so prompts never reach an unintended backend
 - `ANTHROPIC_API_KEY` is **removed** from a provider session's environment — left in place it would outrank the auth token
 
-## Running a local LLM from the CLI (claude-ollama)
+## Running a local LLM (claude-ollama)
 
-Everything above is about providers (Anthropic-compatible backends like OpenRouter). You can
-also run Claude Code **fully locally against an Ollama model — no cloud at all**. The bundled
-`claude-ollama` command does exactly that.
-
-> This is not the MulmoTerminal web UI — it's a standalone wrapper that launches plain
-> `claude` (the Claude Code CLI) pointed at Ollama.
-
-### Usage
-
-```bash
-ollama pull qwen3:4b            # pull the model first
-claude-ollama qwen3:4b          # launch Claude Code on the local model
-claude-ollama qwen3:30b-a3b "refactor this module"
-```
-
-### What it sets up (three things)
-
-Ollama 0.31+ serves a native Anthropic-compatible `/v1/messages`, so pointing
-`ANTHROPIC_BASE_URL` at it connects with no translation layer. But making a *small* local model
-actually work needs three things, which `claude-ollama` wires up for you:
-
-1. **A big context** — a dedicated `ollama serve` on a private port with
-   `OLLAMA_CONTEXT_LENGTH=32768` (the 4096 default overflows Claude's system prompt and the
-   session dies on the second turn). Any Ollama you already run (11434) is left untouched.
-2. **A minimal system prompt** — `claude --bare --disable-slash-commands`, which drops
-   skills / plugins / MCP / hooks and shrinks the prompt from **~16000 to ~400 tokens**.
-   Without it, a small model drowns and answers generically instead of using tools.
-3. **The env recipe** — remove `ANTHROPIC_API_KEY` (if present it outranks the base URL) and
-   set `ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN=ollama` / `ANTHROPIC_MODEL` /
-   `ANTHROPIC_SMALL_FAST_MODEL` (the same model) / `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000`.
-
-### Caveats
-
-- **Speed depends on the model and machine.** Even qwen3:4b can take tens of seconds to a few
-  minutes per tool-using turn.
-- **Whether a model completes a tool loop varies.** `qwen3:4b` and `qwen3:30b-a3b` complete it;
-  `llama3.1:8b` breaks on the tool-result turn. **Validate through a real multi-turn run** — a
-  single endpoint probe isn't enough.
-- A fresh dedicated server reloads the model (slower first turn) but guarantees the big context.
+To run Claude Code **fully locally against an Ollama model** — no cloud — use the bundled
+`claude-ollama` command (`npx -p mulmoterminal claude-ollama qwen3:4b`). See
+**[Local models with claude-ollama](claude-ollama.html)** for the details.
 
 ---
 

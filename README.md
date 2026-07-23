@@ -94,6 +94,19 @@ listener and needs a browser **on the host**. Either way it needs a Desktop OAut
 as `~/.secrets/client_secret_*.json`; the refresh token lands in `~/.config/mulmo/google-token.json`
 and is **shared with MulmoClaude**, so one link per machine covers both apps.
 
+**Local models (optional).** The package also ships `claude-ollama` — a one-command launcher that
+runs Claude Code **fully locally against an [Ollama](https://ollama.com) model** (no cloud, no API
+key). It starts a large-context Ollama server and launches `claude` with a minimal system prompt so
+small models aren't drowned:
+
+```bash
+ollama pull qwen3:4b
+npx -p mulmoterminal claude-ollama qwen3:4b   # or, if installed globally: claude-ollama qwen3:4b
+```
+
+See [Local models with claude-ollama](https://receptron.github.io/mulmoterminal/guide/en/claude-ollama.html)
+for the details and model notes.
+
 > **Already linked before the calendar-list / colour features?** They need a read scope your existing
 > link doesn't have, so `listCalendars` (and, in practice, `colors`) fail with an insufficient-scope
 > 403 until you re-authorize: **Settings → Google account → Unlink**, then sign in again (or re-run

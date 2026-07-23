@@ -334,33 +334,9 @@ yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 qwen/qwen3-cod
 - 鍵が解決できないときは**起動を拒否**します。意図しないバックエンドにプロンプトが流れないためです
 - プロバイダを使うセッションでは `ANTHROPIC_API_KEY` を子プロセスから**取り除きます**（残っていると認証トークンより優先されてしまうため）
 
-## ローカル LLM を CLI で動かす（claude-ollama）
+## ローカル LLM をローカルで動かす（claude-ollama）
 
-ここまではプロバイダ（OpenRouter 等の Anthropic 互換バックエンド）の話でしたが、**クラウドを一切使わず手元の Ollama モデルで Claude Code を動かす**こともできます。付属の `claude-ollama` コマンドがそれです。
-
-> これは MulmoTerminal の Web UI ではなく、**素の `claude`（Claude Code CLI）を Ollama に向けて起動する**スタンドアロンのラッパーです。
-
-### 使い方
-
-```bash
-ollama pull qwen3:4b            # モデルは先に pull しておく
-claude-ollama qwen3:4b          # ローカルモデルで Claude Code を起動
-claude-ollama qwen3:30b-a3b "このモジュールをリファクタして"
-```
-
-### 何をしているか（3点セット）
-
-Ollama 0.31+ は Anthropic 互換の `/v1/messages` を持つので、`ANTHROPIC_BASE_URL` を向けるだけで変換層なしに繋がります。ただし小型モデルをまともに動かすには次の3点が要り、`claude-ollama` がこれを自動で仕込みます:
-
-1. **大きい context** — 専用ポートで `OLLAMA_CONTEXT_LENGTH=32768` の `ollama serve` を起動（既定の 4096 では Claude のシステムプロンプトが溢れ、2ターン目でセッションが落ちる）。既存の Ollama（11434）は触りません。
-2. **システムプロンプトの最小化** — `claude --bare --disable-slash-commands`。skills / plugins / MCP / hooks を落とし、プロンプトを **約 16000 → 約 400 トークン**に縮める。これが無いと小型モデルはツールを使わず一般応答してしまう。
-3. **環境変数** — `ANTHROPIC_API_KEY` を外し（残っていると base URL より優先される）、`ANTHROPIC_BASE_URL` / `ANTHROPIC_AUTH_TOKEN=ollama` / `ANTHROPIC_MODEL` / `ANTHROPIC_SMALL_FAST_MODEL`（＝同じモデル）/ `CLAUDE_CODE_MAX_OUTPUT_TOKENS=8000` を設定。
-
-### 注意点
-
-- **速度はモデル / マシン依存**。qwen3:4b でもツールを使うマルチターンは 1 ターン数十秒〜数分かかることがある。
-- **モデルによって tool ループの完走可否が違う**。`qwen3:4b` / `qwen3:30b-a3b` は完走を確認。`llama3.1:8b` は tool-result のターンで壊れる。**必ず実際のマルチターン実行で確かめる**こと（単発の疎通確認だけでは不十分）。
-- 専用サーバを毎回立てるためモデルの初回ロードが入る（初回ターンが遅い）。その代わり context が確実に大きい。
+クラウドを一切使わず**手元の Ollama モデルで Claude Code を動かす**なら、同梱の `claude-ollama` コマンドが使えます（`npx -p mulmoterminal claude-ollama qwen3:4b`）。詳しくは **[claude-ollama でローカルモデルを動かす](claude-ollama.html)** を参照。
 
 ---
 
