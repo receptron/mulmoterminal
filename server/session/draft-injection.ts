@@ -5,6 +5,7 @@
 import { claudeAdapter } from "../agents/claude.js";
 import type { PtyEntry } from "./types.js";
 import { sanitizeDraftText } from "./pty-text.js";
+import { planDraftInjection } from "./draft-plan.js";
 
 // Claude must have its input box + bracketed-paste mode up before it will capture a
 // typed `draft`; too early and the bytes are echoed into the scrollback instead. We
@@ -30,10 +31,9 @@ const DRAFT_SUBMIT_MS = 150;
 // the pty output to: it types once the input-box readiness marker paints (after a settle),
 // or after DRAFT_FALLBACK_MS if the marker never appears (UI drift). No-op when neither.
 export function attachDraftInjection(entry: PtyEntry, initialPrompt: string | undefined, draft: string | undefined): (data: string) => void {
-  const pendingText = draft ?? initialPrompt;
-  const autoSubmit = draft === undefined && initialPrompt !== undefined;
-  const draftText = pendingText ? sanitizeDraftText(pendingText) : "";
-  if (!draftText) return () => {};
+  const plan = planDraftInjection(initialPrompt, draft, sanitizeDraftText);
+  if (!plan) return () => {};
+  const { text: draftText, autoSubmit } = plan;
   let done = false;
   let scan = "";
   const typeDraft = () => {
