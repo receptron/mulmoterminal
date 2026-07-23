@@ -6,6 +6,7 @@
 import type { Express } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import { workspaceFromQuery } from "../config/workspace.js";
+import { normalizeAgent } from "./routeParams.js";
 import { getHeaderConfig } from "../config/config-routes.js";
 import { publicDirConfig, dirSoundFile, loadDirConfig } from "../config/dir-config.js";
 import { buildHeaderContext, loadHeaderConfig, repoFromWebUrl } from "../config/header-context.js";
@@ -74,7 +75,7 @@ export function mountDirRoutes(app: Express): void {
   app.get("/api/header", async (req, res) => {
     const cwd = workspaceFromQuery(req.query.cwd);
     const session = typeof req.query.session === "string" && SESSION_ID_RE.test(req.query.session) ? req.query.session : null;
-    const agent = req.query.agent === "codex" ? "codex" : "claude";
+    const agent = normalizeAgent(req.query.agent);
     const model = typeof req.query.model === "string" ? req.query.model : null;
     const config = loadHeaderConfig(cwd, getHeaderConfig());
     const context = await buildHeaderContext(cwd, { session, agent, model });
