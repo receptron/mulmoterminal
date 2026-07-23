@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest";
 
-import { formatTokens, inputTokensShown, relativeTime, usageBadge } from "../../../src/components/cellDisplay";
+import {
+  compactRelativeTime,
+  compactRelativeTimeFromIso,
+  formatTokens,
+  inputTokensShown,
+  relativeTime,
+  relativeTimeFromIso,
+  usageBadge,
+} from "../../../src/components/cellDisplay";
 
 const NOW = 1_700_000_000_000;
 const minutesAgo = (n: number) => NOW - n * 60_000;
+const secondsAgo = (n: number) => NOW - n * 1_000;
+const isoMinutesAgo = (n: number) => new Date(minutesAgo(n)).toISOString();
 
 // The user picks which session to resume by this, so an off-by-one in the units sends them
 // into the wrong conversation.
@@ -25,6 +35,66 @@ describe("relativeTime", () => {
   // Clock skew between the server's mtime and the browser must not produce "-1m ago".
   it("says just now for a timestamp slightly in the future", () => {
     expect(relativeTime(NOW + 5_000, NOW)).toBe("just now");
+  });
+});
+
+describe("relativeTimeFromIso", () => {
+  it("delegates to relativeTime for a valid ISO timestamp", () => {
+    expect(relativeTimeFromIso(isoMinutesAgo(5), NOW)).toBe("5m ago");
+    expect(relativeTimeFromIso(isoMinutesAgo(25 * 60), NOW)).toBe("1d ago");
+  });
+
+  // A malformed date drops the meta rather than rendering "NaNm ago".
+  it.each([["not-a-date"], [""], ["2023-13-99"]])("is empty for unparseable %j", (iso) => {
+    expect(relativeTimeFromIso(iso, NOW)).toBe("");
+  });
+});
+
+// The bell's compact form: floor (shared with relativeTime), no "ago" suffix, a 45-second
+// just-now cutoff. floor here is deliberate — round would read 90s as "2m" before two minutes
+// have passed. A consequence is that 45–59s reads "0m"; that window is transient in the live UI.
+describe("compactRelativeTime", () => {
+  it("reads just now below the 45-second cutoff", () => {
+    expect(compactRelativeTime(secondsAgo(0), NOW)).toBe("just now");
+    expect(compactRelativeTime(secondsAgo(44), NOW)).toBe("just now");
+  });
+
+  // 45s is the boundary: at the cutoff it is no longer "just now", and floored minutes is 0.
+  // Moving the cutoff to 60 would flip this back to "just now" — this pins it.
+  it("crosses out of just now at exactly 45 seconds", () => {
+    expect(compactRelativeTime(secondsAgo(45), NOW)).toBe("0m");
+  });
+
+  // floors, never rounds: 90s is one minute, not two; 90min is one hour; 36h is one day.
+  it.each([
+    [secondsAgo(90), "1m"],
+    [minutesAgo(5), "5m"],
+    [minutesAgo(59), "59m"],
+    [minutesAgo(90), "1h"],
+    [minutesAgo(23 * 60), "23h"],
+    [minutesAgo(36 * 60), "1d"],
+    [minutesAgo(72 * 60), "3d"],
+  ])("floors %s to %s", (ms, expected) => {
+    expect(compactRelativeTime(ms, NOW)).toBe(expected);
+  });
+
+  // The whole reason it is a separate function: no " ago".
+  it("never appends ago", () => {
+    expect(compactRelativeTime(minutesAgo(5), NOW)).not.toContain("ago");
+  });
+
+  it("says just now for a future timestamp (clock skew)", () => {
+    expect(compactRelativeTime(NOW + 5_000, NOW)).toBe("just now");
+  });
+});
+
+describe("compactRelativeTimeFromIso", () => {
+  it("delegates to compactRelativeTime for a valid ISO timestamp", () => {
+    expect(compactRelativeTimeFromIso(isoMinutesAgo(5), NOW)).toBe("5m");
+  });
+
+  it.each([["not-a-date"], [""]])("is empty for unparseable %j", (iso) => {
+    expect(compactRelativeTimeFromIso(iso, NOW)).toBe("");
   });
 });
 

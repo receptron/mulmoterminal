@@ -2,9 +2,16 @@
 // tested. None is complicated; each is the kind of thing that goes subtly wrong and is then
 // believed, because the number on screen looks like a number.
 
+const SECOND_MS = 1_000;
 const MINUTE_MS = 60_000;
+const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
+
+// Below this a notification reads as "just now". The bell's compact form deliberately keeps
+// this larger, seconds-based cutoff (rather than relativeTime's "under a minute") so a burst
+// of near-simultaneous notifications doesn't all flip to "0m" the instant a minute passes.
+const COMPACT_JUST_NOW_SECONDS = 45;
 
 // How long ago a session was last active, for the resume list. The user picks which session
 // to resume by this, so an off-by-one in the units sends them into the wrong conversation.
@@ -16,6 +23,33 @@ export function relativeTime(ms: number, now: number): string {
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
   if (hours < HOURS_PER_DAY) return `${hours}h ago`;
   return `${Math.floor(hours / HOURS_PER_DAY)}d ago`;
+}
+
+// Same rule from an ISO timestamp (PR/issue `updatedAt`). An unparseable string yields ""
+// rather than "NaNm ago", so a malformed date silently drops the meta rather than showing junk.
+export function relativeTimeFromIso(iso: string, now: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  return relativeTime(ms, now);
+}
+
+// The notification bell's compact variant: "just now" / "5m" / "3h" / "2d", no "ago" suffix.
+// Shares relativeTime's floor so the two never disagree on the number, differing only in the
+// suffix and the seconds-based just-now cutoff above.
+export function compactRelativeTime(ms: number, now: number): string {
+  const seconds = Math.floor((now - ms) / SECOND_MS);
+  if (seconds < COMPACT_JUST_NOW_SECONDS) return "just now";
+  const minutes = Math.floor(seconds / SECONDS_PER_MINUTE);
+  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  if (hours < HOURS_PER_DAY) return `${hours}h`;
+  return `${Math.floor(hours / HOURS_PER_DAY)}d`;
+}
+
+export function compactRelativeTimeFromIso(iso: string, now: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  return compactRelativeTime(ms, now);
 }
 
 const MILLION = 1_000_000;
