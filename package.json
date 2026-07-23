@@ -18,7 +18,8 @@
     "mulmoterminal"
   ],
   "bin": {
-    "mulmoterminal": "bin/mulmoterminal.js"
+    "mulmoterminal": "bin/mulmoterminal.js",
+    "claude-ollama": "bin/claude-ollama.js"
   },
   "files": [
     "bin/",

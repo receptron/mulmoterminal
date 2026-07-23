@@ -334,6 +334,10 @@ yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 qwen/qwen3-cod
 - 鍵が解決できないときは**起動を拒否**します。意図しないバックエンドにプロンプトが流れないためです
 - プロバイダを使うセッションでは `ANTHROPIC_API_KEY` を子プロセスから**取り除きます**（残っていると認証トークンより優先されてしまうため）
 
+## ローカル LLM をローカルで動かす（claude-ollama）
+
+クラウドを一切使わず**手元の Ollama モデルで Claude Code を動かす**なら、同梱の `claude-ollama` コマンドが使えます（`npx -p mulmoterminal claude-ollama qwen3:4b`）。詳しくは **[claude-ollama でローカルモデルを動かす](claude-ollama.html)** を参照。
+
 ---
 
 ← [設定方法に戻る](config.html) ／ [日本語ガイドの目次](index.html)

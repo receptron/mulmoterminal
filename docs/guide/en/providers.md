@@ -341,6 +341,12 @@ If you are unsure where to start, try **Kimi K2.7 Code** (fast, coding-oriented)
 - An unresolvable key **refuses the launch**, so prompts never reach an unintended backend
 - `ANTHROPIC_API_KEY` is **removed** from a provider session's environment — left in place it would outrank the auth token
 
+## Running a local LLM (claude-ollama)
+
+To run Claude Code **fully locally against an Ollama model** — no cloud — use the bundled
+`claude-ollama` command (`npx -p mulmoterminal claude-ollama qwen3:4b`). See
+**[Local models with claude-ollama](claude-ollama.html)** for the details.
+
 ---
 
 ← [back to Configuration](config.html) / [English guide index](index.html)
