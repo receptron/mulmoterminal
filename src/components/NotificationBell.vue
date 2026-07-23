@@ -2,6 +2,8 @@
 import { computed, useTemplateRef } from "vue";
 import ToolbarPopover from "./ToolbarPopover.vue";
 import { useNotifications, type NotifierEntry, type NotifierSeverity } from "../composables/useNotifications";
+import { compactRelativeTimeFromIso } from "./cellDisplay";
+import { shortPkg } from "./shortPkg";
 
 // Toolbar bell: a severity-coloured unread badge + a dropdown listing the active
 // notifications. Mirrors MulmoClaude's bell structure (severity-coloured bell icon
@@ -36,26 +38,6 @@ function bellColorClass(severity: NotifierSeverity): string {
   if (severity === "nudge") return "text-[#e0a526]";
   if (severity === "urgent") return "text-[#e0533d]";
   return "text-[#9aa6cc]";
-}
-
-// Strip a leading `@scope/` from a package name for the meta line (matches
-// MulmoClaude's shortPkg) — unscoped legacy pluginPkgs pass through unchanged.
-function shortPkg(pluginPkg: string): string {
-  return pluginPkg.startsWith("@") ? pluginPkg.split("/").slice(1).join("/") || pluginPkg : pluginPkg;
-}
-
-// Compact relative time ("just now", "5m", "3h", "2d") from an ISO timestamp.
-function relativeTime(iso: string): string {
-  const then = Date.parse(iso);
-  if (Number.isNaN(then)) return "";
-  const seconds = Math.max(0, Math.round((Date.now() - then) / 1000));
-  if (seconds < 45) return "just now";
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h`;
-  const days = Math.round(hours / 24);
-  return `${days}d`;
 }
 </script>
 
@@ -103,7 +85,7 @@ function relativeTime(iso: string): string {
             <span v-if="entry.lifecycle" class="flex-none font-sans text-[9px] uppercase tracking-[0.04em] text-muted">{{ entry.lifecycle }}</span>
           </span>
           <span v-if="entry.body" class="font-sans text-[12px] text-muted [overflow-wrap:anywhere]">{{ entry.body }}</span>
-          <span class="font-mono text-[10px] text-muted">{{ relativeTime(entry.createdAt) }} · {{ shortPkg(entry.pluginPkg) }}</span>
+          <span class="font-mono text-[10px] text-muted">{{ compactRelativeTimeFromIso(entry.createdAt, Date.now()) }} · {{ shortPkg(entry.pluginPkg) }}</span>
         </span>
         <button
           type="button"

@@ -2,6 +2,7 @@
 import { isUnread } from "../composables/useSessions";
 import { useSessionFilter, type SessionListEmits, type SessionListProps } from "../composables/sessionList";
 import SessionFilters from "./SessionFilters.vue";
+import { relativeTime } from "./cellDisplay";
 
 // Presentational: the session list + filter are owned by App.vue (a single
 // useSessions instance shared across layouts) so toggling vertical/horizontal
@@ -16,16 +17,6 @@ const props = defineProps<
 const emit = defineEmits<SessionListEmits>();
 
 const { unreadCount, filteredSessions } = useSessionFilter(props);
-
-function relativeTime(ms: number): string {
-  const diff = Date.now() - ms;
-  const min = Math.round(diff / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.round(hr / 24)}d ago`;
-}
 </script>
 
 <template>
@@ -101,7 +92,7 @@ function relativeTime(ms: number): string {
           >
           {{ s.title }}
         </span>
-        <span class="text-[11px] text-dim">{{ relativeTime(s.mtime) }}</span>
+        <span class="text-[11px] text-dim">{{ relativeTime(s.mtime, Date.now()) }}</span>
       </li>
     </ul>
   </aside>
