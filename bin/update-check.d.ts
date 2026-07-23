@@ -10,6 +10,13 @@ export declare function isUpdateCheckDisabled(env: Record<string, string | undef
 export declare function hasNodeModulesSegment(pkgDir: string): boolean;
 export declare function classifyInstall(pkgDir: string, isGitWorkTree: boolean): "npm" | "git";
 export declare function parseLsRemoteHead(stdout: string | null | undefined): string | null;
+export declare function parseLsRemoteDefaultBranch(stdout: string | null | undefined): string | null;
 export declare function npmUpdateNotice(current: string, latest: string | null): string | null;
 export declare function isTreeDirtyForUpdate(porcelain: string | null | undefined): boolean;
-export declare function gitUpdateNotice(args: { localSha: string | null; localShort: string | null; remoteSha: string | null; dirty: boolean }): string | null;
+export declare function gitUpdateNotice(args: {
+  localSha: string | null;
+  localShort: string | null;
+  remoteSha: string | null;
+  defaultBranch?: string | null;
+  dirty: boolean;
+}): string | null;

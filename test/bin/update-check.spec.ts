@@ -6,6 +6,7 @@ import {
   hasNodeModulesSegment,
   classifyInstall,
   parseLsRemoteHead,
+  parseLsRemoteDefaultBranch,
   npmUpdateNotice,
   isTreeDirtyForUpdate,
   gitUpdateNotice,
@@ -142,6 +143,25 @@ describe("parseLsRemoteHead", () => {
   it("rejects a non-sha in the HEAD line", () => {
     expect(parseLsRemoteHead("not-a-sha\tHEAD")).toBeNull();
   });
+
+  // The sha is still readable from --symref output (the ref: line's first field isn't a sha).
+  it("reads the sha out of --symref output too", () => {
+    expect(parseLsRemoteHead("ref: refs/heads/main\tHEAD\nd451b53dfcda7ef7395bed8a04cf5e1060d6e55f\tHEAD")).toBe("d451b53dfcda7ef7395bed8a04cf5e1060d6e55f");
+  });
+});
+
+describe("parseLsRemoteDefaultBranch", () => {
+  it("reads the default branch from a --symref line", () => {
+    expect(parseLsRemoteDefaultBranch("ref: refs/heads/main\tHEAD\nd451b53\tHEAD")).toBe("main");
+    expect(parseLsRemoteDefaultBranch("ref: refs/heads/master\tHEAD\nabc\tHEAD")).toBe("master");
+  });
+
+  // Without --symref (or on odd output) there's no ref line — fall back to null → bare git pull.
+  it("is null when there is no ref line", () => {
+    expect(parseLsRemoteDefaultBranch("d451b53\tHEAD")).toBeNull();
+    expect(parseLsRemoteDefaultBranch("")).toBeNull();
+    expect(parseLsRemoteDefaultBranch(null)).toBeNull();
+  });
 });
 
 describe("npmUpdateNotice", () => {
@@ -165,8 +185,15 @@ describe("gitUpdateNotice", () => {
   // tell whether the notice used the captured short sha or re-sliced the full one.
   const behind = { localSha: "0123456789abcdef", localShort: "short12", remoteSha: "fedcba9876543210", dirty: false };
 
-  it("names the local short sha and git pull when behind and clean", () => {
+  it("names the local short sha and a bare git pull when the default branch is unknown", () => {
     expect(gitUpdateNotice(behind)).toBe("Update available: short12 → origin  ·  run: git pull");
+  });
+
+  // `git pull` alone pulls the current branch's upstream, not the release. Naming the remote's
+  // default branch is what actually updates a clone that's on it (or behind it).
+  it("names origin + the default branch when it is known", () => {
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "main" })).toBe("Update available: short12 → origin  ·  run: git pull origin main");
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "master" })).toContain("git pull origin master");
   });
 
   // Dirty stops it even when the shas differ — a checkout with local edits can't
@@ -255,11 +282,11 @@ describe("computeUpdateNotice", () => {
       if (args[0] === "status") return ""; // clean
       if (args[0] === "rev-parse" && args[1] === "HEAD") return "0123456789abcdef";
       if (args[0] === "rev-parse" && args[1] === "--short") return "0123456";
-      if (args[0] === "ls-remote") return "fedcba9876543210\tHEAD";
+      if (args[0] === "ls-remote") return "ref: refs/heads/main\tHEAD\nfedcba9876543210\tHEAD";
       return null;
     };
     const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
-    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull");
+    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull origin main");
   });
 
   it("is silent on the git path when the checkout is dirty", async () => {

@@ -128,16 +128,27 @@ export function isTreeDirtyForUpdate(porcelain) {
     .some((line) => line.trim() !== "" && !line.startsWith("??"));
 }
 
+// The remote's default branch, from the "ref: refs/heads/<branch>\tHEAD" line that
+// `git ls-remote --symref origin HEAD` prints, or null. `git pull` with no args pulls the
+// CURRENT branch's upstream — which isn't the release a clone is behind if you're on some
+// other branch. Naming origin + the default branch is what actually updates it, and reading
+// the name (rather than hardcoding "main") keeps it right for a "master" remote too.
+export function parseLsRemoteDefaultBranch(stdout) {
+  const match = String(stdout ?? "").match(/^ref:\s+refs\/heads\/(\S+)\s+HEAD$/m);
+  return match ? match[1] : null;
+}
+
 // Whether a git checkout should hear that an update exists, and what to say.
 // Silent whenever the notice could not be acted on or trusted: a dirty tree
 // cannot fast-forward, a missing sha means local or remote could not be read,
 // and equal shas mean it is already current. Only a clean checkout whose HEAD
 // differs from the remote's is behind — count is deliberately absent, since
 // counting commits needs the objects a `git fetch` would bring and we skip it.
-export function gitUpdateNotice({ localSha, localShort, remoteSha, dirty }) {
+export function gitUpdateNotice({ localSha, localShort, remoteSha, defaultBranch, dirty }) {
   if (dirty) return null;
   if (!localSha || !remoteSha || localSha === remoteSha) return null;
-  return `Update available: ${localShort || localSha.slice(0, 7)} → origin  ·  run: git pull`;
+  const pull = defaultBranch ? `git pull origin ${defaultBranch}` : "git pull";
+  return `Update available: ${localShort || localSha.slice(0, 7)} → origin  ·  run: ${pull}`;
 }
 
 // ls-remote reaches the network (an SSH/HTTPS handshake to the origin host), so it routinely
@@ -154,9 +165,15 @@ async function gitUpdateNotice_(git) {
   const [localSha, localShort, lsRemote] = await Promise.all([
     git(["rev-parse", "HEAD"]),
     git(["rev-parse", "--short", "HEAD"]),
-    git(["ls-remote", "origin", "HEAD"], LS_REMOTE_TIMEOUT_MS),
+    git(["ls-remote", "--symref", "origin", "HEAD"], LS_REMOTE_TIMEOUT_MS),
   ]);
-  return gitUpdateNotice({ localSha, localShort, remoteSha: parseLsRemoteHead(lsRemote), dirty: false });
+  return gitUpdateNotice({
+    localSha,
+    localShort,
+    remoteSha: parseLsRemoteHead(lsRemote),
+    defaultBranch: parseLsRemoteDefaultBranch(lsRemote),
+    dirty: false,
+  });
 }
 
 // The whole check, front to back: which install this is, then its notice (or null when
