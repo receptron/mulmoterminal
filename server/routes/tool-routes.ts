@@ -5,6 +5,7 @@
 import type { Express } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import type { createToolStores } from "../session/tool-store.js";
+import { planToolResultUpdate } from "./toolResultPlan.js";
 
 export interface ToolRouteDeps {
   stores: ReturnType<typeof createToolStores>;
@@ -23,35 +24,15 @@ export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
   // so the active panel renders/updates it live. Mirrors MulmoClaude's internal
   // toolResult route + applyToolResultToSession.
   app.post("/api/agent/toolResult", async (req, res) => {
-    const { sessionId, toolName, uuid } = req.body || {};
-    // The session id flows from env (broker) / the client and ends up in a pub/sub
-    // channel name — keep it to the known UUID shape.
-    if (!sessionId || !SESSION_ID_RE.test(sessionId)) {
-      return res.status(400).json({ error: "invalid sessionId" });
+    const plan = planToolResultUpdate(req.body);
+    if (!plan.ok) {
+      return res.status(400).json({ error: plan.error });
     }
-    if (typeof toolName !== "string" || !toolName) {
-      return res.status(400).json({ error: "invalid toolName" });
-    }
-    if (typeof uuid !== "string" || !uuid) {
-      return res.status(400).json({ error: "invalid uuid" });
-    }
+    await deps.stores.storeToolResult(plan.sessionId, plan.stored);
 
-    // Store everything except the routing fields; the result itself is the payload
-    // the panel renders.
-    // `persistOnly` (set by the GUI panel when a view persists its own state change)
-    // means: store, but do NOT re-publish on the session channel. Re-publishing would
-    // echo the update back to the originating panel as a fresh result, which re-seeds
-    // the view and re-emits — an infinite flicker loop. The broker (new tool calls)
-    // omits the flag, so its results still publish and render live.
-    const result = { ...req.body };
-    delete result.sessionId;
-    const persistOnly = result.persistOnly === true;
-    delete result.persistOnly;
-    await deps.stores.storeToolResult(sessionId, result);
-
-    if (!persistOnly) {
-      deps.publish(deps.sessionChannel(sessionId), result);
-      console.log(`[gui] toolResult ${toolName} for ${sessionId}`);
+    if (plan.publish) {
+      deps.publish(deps.sessionChannel(plan.sessionId), plan.stored);
+      console.log(`[gui] toolResult ${plan.toolName} for ${plan.sessionId}`);
     }
     res.json({ ok: true });
   });

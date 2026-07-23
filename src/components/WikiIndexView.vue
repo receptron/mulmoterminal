@@ -6,49 +6,14 @@ import { computed, ref } from "vue";
 import type { WikiPageEntry } from "@mulmoclaude/core/wiki";
 import FilterChip from "./FilterChip.vue";
 import { wikiGotoPage } from "../composables/useWikiBrowse";
+import { filterChips, filterEntriesByTags } from "./wikiTagFilter";
 
 const props = defineProps<{ entries: WikiPageEntry[] }>();
 
 const selected = ref<Set<string>>(new Set());
 
-// Full per-tag page counts.
-const tagCounts = computed(() => {
-  const counts = new Map<string, number>();
-  for (const e of props.entries) for (const t of e.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
-  return counts;
-});
-
-// Filter-bar chips, mirroring MulmoClaude's wiki View: drop singletons (a tag on one
-// page adds no filtering value, just visual noise — it stays clickable from the card),
-// sort by count desc then name asc, and raise the cutoff adaptively so the row stays
-// around TARGET_FILTER_CHIPS even on big wikis. The cutoff is the count at the target
-// position, so equally-popular tags are kept together rather than sliced arbitrarily.
-const TARGET_FILTER_CHIPS = 20;
-const meaningfulTags = computed(() => [...tagCounts.value.entries()].filter(([, c]) => c > 1).sort(([ta, ca], [tb, cb]) => cb - ca || ta.localeCompare(tb)));
-const cutoffTags = computed<[string, number][]>(() => {
-  const m = meaningfulTags.value;
-  if (m.length <= TARGET_FILTER_CHIPS) return m;
-  const cutoff = m[TARGET_FILTER_CHIPS - 1][1];
-  return m.filter(([, c]) => c >= cutoff);
-});
-// Keep any selected tag the cutoff hides (e.g. a singleton picked from a card) visible
-// in the bar so it stays removable.
-const visibleTags = computed<[string, number][]>(() => {
-  const shown = new Set(cutoffTags.value.map(([t]) => t));
-  const extra = [...selected.value]
-    .filter((t) => !shown.has(t))
-    .sort((a, b) => a.localeCompare(b))
-    .map((t): [string, number] => [t, tagCounts.value.get(t) ?? 1]);
-  return [...cutoffTags.value, ...extra];
-});
-
-const filtered = computed(() => {
-  if (selected.value.size === 0) return props.entries;
-  return props.entries.filter((e) => {
-    const tags = new Set(e.tags);
-    return [...selected.value].every((t) => tags.has(t));
-  });
-});
+const visibleTags = computed(() => filterChips(props.entries, selected.value));
+const filtered = computed(() => filterEntriesByTags(props.entries, selected.value));
 
 function toggleTag(tag: string): void {
   const next = new Set(selected.value);

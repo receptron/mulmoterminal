@@ -685,6 +685,57 @@ describe("TerminalCell", () => {
     expect(w.find('[data-testid="cell-usage"]').exists()).toBe(false);
   });
 
+  // #620, on the badge path: two turns end back-to-back, so two /api/session reads for the
+  // same session are in flight at once. The older one resolving last must not put the
+  // previous turn's token numbers back on the badge.
+  it("does not let a stale usage refresh clobber a newer one (out-of-order)", async () => {
+    const id = "66666666-6666-6666-6666-666666666666";
+    const gates = [deferred<boolean>(), deferred<boolean>()];
+    let sessionCall = 0;
+    const INITIAL = { inputTokens: 100, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    const OLD = { inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    const NEW = { inputTokens: 5000, outputTokens: 9000, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        const n = sessionCall++;
+        if (n === 0) return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage: INITIAL }) }; // mount seed
+        const usage = n === 1 ? OLD : NEW; // refresh #1 = older turn, refresh #2 = newer turn
+        await gates[n - 1].promise;
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    await flushPromises();
+    expect(w.find('[data-testid="cell-usage"]').text()).toContain("100"); // initial seed
+
+    // First turn ends → refresh #1 (older), held on gates[0].
+    captured?.({ id, working: true, waiting: false });
+    await flushPromises();
+    captured?.({ id, working: false, waiting: false, event: "Stop" });
+    await flushPromises();
+    // Second turn ends → refresh #2 (newer), held on gates[1].
+    captured?.({ id, working: true, waiting: false });
+    await flushPromises();
+    captured?.({ id, working: false, waiting: false, event: "Stop" });
+    await flushPromises();
+
+    gates[1].resolve(true); // newer resolves first → applies the current turn's numbers
+    await flushPromises();
+    gates[0].resolve(true); // older resolves last → must be ignored, not revive the prior turn
+    await flushPromises();
+    await nextTick();
+
+    const badge = w.find('[data-testid="cell-usage"]').text();
+    expect(badge).toContain("5.0k"); // NEW input
+    expect(badge).toContain("9.0k"); // NEW output
+    expect(badge).not.toContain("1.0k"); // not OLD input
+  });
+
   it("shows the model/context badge from /api/session/:id context", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {

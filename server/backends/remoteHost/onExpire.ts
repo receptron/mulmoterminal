@@ -17,28 +17,14 @@
 // regardless). Unlike startChat's strict attachment parsing, extraction here is
 // lenient — this is cleanup, so a malformed entry is skipped, not surfaced.
 import { deleteObject, ref } from "firebase/storage";
-import type { Command, JsonObject } from "@mulmoclaude/core/remote-host";
+import type { Command } from "@mulmoclaude/core/remote-host";
 
 import { currentStorage } from "./session.js";
+import { stagedStorageIds } from "./stagedStorageIds.js";
 
 const PREFIX = "[remote-host]";
 
-// Same safe-token guard ingestAttachments applies before interpolating a
-// storage_id into the Storage path (no `/`, no `..`).
-const STORAGE_ID_RE = /^[A-Za-z0-9-]+$/;
-
 const errorText = (err: unknown): string => (err instanceof Error ? err.message : String(err));
-
-// Pull the staged storage_ids out of a command's `{ attachments: [{ storage_id }] }`
-// params, skipping anything malformed. Absent / wrong-shaped ⇒ [].
-const stagedStorageIds = (params: JsonObject): string[] => {
-  const { attachments } = params;
-  if (!Array.isArray(attachments)) return [];
-  return attachments.flatMap((entry) => {
-    const rawId = entry && typeof entry === "object" && !Array.isArray(entry) ? entry.storage_id : undefined;
-    return typeof rawId === "string" && STORAGE_ID_RE.test(rawId) ? [rawId] : [];
-  });
-};
 
 export const onExpire = async (command: Command, uid: string): Promise<void> => {
   for (const storageId of stagedStorageIds(command.params)) {

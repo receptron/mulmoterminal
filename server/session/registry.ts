@@ -12,7 +12,7 @@ import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
-import { buildActivitySnapshot, parseActivityState } from "./activity-state.js";
+import { buildActivitySnapshot, mergeOwnedActivity, parseActivityState, type PersistedActivity } from "./activity-state.js";
 import { devTerminalSessionLine, parseDevTerminalSessionIds } from "./dev-terminal-sessions.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
 
@@ -162,15 +162,43 @@ export const activityStateHydrated: Promise<void> = (async () => {
   }
 })();
 
-// Serialize writes into one chain (like appendDevTerminalSession) and snapshot the
-// CURRENT working/waiting entries at write time, so the last link always writes the complete set.
-// `isHidden` comes from the caller rather than closing over `hiddenSessions`: which sessions
-// are hidden is the session layer's policy, and this module owns storage, not policy.
+// The sessions THIS process drives (every id it has flagged working/waiting). The file is
+// shared with any other server rooted at the same MULMOTERMINAL_HOME, and hydration pulls the
+// other instance's ids into `activity` too — so a snapshot of the whole map is not this
+// instance's to write back. Ownership is claimed on the flag, not derived from `ptys`, so a
+// just-reaped session (pty already gone) is still recognised as ours and removed from the file.
+const ownedActivityIds = new Set<string>();
+export function claimActivityOwnership(id: string): void {
+  ownedActivityIds.add(id);
+}
+
+async function readPersistedActivity(): Promise<Record<string, PersistedActivity>> {
+  try {
+    const parsed = parseActivityState(JSON.parse(await fs.readFile(ACTIVITY_STATE_FILE, "utf8")), (x) => SESSION_ID_RE.test(x));
+    return Object.fromEntries(parsed.map(({ id, working, waiting, event }) => [id, { working, waiting, event }]));
+  } catch {
+    return {}; // no file yet / unreadable => nothing to preserve
+  }
+}
+
+// Serialize writes into one chain (like appendDevTerminalSession). Read the current file and
+// rewrite only the entries THIS instance owns, so a second instance's sessions are neither
+// dropped nor revived. `isHidden` comes from the caller rather than closing over
+// `hiddenSessions`: which sessions are hidden is the session layer's policy, and this module
+// owns storage, not policy.
 let activityPersist: Promise<void> = Promise.resolve();
 export function persistActivityState(isHidden: (id: string) => boolean): void {
   activityPersist = activityPersist
     .then(() => activityStateHydrated)
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
-    .then(() => fs.writeFile(ACTIVITY_STATE_FILE, JSON.stringify(buildActivitySnapshot(activity, isHidden))))
+    .then(async () => {
+      const onDisk = await readPersistedActivity();
+      const owned = buildActivitySnapshot(
+        [...activity].filter(([id]) => ownedActivityIds.has(id)),
+        isHidden,
+      );
+      const next = mergeOwnedActivity(onDisk, owned, (id) => ownedActivityIds.has(id));
+      await fs.writeFile(ACTIVITY_STATE_FILE, JSON.stringify(next));
+    })
     .catch((e) => console.error(`[activity-state] failed to persist: ${messageOf(e)}`));
 }

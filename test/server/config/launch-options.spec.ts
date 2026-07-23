@@ -49,6 +49,16 @@ describe("launchOptions", () => {
     expect(matches[0].trials.status).toBe("measured");
   });
 
+  // The dedup has to agree with `presetFor`, which matches ids case-insensitively. A user
+  // who lists the preset in different case must still get the measured preset once, not a
+  // second "unmeasured" row for the same model.
+  it("dedups a user model that matches a preset only by case", () => {
+    const [option] = launchOptions([{ ...OPENROUTER, models: ["MoonshotAI/Kimi-K2.7-Code"] }], WITH_KEY).providers;
+    const matches = option.models.filter((model) => model.id.toLowerCase() === "moonshotai/kimi-k2.7-code");
+    expect(matches).toHaveLength(1);
+    expect(matches[0].trials.status).toBe("measured");
+  });
+
   it("still lists a provider whose token is missing, and says so", () => {
     const { providers, anyReady } = launchOptions([OPENROUTER], {} as NodeJS.ProcessEnv);
     expect(anyReady).toBe(false);

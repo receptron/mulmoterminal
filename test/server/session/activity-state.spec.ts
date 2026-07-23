@@ -1,8 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { buildActivitySnapshot, parseActivityState, type RestartActivity } from "../../../server/session/activity-state.js";
+import {
+  buildActivitySnapshot,
+  mergeOwnedActivity,
+  parseActivityState,
+  type PersistedActivity,
+  type RestartActivity,
+} from "../../../server/session/activity-state.js";
 
 const never = () => false;
 const anyId = () => true;
+
+const P = (over: Partial<PersistedActivity> = {}): PersistedActivity => ({ working: false, waiting: false, event: null, ...over });
 
 describe("buildActivitySnapshot", () => {
   it("keeps working OR waiting sessions with their full state, dropping idle ones", () => {
@@ -51,5 +59,49 @@ describe("parseActivityState", () => {
   it("returns [] for non-object input", () => {
     expect(parseActivityState(null, anyId)).toEqual([]);
     expect(parseActivityState("x", anyId)).toEqual([]);
+  });
+});
+
+// Two servers rooted at the same MULMOTERMINAL_HOME share this file. A persist must rewrite
+// only the sessions THIS instance owns and leave the other instance's alone — otherwise a
+// full-snapshot overwrite drops or revives the other's sessions (the #672 cross-process bug).
+describe("mergeOwnedActivity", () => {
+  const ownedBy =
+    (...ids: string[]) =>
+    (id: string) =>
+      ids.includes(id);
+
+  it("writes this instance's owned entries and preserves another instance's", () => {
+    const onDisk = { a1: P({ working: true }), b1: P({ waiting: true, event: "Notification" }) };
+    const owned = { a1: P({ waiting: true, event: "Stop" }) };
+    // a1 is ours (updated); b1 belongs to the other instance (left as-is on disk).
+    expect(mergeOwnedActivity(onDisk, owned, ownedBy("a1"))).toEqual({
+      a1: P({ waiting: true, event: "Stop" }),
+      b1: P({ waiting: true, event: "Notification" }),
+    });
+  });
+
+  it("does not drop the other instance's session when ours goes idle", () => {
+    // ours (a1) went idle so it's absent from `owned`; the other instance's b1 must survive.
+    expect(mergeOwnedActivity({ a1: P({ working: true }), b1: P({ waiting: true }) }, {}, ownedBy("a1"))).toEqual({
+      b1: P({ waiting: true }),
+    });
+  });
+
+  it("removes an owned session that is no longer active, even if still stale on disk", () => {
+    // a1 is ours and reaped: gone from `owned`, but a stale entry lingers on disk. Ours wins.
+    expect(mergeOwnedActivity({ a1: P({ working: true }) }, {}, ownedBy("a1"))).toEqual({});
+  });
+
+  it("does not revive an owned session from disk — this instance is authoritative for its ids", () => {
+    // disk says a1 working (a stale write), but we own it and know it's idle now.
+    expect(mergeOwnedActivity({ a1: P({ working: true }) }, { a1: P({ working: false, waiting: false }) }, ownedBy("a1"))).toEqual({
+      a1: P({ working: false }),
+    });
+  });
+
+  it("keeps foreign entries untouched when we own nothing", () => {
+    const onDisk = { b1: P({ working: true }), c1: P({ waiting: true }) };
+    expect(mergeOwnedActivity(onDisk, {}, never)).toEqual(onDisk);
   });
 });
