@@ -19,6 +19,7 @@ import type { LaunchChoice } from "./wsUrl";
 import type { RunCommand } from "./runCommand";
 import { useHeaderButtons } from "../composables/useHeaderButtons";
 import TimelineOverlay from "./TimelineOverlay.vue";
+import CockpitHeader from "./CockpitHeader.vue";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { activityStatus, type CellStatus } from "./gridTabs";
@@ -991,9 +992,37 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
     :style="cellStyle"
   >
     <template v-if="launched">
-      <!-- Row 1 — INFO only: dir + git + model/token + what it's doing. Every icon
-           BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
+      <!-- Filmstrip thumbnail: the same roster header (CockpitHeader) — the dir colour is applied
+           regardless of status (status is the dot + badge), so a thumbnail reads as its directory
+           the way the roster row does. Expand/close go in its trailing slot. -->
+      <CockpitHeader
+        v-if="filmstrip"
+        class="cell-header flex-none border-b"
+        :class="[statusClass, { 'is-zoomable': !expanded }]"
+        :status="status"
+        :agent="agent"
+        :cwd="cwd"
+        :home="home"
+        :header-color="dirConfig.headerColor"
+        :header-text-color="dirConfig.headerTextColor"
+        @click="onHeaderClick"
+      >
+        <span class="cell-actions">
+          <button
+            class="cell-btn"
+            :title="expanded ? 'Restore' : 'Expand'"
+            :aria-label="expanded ? 'Restore terminal' : 'Expand terminal'"
+            @click.stop="emit('toggle-expand')"
+          >
+            {{ expanded ? "⤡" : "⤢" }}
+          </button>
+          <button class="cell-btn cell-close" title="Close terminal" aria-label="Close terminal" @click.stop="close">✕</button>
+        </span>
+      </CockpitHeader>
+      <!-- Row 1 — INFO only (normal grid / expanded): dir + git + model/token + what it's doing.
+           Every icon BUTTON lives on row 2 (the embedded terminal's header, via its slot). -->
       <div
+        v-else
         class="cell-header flex h-[34px] flex-none items-center gap-2 border-b px-2"
         :class="[statusClass, headerStatusClass, { 'is-zoomable': !expanded }]"
         :style="headerStyle"

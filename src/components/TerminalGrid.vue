@@ -4,17 +4,16 @@ import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
 import CockpitRowMenu from "./CockpitRowMenu.vue";
+import CockpitHeader from "./CockpitHeader.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
-import { formatCwd } from "./cwdDisplay";
 import { canMoveCell, type Cell, type CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
-import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
+import type { PrPhase, WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { shouldFlipZoom } from "./cellChromeRules";
-import { headerStyleFor } from "./cellHeaderStyle";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -38,32 +37,6 @@ export interface CockpitRow {
   headerColor: string | null; // the directory's configured header background, tinting the row
   headerTextColor: string | null; // and its text colour, so the row stays legible on that tint
 }
-const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
-// A working cell shows what it's doing (planning / editing) when known, else the plain word.
-const statusWord = (row: CockpitRow): string => (row.status === "working" && row.workPhase ? WORK_WORD[row.workPhase] : STATUS_WORD[row.status]);
-// Roster colours. These hues are hardcoded and token-less, so they come through as
-// arbitrary utilities; returning fill+text together keeps the pair in one place.
-const DOT_CLASS: Record<CellStatus, string> = {
-  working: "bg-[#4a9eff]",
-  done: "bg-[#22c55e]",
-  blocked: "bg-[#f59e0b]",
-  idle: "bg-[#666]",
-};
-const BADGE_CLASS: Record<CellStatus, string> = {
-  working: "bg-[#4a9eff] text-[#04121f]",
-  done: "bg-[#22c55e] text-[#04120a]",
-  blocked: "bg-[#f59e0b] text-[#1f1300]",
-  idle: "bg-[#333] text-[#ddd]",
-};
-// Outlined pill, coloured by PR lifecycle; anything unlisted keeps the neutral grey.
-const PHASE_CLASS: Record<string, string> = {
-  "ci-running": "text-[#4a9eff]",
-  "ci-failing": "text-[#f87171]",
-  "changes-requested": "text-[#f59e0b]",
-  ready: "text-[#22c55e]",
-  merged: "text-[#a78bfa]",
-};
-const phaseClass = (phase: PrPhase): string => PHASE_CLASS[phase] ?? "text-[#9aa4b2]";
 const props = defineProps<{
   cells: Cell[];
   expandedUid: number | null;
@@ -233,36 +206,27 @@ watch(
         @keydown.enter.self.prevent="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
         @keydown.space.self.prevent="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
       >
-        <!-- The status + directory line is the row's header: it carries the directory's
-             configured header colour as a bar, pulled to the row's top and side edges. A
-             directory with no colour set leaves the bar transparent. -->
-        <span
-          data-testid="cockpit-header"
-          class="-mx-2.5 -mt-2 flex min-w-0 items-center gap-1.5 bg-[var(--cell-header-bg,transparent)] px-2.5 py-1.5 text-[var(--cell-header-fg,inherit)]"
-          :style="headerStyleFor(row.headerColor, row.headerTextColor)"
+        <!-- The status + directory line is the row's header: a bar tinted with the directory's
+             configured header colour, pulled to the row's top and side edges. Shared with the
+             strip thumbnails (CockpitHeader) so both read as the same directory. -->
+        <CockpitHeader
+          class="-mx-2.5 -mt-2"
+          :status="row.status"
+          :agent="row.agent"
+          :cwd="row.cwd"
+          :home="home"
+          :header-color="row.headerColor"
+          :header-text-color="row.headerTextColor"
+          :work-phase="row.workPhase"
+          :phase="row.phase"
         >
-          <span class="h-2 w-2 flex-none rounded-full" :class="DOT_CLASS[row.status]" aria-hidden="true" />
-          <span data-testid="cockpit-badge" class="flex-none rounded-full px-1.5 py-px text-[10px] font-bold" :class="BADGE_CLASS[row.status]">{{
-            statusWord(row)
-          }}</span>
-          <span
-            v-if="phaseDisplay(row.phase)"
-            data-testid="cockpit-phase"
-            class="flex-none whitespace-nowrap rounded-full border border-current px-1.5 text-[10px] font-bold"
-            :class="[`ph-${row.phase}`, phaseClass(row.phase)]"
-            :title="phaseDisplay(row.phase)?.title"
-          >
-            {{ phaseDisplay(row.phase)?.label }}
-          </span>
-          <span v-if="row.agent === 'codex'" class="flex-none rounded-[4px] border border-border px-1 text-[10px] text-[#9ab]">codex</span>
-          <span class="min-w-0 flex-auto truncate text-[11px] text-[var(--cell-header-fg,var(--text-dim))]">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
           <CockpitRowMenu
             v-if="reorderable"
             :can-up="canMoveCell(cells, row.uid, -1)"
             :can-down="canMoveCell(cells, row.uid, 1)"
             @move="(dir) => emit('move', row.uid, dir)"
           />
-        </span>
+        </CockpitHeader>
         <span v-if="row.summary" data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
         >

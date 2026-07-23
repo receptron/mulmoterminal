@@ -1609,21 +1609,24 @@ describe("TerminalCell", () => {
     expect(w.find("button.cell-dir").exists()).toBe(true); // dir stays clickable
   });
 
-  it("a filmstrip thumbnail (another cell zoomed) drops to dir + activity + zoom only", async () => {
+  it("a filmstrip thumbnail (another cell zoomed) uses the shared roster header, chips stripped", async () => {
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
     await flushPromises();
-    // Info stripped: no git chip / usage; the second (terminal) header row is hidden.
+    // The roster-style header (dir colour applied regardless of status, plus its status badge),
+    // NOT the full info header.
+    expect(w.find('[data-testid="cockpit-header"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cockpit-badge"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-header-main"]').exists()).toBe(false);
+    // Info stripped: no git chip / usage / open-dir button; the terminal's own header row is hidden.
     expect(w.find('[data-testid="git-chip"]').exists()).toBe(false);
     expect(w.find('[data-testid="cell-usage"]').exists()).toBe(false);
-    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
-    // Row 1 keeps dir + prompt + the expand/close actions (row 2 is hidden).
-    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
-    // The dir stays visible but as inert text (not an "open dir" button).
-    expect(w.find("span.cell-dir").exists()).toBe(true);
     expect(w.find("button.cell-dir").exists()).toBe(false);
+    expect(w.findComponent({ name: "TerminalView" }).props("hideHeader")).toBe(true);
+    // Expand/close stay available.
+    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(true);
   });
 
-  it("a filmstrip thumbnail's dir click zooms (switch to it) instead of opening the dir", async () => {
+  it("a filmstrip thumbnail's header click zooms (switch to it) instead of opening the dir", async () => {
     const urls: string[] = [];
     globalThis.fetch = vi.fn((url: string) => {
       urls.push(String(url));
@@ -1633,7 +1636,7 @@ describe("TerminalCell", () => {
 
     const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj", zoomed: true, expanded: false });
     await flushPromises();
-    await w.find(".cell-dir").trigger("click");
+    await w.find('[data-testid="cockpit-header"]').trigger("click");
 
     expect(w.emitted("toggle-expand")).toHaveLength(1); // zoomed instead
     expect(urls).not.toContain("/api/open-dir"); // dir was NOT opened
