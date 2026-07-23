@@ -33,6 +33,7 @@ import type { RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/
 import type { TranslateRequest, TranslateResponse } from "@mulmoclaude/core/translation/client";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { fetchJson } from "../utils/fetchJson";
+import { htmlPreviewUrl, remoteViewItemsQuery, deleteErrorMessage } from "./collectionUiRules";
 import { useShortcuts } from "./useShortcuts";
 import {
   browseGotoIndex,
@@ -81,8 +82,7 @@ async function apiDelete(url: string): Promise<{ ok: true } | { ok: false; error
     const res = await fetch(url, { method: "DELETE" });
     if (res.ok) return { ok: true };
     const body = await res.json().catch(() => null);
-    const error = body && typeof body.error === "string" ? body.error : `HTTP ${res.status}`;
-    return { ok: false, error };
+    return { ok: false, error: deleteErrorMessage(body, res.status) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -115,21 +115,9 @@ function rawFileUrl(value: unknown): string {
   return `/api/files/raw?path=${encodeURIComponent(String(value))}`;
 }
 
-// A `file` field holding an `artifacts/html/*.html` path points at an
-// LLM-authored page. The raw-file route serves it as octet-stream (no `.html`
-// in its MIME map) so the browser downloads it; the dedicated preview route
-// (server/backends/html.ts → mountHtmlPreviewRoute) serves it as text/html
-// with the sandboxed preview CSP, so it renders in a new tab. Detect that
-// shape and return the preview URL; everything else falls back to rawFileUrl.
-const HTML_PREVIEW_DIR_PREFIX = "artifacts/html/";
-function htmlPreviewUrl(value: string): string | null {
-  if (!value.toLowerCase().endsWith(".html")) return null;
-  if (!value.startsWith(HTML_PREVIEW_DIR_PREFIX)) return null;
-  const rest = value.slice(HTML_PREVIEW_DIR_PREFIX.length);
-  if (rest.length === 0) return null;
-  return `/artifacts/html/${rest.split("/").map(encodeURIComponent).join("/")}`;
-}
-
+// The preview route (server/backends/html.ts → mountHtmlPreviewRoute) serves
+// artifacts/html/*.html with the sandboxed preview CSP so it renders in a new tab;
+// everything else falls back to the raw-file route. See htmlPreviewUrl.
 configureCollectionUi({
   // ── real (read side) ──
   fetchCollectionDetail: (slug) => apiGet<CollectionDetailResponse>(`/api/collections/${encodeURIComponent(slug)}/detail`),
@@ -194,15 +182,10 @@ configureCollectionUi({
   // so the host projects to `fields` and inlines the view's declared image fields
   // as `data:` thumbnails. Without this the preview would page raw (CSP-blocked)
   // paths and show broken images.
-  fetchRemoteViewItems: (slug, viewId, request) => {
-    const query = new URLSearchParams();
-    if (request.offset != null) query.set("offset", String(request.offset));
-    if (request.limit != null) query.set("limit", String(request.limit));
-    if (request.fields?.length) query.set("fields", request.fields.join(","));
-    const qs = query.toString();
-    const suffix = qs ? `?${qs}` : "";
-    return apiGet<CollectionRemoteViewItemsResult>(`/api/collections/${encodeURIComponent(slug)}/remote-view/${encodeURIComponent(viewId)}/items${suffix}`);
-  },
+  fetchRemoteViewItems: (slug, viewId, request) =>
+    apiGet<CollectionRemoteViewItemsResult>(
+      `/api/collections/${encodeURIComponent(slug)}/remote-view/${encodeURIComponent(viewId)}/items${remoteViewItemsQuery(request)}`,
+    ),
 
   // MulmoTerminal serves no per-view translations — return the documented
   // "no i18n" shape ({ locale: "", dict: {} }) so the iframe's __MC_VIEW.t(key)
