@@ -117,6 +117,13 @@ describe("parseLsRemoteHead", () => {
     expect(parseLsRemoteHead("88a82bc1f5abb50328b27aea3ae50a196ba3fc12\tHEAD")).toBe("88a82bc1f5abb50328b27aea3ae50a196ba3fc12");
   });
 
+  // A SHA-256 repository emits a 64-char object id; a SHA-1-length cap would drop it and
+  // silence update notices for that repo even when behind.
+  it("reads a 64-char SHA-256 HEAD id", () => {
+    const sha256 = "a".repeat(64);
+    expect(parseLsRemoteHead(`${sha256}\tHEAD`)).toBe(sha256);
+  });
+
   // It must key off the HEAD ref, not the first line — a stray line without HEAD
   // should never be mistaken for the answer.
   it("finds HEAD among other refs", () => {

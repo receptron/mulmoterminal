@@ -69,7 +69,9 @@ export function classifyInstall(pkgDir, isGitWorkTree) {
 export function parseLsRemoteHead(stdout) {
   for (const line of String(stdout ?? "").split("\n")) {
     const [sha, ref] = line.split("\t");
-    if (ref === "HEAD" && /^[0-9a-f]{7,40}$/i.test(sha ?? "")) return sha;
+    // 40 hex for SHA-1, 64 for a SHA-256 repository — accept both (and anything between,
+    // since ls-remote emits the full object id, never an abbreviation).
+    if (ref === "HEAD" && /^[0-9a-f]{7,64}$/i.test(sha ?? "")) return sha;
   }
   return null;
 }
