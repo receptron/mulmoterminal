@@ -156,8 +156,15 @@ async function seedPhase(cwd: string) {
 // the directory's, like the phase), fetched through the shared dir-config cache.
 type RowChrome = { headerColor: string | null; headerTextColor: string | null };
 const chromeByCwd = reactive(new Map<string, RowChrome>());
+// A freshness token per cwd, exactly like latestPhaseSeed: two rapid dir-config edits can
+// leave fetches resolving out of order, and without this a stale one would overwrite the
+// newer colour.
+const latestChromeSeed = new Map<string, number>();
 async function seedChrome(cwd: string) {
+  const seed = (latestChromeSeed.get(cwd) ?? 0) + 1;
+  latestChromeSeed.set(cwd, seed);
   const config = await fetchDirConfig(cwd);
+  if (latestChromeSeed.get(cwd) !== seed) return; // a newer seed for this cwd already won
   chromeByCwd.set(cwd, { headerColor: config.headerColor, headerTextColor: config.headerTextColor });
 }
 const refreshAllChrome = () => {
@@ -165,16 +172,18 @@ const refreshAllChrome = () => {
   cwds.forEach((cwd) => void seedChrome(cwd));
 };
 // A user editing .mulmoterminal.json is announced on the dir-config channel; re-fetch that
-// directory's chrome so an open roster recolours without a reload.
+// directory's chrome so an open roster recolours without a reload. The unsubscribe is kept
+// and called on unmount so a remounted grid doesn't stack duplicate handlers.
 const cwdOf = (data: unknown): string | null =>
   typeof data === "object" && data !== null && typeof (data as { cwd?: unknown }).cwd === "string" ? (data as { cwd: string }).cwd : null;
-usePubSub().subscribe("dir-config", (data) => {
+const unsubscribeDirConfig = usePubSub().subscribe("dir-config", (data) => {
   const cwd = cwdOf(data);
   if (cwd) {
     invalidateDirConfig(cwd);
     void seedChrome(cwd);
   }
 });
+onBeforeUnmount(unsubscribeDirConfig);
 
 const forgetClosedCells = () => {
   const sessions = new Set(state.value.cells.map((c) => c.session).filter((s): s is string => !!s));
@@ -187,7 +196,10 @@ const forgetClosedCells = () => {
     phaseByCwd.delete(cwd);
     latestPhaseSeed.delete(cwd);
   });
-  staleCacheKeys(chromeByCwd.keys(), cwds).forEach((cwd) => chromeByCwd.delete(cwd));
+  staleCacheKeys(chromeByCwd.keys(), cwds).forEach((cwd) => {
+    chromeByCwd.delete(cwd);
+    latestChromeSeed.delete(cwd);
+  });
 };
 
 // This watch runs whether or not the roster is on screen, and it is what fills sessionMeta,
