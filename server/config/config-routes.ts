@@ -12,6 +12,7 @@ import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import { launchOptions } from "./launch-options.js";
 import { badArrayField, badNullableArrayField } from "./config-body.js";
+import { readUpdateStatus } from "./update-status.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
@@ -65,6 +66,13 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
 
   app.get("/api/config", (_req, res) => {
     res.json({ ...configResponse(), home: os.homedir() });
+  });
+
+  // The update notice the launcher left on disk, for the header's "update available" badge.
+  // Its own route (not folded into /api/config) so it can be re-fetched cheaply once the
+  // launcher's async check has written the file, without re-reading the whole config.
+  app.get("/api/update-status", async (_req, res) => {
+    res.json(await readUpdateStatus());
   });
 
   app.post("/api/config", (req, res) => {

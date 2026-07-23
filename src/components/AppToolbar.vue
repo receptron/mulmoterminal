@@ -11,6 +11,7 @@ import { useAccountingView, accountingViewOpen } from "../composables/useAccount
 import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
+import { useUpdateStatus } from "../composables/useUpdateStatus";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
 import { gridStatusSummary } from "./gridTabs";
@@ -37,6 +38,20 @@ const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = usePrsView();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
+const { badge: updateBadge } = useUpdateStatus();
+
+// The badge offers the upgrade command; copying beats making the user retype it. Clipboard
+// can be unavailable (older browser, insecure context) — a failed copy is a no-op, the full
+// command is still in the tooltip.
+async function copyUpdateCommand(): Promise<void> {
+  const command = updateBadge.value?.command;
+  if (!command) return;
+  try {
+    await navigator.clipboard.writeText(command);
+  } catch {
+    // best-effort — the tooltip still shows the command to copy by hand
+  }
+}
 
 const inGrid = computed(() => route.name === "terminals");
 const inSingle = computed(() => !inGrid.value);
@@ -132,6 +147,17 @@ function showPrs(): void {
     </nav>
     <NotificationBell class="ml-auto" />
     <RemoteHostControl />
+    <button
+      v-if="updateBadge"
+      type="button"
+      class="mr-1 inline-flex flex-none items-center gap-1 rounded-full border border-accent px-2 py-0.5 text-[12px] leading-none text-accent hover:bg-selected"
+      :title="updateBadge.command ? `${updateBadge.text} (click to copy)` : updateBadge.text"
+      :aria-label="updateBadge.text"
+      @click="copyUpdateCommand"
+    >
+      <span class="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">upgrade</span>
+      Update
+    </button>
     <LauncherButton
       :icon="soundEnabled ? 'notifications_active' : 'notifications_off'"
       :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"

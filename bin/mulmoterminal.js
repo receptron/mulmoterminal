@@ -7,9 +7,11 @@
 
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { get as httpGet } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -96,16 +98,36 @@ async function gitUpdateMessage() {
   return gitUpdateNotice({ localSha, localShort, remoteSha: parseLsRemoteHead(lsRemote), dirty: false });
 }
 
+// Where the notice is left for the running server to read and surface in the web header —
+// the console line is easy to miss when you only watch the browser. Sits next to the other
+// shared ~/.mulmoterminal state (activity-state.json, etc.).
+const UPDATE_STATUS_FILE = join(homedir(), ".mulmoterminal", "update-status.json");
+
+// Persist the current notice (null when clean, opted out, or the check failed). Written on
+// every start so a stale "update available" from a prior run can't linger after the user
+// updated. Best-effort — a failed write never disrupts startup.
+async function writeUpdateStatus(notice) {
+  try {
+    await mkdir(dirname(UPDATE_STATUS_FILE), { recursive: true });
+    await writeFile(UPDATE_STATUS_FILE, JSON.stringify({ notice: notice ?? null }));
+  } catch {
+    // best-effort
+  }
+}
+
 // Non-blocking notice that a newer version exists — neither `npm i -g` nor a git
 // checkout auto-updates. Opt out via MULMOTERMINAL_NO_UPDATE_CHECK / NO_UPDATE_NOTIFIER.
 async function checkForUpdate() {
-  if (isUpdateCheckDisabled(process.env)) return;
-  try {
-    const notice = (await installKind()) === "git" ? await gitUpdateMessage() : npmUpdateNotice(VERSION, await fetchLatestVersion());
-    if (notice) log(`\x1b[33m${notice}\x1b[0m`);
-  } catch {
-    // best-effort; never disrupt startup
+  let notice = null;
+  if (!isUpdateCheckDisabled(process.env)) {
+    try {
+      notice = (await installKind()) === "git" ? await gitUpdateMessage() : npmUpdateNotice(VERSION, await fetchLatestVersion());
+    } catch {
+      // best-effort; never disrupt startup
+    }
   }
+  await writeUpdateStatus(notice);
+  if (notice) log(`\x1b[33m${notice}\x1b[0m`);
 }
 
 // Detect a CLI on the user's PATH by asking for its version. Intentionally resolves from
