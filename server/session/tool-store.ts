@@ -20,34 +20,60 @@ export interface ToolStoreDeps {
   root?: string;
 }
 
+// The file's mtime, or 0 when there is no readable file.
+async function fileMtimeMs(file: string): Promise<number> {
+  try {
+    return (await fs.stat(file)).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
 // A per-session list store mirrored to disk so it survives a server reboot — one
 // JSON file per session under <workspace>/<dirName>/<sessionId>.json
 // (<workspace> = CLAUDE_CWD). The in-memory Map is the working copy; the file is
 // rewritten on each change and lazy-loaded on first access. Session ids are
 // validated UUIDs (SESSION_ID_RE), so they're safe to use as filenames.
-export function createSessionStore<T>(dirName: string, root: string = MULMOTERMINAL_HOME) {
+//
+// The file is shared with any other server rooted at the same MULMOTERMINAL_HOME. Only the
+// server that spawned a session ever WRITES its file (the hook/broker URLs bake in the owning
+// server's port), but a NON-owning server can READ it (a phone/browser attached to it opens
+// that session's tool history). This instance OWNS any session it has ever saved: that map is
+// the source of truth and is never re-read (its writes are fire-and-forget, so re-reading could
+// clobber an in-place mutation not yet flushed). A session this instance has only READ is
+// re-read when the file's mtime is newer than the copy it cached, so the non-owner picks up the
+// owner's appends instead of holding a stale copy until it restarts. `statMtimeMs` is a
+// parameter so a test can drive the mtime deterministically. (#705)
+export function createSessionStore<T>(dirName: string, root: string = MULMOTERMINAL_HOME, statMtimeMs: (file: string) => Promise<number> = fileMtimeMs) {
   const dir = path.join(root, dirName);
   const fileFor = (id: string) => path.join(dir, `${id}.json`);
   const map = new Map<string, T[]>(); // id -> list (the working copy; mutate in place)
+  const owned = new Set<string>(); // sessions this instance has written => authoritative, never re-read
+  const loadedMtime = new Map<string, number>(); // id -> file mtime as of the last read (non-owned only)
   const loading = new Map<string, Promise<T[]>>(); // id -> Promise<list>, dedupes concurrent loads
 
-  // Lazily load a session's list from disk, then keep using the in-memory copy.
-  function get(sessionId: string): Promise<T[]> {
-    const cached = map.get(sessionId);
-    if (cached) return Promise.resolve(cached);
+  // Read a session's list off disk. Stat BEFORE reading so a write that races the read is
+  // caught on the next get (a stale-newer mtime only costs one extra re-read; a stale-older one
+  // could miss the update). Missing / corrupt / non-array file => empty.
+  async function readFromDisk(sessionId: string): Promise<{ list: T[]; mtimeMs: number }> {
+    if (!SESSION_ID_RE.test(sessionId)) return { list: [], mtimeMs: 0 };
+    const file = fileFor(sessionId);
+    const mtimeMs = await statMtimeMs(file);
+    try {
+      const parsed = JSON.parse(await fs.readFile(file, "utf8"));
+      return { list: Array.isArray(parsed) ? parsed : [], mtimeMs };
+    } catch {
+      return { list: [], mtimeMs: 0 };
+    }
+  }
+
+  function firstLoad(sessionId: string): Promise<T[]> {
     const inflight = loading.get(sessionId);
     if (inflight) return inflight;
     const p = (async () => {
-      let list: T[] = [];
-      if (SESSION_ID_RE.test(sessionId)) {
-        try {
-          const parsed = JSON.parse(await fs.readFile(fileFor(sessionId), "utf8"));
-          if (Array.isArray(parsed)) list = parsed;
-        } catch {
-          // No file yet (or unreadable) => start empty.
-        }
-      }
+      const { list, mtimeMs } = await readFromDisk(sessionId);
       map.set(sessionId, list);
+      loadedMtime.set(sessionId, mtimeMs);
       loading.delete(sessionId);
       return list;
     })();
@@ -55,9 +81,31 @@ export function createSessionStore<T>(dirName: string, root: string = MULMOTERMI
     return p;
   }
 
-  // Persist a session's list (best-effort, fire-and-forget).
+  // Return the cached list, or re-read it if another instance wrote the file since we cached it.
+  async function maybeReload(sessionId: string, cached: T[]): Promise<T[]> {
+    if (!SESSION_ID_RE.test(sessionId)) return cached; // an invalid id never had a file
+    if ((await statMtimeMs(fileFor(sessionId))) <= (loadedMtime.get(sessionId) ?? 0)) return cached;
+    const { list, mtimeMs } = await readFromDisk(sessionId);
+    map.set(sessionId, list);
+    loadedMtime.set(sessionId, mtimeMs);
+    return list;
+  }
+
+  // Lazily load a session's list from disk; on later calls keep the in-memory copy. A session
+  // this instance owns (has written) is always its cached working array; one it has only read is
+  // re-read when a second instance that owns it has since appended to the file.
+  function get(sessionId: string): Promise<T[]> {
+    const cached = map.get(sessionId);
+    if (!cached) return firstLoad(sessionId);
+    if (owned.has(sessionId)) return Promise.resolve(cached);
+    return maybeReload(sessionId, cached);
+  }
+
+  // Persist a session's list (best-effort, fire-and-forget). Writing marks the session owned by
+  // this instance, so subsequent reads trust the in-memory working copy over the disk.
   async function save(sessionId: string) {
     if (!SESSION_ID_RE.test(sessionId)) return;
+    owned.add(sessionId);
     try {
       await fs.mkdir(dir, { recursive: true });
       await fs.writeFile(fileFor(sessionId), JSON.stringify(map.get(sessionId) || []));
