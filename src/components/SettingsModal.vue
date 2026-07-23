@@ -10,6 +10,7 @@ import SettingsField from "./SettingsField.vue";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
 import { canAddLauncher, canAddMcpServer, canAddRepo } from "./settingsValidators";
+import { formatUsd } from "./formatUsd";
 
 const props = defineProps<{
   soundFile?: string | null;
@@ -191,11 +192,6 @@ function onThemeKey(e: KeyboardEvent, index: number) {
 
 // Read-only estimated cost (Session / Today / Month), loaded when the modal opens.
 const { cost, error: costError, load: loadCost } = useCost();
-function formatUsd(value: number | undefined): string {
-  if (value === undefined) return "—";
-  if (value > 0 && value < 0.01) return "<$0.01";
-  return `$${value.toFixed(2)}`;
-}
 
 const modalEl = ref<HTMLElement>();
 
