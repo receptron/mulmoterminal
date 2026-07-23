@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parsePortArg, chooseCwd, portInUseMessage } from "../../bin/cli-args.js";
+import { parsePortArg, chooseCwd, portInUseAction, portInUseMessage, secondInstancePrompt, saysYes, SECOND_INSTANCE_NOTE } from "../../bin/cli-args.js";
 
 const DEFAULT_PORT = 34567;
 const port = (args: string[]) => parsePortArg(args, DEFAULT_PORT);
@@ -159,5 +159,87 @@ describe("portInUseMessage", () => {
 
   it("puts each part on its own line", () => {
     expect(portInUseMessage(34567, false).split("\n")).toHaveLength(3);
+  });
+});
+
+describe("portInUseAction", () => {
+  it("asks when the port was the default and someone is there to answer", () => {
+    expect(portInUseAction(false, true)).toBe("ask");
+  });
+
+  // A prompt written to a pipe is never answered, so the start would hang rather than fail.
+  it("stops rather than prompt with no terminal", () => {
+    expect(portInUseAction(false, false)).toBe("stop");
+    expect(portInUseAction(false, undefined)).toBe("stop");
+  });
+
+  // --port named the port that was wanted; a different one is not what was asked for.
+  it("stops when the port was given explicitly", () => {
+    expect(portInUseAction(true, true)).toBe("stop");
+    expect(portInUseAction(true, false)).toBe("stop");
+  });
+});
+
+describe("secondInstancePrompt", () => {
+  it("names the port that is taken and where that server would be", () => {
+    const asked = secondInstancePrompt(34567);
+    expect(asked).toContain("34567");
+    expect(asked).toContain("http://localhost:34567");
+  });
+
+  // "[y/N]" is the whole contract with saysYes: the capital N is what tells the reader
+  // that Enter declines. A prompt claiming [Y/n] would be lying about the default.
+  it("shows no as the default", () => {
+    expect(secondInstancePrompt(34567)).toContain("[y/N]");
+    expect(secondInstancePrompt(34567)).not.toContain("[Y/n]");
+  });
+
+  // readline writes the prompt as-is, so the trailing space is what keeps the typed
+  // answer off the question mark.
+  it("leaves room for the answer on the same line", () => {
+    expect(secondInstancePrompt(34567).endsWith("] ")).toBe(true);
+  });
+});
+
+describe("saysYes", () => {
+  it("accepts the ways someone says yes", () => {
+    ["y", "Y", "yes", "YES", "Yes", " y ", "\ty\n"].forEach((answer) => {
+      expect(saysYes(answer), answer).toBe(true);
+    });
+  });
+
+  // Enter is the common one: the prompt offered N as the default, so an empty line takes it.
+  it("treats an empty answer as no", () => {
+    expect(saysYes("")).toBe(false);
+    expect(saysYes("   ")).toBe(false);
+  });
+
+  it("treats a no as no", () => {
+    ["n", "N", "no", "NO"].forEach((answer) => expect(saysYes(answer), answer).toBe(false));
+  });
+
+  // Anything unrecognised declines rather than guessing. Starting a second server off a
+  // mistyped word is the expensive direction to be wrong in; declining costs one retry.
+  it("declines anything it does not recognise", () => {
+    ["yolo", "yep", "ya", "sure", "yes please", "y/n", "1", "true"].forEach((answer) => expect(saysYes(answer), answer).toBe(false));
+  });
+
+  it("declines a missing answer", () => {
+    expect(saysYes(undefined)).toBe(false);
+    expect(saysYes(null)).toBe(false);
+  });
+});
+
+describe("SECOND_INSTANCE_NOTE", () => {
+  // The point of the note is the one thing that actually breaks with two instances.
+  it("names the shared directory and what goes stale", () => {
+    expect(SECOND_INSTANCE_NOTE).toContain("~/.mulmoterminal");
+    expect(SECOND_INSTANCE_NOTE).toContain("live-update");
+  });
+
+  // It is printed just before the URL, in the middle of a start that is going ahead —
+  // long enough to read at a glance, not a paragraph to scroll past.
+  it("stays short", () => {
+    expect(SECOND_INSTANCE_NOTE.split("\n")).toHaveLength(2);
   });
 });

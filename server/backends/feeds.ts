@@ -16,6 +16,7 @@ import { configureFeedsHost, refreshOne, listFeeds, readFeedState, removeFeed, t
 import { loadCollection } from "@mulmoclaude/core/collection/server";
 import type { FeedSummary } from "@mulmoclaude/core/collection";
 import { writeFileAtomic } from "../files/atomic-write.js";
+import { feedSummary } from "./feed-summary.js";
 
 const log: FeedsLogger = {
   error: (prefix, msg, data) => console.error(`[${prefix}] ${msg}`, data ?? ""),
@@ -40,15 +41,7 @@ function errorMessage(err: unknown): string {
 // One feeds-index row: the registered feed's schema + its last-fetch state.
 async function toFeedSummary(feed: Awaited<ReturnType<typeof listFeeds>>[number]): Promise<FeedSummary> {
   const state = await readFeedState(workspaceRoot, feed);
-  const ingest = feed.schema.ingest;
-  return {
-    slug: feed.slug,
-    title: feed.schema.title,
-    icon: feed.schema.icon,
-    kind: ingest?.kind ?? "rss",
-    schedule: ingest?.schedule ?? "on-demand",
-    lastFetchedAt: state.lastFetchedAt,
-  };
+  return feedSummary(feed, state.lastFetchedAt);
 }
 
 /** Mount POST /api/collections/:slug/refresh — generic over ingest.kind (the engine

@@ -11,8 +11,16 @@
 
 export type ActivityEffect = { kind: "working" | "waiting"; value: boolean };
 
+// A prompt starts a turn and a tool call is the middle of one — both mean the session is
+// working right now. Tool events matter beyond the obvious: `working` is set once at
+// UserPromptSubmit and cleared at Stop, so across a long turn nothing re-asserts it. If it
+// is ever lost mid-turn (a --watch restart between the prompt and the Stop), the session
+// reads idle until it finally stops — unless each tool call puts `working` back. nextActivity
+// no-ops when the flag is already true, so this re-asserts only after a loss, never spams.
+const WORKING_EVENTS = new Set(["UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure"]);
+
 export function activityHookEffects(event: string, active: boolean): ActivityEffect[] {
-  if (event === "UserPromptSubmit") return [{ kind: "working", value: true }];
+  if (WORKING_EVENTS.has(event)) return [{ kind: "working", value: true }];
   // A finished turn (Stop) has unseen output; a paused turn (Notification) waits on the
   // user. Either flags the session for attention UNLESS it's the actively-viewed pane.
   if (event === "Stop") {

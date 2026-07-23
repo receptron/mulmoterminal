@@ -25,6 +25,7 @@ import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
 import { reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
+import { messageEffect } from "./serverMessage";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -287,28 +288,16 @@ function handleMessage(c: Conn, event: MessageEvent) {
       if (v) v.serverCwd = msg.cwd;
       c.handlers.onCwd?.(msg.cwd);
     }
-  } else if (msg.type === "exit") {
-    // The process exited (claude, or a Run command) — an intentional end; don't
-    // auto-reconnect. The cell uses `exit` to offer a re-run.
+  } else {
+    // exit / superseded / error — a terminal message. messageEffect decides which retries,
+    // which fires onExit (NOT superseded — the session is alive in another tab), and the
+    // wording; this applies it.
+    const effect = messageEffect(msg.type, !!c.target.command, msg.message);
+    if (!effect.terminal) return;
     c.sawExit = true;
-    c.term.write(c.target.command ? "\r\n\x1b[33m[finished]\x1b[0m\r\n" : "\r\n\x1b[33m[session ended]\x1b[0m\r\n");
+    if (effect.banner) c.term.write(effect.banner);
     setStatus(c, "disconnected");
-    c.handlers.onExit?.();
-  } else if (msg.type === "superseded") {
-    // Another client (this session open in another tab/cell) took over. Stop —
-    // reconnecting would kick the other one off and ping-pong forever.
-    c.sawExit = true;
-    c.term.write("\r\n\x1b[33m[detached — this session is open in another window]\x1b[0m\r\n");
-    setStatus(c, "disconnected");
-  } else if (msg.type === "error") {
-    // Server-declared terminal failure (CLI missing, command unresolvable). Not
-    // transient — reconnecting would re-trigger the failed spawn, so stop and
-    // surface a stable error. Emit `exit` so a CommandCell can offer a re-run.
-    c.sawExit = true;
-    const detail = typeof msg.message === "string" ? msg.message : "failed to start";
-    c.term.write(`\r\n\x1b[31m[${detail}]\x1b[0m\r\n`);
-    setStatus(c, "disconnected");
-    c.handlers.onExit?.();
+    if (effect.callsOnExit) c.handlers.onExit?.();
   }
 }
 

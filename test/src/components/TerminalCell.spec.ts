@@ -3,12 +3,18 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalCell from "../../../src/components/TerminalCell.vue";
 
-// Capture the "sessions" pub/sub callback so tests can push activity directly.
+// Capture the "sessions" pub/sub callback and the reconnect handler so tests can push
+// activity and simulate a dropped-then-restored socket directly.
 let captured: ((data: unknown) => void) | null = null;
+let reconnect: (() => void) | null = null;
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (_channel: string, cb: (data: unknown) => void) => {
       captured = cb;
+      return () => {};
+    },
+    onReconnect: (cb: () => void) => {
+      reconnect = cb;
       return () => {};
     },
   }),
@@ -56,6 +62,7 @@ function deferred<T>() {
 
 beforeEach(() => {
   captured = null;
+  reconnect = null;
   mockFetch();
 });
 
@@ -526,6 +533,105 @@ describe("TerminalCell", () => {
     captured?.({ id, working: false, waiting: true, event: "Stop", lastPrompt: "refactor the parser" });
     await nextTick();
     expect(dotClass(w)).toContain("is-done");
+  });
+
+  it("re-seeds its status from the server on a pub/sub reconnect", async () => {
+    // The dropped socket missed the push that would have said "working", so the cell is idle.
+    // On reconnect it must re-ask /api/session — not sit idle until the session's next event,
+    // which for a long turn is its far-off Stop.
+    const id = "33333333-3333-3333-3333-333333333333";
+    let working = false;
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) return { ok: true, json: async () => ({ working, waiting: false, lastPrompt: null }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    await flushPromises();
+    expect(dotClass(w)).toContain("is-idle");
+
+    // The server now knows the turn is running; the reconnect re-fetch should pick that up.
+    working = true;
+    reconnect?.();
+    await flushPromises();
+    await nextTick();
+    expect(dotClass(w)).toContain("is-working");
+  });
+
+  it("does not let a reconnect re-seed clobber a push that lands mid-fetch", async () => {
+    // The #620 race in one cell: the reconnect fetch reads a stale "working" snapshot, but a
+    // "Stop" push arrives before it resolves. The fresher push must win.
+    const id = "44444444-4444-4444-4444-444444444444";
+    const gate = deferred<boolean>();
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        await gate.promise; // hold the reconnect seed in flight
+        return { ok: true, json: async () => ({ working: true, waiting: false, lastPrompt: null }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    gate.resolve(true); // let the mount seed settle
+    await flushPromises();
+
+    // A second gate for the reconnect seed, so a push can land while it is in flight.
+    const gate2 = deferred<boolean>();
+    (globalThis.fetch as unknown as { mockImplementation: (f: unknown) => void }).mockImplementation(async (url: string) => {
+      const u = String(url);
+      if (u.includes(`/api/session/${id}`)) {
+        await gate2.promise;
+        return { ok: true, json: async () => ({ working: true, waiting: false, lastPrompt: null }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    });
+
+    reconnect?.(); // starts the seed fetch, now blocked on gate2
+    captured?.({ id, working: false, waiting: true, event: "Stop" }); // fresher: the turn ended
+    await nextTick();
+    expect(dotClass(w)).toContain("is-done");
+
+    gate2.resolve(true); // the stale "working" snapshot resolves last — and must be ignored
+    await flushPromises();
+    await nextTick();
+    expect(dotClass(w)).toContain("is-done");
+  });
+
+  it("does not let an older seed clobber a newer one when two reconnect re-seeds overlap", async () => {
+    // seed-vs-seed (reconnect flaps): the OLDER seed resolves FIRST with a now-stale snapshot,
+    // the NEWER one resolves LAST with the current one. Without a per-request token the older
+    // applies first and the newer is then dropped by the push-guard — leaving the stale value.
+    const id = "55555555-5555-5555-5555-555555555555";
+    const gates = [deferred<boolean>(), deferred<boolean>()];
+    let call = 0;
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      if (u.includes(`/api/session/${id}`)) {
+        const n = call++;
+        if (n === 0) return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) }; // mount
+        await gates[n - 1].promise;
+        // seed #1 => working (stale), seed #2 => idle (current, the turn has since ended).
+        return { ok: true, json: async () => ({ working: n === 1, waiting: false, lastPrompt: null }) };
+      }
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id);
+    await flushPromises();
+
+    reconnect?.(); // seed #1 (older) — reports working
+    reconnect?.(); // seed #2 (newer) — reports idle
+    gates[0].resolve(true); // OLDER resolves first
+    await flushPromises();
+    gates[1].resolve(true); // NEWER resolves last
+    await flushPromises();
+    await nextTick();
+    expect(dotClass(w)).toContain("is-idle"); // the newest seed wins, not the first to resolve
   });
 
   it("shows a token-usage badge from /api/session/:id", async () => {
