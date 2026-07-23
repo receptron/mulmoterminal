@@ -5,7 +5,7 @@
 import type { Express, Request, Response } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
-import { activityHookEffects, pushKindFor, resolveHookSessionId } from "../session/activity-hook.js";
+import { activityHookEffects, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../session/activity-hook.js";
 import { headerHookEffect } from "../session/header-hook.js";
 import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import { latestUserPrompt } from "../session/session-reads.js";
@@ -61,15 +61,17 @@ interface HookToolPayload {
 
 // Pre/PostToolUse hooks feed the per-session tool-call history; toolHookRecord decides what
 // each event means and this applies it.
-async function handleToolHook(deps: HookDeps, sessionId: string, event: string, p: HookToolPayload) {
+async function handleToolHook(deps: HookDeps, sessionId: string, event: string, p: HookToolPayload, cwd: string | undefined) {
   const record = toolHookRecord(event, p);
   if (record?.phase === "start") await deps.recordToolCallStart(sessionId, record.call);
   if (record?.phase === "end") await deps.recordToolCallEnd(sessionId, record.call);
   // A SUCCESSFUL write to <dir>/.mulmoterminal.json is the live-reload signal: the hook that already
   // reports every tool call tells the client to re-read that directory's config, so no fs watchers.
+  // `cwd` is the request-wide resolved cwd (body.cwd over the spawn dir) — a relative file_path
+  // must resolve against the same directory the header path uses, not the stale spawn cwd.
   if (publishesDirConfig(event)) {
-    const cwd = dirConfigWriteTarget(p.tool_name, p.tool_input, ptys.get(sessionId)?.cwd ?? null);
-    if (cwd) deps.publishDirConfig(cwd);
+    const target = dirConfigWriteTarget(p.tool_name, p.tool_input, cwd ?? null);
+    if (target) deps.publishDirConfig(target);
   }
 }
 
@@ -132,10 +134,10 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
   if (sessionId) {
     const entry = ptys.get(sessionId);
     const active = !!(entry && entry.active);
-    const cwd = typeof body.cwd === "string" ? body.cwd : entry?.cwd;
+    const cwd = resolveHookCwd(body.cwd, entry?.cwd);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
     handleActivityHook(deps, sessionId, event, active, typeof body.message === "string" ? body.message : "");
-    await handleToolHook(deps, sessionId, event, body);
+    await handleToolHook(deps, sessionId, event, body, cwd);
     // A hidden translation worker that ends its turn while still pending never called
     // submitTranslation — fail it now rather than hang until the timeout. (When it DID
     // submit, the entry is already resolved and this reject is a no-op.)
