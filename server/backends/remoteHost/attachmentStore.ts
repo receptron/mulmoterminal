@@ -9,30 +9,7 @@
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-
-const ATTACHMENTS_DIR = "data/attachments";
-
-// MIME → extension. Narrow on purpose (covers phone photos + PDFs + a few text
-// types); anything unmapped falls back to `.bin` so we never guess.
-const MIME_EXT: Readonly<Record<string, string>> = {
-  "image/png": ".png",
-  "image/jpeg": ".jpg",
-  "image/jpg": ".jpg",
-  "image/webp": ".webp",
-  "image/gif": ".gif",
-  "image/heic": ".heic", // iOS default capture format
-  "image/heif": ".heif",
-  "image/tiff": ".tif",
-  "application/pdf": ".pdf",
-  "text/plain": ".txt",
-  "text/markdown": ".md",
-  "text/csv": ".csv",
-};
-
-const extensionForMime = (mimeType: string): string => MIME_EXT[mimeType.toLowerCase()] ?? ".bin";
-
-// UTC YYYY/MM partition so a workspace with many uploads stays browsable.
-const yearMonthUtc = (when: Date): string => `${when.getUTCFullYear()}/${String(when.getUTCMonth() + 1).padStart(2, "0")}`;
+import { ATTACHMENTS_DIR, extensionForMime, yearMonthUtc } from "./attachment-path.js";
 
 export interface SavedAttachment {
   relativePath: string;
