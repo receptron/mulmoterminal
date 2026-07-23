@@ -25,9 +25,13 @@ the **phone side**.
 ## 1. Terminal side (mulmoterminal)
 
 1. Open the **📱 RemoteHost** control in the toolbar (`phonelink` icon) and click
-   **Connect (Google sign-in)**. Sign in with the **same Google account** you'll use on the phone.
+   **Connect (Google sign-in)**. A Google sign-in popup opens — sign in with the
+   **same Google account** you'll use on the phone.
 2. In **Settings (⚙) → Web Push notifications**, turn on
    **"Notify my devices when a task finishes"** (off by default).
+
+> ⚠️ This is **not** the **Google account** section in Settings (⚙) — that one links a
+> Calendar account for tools. Notifications use the **Connect** button in the RemoteHost panel.
 
 That's it — a background task finishing now sends a push to your phone.
 
@@ -36,11 +40,30 @@ That's it — a background task finishing now sends a push to your phone.
 
 ## 2. Phone side (mulmoserver PWA)
 
-1. On your phone's browser, open **[https://mulmoserver.web.app](https://mulmoserver.web.app)**
-   (or scan the **QR code** shown in the RemoteHost panel).
-2. Sign in with the **same Google account** as the terminal.
-3. **Enable notifications** (registers this device as a push target).
-4. **Add to Home Screen** (install the PWA) for more reliable delivery.
+The entry point is the same on every phone: **[https://mulmoserver.web.app](https://mulmoserver.web.app)**
+(or scan the **QR code** shown in the RemoteHost panel with your phone's camera). Sign in with the
+**same Google account** as the terminal — but the steps **differ between iPhone and Android**.
+
+### iPhone / iPad (iOS 16.4+)
+
+On iOS, **Web Push only works from a PWA installed on the Home Screen** — you can't enable it
+from a regular Safari tab, so **install first**.
+
+1. Open [https://mulmoserver.web.app](https://mulmoserver.web.app) in Safari.
+2. Tap **Share → "Add to Home Screen"** to install the PWA.
+3. **Launch it from the Home Screen icon** and sign in with the same Google account as the terminal.
+4. Tap **"Enable notifications"** and allow the permission prompt (this registers the device
+   as a push target).
+
+### Android
+
+Android (Chrome) can enable push straight from the browser tab.
+
+1. Open [https://mulmoserver.web.app](https://mulmoserver.web.app) in Chrome.
+2. Sign in with the same Google account as the terminal.
+3. Tap **"Enable notifications"** and allow the permission prompt.
+4. (Recommended) Use the menu's **"Add to Home Screen"** to install the PWA — launching and
+   delivery are more reliable that way.
 
 ---
 
@@ -56,6 +79,12 @@ That's it — a background task finishing now sends a push to your phone.
 - Did you finish a task in the **pane you were watching**? → try a background session instead.
 - Is **RemoteHost disconnected**? → Connect again.
 - Notifications not enabled / no device registered on the phone. → enable them in the PWA.
+- **Can't enable on iPhone?** → launch from the **Home Screen icon**, not a Safari tab
+  (an iOS restriction).
+- **Blocked the permission prompt?** → flip it back to "Allow" in the browser's site settings
+  (the icon left of the address bar → Notifications).
+- **Different Google accounts** on the terminal and the phone? → sign in to both with the
+  same account.
 - Getting the **same push twice**? Your phone may have a **stale registration** — re-registering
   on the mulmoserver side clears it.
 
