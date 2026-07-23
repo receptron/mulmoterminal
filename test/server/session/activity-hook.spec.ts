@@ -7,6 +7,15 @@ describe("activityHookEffects", () => {
     expect(activityHookEffects("UserPromptSubmit", false)).toEqual([{ kind: "working", value: true }]);
   });
 
+  // A tool call is the middle of a live turn, so it re-asserts working. This is what lets a
+  // long turn recover its status after a --watch restart lost it: `working` is otherwise only
+  // set at the prompt and cleared at Stop, and a stop can be an hour away. Independent of
+  // `active` — the same rule as the prompt.
+  it.each(["PreToolUse", "PostToolUse", "PostToolUseFailure"])("%s re-asserts working regardless of active", (event) => {
+    expect(activityHookEffects(event, true)).toEqual([{ kind: "working", value: true }]);
+    expect(activityHookEffects(event, false)).toEqual([{ kind: "working", value: true }]);
+  });
+
   it("Stop on the actively-viewed pane clears working only (no attention flag)", () => {
     expect(activityHookEffects("Stop", true)).toEqual([{ kind: "working", value: false }]);
   });
@@ -30,9 +39,11 @@ describe("activityHookEffects", () => {
     expect(activityHookEffects("Notification", false)).toEqual([{ kind: "waiting", value: true }]);
   });
 
-  it("ignores unrelated events", () => {
-    expect(activityHookEffects("PreToolUse", false)).toEqual([]);
+  it("ignores events that are neither a turn boundary nor tool activity", () => {
+    // SessionStart fires before any prompt — the session exists but isn't working yet.
     expect(activityHookEffects("SessionStart", true)).toEqual([]);
+    expect(activityHookEffects("PreCompact", false)).toEqual([]);
+    expect(activityHookEffects("", false)).toEqual([]);
   });
 });
 
