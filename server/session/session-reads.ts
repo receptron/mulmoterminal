@@ -36,6 +36,7 @@ import { sessionListTitle } from "./sessionListTitle.js";
 import { activity, aiTitles, codexRolloutIds, hiddenSessions, knownSessions } from "./registry.js";
 import { projectSessionsDir } from "./project-dir.js";
 import { lastTurnFromClaudeParsed, lastTurnFromCodexRollout, EMPTY_TURN, type LastTurn } from "./last-turn.js";
+import { partitionPending } from "./partitionPending.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutPath } from "../agents/codex-sessions.js";
 import type { DiskStat, PendingSession, SessionMeta } from "./types.js";
@@ -244,22 +245,13 @@ export async function collectOnDiskSessionStats(dir: string, files: string[]): P
 // In-memory sessions not yet written to disk. Prune (delete from knownSessions) any that
 // have since been persisted — the on-disk record (with its real title) wins.
 export function collectPendingSessions(onDisk: Set<string>, includePending: boolean): PendingSession[] {
-  const pending: PendingSession[] = [];
-  for (const [id, meta] of includePending ? knownSessions : []) {
-    if (onDisk.has(id)) {
-      knownSessions.delete(id);
-      continue;
-    }
-    pending.push({
-      kind: "pending",
-      id,
-      title: meta.title,
-      mtime: meta.createdAt,
-      working: activity.get(id)?.working ?? false,
-      waiting: activity.get(id)?.waiting ?? false,
-      event: activity.get(id)?.event ?? null,
-      hidden: hiddenSessions.has(id),
-    });
-  }
-  return pending;
+  const known = includePending ? knownSessions : [];
+  const { keep, persisted } = partitionPending(
+    known,
+    onDisk,
+    (id) => activity.get(id),
+    (id) => hiddenSessions.has(id),
+  );
+  persisted.forEach((id) => knownSessions.delete(id));
+  return keep;
 }
