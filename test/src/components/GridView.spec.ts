@@ -6,10 +6,22 @@ vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({ subscribe: () => () => {}, onReconnect: () => () => {} }),
 }));
 
+// Session ids for the roster-ordering test (must be valid UUIDs or parseGridState drops them).
+const IDS = vi.hoisted(() => ({
+  blocked: "11111111-1111-1111-1111-111111111111",
+  idleA: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  idleB: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+}));
+// Feed one blocked session so the auto sort has something to float to the front.
+vi.mock("../../../src/composables/useGridActivity", () => ({
+  useGridActivity: () => ({ activity: new Map([[IDS.blocked, { working: false, waiting: true, event: "Notification" }]]) }),
+}));
+
 // Config GET hydrates pushEnabled=true; capture POSTs so we can assert the toggle saves.
 const posts: Array<{ url: string; body: unknown }> = [];
 beforeEach(() => {
   posts.length = 0;
+  localStorage.clear();
   globalThis.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
     if (u.includes("/api/config")) {
@@ -51,6 +63,43 @@ const mountGrid = async () => {
   await flushPromises(); // onMounted loadConfig
   return w;
 };
+
+// A TerminalGrid stub that exposes the ordering props the roster/grid receive.
+const OrderStub = {
+  name: "TerminalGrid",
+  props: ["cells", "listRows", "expandedUid", "reorderable"],
+  template: '<div class="order-stub" />',
+};
+
+describe("GridView roster ordering (#720)", () => {
+  it("orders the cockpit roster (listRows) attention-first in auto mode, matching the grid", async () => {
+    // Auto sort, one cell zoomed (roster visible); the middle cell (uid→1) is the blocked one.
+    localStorage.setItem(
+      "grid_v2",
+      JSON.stringify({
+        cells: [
+          { uid: 10, session: IDS.idleA, cwd: "/w" },
+          { uid: 11, session: IDS.blocked, cwd: "/w" },
+          { uid: 12, session: IDS.idleB, cwd: "/w" },
+        ],
+        expanded: 10,
+        page: 0,
+        sortMode: "auto",
+      }),
+    );
+    const w = mount((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: OrderStub, AppToolbar: ToolbarStub, SettingsModal: SettingsStub } },
+    });
+    await flushPromises();
+    const grid = w.findComponent(OrderStub);
+    // The blocked cell (renumbered uid 1) floats to the top; the two idle cells keep manual order.
+    const rosterOrder = grid.props("listRows").map((r: { uid: number }) => r.uid);
+    expect(rosterOrder).toEqual([1, 0, 2]);
+    // The grid reads the SAME ordering — roster and grid can't drift.
+    expect(grid.props("cells").map((c: { uid: number }) => c.uid)).toEqual([1, 0, 2]);
+    w.unmount();
+  });
+});
 
 describe("GridView settings wiring", () => {
   it("passes pushEnabled to SettingsModal and saves it on update-push-enabled (regression #347)", async () => {

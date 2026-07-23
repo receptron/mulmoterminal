@@ -21,7 +21,8 @@ import {
   launchInCell,
   setSortMode,
   moveCell,
-  visibleOrdered,
+  orderCells,
+  pageSlice,
   activityStatus,
   countByStatus,
   cancelableLaunchUid,
@@ -95,10 +96,12 @@ const statusForSort = computed<Record<number, CellStatus>>(() => resolveCellStat
 // At-a-glance tally across ALL pages, for the toolbar summary.
 const statusCounts = computed(() => countByStatus(state.value.cells, statusForSort.value));
 const reorderable = computed(() => state.value.sortMode === "manual");
-// In "auto" mode the whole list is attention-sorted then paged (a waiting cell from
-// any page floats to the front); "manual" keeps the hand-arranged order. While a cell
-// is zoomed, render EVERY cell so the filmstrip lines up all tabs' terminals (live).
-const displayCells = computed(() => visibleOrdered(state.value, statusForSort.value));
+// In "auto" mode the whole list is attention-sorted; "manual" keeps the hand-arranged order.
+// The ONE ordering both the grid and the cockpit roster read, so the two can't drift (#720).
+const orderedCells = computed(() => orderCells(state.value.cells, statusForSort.value, state.value.sortMode));
+// The grid: while a cell is zoomed, render EVERY cell (the filmstrip lines up all tabs' terminals,
+// live); otherwise just the active page's slice. A waiting cell from any page floats to the front.
+const displayCells = computed(() => (zoomedUid(state.value) !== null ? orderedCells.value : pageSlice(orderedCells.value, state.value.page)));
 const expandedUid = computed(() => zoomedUid(state.value));
 
 // The zoomed grid's cockpit roster: a text row per cell — status + dir + AI summary +
@@ -259,7 +262,7 @@ onBeforeUnmount(stopPoll);
 // A cell with no session/prompt yet still gets a human label from what it IS running.
 const fallbackLabel = (c: Cell): string | null => c.command?.label ?? c.launcher?.label ?? (c.session ? "starting…" : "empty");
 const listRows = computed(() =>
-  state.value.cells.map((c) => {
+  orderedCells.value.map((c) => {
     const meta = c.session ? sessionMeta.get(c.session) : undefined;
     return {
       uid: c.uid,
