@@ -9,6 +9,7 @@ import { toolSummaries } from "./infra/plugins-registry.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { getUserMcpServers, getWorklogConfig } from "./config/config-routes.js";
+import { refreshUpdateStatus } from "./config/update-status.js";
 import {
   tmuxAvailable,
   tmuxHasSession,
@@ -471,6 +472,9 @@ server.listen(PORT, () => {
       );
     }
   }
+  // Run the update check for the header badge (best-effort, non-blocking). Works under
+  // `yarn dev` too, where the launcher — which used to be the only checker — isn't involved.
+  void refreshUpdateStatus();
 });
 
 // The whisper sidecar is a spawned child that won't die with the parent on a

@@ -1,5 +1,11 @@
 export declare function fetchLatestVersion(pkg?: string): Promise<string | null>;
 export declare function isNewerVersion(latest: string, current: string): boolean;
+export declare function runGit(pkgDir: string, gitArgs: string[], timeout_ms?: number): Promise<string | null>;
+export interface UpdateNoticeDeps {
+  runGit?: (args: string[]) => Promise<string | null>;
+  fetchLatest?: () => Promise<string | null>;
+}
+export declare function computeUpdateNotice(pkgDir: string, currentVersion: string, deps?: UpdateNoticeDeps): Promise<string | null>;
 export declare function isUpdateCheckDisabled(env: Record<string, string | undefined>): boolean;
 export declare function hasNodeModulesSegment(pkgDir: string): boolean;
 export declare function classifyInstall(pkgDir: string, isGitWorkTree: boolean): "npm" | "git";

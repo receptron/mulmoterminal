@@ -9,6 +9,7 @@ import {
   npmUpdateNotice,
   isTreeDirtyForUpdate,
   gitUpdateNotice,
+  computeUpdateNotice,
 } from "../../bin/update-check.js";
 
 describe("isNewerVersion", () => {
@@ -220,5 +221,53 @@ describe("isTreeDirtyForUpdate", () => {
   // A tracked change hiding among untracked files still counts.
   it("is dirty when a tracked change sits among untracked ones", () => {
     expect(isTreeDirtyForUpdate("?? a.log\n M src/app.ts\n?? b.log")).toBe(true);
+  });
+});
+
+describe("computeUpdateNotice", () => {
+  // A checkout under node_modules is an npm install: it must NOT run git, and the answer
+  // comes from the registry vs the bundled version.
+  it("takes the npm path for a node_modules dir, without touching git", async () => {
+    let gitCalls = 0;
+    const notice = await computeUpdateNotice("/proj/node_modules/mulmoterminal", "0.7.0", {
+      runGit: async () => {
+        gitCalls++;
+        return null;
+      },
+      fetchLatest: async () => "0.8.0",
+    });
+    expect(notice).toBe("Update available: 0.7.0 → 0.8.0  ·  run: npm i -g mulmoterminal");
+    expect(gitCalls).toBe(0);
+  });
+
+  it("is silent on the npm path when already latest", async () => {
+    const notice = await computeUpdateNotice("/proj/node_modules/mulmoterminal", "0.8.0", {
+      runGit: async () => null,
+      fetchLatest: async () => "0.8.0",
+    });
+    expect(notice).toBeNull();
+  });
+
+  // A bare checkout is a git install: local HEAD vs the remote's, read via ls-remote.
+  it("takes the git path for a checkout and reports behind", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return ""; // clean
+      if (args[0] === "rev-parse" && args[1] === "HEAD") return "0123456789abcdef";
+      if (args[0] === "rev-parse" && args[1] === "--short") return "0123456";
+      if (args[0] === "ls-remote") return "fedcba9876543210\tHEAD";
+      return null;
+    };
+    const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
+    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull");
+  });
+
+  it("is silent on the git path when the checkout is dirty", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return " M src/app.ts"; // tracked change => dirty
+      return "whatever";
+    };
+    expect(await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null })).toBeNull();
   });
 });

@@ -1,52 +1,54 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { parseUpdateStatus, readUpdateStatus } from "../../../server/config/update-status.js";
+import { parseCacheEntry, isCacheFresh } from "../../../server/config/update-status.js";
 
-describe("parseUpdateStatus", () => {
-  it("reads a string notice", () => {
-    expect(parseUpdateStatus({ notice: "Update available: git pull" })).toEqual({ notice: "Update available: git pull" });
+describe("parseCacheEntry", () => {
+  it("reads a cached notice with its timestamp", () => {
+    expect(parseCacheEntry({ notice: "Update available: git pull", at: 1000 })).toEqual({
+      notice: "Update available: git pull",
+      at: 1000,
+    });
   });
 
-  it("is null when the launcher wrote no notice (clean / opted out)", () => {
-    expect(parseUpdateStatus({ notice: null })).toEqual({ notice: null });
+  it("keeps the timestamp but nulls a clean notice", () => {
+    expect(parseCacheEntry({ notice: null, at: 1000 })).toEqual({ notice: null, at: 1000 });
+    expect(parseCacheEntry({ notice: "", at: 1000 })).toEqual({ notice: null, at: 1000 });
   });
 
-  // An empty string is nothing to show — treat it as no notice so the badge stays hidden.
-  it("treats an empty notice as none", () => {
-    expect(parseUpdateStatus({ notice: "" })).toEqual({ notice: null });
+  // No usable timestamp => no usable cache => the check must re-run rather than trust it.
+  it("is null without a numeric timestamp", () => {
+    expect(parseCacheEntry({ notice: "x" })).toBeNull();
+    expect(parseCacheEntry({ notice: "x", at: "soon" })).toBeNull();
   });
 
-  // A hand-edited or partially-written file must never take the route down.
-  it("is null for junk rather than throwing", () => {
-    expect(parseUpdateStatus(null)).toEqual({ notice: null });
-    expect(parseUpdateStatus("nope")).toEqual({ notice: null });
-    expect(parseUpdateStatus(42)).toEqual({ notice: null });
-    expect(parseUpdateStatus({})).toEqual({ notice: null });
-    expect(parseUpdateStatus({ notice: 123 })).toEqual({ notice: null });
+  // A hand-edited or half-written file must never throw the route.
+  it("is null for junk", () => {
+    expect(parseCacheEntry(null)).toBeNull();
+    expect(parseCacheEntry("nope")).toBeNull();
+    expect(parseCacheEntry(42)).toBeNull();
   });
 });
 
-describe("readUpdateStatus", () => {
-  const dir = mkdtempSync(path.join(tmpdir(), "mt-update-"));
-  const file = path.join(dir, "update-status.json");
-  const cleanup = () => rmSync(dir, { recursive: true, force: true });
+describe("isCacheFresh", () => {
+  const TTL = 60 * 60 * 1000;
 
-  it("returns the notice from a well-formed file", async () => {
-    writeFileSync(file, JSON.stringify({ notice: "Update available: 0.7.1 → 0.8.0  ·  run: npm i -g mulmoterminal" }));
-    expect((await readUpdateStatus(file)).notice).toContain("npm i -g mulmoterminal");
+  it("is fresh within the ttl", () => {
+    expect(isCacheFresh(1000, 1000 + TTL - 1, TTL)).toBe(true);
+    expect(isCacheFresh(1000, 1000, TTL)).toBe(true);
   });
 
-  // The launcher's async check may not have written the file yet on first load — that is the
-  // common case, not an error, and it must read as "no badge".
-  it("is null when the file does not exist", async () => {
-    expect(await readUpdateStatus(path.join(dir, "missing.json"))).toEqual({ notice: null });
+  it("is stale at or past the ttl", () => {
+    expect(isCacheFresh(1000, 1000 + TTL, TTL)).toBe(false);
+    expect(isCacheFresh(1000, 1000 + TTL + 1, TTL)).toBe(false);
   });
 
-  it("is null for malformed JSON", async () => {
-    writeFileSync(file, "{ not json");
-    expect(await readUpdateStatus(file)).toEqual({ notice: null });
-    cleanup();
+  // A timestamp from the future (clock skew, a copied file) isn't trustworthy — re-check.
+  it("rejects a future timestamp", () => {
+    expect(isCacheFresh(2000, 1000, TTL)).toBe(false);
+  });
+
+  it("rejects a missing / non-numeric timestamp", () => {
+    expect(isCacheFresh(undefined, 1000, TTL)).toBe(false);
+    expect(isCacheFresh(0, 1000, TTL)).toBe(false);
+    expect(isCacheFresh("1000", 1000, TTL)).toBe(false);
   });
 });

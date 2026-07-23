@@ -7,24 +7,13 @@
 
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
 import { get as httpGet } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
-import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import {
-  classifyInstall,
-  fetchLatestVersion,
-  gitUpdateNotice,
-  hasNodeModulesSegment,
-  isTreeDirtyForUpdate,
-  isUpdateCheckDisabled,
-  npmUpdateNotice,
-  parseLsRemoteHead,
-} from "./update-check.js";
+import { computeUpdateNotice, isUpdateCheckDisabled } from "./update-check.js";
 import { chooseCwd, parsePortArg, portInUseAction, portInUseMessage, saysYes, secondInstancePrompt, SECOND_INSTANCE_NOTE } from "./cli-args.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -43,95 +32,17 @@ const { version: VERSION } = createRequire(import.meta.url)("../package.json");
 const log = (msg) => console.log(`\x1b[36m[mulmoterminal]\x1b[0m ${msg}`);
 const error = (msg) => console.error(`\x1b[31m[mulmoterminal]\x1b[0m ${msg}`);
 
-// Upper bound on every git probe, including the network ls-remote — matches the
-// npm fetch timeout so a slow remote can't delay the notice past startup.
-const GIT_PROBE_TIMEOUT_MS = 1500;
-
-// Run git inside the package directory, best-effort. Resolves the trimmed stdout
-// on a clean exit, or null on anything else (git absent, non-zero exit, timeout).
-// GIT_TERMINAL_PROMPT=0 turns an auth prompt into a fast failure instead of a
-// hang, so ls-remote against a private remote can't block startup waiting on a
-// password nobody is there to type.
-function runGit(gitArgs, timeout_ms = GIT_PROBE_TIMEOUT_MS) {
-  return new Promise((resolve) => {
-    let child;
-    try {
-      child = spawn("git", ["-C", PKG_DIR, ...gitArgs], {
-        stdio: ["ignore", "pipe", "ignore"],
-        env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
-      });
-    } catch {
-      return resolve(null);
-    }
-    let out = "";
-    const timer = setTimeout(() => child.kill("SIGKILL"), timeout_ms);
-    child.stdout.on("data", (chunk) => (out += chunk));
-    child.on("error", () => {
-      clearTimeout(timer);
-      resolve(null);
-    });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      resolve(code === 0 ? out.trim() : null);
-    });
-  });
-}
-
-// npm install → registry latest vs the bundled version; git checkout → local
-// HEAD vs the remote's, read without fetching. Only ask git which one this is
-// when the path doesn't already answer it.
-async function installKind() {
-  if (hasNodeModulesSegment(PKG_DIR)) return "npm";
-  return classifyInstall(PKG_DIR, (await runGit(["rev-parse", "--is-inside-work-tree"])) === "true");
-}
-
-// The git-side notice, or null. A dirty tree stops here without touching the
-// network — it can't fast-forward, so there is nothing worth asking the remote.
-async function gitUpdateMessage() {
-  const status = await runGit(["status", "--porcelain"]);
-  if (status === null || isTreeDirtyForUpdate(status)) return null;
-  const [localSha, localShort, lsRemote] = await Promise.all([
-    runGit(["rev-parse", "HEAD"]),
-    runGit(["rev-parse", "--short", "HEAD"]),
-    runGit(["ls-remote", "origin", "HEAD"]),
-  ]);
-  return gitUpdateNotice({ localSha, localShort, remoteSha: parseLsRemoteHead(lsRemote), dirty: false });
-}
-
-// Where the notice is left for the running server to read and surface in the web header —
-// the console line is easy to miss when you only watch the browser. Sits next to the other
-// shared ~/.mulmoterminal state (activity-state.json, etc.).
-const UPDATE_STATUS_FILE = join(homedir(), ".mulmoterminal", "update-status.json");
-
-// Persist the current notice (null when clean, opted out, or the check failed). Written on
-// every start so a stale "update available" from a prior run can't linger after the user
-// updated. Best-effort — a failed write never disrupts startup.
-async function writeUpdateStatus(notice) {
-  try {
-    await mkdir(dirname(UPDATE_STATUS_FILE), { recursive: true });
-    await writeFile(UPDATE_STATUS_FILE, JSON.stringify({ notice: notice ?? null }));
-  } catch {
-    // best-effort
-  }
-}
-
-// Non-blocking notice that a newer version exists — neither `npm i -g` nor a git
-// checkout auto-updates. Opt out via MULMOTERMINAL_NO_UPDATE_CHECK / NO_UPDATE_NOTIFIER.
+// Non-blocking console notice that a newer version exists — neither `npm i -g` nor a git
+// checkout auto-updates. Opt out via MULMOTERMINAL_NO_UPDATE_CHECK / NO_UPDATE_NOTIFIER. The
+// same check runs in the server for the web-header badge (the launcher isn't involved under
+// `yarn dev`), sharing computeUpdateNotice so the two never drift.
 async function checkForUpdate() {
-  // Clear a prior run's notice first, so the header can't keep showing a stale "update
-  // available" before this run's (async) check overwrites the file — or if it never does
-  // (opt-out, clean, or a failed check).
-  await writeUpdateStatus(null);
   if (isUpdateCheckDisabled(process.env)) return;
-  let notice = null;
   try {
-    notice = (await installKind()) === "git" ? await gitUpdateMessage() : npmUpdateNotice(VERSION, await fetchLatestVersion());
+    const notice = await computeUpdateNotice(PKG_DIR, VERSION);
+    if (notice) log(`\x1b[33m${notice}\x1b[0m`);
   } catch {
     // best-effort; never disrupt startup
-  }
-  if (notice) {
-    await writeUpdateStatus(notice);
-    log(`\x1b[33m${notice}\x1b[0m`);
   }
 }
 
