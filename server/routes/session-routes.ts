@@ -123,9 +123,11 @@ async function sessionList(req: Request, res: Response) {
     const cwdParam = typeof req.query.cwd === "string" ? req.query.cwd : null;
     const cwd = cwdParam ? resolveWorkspace(cwdParam) : CLAUDE_CWD;
     const includePending = !cwdParam;
-    // Wait for the persisted grid-session set before filtering (below), so a chat
-    // request racing server boot can't leak previously-hidden grid transcripts.
-    if (includePending) await devTerminalSessionsHydrated;
+    // Wait for the persisted grid-session set before filtering (below). Both queries depend on
+    // it now: the chat sidebar hides grid sessions, and the grid's cwd-scoped resume picker shows
+    // ONLY them (#724) — either way a request racing server boot must see the restored set, not an
+    // empty one (which would leak grid transcripts into chat, or empty the resume picker).
+    await devTerminalSessionsHydrated;
     const dir = projectSessionsDir(cwd);
     let files: string[] = [];
     try {
