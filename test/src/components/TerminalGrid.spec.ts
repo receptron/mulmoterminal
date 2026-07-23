@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, DOMWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalGrid, { type CockpitRow } from "../../../src/components/TerminalGrid.vue";
 import type { Cell } from "../../../src/components/gridTabs.js";
@@ -137,8 +137,10 @@ describe("TerminalGrid (page renderer)", () => {
     const kebabs = w.findAll('[data-testid="cockpit-reorder"]');
     expect(kebabs).toHaveLength(2);
     await kebabs[1].trigger("click");
-    await w.get('[data-testid="reorder-up"]').trigger("click"); // the one open menu (row 1)
+    // the dropdown is teleported to <body>, so reach it through the document
+    await new DOMWrapper(document.querySelector('[data-testid="reorder-up"]') as Element).trigger("click");
     expect(w.emitted("move")?.[0]).toEqual([1, -1]);
+    w.unmount();
   });
 
   it("adds the zoomed class only when a cell is expanded", async () => {
