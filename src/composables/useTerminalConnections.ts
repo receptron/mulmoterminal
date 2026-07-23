@@ -19,6 +19,7 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
+import { swallowsMouseTracking } from "./mouseTrackingModes";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
@@ -161,7 +162,20 @@ function ensure(key: string, target: ConnTarget): Conn {
     // (newline), Alt+B/F (word nav), Alt+Backspace (delete word). The cost is Option
     // dead-key accent entry (é etc.), which a coding terminal doesn't need.
     macOptionIsMeta: true,
+    // The escape hatch for any mouse mode that still slips through the parser hooks below: on
+    // macOS xterm only bypasses tracking for Option+drag, and ONLY when this is on (elsewhere it
+    // is Shift+drag, which needs no option). Without it a Mac has no way to select at all (#729).
+    macOptionClickForcesSelection: true,
+    // `term.parser` is proposed API and THROWS without this, so the hooks below would take the
+    // terminal down at construction rather than degrade.
+    allowProposedApi: true,
   });
+  // Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
+  // over, so its coordinate reports never land in the agent's prompt (#729). Registered per
+  // terminal and disposed with it.
+  const refuseMouseTracking = (params: (number | number[])[]) => swallowsMouseTracking(params);
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, refuseMouseTracking);
+  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, refuseMouseTracking);
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
