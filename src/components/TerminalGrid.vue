@@ -5,14 +5,14 @@ import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
-import { flipKeyframes, FLIP_MS, FLIP_EASING } from "./cellFlip";
+import { flipKeyframes, flipPairs, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
-import { flipTargetUid, shouldFlipZoom } from "./cellChromeRules";
+import { shouldFlipZoom } from "./cellChromeRules";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -114,8 +114,8 @@ onActivated(() => {
 // suppressed while expanded or mid-flip so it never fights those animations.
 function cellClass(uid: number) {
   return {
-    flipping: uid === flippingUid.value,
-    focused: uid === focusedUid.value && props.expandedUid === null && uid !== flippingUid.value,
+    flipping: flippingUids.value.has(uid),
+    focused: uid === focusedUid.value && props.expandedUid === null && !flippingUids.value.has(uid),
   };
 }
 // Hand the flip's timing to the stylesheet so the fade under it can't drift out of sync.
@@ -133,48 +133,65 @@ const listMode = ref(true);
 watch(listMode, (on) => emit("list-mode", on));
 
 const stage = ref<HTMLElement | null>(null);
-// The cell currently flying between slots. Also gates the stylesheet: the cells it
-// leaves behind fade in under it, and the stage stops taking clicks until it lands.
-const flippingUid = ref<number | null>(null);
-let running: Animation | null = null;
+// The cells currently flying between slots. Also gates the stylesheet: the cells not in
+// flight fade in under them, and the stage stops taking clicks until the batch lands.
+const flippingUids = ref<Set<number>>(new Set());
+// One expand/collapse is one batch. A newer batch cancels every animation the last one
+// still had running, so a fast double-click never leaves a cell stranded mid-transform.
+let running: Animation[] = [];
 
 const cellEl = (uid: number) => stage.value?.querySelector<HTMLElement>(`[data-uid="${uid}"]`) ?? null;
 
-function flipCell(uid: number, first: DOMRect) {
-  const el = cellEl(uid);
-  const frames = el && flipKeyframes(first, el.getBoundingClientRect());
-  if (!el || !frames) return;
-  running?.cancel();
-  flippingUid.value = uid;
-  const anim = el.animate(frames, { duration: FLIP_MS, easing: FLIP_EASING });
-  running = anim;
-  const settle = () => {
-    // A newer flip already took over — it owns `running` and the class now.
-    if (running !== anim) return;
-    running = null;
-    flippingUid.value = null;
-  };
-  anim.finished.then(settle, settle); // cancel() rejects, and a cancelled flip still settles
+// Measure every currently-rendered cell's slot. Taken once before the patch and once
+// after; flipPairs keeps only the cells in both, and each flies from its own old slot.
+function measureCells(uids: number[]): Map<number, DOMRect> {
+  const rects = new Map<number, DOMRect>();
+  for (const uid of uids) {
+    const el = cellEl(uid);
+    if (el) rects.set(uid, el.getBoundingClientRect());
+  }
+  return rects;
 }
 
-// Pre-flush, so the cell is still in the slot it is leaving when we measure it. Zooming
-// straight from one cell to another reports `to` — the arriving cell is the one to fly.
+function flipCells(before: Map<number, DOMRect>) {
+  const after = measureCells([...before.keys()]);
+  const animations = flipPairs(before, after)
+    .map(({ uid, first, last }) => {
+      const el = cellEl(uid);
+      const frames = el && flipKeyframes(first, last);
+      return el && frames ? { uid, anim: el.animate(frames, { duration: FLIP_MS, easing: FLIP_EASING }) } : null;
+    })
+    .filter((x): x is { uid: number; anim: Animation } => x !== null);
+  if (!animations.length) return;
+
+  running.forEach((a) => a.cancel());
+  const batch = animations.map((a) => a.anim);
+  running = batch;
+  flippingUids.value = new Set(animations.map((a) => a.uid));
+  const settle = () => {
+    if (running !== batch) return; // a newer batch took over — it owns the class now
+    running = [];
+    flippingUids.value = new Set();
+  };
+  // The batch shares one duration + easing, so the last to finish settles them all.
+  Promise.allSettled(batch.map((a) => a.finished)).then(settle);
+}
+
+// Pre-flush, so the cells are still in the slots they are leaving when we measure them.
+// EVERY rendered cell is measured, not just the one being zoomed, so the filmstrip cells
+// slide into place alongside it instead of snapping.
 watch(
   () => props.expandedUid,
   (to, from) => {
-    const uid = flipTargetUid(to, from);
-    if (uid === null) return;
     if (!shouldFlipZoom(to, from, window.matchMedia("(prefers-reduced-motion: reduce)").matches)) return;
-    const el = cellEl(uid);
-    if (!el) return;
-    const first = el.getBoundingClientRect();
-    nextTick(() => flipCell(uid, first));
+    const before = measureCells(props.cells.map((c) => c.uid));
+    nextTick(() => flipCells(before));
   },
 );
 </script>
 
 <template>
-  <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUid !== null }" :style="flipVars" @focusin="onFocusIn">
+  <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUids.size > 0 }" :style="flipVars" @focusin="onFocusIn">
     <!-- toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
     <button
       v-if="zoomed"
@@ -428,9 +445,9 @@ watch(
   z-index: 1;
 }
 
-/* Only the zoomed cell has two rects to fly between. The cells it leaves behind are
-   arriving in (or vanishing from) a strip that has no counterpart in the other layout,
-   so they cross-fade under it instead. */
+/* Cells present in both layouts fly (they carry `.flipping`); the ones left here are the
+   other tabs' cells, which appear in (or vanish from) the filmstrip with no counterpart to
+   fly from, so they cross-fade instead. */
 .stage.flipping .grid > *:not(.flipping) {
   animation: cell-in var(--flip-ms) var(--flip-ease);
 }
