@@ -138,6 +138,16 @@ export function parseLsRemoteDefaultBranch(stdout) {
   return match ? match[1] : null;
 }
 
+// Whether a branch name is safe to drop into a copy/paste shell command. The name comes from
+// the remote (`ls-remote --symref`), which is untrusted — git allows `;`, `$`, backticks and
+// other shell metacharacters in ref names, so a hostile default branch like `main;rm -rf ~`
+// would inject when pasted. Ordinary branch names (main, master, release/2.x) are all letters,
+// digits, and `._/-`; anything outside that is refused rather than escaped, so the notice
+// falls back to a bare `git pull` instead of showing a weird quoted command.
+export function isSafeBranchName(name) {
+  return typeof name === "string" && /^[A-Za-z0-9._/-]+$/.test(name);
+}
+
 // Whether a git checkout should hear that an update exists, and what to say.
 // Silent whenever the notice could not be acted on or trusted: a dirty tree
 // cannot fast-forward, a missing sha means local or remote could not be read,
@@ -147,7 +157,7 @@ export function parseLsRemoteDefaultBranch(stdout) {
 export function gitUpdateNotice({ localSha, localShort, remoteSha, defaultBranch, dirty }) {
   if (dirty) return null;
   if (!localSha || !remoteSha || localSha === remoteSha) return null;
-  const pull = defaultBranch ? `git pull origin ${defaultBranch}` : "git pull";
+  const pull = isSafeBranchName(defaultBranch) ? `git pull origin ${defaultBranch}` : "git pull";
   return `Update available: ${localShort || localSha.slice(0, 7)} → origin  ·  run: ${pull}`;
 }
 

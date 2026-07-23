@@ -11,6 +11,7 @@ export declare function hasNodeModulesSegment(pkgDir: string): boolean;
 export declare function classifyInstall(pkgDir: string, isGitWorkTree: boolean): "npm" | "git";
 export declare function parseLsRemoteHead(stdout: string | null | undefined): string | null;
 export declare function parseLsRemoteDefaultBranch(stdout: string | null | undefined): string | null;
+export declare function isSafeBranchName(name: unknown): boolean;
 export declare function npmUpdateNotice(current: string, latest: string | null): string | null;
 export declare function isTreeDirtyForUpdate(porcelain: string | null | undefined): boolean;
 export declare function gitUpdateNotice(args: {

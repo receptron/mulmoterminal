@@ -7,6 +7,7 @@ import {
   classifyInstall,
   parseLsRemoteHead,
   parseLsRemoteDefaultBranch,
+  isSafeBranchName,
   npmUpdateNotice,
   isTreeDirtyForUpdate,
   gitUpdateNotice,
@@ -164,6 +165,28 @@ describe("parseLsRemoteDefaultBranch", () => {
   });
 });
 
+describe("isSafeBranchName", () => {
+  it("accepts ordinary branch names", () => {
+    for (const name of ["main", "master", "develop", "release/2.x", "feat/update-badge", "v1.2.3", "a_b-c"]) {
+      expect(isSafeBranchName(name), name).toBe(true);
+    }
+  });
+
+  // The name comes from an untrusted remote and lands in a copy/paste shell command; anything
+  // that could break out of `git pull origin <name>` must be refused.
+  it("rejects names with shell metacharacters", () => {
+    for (const name of ["main;rm -rf ~", "main$(whoami)", "a`id`", "a|b", "a&b", "a b", "a>b", "'x'", '"x"', ""]) {
+      expect(isSafeBranchName(name), name).toBe(false);
+    }
+  });
+
+  it("rejects non-strings", () => {
+    expect(isSafeBranchName(null)).toBe(false);
+    expect(isSafeBranchName(undefined)).toBe(false);
+    expect(isSafeBranchName(42)).toBe(false);
+  });
+});
+
 describe("npmUpdateNotice", () => {
   it("names both versions and the npm command when newer", () => {
     expect(npmUpdateNotice("0.7.0", "0.8.0")).toBe("Update available: 0.7.0 → 0.8.0  ·  run: npm i -g mulmoterminal");
@@ -194,6 +217,13 @@ describe("gitUpdateNotice", () => {
   it("names origin + the default branch when it is known", () => {
     expect(gitUpdateNotice({ ...behind, defaultBranch: "main" })).toBe("Update available: short12 → origin  ·  run: git pull origin main");
     expect(gitUpdateNotice({ ...behind, defaultBranch: "master" })).toContain("git pull origin master");
+  });
+
+  // The branch is untrusted remote metadata pasted into a shell — a metachar name must fall
+  // back to a bare `git pull`, never inject.
+  it("falls back to a bare git pull for an unsafe branch name", () => {
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "main;rm -rf ~" })).toBe("Update available: short12 → origin  ·  run: git pull");
+    expect(gitUpdateNotice({ ...behind, defaultBranch: "$(whoami)" })).not.toContain("whoami");
   });
 
   // Dirty stops it even when the shas differ — a checkout with local edits can't
@@ -287,6 +317,21 @@ describe("computeUpdateNotice", () => {
     };
     const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
     expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull origin main");
+  });
+
+  // End to end: a hostile remote whose default branch carries a shell metachar must not reach
+  // the pasteable command — the notice falls back to a bare git pull.
+  it("does not inject an unsafe remote default branch into the command", async () => {
+    const git = async (args: string[]): Promise<string | null> => {
+      if (args[0] === "rev-parse" && args[1] === "--is-inside-work-tree") return "true";
+      if (args[0] === "status") return "";
+      if (args[0] === "rev-parse" && args[1] === "HEAD") return "0123456789abcdef";
+      if (args[0] === "rev-parse" && args[1] === "--short") return "0123456";
+      if (args[0] === "ls-remote") return "ref: refs/heads/main;rm$IFS-rf\tHEAD\nfedcba9876543210\tHEAD";
+      return null;
+    };
+    const notice = await computeUpdateNotice("/home/dev/mulmoterminal", "0.7.0", { runGit: git, fetchLatest: async () => null });
+    expect(notice).toBe("Update available: 0123456 → origin  ·  run: git pull");
   });
 
   it("is silent on the git path when the checkout is dirty", async () => {
