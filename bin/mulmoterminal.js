@@ -118,16 +118,21 @@ async function writeUpdateStatus(notice) {
 // Non-blocking notice that a newer version exists — neither `npm i -g` nor a git
 // checkout auto-updates. Opt out via MULMOTERMINAL_NO_UPDATE_CHECK / NO_UPDATE_NOTIFIER.
 async function checkForUpdate() {
+  // Clear a prior run's notice first, so the header can't keep showing a stale "update
+  // available" before this run's (async) check overwrites the file — or if it never does
+  // (opt-out, clean, or a failed check).
+  await writeUpdateStatus(null);
+  if (isUpdateCheckDisabled(process.env)) return;
   let notice = null;
-  if (!isUpdateCheckDisabled(process.env)) {
-    try {
-      notice = (await installKind()) === "git" ? await gitUpdateMessage() : npmUpdateNotice(VERSION, await fetchLatestVersion());
-    } catch {
-      // best-effort; never disrupt startup
-    }
+  try {
+    notice = (await installKind()) === "git" ? await gitUpdateMessage() : npmUpdateNotice(VERSION, await fetchLatestVersion());
+  } catch {
+    // best-effort; never disrupt startup
   }
-  await writeUpdateStatus(notice);
-  if (notice) log(`\x1b[33m${notice}\x1b[0m`);
+  if (notice) {
+    await writeUpdateStatus(notice);
+    log(`\x1b[33m${notice}\x1b[0m`);
+  }
 }
 
 // Detect a CLI on the user's PATH by asking for its version. Intentionally resolves from

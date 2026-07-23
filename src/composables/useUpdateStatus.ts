@@ -17,7 +17,10 @@ export function useUpdateStatus() {
       const res = await fetch("/api/update-status");
       if (!res.ok) return;
       const data = await res.json();
-      if (typeof data?.notice === "string") notice.value = data.notice;
+      // Assign both ways: a null answer must CLEAR a notice a first read picked up, else a
+      // stale badge from the previous run's file would never go away once the launcher's
+      // check overwrites it clean.
+      notice.value = typeof data?.notice === "string" ? data.notice : null;
     } catch {
       // best-effort — no badge is fine
     }
@@ -25,7 +28,9 @@ export function useUpdateStatus() {
 
   onMounted(async () => {
     await fetchOnce();
-    if (!notice.value) setTimeout(() => void fetchOnce(), RETRY_MS);
+    // Always re-read once: the first read can land before the launcher's async check has
+    // (over)written the file, so its answer may be stale — not merely empty.
+    setTimeout(() => void fetchOnce(), RETRY_MS);
   });
 
   return { badge };

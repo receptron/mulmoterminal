@@ -40,6 +40,28 @@ describe("useUpdateStatus", () => {
     expect(badge()).toBeNull();
   });
 
+  // The codex-flagged race: the first read returns a previous run's notice, but this run is
+  // clean once the launcher overwrites the file. The delayed re-read must clear the stale
+  // badge rather than skip because a (stale) value was already present.
+  it("clears a stale badge on the delayed re-read", async () => {
+    vi.useFakeTimers();
+    try {
+      let current = "Update available: a1b2c3d → origin  ·  run: git pull";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ notice: current }) })),
+      );
+      const { badge } = mountStatus();
+      await vi.waitFor(() => expect(badge()?.command).toBe("git pull"));
+
+      current = null as unknown as string; // launcher overwrote the file: this run is clean
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(badge()).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // The file may not be readable / the request may fail — the badge just stays hidden.
   it("stays hidden when the fetch fails", async () => {
     vi.stubGlobal(
