@@ -140,6 +140,12 @@ export function gitUpdateNotice({ localSha, localShort, remoteSha, dirty }) {
   return `Update available: ${localShort || localSha.slice(0, 7)} → origin  ·  run: git pull`;
 }
 
+// ls-remote reaches the network (an SSH/HTTPS handshake to the origin host), so it routinely
+// takes several seconds — far longer than a local rev-parse. The default git timeout would
+// kill it first and read the checkout as "no remote HEAD" → no notice. Give just that probe
+// room; the check is background and best-effort, so waiting a few seconds costs nothing.
+const LS_REMOTE_TIMEOUT_MS = 6000;
+
 // The git branch of the check: local HEAD vs the remote's, read with ls-remote so no fetch is
 // forced. Silent on a dirty tree (can't fast-forward) or any unreadable probe.
 async function gitUpdateNotice_(git) {
@@ -148,7 +154,7 @@ async function gitUpdateNotice_(git) {
   const [localSha, localShort, lsRemote] = await Promise.all([
     git(["rev-parse", "HEAD"]),
     git(["rev-parse", "--short", "HEAD"]),
-    git(["ls-remote", "origin", "HEAD"]),
+    git(["ls-remote", "origin", "HEAD"], LS_REMOTE_TIMEOUT_MS),
   ]);
   return gitUpdateNotice({ localSha, localShort, remoteSha: parseLsRemoteHead(lsRemote), dirty: false });
 }
@@ -158,7 +164,7 @@ async function gitUpdateNotice_(git) {
 // (→ git). `deps` lets tests drive it without spawning git or hitting the network; production
 // callers pass nothing and get the real git/registry probes bound to pkgDir.
 export async function computeUpdateNotice(pkgDir, currentVersion, deps = {}) {
-  const git = deps.runGit ?? ((args) => runGit(pkgDir, args));
+  const git = deps.runGit ?? ((args, timeout_ms) => runGit(pkgDir, args, timeout_ms));
   const fetchLatest = deps.fetchLatest ?? fetchLatestVersion;
   const inWorkTree = hasNodeModulesSegment(pkgDir) ? false : (await git(["rev-parse", "--is-inside-work-tree"])) === "true";
   if (classifyInstall(pkgDir, inWorkTree) === "git") return gitUpdateNotice_(git);

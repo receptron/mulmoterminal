@@ -19,11 +19,13 @@ function mountStatus() {
   return { w, badge: () => badge.value };
 }
 
+const GIT_NOTICE = "Update available: a1b2c3d → origin  ·  run: git pull";
+
 describe("useUpdateStatus", () => {
   it("exposes a badge when the server reports a notice", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({ ok: true, json: async () => ({ notice: "Update available: a1b2c3d → origin  ·  run: git pull" }) })),
+      vi.fn(async () => ({ ok: true, json: async () => ({ notice: GIT_NOTICE }) })),
     );
     const { badge } = mountStatus();
     await flushPromises();
@@ -40,28 +42,6 @@ describe("useUpdateStatus", () => {
     expect(badge()).toBeNull();
   });
 
-  // The codex-flagged race: the first read returns a previous run's notice, but this run is
-  // clean once the launcher overwrites the file. The delayed re-read must clear the stale
-  // badge rather than skip because a (stale) value was already present.
-  it("clears a stale badge on the delayed re-read", async () => {
-    vi.useFakeTimers();
-    try {
-      let current = "Update available: a1b2c3d → origin  ·  run: git pull";
-      vi.stubGlobal(
-        "fetch",
-        vi.fn(async () => ({ ok: true, json: async () => ({ notice: current }) })),
-      );
-      const { badge } = mountStatus();
-      await vi.waitFor(() => expect(badge()?.command).toBe("git pull"));
-
-      current = null as unknown as string; // launcher overwrote the file: this run is clean
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(badge()).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   // The file may not be readable / the request may fail — the badge just stays hidden.
   it("stays hidden when the fetch fails", async () => {
     vi.stubGlobal(
@@ -73,5 +53,42 @@ describe("useUpdateStatus", () => {
     const { badge } = mountStatus();
     await flushPromises();
     expect(badge()).toBeNull();
+  });
+
+  // The server's check reaches the network (ls-remote can take seconds), so the first read is
+  // null; a later poll must pick the notice up rather than give up on the first empty answer.
+  it("shows the badge when the notice arrives on a later poll", async () => {
+    vi.useFakeTimers();
+    try {
+      let served: string | null = null; // the server check hasn't finished yet
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => ({ ok: true, json: async () => ({ notice: served }) })),
+      );
+      const { badge } = mountStatus();
+      await vi.waitFor(() => expect(badge).not.toBeUndefined());
+      expect(badge()).toBeNull();
+
+      served = GIT_NOTICE; // the check finished behind
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(badge()?.command).toBe("git pull");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // A server that is genuinely up to date answers null every time — polling must give up, not
+  // hammer the endpoint forever.
+  it("stops polling after a bounded number of empty reads", async () => {
+    vi.useFakeTimers();
+    try {
+      const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ notice: null }) }));
+      vi.stubGlobal("fetch", fetchMock);
+      mountStatus();
+      await vi.advanceTimersByTimeAsync(3000 * 10);
+      expect(fetchMock.mock.calls).toHaveLength(5);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
