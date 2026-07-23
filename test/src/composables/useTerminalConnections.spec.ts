@@ -150,16 +150,14 @@ describe("useTerminalConnections — detached-slot state replay", () => {
   // is load-bearing rather than cosmetic: `term.parser` throws without it, so a terminal would fail
   // to construct at all. macOptionClickForcesSelection is the macOS escape hatch — there, xterm
   // bypasses mouse mode for Option+drag ONLY when it is set (elsewhere Shift needs no option).
-  it("registers the mouse-tracking guards on both DECSET and DECRST, with the options they need", () => {
+  it("registers the mouse-tracking guard on DECSET only, with the options it needs", () => {
     mockTermState.options = {};
     mockTermState.csiHandlers = [];
     conn.attach("cell-mouse", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
     expect(mockTermState.options.allowProposedApi).toBe(true);
     expect(mockTermState.options.macOptionClickForcesSelection).toBe(true);
-    expect(mockTermState.csiHandlers.map(([id]) => id)).toEqual([
-      { prefix: "?", final: "h" },
-      { prefix: "?", final: "l" },
-    ]);
+    // SET only — dropping the reset could strand mouse mode on (see mouseTrackingGuard.spec.ts).
+    expect(mockTermState.csiHandlers.map(([id]) => id)).toEqual([{ prefix: "?", final: "h" }]);
     conn.release("cell-mouse");
   });
 

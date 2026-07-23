@@ -11,9 +11,7 @@ import { swallowsMouseTracking } from "../../../src/composables/mouseTrackingMod
 
 // Mirrors the registration in useTerminalConnections.ensure().
 const guard = (term: Terminal) => {
-  const refuse = (params: (number | number[])[]) => swallowsMouseTracking(params);
-  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, refuse);
-  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, refuse);
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => swallowsMouseTracking(params));
 };
 
 const write = (term: Terminal, data: string) => new Promise<void>((resolve) => term.write(data, resolve));
@@ -56,6 +54,20 @@ describe("the mouse-tracking guard on a real terminal", () => {
     await write(term, "\x1b[?2004h");
     await write(term, "\x1b[?2004l");
     expect(term.modes.bracketedPasteMode).toBe(false);
+    term.dispose();
+  });
+
+  // Why only SET is refused. Mouse mode can still be turned on by a mixed sequence (honoured
+  // above), and if the matching reset were dropped too it could never be turned back off — the
+  // terminal would sit in mouse mode for the rest of the session, which is the very state this
+  // guard exists to avoid.
+  it("lets a reset turn mouse mode back off after a mixed sequence enabled it", async () => {
+    const term = new Terminal({ allowProposedApi: true });
+    guard(term);
+    await write(term, "\x1b[?2004;1002h"); // honoured, so tracking is on
+    expect(term.modes.mouseTrackingMode).toBe("drag");
+    await write(term, "\x1b[?1002l");
+    expect(term.modes.mouseTrackingMode).toBe("none");
     term.dispose();
   });
 

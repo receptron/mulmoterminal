@@ -173,9 +173,12 @@ function ensure(key: string, target: ConnTarget): Conn {
   // Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
   // over, so its coordinate reports never land in the agent's prompt (#729). Registered per
   // terminal and disposed with it.
-  const refuseMouseTracking = (params: (number | number[])[]) => swallowsMouseTracking(params);
-  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, refuseMouseTracking);
-  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, refuseMouseTracking);
+  //
+  // SET only. The matching reset (`CSI ? … l`) is deliberately left alone: dropping it gains
+  // nothing (it disables what was never enabled) but would strand mouse mode ON for good in the
+  // one case that gets past this hook — a sequence mixing tracking with an unrelated mode, which
+  // is honoured on purpose. Letting every reset through keeps that recoverable.
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => swallowsMouseTracking(params));
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
