@@ -235,6 +235,20 @@ describe("grid cockpit (list view)", () => {
     expect(w.find(".stage").classes()).not.toContain("listmode"); // filmstrip mode
   });
 
+  it("keeps roster rows full-height (shrink-0) so a long list scrolls instead of squishing (#722)", async () => {
+    const many = Array.from({ length: 6 }, (_, i) => cell(i, `s${i}`));
+    const w = mountCockpit(
+      many,
+      0,
+      many.map((_, i) => rosterRow(i)),
+    );
+    await nextTick();
+    // The roster is a bounded flex-col scroll container...
+    expect(w.get('[data-testid="cockpit"]').classes()).toContain("overflow-y-auto");
+    // ...and each row refuses to shrink, so the list overflows (scrolls) rather than cramming.
+    for (const row of w.findAll('[data-testid="cockpit-row"]')) expect(row.classes()).toContain("shrink-0");
+  });
+
   it("emits list-mode as the roster is toggled off then on, so the parent can pause its poll", async () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0)]);
     await nextTick();
