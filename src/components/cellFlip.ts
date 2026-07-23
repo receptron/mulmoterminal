@@ -42,3 +42,25 @@ export function flipKeyframes(first: Rect, last: Rect): Keyframe[] | null {
     { transformOrigin: origin, transform: "none" },
   ];
 }
+
+// One cell's flight: where it was before the patch, where it is after. `flipKeyframes`
+// turns each into a transform animation; a null result there means it didn't really move.
+export interface FlipPair {
+  uid: number;
+  first: Rect;
+  last: Rect;
+}
+
+// Which cells can fly when the grid expands or collapses: only those present BOTH before
+// and after the patch. Expanding brings the other tabs' cells into the filmstrip — they
+// have no "before", so they can't be inverted; collapsing drops them — they have no
+// "after". Each surviving cell is paired with its own start and end rect, so every one of
+// them animates, not just the cell being zoomed. Iterating `after` keeps the order stable.
+export function flipPairs(before: Map<number, Rect>, after: Map<number, Rect>): FlipPair[] {
+  const pairs: FlipPair[] = [];
+  for (const [uid, last] of after) {
+    const first = before.get(uid);
+    if (first) pairs.push({ uid, first, last });
+  }
+  return pairs;
+}
