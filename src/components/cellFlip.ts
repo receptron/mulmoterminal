@@ -64,3 +64,12 @@ export function flipPairs(before: Map<number, Rect>, after: Map<number, Rect>): 
   }
   return pairs;
 }
+
+// Is this rect actually on screen? A cell the layout parks off-canvas (the cockpit list
+// mode hides the grid at left:-99999px) must NOT fly — it has no visible slot to fly from
+// or to, so animating it drags a cell across the whole viewport. Such a cell fades instead.
+export function onScreen(rect: Rect, viewportWidth: number, viewportHeight: number): boolean {
+  return (
+    rect.width > 0 && rect.height > 0 && rect.left < viewportWidth && rect.left + rect.width > 0 && rect.top < viewportHeight && rect.top + rect.height > 0
+  );
+}

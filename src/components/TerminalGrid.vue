@@ -5,7 +5,7 @@ import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
-import { flipKeyframes, flipPairs, FLIP_MS, FLIP_EASING } from "./cellFlip";
+import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { formatCwd } from "./cwdDisplay";
 import type { Cell, CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
@@ -142,13 +142,18 @@ let running: Animation[] = [];
 
 const cellEl = (uid: number) => stage.value?.querySelector<HTMLElement>(`[data-uid="${uid}"]`) ?? null;
 
-// Measure every currently-rendered cell's slot. Taken once before the patch and once
-// after; flipPairs keeps only the cells in both, and each flies from its own old slot.
+// Measure every currently-rendered cell's slot, dropping any the layout has parked
+// off-screen. Taken once before the patch and once after; flipPairs keeps only the cells
+// on-screen in BOTH, so a cell hidden in one layout (cockpit list mode parks the grid at
+// left:-99999px) fades rather than flying across the viewport. Each survivor flies from
+// its own old slot.
 function measureCells(uids: number[]): Map<number, DOMRect> {
   const rects = new Map<number, DOMRect>();
   for (const uid of uids) {
     const el = cellEl(uid);
-    if (el) rects.set(uid, el.getBoundingClientRect());
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    if (onScreen(rect, window.innerWidth, window.innerHeight)) rects.set(uid, rect);
   }
   return rects;
 }

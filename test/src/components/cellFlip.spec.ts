@@ -113,3 +113,34 @@ describe("flipPairs", () => {
     expect(flipPairs(new Map(), new Map())).toEqual([]);
   });
 });
+
+import { onScreen } from "../../../src/components/cellFlip.js";
+
+describe("onScreen", () => {
+  const VW = 1000;
+  const VH = 800;
+
+  it("accepts a rect inside the viewport", () => {
+    expect(onScreen(rect(100, 100, 200, 150), VW, VH)).toBe(true);
+  });
+
+  it("rejects the cockpit list-mode park at left:-99999px", () => {
+    expect(onScreen(rect(-99999, 0, 300, 200), VW, VH)).toBe(false);
+  });
+
+  it("accepts a rect straddling the left edge", () => {
+    expect(onScreen(rect(-50, 100, 200, 150), VW, VH)).toBe(true);
+  });
+
+  it("rejects a rect entirely off the right edge", () => {
+    expect(onScreen(rect(1000, 100, 200, 150), VW, VH)).toBe(false);
+  });
+
+  it("rejects a rect scrolled off the bottom", () => {
+    expect(onScreen(rect(100, 800, 200, 150), VW, VH)).toBe(false);
+  });
+
+  it("rejects a zero-area rect (a cell not laid out yet)", () => {
+    expect(onScreen(rect(100, 100, 0, 0), VW, VH)).toBe(false);
+  });
+});
