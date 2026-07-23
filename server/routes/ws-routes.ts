@@ -102,6 +102,17 @@ async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: strin
 async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, url: URL): Promise<void> {
   const resolved = await resolveRunTarget(url);
   if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
+  beginRunTerminal(deps, ws, resolved);
+}
+
+// Spawn the ephemeral Run PTY and wire its lifecycle. resolveRunTarget above can await a git
+// subprocess (buildHeaderContext for a button command), and the viewer can leave during that
+// window — before any close handler is wired. Spawning then leaks a PTY nobody reaps (/ws/run
+// is ephemeral: no reattach, no reap/grace, so its only kill is the close handler below). Bail
+// if the socket has since closed — the same guard handleClaudeConnection applies after its
+// keychain refresh.
+export function beginRunTerminal(deps: WsRouteDeps, ws: WebSocket, resolved: { command: string; cwd: string }): void {
+  if (ws.readyState !== ws.OPEN) return;
   let term: IPty;
   try {
     term = deps.spawnCommandPty(resolved.command, resolved.cwd, ws);
