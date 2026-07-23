@@ -140,7 +140,10 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
     // Before the activity publish below, so the row it mirrors to the phone already carries this
     // hook's phase (a turn's first Edit must read as "editing" in the same push, not the next one).
-    deps.noteWorkPhase(sessionId, event, typeof body.tool_name === "string" ? body.tool_name : undefined);
+    // Live sessions only: a tracked turn is reclaimed by reap, which itself does nothing without a
+    // pty — so tracking an id with no pty (any well-formed uuid may be posted here) would never be
+    // reclaimed. A session whose pty is gone simply reports no phase, as it does before its first tool.
+    if (entry) deps.noteWorkPhase(sessionId, event, typeof body.tool_name === "string" ? body.tool_name : undefined);
     handleActivityHook(deps, sessionId, event, active, typeof body.message === "string" ? body.message : "");
     await handleToolHook(deps, sessionId, event, body, cwd);
     // A hidden translation worker that ends its turn while still pending never called

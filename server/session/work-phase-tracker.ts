@@ -30,8 +30,15 @@ export function nextTurnTools(prev: readonly string[], event: string, toolName?:
 export function createWorkPhaseTracker() {
   const turnTools = new Map<string, string[]>();
 
+  // Only allocate when there is something to remember. /api/hook accepts any well-formed uuid
+  // (the id is shape-checked, not looked up), and an entry is only reclaimed by reap — which
+  // never runs for a session that has no pty. Storing an empty turn for an unrelated event would
+  // therefore leave a permanent entry per uuid ever posted, so those are dropped here instead.
   const note = (sessionId: string, event: string, toolName?: string): void => {
-    turnTools.set(sessionId, nextTurnTools(turnTools.get(sessionId) ?? [], event, toolName));
+    const prev = turnTools.get(sessionId);
+    const next = nextTurnTools(prev ?? [], event, toolName);
+    if (!prev && next.length === 0) return;
+    turnTools.set(sessionId, next);
   };
 
   // null while nothing has been observed yet (a just-started or restored session) — the phone
@@ -42,5 +49,8 @@ export function createWorkPhaseTracker() {
     turnTools.delete(sessionId);
   };
 
-  return { note, phaseOf, forget };
+  /** How many sessions hold a turn — the observable for "ignored hooks allocate nothing". */
+  const trackedCount = (): number => turnTools.size;
+
+  return { note, phaseOf, forget, trackedCount };
 }

@@ -101,4 +101,34 @@ describe("createWorkPhaseTracker", () => {
     t.forget(S);
     expect(t.phaseOf(S)).toBeNull();
   });
+
+  // The leak this guards: /api/hook shape-checks the uuid rather than looking it up, and an entry
+  // is only reclaimed by reap — which does nothing for a session with no pty. An ignored hook must
+  // therefore allocate nothing, or every uuid ever posted would occupy the map for good.
+  it("allocates nothing for hooks that carry no turn information", () => {
+    const t = createWorkPhaseTracker();
+    t.note("unseen-1", "Stop");
+    t.note("unseen-2", "Notification");
+    t.note("unseen-3", "PostToolUse", "Edit");
+    t.note("unseen-4", "UserPromptSubmit"); // a turn reset with nothing to reset
+    t.note("unseen-5", "PreToolUse"); // no tool name
+    expect(t.trackedCount()).toBe(0);
+  });
+
+  it("allocates once a turn actually runs a tool, and releases it on forget", () => {
+    const t = createWorkPhaseTracker();
+    t.note(S, "PreToolUse", "Read");
+    expect(t.trackedCount()).toBe(1);
+    t.forget(S);
+    expect(t.trackedCount()).toBe(0);
+  });
+
+  // A tracked session must still be able to RESET — the reset only allocates when there is a turn.
+  it("keeps resetting a tracked session's turn on a new prompt", () => {
+    const t = createWorkPhaseTracker();
+    t.note(S, "PreToolUse", "Edit");
+    t.note(S, "UserPromptSubmit");
+    expect(t.phaseOf(S)).toBeNull();
+    expect(t.trackedCount()).toBe(1); // still tracked, just empty
+  });
 });
