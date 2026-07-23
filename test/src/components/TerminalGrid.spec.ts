@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mount } from "@vue/test-utils";
+import { mount, DOMWrapper } from "@vue/test-utils";
 import { nextTick } from "vue";
 import TerminalGrid, { type CockpitRow } from "../../../src/components/TerminalGrid.vue";
 import type { Cell } from "../../../src/components/gridTabs.js";
@@ -67,7 +67,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   headerTextColor: null,
   ...over,
 });
-const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]) =>
+const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[], reorderable = false) =>
   mount(TerminalGrid, {
     props: {
       cells,
@@ -80,7 +80,7 @@ const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]
       home: "/work",
       openSessionIds: [],
       openCwds: [],
-      reorderable: false,
+      reorderable,
     },
   });
 
@@ -121,6 +121,26 @@ describe("TerminalGrid (page renderer)", () => {
     cellsOf(w)[0].vm.$emit("status", "waiting");
     expect(w.emitted("move")?.[0]).toEqual([7, 1]);
     expect(w.emitted("status")?.[0]).toEqual([7, "waiting"]);
+  });
+
+  it("puts a ⋮ reorder menu on cockpit rows only in manual mode, emitting move tagged with uid", async () => {
+    const cells = [cell(0, "s0"), cell(1, "s1"), cell(2)]; // two running + a trailing launch cell
+    const rows = [rosterRow(0), rosterRow(1)];
+    // auto mode (reorderable = false): the roster renders but carries no ⋮
+    const auto = mountCockpit(cells, 0, rows);
+    await nextTick();
+    expect(auto.findAll('[data-testid="cockpit-row"]')).toHaveLength(2); // roster is shown
+    expect(auto.find('[data-testid="cockpit-reorder"]').exists()).toBe(false);
+    // manual mode: a ⋮ per row, and moving the 2nd row up emits move tagged with its uid
+    const w = mountCockpit(cells, 0, rows, true);
+    await nextTick();
+    const kebabs = w.findAll('[data-testid="cockpit-reorder"]');
+    expect(kebabs).toHaveLength(2);
+    await kebabs[1].trigger("click");
+    // the dropdown is teleported to <body>, so reach it through the document
+    await new DOMWrapper(document.querySelector('[data-testid="reorder-up"]') as Element).trigger("click");
+    expect(w.emitted("move")?.[0]).toEqual([1, -1]);
+    w.unmount();
   });
 
   it("adds the zoomed class only when a cell is expanded", async () => {

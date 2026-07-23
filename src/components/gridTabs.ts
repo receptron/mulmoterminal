@@ -187,16 +187,23 @@ export function setSortMode(state: GridState, sortMode: SortMode): GridState {
   return { ...state, sortMode };
 }
 
-// Manual reorder: swap a cell with its neighbour (dir -1 = left, +1 = right) in the
-// flat list. No-op at the ends, and never swaps a cell past the trailing launch
-// cell (it stays last so "+ Terminal"/cancel keep working on it).
-export function moveCell(state: GridState, uid: number, dir: -1 | 1): GridState {
-  const i = state.cells.findIndex((c) => c.uid === uid);
+// Whether moveCell would actually reorder: not off either end, and never swapping a cell past
+// the trailing launch cell (it stays last so "+ Terminal"/cancel keep working on it). Drives the
+// enabled/disabled state of the roster's up/down menu items.
+export function canMoveCell(cells: Cell[], uid: number, dir: -1 | 1): boolean {
+  const i = cells.findIndex((c) => c.uid === uid);
   const j = i + dir;
-  if (i < 0 || j < 0 || j >= state.cells.length) return state;
-  if (isLaunchCell(state.cells[j]) && j === state.cells.length - 1) return state;
+  if (i < 0 || j < 0 || j >= cells.length) return false;
+  return !(isLaunchCell(cells[j]) && j === cells.length - 1);
+}
+
+// Manual reorder: swap a cell with its neighbour (dir -1 = left/up, +1 = right/down) in the
+// flat list. A no-op wherever canMoveCell says the swap isn't allowed.
+export function moveCell(state: GridState, uid: number, dir: -1 | 1): GridState {
+  if (!canMoveCell(state.cells, uid, dir)) return state;
+  const i = state.cells.findIndex((c) => c.uid === uid);
   const cells = state.cells.slice();
-  [cells[i], cells[j]] = [cells[j], cells[i]];
+  [cells[i], cells[i + dir]] = [cells[i + dir], cells[i]];
   return { ...state, cells };
 }
 
