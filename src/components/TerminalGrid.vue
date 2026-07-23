@@ -3,11 +3,12 @@ import { ref, computed, onMounted, onActivated, watch, nextTick } from "vue";
 import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
+import CockpitRowMenu from "./CockpitRowMenu.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { formatCwd } from "./cwdDisplay";
-import type { Cell, CellStatus } from "./gridTabs";
+import { canMoveCell, type Cell, type CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
 import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
@@ -220,14 +221,17 @@ watch(
     <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
          reply). Click a row to swap which terminal is enlarged. -->
     <aside v-if="zoomed && listMode" data-testid="cockpit" class="flex min-w-0 shrink-0 grow-0 basis-[360px] flex-col gap-[5px] overflow-y-auto bg-deep p-1.5">
-      <button
+      <div
         v-for="row in listRows"
         :key="row.uid"
-        type="button"
+        role="button"
+        :tabindex="0"
         data-testid="cockpit-row"
-        class="flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border border-l-[3px] bg-panel px-2.5 py-2 text-left text-fg [font:inherit] hover:brightness-[1.15]"
+        class="flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border border-l-[3px] bg-panel px-2.5 py-2 text-left text-fg hover:brightness-[1.15] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#4a9eff]"
         :class="row.uid === expandedUid ? 'border-[#4a9eff] border-l-[#4a9eff]' : 'border-border border-l-transparent'"
         @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
+        @keydown.enter.self.prevent="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
+        @keydown.space.self.prevent="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
       >
         <!-- The status + directory line is the row's header: it carries the directory's
              configured header colour as a bar, pulled to the row's top and side edges. A
@@ -252,6 +256,12 @@ watch(
           </span>
           <span v-if="row.agent === 'codex'" class="flex-none rounded-[4px] border border-border px-1 text-[10px] text-[#9ab]">codex</span>
           <span class="min-w-0 flex-auto truncate text-[11px] text-[var(--cell-header-fg,var(--text-dim))]">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
+          <CockpitRowMenu
+            v-if="reorderable"
+            :can-up="canMoveCell(cells, row.uid, -1)"
+            :can-down="canMoveCell(cells, row.uid, 1)"
+            @move="(dir) => emit('move', row.uid, dir)"
+          />
         </span>
         <span v-if="row.summary" data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
@@ -262,7 +272,7 @@ watch(
         <span v-if="row.response" data-testid="cockpit-line" class="line-clamp-3 overflow-hidden text-[12px] leading-[1.35] text-dim"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">reply</b> {{ row.response }}</span
         >
-      </button>
+      </div>
     </aside>
     <div ref="zoomMain" class="zoom-main" />
     <div class="grid" :style="gridStyle">

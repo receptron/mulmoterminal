@@ -16,6 +16,7 @@ import {
   insertCellAfter,
   shellCell,
   launchInCell,
+  canMoveCell,
   setSortMode,
   moveCell,
   orderCells,
@@ -320,6 +321,25 @@ describe("setSortMode / moveCell (manual reorder)", () => {
   it("moveCell won't push a cell past the trailing launch cell (it stays last)", () => {
     const s = make([...running(2), cell(2)]); // cell 2 is the trailing launcher
     expect(moveCell(s, 1, 1)).toBe(s);
+  });
+
+  // canMoveCell drives the enabled/disabled state of the roster's up/down menu items, so it must
+  // report exactly the moves moveCell would perform (used to gate them in TerminalGrid).
+  it("canMoveCell allows a swap in the middle", () => {
+    const cells = running(3);
+    expect(canMoveCell(cells, 1, -1)).toBe(true);
+    expect(canMoveCell(cells, 1, 1)).toBe(true);
+  });
+  it("canMoveCell forbids moving off either end or an unknown uid", () => {
+    const cells = running(3);
+    expect(canMoveCell(cells, 0, -1)).toBe(false); // already first
+    expect(canMoveCell(cells, 2, 1)).toBe(false); // already last
+    expect(canMoveCell(cells, 99, 1)).toBe(false); // unknown uid
+  });
+  it("canMoveCell forbids swapping past the trailing launch cell", () => {
+    const cells = [...running(2), cell(2)]; // cell 2 is the trailing launcher
+    expect(canMoveCell(cells, 1, 1)).toBe(false); // would push cell 1 into the launcher's last slot
+    expect(canMoveCell(cells, 0, 1)).toBe(true); // cell 0 down into cell 1 is fine
   });
 });
 
