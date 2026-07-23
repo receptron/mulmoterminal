@@ -65,6 +65,8 @@ export interface AppRouteDeps {
   freshenRosterTitle: ReturnType<typeof createTitleManager>["freshenRosterTitle"];
   forgetTitle: (id: string) => void;
   noteTitleTurn: (id: string, prompt: string) => void;
+  /** Feed the live turn's tool names for the phone's planning-vs-editing status (#727). */
+  noteWorkPhase: (id: string, event: string, toolName?: string) => void;
   maybeGenerateTitle: (id: string, cwd: string | undefined) => Promise<void>;
   reap: (id: string) => void;
   setWorking: (id: string, working: boolean, event?: string) => void;
@@ -185,6 +187,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
     publishActivity: (id) => deps.publishActivity(id),
     forgetTitle: deps.forgetTitle,
     noteTitleTurn: deps.noteTitleTurn,
+    noteWorkPhase: deps.noteWorkPhase,
     maybeGenerateTitle: deps.maybeGenerateTitle,
     recordToolCallStart: deps.toolStores.recordToolCallStart,
     recordToolCallEnd: deps.toolStores.recordToolCallEnd,

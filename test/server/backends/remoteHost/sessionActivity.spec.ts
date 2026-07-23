@@ -2,16 +2,24 @@
 import { describe, it, expect, vi } from "vitest";
 
 import { createSessionActivityPublisher, type SessionActivityStore } from "../../../../server/backends/remoteHost/sessionActivity.js";
+import type { WorkPhase } from "../../../../server/session/workPhase.js";
 
 const UID = "user-1";
 const HOST = "mulmoterminal";
 
 const recorder = () => {
-  const writes: Array<{ sessionId: string; rev: number; working: boolean; waiting: boolean }> = [];
+  const writes: Array<{ sessionId: string; rev: number; working: boolean; waiting: boolean; event?: string | null; workPhase?: WorkPhase | null }> = [];
   const removes: string[] = [];
   const store: SessionActivityStore = {
     write: async (_uid, _hostId, sessionId, payload) => {
-      writes.push({ sessionId, rev: payload.rev, working: payload.working, waiting: payload.waiting });
+      writes.push({
+        sessionId,
+        rev: payload.rev,
+        working: payload.working,
+        waiting: payload.waiting,
+        event: payload.event,
+        workPhase: payload.workPhase,
+      });
     },
     remove: async (_uid, _hostId, sessionId) => {
       removes.push(sessionId);
@@ -92,6 +100,43 @@ describe("createSessionActivityPublisher", () => {
     activity.publish("s1", { working: true, waiting: false });
     expect(writes).toHaveLength(2);
     expect(writes.at(-1)?.rev).toBe(1);
+  });
+
+  // #727: the phone speaks the roster's status vocabulary, which needs these two alongside the
+  // flags — and the dedup key has to carry them, or a change the user can see is swallowed.
+  it("carries the event and the work phase into the written doc", () => {
+    const { writes, store } = recorder();
+    publisher(store).publish("s1", { working: true, waiting: false, event: "UserPromptSubmit", workPhase: "planning" });
+    expect(writes.at(-1)).toMatchObject({ event: "UserPromptSubmit", workPhase: "planning" });
+  });
+
+  it("writes when only the work phase moves (planning -> implementing)", () => {
+    const { writes, store } = recorder();
+    const activity = publisher(store);
+    activity.publish("s1", { working: true, waiting: false, event: "PreToolUse", workPhase: "planning" });
+    activity.publish("s1", { working: true, waiting: false, event: "PreToolUse", workPhase: "implementing" });
+    expect(writes).toHaveLength(2);
+    expect(writes.at(-1)).toMatchObject({ workPhase: "implementing" });
+  });
+
+  // blocked (Notification) vs done (Stop) share `waiting: true` — without the event in the key the
+  // phone would keep showing the superseded one.
+  it("writes when only the event moves (blocked -> done)", () => {
+    const { writes, store } = recorder();
+    const activity = publisher(store);
+    activity.publish("s1", { working: false, waiting: true, event: "Notification", workPhase: null });
+    activity.publish("s1", { working: false, waiting: true, event: "Stop", workPhase: null });
+    expect(writes).toHaveLength(2);
+    expect(writes.at(-1)).toMatchObject({ event: "Stop" });
+  });
+
+  it("still dedups when every published field is unchanged", () => {
+    const { writes, store } = recorder();
+    const activity = publisher(store);
+    const state = { working: true, waiting: false, event: "PreToolUse", workPhase: "implementing" } as const;
+    activity.publish("s1", { ...state });
+    activity.publish("s1", { ...state });
+    expect(writes).toHaveLength(1);
   });
 
   // The caller sits on the synchronous hook path serving Claude Code's own requests.

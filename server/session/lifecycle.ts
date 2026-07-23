@@ -32,6 +32,7 @@ import {
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
 import { sessionRow, shouldRefreshReply } from "./activity-transition.js";
 import { flagEffect, type ActivityFlag } from "./activity-flag.js";
+import type { WorkPhase } from "./workPhase.js";
 import { readLatestResponse } from "./session-reads.js";
 import { cleanupSessionSettings } from "./session-settings.js";
 import { cleanupSandbox } from "../infra/sandbox.js";
@@ -45,8 +46,15 @@ export interface SessionLifecycleDeps {
   publish: (channel: string, data: unknown) => void;
   /** Drop a session's AI title so the next turn regenerates it. */
   forgetTitle: (id: string) => void;
-  /** Mirror of working/waiting for the phone's viewer. */
-  sessionActivityPublisher: { publish: (id: string, state: { working: boolean; waiting: boolean }) => void; forget: (id: string) => void };
+  /** Mirror of the session's status for the phone's viewer. */
+  sessionActivityPublisher: {
+    publish: (id: string, state: { working: boolean; waiting: boolean; event: string | null; workPhase: WorkPhase | null }) => void;
+    forget: (id: string) => void;
+  };
+  /** The live turn's planning-vs-implementing phase, or null when nothing has been observed (#727). */
+  workPhaseOf: (id: string) => WorkPhase | null;
+  /** Drop that tracking when the session is torn down. */
+  forgetWorkPhase: (id: string) => void;
 }
 
 // Timers live per process, not per factory call — there is one server.
@@ -131,6 +139,7 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
   deps.forgetTitle(id);
   deps.sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
+  deps.forgetWorkPhase(id); // the live turn dies with the session
   titleInFlight.delete(id);
   lastTitledUserTurns.delete(id); // teardown only — kept across /clear as the re-title baseline
   lastTitleAttemptMs.delete(id);
@@ -167,7 +176,7 @@ function publishActivity(deps: SessionLifecycleDeps, id: string) {
     aiTitle: aiTitles.get(id),
     lastResponse: lastResponses.get(id),
   });
-  deps.sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting });
+  deps.sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting, event: row.event, workPhase: deps.workPhaseOf(id) });
   deps.publish(SESSIONS_CHANNEL, row);
 }
 

@@ -51,6 +51,7 @@ import { initAccountingBackend } from "./backends/accounting.js";
 import { initFeedsBackend } from "./backends/feeds.js";
 import { HOST_ID as REMOTE_HOST_ID, initRemoteHostBackend } from "./backends/remoteHost/index.js";
 import { createSessionActivityPublisher, firestoreSessionActivityStore } from "./backends/remoteHost/sessionActivity.js";
+import { createWorkPhaseTracker } from "./session/work-phase-tracker.js";
 import { currentFirestore, currentUid } from "./backends/remoteHost/session.js";
 import { feedRefreshTaskDef, type AgentWorkerRunner } from "@mulmoclaude/core/feeds/server";
 import { initWorkspaceSetup } from "./backends/workspaceSetup.js";
@@ -158,10 +159,17 @@ const sessionActivityPublisher = createSessionActivityPublisher({
 
 // Session teardown + activity publishing (session/lifecycle.ts). `forgetTitle` is bound
 // lazily because the title manager below needs publishActivity — the cycle is real.
+// The live turn's planning-vs-editing phase, fed by the hook route and read by the activity
+// publisher — the phone's status vocabulary needs it, and the publish path can't read the
+// transcript the roster parses for the same answer (#727).
+const workPhaseTracker = createWorkPhaseTracker();
+
 const lifecycle = createSessionLifecycle({
   publish: (channel, data) => pubsub?.publish(channel, data),
   forgetTitle: (id) => forgetTitle(id),
   sessionActivityPublisher,
+  workPhaseOf: (id) => workPhaseTracker.phaseOf(id),
+  forgetWorkPhase: (id) => workPhaseTracker.forget(id),
 });
 const { cancelReap, reap, armReapForDetached, publishActivity, setWorking, setWaiting } = lifecycle;
 
@@ -223,6 +231,7 @@ mountAppRoutes(app, {
   freshenRosterTitle,
   forgetTitle,
   noteTitleTurn,
+  noteWorkPhase: (id, event, toolName) => workPhaseTracker.note(id, event, toolName),
   maybeGenerateTitle,
   reap,
   setWorking,
