@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { activityHookEffects, buildPushText, pushKindFor, resolveHookSessionId } from "../../../server/session/activity-hook.js";
+import path from "node:path";
+import { activityHookEffects, buildPushText, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../../../server/session/activity-hook.js";
+import { dirConfigWriteTarget } from "../../../server/config/dir-config.js";
 
 describe("activityHookEffects", () => {
   it("UserPromptSubmit sets working regardless of active", () => {
@@ -169,5 +171,35 @@ describe("resolveHookSessionId", () => {
 
   it("accepts either case, since the shape check is case-insensitive", () => {
     expect(resolve(undefined, UUID.toUpperCase())).toBe(UUID.toUpperCase());
+  });
+});
+
+describe("resolveHookCwd", () => {
+  const spawnCwd = path.resolve("/spawn/dir");
+  const liveCwd = path.resolve("/live/dir");
+
+  // The regression this fixes: the CLI-reported cwd is the session's live directory, while the
+  // PTY entry only holds the SPAWN dir. When both are present the live one must win — otherwise
+  // a session that `cd`ed writes a relative file that resolves against the stale spawn dir.
+  it("prefers the payload cwd over the spawn cwd", () => {
+    expect(resolveHookCwd(liveCwd, spawnCwd)).toBe(liveCwd);
+  });
+
+  it("falls back to the spawn cwd when the payload carries no usable cwd", () => {
+    expect(resolveHookCwd(undefined, spawnCwd)).toBe(spawnCwd);
+    expect(resolveHookCwd(42, spawnCwd)).toBe(spawnCwd);
+    expect(resolveHookCwd({ cwd: liveCwd }, spawnCwd)).toBe(spawnCwd);
+  });
+
+  it("is undefined when neither source names a directory", () => {
+    expect(resolveHookCwd(undefined, undefined)).toBeUndefined();
+    expect(resolveHookCwd(null, undefined)).toBeUndefined();
+  });
+
+  // End to end with the live-reload target: a relative `.mulmoterminal.json` write must publish
+  // the directory under the payload cwd, not the spawn cwd — the two used to disagree.
+  it("resolves a relative dir-config write under the payload cwd, not the spawn cwd", () => {
+    const cwd = resolveHookCwd(liveCwd, spawnCwd);
+    expect(dirConfigWriteTarget("Write", { file_path: ".mulmoterminal.json" }, cwd ?? null)).toBe(liveCwd);
   });
 });
