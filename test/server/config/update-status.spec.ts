@@ -1,54 +1,47 @@
-import { describe, it, expect } from "vitest";
-import { parseCacheEntry, isCacheFresh } from "../../../server/config/update-status.js";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-describe("parseCacheEntry", () => {
-  it("reads a cached notice with its timestamp", () => {
-    expect(parseCacheEntry({ notice: "Update available: git pull", at: 1000 })).toEqual({
-      notice: "Update available: git pull",
-      at: 1000,
-    });
-  });
+// vi.mock is hoisted above imports, so the doubles it returns must be created inside a
+// vi.hoisted block rather than referencing top-level consts (which aren't initialized yet).
+const { computeUpdateNotice, isUpdateCheckDisabled } = vi.hoisted(() => ({
+  computeUpdateNotice: vi.fn<(pkgDir: string, version: string) => Promise<string | null>>(),
+  isUpdateCheckDisabled: vi.fn<(env: Record<string, string | undefined>) => boolean>(),
+}));
+vi.mock("../../../bin/update-check.js", () => ({ computeUpdateNotice, isUpdateCheckDisabled }));
 
-  it("keeps the timestamp but nulls a clean notice", () => {
-    expect(parseCacheEntry({ notice: null, at: 1000 })).toEqual({ notice: null, at: 1000 });
-    expect(parseCacheEntry({ notice: "", at: 1000 })).toEqual({ notice: null, at: 1000 });
-  });
+import { refreshUpdateStatus, getUpdateStatus } from "../../../server/config/update-status.js";
 
-  // No usable timestamp => no usable cache => the check must re-run rather than trust it.
-  it("is null without a numeric timestamp", () => {
-    expect(parseCacheEntry({ notice: "x" })).toBeNull();
-    expect(parseCacheEntry({ notice: "x", at: "soon" })).toBeNull();
-  });
-
-  // A hand-edited or half-written file must never throw the route.
-  it("is null for junk", () => {
-    expect(parseCacheEntry(null)).toBeNull();
-    expect(parseCacheEntry("nope")).toBeNull();
-    expect(parseCacheEntry(42)).toBeNull();
-  });
+beforeEach(() => {
+  computeUpdateNotice.mockReset();
+  isUpdateCheckDisabled.mockReset();
 });
 
-describe("isCacheFresh", () => {
-  const TTL = 60 * 60 * 1000;
-
-  it("is fresh within the ttl", () => {
-    expect(isCacheFresh(1000, 1000 + TTL - 1, TTL)).toBe(true);
-    expect(isCacheFresh(1000, 1000, TTL)).toBe(true);
+describe("refreshUpdateStatus", () => {
+  it("caches the computed notice for the route to serve", async () => {
+    isUpdateCheckDisabled.mockReturnValue(false);
+    computeUpdateNotice.mockResolvedValue("Update available: a1b2c3d → origin  ·  run: git pull");
+    await refreshUpdateStatus();
+    expect(getUpdateStatus()).toEqual({ notice: "Update available: a1b2c3d → origin  ·  run: git pull" });
   });
 
-  it("is stale at or past the ttl", () => {
-    expect(isCacheFresh(1000, 1000 + TTL, TTL)).toBe(false);
-    expect(isCacheFresh(1000, 1000 + TTL + 1, TTL)).toBe(false);
+  it("caches null when the checkout is current", async () => {
+    isUpdateCheckDisabled.mockReturnValue(false);
+    computeUpdateNotice.mockResolvedValue(null);
+    await refreshUpdateStatus();
+    expect(getUpdateStatus()).toEqual({ notice: null });
   });
 
-  // A timestamp from the future (clock skew, a copied file) isn't trustworthy — re-check.
-  it("rejects a future timestamp", () => {
-    expect(isCacheFresh(2000, 1000, TTL)).toBe(false);
+  // Opt-out must skip the probe entirely, not just hide the result.
+  it("stays hidden and skips the check when opted out", async () => {
+    isUpdateCheckDisabled.mockReturnValue(true);
+    await refreshUpdateStatus();
+    expect(getUpdateStatus()).toEqual({ notice: null });
+    expect(computeUpdateNotice).not.toHaveBeenCalled();
   });
 
-  it("rejects a missing / non-numeric timestamp", () => {
-    expect(isCacheFresh(undefined, 1000, TTL)).toBe(false);
-    expect(isCacheFresh(0, 1000, TTL)).toBe(false);
-    expect(isCacheFresh("1000", 1000, TTL)).toBe(false);
+  // A thrown check must not surface — the badge just keeps its last value.
+  it("does not throw when the check rejects", async () => {
+    isUpdateCheckDisabled.mockReturnValue(false);
+    computeUpdateNotice.mockRejectedValue(new Error("offline"));
+    await expect(refreshUpdateStatus()).resolves.toBeUndefined();
   });
 });
