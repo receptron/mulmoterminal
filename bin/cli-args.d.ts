@@ -7,3 +7,5 @@ export declare function portInUseAction(explicit: boolean, isTTY: boolean | unde
 export declare function secondInstancePrompt(port: number): string;
 export declare function saysYes(answer: unknown): boolean;
 export declare const SECOND_INSTANCE_NOTE: string;
+export declare const MIN_NODE_LABEL: string;
+export declare function nodeMeetsMinimum(version: string): boolean;
