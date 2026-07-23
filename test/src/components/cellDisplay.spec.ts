@@ -50,19 +50,18 @@ describe("relativeTimeFromIso", () => {
   });
 });
 
-// The bell's compact form: floor (shared with relativeTime), no "ago" suffix, a 45-second
-// just-now cutoff. floor here is deliberate — round would read 90s as "2m" before two minutes
-// have passed. A consequence is that 45–59s reads "0m"; that window is transient in the live UI.
+// The bell's compact form: same floor and same "under a minute is just now" boundary as
+// relativeTime, differing only in dropping the "ago" suffix. Sharing the boundary is the
+// point — the bell and the grid agree on when something stops being "just now".
 describe("compactRelativeTime", () => {
-  it("reads just now below the 45-second cutoff", () => {
-    expect(compactRelativeTime(secondsAgo(0), NOW)).toBe("just now");
-    expect(compactRelativeTime(secondsAgo(44), NOW)).toBe("just now");
+  // Under a minute is "just now"; the previous seconds-based cutoff let 45–59s read "0m".
+  it.each([[0], [44], [59]])("reads %i seconds ago as just now", (seconds) => {
+    expect(compactRelativeTime(secondsAgo(seconds), NOW)).toBe("just now");
   });
 
-  // 45s is the boundary: at the cutoff it is no longer "just now", and floored minutes is 0.
-  // Moving the cutoff to 60 would flip this back to "just now" — this pins it.
-  it("crosses out of just now at exactly 45 seconds", () => {
-    expect(compactRelativeTime(secondsAgo(45), NOW)).toBe("0m");
+  // The boundary is exactly one minute. Moving `minutes < 1` up would flip this to "just now".
+  it("becomes 1m at exactly 60 seconds", () => {
+    expect(compactRelativeTime(secondsAgo(60), NOW)).toBe("1m");
   });
 
   // floors, never rounds: 90s is one minute, not two; 90min is one hour; 36h is one day.
