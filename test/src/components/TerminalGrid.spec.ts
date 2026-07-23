@@ -63,6 +63,8 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   fallback: null,
   phase: "none",
   workPhase: null,
+  headerColor: null,
+  headerTextColor: null,
   ...over,
 });
 const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]) =>
@@ -253,6 +255,21 @@ describe("grid cockpit (list view)", () => {
     const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { phase: "none" })]);
     await nextTick();
     expect(w.find('[data-testid="cockpit-phase"]').exists()).toBe(false);
+  });
+
+  it("tints a row with its directory's configured header colour", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { headerColor: "#123456", headerTextColor: "#abcdef" })]);
+    await nextTick();
+    const style = w.find('[data-testid="cockpit-row"]').attributes("style") ?? "";
+    expect(style).toContain("--cell-header-bg: #123456");
+    expect(style).toContain("--cell-header-fg: #abcdef");
+  });
+
+  it("leaves a row on the theme default when its directory sets no header colour", async () => {
+    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0, { headerColor: null, headerTextColor: null })]);
+    await nextTick();
+    const style = w.find('[data-testid="cockpit-row"]').attributes("style") ?? "";
+    expect(style).not.toContain("--cell-header-bg");
   });
 
   it.each([

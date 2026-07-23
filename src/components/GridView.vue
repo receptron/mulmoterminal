@@ -44,6 +44,8 @@ import { registerNewTerminalHandler, type NewTerminalRequest } from "../composab
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
+import { fetchDirConfig, invalidateDirConfig } from "../composables/useDirConfig";
+import { usePubSub } from "../composables/usePubSub";
 
 // The multi-terminal grid view, shown at /terminals. Leaving the grid is just a
 // route push from the shared toolbar (Chat / Collections / a favorite), so there's
@@ -149,6 +151,31 @@ async function seedPhase(cwd: string) {
 }
 // Drop what no cell asks for any more, so a day of relaunching cells doesn't leave an entry
 // behind for every session the grid ever showed.
+// The directory chrome each roster row is tinted with — its configured header colour, so
+// a row reads as the same directory as its terminal's header. Keyed by cwd (the config is
+// the directory's, like the phase), fetched through the shared dir-config cache.
+type RowChrome = { headerColor: string | null; headerTextColor: string | null };
+const chromeByCwd = reactive(new Map<string, RowChrome>());
+async function seedChrome(cwd: string) {
+  const config = await fetchDirConfig(cwd);
+  chromeByCwd.set(cwd, { headerColor: config.headerColor, headerTextColor: config.headerTextColor });
+}
+const refreshAllChrome = () => {
+  const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
+  cwds.forEach((cwd) => void seedChrome(cwd));
+};
+// A user editing .mulmoterminal.json is announced on the dir-config channel; re-fetch that
+// directory's chrome so an open roster recolours without a reload.
+const cwdOf = (data: unknown): string | null =>
+  typeof data === "object" && data !== null && typeof (data as { cwd?: unknown }).cwd === "string" ? (data as { cwd: string }).cwd : null;
+usePubSub().subscribe("dir-config", (data) => {
+  const cwd = cwdOf(data);
+  if (cwd) {
+    invalidateDirConfig(cwd);
+    void seedChrome(cwd);
+  }
+});
+
 const forgetClosedCells = () => {
   const sessions = new Set(state.value.cells.map((c) => c.session).filter((s): s is string => !!s));
   const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
@@ -160,6 +187,7 @@ const forgetClosedCells = () => {
     phaseByCwd.delete(cwd);
     latestPhaseSeed.delete(cwd);
   });
+  staleCacheKeys(chromeByCwd.keys(), cwds).forEach((cwd) => chromeByCwd.delete(cwd));
 };
 
 // This watch runs whether or not the roster is on screen, and it is what fills sessionMeta,
@@ -180,10 +208,12 @@ const refreshAllPhases = () => {
   const cwds = new Set(state.value.cells.map((c) => c.cwd).filter((c): c is string => c !== null));
   cwds.forEach((cwd) => void seedPhase(cwd));
 };
+
 const refreshRoster = () => {
   forgetClosedCells();
   refreshAllMeta();
   refreshAllPhases();
+  refreshAllChrome();
 };
 const ROSTER_POLL_MS = 4000;
 let rosterTimer: ReturnType<typeof setInterval> | null = null;
@@ -230,6 +260,8 @@ const listRows = computed(() =>
       fallback: fallbackLabel(c),
       phase: (c.cwd ? phaseByCwd.get(c.cwd) : undefined) ?? ("none" as PrPhase),
       workPhase: meta?.workPhase ?? null,
+      headerColor: (c.cwd ? chromeByCwd.get(c.cwd)?.headerColor : null) ?? null,
+      headerTextColor: (c.cwd ? chromeByCwd.get(c.cwd)?.headerTextColor : null) ?? null,
     };
   }),
 );
