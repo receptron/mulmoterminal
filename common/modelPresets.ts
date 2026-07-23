@@ -303,9 +303,11 @@ export const MODEL_PRESETS: readonly ModelPreset[] = [
 // than appearing twice.
 export function presetsForProvider(providerId: string, userModels: readonly string[] = []): ModelPreset[] {
   const presets = MODEL_PRESETS.filter((preset) => preset.provider === providerId);
-  const known = new Set(presets.map((preset) => preset.id));
+  // Match `presetFor` (modelOption.ts), which compares ids case-insensitively: a user
+  // entry that only differs from a preset in case is the same model, not a new one.
+  const known = new Set(presets.map((preset) => preset.id.toLowerCase()));
   const added: ModelPreset[] = userModels
-    .filter((id) => !known.has(id))
+    .filter((id) => !known.has(id.toLowerCase()))
     .map((id) => ({ provider: providerId, id, label: id, contextLength: 0, pricePerMTok: { input: 0, output: 0 }, trials: { status: "unmeasured" } }));
   return [...presets, ...added];
 }
