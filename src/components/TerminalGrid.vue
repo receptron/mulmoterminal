@@ -13,6 +13,7 @@ import { phaseDisplay, WORK_WORD, type PrPhase, type WorkPhase } from "./rosterP
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import { shouldFlipZoom } from "./cellChromeRules";
+import { headerStyleFor } from "./cellHeaderStyle";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -33,6 +34,8 @@ export interface CockpitRow {
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
   phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
   workPhase: WorkPhase | null; // planning vs editing while working; null when unknown / not working
+  headerColor: string | null; // the directory's configured header background, tinting the row
+  headerTextColor: string | null; // and its text colour, so the row stays legible on that tint
 }
 const STATUS_WORD: Record<CellStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
 // A working cell shows what it's doing (planning / editing) when known, else the plain word.
@@ -222,11 +225,18 @@ watch(
         :key="row.uid"
         type="button"
         data-testid="cockpit-row"
-        class="flex cursor-pointer flex-col gap-1 rounded-lg border border-l-[3px] bg-panel px-2.5 py-2 text-left text-fg [font:inherit] hover:brightness-[1.15]"
+        class="flex cursor-pointer flex-col gap-1 overflow-hidden rounded-lg border border-l-[3px] bg-panel px-2.5 py-2 text-left text-fg [font:inherit] hover:brightness-[1.15]"
         :class="row.uid === expandedUid ? 'border-[#4a9eff] border-l-[#4a9eff]' : 'border-border border-l-transparent'"
         @click="row.uid !== expandedUid && emit('toggle-expand', row.uid)"
       >
-        <span class="flex min-w-0 items-center gap-1.5">
+        <!-- The status + directory line is the row's header: it carries the directory's
+             configured header colour as a bar, pulled to the row's top and side edges. A
+             directory with no colour set leaves the bar transparent. -->
+        <span
+          data-testid="cockpit-header"
+          class="-mx-2.5 -mt-2 flex min-w-0 items-center gap-1.5 bg-[var(--cell-header-bg,transparent)] px-2.5 py-1.5 text-[var(--cell-header-fg,inherit)]"
+          :style="headerStyleFor(row.headerColor, row.headerTextColor)"
+        >
           <span class="h-2 w-2 flex-none rounded-full" :class="DOT_CLASS[row.status]" aria-hidden="true" />
           <span data-testid="cockpit-badge" class="flex-none rounded-full px-1.5 py-px text-[10px] font-bold" :class="BADGE_CLASS[row.status]">{{
             statusWord(row)
@@ -241,7 +251,7 @@ watch(
             {{ phaseDisplay(row.phase)?.label }}
           </span>
           <span v-if="row.agent === 'codex'" class="flex-none rounded-[4px] border border-border px-1 text-[10px] text-[#9ab]">codex</span>
-          <span class="min-w-0 flex-auto truncate text-[11px] text-dim">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
+          <span class="min-w-0 flex-auto truncate text-[11px] text-[var(--cell-header-fg,var(--text-dim))]">{{ formatCwd(row.cwd, home, 44) || "—" }}</span>
         </span>
         <span v-if="row.summary" data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
