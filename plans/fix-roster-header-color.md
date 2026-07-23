@@ -11,15 +11,15 @@ grid expand したとき、サイドメニューのロスター（既定の cock
 
 ## 変更
 
-**ロスター行の背景を、そのターミナルの header color に染める。**（見た目はユーザー選択）
+**ロスター行の上部（status バッジ ＋ ディレクトリ名の行）をヘッダー帯にして、そこに header color の背景をつける。**（行まるごとは重すぎたため、実機フィードバックでヘッダー帯方式に変更）
 
 `phaseByCwd` と同じ reactive Map パターンを `chromeByCwd` として追加:
 
 - `GridView.vue`: `chromeByCwd`（cwd → `{headerColor, headerTextColor}`）を `fetchDirConfig`（共有キャッシュ）から seed。`dir-config` pubsub チャネルを購読し、`.mulmoterminal.json` 編集時に該当 cwd を invalidate + 再 seed → 開いたままのロスターがリロードなしで再着色。`forgetClosedCells` で prune
 - `listRows` に `headerColor` / `headerTextColor` を追加
-- `TerminalGrid.vue`: `CockpitRow` に2フィールド追加。ロスター行に `:style="headerStyleFor(row.headerColor, row.headerTextColor)"`（既存の純関数を再利用）を適用し、背景を `bg-[var(--cell-header-bg,var(--bg-panel))]`、文字色を `text-[var(--cell-header-fg,var(--text))]` に。TerminalCell のヘッダーと同じ CSS 変数の使い方
+- `TerminalGrid.vue`: `CockpitRow` に2フィールド追加。**行の上部の status+cwd の span をヘッダー帯**にし、`:style="headerStyleFor(...)"`（既存の純関数を再利用）＋ `bg-[var(--cell-header-bg,transparent)]` を適用。負マージン（`-mx-2.5 -mt-2`）で行の上端・両端まで帯を伸ばす。行本体（summary/prompt/reply）はテーマ既定のまま。cwd テキストは `text-[var(--cell-header-fg,var(--text-dim))]` で、色付き帯では headerTextColor、未設定では従来の dim
 
-未設定のディレクトリは CSS 変数がセットされず、テーマ既定（`--bg-panel` / `--text`）にフォールバック。
+未設定のディレクトリは CSS 変数がセットされず、ヘッダー帯は透明（＝行と一体で従来の見た目）にフォールバック。
 
 ### TDZ 注意
 
