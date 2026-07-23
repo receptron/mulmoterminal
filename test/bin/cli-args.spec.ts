@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 
-import { parsePortArg, chooseCwd, portInUseAction, portInUseMessage, secondInstancePrompt, saysYes, SECOND_INSTANCE_NOTE } from "../../bin/cli-args.js";
+import {
+  parsePortArg,
+  chooseCwd,
+  portInUseAction,
+  portInUseMessage,
+  secondInstancePrompt,
+  saysYes,
+  SECOND_INSTANCE_NOTE,
+  nodeMeetsMinimum,
+  MIN_NODE_LABEL,
+} from "../../bin/cli-args.js";
 
 const DEFAULT_PORT = 34567;
 const port = (args: string[]) => parsePortArg(args, DEFAULT_PORT);
@@ -241,5 +251,45 @@ describe("SECOND_INSTANCE_NOTE", () => {
   // long enough to read at a glance, not a paragraph to scroll past.
   it("stays short", () => {
     expect(SECOND_INSTANCE_NOTE.split("\n")).toHaveLength(2);
+  });
+});
+
+// The `init` pre-flight tick, fed process.versions.node ("22.9.0", "22.9.0-nightly…").
+// Display-only: a wrong answer changes a ✓/✗, it never blocks the launch.
+describe("nodeMeetsMinimum", () => {
+  it("passes the minimum and anything above it", () => {
+    expect(nodeMeetsMinimum("22.9.0")).toBe(true);
+    expect(nodeMeetsMinimum("22.10.0")).toBe(true);
+    expect(nodeMeetsMinimum("23.0.0")).toBe(true);
+  });
+
+  it("fails a lower minor on the boundary major", () => {
+    expect(nodeMeetsMinimum("22.8.0")).toBe(false);
+  });
+
+  it("fails a lower major even with a high minor", () => {
+    expect(nodeMeetsMinimum("21.9.0")).toBe(false);
+  });
+
+  // Number.parseInt stops at the first non-digit, so the nightly tag on the patch never
+  // reaches the comparison — major.minor is all that gates.
+  it("judges a nightly by its major.minor", () => {
+    expect(nodeMeetsMinimum("22.9.0-nightly20240101abcd")).toBe(true);
+    expect(nodeMeetsMinimum("22.8.0-nightly20240101abcd")).toBe(false);
+  });
+
+  // An unreadable version parses to NaN, and every comparison against NaN is false, so it
+  // reads as "below minimum" — the safe direction for a check that only draws a tick.
+  describe("an unreadable version reads as below minimum", () => {
+    it.each(["", "not-a-version", "vvv", "22", "22.x"])("fails %o", (value) => {
+      expect(nodeMeetsMinimum(value)).toBe(false);
+    });
+  });
+
+  // The message's "needs ≥ x.y" and the comparison have to name the same minimum, or the
+  // tick and the advice disagree.
+  it("labels the minimum it enforces", () => {
+    expect(MIN_NODE_LABEL).toBe("22.9");
+    expect(nodeMeetsMinimum(`${MIN_NODE_LABEL}.0`)).toBe(true);
   });
 });

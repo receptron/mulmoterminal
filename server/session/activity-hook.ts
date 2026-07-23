@@ -120,3 +120,12 @@ export function resolveHookSessionId(header: unknown, bodyValue: unknown, isVali
   const usable = (value: unknown): string | null => (typeof value === "string" && isValidId(value) ? value : null);
   return usable(header) ?? usable(bodyValue);
 }
+
+// Which directory a hook's relative paths resolve against. The CLI reports its live cwd in
+// the payload, but the PTY table only holds the dir the session was SPAWNED in — that value
+// goes stale the moment the session `cd`s. So the payload cwd wins, falling back to the spawn
+// dir only when the hook carries none. Shared by every hook path so they can't disagree on
+// which directory a relative write (e.g. a `.mulmoterminal.json` live-reload) belongs to.
+export function resolveHookCwd(bodyCwd: unknown, spawnCwd: string | undefined): string | undefined {
+  return typeof bodyCwd === "string" ? bodyCwd : spawnCwd;
+}

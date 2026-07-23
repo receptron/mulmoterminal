@@ -19,6 +19,7 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+import { median } from "../common/median.js";
 import { claudeAdapter } from "../server/agents/claude.js";
 import { loadAppConfig } from "../server/config/app-config.js";
 import { cleanupSessionSettings, settingsArgument } from "../server/session/session-settings.js";
@@ -51,12 +52,6 @@ export interface TrialResult {
 }
 
 const UNREACHABLE = /No endpoints available|No endpoints found/i;
-
-const median = (values: number[]): number | null => {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-};
 
 // One attempt, through the SAME path a real session uses: the provider environment in a
 // settings file, the token stripped from the child's own environment.

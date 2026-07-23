@@ -6,6 +6,7 @@
 import { ref, watch } from "vue";
 import { usePrsView } from "../composables/usePrsView";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
+import { relativeTimeFromIso } from "./cellDisplay";
 
 type CiState = "passing" | "failing" | "pending" | "none";
 interface PrItem {
@@ -78,16 +79,6 @@ async function load(): Promise<void> {
 // Re-fetch each time the view is entered (open PRs change as work lands elsewhere).
 watch(isOpen, (open) => open && load(), { immediate: true });
 
-function relativeTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return "";
-  const min = Math.floor((Date.now() - t) / 60000);
-  if (min < 1) return "just now";
-  if (min < 60) return `${min}m ago`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr}h ago`;
-  return `${Math.floor(hr / 24)}d ago`;
-}
 const CI_TITLE: Record<CiState, string> = { passing: "Checks passing", failing: "Checks failing", pending: "Checks running", none: "No checks" };
 const REVIEW_LABEL: Record<string, string> = { APPROVED: "approved", CHANGES_REQUESTED: "changes requested", REVIEW_REQUIRED: "review required" };
 
@@ -166,7 +157,7 @@ useEscapeToClose(isOpen, close);
                 <span v-if="pr.review" class="flex-none rounded-[10px] border px-1.5 py-px text-[11px]" :class="reviewTagClass(pr.review)">{{
                   REVIEW_LABEL[pr.review] ?? pr.review.toLowerCase()
                 }}</span>
-                <span class="flex-none text-[11px] text-dim">{{ pr.author }} · {{ relativeTime(pr.updatedAt) }}</span>
+                <span class="flex-none text-[11px] text-dim">{{ pr.author }} · {{ relativeTimeFromIso(pr.updatedAt, Date.now()) }}</span>
               </a>
             </li>
           </ul>
@@ -197,7 +188,7 @@ useEscapeToClose(isOpen, close);
               >
                 <span class="flex-none font-[ui-monospace,monospace] text-dim">#{{ iss.number }}</span>
                 <span class="min-w-0 flex-auto truncate">{{ iss.title }}</span>
-                <span class="flex-none text-[11px] text-dim">{{ iss.author }} · {{ relativeTime(iss.updatedAt) }}</span>
+                <span class="flex-none text-[11px] text-dim">{{ iss.author }} · {{ relativeTimeFromIso(iss.updatedAt, Date.now()) }}</span>
               </a>
             </li>
           </ul>

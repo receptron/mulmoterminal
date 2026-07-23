@@ -4,9 +4,10 @@
 // section derived from the shared graph. Navigation is delegated up via the
 // useWikiBrowse helpers — clicking a link/backlink pushes /wiki/pages/<slug>.
 import { computed } from "vue";
-import { resolveLinkTarget, wikiSlugify, isSafeWikiSlug, incomingLinks, type WikiGraph } from "@mulmoclaude/core/wiki";
+import { incomingLinks, type WikiGraph } from "@mulmoclaude/core/wiki";
 import { renderWikiHtml } from "../wikiMarkdown";
 import { wikiGotoPage } from "../composables/useWikiBrowse";
+import { resolveWikiClickTarget } from "./wikiClickTarget";
 import type { WikiPage } from "../wikiApi";
 
 const props = defineProps<{ slug: string; page: WikiPage; graph: WikiGraph | null }>();
@@ -22,16 +23,11 @@ const fileSlugs = computed(() => new Set((props.graph?.nodes ?? []).map((n) => n
 const slugByTitle = computed(() => new Map((props.graph?.nodes ?? []).map((n) => [n.title, n.slug])));
 const backlinks = computed(() => (props.graph ? incomingLinks(props.graph, props.slug) : []));
 
-// Resolve a `[[link]]` span's raw target to a file slug (graph first, then a plain
-// slugify fallback) and navigate.
+// Read the clicked span's raw target from the DOM, resolve it to a slug, and navigate.
 function activateLink(el: HTMLElement | null): void {
   const target = el?.getAttribute("data-page");
   if (!target) return;
-  let slug = props.graph ? resolveLinkTarget(target, fileSlugs.value, slugByTitle.value) : null;
-  if (!slug) {
-    const fallback = wikiSlugify(target);
-    slug = isSafeWikiSlug(fallback) ? fallback : null;
-  }
+  const slug = resolveWikiClickTarget(target, { graph: props.graph, fileSlugs: fileSlugs.value, slugByTitle: slugByTitle.value });
   if (slug) wikiGotoPage(slug);
 }
 

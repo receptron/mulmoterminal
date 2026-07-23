@@ -18,6 +18,33 @@ export function relativeTime(ms: number, now: number): string {
   return `${Math.floor(hours / HOURS_PER_DAY)}d ago`;
 }
 
+// Same rule from an ISO timestamp (PR/issue `updatedAt`). An unparseable string yields ""
+// rather than "NaNm ago", so a malformed date silently drops the meta rather than showing junk.
+export function relativeTimeFromIso(iso: string, now: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  return relativeTime(ms, now);
+}
+
+// The notification bell's compact variant of relativeTime: same floor and same "under a
+// minute is just now" boundary, differing only in dropping the "ago" suffix ("5m" not
+// "5m ago"). Sharing the boundary keeps the bell and the grid agreeing on when something
+// stops being "just now".
+export function compactRelativeTime(ms: number, now: number): string {
+  const minutes = Math.floor((now - ms) / MINUTE_MS);
+  if (minutes < 1) return "just now";
+  if (minutes < MINUTES_PER_HOUR) return `${minutes}m`;
+  const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+  if (hours < HOURS_PER_DAY) return `${hours}h`;
+  return `${Math.floor(hours / HOURS_PER_DAY)}d`;
+}
+
+export function compactRelativeTimeFromIso(iso: string, now: number): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "";
+  return compactRelativeTime(ms, now);
+}
+
 const MILLION = 1_000_000;
 const THOUSAND = 1_000;
 // Below this a thousands value keeps a decimal: 1.5k reads usefully, 47.2k does not.
