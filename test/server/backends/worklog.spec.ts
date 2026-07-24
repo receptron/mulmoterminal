@@ -56,4 +56,15 @@ describe("WORKLOG_PROMPT prompt-injection hardening", () => {
     expect(WORKLOG_PROMPT).toContain("本手順(1〜8)");
     expect(WORKLOG_PROMPT).toContain("8. 最後に");
   });
+
+  // The wiki index/tag filter reads tags from each index.md bullet's #token, not page frontmatter, so a
+  // weekly page only surfaces under the #worklog filter once it's registered in index.md WITH the tag.
+  // Pin that contract (the write-scope allowance + the step-7b instruction + the tagged entry format) so
+  // a future prompt edit can't silently drop it and make individual weeks vanish from the filter again.
+  it("instructs registering each weekly page in index.md with a #worklog-tagged entry", () => {
+    expect(WORKLOG_PROMPT).toContain("一覧ハブおよび週次ページのエントリを追記する目的でのみ");
+    expect(WORKLOG_PROMPT).toContain("さらに今回の週次ページのエントリも、まだ無ければ追加する");
+    // The entry format must carry the trailing #worklog tag — that tag is what the index filter keys on.
+    expect(WORKLOG_PROMPT).toContain("第N週の週次開発ログ。 #worklog");
+  });
 });
