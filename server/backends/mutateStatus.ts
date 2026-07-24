@@ -26,3 +26,12 @@ export function mutateStatus(kind: string): number {
   if (FORBIDDEN_KINDS.has(kind)) return FORBIDDEN;
   return BAD_REQUEST;
 }
+
+// "too-large" on a mutate is NOT a failure: the record WAS written, only its response
+// (the enriched, thumbnail-inlined item) exceeded the command-channel byte budget. Callers
+// must report it as an applied write so the client re-fetches — a 4xx here reads as "edit
+// failed" and strands stale data in the UI (#747). A type guard so both the desktop preview
+// HTTP handler and the phone channel narrow the result and branch on it in one place.
+export function mutateWriteApplied<T extends { kind: string }>(result: T): result is Extract<T, { kind: "too-large" }> {
+  return result.kind === "too-large";
+}

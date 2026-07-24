@@ -47,6 +47,7 @@ function baseDeps(over: Partial<TmuxRouteDeps> = {}): TmuxRouteDeps {
     hasTmux: () => false,
     killTmux: vi.fn(),
     listTmuxIds: () => [],
+    attachedClientCount: () => 0, // nobody else attached, by default
     resumablePredicate: async () => () => false,
     ...over,
   };
@@ -116,5 +117,39 @@ describe("mountTmuxRoutes — POST /api/tmux/cleanup-orphans", () => {
     await cleanup({ headers: {}, params: {} }, res);
     expect(killTmux.mock.calls.map((c) => c[0])).toEqual(["orphan-1", "orphan-2"]);
     expect(res.payload).toEqual({ killed: ["orphan-1", "orphan-2"], killedCount: 2 });
+  });
+
+  // Regression (#747): a second mulmoterminal process may have just created a session (no
+  // transcript yet, so not resumable here) and be attached to it. Killing it would yank a
+  // live session out from under that process, so an orphan another process holds is spared.
+  it("spares a non-resumable session that another process is attached to", async () => {
+    const killTmux = vi.fn();
+    const attached = new Map<string, number | null>([
+      ["mine-orphan", 0], // no one attached → really an orphan
+      ["theirs", 1], // another process holds it
+      ["unknown", null], // tmux couldn't say → treat as held
+    ]);
+    const { cleanup } = mountAndCapture(
+      baseDeps({
+        killTmux,
+        listTmuxIds: () => ["mine-orphan", "theirs", "unknown"],
+        attachedClientCount: (id) => (attached.has(id) ? (attached.get(id) ?? null) : 0),
+        resumablePredicate: async () => () => false, // none resumable
+      }),
+    );
+    const res = makeRes();
+    await cleanup({ headers: {}, params: {} }, res);
+    expect(killTmux.mock.calls.map((c) => c[0])).toEqual(["mine-orphan"]);
+    expect(res.payload).toEqual({ killed: ["mine-orphan"], killedCount: 1 });
+  });
+});
+
+describe("orphanReapable", () => {
+  it("reaps only a non-resumable session with zero attached clients", async () => {
+    const { orphanReapable } = await import("../../../server/infra/tmux-routes.js");
+    expect(orphanReapable(false, 0)).toBe(true);
+    expect(orphanReapable(true, 0)).toBe(false); // resumable → never
+    expect(orphanReapable(false, 1)).toBe(false); // another process holds it
+    expect(orphanReapable(false, null)).toBe(false); // unknown → treat as held
   });
 });

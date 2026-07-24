@@ -65,7 +65,7 @@ import { clampCapabilities, mintViewToken, requireViewToken, type ViewCapability
 // action so a view can never do more than the agent's own data plane.
 import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { hostLogger } from "./hostLogger.js";
-import { mutateStatus } from "./mutateStatus.js";
+import { mutateStatus, mutateWriteApplied } from "./mutateStatus.js";
 
 // Console-backed logger matching the engine's CollectionLogger shape
 // (prefix, message, optional structured data) — shared with the other engines'
@@ -607,6 +607,12 @@ const remoteViewMutateHandler: RequestHandler<{ slug: string; viewId: string }> 
   const collection = await resolveCollection(res, slug);
   if (!collection) return;
   const result = await mutateRemoteView(collection, viewId, request);
+  if (mutateWriteApplied(result)) {
+    // The write applied; only its response blew the byte budget. Report success (not a 4xx
+    // that reads as a failed edit and strands stale data) and tell the client to re-fetch.
+    res.json({ op: request.op, id: request.id, applied: true, warning: mutateRemoteViewFailureMessage(result, slug) });
+    return;
+  }
   if (result.kind !== "ok") {
     res.status(mutateStatus(result.kind)).json({ error: mutateRemoteViewFailureMessage(result, slug) });
     return;
