@@ -254,8 +254,10 @@ const syncPoll = () => (rosterVisible() ? startPoll() : stopPoll());
 // immediate: a reload that restores a zoomed grid sets expandedUid up front (no "change"
 // to react to), so start here too, or the roster would freeze at its first snapshot.
 watch(expandedUid, syncPoll, { immediate: true });
-const onListMode = (on: boolean) => {
-  listModeOn.value = on;
+// The header's view toggle (shown only while zoomed) flips roster ⇄ thumbnail strip; the poll
+// follows since the roster is its sole consumer.
+const toggleListMode = () => {
+  listModeOn.value = !listModeOn.value;
   syncPoll();
 };
 // Under <KeepAlive>, leaving /terminals deactivates (doesn't unmount) this view — pause the
@@ -381,8 +383,11 @@ function configureAppearance() {
       :add-terminal-active="launchOpen"
       :auto-sort="state.sortMode === 'auto'"
       :status-counts="statusCounts"
+      :show-view-toggle="expandedUid !== null"
+      :list-mode="listModeOn"
       @add-terminal="onAddTerminal"
       @toggle-sort="toggleSortMode"
+      @toggle-view="toggleListMode"
       @settings="showSettings = true"
     />
     <nav
@@ -413,6 +418,7 @@ function configureAppearance() {
       :reorderable="reorderable"
       :open-session-ids="openSessionIds"
       :open-cwds="openCwds"
+      :list-mode="listModeOn"
       @session="onSession"
       @agent="onAgent"
       @cwd="onCwd"
@@ -425,7 +431,6 @@ function configureAppearance() {
       @launch="onLaunch"
       @move="onMove"
       @status="onStatus"
-      @list-mode="onListMode"
     />
     <footer v-if="noRunningTerminals" class="flex-none border-t border-border bg-panel px-4 py-2 text-center">
       <GuideLinks />
