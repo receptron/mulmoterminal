@@ -11,12 +11,17 @@ nav_order: 6
 - TOC
 {:toc}
 
-**When a background task finishes, your phone gets a push notification.** Kick off a long task,
-walk away, and get pulled back when it's done. Setup is in two places: the **terminal side** and
-the **phone side**.
+**When a task finishes — or stops on a permission prompt or question — your phone gets a push
+notification.** Kick off a long task, walk away, and get pulled back when you're needed. Setup is
+in two places: the **terminal side** and the **phone side**.
 
-- You're only notified for **sessions you're *not* looking at** (the pane you're actively viewing
-  stays quiet — same idea as the attention [sound](features.html)).
+![Push notifications on a phone's lock screen — finished tasks ✅ and "Claude is waiting for your input"](../images/push-lock-screen.jpg)
+
+- There are **two kinds** of push: a turn **finishing**, and a turn **blocking on input**
+  (permission prompt / question).
+- Pushes fire **even for the pane you're viewing** (unlike the attention [sound](features.html),
+  which stays quiet for the active pane — a push assumes your phone is elsewhere). Only internal
+  background workers are excluded.
 - The send happens on the server; device registration/delivery is handled by a separate service
   (`mulmoserver`). Pushes are sent **only while RemoteHost is connected**.
 
@@ -36,7 +41,7 @@ the **phone side**.
 That's it — a background task finishing now sends a push to your phone.
 
 > 💡 The login survives a server restart (since 0.9.3): the session is parked in the browser and
-> the client silently reconnects on the next page load.
+> the client silently reconnects — on page load, socket reconnect, tab wake, or network recovery.
 
 ## 2. Phone side (mulmoserver PWA)
 
@@ -65,6 +70,15 @@ Android (Chrome) can enable push straight from the browser tab.
 4. (Recommended) Use the menu's **"Add to Home Screen"** to install the PWA — launching and
    delivery are more reliable that way.
 
+## Not just notifications: watch and reply from the phone
+
+The mulmoserver PWA is a **remote control**, not just an inbox. From your phone you can browse
+the host's sessions, watch a session's **live screen**, and answer on the spot — type a command
+or tap a quick reply (**yes / no / ok / continue / stop**). Get pinged, glance at the screen,
+send one word, and the agent keeps going — all without a laptop.
+
+![The terminal viewed from a phone — live screen plus yes / no / ok / continue / stop quick replies](../images/remote-phone-terminal.jpg)
+
 ---
 
 ## When a push is sent
@@ -72,11 +86,11 @@ Android (Chrome) can enable push straight from the browser tab.
 - ✅ RemoteHost is **connected** on the terminal side
 - ✅ the **"Notify my devices…" toggle is ON**
 - ✅ at least one **device has notifications enabled** on the phone side
-- ✅ the finished session was **one you weren't viewing** (a background session)
+- ✅ a regular session's turn **finished** or **blocked on input** (the pane you're viewing
+  counts too; internal workers don't)
 
 ## If nothing arrives
 
-- Did you finish a task in the **pane you were watching**? → try a background session instead.
 - Is **RemoteHost disconnected**? → Connect again.
 - Notifications not enabled / no device registered on the phone. → enable them in the PWA.
 - **Can't enable on iPhone?** → launch from the **Home Screen icon**, not a Safari tab

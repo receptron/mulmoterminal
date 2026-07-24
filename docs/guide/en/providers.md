@@ -57,7 +57,7 @@ in them**, so until a provider is registered there is nowhere to send anything. 
 | `providers` | Models offered | MODEL select |
 |---|---|---|
 | unset (fresh install) | **0** | hidden |
-| registered | **27** | shown |
+| registered (`id` = `openrouter`) | **27** | shown |
 
 ### Add it in one command
 {: .no_toc }
@@ -133,7 +133,7 @@ that are **not** in that list (→ [Adding models](#add-models)).
 
 | Key | Meaning |
 |---|---|
-| `id` | the name other settings refer to; letters, digits and `. _ : / - ~` |
+| `id` | the name other settings refer to; letters, digits and `. _ : / - ~`. **The built-in 27 models appear only when `id` is exactly `openrouter`** — any other id (Moonshot, an in-house LiteLLM, …) gets no presets, so [list models by hand](#add-models) |
 | `label` | what the picker shows |
 | `baseUrl` | **no trailing `/v1`** — see below |
 | `tokenEnv` | the **name** of the environment variable holding the key, never the key |
