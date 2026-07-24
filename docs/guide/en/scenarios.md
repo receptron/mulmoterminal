@@ -21,7 +21,7 @@ The grid's core and headline use case. This is the center of the **command post*
 
 1. Add cells with `New terminal ＋` and launch Claude / Codex on a different task in each.
 2. While one is thinking, move ahead with review or edits in another cell.
-3. Pick up only the cells that turn **needs you (amber)** — you don't have to watch them all.
+3. Pick up only the cells that call you — **amber (awaiting input)** or the **blue-ringed "done, review it"** ones — you don't have to watch them all.
 
 ![Terminals running in parallel](../images/grid-2x2.png)
 
@@ -65,7 +65,7 @@ Grid cells aren't just for Claude — they can run your project's **scripts**, s
    > **Another way, as of 0.8.0:** a **`run:"shell"` button** in `.mulmoterminal.json` (e.g. `{ "run": "shell", "cmd": "yarn build" }`)
    > runs the same command as a command cell from a one-click header button. See [Configuration → Customizing the header](config.html#header).
 2. The script runs **inside that cell**, so you can watch the results right next to your Claude session.
-3. When a build or test fails and drowns you in logs, press **✦ Summarize** on the command cell.
+3. When a build or test fails and drowns you in logs, press the **✦ button** (Summarize output) on the command cell.
    It passes the output to `claude -p` and returns a short summary of the **errors / warnings / cause / how to fix**.
    Use **⧉ Copy as prompt** to copy "command + directory + summary + follow-up" and paste it into any session to continue.
 

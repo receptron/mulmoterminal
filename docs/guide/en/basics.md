@@ -17,11 +17,12 @@ nav_order: 1
 
 The grid view is the screen for **supervising many AI agents in parallel**. Each cell is one independent
 agent (or terminal). While one is thinking, you push another cell forward and pick up **only the ones that
-turn amber (needs you)** — the goal is to run many agents solo instead of babysitting them all.
+call you** — **amber** for a cell awaiting input or a permission, a **blue ring** for a turn that finished and
+awaits review — the goal is to run many agents solo instead of babysitting them all.
 
 MulmoTerminal has two display modes; switch between them with the **chat / grid** icons in the top toolbar.
 
-- **Single view** — the screen for **focusing** on one agent (conversation on the left, a GUI panel on the right for diagrams, forms, images, and documents).
+- **Single view** — the screen for **focusing** on one agent (conversation on the left, a GUI panel on the right for diagrams, forms, images, documents, video, and more).
 - **Grid view** — the screen for **supervising many agents at once**, tiled side by side. This is the star of this guide.
 
 ![Single view — focus on one agent](../images/single-view.png)
@@ -35,7 +36,8 @@ Empty cells in the grid show a **launcher form**. This is where you choose **wha
 | Part | Role |
 |---|---|
 | **Claude / Codex** toggle | Choose the **agent** to run in this cell |
-| **WORKING DIRECTORY** | Enter the working directory (`▶` to launch). Frequently used directories autocomplete from *cwd presets* |
+| **WORKING DIRECTORY** | Enter the working directory (`▶` to launch). Frequently used directories are offered as clickable *cwd preset* **chips** that fill the field (the chip's ▶ launches right away) |
+| **Model picker** (when Claude is selected) | Pick the backend / model for this session only (→ [providers](providers.html)) |
 | **OR ISOLATE IN A WORKTREE** | In a git repo, enter a task name and hit **＋ New worktree** to create an isolated worktree and launch there |
 | **OR LAUNCH** | Start a non-agent **launch command** (`Shell` / `codex` / anything) as a persistent terminal |
 
@@ -47,11 +49,13 @@ The header of a running cell has two rows. Together they capture that agent's **
 
 - **Row 1 (info):** status dot, directory, git chip (`⎇ branch ●changes`), **model / context size**,
   what that agent is **doing right now**, and expand / close.
-- **Row 2 (controls):** connection status, attachments, file browser, GitHub, and the **timeline 🕘** (tool-call history).
+- **Row 2 (controls):** connection status, 📎 insert a file path, 📂 reveal in the file manager (the default
+  buttons — [replaceable in config](config.html#header)), GitHub, and the **timeline 🕘** (tool-call history).
 
-> **Status shows up as color.** A bluish border means **working** (thinking), amber means **needs you** (awaiting input,
-> or unread output), and neutral means idle. A sound plays too, so you know you've been **called without watching the screen**.
-> This is the heart of the grid.
+> **Status shows up as color.** A bluish border means **working** (thinking), **amber means awaiting input or a
+> permission** (Needs input), a **blue ring + glow means a finished, unreviewed turn** (Done — review; a green dot
+> in the thumbnails), and neutral means idle. A sound plays too, so you know you've been **called without watching
+> the screen**. This is the heart of the grid.
 
 ## Tiling many, pages, and reordering
 
@@ -60,13 +64,21 @@ The header of a running cell has two rows. Together they capture that agent's **
 
 ![Agents running in parallel](../images/grid-2x2.png)
 
-## Zooming into one (filmstrip)
+## Zooming into one (the cockpit roster)
 
-Hit a cell's **⤢** (expand) to show that agent large while the others shrink into thumbnails in the **filmstrip**
-along the bottom. Click a thumbnail's header margin to **switch**, and **⤡** returns to the grid. You can jump quickly
-between surveying the whole board and zooming into one.
+Hit a cell's **⤢** (expand) to show that agent large — and next to it, the **cockpit roster**: a text list
+with one row per session (the default). Each row carries the directory, an **AI summary**, the last prompt,
+the latest reply, a status word (running / planning / done / idle …), and the branch's **PR phase** badge
+(draft / CI fail / changes / ready / merged …). **Click a row to swap** which terminal is enlarged; the ⋮ menu
+reorders rows. You stay zoomed in while still reading, in plain text, what everyone else is doing and how far
+along it is — this is the main screen for running many agents.
 
-![Zoom (filmstrip)](../images/grid-zoom.png)
+![The cockpit roster — a summary list of every session on the left, one agent enlarged on the right](../images/cockpit-roster.png)
+
+The **▤ / ☰** button in the top-right corner switches between the roster and the **filmstrip** (a thumbnail
+strip; click a thumbnail's header margin to switch cells). **⤡** returns to the grid.
+
+![Zoom (filmstrip view)](../images/grid-zoom.png)
 
 ## Mixing Claude and Codex
 

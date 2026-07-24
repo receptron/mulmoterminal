@@ -27,14 +27,17 @@ npx mulmoterminal        # starts on http://localhost:34567 and opens your brows
 - **See every agent at once.** A grid of live sessions, each cell color-coded by state —
   **working** (blue), **blocked / needs a permission** (amber), **done, unreviewed** (blue),
   **idle** — with an attention chime and a toolbar tally, so an off-screen agent that's stuck
-  never slips past you. Stop babysitting one terminal; supervise ten.
+  never slips past you. Stop babysitting one terminal; supervise ten. Zoom into one and the
+  **cockpit roster** keeps everyone else in view — one text row per session with its AI
+  summary, last prompt, latest reply, and the branch's **PR phase** (draft / CI fail /
+  ready / merged).
 - **A GUI for your agents, not just a terminal.** Beside the terminal, a **Canvas** panel
   renders what an agent produces over MCP — **documents, forms, charts, generated images,
   HTML, collection cards** — each drawn by its own plugin. The agent doesn't just print
   text; it hands you an interface.
-- **Get pulled back from anywhere.** A finished background task sends a **Web Push to your
-  phone**, and the **RemoteHost** companion lets you watch and start sessions from the phone
-  itself — walk away, get pinged, jump back in.
+- **Get pulled back from anywhere.** A finished — or input-waiting — task sends a **Web Push
+  to your phone**, and the **RemoteHost** companion lets you watch sessions and answer with a
+  tap (**yes / no / continue**) from the phone itself — walk away, get pinged, jump back in.
 - **Nothing is lost on a restart.** With `tmux`, every session survives a server crash,
   restart, or `node --watch` reload — a mid-turn agent, a long build, a dev server all keep
   running and reattach when you come back.
@@ -47,6 +50,12 @@ npx mulmoterminal        # starts on http://localhost:34567 and opens your brows
 - **Make it yours.** Per-directory **themes, colors, and name badges** (`prod` in red,
   `staging` in amber), a configurable header (buttons + info chips), custom attention sounds,
   and Run / Skill menus to launch a project's scripts and `.claude/skills` right inside a cell.
+
+![The cockpit roster — a one-row-per-session summary list beside the enlarged terminal](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/cockpit-roster.png)
+
+*Zoomed in, the **cockpit roster** replaces thumbnails with information: every session as a
+text row — directory, AI summary, your last prompt, the agent's latest reply, a status word,
+and the branch's **PR phase** badge. Click a row to swap the enlarged terminal.*
 
 ### What it is, under the hood
 
@@ -119,8 +128,9 @@ for the details and model notes.
 > `google login`). Reading/creating events on your primary calendar keeps working without re-linking.
 
 A global install isn't auto-updated, so on startup MulmoTerminal checks npm and
-prints a one-line notice when a newer version is available (`npm i -g mulmoterminal`
-to update). Disable with `MULMOTERMINAL_NO_UPDATE_CHECK=1` (or `NO_UPDATE_NOTIFIER=1`).
+prints a one-line notice when a newer version is available — and the web toolbar shows a
+clickable **update badge** with the exact command for your install (`npm i -g mulmoterminal`,
+or `git pull` for a clone). Disable with `MULMOTERMINAL_NO_UPDATE_CHECK=1` (or `NO_UPDATE_NOTIFIER=1`).
 
 Options: `--cwd <dir>` (working directory — relative paths allowed; defaults to the
 directory you run the command from), `--port <n>` (default 34567), `--no-open`,
@@ -338,7 +348,7 @@ building the sandbox spawn, so they have no effect unless `MULMOTERMINAL_SANDBOX
 | -------- | ---------- |
 | Frontend | Vue 3 (`<script setup>` + TypeScript), Vue Router, Vite, xterm.js (`@xterm/*`), CodeMirror 6, socket.io-client |
 | Backend  | Node (ESM, TypeScript run via `tsx`), Express 5, `ws` (terminal WebSocket), `node-pty`, socket.io, `@modelcontextprotocol/sdk` (in-process GUI MCP) |
-| Plugins  | GUI-protocol Vue plugins (`@mulmoclaude/*`, `@mulmochat-plugin/*`): markdown, form, image, chart, HTML, collection, accounting |
+| Plugins  | GUI-protocol Vue plugins (`@mulmoclaude/*`, `@mulmochat-plugin/*`): markdown, form, image, chart, HTML, collection, accounting, mulmoscript (MulmoCast video/slides), google |
 | Tests    | Vitest + @vue/test-utils + jsdom |
 
 Requires **Node ≥ 22.9** (uses `node --env-file-if-exists`) and the `claude` CLI on `PATH`.
@@ -698,7 +708,7 @@ Each grid cell's header shows two badges for its session, refreshed when a turn 
 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
-  current-gen Opus / Sonnet / Fable, **200k** otherwise). A session running on a
+  current-gen Opus / Sonnet / Fable / Mythos, **200k** otherwise). A session running on a
   [provider model](#agents-claude--codex) shows that model's name and its published window
   (`Kimi K2.7 Code · ctx 12%`); a model in neither list keeps the label and hides the %,
   since the window is never guessed.
@@ -730,9 +740,9 @@ mirrors the active session, and replays history on re-select. Plugins reach the 
 an **in-process MCP server** served per session at `POST /api/mcp/:sessionId` (server name
 `mulmoterminal-gui`) — which works from the host *or* the Docker sandbox (over
 `host.docker.internal`). Which plugins load is gated by `plugins/plugins.json`; the shipped
-set includes markdown, form, image generation (needs `GEMINI_API_KEY`), chart, HTML, and
-collection views. You can also merge your **own HTTP MCP servers** into the single-view
-session via Settings → `userMcpServers`.
+set includes markdown, form, image generation (needs `GEMINI_API_KEY`), chart, HTML,
+collection, and mulmoscript (MulmoCast video/slides/PDF playback) views. You can also merge
+your **own HTTP MCP servers** into the single-view session via Settings → `userMcpServers`.
 
 **Wiki.** The toolbar **Wiki** button opens a read-only browser over `<workspace>/data/wiki/`
 — an **index** (tag-filterable page catalog), rendered **pages** with `[[wiki links]]` and

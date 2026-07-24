@@ -24,16 +24,23 @@ Open it from the ⚙ in the toolbar.
 | Item | Description |
 |---|---|
 | **THEME** | Midnight / Nord / Daylight / Solarized Light |
+| **DIRECTORY APPEARANCE** | "🎨 Configure appearance…" — set a directory's name badge, colors, and header interactively |
 | **NOTIFICATION SOUND** | The sound played when a cell needs you (empty for the built-in chime, or any audio file) |
+| **WEB PUSH NOTIFICATIONS** | The "Notify my devices when a task finishes" toggle (off by default → [Mobile notifications](notifications.html)) |
+| **GOOGLE ACCOUNT** | Google sign-in for the Calendar link (not the RemoteHost Connect) |
 | **PULL REQUEST REPOS** | The repos aggregated by the cross-repo PR/Issue view (`owner/repo`) |
 | **LAUNCH COMMANDS** | Commands you can launch besides Claude in a grid cell (`{ label, command }`) |
 | **MCP SERVERS** | Your own MCP servers to add to single-view sessions |
+| **COST (ESTIMATED)** | Estimated cost readouts for Session / Today / Month |
 
 ## Global config `~/.mulmoterminal/config.json`
 
 ```json
 {
-  "cwdPresets": ["/Users/you/projects/acme-web", "/Users/you/projects/acme-api"],
+  "cwdPresets": [
+    { "label": "acme-web", "path": "/Users/you/projects/acme-web" },
+    { "label": "acme-api", "path": "/Users/you/projects/acme-api" }
+  ],
   "launchers": [
     { "label": "Shell", "command": "$SHELL" },
     { "label": "Node REPL", "command": "node" }
@@ -47,11 +54,14 @@ Open it from the ⚙ in the toolbar.
 
 | Key | Role |
 |---|---|
-| `cwdPresets` | Working-directory autocomplete in the launcher |
+| `cwdPresets` | Working-directory chips in the launcher (`{ label, path }`; click to fill the field, ▶ to launch) |
 | `launchers` | The launch commands that appear under "OR LAUNCH" in a grid cell |
 | `prRepos` | The repos targeted by the cross-repo PR/Issue view |
 | `buttons` / `chips` | Header buttons / chips (merged with project settings → [Customizing the header](#header)) |
 | `providers` | Anthropic-compatible backends (→ [Using another model via OpenRouter](providers.html)) |
+| `soundFile` | Custom notification sound (absolute path to an audio file; also settable from the modal) |
+| `pushEnabled` | Where the Web Push toggle is stored (default `false` → [Mobile notifications](notifications.html)) |
+| `worklogEnabled` / `worklogIntervalHours` | The periodic dev-work log (default off / 6 hours) |
 
 ## Running on another model (providers) {#providers}
 
@@ -129,7 +139,8 @@ paint each project — **from the header down to the terminal body**.
 This is where MulmoTerminal's **Extend** pillar lives. Shape the header of a running terminal to fit your workflow with **a small DSL**.
 Any developer can turn their frequent actions into a single click and surface only the information they want to see — that's what this is for.
 
-**Buttons** (`buttons`) — action buttons with emoji/labels that act on a running session. With none set, nothing is added, just as before.
+**Buttons** (`buttons`) — action buttons that act on a running session. Display is an `emoji` or an `icon` (a Material Symbol name) plus a `label`; `order` controls the sort.
+With none set, you get the **two defaults** (📎 insert a file path · 📂 reveal in the file manager); setting `buttons` **replaces** that default set.
 
 ```json
 {
@@ -143,9 +154,9 @@ Any developer can turn their frequent actions into a single click and surface on
 ```
 
 - `run: "input"` … send `text` to the running Claude/Codex (e.g. `/compact`).
-- `run: "open"` … `url` (browser, http/https only) / `reveal` (OS file manager: Finder/Explorer/xdg-open) / `files` (in-app explorer) / `view` (`prs`/`wiki`/`collections`/`accounting`).
+- `run: "open"` … `url` (browser, http/https only) / `reveal` (OS file manager: Finder/Explorer/xdg-open) / `files` (in-app explorer) / `pickFile` (OS file dialog, inserts the path) / `terminal` (a new terminal cell in that directory) / `pr` (the current branch's PR in the browser) / `view` (`diff`/`prs`/`wiki`/`collections`/`accounting`).
 - `run: "shell"` … run `cmd` in a command cell (the id is resolved server-side, `${variables}` are shell-escaped, and the command never reaches the browser).
-- `${variables}` … `dir` `branch` `repo` `ahead` `behind` `dirty` `agent` `model` `task`.
+- `${variables}` … `dir` `dirName` `branch` `repo` `remoteUrl` `ahead` `behind` `dirty` `agent` `model` `task` `session`.
 - `when` … `isGitRepo` / `agent == …` / `repo == …` (`&&` / `||`, with `&&` taking precedence).
 
 **Chips** (`chips`) — reorder / hide the info chips in a grid cell header, plus custom ones. `null` (the default) behaves as before.
@@ -154,7 +165,7 @@ Any developer can turn their frequent actions into a single click and surface on
 { "chips": ["ctx", "git", { "label": "env", "text": "⎇ ${branch}", "when": "isGitRepo" }] }
 ```
 
-- Built-in `git` / `diff` / `ctx` / `usage` … shown in the order you list them; omit one to hide it.
+- Built-in `dir` / `git` / `diff` / `ctx` / `usage` / `status` / `tools` … shown in the order you list them; omit one to hide it.
 - Custom `{ label, text, when }` … read-only text (`text` expands `${variables}`).
 
 ### ⚡ Skill menu filter (`skills`)
