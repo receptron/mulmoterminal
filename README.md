@@ -414,9 +414,11 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 #### Header buttons
 
 Each terminal header shows configurable **action buttons**. Omitting `buttons` (globally or per-dir)
-keeps the built-in defaults — a **file-path picker** (📎) and an **OS file-manager reveal** (📂).
-Setting `buttons` (at either level) **replaces** the defaults with your list, so you can drop, reorder,
-or swap them — e.g. add the in-app **📁 file explorer** with `"open": { "files": "${dir}" }`.
+keeps the built-in **starter set**: a file-path picker (📎), an OS file-manager reveal (📂), an in-app
+file explorer (📁), a new terminal here (🖥), this branch's PR (🔗, git repos, only when a PR exists),
+and open-on-GitHub (🌐, git repos). Setting `buttons` (at either level) **replaces the whole default
+set** with your list (it is not merged on top), so listing your own — even a **shorter** one — is how
+you drop, reorder, or swap them.
 A button has an `id`, `label`, and a `run` of `"shell"` (run a command), `"input"` (send text to the
 agent), or `"open"`. An `open` button targets one of `url` / `reveal` (OS file manager) / `files`
 (in-app explorer) / `view` (a built-in overlay) / `terminal` (a dir → a new cell running `$SHELL`,
