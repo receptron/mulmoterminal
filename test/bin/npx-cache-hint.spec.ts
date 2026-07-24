@@ -55,8 +55,29 @@ describe("detectNpxCacheDir", () => {
 
 describe("npxCacheHintLines", () => {
   it("names the corrupted dir and the removal command", () => {
-    const lines = npxCacheHintLines("/Users/isamu/.npm/_npx/b492274026eba8a2");
+    const lines = npxCacheHintLines("/Users/isamu/.npm/_npx/b492274026eba8a2", "darwin");
     expect(lines.some((l) => l.includes("corrupted npx cache"))).toBe(true);
     expect(lines).toContain("  rm -rf '/Users/isamu/.npm/_npx/b492274026eba8a2'");
+  });
+
+  // `rm -rf` is not a command on Windows, and cmd's `rmdir /s /q` is a syntax error in
+  // PowerShell (where `rmdir` aliases Remove-Item) — a wrong command is worse than none.
+  it("gives Windows both of its shells and never the POSIX command", () => {
+    const dir = "C:\\Users\\me\\AppData\\Local\\npm-cache\\_npx\\0a1b2c3d4e5f6789";
+    const lines = npxCacheHintLines(dir, "win32");
+    expect(lines).toContain(`  cmd:        rmdir /s /q "${dir}"`);
+    expect(lines).toContain(`  PowerShell: Remove-Item -Recurse -Force "${dir}"`);
+    expect(lines.some((l) => l.includes("rm -rf"))).toBe(false);
+  });
+
+  it("gives POSIX platforms only the rm command", () => {
+    const lines = npxCacheHintLines("/Users/isamu/.npm/_npx/b492274026eba8a2", "linux");
+    expect(lines.some((l) => l.includes("rmdir /s /q") || l.includes("Remove-Item"))).toBe(false);
+  });
+
+  it("names the corrupted directory on every platform", () => {
+    (["darwin", "linux", "win32"] as const).forEach((platform) => {
+      expect(npxCacheHintLines("/home/u/.npm/_npx/abc123", platform)).toContain("  /home/u/.npm/_npx/abc123");
+    });
   });
 });

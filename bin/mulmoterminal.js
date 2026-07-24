@@ -315,7 +315,7 @@ function runServer(port, noOpen, cwd, onChild) {
       }
       if (code !== 0) {
         const cacheDir = detectNpxCacheDir(stderrTail);
-        if (cacheDir) npxCacheHintLines(cacheDir).forEach((line) => error(line));
+        if (cacheDir) npxCacheHintLines(cacheDir, process.platform).forEach((line) => error(line));
       }
       process.exit(code ?? 1);
     });
