@@ -12,6 +12,7 @@ import {
   loadAppConfig,
   loadAppConfigResult,
   backupCorruptConfig,
+  emptyConfig,
   saveAppConfig,
   mergeConfigUpdate,
   type AppConfig,
@@ -227,6 +228,19 @@ describe("loadAppConfigResult (missing vs corrupt vs ok)", () => {
     writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }], pushEnabled: true }));
     const loaded = loadAppConfigResult(file);
     expect(loaded).toMatchObject({ status: "ok", config: { cwdPresets: [{ label: "a", path: "/a" }], pushEnabled: true } });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // The write path uses emptyConfig() as the base for a MISSING file instead of a second
+  // loadAppConfig() read (which could race a concurrent write turning it corrupt in between).
+  // A missing-file merge must therefore behave exactly like merging onto empty.
+  it("emptyConfig is a fresh default base equal to loading a missing file", () => {
+    const dir = tmp();
+    expect(emptyConfig()).toEqual(loadAppConfig(path.join(dir, "none.json")));
+    // fresh object each call (callers mutate in place)
+    expect(emptyConfig()).not.toBe(emptyConfig());
+    const merged = mergeConfigUpdate(emptyConfig(), { pushEnabled: true });
+    expect(merged).toEqual({ ...emptyConfig(), pushEnabled: true });
     rmSync(dir, { recursive: true, force: true });
   });
 });

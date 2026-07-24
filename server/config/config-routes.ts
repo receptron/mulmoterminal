@@ -7,7 +7,16 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
-import { loadAppConfig, loadAppConfigResult, backupCorruptConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
+import {
+  loadAppConfig,
+  loadAppConfigResult,
+  backupCorruptConfig,
+  emptyConfig,
+  saveAppConfig,
+  mergeConfigUpdate,
+  toPublicAppConfig,
+  type AppConfig,
+} from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import { launchOptions } from "./launch-options.js";
@@ -98,7 +107,11 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
         error: `config.json is unreadable and was NOT overwritten${backupNote}. Fix or remove it, then retry.`,
       });
     }
-    const base = loaded.status === "ok" ? loaded.config : loadAppConfig(CONFIG_FILE);
+    // status is "ok" or "missing" here (corrupt returned above). Use the config we already
+    // read, or a fresh empty base for a missing file — NOT a second loadAppConfig() read,
+    // which could race a concurrent write turning the file corrupt between the two reads and
+    // silently merge onto empty.
+    const base = loaded.status === "ok" ? loaded.config : emptyConfig();
     const next = mergeConfigUpdate(base, body);
     // Stage, persist, commit in-memory only on success — a failed write must not
     // leave GET exposing values that won't survive a restart.

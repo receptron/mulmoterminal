@@ -6,7 +6,7 @@
 import { statSync, readdirSync, openSync, readSync, closeSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadAppConfig, loadAppConfigResult, mergeConfigUpdate, saveAppConfig } from "./config/app-config.js";
+import { loadAppConfigResult, emptyConfig, mergeConfigUpdate, saveAppConfig } from "./config/app-config.js";
 import { deriveCwdPresets, extractCwdFromTranscript, type CwdRecord } from "./config/cwd-presets.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
@@ -90,11 +90,15 @@ function main(): void {
   }
   // Refuse to overwrite a config we couldn't parse: seeding presets onto an empty base
   // would wipe the user's existing launchers/providers/etc. (same hazard as POST /api/config).
-  if (loadAppConfigResult(CONFIG_FILE).status === "corrupt") {
+  // Read ONCE and reuse — a second load could race a concurrent write turning the file
+  // corrupt between the check and the merge.
+  const loaded = loadAppConfigResult(CONFIG_FILE);
+  if (loaded.status === "corrupt") {
     console.error(`\x1b[31m[init]\x1b[0m ${CONFIG_FILE} is unreadable — fix or remove it before seeding presets. No changes written.`);
     process.exit(1);
   }
-  const next = mergeConfigUpdate(loadAppConfig(CONFIG_FILE), { cwdPresets: presets });
+  const base = loaded.status === "ok" ? loaded.config : emptyConfig();
+  const next = mergeConfigUpdate(base, { cwdPresets: presets });
   if (!saveAppConfig(CONFIG_FILE, next)) {
     console.error(`\x1b[31m[init]\x1b[0m Failed to write ${CONFIG_FILE}`);
     process.exit(1);

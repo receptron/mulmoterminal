@@ -138,8 +138,10 @@ export function sanitizeWorklogIntervalHours(input: unknown): number {
 }
 
 // Fresh object each call — callers hold and mutate the returned config in place, so a
-// shared default constant would be corrupted across loads.
-const emptyConfig = (): AppConfig => ({
+// shared default constant would be corrupted across loads. Exported so a write path can
+// use it as the base for a MISSING file WITHOUT a second disk read (that re-read could
+// race a concurrent write turning the file corrupt between the two reads).
+export const emptyConfig = (): AppConfig => ({
   cwdPresets: [],
   soundFile: null,
   prRepos: [],
