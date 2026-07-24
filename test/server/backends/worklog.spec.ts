@@ -46,4 +46,14 @@ describe("WORKLOG_PROMPT prompt-injection hardening", () => {
     expect(WORKLOG_PROMPT).toContain("worklog-state.json");
     expect(WORKLOG_PROMPT).toContain("秘密情報");
   });
+
+  // Regression (#748): the write-permission line pointed at step (8), which never existed —
+  // the writes happen in steps 7 and 7b. A stale step reference weakens the guardrail it
+  // describes, so pin the reference to real steps and the contiguous 1〜8 numbering.
+  it("references the real write steps (7)(7b), not a phantom step 8", () => {
+    expect(WORKLOG_PROMPT).toContain("(7)(7b)");
+    expect(WORKLOG_PROMPT).not.toContain("(7)(8)");
+    expect(WORKLOG_PROMPT).toContain("本手順(1〜8)");
+    expect(WORKLOG_PROMPT).toContain("8. 最後に");
+  });
 });

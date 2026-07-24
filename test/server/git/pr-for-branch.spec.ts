@@ -47,4 +47,17 @@ describe("prUrlForBranch", () => {
     await prUrlForBranch("o/r", "b", { runGh, now, ttlMs: 100 });
     expect(runGh).toHaveBeenCalledTimes(2);
   });
+
+  // Regression (#748): a gh failure was cached as "no PR" for the full TTL, hiding the PR
+  // button even after gh recovered. A failed lookup must NOT be cached — the next call retries.
+  it("does not cache a gh failure — a later success within the TTL is picked up", async () => {
+    const runGh = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, stdout: "", stderr: "rate limited", code: 1 })
+      .mockResolvedValueOnce({ ok: true, stdout: '[{"url":"https://github.com/o/r/pull/9"}]', stderr: "", code: 0 });
+    const now = () => 5000; // same instant both calls: a cached failure would survive
+    expect(await prUrlForBranch("o/r", "b", { runGh, now, ttlMs: 100000 })).toBeNull();
+    expect(await prUrlForBranch("o/r", "b", { runGh, now, ttlMs: 100000 })).toBe("https://github.com/o/r/pull/9");
+    expect(runGh).toHaveBeenCalledTimes(2); // second call actually re-queried (no cached failure)
+  });
 });

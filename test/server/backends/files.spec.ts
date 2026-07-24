@@ -64,4 +64,18 @@ describe("GET /api/files/raw", () => {
     expect(res.headers.get("content-range")).toBe("bytes 0-1/4");
     expect((await res.arrayBuffer()).byteLength).toBe(2);
   });
+
+  // Regression (#748): a malformed / multi-range header is IGNORED (full 200), not 416 — a
+  // 416 to a media element is a failed seek. Only a well-formed past-the-end range gets 416.
+  it.each(["bytes=0-1,3-4", "items=0-1", "bytes=abc-1", "0-1"])("serves the full file (200) for the unsupported range %j", async (range) => {
+    const res = await fetch(`${base}/api/files/raw?path=downloads/images/a.png`, { headers: { Range: range } });
+    expect(res.status).toBe(200);
+    expect((await res.arrayBuffer()).byteLength).toBe(4);
+  });
+
+  it("answers 416 for a well-formed but unsatisfiable range", async () => {
+    const res = await fetch(`${base}/api/files/raw?path=downloads/images/a.png`, { headers: { Range: "bytes=99-100" } });
+    expect(res.status).toBe(416);
+    expect(res.headers.get("content-range")).toBe("bytes */4");
+  });
 });
