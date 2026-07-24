@@ -35,7 +35,7 @@ import { generateHeaderTitle } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
-import { activity, aiTitles, hiddenSessions, knownSessions, ptys } from "./session/registry.js";
+import { activity, aiTitles, devTerminalSessions, hiddenSessions, knownSessions, ptys } from "./session/registry.js";
 import { runWithHiddenMarker } from "./session/hiddenMarker.js";
 import { createToolStores } from "./session/tool-store.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -324,6 +324,10 @@ const remoteHostListTerminalSessions = async () =>
     liveIds: [...ptys.keys()],
     tmuxIds: tmuxListSessionIds(),
     isResumable: await resumableSessionPredicate(),
+    // The phone lists the multi-terminal grid's cells only — not the single-view chat
+    // session or a tmux shell that was never a grid cell. resumableSessionPredicate()
+    // above already awaited devTerminalSessionsHydrated, so this set is fully seeded.
+    isGridSession: (id) => devTerminalSessions.has(id),
     // Empty title rather than the id as a fallback — buildSessionList uses "nameless"
     // to drop the long tail of finished sessions the phone can't meaningfully offer.
     detailOf: (id) => ({
