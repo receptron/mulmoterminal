@@ -19,15 +19,12 @@ import { spawn } from "node:child_process";
 import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveWatchDirs, shouldSchedule, isReloadableChange } from "./dev-server-config.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-// Backend source lives in server/, but it also imports repo code from common/ and bin/
-// (e.g. server/config/config-schema.ts -> ../../common/modelIds.ts,
-// server/config/update-status.ts -> ../../bin/update-check.js). `node --watch` reloaded on
-// any imported module; watch those dirs too so editing them under `yarn dev` still reloads.
-const DEFAULT_WATCH_DIRS = ["server", "common", "bin"].map((d) => path.join(ROOT, d));
-// DEV_SERVER_WATCH overrides the watched set with a single dir — used only by the smoke test.
-const WATCH_DIRS = process.env.DEV_SERVER_WATCH ? [path.resolve(process.env.DEV_SERVER_WATCH)] : DEFAULT_WATCH_DIRS;
+// Which dirs a source change reloads on (server/ + the common/ and bin/ the backend imports),
+// or the single dir DEV_SERVER_WATCH names for the smoke test. See dev-server-config.js.
+const WATCH_DIRS = resolveWatchDirs(process.env, ROOT);
 // DEV_SERVER_ENTRY overrides the entry (and skips tsx) — used by the supervisor's own smoke
 // test to drive a lightweight stub instead of booting the full backend.
 const STUB = process.env.DEV_SERVER_ENTRY;
@@ -87,7 +84,7 @@ function bringUp() {
 // Idempotent: if a bring-up is already scheduled, do nothing (this is what prevents a crash
 // and a file-change from each spawning their own backend).
 function scheduleBringUp(ms) {
-  if (shuttingDown || restartTimer) return;
+  if (!shouldSchedule({ shuttingDown, restartPending: restartTimer !== null })) return;
   restartTimer = setTimeout(bringUp, ms);
 }
 
@@ -97,8 +94,7 @@ function scheduleBringUp(ms) {
 // scheduleBringUp is a no-op when one already is. Full restart, matching `node --watch`.
 let debounce = null;
 function onChange(filename) {
-  if (!filename || shuttingDown) return;
-  if (!/\.(ts|mjs|js|json)$/.test(filename)) return; // ignore editor temp files, etc.
+  if (shuttingDown || !isReloadableChange(filename)) return; // ignore editor temp files, etc.
   clearTimeout(debounce);
   debounce = setTimeout(() => {
     if (shuttingDown) return;
