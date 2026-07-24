@@ -23,7 +23,10 @@ const MIME_EXT: Readonly<Record<string, string>> = {
   "text/csv": ".csv",
 };
 
-export const extensionForMime = (mimeType: string): string => MIME_EXT[mimeType.toLowerCase()] ?? ".bin";
+// A Content-Type may carry parameters ("text/plain; charset=utf-8") or surrounding space;
+// the extension map is keyed by the bare type, so strip everything from the first ";" and
+// trim before the lower-cased lookup — otherwise a charset-bearing text upload falls to .bin.
+export const extensionForMime = (mimeType: string): string => MIME_EXT[mimeType.split(";")[0].trim().toLowerCase()] ?? ".bin";
 
 // UTC YYYY/MM partition so a workspace with many uploads stays browsable. getUTCMonth is
 // 0-indexed, hence +1; zero-padded to two digits. UTC (not local) so the partition a file lands

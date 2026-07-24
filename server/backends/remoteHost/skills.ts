@@ -35,8 +35,10 @@ export interface DiscoveredSkill {
 // Scanned line-by-line rather than with a whole-document regex: a lazy
 // `[\s\S]*?` up to a closing fence backtracks super-linearly on a SKILL.md with
 // many newlines and no closing `---` (ReDoS). The line walk is linear.
-const parseSkillDescription = (raw: string): string | null => {
-  const lines = raw.split(/\r?\n/);
+export const parseSkillDescription = (raw: string): string | null => {
+  // A file saved as UTF-8-with-BOM puts U+FEFF before the opening "---", so the fence
+  // check below would fail and the skill would silently vanish from the menu. Strip it.
+  const lines = raw.replace(/^\uFEFF/, "").split(/\r?\n/);
   if (lines[0] !== "---") return null; // must open with a fence on line 1
   const close = lines.indexOf("---", 1); // …and be terminated
   if (close === -1) return null;

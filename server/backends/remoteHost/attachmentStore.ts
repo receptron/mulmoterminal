@@ -21,7 +21,9 @@ export interface SavedAttachment {
 export function createSaveAttachment(workspaceRoot: string, now: () => Date = () => new Date()) {
   return async function saveAttachment(base64Data: string, mimeType: string): Promise<SavedAttachment> {
     const partition = yearMonthUtc(now());
-    const filename = `${randomUUID().slice(0, 8)}${extensionForMime(mimeType)}`;
+    // Full UUID, not an 8-hex (32-bit) prefix: rename() silently overwrites on a name
+    // clash, and 32 bits collides at realistic upload counts (birthday bound ~77k files).
+    const filename = `${randomUUID()}${extensionForMime(mimeType)}`;
     const relativePath = path.posix.join(ATTACHMENTS_DIR, partition, filename);
     const absPath = path.join(workspaceRoot, ATTACHMENTS_DIR, partition, filename);
     await mkdir(path.dirname(absPath), { recursive: true });

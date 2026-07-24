@@ -5,8 +5,11 @@ import type { JsonObject } from "@mulmoclaude/core/remote-host";
 export const STORAGE_ID_RE = /^[A-Za-z0-9-]+$/;
 
 // Pull the staged storage_ids out of a command's `{ attachments: [{ storage_id }] }`
-// params, skipping anything malformed. Absent / wrong-shaped ⇒ [].
-export const stagedStorageIds = (params: JsonObject): string[] => {
+// params, skipping anything malformed. Absent / wrong-shaped ⇒ []. Accepts a
+// missing params object too: an expired command doc may carry none, and destructuring
+// `undefined` would throw a TypeError — breaking onExpire's never-throw contract.
+export const stagedStorageIds = (params: JsonObject | null | undefined): string[] => {
+  if (!params || typeof params !== "object") return [];
   const { attachments } = params;
   if (!Array.isArray(attachments)) return [];
   return attachments.flatMap((entry) => {
