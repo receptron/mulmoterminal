@@ -64,7 +64,9 @@ Grid cells aren't just for Claude — they can run your project's **scripts**, s
 
    > **Another way, as of 0.8.0:** a **`run:"shell"` button** in `.mulmoterminal.json` (e.g. `{ "run": "shell", "cmd": "yarn build" }`)
    > runs the same command as a command cell from a one-click header button. See [Configuration → Customizing the header](config.html#header).
-2. The script runs **inside that cell**, so you can watch the results right next to your Claude session.
+2. From an empty cell's launcher the script runs **inside that cell**; from a running session's **▶ Run** menu it
+   launches in **a spare cell next door** (so the conversation isn't interrupted). Either way you watch the results
+   right next to your Claude session.
 3. When a build or test fails and drowns you in logs, press the **✦ button** (Summarize output) on the command cell.
    It passes the output to `claude -p` and returns a short summary of the **errors / warnings / cause / how to fix**.
    Use **⧉ Copy as prompt** to copy "command + directory + summary + follow-up" and paste it into any session to continue.
