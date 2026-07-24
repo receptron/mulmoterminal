@@ -40,7 +40,9 @@ export const DEFAULT_BUTTONS: HeaderButton[] = [
   { id: "files", icon: "folder_open", label: "Browse files in the app", run: "open", open: { files: "${dir}" } },
   { id: "terminal", emoji: "🖥", label: "New terminal here", run: "open", open: { terminal: "${dir}" } },
   { id: "pr", emoji: "🔗", label: "Open this branch's PR", run: "open", when: "isGitRepo", open: { pr: true } },
-  { id: "gh", emoji: "🌐", label: "Open on GitHub", run: "open", when: "isGitRepo", open: { url: "https://github.com/${repo}" } },
+  // `repo != ` gates on a resolvable GitHub owner/repo (ctx.repo is null for non-GitHub or remoteless
+  // repos), so this never renders a broken `https://github.com/` link.
+  { id: "gh", emoji: "🌐", label: "Open on GitHub", run: "open", when: "repo != ", open: { url: "https://github.com/${repo}" } },
 ];
 
 // The live context a header is resolved against — all trusted server-side session state.

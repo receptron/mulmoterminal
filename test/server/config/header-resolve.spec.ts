@@ -153,12 +153,19 @@ describe("resolveHeader defaults + pickFile", () => {
   });
 
   it("drops the default pr button outside a git repo and shows it (as its PR url) when a PR exists", () => {
-    // Non-git: pr AND gh (both when:isGitRepo) drop, leaving the always-on buttons.
-    const nonGit = resolveHeader({ buttons: null, chips: null }, ctx({ isGitRepo: false }));
+    // Non-git (no remote, so repo is null too): pr and gh drop, leaving the always-on buttons.
+    const nonGit = resolveHeader({ buttons: null, chips: null }, ctx({ isGitRepo: false, repo: null }));
     expect(nonGit.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal", "files", "terminal"]);
     // Git repo WITH an open PR: the pr button resolves to the branch's PR url.
     const withPr = resolveHeader({ buttons: null, chips: null }, ctx({ prUrl: "https://github.com/receptron/mulmoterminal/pull/9" }));
     expect(withPr.buttons.find((b) => b.id === "pr")?.open).toEqual({ url: "https://github.com/receptron/mulmoterminal/pull/9" });
+  });
+
+  it("drops the default gh button in a git repo whose remote isn't GitHub (repo null), avoiding a broken github.com/ link", () => {
+    // A real git repo but a non-GitHub (or remoteless) origin → ctx.repo is null; gh must NOT render.
+    const nonGithub = resolveHeader({ buttons: null, chips: null }, ctx({ repo: null }));
+    expect(nonGithub.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal", "files", "terminal"]);
+    expect(nonGithub.buttons.some((b) => b.open?.url === "https://github.com/")).toBe(false);
   });
 
   it("an explicit empty list replaces the defaults with nothing", () => {

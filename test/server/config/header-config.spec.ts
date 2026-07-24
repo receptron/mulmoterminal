@@ -147,9 +147,10 @@ describe("DEFAULT_BUTTONS", () => {
     expect(DEFAULT_BUTTONS.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "${dir}" });
     expect(DEFAULT_BUTTONS.find((b) => b.id === "files")?.open).toEqual({ files: "${dir}" });
     expect(DEFAULT_BUTTONS.find((b) => b.id === "terminal")?.open).toEqual({ terminal: "${dir}" });
-    // pr/gh are git-only so they self-hide outside a repo.
+    // pr self-hides outside a repo (isGitRepo) and without an open PR (resolver); gh gates on a
+    // resolvable GitHub owner/repo so it never renders a broken https://github.com/ link.
     expect(DEFAULT_BUTTONS.find((b) => b.id === "pr")?.when).toBe("isGitRepo");
-    expect(DEFAULT_BUTTONS.find((b) => b.id === "gh")?.when).toBe("isGitRepo");
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "gh")?.when).toBe("repo != ");
   });
 });
 
