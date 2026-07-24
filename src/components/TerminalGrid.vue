@@ -318,6 +318,10 @@ watch(
   min-height: 0;
   min-width: 0;
   background: var(--bg-deep);
+  /* Containing block for the absolutely-positioned view-toggle (☰) button. Without it the
+     toggle resolves against the viewport and lands over the global header's Settings gear,
+     covering it while a cell is expanded. */
+  position: relative;
 }
 
 .grid {
