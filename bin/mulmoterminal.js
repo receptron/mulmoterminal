@@ -276,9 +276,9 @@ async function choosePort(requested, explicit) {
 function runServer(port, noOpen, cwd, onChild) {
   return new Promise((resolveExit) => {
     log(`Starting MulmoTerminal on port ${port}...`);
-    // stderr is piped (and passed through) so a fatal boot error can be inspected on exit —
-    // a half-unpacked npx cache entry crashes here with ERR_MODULE_NOT_FOUND, and without
-    // reading stderr the launcher cannot tell that from a real bug.
+    // stderr is piped (and passed through) so a fatal boot error can be inspected once the
+    // child closes — a half-unpacked npx cache entry crashes here with ERR_MODULE_NOT_FOUND,
+    // and without reading stderr the launcher cannot tell that from a real bug.
     const server = spawn(process.execPath, ["--import", "tsx", SERVER_ENTRY], {
       cwd: PKG_DIR,
       env: { ...process.env, NODE_ENV: "production", PORT: String(port), CLAUDE_CWD: cwd },
@@ -304,7 +304,10 @@ function runServer(port, noOpen, cwd, onChild) {
       }
     });
 
-    server.on("exit", (code) => {
+    // `close`, not `exit`: it fires only once the piped stderr has fully drained, so the
+    // whole crash output — including a trailing `_npx/<hash>` line that can arrive after
+    // `exit` — is in `stderrTail` before we inspect it.
+    server.on("close", (code) => {
       cancelReady();
       // Exit code 75 means this child failed to bind (EADDRINUSE) and never
       // served — always retriable, regardless of what a probe to the port saw
