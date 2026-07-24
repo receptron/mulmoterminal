@@ -6,6 +6,8 @@ import {
   isResumableTmuxSession,
   parseTmuxEnvironment,
   parseAttachedClientCount,
+  planMsOverride,
+  MS_OVERRIDE_ENTRY,
 } from "../../../server/infra/tmux";
 
 describe("tmuxSessionName", () => {
@@ -46,6 +48,43 @@ describe("TMUX_CONF_LINES", () => {
   it("forwards OSC 52 to the outer terminal (Claude's auto-copy → browser clipboard)", () => {
     expect(TMUX_CONF_LINES).toContain("set -g set-clipboard on");
     expect(TMUX_CONF_LINES.some((l) => l.includes("terminal-overrides") && l.includes("Ms="))).toBe(true);
+  });
+
+  // Regression (#740): with DOUBLE quotes tmux escape-processes the value while parsing the
+  // conf — `\E` becomes a bare `E` and `\007` a raw BEL — so the stored capability emits
+  // `E]52;…` as literal text and the clipboard write never happens. Measured on tmux 3.6a.
+  it("single-quotes the Ms override so tmux stores `\\E` rather than eating it", () => {
+    const line = TMUX_CONF_LINES.find((l) => l.includes("Ms="));
+    expect(line).toBe(`set -ag terminal-overrides ',${MS_OVERRIDE_ENTRY}'`);
+    expect(line).not.toContain('"');
+    expect(MS_OVERRIDE_ENTRY).toContain("Ms=\\E]52;");
+  });
+});
+
+describe("planMsOverride", () => {
+  // Captured from a real `tmux -L … show -g terminal-overrides` on tmux 3.6a. tmux doubles
+  // each stored backslash on the way out, so a working entry reads `Ms=\\E]52;`.
+  const DEFAULT_ONLY = "terminal-overrides[0] linux*:AX@\n";
+  const WORKING = `${DEFAULT_ONLY}terminal-overrides[1] "*:Ms=\\\\E]52;%p1%s;%p2%s\\\\007"\n`;
+  const BROKEN = `${DEFAULT_ONLY}terminal-overrides[1] "*:Ms=E]52;%p1%s;%p2%s\\a"\n`;
+
+  it("appends when the server has no OSC 52 override yet", () => {
+    expect(planMsOverride(DEFAULT_ONLY)).toEqual({ kind: "append" });
+    expect(planMsOverride("")).toEqual({ kind: "append" });
+  });
+
+  it("leaves a correctly-stored override alone", () => {
+    expect(planMsOverride(WORKING)).toEqual({ kind: "ok" });
+  });
+
+  // A server started before #740 keeps the broken value for its whole life — rewriting that
+  // one index is the only way an upgrade reaches it.
+  it("rewrites the entry a pre-fix server stored with the escape eaten", () => {
+    expect(planMsOverride(BROKEN)).toEqual({ kind: "replace", index: 1 });
+  });
+
+  it("ignores overrides that are not ours", () => {
+    expect(planMsOverride("terminal-overrides[0] xterm*:XT\nterminal-overrides[1] screen*:Ms@\n")).toEqual({ kind: "append" });
   });
 });
 

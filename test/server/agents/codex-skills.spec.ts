@@ -65,6 +65,38 @@ describe("syncCodexSkills", () => {
   });
 
   it("no-ops when the source doesn't exist", () => {
-    expect(syncCodexSkills(path.join(src, "nope"), dst)).toEqual({ mirrored: [], skipped: [] });
+    expect(syncCodexSkills(path.join(src, "nope"), dst)).toEqual({ mirrored: [], skipped: [], removed: [] });
+  });
+
+  // Regression (#742): a skill removed from the workspace must be un-mirrored from codex,
+  // or codex keeps auto-loading a deleted skill's SKILL.md forever.
+  it("removes a mirror we own once its source skill is gone", () => {
+    writeSkill(src, "keep-me", "# still here");
+    // A prior mirror whose source has since been deleted (marked = ours).
+    mkdirSync(path.join(dst, "gone"), { recursive: true });
+    writeFileSync(path.join(dst, "gone", ".mt-mirror"), "x");
+    writeFileSync(path.join(dst, "gone", "SKILL.md"), "# deleted upstream");
+    const res = syncCodexSkills(src, dst);
+    expect(res.mirrored).toEqual(["keep-me"]);
+    expect(res.removed).toEqual(["gone"]);
+    expect(existsSync(path.join(dst, "gone"))).toBe(false);
+    expect(existsSync(path.join(dst, "keep-me", "SKILL.md"))).toBe(true);
+  });
+
+  it("never removes a codex-owned skill (no marker), only our orphaned mirrors", () => {
+    writeSkill(dst, "codex-native", "# codex's own"); // unmarked
+    const res = syncCodexSkills(src, dst); // empty source, but dst exists
+    expect(res.removed).toEqual([]);
+    expect(readFileSync(path.join(dst, "codex-native", "SKILL.md"), "utf8")).toBe("# codex's own");
+  });
+
+  it("removes every orphaned mirror when the source dir is gone entirely", () => {
+    mkdirSync(path.join(dst, "orphan"), { recursive: true });
+    writeFileSync(path.join(dst, "orphan", ".mt-mirror"), "x");
+    writeSkill(dst, "codex-native", "# keep"); // unmarked — codex's own
+    const res = syncCodexSkills(path.join(src, "nope"), dst);
+    expect(res.removed).toEqual(["orphan"]);
+    expect(existsSync(path.join(dst, "orphan"))).toBe(false);
+    expect(existsSync(path.join(dst, "codex-native"))).toBe(true);
   });
 });
