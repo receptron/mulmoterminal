@@ -33,11 +33,29 @@ export function detectNpxCacheDir(stderrText) {
   return stderrText.slice(pathStartIndex(stderrText.slice(0, match.index)), match.index + match[0].length);
 }
 
+// Shell-quote the cache dir so a path containing quote characters (a home dir with an
+// apostrophe on POSIX is the realistic case) produces a command that is still valid — and
+// safe — to copy-paste, rather than one that breaks or runs something unintended.
+
+// POSIX single-quoting: wrap in '…' and turn every embedded ' into '\'' (close, escaped
+// quote, reopen). Nothing inside single quotes is special, so this is injection-proof.
+const posixQuote = (s) => `'${s.replace(/'/g, "'\\''")}'`;
+
+// PowerShell single-quoting: '…' with each ' doubled. Single quotes suppress $-interpolation
+// (a double-quoted path containing $ would otherwise expand a variable), so this is safe.
+const powershellQuote = (s) => `'${s.replace(/'/g, "''")}'`;
+
+// cmd has no way to escape a " inside "…", but " is an illegal character in a Windows path,
+// so double-quoting a real cache dir is safe; it protects the spaces that do occur.
+const cmdQuote = (s) => `"${s}"`;
+
 // The delete command differs per platform, and a wrong one is worse than none: `rm -rf` is not
 // a command on Windows, and cmd's `rmdir /s /q` is a syntax error in PowerShell (where `rmdir`
 // aliases Remove-Item), so Windows gets both of its shells spelled out.
 const removalCommands = (cacheDir, platform) =>
-  platform === "win32" ? [`  cmd:        rmdir /s /q "${cacheDir}"`, `  PowerShell: Remove-Item -Recurse -Force "${cacheDir}"`] : [`  rm -rf '${cacheDir}'`];
+  platform === "win32"
+    ? [`  cmd:        rmdir /s /q ${cmdQuote(cacheDir)}`, `  PowerShell: Remove-Item -Recurse -Force ${powershellQuote(cacheDir)}`]
+    : [`  rm -rf ${posixQuote(cacheDir)}`];
 
 /** The recovery instructions shown under the crash, one string per line. */
 export function npxCacheHintLines(cacheDir, platform) {

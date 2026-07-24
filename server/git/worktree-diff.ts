@@ -36,12 +36,17 @@ async function aheadOf(cwd: string, base: string): Promise<number> {
   return res.ok ? toCount(res.stdout) : 0;
 }
 
+// git escapes non-ASCII paths as C-quoted octal ("\346\227\245…") by default, which the
+// UI would show as garbage. `-c core.quotePath=false` makes it emit raw UTF-8 instead, so
+// a 日本語.txt reads as itself. Applied to every call whose output is a file PATH.
+const QUOTE_PATH_OFF = ["-c", "core.quotePath=false"];
+
 // Tracked changes vs base, with +/- counts (numstat: "<add>\t<del>\t<path>", "-"
 // for binary). Untracked files aren't in `git diff`, so add them from status.
 async function changedFiles(cwd: string, base: string): Promise<WorktreeFile[]> {
-  const tracked = await git(["diff", "--numstat", base], cwd);
+  const tracked = await git([...QUOTE_PATH_OFF, "diff", "--numstat", base], cwd);
   const files: WorktreeFile[] = tracked.ok ? tracked.stdout.split("\n").filter(Boolean).map(parseNumstat) : [];
-  const untracked = await git(["ls-files", "--others", "--exclude-standard"], cwd);
+  const untracked = await git([...QUOTE_PATH_OFF, "ls-files", "--others", "--exclude-standard"], cwd);
   const news = untracked.ok ? untracked.stdout.split("\n").filter(Boolean) : [];
   return [...files, ...news.map((path): WorktreeFile => ({ path, additions: 0, deletions: 0, status: "untracked" }))];
 }
@@ -51,7 +56,9 @@ function parseNumstat(line: string): WorktreeFile {
 }
 
 async function diffPatch(cwd: string, base: string): Promise<{ patch: string; truncated: boolean }> {
-  const res = await git(["diff", base], cwd);
+  // Same quoting fix as changedFiles: the patch's own `diff --git a/… b/…` headers carry
+  // the paths, so a non-ASCII filename would otherwise render as octal escapes here too.
+  const res = await git([...QUOTE_PATH_OFF, "diff", base], cwd);
   if (!res.ok) return { patch: "", truncated: false };
   const full = res.stdout;
   return capPatch(full, PATCH_LIMIT_CHARS);

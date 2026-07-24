@@ -43,3 +43,12 @@ export function toInsertText(paths: string[]): string {
 export function dropTextFromUriList(uriList: string): string {
   return toInsertText(parseFileUris(uriList));
 }
+
+// A drag carries external files when its type list includes the "Files" sentinel.
+// Internal element drags (custom types / plain text) don't, so anything keyed on this
+// intercepts only file drops — the window-level navigation guard never swallows an
+// in-app drag. `types` is a DataTransfer.types (available during dragover, when
+// `.files` is still empty).
+export function dragCarriesFiles(types: readonly string[]): boolean {
+  return types.includes("Files");
+}

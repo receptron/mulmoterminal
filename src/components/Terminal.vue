@@ -3,7 +3,8 @@ import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, watc
 import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { terminalManagesAttention, terminalViewActive } from "./terminalViewActive";
-import { dropTextFromUriList } from "./dropPaths";
+import { dragCarriesFiles, dropTextFromUriList } from "./dropPaths";
+import { translateUiSentence } from "../utils/translateUi";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
 import { terminalHeaderStyleFor } from "./cellHeaderStyle";
@@ -14,7 +15,7 @@ import RunMenu from "./RunMenu.vue";
 import SkillMenu from "./SkillMenu.vue";
 import { skillSeed } from "./skillSeed";
 import GitBranchChip from "./GitBranchChip.vue";
-import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderButtons";
+import { useHeaderButtons, hasPickFileButton, type HeaderButton } from "../composables/useHeaderButtons";
 import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
 import type { RunCommand } from "./runCommand";
@@ -309,21 +310,45 @@ function insertText(text: string) {
 // Drop a file onto the terminal to insert its absolute path, like a native
 // terminal. Browsers expose the real path only via the drag's file:// URIs
 // (text/uri-list); the File object hides it. Browsers that withhold the path
-// (e.g. Chrome) yield no URIs, so we insert nothing rather than a wrong string —
-// the file-picker button is the path-in-Chrome route.
+// (e.g. Chrome) yield no URIs — instead of silently inserting nothing, point the
+// user at the 📎 file-picker button, which is the path-in-Chrome route.
 function onDrop(e: DragEvent) {
   dragOver.value = false;
   const dt = e.dataTransfer;
-  if (!dt || dt.files.length === 0) return; // not a file drop — leave text drags alone
+  if (!dt || !dragCarriesFiles(dt.types)) return; // not a file drop — leave text drags alone
   e.preventDefault();
-  insertText(dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain")));
+  const text = dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain"));
+  if (text) insertText(text);
+  else showDropHint();
 }
 
 function onDragOver(e: DragEvent) {
-  if (!e.dataTransfer?.types.includes("Files")) return;
+  if (!e.dataTransfer || !dragCarriesFiles(e.dataTransfer.types)) return;
   e.preventDefault(); // required for the drop event to fire
   dragOver.value = true;
 }
+
+// Shown when a file was dropped but the browser withheld its path — the drop can't do
+// anything, so tell the user how to insert the path rather than leaving the failed drop
+// looking like nothing happened. The guidance depends on the header: point at the 📎 picker
+// only when it's actually present (buttons are configurable and it can be removed), otherwise
+// fall back to advice that always holds.
+const DROP_HINT_PICKER_EN = "This browser doesn't share a dropped file's path. Use the 📎 button in the header (Insert a file path) instead.";
+const DROP_HINT_TYPE_EN = "This browser doesn't share a dropped file's path — type or paste the path instead.";
+const dropHint = ref(false);
+const dropHintText = ref("");
+const DROP_HINT_MS = 6000;
+let dropHintTimer: ReturnType<typeof setTimeout> | undefined;
+async function showDropHint() {
+  const english = hasPickFileButton(headerButtons.value) ? DROP_HINT_PICKER_EN : DROP_HINT_TYPE_EN;
+  dropHintText.value = english; // show immediately; the translation (server-cached) swaps in
+  dropHint.value = true;
+  clearTimeout(dropHintTimer);
+  dropHintTimer = setTimeout(() => (dropHint.value = false), DROP_HINT_MS);
+  const translated = await translateUiSentence(english, "mulmoterminal-ui");
+  if (dropHint.value) dropHintText.value = translated; // ignore if it resolved after the hint hid
+}
+onUnmounted(() => clearTimeout(dropHintTimer));
 
 onUnmounted(() => {
   resizeObserver?.disconnect();
@@ -336,7 +361,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="flex h-full min-h-0 min-w-0 flex-1 flex-col bg-base">
+  <div class="relative flex h-full min-h-0 min-w-0 flex-1 flex-col bg-base">
     <div
       v-if="!hideHeader"
       class="flex items-center gap-3 bg-[var(--cell-header-bg,var(--bg-panel))] px-4 py-2 font-sans text-[14px] text-[var(--cell-header-fg,var(--text))]"
@@ -393,6 +418,21 @@ onUnmounted(() => {
       @dragleave="dragOver = false"
       @drop="onDrop"
     />
+    <Transition
+      enter-active-class="transition-opacity duration-200 ease-[ease]"
+      leave-active-class="transition-opacity duration-200 ease-[ease]"
+      enter-from-class="opacity-0"
+      leave-to-class="opacity-0"
+    >
+      <div
+        v-if="dropHint"
+        class="pointer-events-none absolute bottom-3 left-1/2 z-20 flex max-w-[min(90%,560px)] -translate-x-1/2 items-center gap-2 rounded-lg border-2 border-[#c98a00] bg-[#ffd54a] px-4 py-2.5 font-sans text-[13px] font-semibold leading-[1.4] text-[#1a1a2e] shadow-[0_4px_16px_rgba(0,0,0,0.45)]"
+        role="status"
+      >
+        <span class="material-symbols-outlined shrink-0 text-[18px]" aria-hidden="true">attach_file</span>
+        <span>{{ dropHintText }}</span>
+      </div>
+    </Transition>
   </div>
 </template>
 

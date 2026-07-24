@@ -66,7 +66,8 @@ describe("npxCacheHintLines", () => {
     const dir = "C:\\Users\\me\\AppData\\Local\\npm-cache\\_npx\\0a1b2c3d4e5f6789";
     const lines = npxCacheHintLines(dir, "win32");
     expect(lines).toContain(`  cmd:        rmdir /s /q "${dir}"`);
-    expect(lines).toContain(`  PowerShell: Remove-Item -Recurse -Force "${dir}"`);
+    // PowerShell uses SINGLE quotes so a $ in the path can't interpolate a variable.
+    expect(lines).toContain(`  PowerShell: Remove-Item -Recurse -Force '${dir}'`);
     expect(lines.some((l) => l.includes("rm -rf"))).toBe(false);
   });
 
@@ -78,6 +79,28 @@ describe("npxCacheHintLines", () => {
   it("names the corrupted directory on every platform", () => {
     (["darwin", "linux", "win32"] as const).forEach((platform) => {
       expect(npxCacheHintLines("/home/u/.npm/_npx/abc123", platform)).toContain("  /home/u/.npm/_npx/abc123");
+    });
+  });
+
+  // Regression (#736 Codex review): a path with a quote character must produce a still-valid,
+  // safe-to-paste command rather than one that breaks or runs something unintended.
+  describe("shell-quotes a path containing quote characters", () => {
+    it("POSIX: an apostrophe is escaped as '\\'' inside single quotes", () => {
+      const dir = "/home/o'brien/.npm/_npx/abc123";
+      const lines = npxCacheHintLines(dir, "linux");
+      expect(lines).toContain(`  rm -rf '/home/o'\\''brien/.npm/_npx/abc123'`);
+    });
+
+    it("PowerShell: an apostrophe is doubled inside single quotes", () => {
+      const dir = "C:\\Users\\o'brien\\npm-cache\\_npx\\abc123";
+      const lines = npxCacheHintLines(dir, "win32");
+      expect(lines).toContain(`  PowerShell: Remove-Item -Recurse -Force 'C:\\Users\\o''brien\\npm-cache\\_npx\\abc123'`);
+    });
+
+    it("PowerShell single-quotes keep a $ literal (no variable interpolation)", () => {
+      const dir = "C:\\Users\\$env\\_npx\\abc123";
+      const line = npxCacheHintLines(dir, "win32").find((l) => l.includes("PowerShell"));
+      expect(line).toContain("'C:\\Users\\$env\\_npx\\abc123'"); // the $ is inside single quotes
     });
   });
 });

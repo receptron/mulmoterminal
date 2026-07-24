@@ -36,6 +36,10 @@ describe("upstreamFailureMessage", () => {
       ["a non-string error", { error: 42 }],
       ["a nested error", { error: { message: "nope" } }],
       ["a differently named field", { message: "nope" }],
+      // Regression (#748): an empty (or whitespace-only) error string used to pass through,
+      // narrating a blank message the agent read as a bare "Done".
+      ["an empty error string", { error: "" }],
+      ["a whitespace-only error string", { error: "   " }],
     ])("falls back for %s", (_label, body) => {
       expect(upstreamFailureMessage(500, body, FALLBACK)).toBe("accounting request failed (HTTP 500)");
     });
@@ -52,10 +56,9 @@ describe("upstreamFailureMessage", () => {
     });
   });
 
-  // Current behaviour, pinned rather than endorsed: an empty `error` is still a string, so it
-  // wins over the fallback and the agent is told nothing at all. It takes a misbehaving
-  // router to produce, and changing it is a behaviour change this refactor keeps out.
-  it("passes an empty error string straight through", () => {
-    expect(upstreamFailureMessage(400, { error: "" }, FALLBACK)).toBe("");
+  // Fixed in #748: an empty (or whitespace-only) `error` no longer wins over the fallback —
+  // it would narrate a blank message the agent reads as a bare "Done".
+  it("falls back for an empty error string instead of narrating nothing", () => {
+    expect(upstreamFailureMessage(400, { error: "" }, FALLBACK)).toBe("accounting request failed (HTTP 400)");
   });
 });

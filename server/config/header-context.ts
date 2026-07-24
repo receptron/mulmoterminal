@@ -22,10 +22,17 @@ export function repoFromWebUrl(webUrl: string | null): string | null {
   return repo || null;
 }
 
-// A managed worktree lives at ~/.mulmoterminal/worktrees/<repo>-<hash>/<task>; its dir name is the task.
-function worktreeTask(cwd: string): string | null {
+// A managed worktree lives at <root>/<repo>-<hash>/<task>. The task is the FIRST segment
+// under <root> — NOT path.basename, which would return the wrong name for any cwd deeper
+// than the task dir itself (a session working in <task>/src would read as "src"). Root is a
+// parameter so the rule is unit-testable without the real home dir. Exported for that test.
+export function worktreeTask(cwd: string, root: string = WORKTREES_ROOT): string | null {
   const resolved = path.resolve(cwd);
-  return resolved.startsWith(WORKTREES_ROOT + path.sep) ? path.basename(resolved) : null;
+  const prefix = root + path.sep;
+  if (!resolved.startsWith(prefix)) return null;
+  // segments[0] = "<repo>-<hash>", segments[1] = "<task>", anything after is inside the task.
+  const segments = resolved.slice(prefix.length).split(path.sep);
+  return segments[1] ?? null;
 }
 
 async function remoteInfo(cwd: string): Promise<{ remoteUrl: string | null; repo: string | null }> {
