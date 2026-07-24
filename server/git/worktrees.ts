@@ -104,16 +104,27 @@ export function parseWorktreeList(porcelain: string): { path: string; head: stri
   return out;
 }
 
+// Kill a git call that never finishes (a broken hook waiting on input, a stuck lfs
+// smudge) so it can't pin a request forever. Generous: a real `worktree add` that
+// checks out a large repo is slow but not infinite.
+const GIT_TIMEOUT_MS = 120_000;
+
 // Run git with argv (no shell) in `cwd`; resolve { ok, stdout } — never reject, so
 // a missing git / non-repo dir is just `ok:false` and the caller falls back.
 export function git(args: string[], cwd?: string): Promise<{ ok: boolean; stdout: string }> {
   return new Promise((resolve) => {
     // eslint-disable-next-line sonarjs/no-os-command-from-path -- 'git' is a standard tool from PATH in this local dev server; all inputs go through argv (no shell)
-    const child = spawn("git", cwd ? ["-C", cwd, ...args] : args, { stdio: ["ignore", "pipe", "pipe"] });
-    let stdout = "";
-    child.stdout.on("data", (c) => (stdout += c.toString()));
+    const child = spawn("git", cwd ? ["-C", cwd, ...args] : args, { stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS });
+    // Collect bytes and decode ONCE: a chunk can split a multibyte UTF-8 character, and
+    // per-chunk toString() would turn a non-ASCII path/message into replacement chars.
+    const chunks: Buffer[] = [];
+    child.stdout.on("data", (c: Buffer) => chunks.push(c));
+    // stderr is not returned, but it MUST still be drained: git blocks on a full stderr
+    // pipe (a repo that prints thousands of lfs/hook warnings easily exceeds the 64KB
+    // buffer), so an unread pipe deadlocks the whole call. Discard the bytes, keep reading.
+    child.stderr.on("data", () => {});
     child.on("error", () => resolve({ ok: false, stdout: "" }));
-    child.on("close", (code) => resolve({ ok: code === 0, stdout }));
+    child.on("close", (code) => resolve({ ok: code === 0, stdout: Buffer.concat(chunks).toString("utf8") }));
   });
 }
 

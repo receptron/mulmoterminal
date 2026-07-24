@@ -80,4 +80,28 @@ describe("worktreeDiff", () => {
     const d = await worktreeDiff(wt.path);
     expect(d).toMatchObject({ isWorktree: true, base: "main", ahead: 0, dirty: 0, files: [], patch: "" });
   });
+
+  // Regression (#743): git C-quotes non-ASCII paths ("\346\227\245…") by default, so the
+  // changed-file list and the patch showed octal garbage for a Japanese filename. The fix
+  // passes -c core.quotePath=false; here the real git output must carry the raw name.
+  it.skipIf(!hasGit)("returns non-ASCII filenames raw, not C-quoted/octal-escaped", async () => {
+    const wt = await createWorktree(repo, "unicode");
+    if (!wt) throw new Error("expected a worktree");
+    // a committed tracked change with a Japanese name (numstat + patch paths)
+    writeFileSync(path.join(wt.path, "日本語.txt"), "本文\n");
+    g(wt.path, "add", "-A");
+    g(wt.path, "commit", "-m", "add japanese tracked file");
+    // and an untracked one (ls-files path)
+    writeFileSync(path.join(wt.path, "メモ.txt"), "memo\n");
+
+    const d = await worktreeDiff(wt.path);
+    const tracked = d.files.find((f) => f.status === "changed");
+    const untracked = d.files.find((f) => f.status === "untracked");
+    expect(tracked?.path).toBe("日本語.txt");
+    expect(untracked?.path).toBe("メモ.txt");
+    // no octal escapes / surrounding quotes leaked through
+    expect(d.files.some((f) => f.path.includes("\\"))).toBe(false);
+    expect(d.patch).toContain("日本語.txt");
+    expect(d.patch).not.toContain("\\346");
+  });
 });
