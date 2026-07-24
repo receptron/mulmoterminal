@@ -29,6 +29,7 @@ vi.mock("@xterm/xterm", () => ({
     // is covered against a REAL terminal in mouseTrackingGuard.spec.ts.
     parser = { registerCsiHandler: (...args: unknown[]) => mockTermState.csiHandlers.push(args) };
     loadAddon() {}
+    registerLinkProvider() {}
     open() {}
     onData() {}
     attachCustomKeyEventHandler(fn: (e: unknown) => boolean) {

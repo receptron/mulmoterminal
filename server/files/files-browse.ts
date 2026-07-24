@@ -10,59 +10,11 @@ import path from "node:path";
 import fs from "node:fs";
 import { marked } from "marked";
 import type { Express, Request, Response } from "express";
+import { resolveBase, containedPath, realContainedWithin } from "./pathContainment.js";
 
 // Cap on the bytes served to the editor / accepted on write — a text editor, not a
 // blob store. Large/binary files are refused rather than streamed into a textarea.
 export const MAX_EDIT_BYTES = 2 * 1024 * 1024;
-
-// Resolve a client-supplied project dir: absolute + existing dir, else the default
-// workspace (mirrors index.ts resolveWorkspace).
-export function resolveBase(cwd: string | null, defaultCwd: string): string {
-  if (cwd && path.isAbsolute(cwd)) {
-    try {
-      if (fs.statSync(cwd).isDirectory()) return cwd;
-    } catch {
-      // not a dir / missing — fall through to the default
-    }
-  }
-  return defaultCwd;
-}
-
-// Resolve `rel` under `base`; return the absolute path only if it stays within base
-// (reject `..` / absolute escapes). null = escapes the root.
-export function containedPath(base: string, rel: string): string | null {
-  const root = path.resolve(base);
-  const abs = path.resolve(root, rel);
-  if (abs !== root && !abs.startsWith(root + path.sep)) return null;
-  return abs;
-}
-
-function realpathOr(p: string): string {
-  try {
-    return fs.realpathSync(p);
-  } catch {
-    return p; // doesn't exist yet (a new file being written) — use the lexical path
-  }
-}
-
-// Lexical containment (containedPath) can be defeated by a SYMLINK inside the project
-// that points outside it. This resolves symlinks in the path's existing portion (a
-// not-yet-created write target has none) and confirms the real path still lands within
-// `base`. Returns the real absolute path, or null if it escapes.
-export function realContainedWithin(base: string, absLexical: string): string | null {
-  const root = realpathOr(path.resolve(base));
-  const rest: string[] = [];
-  let existing = absLexical;
-  while (!fs.existsSync(existing)) {
-    rest.unshift(path.basename(existing));
-    const parent = path.dirname(existing);
-    if (parent === existing) break; // reached the filesystem root
-    existing = parent;
-  }
-  const real = rest.length ? path.resolve(realpathOr(existing), ...rest) : realpathOr(existing);
-  if (real !== root && !real.startsWith(root + path.sep)) return null;
-  return real;
-}
 
 // Wrap marked's HTML output in a minimal, self-contained document (served sandboxed).
 export function mdToHtmlDoc(bodyHtml: string, title: string): string {

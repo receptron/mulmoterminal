@@ -28,6 +28,7 @@ import { reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 import { messageEffect } from "./serverMessage";
+import { createFilePathLinkProvider } from "./terminalFilePathLinkProvider";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -191,6 +192,35 @@ function guardMouseTracking(term: Terminal, swallowedMouseModes: Set<number>): v
   });
 }
 
+// Terminal input -> the slot's CURRENT socket (survives reconnects: `c.ws` is re-read
+// each keystroke, so input always targets the live socket).
+function wireTerminalInput(term: Terminal, c: Conn): void {
+  term.onData((data) => {
+    if (c.ws && c.ws.readyState === WebSocket.OPEN) {
+      c.ws.send(JSON.stringify({ type: "input", data }));
+    }
+  });
+  // Shift+Enter → newline (not submit): send the sequence ourselves and suppress the
+  // \r xterm would otherwise emit for it (returning false cancels the default).
+  term.attachCustomKeyEventHandler(
+    makeShiftEnterHandler((data) => {
+      if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data }));
+    }),
+  );
+}
+
+// Linkify file paths in the output → open them in a new tab via the raw-file route,
+// scoped to the session's live cwd (read lazily, since it's learned after connect).
+function registerFilePathLinks(term: Terminal, c: Conn): void {
+  term.registerLinkProvider(
+    createFilePathLinkProvider(
+      term,
+      () => c.knownCwd,
+      (url) => window.open(url, "_blank", "noopener,noreferrer"),
+    ),
+  );
+}
+
 function ensure(key: string, target: ConnTarget): Conn {
   const existing = conns.get(key);
   if (existing) {
@@ -254,21 +284,8 @@ function ensure(key: string, target: ConnTarget): Conn {
   };
   conns.set(key, c);
   connView.set(key, { status: "connecting", serverCwd: target.cwd });
-
-  // Terminal input -> the slot's CURRENT socket (survives reconnects: `c.ws` is
-  // re-read each keystroke, so input always targets the live socket).
-  term.onData((data) => {
-    if (c.ws && c.ws.readyState === WebSocket.OPEN) {
-      c.ws.send(JSON.stringify({ type: "input", data }));
-    }
-  });
-  // Shift+Enter → newline (not submit): send the sequence ourselves and suppress the
-  // \r xterm would otherwise emit for it (returning false cancels the default).
-  term.attachCustomKeyEventHandler(
-    makeShiftEnterHandler((data) => {
-      if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data }));
-    }),
-  );
+  registerFilePathLinks(term, c);
+  wireTerminalInput(term, c);
   return c;
 }
 

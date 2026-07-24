@@ -39,6 +39,7 @@ MulmoTerminal's features, organized by the **four pillars** (Supervise / See / A
 | Cost (estimated) | Approximate **session / today / this month** cost in settings |
 | Worktree diff badge | Shows the amount of change on a worktree cell; click for the diff panel |
 | GUI panel | Renders diagrams, forms, images, and documents — plus HTML, **video/slides (MulmoCast)**, collections, and accounting — from the agent's tool calls (Claude / Codex both supported) |
+| Clickable file paths | A **file path an agent prints** in the terminal becomes a link — click to **preview the file** (image / gif / video / PDF …) in a new browser tab (files within the session's working directory) |
 | Cross-repo PRs / Issues view | All registered repos' **open PRs and issues** in one Pull requests view in the toolbar |
 | Wiki / Collections / Accounting / Files | In-app views from the toolbar: a Wiki (with a graph view), collections, accounting, and a **file explorer + editor** |
 | Update notice | When a new version ships, the header shows an **update badge**; click it for the update command that fits your install (npm / git clone) |
