@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { existsSync, statSync } from "node:fs";
 import type { Express } from "express";
-import { loadAppConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
+import { loadAppConfig, loadAppConfigResult, backupCorruptConfig, saveAppConfig, mergeConfigUpdate, toPublicAppConfig, type AppConfig } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import { launchOptions } from "./launch-options.js";
@@ -87,7 +87,19 @@ export function mountConfigRoutes(app: Express, claudeCwd: string): void {
     // `config`, which may be stale (another mulmoterminal instance sharing this file
     // could have written since we booted). Using the stale copy for omitted fields
     // would clobber those edits (e.g. a chips-only POST wiping another's buttons).
-    const next = mergeConfigUpdate(loadAppConfig(CONFIG_FILE), body);
+    const loaded = loadAppConfigResult(CONFIG_FILE);
+    // A corrupt file is real config we merely failed to parse; merging the partial body
+    // onto an empty base would erase every omitted field. Back it up and refuse rather
+    // than overwrite (a single stray comma must not cost the user their whole config).
+    if (loaded.status === "corrupt") {
+      const bak = backupCorruptConfig(CONFIG_FILE);
+      const backupNote = bak ? ` (backed up to ${path.basename(bak)})` : "";
+      return res.status(409).json({
+        error: `config.json is unreadable and was NOT overwritten${backupNote}. Fix or remove it, then retry.`,
+      });
+    }
+    const base = loaded.status === "ok" ? loaded.config : loadAppConfig(CONFIG_FILE);
+    const next = mergeConfigUpdate(base, body);
     // Stage, persist, commit in-memory only on success — a failed write must not
     // leave GET exposing values that won't survive a restart.
     if (!saveAppConfig(CONFIG_FILE, next)) return res.status(500).json({ error: "failed to persist config" });

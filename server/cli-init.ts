@@ -6,7 +6,7 @@
 import { statSync, readdirSync, openSync, readSync, closeSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { loadAppConfig, mergeConfigUpdate, saveAppConfig } from "./config/app-config.js";
+import { loadAppConfig, loadAppConfigResult, mergeConfigUpdate, saveAppConfig } from "./config/app-config.js";
 import { deriveCwdPresets, extractCwdFromTranscript, type CwdRecord } from "./config/cwd-presets.js";
 
 const CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
@@ -87,6 +87,12 @@ function main(): void {
     log(`[dry-run] Would set ${presets.length} working-directory preset(s) (no changes written):`);
     for (const p of presets) console.log(`    • ${p.path}`);
     return;
+  }
+  // Refuse to overwrite a config we couldn't parse: seeding presets onto an empty base
+  // would wipe the user's existing launchers/providers/etc. (same hazard as POST /api/config).
+  if (loadAppConfigResult(CONFIG_FILE).status === "corrupt") {
+    console.error(`\x1b[31m[init]\x1b[0m ${CONFIG_FILE} is unreadable — fix or remove it before seeding presets. No changes written.`);
+    process.exit(1);
   }
   const next = mergeConfigUpdate(loadAppConfig(CONFIG_FILE), { cwdPresets: presets });
   if (!saveAppConfig(CONFIG_FILE, next)) {
