@@ -13,6 +13,7 @@ import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { computeUpdateNotice, isUpdateCheckDisabled } from "./update-check.js";
+import { detectNpxCacheDir, npxCacheHintLines } from "./npx-cache-hint.js";
 import { waitUntilReady } from "./wait-ready.js";
 import {
   chooseCwd,
@@ -33,6 +34,9 @@ const DEFAULT_PORT = 34567;
 // Server exit code meaning "port taken at bind time" — keep in sync with
 // server/index.ts (PORT_IN_USE_EXIT_CODE).
 const PORT_IN_USE_EXIT_CODE = 75;
+// Only the end of stderr matters for the crash diagnosis; a long-lived server can log
+// arbitrarily much before dying, so the tail is bounded.
+const STDERR_TAIL_MAX_BYTES = 64 * 1024;
 
 // Single source of truth: read the version from the shipped package.json so
 // `--version` never drifts from the published version.
@@ -241,10 +245,18 @@ async function choosePort(requested, explicit) {
 function runServer(port, noOpen, cwd, onChild) {
   return new Promise((resolveExit) => {
     log(`Starting MulmoTerminal on port ${port}...`);
+    // stderr is piped (and passed through) so a fatal boot error can be inspected once the
+    // child closes — a half-unpacked npx cache entry crashes here with ERR_MODULE_NOT_FOUND,
+    // and without reading stderr the launcher cannot tell that from a real bug.
     const server = spawn(process.execPath, ["--import", "tsx", SERVER_ENTRY], {
       cwd: PKG_DIR,
       env: { ...process.env, NODE_ENV: "production", PORT: String(port), CLAUDE_CWD: cwd },
-      stdio: "inherit",
+      stdio: ["inherit", "inherit", "pipe"],
+    });
+    let stderrTail = "";
+    server.stderr.on("data", (chunk) => {
+      process.stderr.write(chunk);
+      stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL_MAX_BYTES);
     });
     onChild(server);
 
@@ -261,7 +273,10 @@ function runServer(port, noOpen, cwd, onChild) {
       }
     });
 
-    server.on("exit", (code) => {
+    // `close`, not `exit`: it fires only once the piped stderr has fully drained, so the
+    // whole crash output — including a trailing `_npx/<hash>` line that can arrive after
+    // `exit` — is in `stderrTail` before we inspect it.
+    server.on("close", (code) => {
       cancelReady();
       // Exit code 75 means this child failed to bind (EADDRINUSE) and never
       // served — always retriable, regardless of what a probe to the port saw
@@ -269,6 +284,10 @@ function runServer(port, noOpen, cwd, onChild) {
       if (code === PORT_IN_USE_EXIT_CODE) {
         resolveExit();
         return;
+      }
+      if (code !== 0) {
+        const cacheDir = detectNpxCacheDir(stderrTail);
+        if (cacheDir) npxCacheHintLines(cacheDir, process.platform).forEach((line) => error(line));
       }
       process.exit(code ?? 1);
     });
