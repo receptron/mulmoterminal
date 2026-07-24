@@ -4,6 +4,7 @@ import { nextReadRange, takeCompleteLines, turnBoundaries, boundaryOutcome, HOOK
 const line = (o: unknown) => JSON.stringify(o);
 const started = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_started", turn_id: turnId } });
 const complete = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_complete", turn_id: turnId, last_agent_message: "done" } });
+const aborted = (turnId = "t1") => line({ type: "event_msg", payload: { type: "turn_aborted", turn_id: turnId, reason: "interrupted" } });
 const agentMessage = () => line({ type: "event_msg", payload: { type: "agent_message", message: "thinking" } });
 // A turn_context row carries a turn_id but no payload.type — the shape most likely to be
 // misread as a boundary.
@@ -62,6 +63,18 @@ describe("turnBoundaries", () => {
 
   it("reports several turns from one poll without collapsing any", () => {
     expect(turnBoundaries([started("t1"), complete("t1"), started("t2"), complete("t2")])).toEqual(["started", "completed", "started", "completed"]);
+  });
+
+  // Regression (#742): an interrupted turn (Esc / steer) writes task_started … turn_aborted
+  // with NO task_complete — verified against real ~/.codex/sessions rollouts. Without this,
+  // the working flag set at task_started never clears: spinner stuck, no finished-push, and
+  // the detached session is never reaped.
+  it("treats turn_aborted as a completed boundary (interrupted turns clear the working flag)", () => {
+    expect(turnBoundaries([started(), agentMessage(), aborted()])).toEqual(["started", "completed"]);
+  });
+
+  it("handles a normal turn followed by an interrupted one", () => {
+    expect(turnBoundaries([started("t1"), complete("t1"), started("t2"), aborted("t2")])).toEqual(["started", "completed", "started", "completed"]);
   });
 
   it("ignores rows that are not turn boundaries", () => {

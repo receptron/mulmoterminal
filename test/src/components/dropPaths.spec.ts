@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseFileUris, toShellArg, toInsertText, dropTextFromUriList } from "../../../src/components/dropPaths.js";
+import { parseFileUris, toShellArg, toInsertText, dropTextFromUriList, dragCarriesFiles } from "../../../src/components/dropPaths.js";
 
 describe("parseFileUris", () => {
   it("parses a single file:// URI into an absolute path", () => {
@@ -73,5 +73,18 @@ describe("dropTextFromUriList", () => {
   it("returns empty string when no file path is present", () => {
     expect(dropTextFromUriList("")).toBe("");
     expect(dropTextFromUriList("https://example.com")).toBe("");
+  });
+});
+
+describe("dragCarriesFiles", () => {
+  it("is true when the type list includes the Files sentinel", () => {
+    expect(dragCarriesFiles(["Files"])).toBe(true);
+    expect(dragCarriesFiles(["text/plain", "text/uri-list", "Files"])).toBe(true);
+  });
+
+  it("is false for an in-app / text-only drag and an empty list", () => {
+    expect(dragCarriesFiles(["text/plain"])).toBe(false);
+    expect(dragCarriesFiles(["application/x-cell-reorder"])).toBe(false);
+    expect(dragCarriesFiles([])).toBe(false);
   });
 });

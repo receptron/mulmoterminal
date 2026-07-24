@@ -13,22 +13,20 @@ export interface SessionRowFilter {
   isTranslationWorker: (id: string) => boolean;
   /** Multi-terminal GRID sessions. */
   isDevTerminal: (id: string) => boolean;
-  /** True for the unscoped (chat sidebar) query, false for a cwd-scoped one. Also picks the
-   *  dev-terminal direction: unscoped hides grid sessions, cwd-scoped shows ONLY them (#724). */
+  /** True for the unscoped (chat sidebar) query, false for a cwd-scoped one. */
   includePending: boolean;
   limit: number;
 }
 
 /** The rows a listing should render: newest first, capped, with the hidden kinds dropped.
- *  Two mirror-image rules on the same dev-terminal set: the unscoped CHAT sidebar hides grid
- *  sessions (they're the grid's, not chats), while the grid's OWN cwd-scoped resume picker shows
- *  ONLY grid sessions — a plain `claude`/mulmoclaude transcript in the dir isn't a grid terminal
- *  and shouldn't be offered to resume there (#724). The grid's own sessions must stay listed in
- *  the cwd-scoped view, or they stop being resumable. Pure so both rules can be pinned. */
+ *  The dev-terminal exclusion applies ONLY to the unscoped chat query — the grid's own
+ *  resume picker passes ?cwd= and must keep listing its sessions, or they stop being
+ *  resumable. Pure so that rule can be pinned; it is one boolean away from silently
+ *  hiding the grid's own sessions from itself. */
 export function selectSessionRows(rows: readonly SessionRow[], filter: SessionRowFilter): SessionRow[] {
   return rows
     .filter((row) => !filter.isTranslationWorker(row.id))
-    .filter((row) => (filter.includePending ? !filter.isDevTerminal(row.id) : filter.isDevTerminal(row.id)))
+    .filter((row) => !filter.includePending || !filter.isDevTerminal(row.id))
     .sort((a, b) => b.mtime - a.mtime)
     .slice(0, filter.limit);
 }

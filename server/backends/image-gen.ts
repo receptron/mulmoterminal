@@ -20,6 +20,11 @@ const DEFAULT_IMAGE_CONFIG = {
   imageConfig: { aspectRatio: "16:9" },
 };
 
+// A stalled generateContent (network hiccup, model queue) would otherwise leave the tool
+// call hanging forever. Cap it; the SDK's abortSignal frees our caller (it won't cancel
+// server-side billing, but nothing here is waiting on that).
+const IMAGE_TIMEOUT_MS = 120_000;
+
 let client: GoogleGenAI | null = null;
 function getClient() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -35,14 +40,20 @@ export async function generateImage(prompt: string) {
     return { message: "Image generation is unavailable on this server (set GEMINI_API_KEY)." };
   }
   let response;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
   try {
     response = await ai.models.generateContent({
       model: DEFAULT_IMAGE_MODEL,
       contents: [{ text: prompt }],
-      config: DEFAULT_IMAGE_CONFIG,
+      config: { ...DEFAULT_IMAGE_CONFIG, abortSignal: controller.signal },
     });
   } catch (e) {
-    return { message: `Image generation failed: ${e instanceof Error ? e.message : String(e)}` };
+    const cause = e instanceof Error ? e.message : String(e);
+    const reason = controller.signal.aborted ? `timed out after ${IMAGE_TIMEOUT_MS / 1000}s` : cause;
+    return { message: `Image generation failed: ${reason}` };
+  } finally {
+    clearTimeout(timer);
   }
 
   const parts = response?.candidates?.[0]?.content?.parts ?? [];

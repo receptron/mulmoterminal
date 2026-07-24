@@ -6,7 +6,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // pass-through behavior (and thus fail the Shift+Enter assertion) rather than crash.
 const mockKeyState: { handler: (e: unknown) => boolean } = vi.hoisted(() => ({ handler: () => true }));
 // The options ensure() passes to `new Terminal({...})`, captured for assertions.
-const mockTermState: { options: Record<string, unknown>; csiHandlers: unknown[][] } = vi.hoisted(() => ({ options: {}, csiHandlers: [] }));
+type FakeWheelEvent = { deltaY: number; preventDefault: () => void };
+const mockTermState: {
+  options: Record<string, unknown>;
+  csiHandlers: unknown[][];
+  wheelHandler: (ev: FakeWheelEvent) => boolean;
+  input: string[];
+  bufferType: "normal" | "alternate";
+} = vi.hoisted(() => ({ options: {}, csiHandlers: [], wheelHandler: () => true, input: [], bufferType: "normal" }));
 
 // Mock xterm + addons so the manager runs headless (no real DOM terminal / canvas).
 // Factories are hoisted above imports, so the fakes are declared INSIDE them.
@@ -27,7 +34,18 @@ vi.mock("@xterm/xterm", () => ({
     attachCustomKeyEventHandler(fn: (e: unknown) => boolean) {
       mockKeyState.handler = fn;
     }
+    // The wheel guard (#737) is driven directly by the stale-mode test below.
+    attachCustomWheelEventHandler(fn: (ev: FakeWheelEvent) => boolean) {
+      mockTermState.wheelHandler = fn;
+    }
+    get buffer() {
+      return { active: { type: mockTermState.bufferType } };
+    }
+    input(data: string) {
+      mockTermState.input.push(data);
+    }
     write() {}
+    refresh() {}
     reset() {}
     focus() {}
     scrollToBottom() {}
@@ -150,15 +168,47 @@ describe("useTerminalConnections — detached-slot state replay", () => {
   // is load-bearing rather than cosmetic: `term.parser` throws without it, so a terminal would fail
   // to construct at all. macOptionClickForcesSelection is the macOS escape hatch — there, xterm
   // bypasses mouse mode for Option+drag ONLY when it is set (elsewhere Shift needs no option).
-  it("registers the mouse-tracking guard on DECSET only, with the options it needs", () => {
+  it("registers the mouse-tracking guard on DECSET and DECRST, with the options it needs", () => {
     mockTermState.options = {};
     mockTermState.csiHandlers = [];
     conn.attach("cell-mouse", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
     expect(mockTermState.options.allowProposedApi).toBe(true);
     expect(mockTermState.options.macOptionClickForcesSelection).toBe(true);
-    // SET only — dropping the reset could strand mouse mode on (see mouseTrackingGuard.spec.ts).
-    expect(mockTermState.csiHandlers.map(([id]) => id)).toEqual([{ prefix: "?", final: "h" }]);
+    // SET swallows; RESET is only observed (must keep returning false) so the wheel-report
+    // record can follow the app's own mode teardown (#737) — see mouseTrackingGuard.spec.ts.
+    expect(mockTermState.csiHandlers.map(([id]) => id)).toEqual([
+      { prefix: "?", final: "h" },
+      { prefix: "?", final: "l" },
+    ]);
     conn.release("cell-mouse");
+  });
+
+  // The swallowed modes describe ONE session. An app that dies without sending DECRST would
+  // otherwise leave the slot believing the next app wants mouse reports, and that app's wheel
+  // would deliver escape bytes instead of scrolling — the #729 noise, one layer over (#737).
+  it("forgets swallowed mouse modes when the session is replaced, so the wheel guard doesn't leak across a reconnect", () => {
+    vi.useFakeTimers();
+    mockTermState.csiHandlers = [];
+    mockTermState.input = [];
+    mockTermState.bufferType = "alternate";
+    mockTermState.wheelHandler = () => true;
+    conn.attach("cell-race", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
+
+    const decset = mockTermState.csiHandlers.find(([id]) => (id as { final: string }).final === "h")?.[1] as (p: (number | number[])[]) => boolean;
+    decset([1002, 1006]); // the app asks for drag tracking + SGR: swallowed, and remembered
+    const wheel = mockTermState.wheelHandler;
+    expect(wheel({ deltaY: 1, preventDefault: () => {} })).toBe(false);
+    expect(mockTermState.input).toEqual(["\x1b[<65;1;1M"]);
+
+    // The app dies WITHOUT the matching DECRST and the socket drops; the slot reconnects.
+    FakeWebSocket.instances.at(-1)?.onclose?.();
+    vi.advanceTimersByTime(10_000);
+    mockTermState.input = [];
+
+    // A later alt-buffer app that never asked for tracking keeps xterm's own scrolling.
+    expect(wheel({ deltaY: 1, preventDefault: () => {} })).toBe(true);
+    expect(mockTermState.input).toEqual([]);
+    vi.useRealTimers();
   });
 
   it("does not replay a session id before the server has assigned one", () => {

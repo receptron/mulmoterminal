@@ -30,15 +30,20 @@ export async function prUrlForBranch(repo: string, branch: string, deps: PrForBr
   const { run, now, ttlMs, key } = branchQuery(deps, repo, branch);
   const hit = cache.get(key, now, ttlMs);
   if (hit !== undefined) return hit;
-  let url: string | null = null;
   try {
     const res = await run(["pr", "list", "--head", branch, "--repo", repo, "--state", "open", "--json", "url", "--limit", "1"]);
-    if (res.ok) url = parsePrUrl(res.stdout);
+    if (res.ok) {
+      // Cache only a REAL answer. A gh failure (offline, unauthed, rate-limited) must not be
+      // cached as "no PR" — that would hide the button for the whole TTL even after gh
+      // recovers. On failure we return null WITHOUT caching, so the next call retries.
+      const url = parsePrUrl(res.stdout);
+      cache.set(key, url, now);
+      return url;
+    }
   } catch {
-    url = null;
+    // fall through — transient failure, not cached
   }
-  cache.set(key, url, now);
-  return url;
+  return null;
 }
 
 // Test-only: drop the cache so cases don't leak across each other.

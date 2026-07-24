@@ -33,8 +33,10 @@ export function tmuxAvailable(): boolean {
 // OSC 52 to the OUTER terminal when it knows the outer terminal supports it — our web
 // xterm does (via the ClipboardAddon, #206), but its terminfo doesn't advertise `Ms`, so
 // we declare it. Without this, tmux swallows Claude Code's auto-copy and it never reaches
-// the browser clipboard. Appended (not set) so tmux's built-in overrides survive.
-const OSC52_MS_OVERRIDE = ",*:Ms=\\E]52;%p1%s;%p2%s\\007";
+// the browser clipboard.
+export const MS_OVERRIDE_ENTRY = "*:Ms=\\E]52;%p1%s;%p2%s\\007";
+// Appended (not set) so tmux's built-in overrides survive.
+const OSC52_MS_OVERRIDE = `,${MS_OVERRIDE_ENTRY}`;
 
 // Minimal config for our server: no status bar (this is a terminal INSIDE a terminal),
 // instant escape, generous scrollback, follow the latest client's size, never destroy a
@@ -53,19 +55,44 @@ export const TMUX_CONF_LINES: readonly string[] = [
   "set -g destroy-unattached off",
   "set -g mouse on",
   "set -g set-clipboard on",
-  `set -ag terminal-overrides "${OSC52_MS_OVERRIDE}"`,
+  // SINGLE quotes: inside double quotes tmux runs its own escape processing over the
+  // value, which eats the `\E` (leaving a bare `E` that is not an escape at all) and turns
+  // `\007` into a raw BEL — so the capability tmux stores emits `E]52;…` as literal text
+  // instead of an OSC 52 sequence. Measured on tmux 3.6a.
+  `set -ag terminal-overrides '${OSC52_MS_OVERRIDE}'`,
 ];
+
+export type MsOverridePlan = { kind: "ok" } | { kind: "append" } | { kind: "replace"; index: number };
+
+// What a RUNNING server's `show -g terminal-overrides` says we must do to get a working
+// `Ms`. Its own function because the repair case only exists for servers that stored the
+// double-quoted (broken) value before this was fixed, and that is not reachable from a
+// test without standing up a tmux server.
+//
+// tmux prints one `terminal-overrides[N] value` line per entry and doubles each stored
+// backslash, so a correct entry shows as `Ms=\\E]52;` and the broken one as `Ms=E]52;`.
+export function planMsOverride(showStdout: string): MsOverridePlan {
+  for (const line of showStdout.split("\n")) {
+    const entry = /^terminal-overrides\[(\d+)\] (.*)$/.exec(line);
+    if (!entry) continue;
+    const [, index, value] = entry;
+    if (!value.includes("Ms=") || !value.includes("]52;")) continue; // someone else's override
+    return value.includes("Ms=\\\\E]52;") ? { kind: "ok" } : { kind: "replace", index: Number(index) };
+  }
+  return { kind: "append" };
+}
 
 // A fresh server sources CONF_FILE via `-f` on its first `new-session`, but a server
 // already running from persisted sessions ignores it — so apply the options that must be
 // live. Idempotent across node restarts: mouse/set-clipboard are plain global sets; the
-// Ms override is appended only when it isn't already present.
+// Ms override is appended when absent and rewritten in place when a previous version
+// stored the broken value (a server can outlive the upgrade that fixed it).
 function applyLiveTmuxOptions(): void {
   tmux(["set", "-g", "mouse", "on"]);
   tmux(["set", "-g", "set-clipboard", "on"]);
-  if (!tmux(["show", "-g", "terminal-overrides"]).stdout.includes("Ms=")) {
-    tmux(["set", "-ag", "terminal-overrides", OSC52_MS_OVERRIDE]);
-  }
+  const plan = planMsOverride(tmux(["show", "-g", "terminal-overrides"]).stdout);
+  if (plan.kind === "append") tmux(["set", "-ag", "terminal-overrides", OSC52_MS_OVERRIDE]);
+  if (plan.kind === "replace") tmux(["set", "-g", `terminal-overrides[${plan.index}]`, MS_OVERRIDE_ENTRY]);
 }
 
 // The two line shapes `show-environment` emits. Anything else continues the

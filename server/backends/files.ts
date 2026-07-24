@@ -15,11 +15,11 @@
 //     navigation or <iframe>; PDFs skip the sandbox CSP (WebKit refuses to render
 //     sandbox-opaque PDFs) but keep nosniff. Matches MulmoClaude's RAW_SECURITY_HEADERS.
 import path from "node:path";
-import { createReadStream } from "node:fs";
 import type { Express, Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
 import { parseByteRange } from "./byte-range.js";
 import { rawServingPlan } from "./rawServingPlan.js";
+import { streamFileToResponse } from "./streamFile.js";
 
 export function mountFilesRoutes(app: Express, deps: { workspace: string }): void {
   const root = path.resolve(deps.workspace);
@@ -57,19 +57,24 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
     const rangeHeader = req.headers.range;
     if (rangeHeader) {
       const range = parseByteRange(rangeHeader, stat.size);
-      if (!range) {
+      // A well-formed but unsatisfiable range earns a 416; a malformed / unsupported one is
+      // ignored (fall through to the full 200), per RFC 7233 — a 416 breaks a media seek.
+      if (range.kind === "unsatisfiable") {
         res.status(416).setHeader("Content-Range", `bytes */${stat.size}`);
-        res.json({ error: "invalid range" });
+        res.json({ error: "range not satisfiable" });
         return;
       }
-      res.status(206);
-      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
-      res.setHeader("Content-Length", String(range.end - range.start + 1));
-      createReadStream(abs, { start: range.start, end: range.end }).pipe(res);
-      return;
+      if (range.kind === "range") {
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
+        res.setHeader("Content-Length", String(range.end - range.start + 1));
+        streamFileToResponse(abs, res, { start: range.start, end: range.end });
+        return;
+      }
+      // range.kind === "ignore" → serve the whole file below.
     }
 
     res.setHeader("Content-Length", String(stat.size));
-    createReadStream(abs).pipe(res);
+    streamFileToResponse(abs, res);
   });
 }

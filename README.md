@@ -2,6 +2,8 @@
 
 **Run a whole team of coding agents from your browser — and actually keep up with them.**
 
+![MulmoTerminal — a grid of live Claude Code sessions, each color-coded by state, updating in real time](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/hero.gif)
+
 MulmoTerminal turns [Claude Code](https://claude.com/claude-code) (and OpenAI's **Codex**)
 into a parallel, observable workspace: many agent sessions at once in a grid, each one
 color-coded so you see at a glance which are **working**, which **need you**, and which are
