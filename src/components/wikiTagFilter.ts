@@ -50,3 +50,11 @@ export const filterEntriesByTags = (entries: WikiPageEntry[], selected: Readonly
     return [...selected].every((tag) => tags.has(tag));
   });
 };
+
+// The tags a `?tag=` wiki-index query names, as a set to pre-select. A router query value is
+// `string | string[] | null` (repeated `?tag=a&tag=b` → array); non-strings and blanks are
+// dropped. Pure so the "open the wiki filtered by #worklog" deep-link is unit-testable.
+export const parseTagQuery = (raw: unknown): Set<string> => {
+  const values = Array.isArray(raw) ? raw : [raw];
+  return new Set(values.filter((v): v is string => typeof v === "string" && v.trim().length > 0).map((v) => v.trim()));
+};

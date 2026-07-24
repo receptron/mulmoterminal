@@ -17,6 +17,12 @@ export function wikiGotoIndex(): void {
   router.push("/wiki");
 }
 
+/** Open the wiki index pre-filtered to a tag (e.g. the Worklog shortcut → `#worklog`).
+ *  WikiIndexView reads `?tag=` into its initial selection. */
+export function wikiGotoTag(tag: string): void {
+  router.push({ path: "/wiki", query: { tag } });
+}
+
 /** Open one page by slug. Unsafe slugs are coerced to the index rather than pushing a
  *  route the API would reject — the guard mirrors the server's isSafeWikiSlug. */
 export function wikiGotoPage(slug: string): void {

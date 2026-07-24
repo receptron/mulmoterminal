@@ -8,11 +8,12 @@ import LauncherButton from "./LauncherButton.vue";
 import { useShortcuts } from "../composables/useShortcuts";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
-import { useWikiBrowse, wikiGotoIndex } from "../composables/useWikiBrowse";
+import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import { useUpdateStatus } from "../composables/useUpdateStatus";
 import { useDropdownMenu } from "../composables/useDropdownMenu";
+import { parseTagQuery } from "./wikiTagFilter";
 import type { Shortcut } from "../types/shortcuts";
 import type { StatusCounts } from "./gridTabs";
 import { gridStatusSummary } from "./gridTabs";
@@ -92,6 +93,13 @@ function showAccounting(): void {
 }
 function showWiki(): void {
   wikiGotoIndex();
+}
+// Grid-only shortcut to the dev worklog: the wiki filtered to the #worklog tag (the weekly
+// dev-log pages the scheduled worklog task writes).
+const WORKLOG_TAG = "worklog";
+const worklogActive = computed(() => wikiOpen.value && parseTagQuery(route.query.tag).has(WORKLOG_TAG));
+function showWorklog(): void {
+  wikiGotoTag(WORKLOG_TAG);
 }
 function showPrs(): void {
   prsGotoIndex();
@@ -191,6 +199,14 @@ function showPrs(): void {
         <p v-else class="text-muted">{{ updateBadge.text }}</p>
       </div>
     </div>
+    <LauncherButton
+      v-if="inGrid"
+      icon="history_edu"
+      title="Worklog — the dev work log in the wiki (#worklog)"
+      label="Worklog"
+      :active="worklogActive"
+      @click="showWorklog"
+    />
     <LauncherButton
       :icon="soundEnabled ? 'notifications_active' : 'notifications_off'"
       :title="soundEnabled ? 'Attention sound on' : 'Attention sound off'"
