@@ -101,6 +101,31 @@ describe("GridView roster ordering (#720)", () => {
   });
 });
 
+describe("GridView guide help (empty state)", () => {
+  it("shows the guide footer (ja/en links) when no terminal is running, and hides it once one is", async () => {
+    // Empty grid: ensureEntry leaves only the entry launch cell, so runningCount === 0.
+    const empty = await mountGrid();
+    const footer = empty.find("footer");
+    expect(footer.exists()).toBe(true);
+    const hrefs = footer.findAll("a").map((a) => a.attributes("href"));
+    expect(hrefs).toContain("https://receptron.github.io/mulmoterminal/guide/ja/");
+    expect(hrefs).toContain("https://receptron.github.io/mulmoterminal/guide/en/");
+    empty.unmount();
+
+    // A running session cell (occupied) — the newcomer hint must step out of the way.
+    localStorage.setItem(
+      "grid_v2",
+      JSON.stringify({ cells: [{ uid: 1, session: IDS.idleA, cwd: "/w" }], expanded: null, page: 0, sortMode: "manual" }),
+    );
+    const running = mount((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: true, AppToolbar: ToolbarStub, SettingsModal: SettingsStub } },
+    });
+    await flushPromises();
+    expect(running.find("footer").exists()).toBe(false);
+    running.unmount();
+  });
+});
+
 describe("GridView settings wiring", () => {
   it("passes pushEnabled to SettingsModal and saves it on update-push-enabled (regression #347)", async () => {
     const w = await mountGrid();

@@ -3,6 +3,7 @@ import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated
 import TerminalGrid from "./TerminalGrid.vue";
 import AppSettingsModal from "./AppSettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
+import GuideLinks from "./GuideLinks.vue";
 import { startCollectionChat } from "../composables/useChatLauncher";
 import { router } from "../router";
 import {
@@ -76,6 +77,10 @@ watch(
 );
 
 const pages = computed(() => pageCount(state.value.cells.length));
+
+// Nothing has been launched yet (only the entry launch cell) — show the newcomer a
+// pointer to the guide, cleared the moment any terminal starts.
+const noRunningTerminals = computed(() => runningCount(state.value.cells) === 0);
 
 // The "auto" order needs every cell's status, including cells on pages that aren't
 // mounted. useGridActivity tracks each cell session's live attention state by id —
@@ -422,6 +427,9 @@ function configureAppearance() {
       @status="onStatus"
       @list-mode="onListMode"
     />
+    <footer v-if="noRunningTerminals" class="flex-none border-t border-border bg-panel px-4 py-2 text-center">
+      <GuideLinks />
+    </footer>
     <AppSettingsModal v-if="showSettings" @configure-appearance="configureAppearance" @close="closeSettings" />
   </div>
 </template>

@@ -7,6 +7,7 @@ import { useCost } from "../composables/useCost";
 import { useGoogleLink } from "../composables/useGoogleLink";
 import SettingsButton from "./SettingsButton.vue";
 import SettingsField from "./SettingsField.vue";
+import GuideLinks from "./GuideLinks.vue";
 import type { Launcher } from "./launchers";
 import type { UserMcpServer } from "./userMcp";
 import { canAddLauncher, canAddMcpServer, canAddRepo } from "./settingsValidators";
@@ -463,6 +464,9 @@ onUnmounted(() => {
       <p v-else-if="cost && (cost.unpricedTurns > 0 || cost.sessionUnpricedTurns > 0)" class="mt-2 text-[12px] text-dim">
         Some turns used a model with no known price and are excluded from these estimates.
       </p>
+
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Help &amp; user guide</h3>
+      <GuideLinks />
 
       <div class="mt-4 flex items-center gap-2">
         <span class="flex-1" />
