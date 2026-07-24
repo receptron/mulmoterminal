@@ -51,6 +51,9 @@ const props = defineProps<{
   reorderable?: boolean;
   openSessionIds: string[];
   openCwds: string[];
+  // While a cell is zoomed: cockpit roster (true) vs thumbnail strip (false). Owned by GridView
+  // so the toggle can live in the global toolbar rather than float over the stage.
+  listMode: boolean;
 }>();
 const emit = defineEmits<{
   (e: "session" | "cwd", uid: number, value: string): void;
@@ -60,8 +63,6 @@ const emit = defineEmits<{
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
   (e: "agent", uid: number, value: "claude" | "codex"): void;
-  // Roster shown (true) / thumbnail strip (false), so the parent can pause the roster-only poll.
-  (e: "list-mode", on: boolean): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();
@@ -104,10 +105,6 @@ const zoomMain = ref<HTMLElement | null>(null);
 const mounted = ref(false);
 onMounted(() => (mounted.value = true));
 const zoomed = computed(() => props.expandedUid !== null && mounted.value);
-// While zoomed, show the cockpit roster (true) or the old thumbnail filmstrip (false).
-const listMode = ref(true);
-// The roster is the only consumer of the parent's /api/session poll — tell it when we hide it.
-watch(listMode, (on) => emit("list-mode", on));
 
 const stage = ref<HTMLElement | null>(null);
 // The cells currently flying between slots. Also gates the stylesheet: the cells not in
@@ -179,18 +176,6 @@ watch(
 
 <template>
   <div ref="stage" class="stage" :class="{ zoomed, listmode: listMode, flipping: flippingUids.size > 0 }" :style="flipVars" @focusin="onFocusIn">
-    <!-- toggle the zoomed side panel between the text roster and the old thumbnail strip. -->
-    <button
-      v-if="zoomed"
-      type="button"
-      data-testid="view-toggle"
-      class="absolute right-3 top-2 z-10 h-[26px] w-[26px] cursor-pointer rounded-md border border-border bg-panel text-[13px] leading-none text-fg"
-      :title="listMode ? 'Show thumbnails' : 'Show list'"
-      :aria-label="listMode ? 'Switch to thumbnail strip' : 'Switch to list'"
-      @click="listMode = !listMode"
-    >
-      {{ listMode ? "▤" : "☰" }}
-    </button>
     <!-- Cockpit roster: a tall text row per cell (status / dir / summary / prompt / latest
          reply). Click a row to swap which terminal is enlarged. -->
     <aside v-if="zoomed && listMode" data-testid="cockpit" class="flex min-w-0 shrink-0 grow-0 basis-[360px] flex-col gap-[5px] overflow-y-auto bg-deep p-1.5">
@@ -318,10 +303,6 @@ watch(
   min-height: 0;
   min-width: 0;
   background: var(--bg-deep);
-  /* Containing block for the absolutely-positioned view-toggle (☰) button. Without it the
-     toggle resolves against the viewport and lands over the global header's Settings gear,
-     covering it while a cell is expanded. */
-  position: relative;
 }
 
 .grid {

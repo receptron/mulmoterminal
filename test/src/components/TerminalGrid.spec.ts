@@ -47,6 +47,7 @@ const mountGrid = (cells: Cell[], expandedUid: number | null = null, cancelUid: 
       openSessionIds: [],
       openCwds: [],
       reorderable,
+      listMode: true,
     },
   });
 const cellsOf = (w: ReturnType<typeof mount>) => w.findAllComponents({ name: "TerminalCell" });
@@ -67,7 +68,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   headerTextColor: null,
   ...over,
 });
-const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[], reorderable = false) =>
+const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[], reorderable = false, listMode = true) =>
   mount(TerminalGrid, {
     props: {
       cells,
@@ -81,6 +82,7 @@ const mountCockpit = (cells: Cell[], expandedUid: number, listRows: CockpitRow[]
       openSessionIds: [],
       openCwds: [],
       reorderable,
+      listMode,
     },
   });
 
@@ -223,14 +225,14 @@ describe("active-cell focus zoom", () => {
 });
 
 describe("grid cockpit (list view)", () => {
-  it("toggles between the text roster and the thumbnail strip", async () => {
+  it("shows the roster in list mode and the thumbnail strip otherwise (driven by the listMode prop)", async () => {
     const w = mountCockpit([cell(0, "s0"), cell(1, "s1")], 0, [rosterRow(0), rosterRow(1)]);
     await nextTick();
     expect(w.find('[data-testid="cockpit"]').exists()).toBe(true);
     expect(w.find(".stage").classes()).toContain("listmode");
     expect(w.findAll('[data-testid="cockpit-row"]')).toHaveLength(2);
 
-    await w.get('[data-testid="view-toggle"]').trigger("click");
+    await w.setProps({ listMode: false });
     expect(w.find('[data-testid="cockpit"]').exists()).toBe(false); // roster gone
     expect(w.find(".stage").classes()).not.toContain("listmode"); // filmstrip mode
   });
@@ -247,15 +249,6 @@ describe("grid cockpit (list view)", () => {
     expect(w.get('[data-testid="cockpit"]').classes()).toContain("overflow-y-auto");
     // ...and each row refuses to shrink, so the list overflows (scrolls) rather than cramming.
     for (const row of w.findAll('[data-testid="cockpit-row"]')) expect(row.classes()).toContain("shrink-0");
-  });
-
-  it("emits list-mode as the roster is toggled off then on, so the parent can pause its poll", async () => {
-    const w = mountCockpit([cell(0, "s0")], 0, [rosterRow(0)]);
-    await nextTick();
-    await w.get('[data-testid="view-toggle"]').trigger("click"); // roster -> strip
-    expect(w.emitted("list-mode")?.[0]).toEqual([false]);
-    await w.get('[data-testid="view-toggle"]').trigger("click"); // strip -> roster
-    expect(w.emitted("list-mode")?.[1]).toEqual([true]);
   });
 
   it("emits toggle-expand when a NON-active row is clicked, and not for the active one", async () => {
