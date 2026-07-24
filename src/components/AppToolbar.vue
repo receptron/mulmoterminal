@@ -115,16 +115,6 @@ function showPrs(): void {
 
 <template>
   <header class="flex h-10 flex-none items-center border-b border-border bg-panel px-4">
-    <!-- Zoomed-grid only: switch the expanded terminal's side panel between the cockpit roster and
-         the thumbnail strip. Lives at the far left and hides when nothing is expanded. -->
-    <LauncherButton
-      v-if="showViewToggle"
-      class="mr-1"
-      :icon="listMode ? 'view_carousel' : 'view_agenda'"
-      :title="listMode ? 'Show thumbnail strip' : 'Show list roster'"
-      :label="listMode ? 'Show thumbnail strip' : 'Show list roster'"
-      @click="emit('toggle-view')"
-    />
     <span class="font-sans text-[14px] font-semibold tracking-[0.02em] text-fg">MulmoTerminal</span>
     <nav class="ml-4 flex min-w-0 items-center gap-[3px] overflow-x-auto" aria-label="Views">
       <LauncherButton icon="chat" title="Chat" label="Chat" :active="chatActive" @click="showChat" />
@@ -231,6 +221,15 @@ function showPrs(): void {
       :active="soundEnabled"
       :aria-pressed="soundEnabled"
       @click="toggleSound"
+    />
+    <!-- Zoomed-grid only: switch the expanded terminal's side panel between the cockpit roster and
+         the thumbnail strip. Sits at the right end (next to Settings) and hides when nothing is expanded. -->
+    <LauncherButton
+      v-if="showViewToggle"
+      :icon="listMode ? 'view_carousel' : 'view_agenda'"
+      :title="listMode ? 'Show thumbnail strip' : 'Show list roster'"
+      :label="listMode ? 'Show thumbnail strip' : 'Show list roster'"
+      @click="emit('toggle-view')"
     />
     <LauncherButton icon="settings" title="Settings" label="Settings" @click="emit('settings')" />
   </header>
