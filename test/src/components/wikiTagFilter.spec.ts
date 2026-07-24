@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { WikiPageEntry } from "@mulmoclaude/core/wiki";
-import { tagCounts, filterChips, filterEntriesByTags, TARGET_FILTER_CHIPS } from "../../../src/components/wikiTagFilter";
+import { tagCounts, filterChips, filterEntriesByTags, parseTagQuery, TARGET_FILTER_CHIPS } from "../../../src/components/wikiTagFilter";
 
 const entry = (slug: string, tags: string[]): WikiPageEntry => ({ title: slug, slug, description: "", tags });
 
@@ -103,5 +103,29 @@ describe("filterEntriesByTags", () => {
 
   it("returns nothing when no entry carries all selected tags", () => {
     expect(filterEntriesByTags(entries, new Set(["x", "y", "z", "missing"]))).toEqual([]);
+  });
+});
+
+describe("parseTagQuery", () => {
+  it("reads a single tag from a string query", () => {
+    expect([...parseTagQuery("worklog")]).toEqual(["worklog"]);
+  });
+
+  it("reads repeated tags from an array query", () => {
+    expect([...parseTagQuery(["worklog", "notes"])]).toEqual(["worklog", "notes"]);
+  });
+
+  it("trims whitespace and drops blank / non-string values", () => {
+    expect([...parseTagQuery(["  worklog  ", "", "   ", 5, null])]).toEqual(["worklog"]);
+  });
+
+  it("is empty for null / undefined / a blank string (no filter)", () => {
+    expect(parseTagQuery(null).size).toBe(0);
+    expect(parseTagQuery(undefined).size).toBe(0);
+    expect(parseTagQuery("").size).toBe(0);
+  });
+
+  it("de-duplicates repeated tags", () => {
+    expect([...parseTagQuery(["worklog", "worklog"])]).toEqual(["worklog"]);
   });
 });
