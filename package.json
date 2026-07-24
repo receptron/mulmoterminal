@@ -33,8 +33,8 @@
     "node": ">=22.9"
   },
   "scripts": {
-    "dev": "concurrently -n server,vite -c blue,green \"node --watch --import tsx --env-file-if-exists=.env server/index.ts\" \"vite\"",
-    "dev:server": "node --watch --import tsx --env-file-if-exists=.env server/index.ts",
+    "dev": "concurrently -n server,vite -c blue,green \"node scripts/dev-server.mjs\" \"vite\"",
+    "dev:server": "node scripts/dev-server.mjs",
     "dev:client": "vite",
     "build": "vue-tsc -b && vite build",
     "typecheck": "vue-tsc -b",

@@ -104,8 +104,39 @@ point**）で、connection ハンドラ実行前に `attachSocketErrorLogger(ws,
   （リスナ無しでは）throw することをまず確認し、`attachSocketErrorLogger` 適用後は同じ emit が
   吸収されて警告ログのみになることを検証（変異テスト的に「無ければ死ぬ／有れば生きる」を担保）。
 
+### Step C（決定打）— dev バックエンドをクラッシュ時に自動再起動する supervisor ✅ 追加 PR
+
+**Step A/B マージ後も再発**。調査の結果:
+
+- 落ちた瞬間、mulmoterminal の dev プロセス（`concurrently` / `node --watch` の親 / vite）は**生存**、
+  だが **34567 を listen しているものが無い**。＝`index.ts` の子が**ブート中にクラッシュ**して
+  `node --watch` が idle 待機している状態。
+- 同一コードを手で直接ブートすると**正常に listen する**。＝クラッシュは**間欠的**で、しかも
+  Step A のガードを**すり抜けている**。ガードは install 後の runtime 例外しか捕えないので、
+  すり抜ける＝**import 時エラー**（ガード登録前）か **明示 `process.exit`**（例: 再起動時に前インスタンスが
+  まだ 34567 を握っていて EADDRINUSE → `serverErrorExit` → `process.exit`）。
+- 実測で確定: `node --watch` は**クラッシュでは再起動しない**（"Failed running... Waiting for file
+  changes" と表示して待つだけ）。これが「切断されたまま二度と戻らない」の正体。
+
+根本原因（間欠クラッシュそのもの）は再現できていないが、**症状の決定打**はこの「再起動しない」性質。
+`scripts/dev-server.mjs`（supervisor）で `node --watch` を置換:
+
+- **どんな exit でも**バックエンドを再起動（fast-crash はバックオフ、通常は即）。import 時エラーでも
+  `process.exit`（EADDRINUSE レース）でも自己回復する。tmux 永続化のおかげで再起動後は全ターミナルが
+  透過再アタッチされ、切断は「恒久」から「一瞬」になる。
+- ソース変更でも再起動（`node --watch` の役割を継続）。`node --watch` は元々変更ごとにプロセス全体を
+  再実行するだけなので、full-restart 化してもコストはほぼ同じ。
+- stdio inherit なのでクラッシュのスタックは server ペインにそのまま出る＋ `[dev-server] backend
+  exited (...)` 行で可視化。次に落ちても自己回復しつつ原因ログが残る。
+
+テスト: `test/scripts/dev-server.spec.ts` — stub エントリ（ブートで pid を追記して即クラッシュ）を
+supervisor に食わせ、2 回目のブートが起きる（＝再起動した）ことをポーリングで検証。
+`DEV_SERVER_ENTRY` / `DEV_SERVER_WATCH` env override はこのテスト専用フック。
+
 ## 未確定事項 / フォローアップ
 
-- 実際の原因スタック: Step B（ws socket error）が本命だが、Step A のガードで今後別の発生源
-  （PTY 系等）が判明したら都度塞ぐ。
-- fail-fast（log→exit→supervisor 再起動）にすべきか、log→継続のままにするか。まずは継続で運用し判断。
+- 間欠クラッシュの実スタック: supervisor 化で自己回復するようになったので緊急度は下がったが、
+  次回発生時に server ペインの `[dev-server] backend exited` 直前のスタックで発生源を確定する。
+  第一候補は import 時エラー か 再起動レースの EADDRINUSE。
+- fail-fast（log→exit→supervisor 再起動）にすべきか、log→継続のままにするか。supervisor が入った今、
+  fail-fast でも自己回復するので選択肢が広がった。まずは現状（ガードは継続、supervisor が再起動）で運用。
