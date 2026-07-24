@@ -132,8 +132,13 @@ const toolStores = createToolStores({
 });
 
 // Bytes of recent output kept per pty and replayed when a client reattaches to
-// a background session, so the user sees context instead of a blank screen.
-const OUTPUT_BUFFER_LIMIT = 64 * 1024;
+// a background session, so the user sees context instead of a blank screen. On
+// reattach the client resets its terminal and rebuilds scrollback purely from
+// this replay, so this — not xterm's 1000-line scrollback — is what caps how far
+// back you can scroll after a reload. 64 KiB of escape-heavy TUI output rendered
+// to only ~100 lines; size it to comfortably fill the client's ~1000-line
+// scrollback (older lines past that are dropped client-side anyway).
+const OUTPUT_BUFFER_LIMIT = 1024 * 1024;
 
 // Assigned once the HTTP server exists (createPubSub needs it).
 let pubsub: ReturnType<typeof createPubSub> | null = null;
