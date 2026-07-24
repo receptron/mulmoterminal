@@ -62,6 +62,7 @@ Open it from the ⚙ in the toolbar.
 | `soundFile` | Custom notification sound (absolute path to an audio file; also settable from the modal) |
 | `pushEnabled` | Where the Web Push toggle is stored (default `false` → [Mobile notifications](notifications.html)) |
 | `worklogEnabled` / `worklogIntervalHours` | The periodic dev-work log (default off / 6 hours) |
+| `terminalSubmit` | Which bytes mean **submit** vs **newline** — `"cr"` (default) or `"esc-cr"` (→ [Enter — submit vs. newline](#terminal-submit)) |
 
 ## Running on another model (providers) {#providers}
 
@@ -81,6 +82,65 @@ Note that `baseUrl` must not end in `/v1`, and `tokenEnv` is the **name** of a v
 
 → **Full walkthrough, the measured model list, how to add your own models, and troubleshooting:
 [Using another model via OpenRouter](providers.html).**
+
+## Enter — submit vs. newline (`terminalSubmit`) {#terminal-submit}
+
+Whether **Enter submits** your prompt or **inserts a newline** is decided by Claude Code (its
+TUI), from the *bytes* the terminal sends it — not by MulmoTerminal. Two byte sequences are in
+play:
+
+- **CR** (`\r`) — what a bare **Enter** sends.
+- **ESC + CR** (`\x1b\r`) — what **Option/Alt+Enter**, and MulmoTerminal's **Shift+Enter**, send.
+
+Claude Code's **standard** binding reads **CR = submit** and **ESC+CR = newline**. That is
+MulmoTerminal's default, so **you don't need this setting unless you have changed it**. Some people
+rebind Claude Code the other way round (**CR = newline, ESC+CR = submit**); for them Shift+Enter
+would *submit* the prompt, and the phone's "send" would only *type* the text without submitting it.
+`terminalSubmit` makes both the keyboard and the phone follow your binding.
+
+```jsonc
+{ "terminalSubmit": "cr" }      // default: Enter submits, Shift+Enter makes a newline
+{ "terminalSubmit": "esc-cr" }  // reversed: Enter submits with ESC+CR, Shift+Enter makes a newline
+```
+
+| Mode | Enter | Shift+Enter · Option/Alt+Enter | Phone "send" (remote view) |
+|---|---|---|---|
+| `cr` (default) | submit (`\r`) | newline (`\x1b\r`) | submits with `\r` |
+| `esc-cr` | submit (`\x1b\r`) | newline (`\r`) | submits with `\x1b\r` |
+
+In **both** modes the *meaning* is the same — **Enter submits, Shift/Option+Enter make a newline** —
+only the bytes differ, so they match your Claude binding.
+
+### Which one do I need?
+
+Almost everyone wants the default (`cr`) — leave it unset. Choose `esc-cr` **only if, in
+MulmoTerminal, Shift+Enter *submits* your prompt instead of adding a line** (equivalently: a bare
+Enter drops to a new line instead of submitting). That is the tell-tale sign your Claude Code is on
+the reversed binding. If you're unsure, keep `cr`; switch to `esc-cr` only if Shift+Enter misbehaves.
+
+### How to set it
+
+1. Open `~/.mulmoterminal/config.json` (create the file if it doesn't exist) and add the key at the
+   top level — for the reversed binding:
+   ```json
+   { "terminalSubmit": "esc-cr" }
+   ```
+2. **Reload the browser tab** — the keyboard reads the value when the page loads.
+3. **Restart `mulmoterminal`** — the phone remote-view "send" reads the value from the file at
+   startup, so a hand-edit needs a restart to take effect there.
+4. Verify: a bare **Enter** submits, and **Shift+Enter** drops to a new line.
+
+An invalid value (a typo, or anything other than `"cr"` / `"esc-cr"`) is ignored and falls back to
+`"cr"`, so a mistake never leaves Enter in a broken state.
+
+### Notes
+
+- **Smartphones** — a soft keyboard can only send a bare **Enter** (there is no Shift+Enter, and on
+  Android the Return key often isn't even a normal Enter). So on a phone Enter follows the table
+  above and you can't insert a newline from the on-screen keyboard; compose multi-line prompts from
+  the remote view's text box instead.
+- **Japanese / other IME input** — while the IME is composing, **Enter confirms the candidate** and
+  is never taken as submit or newline, in either mode. Your CJK input is unaffected.
 
 ## Per-project `.mulmoterminal.json` {#per-dir}
 

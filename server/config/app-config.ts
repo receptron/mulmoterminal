@@ -17,6 +17,7 @@ import {
   type HeaderButton,
   type HeaderChip,
 } from "./config-schema.js";
+import { DEFAULT_TERMINAL_SUBMIT_MODE, isTerminalSubmitMode, type TerminalSubmitMode } from "../../common/terminalSubmit.js";
 
 export interface AppConfig {
   cwdPresets: CwdPreset[];
@@ -45,6 +46,9 @@ export interface AppConfig {
   // Anthropic-compatible backends a directory can point its sessions at (#579). Safe to
   // serve: an entry names the env var holding its key (`tokenEnv`), never the key.
   providers: Provider[];
+  // Which received bytes the host's Claude reads as "submit" vs "newline" (#772). Drives
+  // both the browser key handler and the phone remote-view submit. Default "cr".
+  terminalSubmit: TerminalSubmitMode;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -123,6 +127,13 @@ export function sanitizePushEnabled(input: unknown): boolean {
   return input === true;
 }
 
+// The Enter-key submit/newline byte mapping. Anything that isn't a known mode (missing,
+// typo, wrong type) falls back to the standard binding, so a bad value never changes how
+// Enter behaves.
+export function sanitizeTerminalSubmit(input: unknown): TerminalSubmitMode {
+  return isTerminalSubmitMode(input) ? input : DEFAULT_TERMINAL_SUBMIT_MODE;
+}
+
 export const DEFAULT_WORKLOG_INTERVAL_HOURS = 6;
 const MIN_WORKLOG_INTERVAL_HOURS = 1;
 const MAX_WORKLOG_INTERVAL_HOURS = 168; // one week
@@ -153,6 +164,7 @@ export const emptyConfig = (): AppConfig => ({
   worklogEnabled: false,
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
   providers: [],
+  terminalSubmit: DEFAULT_TERMINAL_SUBMIT_MODE,
 });
 
 // Drop malformed entries rather than rejecting the whole config: one bad provider must
@@ -182,6 +194,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     worklogEnabled: sanitizeWorklogEnabled(o.worklogEnabled),
     worklogIntervalHours: sanitizeWorklogIntervalHours(o.worklogIntervalHours),
     providers: sanitizeProviders(o.providers),
+    terminalSubmit: sanitizeTerminalSubmit(o.terminalSubmit),
   };
 }
 
@@ -246,6 +259,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     worklogEnabled: body.worklogEnabled !== undefined ? sanitizeWorklogEnabled(body.worklogEnabled) : base.worklogEnabled,
     worklogIntervalHours: body.worklogIntervalHours !== undefined ? sanitizeWorklogIntervalHours(body.worklogIntervalHours) : base.worklogIntervalHours,
     providers: body.providers !== undefined ? sanitizeProviders(body.providers) : base.providers,
+    terminalSubmit: body.terminalSubmit !== undefined ? sanitizeTerminalSubmit(body.terminalSubmit) : base.terminalSubmit,
   };
 }
 
@@ -265,6 +279,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     pushEnabled: config.pushEnabled,
     worklogEnabled: config.worklogEnabled,
     worklogIntervalHours: config.worklogIntervalHours,
+    terminalSubmit: config.terminalSubmit,
   };
 }
 

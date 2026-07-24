@@ -12,6 +12,7 @@ const unusedTerminalDeps = {
   captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
   writeToSession: () => false,
   canClearBox: () => false,
+  submitSequence: () => "\r",
 };
 
 describe("createRemoteHostHandlers", () => {

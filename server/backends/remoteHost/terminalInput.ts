@@ -63,6 +63,10 @@ export interface TerminalInputDeps {
   // a shell it kills whatever is running. Omitted means no — the old behaviour of
   // pasting on top of whatever is there.
   canClearBox?: (sessionId: string) => boolean;
+  // The byte(s) that SUBMIT in the host's Claude binding (#772). CR (\r) in the standard
+  // binding; ESC+CR (\x1b\r) where the user reversed it. Read per send so a config edit
+  // applies without a restart. Omitted defaults to CR — the historical behaviour.
+  submitSequence?: () => string;
   // Injected so tests don't wait on real time.
   scheduleSubmit?: (submit: () => void) => void;
 }
@@ -77,11 +81,12 @@ const typeAndSubmit = (deps: TerminalInputDeps, sessionId: string, safe: string)
   if (!deps.writeToSession(sessionId, `${clear}${PASTE_START}${safe}${PASTE_END}`)) {
     return Promise.reject(new Error(`session ${sessionId} has no live terminal on this host`));
   }
+  const submit = deps.submitSequence?.() ?? "\r";
   return new Promise((resolve) => {
     (deps.scheduleSubmit ?? defaultSchedule)(() => {
       // Best-effort: the session can end between the paste and the Enter, and there
       // is nothing to report by then — the paste already landed.
-      deps.writeToSession(sessionId, "\r");
+      deps.writeToSession(sessionId, submit);
       resolve();
     });
   });

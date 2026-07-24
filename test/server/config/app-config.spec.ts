@@ -9,6 +9,7 @@ import {
   sanitizeUserMcpServers,
   sanitizePushEnabled,
   sanitizeWorklogIntervalHours,
+  sanitizeTerminalSubmit,
   loadAppConfig,
   loadAppConfigResult,
   backupCorruptConfig,
@@ -114,6 +115,19 @@ describe("sanitizeWorklogIntervalHours", () => {
   });
 });
 
+describe("sanitizeTerminalSubmit", () => {
+  it("keeps a known mode; anything else falls back to the standard 'cr'", () => {
+    expect(sanitizeTerminalSubmit("cr")).toBe("cr");
+    expect(sanitizeTerminalSubmit("esc-cr")).toBe("esc-cr");
+    expect(sanitizeTerminalSubmit("CR")).toBe("cr"); // case-sensitive
+    expect(sanitizeTerminalSubmit("bogus")).toBe("cr");
+    expect(sanitizeTerminalSubmit("")).toBe("cr");
+    expect(sanitizeTerminalSubmit(1)).toBe("cr");
+    expect(sanitizeTerminalSubmit(null)).toBe("cr");
+    expect(sanitizeTerminalSubmit(undefined)).toBe("cr");
+  });
+});
+
 describe("loadAppConfig / saveAppConfig", () => {
   const base = {
     cwdPresets: [],
@@ -127,6 +141,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     worklogEnabled: false,
     worklogIntervalHours: 6,
     providers: [],
+    terminalSubmit: "cr",
   };
   it("round-trips presets + soundFile + prRepos + launchers + userMcpServers through a file", () => {
     const dir = tmp();
@@ -143,6 +158,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       worklogEnabled: true,
       worklogIntervalHours: 12,
       providers: [],
+      terminalSubmit: "esc-cr" as const, // a non-default value must round-trip through the file
     };
     expect(saveAppConfig(file, cfg)).toBe(true);
     expect(JSON.parse(readFileSync(file, "utf8"))).toEqual(cfg);
@@ -170,6 +186,7 @@ describe("loadAppConfig / saveAppConfig", () => {
           { id: "ok", url: "https://x/mcp" },
           { id: "bad url", url: "nope" },
         ],
+        terminalSubmit: "bogus", // unknown mode => standard 'cr'
       }),
     );
     expect(loadAppConfig(file)).toEqual({
@@ -184,6 +201,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       worklogEnabled: false,
       worklogIntervalHours: 6,
       providers: [],
+      terminalSubmit: "cr",
     });
     rmSync(dir, { recursive: true, force: true });
   });
@@ -278,6 +296,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     worklogEnabled: false,
     worklogIntervalHours: 6,
     providers: [],
+    terminalSubmit: "cr" as const,
   };
 
   it("a valid base keeps every omitted field through a pushEnabled-only update", () => {
@@ -328,6 +347,7 @@ describe("mergeConfigUpdate", () => {
     worklogEnabled: false,
     worklogIntervalHours: 6,
     providers: [],
+    terminalSubmit: "cr",
     ...over,
   });
 
@@ -351,6 +371,13 @@ describe("mergeConfigUpdate", () => {
     expect(next.worklogIntervalHours).toBe(12);
     // a chips-only update must not reset worklog
     expect(mergeConfigUpdate(baseConfig({ worklogEnabled: true }), { chips: ["git"] }).worklogEnabled).toBe(true);
+  });
+
+  it("applies terminalSubmit from the body (sanitized) and keeps it when omitted", () => {
+    expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "esc-cr" }).terminalSubmit).toBe("esc-cr");
+    expect(mergeConfigUpdate(baseConfig(), { terminalSubmit: "bogus" }).terminalSubmit).toBe("cr"); // invalid => default
+    // a chips-only update must not reset the mapping
+    expect(mergeConfigUpdate(baseConfig({ terminalSubmit: "esc-cr" }), { chips: ["git"] }).terminalSubmit).toBe("esc-cr");
   });
 
   it("merging on a RE-READ disk base preserves another instance's write (the clobber fix)", () => {

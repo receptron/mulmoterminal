@@ -28,31 +28,29 @@ import { reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
 import type { RunCommand } from "../components/runCommand";
 import { readableSlot, type SlotCandidate, type SlotInfo } from "./readableSlot";
 import { messageEffect } from "./serverMessage";
+import { enterKeyOverride, type EnterKeyEvent, type TerminalSubmitMode } from "../../common/terminalSubmit";
+import { getTerminalSubmitMode } from "./terminalSubmitMode";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
-// Shift+Enter must insert a NEWLINE in the prompt, not submit. xterm sends "\r" for
-// both Enter and Shift+Enter, so the PTY can't tell them apart — we intercept the key
-// and send the sequence Claude Code reads as a newline (Meta/Alt+Enter = ESC + CR).
-export const NEWLINE_SEQUENCE = "\x1b\r";
-type ModifierKeyEvent = Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey">;
-export function shiftEnterNewline(e: ModifierKeyEvent): string | null {
-  const isShiftEnter = e.type === "keydown" && e.key === "Enter" && e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
-  return isShiftEnter ? NEWLINE_SEQUENCE : null;
-}
-
-// The xterm custom key handler: on Shift+Enter, `send` the newline and return false (cancel xterm's
-// default \r); otherwise return true so xterm handles the key normally. `preventDefault()` is essential:
-// xterm's _keyDown returns early on a false custom handler WITHOUT preventDefault, so the browser fires a
-// follow-up keypress that _keyPress turns into a bare \r — submitting the prompt. Cancelling the default
-// stops that keypress.
-type ShiftEnterEvent = ModifierKeyEvent & { preventDefault: () => void };
-export function makeShiftEnterHandler(send: (data: string) => void): (e: ShiftEnterEvent) => boolean {
+// Enter submits and Shift/Option+Enter make a newline — but which BYTES carry each meaning
+// depends on the host's Claude binding, so the choice lives in `enterKeyOverride` (keyed by
+// the user's `terminalSubmit` setting) rather than being hardcoded here. xterm emits "\r" for
+// both Enter and Shift+Enter, so whenever we need anything else we intercept the key and send
+// the right bytes ourselves.
+//
+// The handler: when `enterKeyOverride` returns bytes, `send` them and return false to cancel
+// xterm's default \r; otherwise return true so xterm handles the key normally.
+// `preventDefault()` is essential: xterm's _keyDown returns early on a false custom handler
+// WITHOUT preventDefault, so the browser fires a follow-up keypress that _keyPress turns into a
+// bare \r — submitting the prompt. Cancelling the default stops that keypress.
+type EnterHandlerEvent = EnterKeyEvent & { preventDefault: () => void };
+export function makeEnterHandler(getMode: () => TerminalSubmitMode, send: (data: string) => void): (e: EnterHandlerEvent) => boolean {
   return (e) => {
-    const newline = shiftEnterNewline(e);
-    if (newline === null) return true;
+    const bytes = enterKeyOverride(getMode(), e);
+    if (bytes === null) return true;
     e.preventDefault();
-    send(newline);
+    send(bytes);
     return false;
   };
 }
@@ -262,10 +260,11 @@ function ensure(key: string, target: ConnTarget): Conn {
       c.ws.send(JSON.stringify({ type: "input", data }));
     }
   });
-  // Shift+Enter → newline (not submit): send the sequence ourselves and suppress the
-  // \r xterm would otherwise emit for it (returning false cancels the default).
+  // Enter-family keys whose bytes differ from xterm's native \r (per the user's
+  // `terminalSubmit` mapping): send the right bytes ourselves and suppress the \r xterm
+  // would otherwise emit (returning false cancels the default).
   term.attachCustomKeyEventHandler(
-    makeShiftEnterHandler((data) => {
+    makeEnterHandler(getTerminalSubmitMode, (data) => {
       if (c.ws && c.ws.readyState === WebSocket.OPEN) c.ws.send(JSON.stringify({ type: "input", data }));
     }),
   );

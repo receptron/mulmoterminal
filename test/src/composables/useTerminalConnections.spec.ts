@@ -96,6 +96,8 @@ class FakeWebSocket {
 }
 
 import * as conn from "../../../src/composables/useTerminalConnections";
+import { newlineSequence, submitSequence } from "../../../common/terminalSubmit";
+import { setTerminalSubmitMode } from "../../../src/composables/terminalSubmitMode";
 
 const target = (sessionId: string | null) => ({ sessionId, cwd: "/typed", devTerminal: false, command: null, launcher: null });
 
@@ -135,26 +137,96 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     expect(second.onCwd).toHaveBeenCalledWith("/resolved");
   });
 
-  it("wires Shift+Enter through ensure(): registers a handler that sends \\x1b\\r on the ws and cancels the default", () => {
+  it("wires the Enter handler through ensure() (cr mode): sends \\x1b\\r on Shift+Enter and cancels the default", () => {
     mockKeyState.handler = () => true; // reset (the mock persists across tests)
+    setTerminalSubmitMode("cr");
     conn.attach("cell-key", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
     const ws = FakeWebSocket.instances.at(-1);
     if (!ws) throw new Error("no socket created");
     ws.onopen?.(); // open so send() passes the readyState guard
 
     const preventDefault = vi.fn();
-    const shiftEnter = { type: "keydown", key: "Enter", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false, preventDefault };
+    const shiftEnter = { type: "keydown", key: "Enter", shiftKey: true, altKey: false, ctrlKey: false, metaKey: false, isComposing: false, preventDefault };
     expect(mockKeyState.handler(shiftEnter)).toBe(false); // false => xterm won't also emit \r
-    expect(ws.sent).toContain(JSON.stringify({ type: "input", data: conn.NEWLINE_SEQUENCE }));
+    expect(ws.sent).toContain(JSON.stringify({ type: "input", data: newlineSequence("cr") }));
     expect(preventDefault).toHaveBeenCalled(); // cancels the default so no follow-up keypress leaks a \r
 
     // A plain Enter is left to xterm (returns true, sends nothing extra).
     ws.sent.length = 0;
     expect(
-      mockKeyState.handler({ type: "keydown", key: "Enter", shiftKey: false, altKey: false, ctrlKey: false, metaKey: false, preventDefault: vi.fn() }),
+      mockKeyState.handler({
+        type: "keydown",
+        key: "Enter",
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        isComposing: false,
+        preventDefault: vi.fn(),
+      }),
     ).toBe(true);
     expect(ws.sent).toHaveLength(0);
     conn.release("cell-key");
+  });
+
+  it("wires the Enter handler through ensure() (esc-cr mode): submits a bare Enter with \\x1b\\r and makes Shift+Enter a \\r newline", () => {
+    mockKeyState.handler = () => true;
+    setTerminalSubmitMode("esc-cr");
+    try {
+      conn.attach("cell-esc", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
+      const ws = FakeWebSocket.instances.at(-1);
+      if (!ws) throw new Error("no socket created");
+      ws.onopen?.();
+
+      // Bare Enter → submit (ESC+CR), default cancelled.
+      const enter = {
+        type: "keydown",
+        key: "Enter",
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        isComposing: false,
+        preventDefault: vi.fn(),
+      };
+      expect(mockKeyState.handler(enter)).toBe(false);
+      expect(ws.sent).toContain(JSON.stringify({ type: "input", data: submitSequence("esc-cr") }));
+
+      // Shift+Enter → newline (CR).
+      ws.sent.length = 0;
+      const shiftEnter = {
+        type: "keydown",
+        key: "Enter",
+        shiftKey: true,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        isComposing: false,
+        preventDefault: vi.fn(),
+      };
+      expect(mockKeyState.handler(shiftEnter)).toBe(false);
+      expect(ws.sent).toContain(JSON.stringify({ type: "input", data: newlineSequence("esc-cr") }));
+
+      // An IME candidate-confirm Enter must NOT be eaten as a submit — the guard that
+      // protects Japanese input in the one mode where a bare Enter is intercepted.
+      ws.sent.length = 0;
+      const composing = {
+        type: "keydown",
+        key: "Enter",
+        shiftKey: false,
+        altKey: false,
+        ctrlKey: false,
+        metaKey: false,
+        isComposing: true,
+        preventDefault: vi.fn(),
+      };
+      expect(mockKeyState.handler(composing)).toBe(true);
+      expect(ws.sent).toHaveLength(0);
+
+      conn.release("cell-esc");
+    } finally {
+      setTerminalSubmitMode("cr"); // module global — reset so later tests see the default
+    }
   });
 
   it("configures xterm with macOptionIsMeta so macOS Option acts as Meta (Alt bindings reach the PTY)", () => {
@@ -239,50 +311,56 @@ describe("isSystemClipboard", () => {
   });
 });
 
-describe("shiftEnterNewline", () => {
-  const ev = (over: Partial<KeyboardEvent>): Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey" | "preventDefault"> => ({
+// The pure key→bytes decision (enterKeyOverride) is covered in test/common/terminalSubmit.spec.ts;
+// here we cover the thin wrapper that turns that decision into a send + preventDefault, and that
+// it re-reads the mode getter each call so a live config change takes effect.
+describe("makeEnterHandler", () => {
+  const ev = (
+    over: Partial<KeyboardEvent>,
+  ): Pick<KeyboardEvent, "type" | "key" | "shiftKey" | "altKey" | "ctrlKey" | "metaKey" | "isComposing" | "preventDefault"> => ({
     type: "keydown",
     key: "Enter",
     shiftKey: false,
     altKey: false,
     ctrlKey: false,
     metaKey: false,
+    isComposing: false,
     preventDefault: () => {},
     ...over,
   });
 
-  it("returns the newline sequence for a Shift+Enter keydown", () => {
-    expect(conn.shiftEnterNewline(ev({ shiftKey: true }))).toBe(conn.NEWLINE_SEQUENCE);
-  });
-
-  it("returns null for a plain Enter (so it still submits)", () => {
-    expect(conn.shiftEnterNewline(ev({}))).toBeNull();
-  });
-
-  it("returns null on keyup and for non-Enter keys", () => {
-    expect(conn.shiftEnterNewline(ev({ shiftKey: true, type: "keyup" }))).toBeNull();
-    expect(conn.shiftEnterNewline(ev({ shiftKey: true, key: "a" }))).toBeNull();
-  });
-
-  it("returns null when another modifier is also held (Ctrl/Alt/Meta+Shift+Enter)", () => {
-    for (const mod of ["altKey", "ctrlKey", "metaKey"] as const) {
-      expect(conn.shiftEnterNewline(ev({ shiftKey: true, [mod]: true }))).toBeNull();
-    }
-  });
-
-  it("makeShiftEnterHandler sends the newline, cancels the default, and preventDefaults on Shift+Enter", () => {
+  it("cr mode: sends the newline sequence on Shift+Enter, cancels the default, and preventDefaults", () => {
     const send = vi.fn();
     const preventDefault = vi.fn();
-    const handler = conn.makeShiftEnterHandler(send);
+    const handler = conn.makeEnterHandler(() => "cr", send);
     expect(handler(ev({ shiftKey: true, preventDefault }))).toBe(false); // false => xterm won't also send \r
-    expect(send).toHaveBeenCalledWith(conn.NEWLINE_SEQUENCE);
+    expect(send).toHaveBeenCalledWith(newlineSequence("cr"));
     expect(preventDefault).toHaveBeenCalled(); // else the browser fires a keypress and xterm submits a bare \r
   });
 
-  it("makeShiftEnterHandler passes plain Enter through (returns true, sends nothing)", () => {
+  it("cr mode: passes a plain Enter through (returns true, sends nothing)", () => {
     const send = vi.fn();
-    const handler = conn.makeShiftEnterHandler(send);
+    const handler = conn.makeEnterHandler(() => "cr", send);
     expect(handler(ev({}))).toBe(true);
     expect(send).not.toHaveBeenCalled();
+  });
+
+  it("esc-cr mode: submits a bare Enter with the ESC+CR sequence and cancels the default", () => {
+    const send = vi.fn();
+    const preventDefault = vi.fn();
+    const handler = conn.makeEnterHandler(() => "esc-cr", send);
+    expect(handler(ev({ preventDefault }))).toBe(false);
+    expect(send).toHaveBeenCalledWith(submitSequence("esc-cr"));
+    expect(preventDefault).toHaveBeenCalled();
+  });
+
+  it("reads the mode getter on every keydown, so a live config change is honoured", () => {
+    const send = vi.fn();
+    let mode: "cr" | "esc-cr" = "cr";
+    const handler = conn.makeEnterHandler(() => mode, send);
+    expect(handler(ev({}))).toBe(true); // cr: a bare Enter is left to xterm
+    mode = "esc-cr";
+    expect(handler(ev({}))).toBe(false); // esc-cr: the same key is now intercepted as submit
+    expect(send).toHaveBeenCalledWith(submitSequence("esc-cr"));
   });
 });
