@@ -68,8 +68,14 @@ import { createSessionLifecycle, SESSIONS_CHANNEL } from "./session/lifecycle.js
 import { mountAppRoutes } from "./routes/app-routes.js";
 import { allowedToolNames } from "./infra/plugins-registry.js";
 import { resumableSessionPredicate } from "./session/resumable-sessions.js";
+import { installProcessGuards } from "./infra/process-guards.js";
 
 // Per-session activity flags, driven by Claude hooks (see /api/hook).
+
+// Register the top-level uncaughtException/unhandledRejection guards before any async boot
+// work runs, so a single unhandled error can't silently kill the backend and disconnect
+// every terminal at once (see infra/process-guards.ts).
+installProcessGuards();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
