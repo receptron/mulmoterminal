@@ -101,6 +101,10 @@ interface Conn {
   reconnectAttempts: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   attachedEl: HTMLElement | null;
+  // Mouse modes swallowed for the CURRENT session (#729/#737). Session-scoped: an app that
+  // dies without sending DECRST must not leave the next one looking like it asked for mouse
+  // reports, or its wheel would get synthesized reports it never wanted.
+  swallowedMouseModes: Set<number>;
 }
 
 // The heavy per-slot runtime (non-reactive — Vue never needs to track these).
@@ -164,8 +168,10 @@ const clipboardProvider: IClipboardProvider = {
 // report it asked for instead; `term.input` routes it through onData to the PTY like any
 // keystroke. The cell coordinate is fixed at 1;1 — a transcript scroll doesn't depend on where
 // the pointer sits, and the real position isn't exposed at this layer.
-function guardMouseTracking(term: Terminal): void {
-  const swallowedMouseModes = new Set<number>();
+//
+// The record is owned by the connection, not this closure, because it is per SESSION: connect()
+// clears it alongside term.reset() so a crashed app's modes can't outlive it.
+function guardMouseTracking(term: Terminal, swallowedMouseModes: Set<number>): void {
   term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
     const swallowed = swallowsMouseTracking(params);
     if (swallowed) recordSwallowedModes(swallowedMouseModes, params);
@@ -207,7 +213,8 @@ function ensure(key: string, target: ConnTarget): Conn {
     // terminal down at construction rather than degrade.
     allowProposedApi: true,
   });
-  guardMouseTracking(term);
+  const swallowedMouseModes = new Set<number>();
+  guardMouseTracking(term, swallowedMouseModes);
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
@@ -243,6 +250,7 @@ function ensure(key: string, target: ConnTarget): Conn {
     reconnectAttempts: 0,
     reconnectTimer: null,
     attachedEl: null,
+    swallowedMouseModes,
   };
   conns.set(key, c);
   connView.set(key, { status: "connecting", serverCwd: target.cwd });
@@ -283,6 +291,10 @@ function connect(c: Conn) {
   // Neutralise the old socket's late events via the `sock !== c.ws` guards below.
   if (c.ws) c.ws.close();
   c.term.reset();
+  // The mouse modes belonged to the session being replaced. Keeping them would make the next
+  // app inherit "wants wheel reports" it never asked for, and its wheel would deliver escape
+  // bytes instead of scrolling (#737).
+  c.swallowedMouseModes.clear();
   c.sawExit = false;
   setStatus(c, "connecting");
   // Drop the previous session's resolved cwd so the Run menu can't list/launch the
