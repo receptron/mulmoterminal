@@ -20,6 +20,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { swallowsMouseTracking } from "./mouseTrackingModes";
+import { clearResetModes, recordSwallowedModes, wantsWheelReports, wheelReportSequence } from "./wheelReports";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
@@ -100,6 +101,10 @@ interface Conn {
   reconnectAttempts: number;
   reconnectTimer: ReturnType<typeof setTimeout> | null;
   attachedEl: HTMLElement | null;
+  // Mouse modes swallowed for the CURRENT session (#729/#737). Session-scoped: an app that
+  // dies without sending DECRST must not leave the next one looking like it asked for mouse
+  // reports, or its wheel would get synthesized reports it never wanted.
+  swallowedMouseModes: Set<number>;
 }
 
 // The heavy per-slot runtime (non-reactive — Vue never needs to track these).
@@ -148,6 +153,44 @@ const clipboardProvider: IClipboardProvider = {
   },
 };
 
+// Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
+// over, so its coordinate reports never land in the agent's prompt (#729). Registered per
+// terminal and disposed with it.
+//
+// SET only. The matching reset (`CSI ? … l`) is deliberately left alone: dropping it gains
+// nothing (it disables what was never enabled) but would strand mouse mode ON for good in the
+// one case that gets past this hook — a sequence mixing tracking with an unrelated mode, which
+// is honoured on purpose. Letting every reset through keeps that recoverable.
+//
+// What was swallowed is still remembered: in the alternate buffer, xterm's fallback would turn
+// the wheel into arrow keys — which a TUI binds to input history, so scrolling spun the prompt
+// history (#737). When the app asked for wheel tracking, the wheel handler synthesizes the SGR
+// report it asked for instead; `term.input` routes it through onData to the PTY like any
+// keystroke. The cell coordinate is fixed at 1;1 — a transcript scroll doesn't depend on where
+// the pointer sits, and the real position isn't exposed at this layer.
+//
+// The record is owned by the connection, not this closure, because it is per SESSION: connect()
+// clears it alongside term.reset() so a crashed app's modes can't outlive it.
+function guardMouseTracking(term: Terminal, swallowedMouseModes: Set<number>): void {
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+    const swallowed = swallowsMouseTracking(params);
+    if (swallowed) recordSwallowedModes(swallowedMouseModes, params);
+    return swallowed;
+  });
+  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+    clearResetModes(swallowedMouseModes, params);
+    return false;
+  });
+  term.attachCustomWheelEventHandler((ev) => {
+    if (term.buffer.active.type !== "alternate" || !wantsWheelReports(swallowedMouseModes)) return true;
+    const seq = wheelReportSequence(ev.deltaY, 1, 1);
+    if (!seq) return true;
+    term.input(seq, false);
+    ev.preventDefault();
+    return false;
+  });
+}
+
 function ensure(key: string, target: ConnTarget): Conn {
   const existing = conns.get(key);
   if (existing) {
@@ -170,15 +213,8 @@ function ensure(key: string, target: ConnTarget): Conn {
     // terminal down at construction rather than degrade.
     allowProposedApi: true,
   });
-  // Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
-  // over, so its coordinate reports never land in the agent's prompt (#729). Registered per
-  // terminal and disposed with it.
-  //
-  // SET only. The matching reset (`CSI ? … l`) is deliberately left alone: dropping it gains
-  // nothing (it disables what was never enabled) but would strand mouse mode ON for good in the
-  // one case that gets past this hook — a sequence mixing tracking with an unrelated mode, which
-  // is honoured on purpose. Letting every reset through keeps that recoverable.
-  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => swallowsMouseTracking(params));
+  const swallowedMouseModes = new Set<number>();
+  guardMouseTracking(term, swallowedMouseModes);
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
@@ -214,6 +250,7 @@ function ensure(key: string, target: ConnTarget): Conn {
     reconnectAttempts: 0,
     reconnectTimer: null,
     attachedEl: null,
+    swallowedMouseModes,
   };
   conns.set(key, c);
   connView.set(key, { status: "connecting", serverCwd: target.cwd });
@@ -254,6 +291,10 @@ function connect(c: Conn) {
   // Neutralise the old socket's late events via the `sock !== c.ws` guards below.
   if (c.ws) c.ws.close();
   c.term.reset();
+  // The mouse modes belonged to the session being replaced. Keeping them would make the next
+  // app inherit "wants wheel reports" it never asked for, and its wheel would deliver escape
+  // bytes instead of scrolling (#737).
+  c.swallowedMouseModes.clear();
   c.sawExit = false;
   setStatus(c, "connecting");
   // Drop the previous session's resolved cwd so the Run menu can't list/launch the
