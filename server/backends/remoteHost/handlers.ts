@@ -25,7 +25,7 @@ import {
   remoteViewItems,
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
-import type { Attachment } from "./ingestAttachments.js";
+import type { Attachment, IngestResult } from "./ingestAttachments.js";
 import { createTerminalInputSender } from "./terminalInput.js";
 import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
 import { feedSummary } from "../feed-summary.js";
@@ -34,9 +34,9 @@ export interface RemoteHostHandlerDeps {
   workspace: string;
   // Start a visible chat seeded with `message`; returns the new session id.
   spawnChat: (message: string) => { chatId: string };
-  // Download the phone's staged uploads (by storage_id) into the workspace and
-  // return path-only attachments (remoteHost/ingestAttachments.ts).
-  ingest: (storageIds: string[]) => Promise<Attachment[]>;
+  // Download the phone's staged uploads (by storage_id) into the workspace and return
+  // path-only attachments plus a deferred staging cleanup (remoteHost/ingestAttachments.ts).
+  ingest: (storageIds: string[]) => Promise<IngestResult>;
   // The phone's remote terminal view (#435) — the picker's list and one session's
   // current screen. Wired in server/index.ts, where the PTY table lives.
   listTerminalSessions: () => Promise<TerminalSessionSummary[]>;
@@ -246,8 +246,12 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     startChat: async (params: JsonObject) => {
       const message = (typeof params.message === "string" ? params.message : "").trim();
       if (!message) throw new Error("message is required");
-      const attachments = await ingest(readStorageIds(params.attachments));
+      const { attachments, cleanupStaging } = await ingest(readStorageIds(params.attachments));
+      // Spawn FIRST, reap staging only after it succeeds: a spawn failure (e.g. a missing
+      // provider token) must leave the staged uploads intact so the phone can retry the same
+      // command — deleting them before spawn would strand a retry with no bytes to re-fetch.
       const { chatId } = spawnChat(composeMessage(message, attachments));
+      await cleanupStaging();
       return { started: true, chatId };
     },
 

@@ -30,6 +30,17 @@ describe("extensionForMime", () => {
     expect(extensionForMime(mime)).toBe(ext);
   });
 
+  // Regression (#746): a Content-Type may carry parameters or surrounding space; the bare
+  // type must still resolve, not fall through to .bin.
+  it.each([
+    ["text/plain; charset=utf-8", ".txt"],
+    ["text/csv;charset=UTF-8", ".csv"],
+    ["  image/png  ", ".png"],
+    ["application/pdf ; foo=bar", ".pdf"],
+  ])("strips parameters/space from %j", (mime, ext) => {
+    expect(extensionForMime(mime)).toBe(ext);
+  });
+
   // Anything unmapped falls back to .bin — never a guessed extension.
   it.each(["application/octet-stream", "image/bmp", "video/mp4", "", "not-a-mime"])("falls back to .bin for %j", (mime) => {
     expect(extensionForMime(mime)).toBe(".bin");

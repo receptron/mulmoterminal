@@ -18,22 +18,30 @@ describe("createRemoteHostHandlers", () => {
   let ws: string;
   let spawned: string[];
   let ingested: string[][];
+  let cleanedUp: string[][];
   let handlers: ReturnType<typeof createRemoteHostHandlers>;
 
   beforeEach(() => {
     ws = mkdtempSync(path.join(tmpdir(), "mt-rh-"));
     spawned = [];
     ingested = [];
+    cleanedUp = [];
     handlers = createRemoteHostHandlers({
       workspace: ws,
       spawnChat: (message) => {
         spawned.push(message);
         return { chatId: `chat-${spawned.length}` };
       },
-      // Fake ingest: record the storage ids, echo a saved path per file.
+      // Fake ingest: record the storage ids, echo a saved path per file, and a no-op
+      // staging cleanup (tracked so a test can assert it runs after a successful spawn).
       ingest: async (storageIds) => {
         ingested.push(storageIds);
-        return storageIds.map((id) => ({ path: `data/attachments/${id}.jpg`, mimeType: "image/jpeg" }));
+        return {
+          attachments: storageIds.map((id) => ({ path: `data/attachments/${id}.jpg`, mimeType: "image/jpeg" })),
+          cleanupStaging: async () => {
+            cleanedUp.push(storageIds);
+          },
+        };
       },
       ...unusedTerminalDeps,
     });
@@ -80,6 +88,33 @@ describe("createRemoteHostHandlers", () => {
     expect(spawned[0]).toContain("data/attachments/abc.jpg");
     expect(spawned[0]).toContain("data/attachments/def.jpg");
     expect(result).toEqual({ started: true, chatId: "chat-1" });
+  });
+
+  // Regression (#746): staging is reaped only AFTER a successful spawn.
+  it("startChat cleans up staging after spawning succeeds", async () => {
+    await handlers.startChat({ message: "hi", attachments: [{ storage_id: "abc" }] });
+    expect(spawned).toHaveLength(1);
+    expect(cleanedUp).toEqual([["abc"]]); // cleanup ran, once, after spawn
+  });
+
+  // Regression (#746): if the spawn throws, staging is NOT deleted, so the phone can retry
+  // with the same storage_ids and still find its uploads.
+  it("startChat does NOT clean up staging when the spawn fails", async () => {
+    handlers = createRemoteHostHandlers({
+      workspace: ws,
+      spawnChat: () => {
+        throw new Error("no provider token");
+      },
+      ingest: async (storageIds) => ({
+        attachments: storageIds.map((id) => ({ path: `data/attachments/${id}.jpg`, mimeType: "image/jpeg" })),
+        cleanupStaging: async () => {
+          cleanedUp.push(storageIds);
+        },
+      }),
+      ...unusedTerminalDeps,
+    });
+    await expect(handlers.startChat({ message: "hi", attachments: [{ storage_id: "abc" }] })).rejects.toThrow(/no provider token/);
+    expect(cleanedUp).toEqual([]); // staging survives for a retry
   });
 
   it("startChat rejects a malformed attachments param without spawning", async () => {
@@ -132,7 +167,12 @@ describe("createRemoteHostHandlers · listSkills", () => {
     mkdirSync(path.join(ws, "data", "mycol", "items"), { recursive: true });
 
     initCollectionsBackend({ workspace: ws });
-    handlers = createRemoteHostHandlers({ workspace: ws, spawnChat: () => ({ chatId: "x" }), ingest: async () => [], ...unusedTerminalDeps });
+    handlers = createRemoteHostHandlers({
+      workspace: ws,
+      spawnChat: () => ({ chatId: "x" }),
+      ingest: async () => ({ attachments: [], cleanupStaging: async () => {} }),
+      ...unusedTerminalDeps,
+    });
   });
   afterEach(() => rmSync(ws, { recursive: true, force: true }));
 

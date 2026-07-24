@@ -19,10 +19,23 @@ describe("createSaveAttachment", () => {
     const saved = await save(bytes.toString("base64"), "image/png");
 
     expect(saved.mimeType).toBe("image/png");
-    expect(saved.relativePath).toMatch(/^data\/attachments\/2026\/07\/[0-9a-f]{8}\.png$/);
+    // Regression (#746): a full UUID (8-4-4-4-12 hex), not an 8-hex prefix — rename()
+    // overwrites on a name clash, and 32 bits collides at realistic upload counts.
+    expect(saved.relativePath).toMatch(/^data\/attachments\/2026\/07\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.png$/);
     const abs = path.join(ws, saved.relativePath);
     expect(existsSync(abs)).toBe(true);
     expect(readFileSync(abs).equals(bytes)).toBe(true);
+  });
+
+  it("gives two saves in the same partition distinct filenames (no silent overwrite)", async () => {
+    ws = mkdtempSync(path.join(tmpdir(), "mt-att-"));
+    const fixed = new Date(Date.UTC(2026, 6, 5));
+    const save = createSaveAttachment(ws, () => fixed);
+    const a = await save(Buffer.from("aaa").toString("base64"), "image/png");
+    const b = await save(Buffer.from("bbb").toString("base64"), "image/png");
+    expect(a.relativePath).not.toBe(b.relativePath);
+    expect(readFileSync(path.join(ws, a.relativePath)).toString()).toBe("aaa");
+    expect(readFileSync(path.join(ws, b.relativePath)).toString()).toBe("bbb");
   });
 
   it("falls back to .bin for an unmapped mime", async () => {
