@@ -2,6 +2,35 @@
 
 Release notes for MulmoTerminal, mirrored from the [GitHub Releases](https://github.com/receptron/mulmoterminal/releases). Newest first. Versions before `0.6.0` are on GitHub Releases only.
 
+## mulmoterminal@1.7.2 — 2026-07-24
+
+A hardening release: a repo-wide code review turned up a family of real bugs across the server, the plugin runtime, the remote-host (phone) channel, and the git/worktree tooling. Each fix ships with a regression test.
+
+### Server / backend
+
+- **git worker deadlock & encoding** (#754, #743): `git()` never drained stderr, so a chatty `git worktree add` (git-lfs smudge errors filling the 64 KB pipe) deadlocked and wedged the worktree-create queue; stderr is now drained. Process output is decoded once so a multibyte UTF-8 character split across pipe chunks isn't corrupted (Japanese PR titles / branches / commit messages), and worktree diffs pass `-c core.quotePath=false` so non-ASCII paths read as themselves instead of octal escapes.
+- **stream & external-call error/timeout gaps** (#755, #744): `GET /api/files/raw` and the `/artifacts/html` preview piped a read stream with no `error` handler, so a file that vanished or turned unreadable between stat and open crashed with an uncaughtException and hung the request; both now return 500 (or abort cleanly). Gemini image generation gained an abort timeout.
+- **plugin fetch** (#757, #745): `allowedHosts` compares on hostname (a `localhost` pin now accepts `localhost:8080`), a caller-supplied AbortSignal is honored, the timeout covers the response body (not just the headers), and a redirect can't land the plugin on a host outside its pin.
+- **startup, tmux, and mutate** (#759, #747): the launcher's readiness poll no longer forks on timeout into duplicate banners / browser tabs; `tmux cleanup-orphans` spares a session another mulmoterminal process is attached to; and a mobile-view edit whose (thumbnail-inlined) response exceeds the byte budget is reported as applied rather than a 4xx that showed the edit as failed and kept stale data.
+
+### Remote host (phone) channel (#760, #746)
+
+- Staged uploads are deleted only after the chat spawns, so a spawn failure (e.g. a missing provider token) leaves them intact for a retry; `Content-Type` parameters (`text/plain; charset=utf-8`) now map to the right extension instead of `.bin`; a leading UTF-8 BOM no longer hides a `SKILL.md`; attachment filenames use a full UUID (no 32-bit birthday collision that `rename()` would silently overwrite); and expired-command cleanup keeps its never-throw contract when a doc has no params.
+
+### Worktree tooling (#762, #748 follow-up)
+
+- `git diff <base>` no longer errors ("ambiguous argument") when a file is named after the base branch; re-running "create PR" opens the existing PR instead of the compare page; and removing a worktree deletes its branch even when the given path isn't realpath-canonical.
+
+### Bundle of minor fixes (#761, #748)
+
+- Model-preset context-length typo (`512_288` → `524_288`) and user-model dedup; empty upstream errors no longer narrate as a bare "Done"; a transient `gh` failure isn't cached as "no PR" for the TTL; the shipped config JSON Schema no longer requires all ~23 palette keys (a single-color write validates); plugin dispatch goes through a `Map` (a tool named `constructor`/`__proto__` 404s instead of resolving through the prototype chain); and a malformed/multi-range `Range` header is ignored (full 200) rather than answered 416.
+
+### Other
+
+- **npx cache recovery hint** (#736, #735): an npx install aborted mid-unpack leaves a half-unpacked cache entry that crashes the backend at boot with `ERR_MODULE_NOT_FOUND`; the launcher now detects that and prints an OS-appropriate, shell-quoted removal command so the fix is one copy-paste away.
+- **dev backend auto-restart on crash** (#734): the dev supervisor restarts the backend on any crash so tmux-backed terminals self-heal, and watches `common/` and `bin/` (not just `server/`) for reload.
+- **file drop no longer navigates away** (#752, #750): dropping a file anywhere in the window no longer replaces the page with the file.
+
 ## mulmoterminal@1.7.1 — 2026-07-24
 
 A same-day patch undoing two 1.7.0 regressions and fixing a couple of terminal bugs.
