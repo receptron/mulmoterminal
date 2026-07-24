@@ -8,12 +8,18 @@ import "./composables/collectionUi";
 // locale) once, before any manageAccounting card mounts.
 import "./composables/accountingUi";
 import { initTheme } from "./composables/useTheme";
+import { installFileDropGuard } from "./composables/useFileDropGuard";
 import { router } from "./router";
 import App from "./App.vue";
 
 // Apply the persisted theme to <html> before mount so there's no flash of the
 // default palette.
 initTheme();
+
+// Catch a file dropped anywhere in the tab so an imprecise drop can't navigate the
+// page to the file and lose every session. Installed on window, before mount, so it
+// covers both views and any area between them.
+installFileDropGuard();
 
 // Mount only AFTER the router's initial (async) navigation resolves. On a hard
 // reload / deep-link to /terminals, mounting eagerly would first render the single
