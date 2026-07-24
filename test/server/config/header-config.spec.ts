@@ -141,10 +141,15 @@ describe("mergeHeaderConfig", () => {
 });
 
 describe("DEFAULT_BUTTONS", () => {
-  it("is the file-path picker and the OS file-manager reveal, as config buttons", () => {
-    expect(DEFAULT_BUTTONS.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
+  it("is the starter set (picker, reveal, in-app files, new terminal, PR, GitHub) as config buttons", () => {
+    expect(DEFAULT_BUTTONS.map((b) => b.id)).toEqual(["pick-file", "reveal", "files", "terminal", "pr", "gh"]);
     expect(DEFAULT_BUTTONS.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
     expect(DEFAULT_BUTTONS.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "${dir}" });
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "files")?.open).toEqual({ files: "${dir}" });
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "terminal")?.open).toEqual({ terminal: "${dir}" });
+    // pr/gh are git-only so they self-hide outside a repo.
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "pr")?.when).toBe("isGitRepo");
+    expect(DEFAULT_BUTTONS.find((b) => b.id === "gh")?.when).toBe("isGitRepo");
   });
 });
 

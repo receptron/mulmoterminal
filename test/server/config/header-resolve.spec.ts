@@ -142,10 +142,23 @@ describe("resolveButtonCommand", () => {
 
 describe("resolveHeader defaults + pickFile", () => {
   it("falls back to DEFAULT_BUTTONS when buttons is null (unconfigured), substituting ${dir}", () => {
+    // ctx() is a git repo with no open PR: files/terminal/gh resolve, pr is dropped (no PR url).
     const out = resolveHeader({ buttons: null, chips: null }, ctx());
-    expect(out.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal"]);
+    expect(out.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal", "files", "terminal", "gh"]);
     expect(out.buttons.find((b) => b.id === "pick-file")?.open).toEqual({ pickFile: true });
     expect(out.buttons.find((b) => b.id === "reveal")?.open).toEqual({ reveal: "/Users/x/myrepo" });
+    expect(out.buttons.find((b) => b.id === "files")?.open).toEqual({ files: "/Users/x/myrepo" });
+    expect(out.buttons.find((b) => b.id === "terminal")?.open).toEqual({ terminal: "/Users/x/myrepo" });
+    expect(out.buttons.find((b) => b.id === "gh")?.open).toEqual({ url: "https://github.com/receptron/mulmoterminal" });
+  });
+
+  it("drops the default pr button outside a git repo and shows it (as its PR url) when a PR exists", () => {
+    // Non-git: pr AND gh (both when:isGitRepo) drop, leaving the always-on buttons.
+    const nonGit = resolveHeader({ buttons: null, chips: null }, ctx({ isGitRepo: false }));
+    expect(nonGit.buttons.map((b) => b.id)).toEqual(["pick-file", "reveal", "files", "terminal"]);
+    // Git repo WITH an open PR: the pr button resolves to the branch's PR url.
+    const withPr = resolveHeader({ buttons: null, chips: null }, ctx({ prUrl: "https://github.com/receptron/mulmoterminal/pull/9" }));
+    expect(withPr.buttons.find((b) => b.id === "pr")?.open).toEqual({ url: "https://github.com/receptron/mulmoterminal/pull/9" });
   });
 
   it("an explicit empty list replaces the defaults with nothing", () => {
@@ -181,8 +194,8 @@ describe("headerHasPrButton", () => {
     expect(headerHasPrButton({ buttons: [{ id: "u", label: "U", run: "open", open: { url: "https://x" } }], chips: null })).toBe(false);
     expect(headerHasPrButton({ buttons: [], chips: null })).toBe(false);
   });
-  it("checks DEFAULT_BUTTONS when unconfigured (they have no pr button)", () => {
-    expect(headerHasPrButton({ buttons: null, chips: null })).toBe(false);
+  it("checks DEFAULT_BUTTONS when unconfigured (they include a pr button)", () => {
+    expect(headerHasPrButton({ buttons: null, chips: null })).toBe(true);
   });
 });
 

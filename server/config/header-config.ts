@@ -29,13 +29,18 @@ export interface HeaderConfig {
   chips: HeaderChip[] | null; // null = unconfigured (client uses its default)
 }
 
-// The header's action buttons when the user hasn't configured `buttons` — the file-path picker and an
-// OS-file-manager reveal, expressed as ordinary config buttons so the user can drop/reorder/replace them.
-// Configuring `buttons` at ANY level REPLACES this set (it isn't merged on top), so an explicit list is
-// the whole button row. The in-app file explorer (`open: { files }`) is available but not a default.
+// The header's action buttons when the user hasn't configured `buttons` — a useful starter set,
+// each an ordinary config button so the user can drop/reorder/replace them. Configuring `buttons` at
+// ANY level REPLACES this whole set (it is NOT merged on top), so a user who wants fewer just lists
+// their own shorter set. `pr`/`gh` are gated to git repos (`when: isGitRepo`) and `pr` is dropped when
+// the branch has no open PR, so they self-hide where they don't apply.
 export const DEFAULT_BUTTONS: HeaderButton[] = [
   { id: "pick-file", icon: "attach_file", label: "Insert a file path", run: "open", open: { pickFile: true } },
   { id: "reveal", emoji: "📂", label: "Reveal in the file manager", run: "open", open: { reveal: "${dir}" } },
+  { id: "files", icon: "folder_open", label: "Browse files in the app", run: "open", open: { files: "${dir}" } },
+  { id: "terminal", emoji: "🖥", label: "New terminal here", run: "open", open: { terminal: "${dir}" } },
+  { id: "pr", emoji: "🔗", label: "Open this branch's PR", run: "open", when: "isGitRepo", open: { pr: true } },
+  { id: "gh", emoji: "🌐", label: "Open on GitHub", run: "open", when: "isGitRepo", open: { url: "https://github.com/${repo}" } },
 ];
 
 // The live context a header is resolved against — all trusted server-side session state.

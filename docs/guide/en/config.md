@@ -140,7 +140,7 @@ This is where MulmoTerminal's **Extend** pillar lives. Shape the header of a run
 Any developer can turn their frequent actions into a single click and surface only the information they want to see — that's what this is for.
 
 **Buttons** (`buttons`) — action buttons that act on a running session. Display is an `emoji` or an `icon` (a Material Symbol name) plus a `label`; `order` controls the sort.
-With none set, you get the **two defaults** (📎 insert a file path · 📂 reveal in the file manager); setting `buttons` **replaces** that default set.
+With none set, you get a **built-in starter set**: 📎 insert a file path · 📂 reveal in the file manager · 📁 browse files in the app · 🖥 new terminal here · 🔗 this branch's PR (git repos, only when a PR exists) · 🌐 open on GitHub (git repos). Setting `buttons` at any level **replaces the whole default set** (it is _not_ merged on top) — so listing your own, even a **shorter** list, is how you trim, reorder, or swap them.
 
 ```json
 {
