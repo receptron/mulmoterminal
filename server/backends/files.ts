@@ -15,11 +15,11 @@
 //     navigation or <iframe>; PDFs skip the sandbox CSP (WebKit refuses to render
 //     sandbox-opaque PDFs) but keep nosniff. Matches MulmoClaude's RAW_SECURITY_HEADERS.
 import path from "node:path";
-import { createReadStream } from "node:fs";
 import type { Express, Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
 import { parseByteRange } from "./byte-range.js";
 import { rawServingPlan } from "./rawServingPlan.js";
+import { streamFileToResponse } from "./streamFile.js";
 
 export function mountFilesRoutes(app: Express, deps: { workspace: string }): void {
   const root = path.resolve(deps.workspace);
@@ -65,11 +65,11 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
       res.status(206);
       res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
       res.setHeader("Content-Length", String(range.end - range.start + 1));
-      createReadStream(abs, { start: range.start, end: range.end }).pipe(res);
+      streamFileToResponse(abs, res, { start: range.start, end: range.end });
       return;
     }
 
     res.setHeader("Content-Length", String(stat.size));
-    createReadStream(abs).pipe(res);
+    streamFileToResponse(abs, res);
   });
 }
