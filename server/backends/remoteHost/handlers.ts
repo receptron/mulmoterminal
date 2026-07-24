@@ -25,6 +25,7 @@ import {
   remoteViewItems,
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
+import { mutateWriteApplied } from "../mutateStatus.js";
 import type { Attachment } from "./ingestAttachments.js";
 import { createTerminalInputSender } from "./terminalInput.js";
 import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
@@ -134,6 +135,11 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
   const collection = await loadCollection(slug);
   if (!collection) throw new Error(`collection '${slug}' not found`);
   const result = await mutateRemoteView(collection, viewId, request);
+  // The write applied but its response blew the byte budget — report success (+refetch),
+  // not a thrown error the phone shows as a failed edit while keeping stale data (#747).
+  if (mutateWriteApplied(result)) {
+    return { op: request.op, id: request.id, applied: true, warning: mutateRemoteViewFailureMessage(result, slug) } as unknown as JsonObject;
+  }
   if (result.kind !== "ok") throw new Error(mutateRemoteViewFailureMessage(result, slug));
   return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
 };

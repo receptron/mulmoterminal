@@ -11,9 +11,23 @@ export interface TmuxRouteDeps {
   hasTmux: (id: string) => boolean;
   killTmux: (id: string) => void;
   listTmuxIds: () => string[];
+  // Clients attached to a tmux session, or null when tmux can't say. Each mulmoterminal
+  // holds ONE client per session it is live on; the cleanup only reaches ids this process
+  // is NOT live on, so any count >= 1 means ANOTHER process is holding it.
+  attachedClientCount: (id: string) => number | null;
   // Build the resumability predicate for a cleanup pass (awaits any hydration, snapshots
   // the live / grid / on-disk sets). A tmux id is reaped only when it returns false.
   resumablePredicate: () => Promise<(id: string) => boolean>;
+}
+
+// Whether an orphan tmux session is safe to reap. Not resumable is necessary but not
+// sufficient: a second mulmoterminal process may have just created it (no transcript yet)
+// and be attached to it. We only reach here for ids THIS process isn't live on, so any
+// attached client is someone else — and a null count (tmux couldn't say) is treated as
+// "held", never killing what we can't confirm is free. Pure, hence unit-testable.
+export function orphanReapable(resumable: boolean, attachedCount: number | null): boolean {
+  if (resumable) return false;
+  return attachedCount === 0;
 }
 
 export function mountTmuxRoutes(app: Express, deps: TmuxRouteDeps): void {
@@ -37,7 +51,9 @@ export function mountTmuxRoutes(app: Express, deps: TmuxRouteDeps): void {
     const isResumable = await deps.resumablePredicate();
     const killed: string[] = [];
     for (const id of deps.listTmuxIds()) {
-      if (isResumable(id)) continue;
+      // Skip a session another running mulmoterminal is attached to — killing it would
+      // yank a live session out from under that process (#747).
+      if (!orphanReapable(isResumable(id), deps.attachedClientCount(id))) continue;
       deps.killTmux(id);
       killed.push(id);
     }
