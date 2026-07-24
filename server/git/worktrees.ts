@@ -229,7 +229,12 @@ export async function removeWorktree(
   if (!repo || !isManagedWorktree(repo, worktreePath)) return { ok: false, reason: "not-managed" };
   if (!opts.force && (await isDirty(worktreePath))) return { ok: false, reason: "dirty" };
 
-  const branch = (await listWorktrees(repo)).find((w) => w.path === path.resolve(worktreePath))?.branch ?? null;
+  // Match on CANONICAL paths, not path.resolve vs the listed path: git reports realpaths
+  // (e.g. macOS /tmp → /private/tmp), so a plain string compare misses the entry when the
+  // caller's path isn't already realpath-resolved — and a missed match silently skips the
+  // branch deletion below (the worktree goes but its branch lingers).
+  const target = canonicalPath(worktreePath);
+  const branch = (await listWorktrees(repo)).find((w) => canonicalPath(w.path) === target)?.branch ?? null;
   const removed = await git(["worktree", "remove", ...(opts.force ? ["--force"] : []), worktreePath], repo);
   if (!removed.ok) return { ok: false, reason: "failed" };
   await git(["worktree", "prune"], repo);

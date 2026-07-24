@@ -14,6 +14,7 @@ import {
   listWorktrees,
   isDirty,
   removeWorktree,
+  git,
 } from "../../../server/git/worktrees";
 
 describe("slugify", () => {
@@ -123,6 +124,10 @@ describe("git worktree lifecycle", () => {
       expect(await removeWorktree(repo, wt.path, { force: true, deleteBranch: true })).toEqual({ ok: true });
       expect(existsSync(wt.path)).toBe(false);
       expect(await listWorktrees(repo)).toEqual([]);
+      // Regression (#748): deleteBranch actually deleted the branch. This failed silently
+      // when the branch lookup compared non-canonical paths and found no match.
+      const branchList = await git(["branch", "--list", wt.branch], repo);
+      expect(branchList.stdout.trim()).toBe("");
     },
     GIT_TEST_TIMEOUT_MS,
   );

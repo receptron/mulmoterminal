@@ -6,6 +6,7 @@ import { repoRoot, defaultBaseBranch, isManagedWorktree, git } from "./worktrees
 import { resolveGithubUrl } from "./gitRemote.js";
 import { spawnCollect, type SpawnResult } from "./spawn-collect.js";
 import { lastGhUrl } from "./git-parse.js";
+import { parsePrUrl } from "./pr-for-branch.js";
 
 type Reason = "not-worktree" | "no-branch" | "no-remote" | "no-github" | "push-failed" | "failed";
 
@@ -84,6 +85,15 @@ export async function createOrOpenPR(cwd: string): Promise<PrResult> {
   const gh = await run("gh", ["pr", "create", "--base", base, "--head", branch, "--fill"], cwd);
   const ghUrl = gh.ok ? lastGhUrl(gh.stdout) : null;
   if (ghUrl) return { ok: true, url: ghUrl, via: "gh" };
+
+  // `gh pr create` fails when a PR for this branch ALREADY exists — re-running the button
+  // should open that PR, not the "open a new PR" compare page. Look it up before falling back.
+  // No `--repo`: like the `gh pr create` above, gh infers the repo from `cwd` (the worktree).
+  // Passing repoRoot(cwd) here would be a filesystem PATH, but `--repo` only accepts an
+  // OWNER/REPO slug, so it would always error and defeat this lookup.
+  const existing = await run("gh", ["pr", "list", "--head", branch, "--state", "open", "--json", "url", "--limit", "1"], cwd);
+  const existingUrl = existing.ok ? parsePrUrl(existing.stdout) : null;
+  if (existingUrl) return { ok: true, url: existingUrl, via: "gh" };
 
   const githubUrl = await resolveGithubUrl(cwd);
   if (!githubUrl) return { ok: false, reason: "no-github", detail: gh.stderr.trim().slice(0, DETAIL_LIMIT) };
