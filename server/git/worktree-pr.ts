@@ -25,10 +25,16 @@ export interface PrResult {
 
 const DETAIL_LIMIT = 500;
 
+// `git push` and `gh pr create` are outward network mutations that can legitimately take
+// minutes on a large branch or a slow remote — far longer than spawnCollect's default,
+// which is tuned for quick `gh` reads. Give them a generous ceiling so a real push isn't
+// killed at 30s and mis-reported as push-failed, while still bounding a truly-stuck process.
+export const NETWORK_MUTATION_TIMEOUT_MS = 300_000;
+
 // worktrees.ts' git() drops stderr and only runs git; push/gh failures report via
 // stderr, so use the stderr-capturing runner, constrained to those two tools.
 function run(cmd: "git" | "gh", args: string[], cwd: string): Promise<SpawnResult> {
-  return spawnCollect(cmd, args, { cwd, errorStderr: "spawn failed" });
+  return spawnCollect(cmd, args, { cwd, errorStderr: "spawn failed", timeoutMs: NETWORK_MUTATION_TIMEOUT_MS });
 }
 
 async function currentBranch(cwd: string): Promise<string | null> {

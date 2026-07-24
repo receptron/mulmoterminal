@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -95,6 +95,31 @@ describe("createRemoteHostHandlers", () => {
     await handlers.startChat({ message: "hi", attachments: [{ storage_id: "abc" }] });
     expect(spawned).toHaveLength(1);
     expect(cleanedUp).toEqual([["abc"]]); // cleanup ran, once, after spawn
+  });
+
+  // Regression (#746 Codex review): the chat already started, so a cleanupStaging rejection
+  // must NOT turn the successful start into a reported failure (which the phone would retry,
+  // spawning a duplicate chat). The rejection is isolated at the handler boundary.
+  it("startChat still succeeds when staging cleanup rejects (chat already spawned)", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    handlers = createRemoteHostHandlers({
+      workspace: ws,
+      spawnChat: (message) => {
+        spawned.push(message);
+        return { chatId: "chat-ok" };
+      },
+      ingest: async () => ({
+        attachments: [],
+        cleanupStaging: async () => {
+          throw new Error("storage offline");
+        },
+      }),
+      ...unusedTerminalDeps,
+    });
+    const result = await handlers.startChat({ message: "hi", attachments: [{ storage_id: "abc" }] });
+    expect(result).toEqual({ started: true, chatId: "chat-ok" });
+    expect(spawned).toHaveLength(1); // spawned exactly once — no false failure, no retry
+    warn.mockRestore();
   });
 
   // Regression (#746): if the spawn throws, staging is NOT deleted, so the phone can retry

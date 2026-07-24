@@ -25,6 +25,7 @@ import {
   remoteViewItems,
   remoteViewItemsFailureMessage,
 } from "../remoteView.js";
+import { mutateWriteApplied } from "../mutateStatus.js";
 import type { Attachment, IngestResult } from "./ingestAttachments.js";
 import { createTerminalInputSender } from "./terminalInput.js";
 import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
@@ -134,6 +135,11 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
   const collection = await loadCollection(slug);
   if (!collection) throw new Error(`collection '${slug}' not found`);
   const result = await mutateRemoteView(collection, viewId, request);
+  // The write applied but its response blew the byte budget — report success (+refetch),
+  // not a thrown error the phone shows as a failed edit while keeping stale data (#747).
+  if (mutateWriteApplied(result)) {
+    return { op: request.op, id: request.id, applied: true, warning: mutateRemoteViewFailureMessage(result, slug) } as unknown as JsonObject;
+  }
   if (result.kind !== "ok") throw new Error(mutateRemoteViewFailureMessage(result, slug));
   return (result.op === "delete" ? { op: "delete", id: result.id } : { op: "update", item: result.item }) as unknown as JsonObject;
 };
@@ -251,7 +257,10 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
       // provider token) must leave the staged uploads intact so the phone can retry the same
       // command — deleting them before spawn would strand a retry with no bytes to re-fetch.
       const { chatId } = spawnChat(composeMessage(message, attachments));
-      await cleanupStaging();
+      // The chat HAS started; staging cleanup is best-effort background work that must never
+      // turn a successful start into a reported failure (which the phone would retry, spawning
+      // a duplicate chat). Isolate any rejection at this boundary.
+      await cleanupStaging().catch((err) => console.warn("[remote-host] staging cleanup after startChat failed", String(err)));
       return { started: true, chatId };
     },
 

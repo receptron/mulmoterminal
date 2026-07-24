@@ -2,6 +2,25 @@
 
 Release notes for MulmoTerminal, mirrored from the [GitHub Releases](https://github.com/receptron/mulmoterminal/releases). Newest first. Versions before `0.6.0` are on GitHub Releases only.
 
+## mulmoterminal@1.7.1 — 2026-07-24
+
+A same-day patch undoing two 1.7.0 regressions and fixing a couple of terminal bugs.
+
+### Regressions fixed
+
+- **Grid resume picker lists all sessions again** (#758, reverts #724): 1.7.0 filtered the grid's empty-cell resume picker to grid-launched sessions only, so sessions started in the normal terminal / a plain `claude` disappeared from the grid picker. The picker again lists every session in the directory. (The chat sidebar's older behavior is unchanged.)
+- **Wheel scrolls the terminal instead of spinning input history** (#738, #737): after the #729 mouse-tracking change, scrolling a zoomed terminal cycled the input history instead of scrolling the transcript. The wheel now scrolls; keyboard ↑/↓ still cycles history.
+
+### Fixes
+
+- **Corrupt `config.json` no longer wipes every setting** (#751, #741): if `config.json` was malformed, the next settings save discarded all existing settings; a corrupt file is now handled without data loss.
+- **Codex session status tracking** (#753, #742): an interrupted turn could leave a codex cell stuck "working," and a deleted skill's mirror could linger.
+- **tmux OSC 52 clipboard passthrough** (#749, #740): the tmux conf's double-quoting dropped `\E`, breaking clipboard copy from inside tmux.
+
+### Docs
+
+- **Animated hero GIF at the top of the README** (#756).
+
 ## mulmoterminal@1.7.0 — 2026-07-24
 
 A resilience-and-cockpit release: one uncaught error can no longer take down every terminal, the cockpit roster gained reordering, shared directory-colored headers, auto-sort and proper scrolling, and the docs were audited end-to-end against the implementation — with the guide's highlights (roster, phone push, worktrees) now front and center.

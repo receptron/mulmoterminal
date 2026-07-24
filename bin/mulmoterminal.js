@@ -7,13 +7,13 @@
 
 import { execSync, spawn } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { get as httpGet } from "node:http";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { computeUpdateNotice, isUpdateCheckDisabled } from "./update-check.js";
+import { waitUntilReady } from "./wait-ready.js";
 import {
   chooseCwd,
   parsePortArg,
@@ -30,7 +30,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
 const SERVER_ENTRY = join(PKG_DIR, "server", "index.ts");
 const DEFAULT_PORT = 34567;
-const READY_TIMEOUT_MS = 15_000;
 // Server exit code meaning "port taken at bind time" — keep in sync with
 // server/index.ts (PORT_IN_USE_EXIT_CODE).
 const PORT_IN_USE_EXIT_CODE = 75;
@@ -168,36 +167,6 @@ function isPortFree(port) {
     probe.once("listening", () => probe.close(() => resolve(true)));
     probe.listen(port);
   });
-}
-
-// Poll the server until it answers, then call onReady; give up after the timeout
-// so the launcher never hangs on a crash loop. Returns a cancel function — a
-// raced/abandoned attempt stops polling so it can't fire a stale banner.
-function waitUntilReady(port, onReady) {
-  const startedAt = Date.now();
-  let timer = null;
-  let cancelled = false;
-  const attempt = () => {
-    if (cancelled) return;
-    const req = httpGet({ host: "127.0.0.1", port, path: "/", timeout: 1000 }, (res) => {
-      res.resume();
-      if (!cancelled) onReady();
-    });
-    req.on("error", retry);
-    req.on("timeout", () => {
-      req.destroy();
-      retry();
-    });
-  };
-  const retry = () => {
-    if (cancelled || Date.now() - startedAt > READY_TIMEOUT_MS) return;
-    timer = setTimeout(attempt, 300);
-  };
-  attempt();
-  return () => {
-    cancelled = true;
-    if (timer) clearTimeout(timer);
-  };
 }
 
 function printReadyBanner(url) {

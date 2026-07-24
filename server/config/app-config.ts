@@ -2,7 +2,7 @@
 // presets plus an optional custom attention-sound file. Unified read/write so a
 // partial update (e.g. just the sound) never clobbers the other field. Extracted
 // from config-routes.ts so the sanitize/load/save logic is unit-testable.
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, copyFileSync } from "node:fs";
 import path from "node:path";
 import { sanitizePresets } from "./cwd-presets.js";
 import { sanitizeButtons, sanitizeChips } from "./header-config.js";
@@ -138,8 +138,10 @@ export function sanitizeWorklogIntervalHours(input: unknown): number {
 }
 
 // Fresh object each call — callers hold and mutate the returned config in place, so a
-// shared default constant would be corrupted across loads.
-const emptyConfig = (): AppConfig => ({
+// shared default constant would be corrupted across loads. Exported so a write path can
+// use it as the base for a MISSING file WITHOUT a second disk read (that re-read could
+// race a concurrent write turning the file corrupt between the two reads).
+export const emptyConfig = (): AppConfig => ({
   cwdPresets: [],
   soundFile: null,
   prRepos: [],
@@ -164,25 +166,65 @@ export function sanitizeProviders(input: unknown): Provider[] {
   });
 }
 
-export function loadAppConfig(file: string): AppConfig {
+// Sanitize a parsed config object into an AppConfig. Pure; `raw` is whatever JSON.parse
+// produced (any shape), so every field is defended by its own sanitizer.
+function sanitizeAppConfig(raw: unknown): AppConfig {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  return {
+    cwdPresets: sanitizePresets(o.cwdPresets),
+    soundFile: sanitizeSoundFile(o.soundFile),
+    prRepos: sanitizeRepos(o.prRepos),
+    launchers: sanitizeLaunchers(o.launchers),
+    userMcpServers: sanitizeUserMcpServers(o.userMcpServers),
+    buttons: sanitizeButtons(o.buttons),
+    chips: sanitizeChips(o.chips),
+    pushEnabled: sanitizePushEnabled(o.pushEnabled),
+    worklogEnabled: sanitizeWorklogEnabled(o.worklogEnabled),
+    worklogIntervalHours: sanitizeWorklogIntervalHours(o.worklogIntervalHours),
+    providers: sanitizeProviders(o.providers),
+  };
+}
+
+// "missing" and "corrupt" are DIFFERENT and a caller about to overwrite must tell them
+// apart: an absent file means "first run, start from empty"; an unparseable file means
+// "the user has real config here that we simply failed to read", where writing an empty
+// base back would silently erase presets/launchers/providers. loadAppConfig collapses
+// both to empty (safe for read-only boot); a WRITE path must use this instead.
+export type AppConfigLoad = { status: "ok"; config: AppConfig } | { status: "missing" } | { status: "corrupt"; error: string };
+
+export function loadAppConfigResult(file: string): AppConfigLoad {
+  if (!existsSync(file)) return { status: "missing" };
+  let text: string;
   try {
-    if (!existsSync(file)) return emptyConfig();
-    const raw = JSON.parse(readFileSync(file, "utf8"));
-    return {
-      cwdPresets: sanitizePresets(raw?.cwdPresets),
-      soundFile: sanitizeSoundFile(raw?.soundFile),
-      prRepos: sanitizeRepos(raw?.prRepos),
-      launchers: sanitizeLaunchers(raw?.launchers),
-      userMcpServers: sanitizeUserMcpServers(raw?.userMcpServers),
-      buttons: sanitizeButtons(raw?.buttons),
-      chips: sanitizeChips(raw?.chips),
-      pushEnabled: sanitizePushEnabled(raw?.pushEnabled),
-      worklogEnabled: sanitizeWorklogEnabled(raw?.worklogEnabled),
-      worklogIntervalHours: sanitizeWorklogIntervalHours(raw?.worklogIntervalHours),
-      providers: sanitizeProviders(raw?.providers),
-    };
+    text = readFileSync(file, "utf8");
+  } catch (err) {
+    return { status: "corrupt", error: `cannot read ${file}: ${String(err)}` };
+  }
+  try {
+    return { status: "ok", config: sanitizeAppConfig(JSON.parse(text)) };
+  } catch (err) {
+    return { status: "corrupt", error: `invalid JSON in ${file}: ${String(err)}` };
+  }
+}
+
+// Lenient load for read-only / boot callers: a missing OR unreadable file yields an empty
+// config so startup never crashes. Callers that then WRITE must NOT use this — see
+// loadAppConfigResult, or a corrupt file gets overwritten with the empty base.
+export function loadAppConfig(file: string): AppConfig {
+  const loaded = loadAppConfigResult(file);
+  return loaded.status === "ok" ? loaded.config : emptyConfig();
+}
+
+// Copy a corrupt config aside before refusing to overwrite it, so the user's unreadable-
+// but-real config isn't lost. Returns the backup path, or null if even the copy failed
+// (best-effort — the caller still refuses the write regardless).
+export function backupCorruptConfig(file: string): string | null {
+  const bak = `${file}.corrupt.bak`;
+  try {
+    copyFileSync(file, bak);
+    return bak;
   } catch {
-    return emptyConfig();
+    return null;
   }
 }
 
