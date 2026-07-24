@@ -91,6 +91,6 @@ export function initWorkspaceSetup(deps: { workspace: string }): void {
   // by description — codex has no /<slug> command, so a codex chat seed names the skill instead.
   safeStep("mirrorCodexSkills", () => {
     const result = syncCodexSkills(path.join(workspace, ".claude", "skills"), codexSkillsRoot());
-    log.info("mirrored skills to codex", { mirrored: result.mirrored.length, skipped: result.skipped.length });
+    log.info("mirrored skills to codex", { mirrored: result.mirrored.length, skipped: result.skipped.length, removed: result.removed.length });
   });
 }

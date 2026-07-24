@@ -17,18 +17,43 @@ export function codexSkillsRoot(): string {
 
 const isOurs = (dir: string): boolean => existsSync(path.join(dir, MIRROR_MARKER));
 
-// Mirror each skill dir from the workspace's .claude/skills into codex's skills dir (same SKILL.md
-// format), so codex loads them by description like claude does. Skips any name codex already owns
-// (no marker) to avoid clobbering codex's own skills; re-copies ours fresh so edits/removals in the
-// workspace propagate.
-export function syncCodexSkills(sourceDir: string, destDir: string): { mirrored: string[]; skipped: string[] } {
-  const mirrored: string[] = [];
-  const skipped: string[] = [];
-  if (!existsSync(sourceDir)) return { mirrored, skipped };
-  mkdirSync(destDir, { recursive: true });
-  const names = readdirSync(sourceDir, { withFileTypes: true })
+const directoryNames = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true })
     .filter((e) => e.isDirectory())
     .map((e) => e.name);
+
+// Delete mirrors we own (marker present) whose source skill is gone from the workspace, so
+// removing a skill from .claude/skills actually un-mirrors it from codex. Without this a
+// deleted skill's mirror survives every sync and codex keeps auto-loading it forever; the
+// claude side prunes retired skills for exactly this reason, and the two must not diverge.
+// Only marked dirs are touched — codex's own skills (no marker) are never removed.
+function removeOrphanedMirrors(destDir: string, keep: ReadonlySet<string>): string[] {
+  const removed: string[] = [];
+  for (const name of directoryNames(destDir)) {
+    if (keep.has(name)) continue;
+    const dst = path.join(destDir, name);
+    if (!isOurs(dst)) continue;
+    rmSync(dst, { recursive: true, force: true });
+    removed.push(name);
+  }
+  return removed;
+}
+
+// Mirror each skill dir from the workspace's .claude/skills into codex's skills dir (same SKILL.md
+// format), so codex loads them by description like claude does. Skips any name codex already owns
+// (no marker) to avoid clobbering codex's own skills; re-copies ours fresh so edits in the workspace
+// propagate; and deletes our mirrors whose source skill was removed, so a whole-skill deletion
+// propagates too (not just file removals inside a still-present skill).
+export function syncCodexSkills(sourceDir: string, destDir: string): { mirrored: string[]; skipped: string[]; removed: string[] } {
+  const mirrored: string[] = [];
+  const skipped: string[] = [];
+  if (!existsSync(sourceDir)) {
+    // Source gone entirely — every mirror we own is now orphaned.
+    const removed = existsSync(destDir) ? removeOrphanedMirrors(destDir, new Set()) : [];
+    return { mirrored, skipped, removed };
+  }
+  mkdirSync(destDir, { recursive: true });
+  const names = directoryNames(sourceDir);
   for (const name of names) {
     const dst = path.join(destDir, name);
     if (existsSync(dst) && !isOurs(dst)) {
@@ -40,7 +65,8 @@ export function syncCodexSkills(sourceDir: string, destDir: string): { mirrored:
     writeFileSync(path.join(dst, MIRROR_MARKER), "managed by mulmoterminal\n");
     mirrored.push(name);
   }
-  return { mirrored, skipped };
+  const removed = removeOrphanedMirrors(destDir, new Set(names));
+  return { mirrored, skipped, removed };
 }
 
 // codex has no /<slug> command (skills auto-load by description), so a collection chat seed
