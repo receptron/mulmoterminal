@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { createApp, defineComponent, ref } from "vue";
 import { flushPromises } from "@vue/test-utils";
-import { useHeaderButtons } from "../../../src/composables/useHeaderButtons";
+import { useHeaderButtons, hasPickFileButton, type HeaderButton } from "../../../src/composables/useHeaderButtons";
 
 function withSetup<T>(composable: () => T): { result: T; unmount: () => void } {
   let result!: T;
@@ -34,5 +34,23 @@ describe("useHeaderButtons", () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/api/header?"));
     expect(result.buttons.value.map((b) => b.id)).toEqual(["pr"]);
     unmount();
+  });
+});
+
+describe("hasPickFileButton", () => {
+  const btn = (over: Partial<HeaderButton>): HeaderButton => ({ id: "x", label: "x", run: "open", ...over });
+
+  it("is true when an open button carries pickFile", () => {
+    expect(hasPickFileButton([btn({ id: "pick", open: { pickFile: true } })])).toBe(true);
+    expect(hasPickFileButton([btn({ id: "url", open: { url: "https://x" } }), btn({ id: "pick", open: { pickFile: true } })])).toBe(true);
+  });
+
+  it("is false when the picker was configured away", () => {
+    expect(hasPickFileButton([btn({ id: "url", open: { url: "https://x" } }), btn({ id: "rev", open: { reveal: "${dir}" } })])).toBe(false);
+    expect(hasPickFileButton([])).toBe(false);
+  });
+
+  it("does not count a non-open button or pickFile:false", () => {
+    expect(hasPickFileButton([btn({ id: "sh", run: "shell" }), btn({ id: "p", open: { pickFile: false } })])).toBe(false);
   });
 });

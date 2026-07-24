@@ -15,7 +15,7 @@ import RunMenu from "./RunMenu.vue";
 import SkillMenu from "./SkillMenu.vue";
 import { skillSeed } from "./skillSeed";
 import GitBranchChip from "./GitBranchChip.vue";
-import { useHeaderButtons, type HeaderButton } from "../composables/useHeaderButtons";
+import { useHeaderButtons, hasPickFileButton, type HeaderButton } from "../composables/useHeaderButtons";
 import { useSessionContext } from "../composables/useSessionContext";
 import { runHeaderButton } from "../composables/useHeaderAction";
 import type { RunCommand } from "./runCommand";
@@ -328,19 +328,25 @@ function onDragOver(e: DragEvent) {
   dragOver.value = true;
 }
 
-// Shown when a file was dropped but the browser withheld its path — the drop can't
-// do anything, so tell the user to use the 📎 button (whose tooltip explains it)
-// rather than leaving the failed drop looking like nothing happened.
-const DROP_HINT_EN = "This browser doesn't share a dropped file's path. Use the 📎 button in the header (Insert a file path) instead.";
+// Shown when a file was dropped but the browser withheld its path — the drop can't do
+// anything, so tell the user how to insert the path rather than leaving the failed drop
+// looking like nothing happened. The guidance depends on the header: point at the 📎 picker
+// only when it's actually present (buttons are configurable and it can be removed), otherwise
+// fall back to advice that always holds.
+const DROP_HINT_PICKER_EN = "This browser doesn't share a dropped file's path. Use the 📎 button in the header (Insert a file path) instead.";
+const DROP_HINT_TYPE_EN = "This browser doesn't share a dropped file's path — type or paste the path instead.";
 const dropHint = ref(false);
-const dropHintText = ref(DROP_HINT_EN);
+const dropHintText = ref("");
 const DROP_HINT_MS = 6000;
 let dropHintTimer: ReturnType<typeof setTimeout> | undefined;
 async function showDropHint() {
+  const english = hasPickFileButton(headerButtons.value) ? DROP_HINT_PICKER_EN : DROP_HINT_TYPE_EN;
+  dropHintText.value = english; // show immediately; the translation (server-cached) swaps in
   dropHint.value = true;
   clearTimeout(dropHintTimer);
   dropHintTimer = setTimeout(() => (dropHint.value = false), DROP_HINT_MS);
-  if (dropHintText.value === DROP_HINT_EN) dropHintText.value = await translateUiSentence(DROP_HINT_EN, "mulmoterminal-ui");
+  const translated = await translateUiSentence(english, "mulmoterminal-ui");
+  if (dropHint.value) dropHintText.value = translated; // ignore if it resolved after the hint hid
 }
 onUnmounted(() => clearTimeout(dropHintTimer));
 
