@@ -20,6 +20,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { ClipboardAddon, type IClipboardProvider } from "@xterm/addon-clipboard";
 import { swallowsMouseTracking } from "./mouseTrackingModes";
+import { clearResetModes, recordSwallowedModes, wantsWheelReports, wheelReportSequence } from "./wheelReports";
 import { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
@@ -148,6 +149,42 @@ const clipboardProvider: IClipboardProvider = {
   },
 };
 
+// Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
+// over, so its coordinate reports never land in the agent's prompt (#729). Registered per
+// terminal and disposed with it.
+//
+// SET only. The matching reset (`CSI ? … l`) is deliberately left alone: dropping it gains
+// nothing (it disables what was never enabled) but would strand mouse mode ON for good in the
+// one case that gets past this hook — a sequence mixing tracking with an unrelated mode, which
+// is honoured on purpose. Letting every reset through keeps that recoverable.
+//
+// What was swallowed is still remembered: in the alternate buffer, xterm's fallback would turn
+// the wheel into arrow keys — which a TUI binds to input history, so scrolling spun the prompt
+// history (#737). When the app asked for wheel tracking, the wheel handler synthesizes the SGR
+// report it asked for instead; `term.input` routes it through onData to the PTY like any
+// keystroke. The cell coordinate is fixed at 1;1 — a transcript scroll doesn't depend on where
+// the pointer sits, and the real position isn't exposed at this layer.
+function guardMouseTracking(term: Terminal): void {
+  const swallowedMouseModes = new Set<number>();
+  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => {
+    const swallowed = swallowsMouseTracking(params);
+    if (swallowed) recordSwallowedModes(swallowedMouseModes, params);
+    return swallowed;
+  });
+  term.parser.registerCsiHandler({ prefix: "?", final: "l" }, (params) => {
+    clearResetModes(swallowedMouseModes, params);
+    return false;
+  });
+  term.attachCustomWheelEventHandler((ev) => {
+    if (term.buffer.active.type !== "alternate" || !wantsWheelReports(swallowedMouseModes)) return true;
+    const seq = wheelReportSequence(ev.deltaY, 1, 1);
+    if (!seq) return true;
+    term.input(seq, false);
+    ev.preventDefault();
+    return false;
+  });
+}
+
 function ensure(key: string, target: ConnTarget): Conn {
   const existing = conns.get(key);
   if (existing) {
@@ -170,15 +207,7 @@ function ensure(key: string, target: ConnTarget): Conn {
     // terminal down at construction rather than degrade.
     allowProposedApi: true,
   });
-  // Keep a drag as a text selection: refuse the mouse-tracking modes an app would use to take it
-  // over, so its coordinate reports never land in the agent's prompt (#729). Registered per
-  // terminal and disposed with it.
-  //
-  // SET only. The matching reset (`CSI ? … l`) is deliberately left alone: dropping it gains
-  // nothing (it disables what was never enabled) but would strand mouse mode ON for good in the
-  // one case that gets past this hook — a sequence mixing tracking with an unrelated mode, which
-  // is honoured on purpose. Letting every reset through keeps that recoverable.
-  term.parser.registerCsiHandler({ prefix: "?", final: "h" }, (params) => swallowsMouseTracking(params));
+  guardMouseTracking(term);
   const fitAddon = new FitAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(new WebLinksAddon());
