@@ -101,6 +101,48 @@ describe("GridView roster ordering (#720)", () => {
   });
 });
 
+// A toolbar stub that surfaces the view-toggle props and can fire the toggle-view event, plus a
+// TerminalGrid stub exposing the listMode prop — together they trace the header → GridView → grid
+// wiring for the roster ⇄ strip toggle.
+const ViewToggleToolbarStub = {
+  name: "AppToolbar",
+  props: ["showViewToggle", "listMode"],
+  emits: ["toggle-view"],
+  template: '<button class="toggle-view" @click="$emit(\'toggle-view\')" />',
+};
+const ListModeGridStub = { name: "TerminalGrid", props: ["listMode", "expandedUid"], template: '<div class="lm-stub" />' };
+
+describe("GridView view toggle wiring", () => {
+  it("shows the toggle only while zoomed and flips the grid's listMode when the header fires toggle-view", async () => {
+    localStorage.setItem("grid_v2", JSON.stringify({ cells: [{ uid: 10, session: IDS.idleA, cwd: "/w" }], expanded: 10, page: 0, sortMode: "manual" }));
+    const w = mount((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: ListModeGridStub, AppToolbar: ViewToggleToolbarStub, SettingsModal: SettingsStub } },
+    });
+    await flushPromises();
+    const toolbar = w.findComponent(ViewToggleToolbarStub);
+    const grid = w.findComponent(ListModeGridStub);
+    // A cell is expanded → the toggle is offered, and both surfaces start in roster (list) mode.
+    expect(toolbar.props("showViewToggle")).toBe(true);
+    expect(toolbar.props("listMode")).toBe(true);
+    expect(grid.props("listMode")).toBe(true);
+    // The header toggle flips roster → strip for the grid too.
+    await toolbar.trigger("click");
+    expect(grid.props("listMode")).toBe(false);
+    expect(toolbar.props("listMode")).toBe(false);
+    w.unmount();
+  });
+
+  it("hides the toggle when nothing is expanded", async () => {
+    localStorage.setItem("grid_v2", JSON.stringify({ cells: [{ uid: 10, session: IDS.idleA, cwd: "/w" }], expanded: null, page: 0, sortMode: "manual" }));
+    const w = mount((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: ListModeGridStub, AppToolbar: ViewToggleToolbarStub, SettingsModal: SettingsStub } },
+    });
+    await flushPromises();
+    expect(w.findComponent(ViewToggleToolbarStub).props("showViewToggle")).toBe(false);
+    w.unmount();
+  });
+});
+
 describe("GridView settings wiring", () => {
   it("passes pushEnabled to SettingsModal and saves it on update-push-enabled (regression #347)", async () => {
     const w = await mountGrid();

@@ -1,38 +1,32 @@
-# fix: expand 時に view-toggle(☰) がセルの ✕ 閉じるボタンを覆って閉じられない
+# fix: expand 時の view-toggle を撤去し、グローバルヘッダー左端へ移設
 
 ## User Prompt
 
 > あれれ、expand時のボタンを移動したせいで、今度は閉じられなくない？
+> expandひだりうえ！！じゃなくて設定とかあるglobalヘッダーの一番左に於けば良い。不要なときは隠して。
 
-（#769 で `.stage { position: relative }` を入れた直後の回帰報告）
+（#769 で `.stage { position: relative }` を入れた直後の回帰 → 位置の作り直し）
 
 ## 背景 / 症状
 
-#769 で「grid+expand 時に設定歯車が view-toggle に覆われる」問題を、`.stage` に
-`position: relative` を与えて解決した。しかしこれで view-toggle（`☰`/`▤`、`absolute right-3 top-2 z-10`）
-の絶対配置基準が viewport → `.stage` に変わり、今度は **stage 右上 = zoom セル（`.zoom-main`）右上に固定された
-`.cell-actions`（⤢/⤡ 展開＋✕ 閉じる、各 28×26px）の真上**に乗ってしまい、✕ で閉じられなくなった。
-歯車の overlap を ✕ の overlap に付け替えてしまった形。
+- #768/#769: grid+expand 時に view-toggle（`☰`/`▤`）が設定歯車を覆う → `.stage { position: relative }` で解決。
+- その副作用で toggle の絶対配置基準が viewport→`.stage` になり、今度は **zoom セル右上の ✕ 閉じる/⤡ 展開ボタン**を覆って閉じられなくなった（回帰）。
+- stage 左上へ逃がす案（PR #771 初版）も、コックピット先頭行に重なりユーザー却下。
 
-## 原因
+## 方針（確定）
 
-view-toggle は右上固定。zoom セルの閉じる/展開ボタンも（セルは stage 右上を占めるため）stage 右上固定。
-両者が同じ右上コーナーで重なる。`.stage` を static に戻すと #768（歯車 overlap）が再発するので戻せない。
+toggle を stage から撤去し、**グローバルヘッダー（AppToolbar）の一番左**へ移設。expand 時のみ表示、非 expand 時は隠す。
+toggle は元々「左サイドパネル（コックピット⇄ストリップ）の表示切替」なので、他のビュー系ボタンと同じヘッダーに置くのが自然。
 
-## 修正
+## 実装
 
-view-toggle を stage の **左上**（`right-3` → `left-3`）へ移動。
-- 歯車（ヘッダ右上）とも ✕/⤡（セル右上）とも重ならない。
-- トグルは元々「左サイドパネル（コックピット/ストリップ）の表示切替」なので左上配置は意味的にも自然。
-- `.stage { position: relative }` は維持（無いと左上が viewport 基準になりヘッダのタイトル/ナビに乗る）。
+- **TerminalGrid.vue**: stage 内の absolute トグルを削除。`listMode` をローカル ref → **prop 化**（source of truth は親）。`list-mode` emit と `.stage { position: relative }` を撤去（元の stage に復元）。
+- **GridView.vue**: `listModeOn` を source of truth 化。`toggleListMode()`（反転＋poll 同期）を追加。AppToolbar へ `:show-view-toggle="expandedUid !== null"` `:list-mode` を渡し `@toggle-view`。TerminalGrid へ `:list-mode="listModeOn"`。
+- **AppToolbar.vue**: props `showViewToggle` / `listMode`、emit `toggle-view`。ヘッダー左端（タイトル前）に `v-if="showViewToggle"` の LauncherButton（roster=`view_agenda` / strip=`view_carousel`）。
 
-副作用: 左上はコックピット先頭行ヘッダ（listMode）／zoom セルのステータスドット（strip）の左端に
-26px 重なるが、いずれも**操作ボタンではなく情報表示**なので実害なし。
+## テスト
 
-## 検証
+- TerminalGrid.spec: トグルクリック依存のテストを **`listMode` prop 駆動**へ。削除した `list-mode` emit のテストを除去。mount ヘルパーに `listMode` 追加。
+- GridView.spec: **結線テスト**を追加（expand 時のみ toggle 表示 / `toggle-view` で grid の `listMode` が反転）。ミューテーション（grid の `:list-mode` を定数化）で赤くなることを確認済み。
 
-- 実レイアウト（toolbar＋歯車／stage relative／cockpit＋zoom-main／セル `.cell-actions` を実寸で再現）で
-  Before/After を描画。Before は ▤ が ✕ を覆う（報告と一致）、After は ✕（赤）と ⤡ が露出・歯車もクリア。
-- CSS レイアウト修正のため jsdom 単体テスト不可（機構は再現＋コメントで固定）。
-
-typecheck(app) / build / grid テスト（TerminalGrid + GridView, 29件）パス。
+typecheck(app) / build / lint（0 error）/ grid・gridview テスト（30件）パス。実レイアウト再現で閉じる/歯車の露出も確認済み。
