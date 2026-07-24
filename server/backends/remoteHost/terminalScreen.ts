@@ -48,6 +48,10 @@ export interface SessionListInput {
   // Excludes sessions an orphan cleanup would reap — without it the picker fills with
   // long-dead tmux shells (66 of them on the author's machine when this was written).
   isResumable: (id: string) => boolean;
+  // Keeps only multi-terminal GRID sessions (the dev-terminal set). The phone drives the
+  // grid's cells, so the single-view chat session and any tmux shell that was never a grid
+  // cell are excluded — even while they are live and resumable.
+  isGridSession: (id: string) => boolean;
   detailOf: (id: string) => SessionDetail;
 }
 
@@ -60,9 +64,9 @@ const byLiveThenTitle = (a: TerminalSessionSummary, b: TerminalSessionSummary): 
 // dozens of long-finished ones the host can no longer name. A row showing nothing but
 // a UUID is not a choice the user can make, so a nameless session earns its place only
 // by being live — where the id at least identifies something currently running.
-export function buildSessionList({ liveIds, tmuxIds, isResumable, detailOf }: SessionListInput): TerminalSessionSummary[] {
+export function buildSessionList({ liveIds, tmuxIds, isResumable, isGridSession, detailOf }: SessionListInput): TerminalSessionSummary[] {
   const live = new Set(liveIds);
-  const ids = [...new Set([...liveIds, ...tmuxIds])].filter(isResumable);
+  const ids = [...new Set([...liveIds, ...tmuxIds])].filter(isResumable).filter(isGridSession);
   return ids
     .map((id) => ({ id, ...detailOf(id), live: live.has(id) }))
     .filter((session) => session.title !== "" || session.live)
