@@ -18,18 +18,18 @@
 
 ## 変更
 
-- `server/config/header-config.ts` の `DEFAULT_BUTTONS` を **6つの充実セット**に:
+- `server/config/header-config.ts` の `DEFAULT_BUTTONS` を **5つの充実セット**に:
   1. 📎 pick-file（ファイルパス挿入） 2. 📂 reveal（OSファイルマネージャ）
   3. 📁 files（アプリ内ファイル一覧, `open:{files:"${dir}"}`）
   4. 🖥 terminal（新規ターミナル, `open:{terminal:"${dir}"}`）
   5. 🔗 pr（`when:isGitRepo`, `open:{pr:true}` — PR 無しは自動ドロップ）
-  6. 🌐 gh（`when:isGitRepo`, `open:{url:"https://github.com/${repo}"}`）
-- `pr`/`gh` は `when:isGitRepo` で git リポ限定、`pr` は PR 無しで resolver がドロップ（既存の isVisible）。
+- `pr` は `when:isGitRepo` で git リポ限定、PR 無しで resolver がドロップ（既存の isVisible）。
+- 「🌐 GitHub トップを開く」は当初含めたが、リポトップは `pr`（ブランチ PR）と役割が重複し不要との判断で外した。
 - **docs / README** に、既定セットの内容と「`buttons` 設定＝丸ごと上書き（＝短いリストで減らせる）」を明記
   （README / docs/guide/{ja,en}/config.md）。
 
 ## テスト
 
-- header-config.spec / header-resolve.spec の「既定=2つ」前提を新しい6つ・resolver 挙動（非git/PR有無）に更新。
-- ミューテーション確認: 既定を元の2つに戻すと4テストが赤 → 6つで green。
+- header-config.spec / header-resolve.spec の「既定=2つ」前提を新しい5つ・resolver 挙動（非git/PR有無）に更新。
+- ミューテーション確認: 既定を元の2つに戻すとテストが赤 → 5つで green。
 - server/config テスト 49件・typecheck・build・lint(0 error) パス。

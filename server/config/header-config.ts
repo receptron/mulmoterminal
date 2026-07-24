@@ -32,17 +32,14 @@ export interface HeaderConfig {
 // The header's action buttons when the user hasn't configured `buttons` — a useful starter set,
 // each an ordinary config button so the user can drop/reorder/replace them. Configuring `buttons` at
 // ANY level REPLACES this whole set (it is NOT merged on top), so a user who wants fewer just lists
-// their own shorter set. `pr`/`gh` are gated to git repos (`when: isGitRepo`) and `pr` is dropped when
-// the branch has no open PR, so they self-hide where they don't apply.
+// their own shorter set. `pr` is gated to git repos (`when: isGitRepo`) and dropped when the branch has
+// no open PR, so it self-hides where it doesn't apply.
 export const DEFAULT_BUTTONS: HeaderButton[] = [
   { id: "pick-file", icon: "attach_file", label: "Insert a file path", run: "open", open: { pickFile: true } },
   { id: "reveal", emoji: "📂", label: "Reveal in the file manager", run: "open", open: { reveal: "${dir}" } },
   { id: "files", icon: "folder_open", label: "Browse files in the app", run: "open", open: { files: "${dir}" } },
   { id: "terminal", emoji: "🖥", label: "New terminal here", run: "open", open: { terminal: "${dir}" } },
   { id: "pr", emoji: "🔗", label: "Open this branch's PR", run: "open", when: "isGitRepo", open: { pr: true } },
-  // `repo != ` gates on a resolvable GitHub owner/repo (ctx.repo is null for non-GitHub or remoteless
-  // repos), so this never renders a broken `https://github.com/` link.
-  { id: "gh", emoji: "🌐", label: "Open on GitHub", run: "open", when: "repo != ", open: { url: "https://github.com/${repo}" } },
 ];
 
 // The live context a header is resolved against — all trusted server-side session state.
