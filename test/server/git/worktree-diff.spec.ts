@@ -104,4 +104,20 @@ describe("worktreeDiff", () => {
     expect(d.patch).toContain("日本語.txt");
     expect(d.patch).not.toContain("\\346");
   });
+
+  // Regression (#748): `git diff main` is "ambiguous argument: both revision and filename"
+  // when the worktree holds a file literally named after the base branch. The `--` separator
+  // disambiguates it, so the diff still reports the file instead of erroring to empty.
+  it.skipIf(!hasGit)("diffs cleanly when a file is named after the base branch", async () => {
+    const wt = await createWorktree(repo, "ambiguous");
+    if (!wt) throw new Error("expected a worktree");
+    writeFileSync(path.join(wt.path, "main"), "a file whose name equals the base branch\n");
+    g(wt.path, "add", "-A");
+    g(wt.path, "commit", "-m", "add a file named main");
+
+    const d = await worktreeDiff(wt.path);
+    expect(d.isWorktree).toBe(true);
+    expect(d.files.find((f) => f.path === "main")).toMatchObject({ status: "changed" });
+    expect(d.patch).toContain("main");
+  });
 });

@@ -41,10 +41,15 @@ async function aheadOf(cwd: string, base: string): Promise<number> {
 // a 日本語.txt reads as itself. Applied to every call whose output is a file PATH.
 const QUOTE_PATH_OFF = ["-c", "core.quotePath=false"];
 
+// A trailing `--` separates the revision from pathspecs, so `git diff <base>` isn't
+// "ambiguous argument: both revision and filename" when the worktree holds a file whose
+// name equals the base branch (e.g. a file literally called `main`).
+const REV_END = "--";
+
 // Tracked changes vs base, with +/- counts (numstat: "<add>\t<del>\t<path>", "-"
 // for binary). Untracked files aren't in `git diff`, so add them from status.
 async function changedFiles(cwd: string, base: string): Promise<WorktreeFile[]> {
-  const tracked = await git([...QUOTE_PATH_OFF, "diff", "--numstat", base], cwd);
+  const tracked = await git([...QUOTE_PATH_OFF, "diff", "--numstat", base, REV_END], cwd);
   const files: WorktreeFile[] = tracked.ok ? tracked.stdout.split("\n").filter(Boolean).map(parseNumstat) : [];
   const untracked = await git([...QUOTE_PATH_OFF, "ls-files", "--others", "--exclude-standard"], cwd);
   const news = untracked.ok ? untracked.stdout.split("\n").filter(Boolean) : [];
@@ -58,7 +63,8 @@ function parseNumstat(line: string): WorktreeFile {
 async function diffPatch(cwd: string, base: string): Promise<{ patch: string; truncated: boolean }> {
   // Same quoting fix as changedFiles: the patch's own `diff --git a/… b/…` headers carry
   // the paths, so a non-ASCII filename would otherwise render as octal escapes here too.
-  const res = await git([...QUOTE_PATH_OFF, "diff", base], cwd);
+  // Trailing `--` disambiguates the base revision from a same-named file (see REV_END).
+  const res = await git([...QUOTE_PATH_OFF, "diff", base, REV_END], cwd);
   if (!res.ok) return { patch: "", truncated: false };
   const full = res.stdout;
   return capPatch(full, PATCH_LIMIT_CHARS);
