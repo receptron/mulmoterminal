@@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 // pass-through behavior (and thus fail the Shift+Enter assertion) rather than crash.
 const mockKeyState: { handler: (e: unknown) => boolean } = vi.hoisted(() => ({ handler: () => true }));
 // The options ensure() passes to `new Terminal({...})`, captured for assertions.
-const mockTermState: { options: Record<string, unknown> } = vi.hoisted(() => ({ options: {} }));
+const mockTermState: { options: Record<string, unknown>; csiHandlers: unknown[][] } = vi.hoisted(() => ({ options: {}, csiHandlers: [] }));
 
 // Mock xterm + addons so the manager runs headless (no real DOM terminal / canvas).
 // Factories are hoisted above imports, so the fakes are declared INSIDE them.
@@ -18,6 +18,9 @@ vi.mock("@xterm/xterm", () => ({
     constructor(opts: Record<string, unknown>) {
       mockTermState.options = opts;
     }
+    // ensure() registers the mouse-tracking guards through this (#729); the guards' own behaviour
+    // is covered against a REAL terminal in mouseTrackingGuard.spec.ts.
+    parser = { registerCsiHandler: (...args: unknown[]) => mockTermState.csiHandlers.push(args) };
     loadAddon() {}
     open() {}
     onData() {}
@@ -141,6 +144,21 @@ describe("useTerminalConnections — detached-slot state replay", () => {
     conn.attach("cell-opt", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
     expect(mockTermState.options.macOptionIsMeta).toBe(true);
     conn.release("cell-opt");
+  });
+
+  // Selecting text must not hand the drag to the agent as mouse reports (#729). `allowProposedApi`
+  // is load-bearing rather than cosmetic: `term.parser` throws without it, so a terminal would fail
+  // to construct at all. macOptionClickForcesSelection is the macOS escape hatch — there, xterm
+  // bypasses mouse mode for Option+drag ONLY when it is set (elsewhere Shift needs no option).
+  it("registers the mouse-tracking guard on DECSET only, with the options it needs", () => {
+    mockTermState.options = {};
+    mockTermState.csiHandlers = [];
+    conn.attach("cell-mouse", target(null), { onSession: vi.fn(), onCwd: vi.fn() }, document.createElement("div"));
+    expect(mockTermState.options.allowProposedApi).toBe(true);
+    expect(mockTermState.options.macOptionClickForcesSelection).toBe(true);
+    // SET only — dropping the reset could strand mouse mode on (see mouseTrackingGuard.spec.ts).
+    expect(mockTermState.csiHandlers.map(([id]) => id)).toEqual([{ prefix: "?", final: "h" }]);
+    conn.release("cell-mouse");
   });
 
   it("does not replay a session id before the server has assigned one", () => {
