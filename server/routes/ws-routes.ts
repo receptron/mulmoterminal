@@ -98,6 +98,16 @@ async function resolveRunTarget(url: URL): Promise<{ command: string; cwd: strin
   return resolveScript(cwd, parseIndexParam(url.searchParams.get("index")));
 }
 
+// A terminal socket is a raw EventEmitter: an unhandled 'error' (a client whose network
+// drops mid-session emits ECONNRESET/EPIPE) is re-thrown by the ws library and would crash
+// the whole backend — disconnecting EVERY terminal, not just this one, and leaving the Vite
+// dev proxy to flood the console with ECONNREFUSED. Attach a no-op-but-logging listener
+// before the connection handler runs so one dropped client stays one dropped client. Wired
+// at the single handleUpgrade choke point, so it covers claude/run/launch/codex alike.
+export function attachSocketErrorLogger(ws: Pick<WebSocket, "on">, kind: TerminalWsKind): void {
+  ws.on("error", (err) => console.warn(`[ws] socket error (${kind}): ${messageOf(err)}`));
+}
+
 async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, url: URL): Promise<void> {
   const resolved = await resolveRunTarget(url);
   if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
@@ -364,7 +374,10 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
       socket.destroy();
       return;
     }
-    target.handleUpgrade(req, socket, head, (ws) => target.emit("connection", ws, req));
+    target.handleUpgrade(req, socket, head, (ws) => {
+      attachSocketErrorLogger(ws, kind);
+      target.emit("connection", ws, req);
+    });
   });
 
   wss.on("connection", (ws, req) => void handleClaudeConnection(deps, ws, req));
