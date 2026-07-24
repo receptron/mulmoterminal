@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -10,6 +10,9 @@ import {
   sanitizePushEnabled,
   sanitizeWorklogIntervalHours,
   loadAppConfig,
+  loadAppConfigResult,
+  backupCorruptConfig,
+  emptyConfig,
   saveAppConfig,
   mergeConfigUpdate,
   type AppConfig,
@@ -185,7 +188,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it("returns defaults for invalid JSON", () => {
+  it("returns defaults for invalid JSON (lenient boot load)", () => {
     const dir = tmp();
     const file = path.join(dir, "bad.json");
     writeFileSync(file, "{ not json");
@@ -198,6 +201,116 @@ describe("loadAppConfig / saveAppConfig", () => {
     const file = path.join(dir, "config.json");
     writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }] }));
     expect(loadAppConfig(file)).toEqual({ ...base, cwdPresets: [{ label: "a", path: "/a" }] });
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("loadAppConfigResult (missing vs corrupt vs ok)", () => {
+  it("reports a missing file as missing, not corrupt", () => {
+    const dir = tmp();
+    expect(loadAppConfigResult(path.join(dir, "none.json"))).toEqual({ status: "missing" });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("reports unparseable JSON as corrupt (distinct from missing)", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    // A single trailing comma — the realistic hand-edit that triggered #741.
+    writeFileSync(file, '{ "pushEnabled": true, }');
+    const loaded = loadAppConfigResult(file);
+    expect(loaded.status).toBe("corrupt");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns the sanitized config for a good file", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    writeFileSync(file, JSON.stringify({ cwdPresets: [{ label: "a", path: "/a" }], pushEnabled: true }));
+    const loaded = loadAppConfigResult(file);
+    expect(loaded).toMatchObject({ status: "ok", config: { cwdPresets: [{ label: "a", path: "/a" }], pushEnabled: true } });
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  // The write path uses emptyConfig() as the base for a MISSING file instead of a second
+  // loadAppConfig() read (which could race a concurrent write turning it corrupt in between).
+  // A missing-file merge must therefore behave exactly like merging onto empty.
+  it("emptyConfig is a fresh default base equal to loading a missing file", () => {
+    const dir = tmp();
+    expect(emptyConfig()).toEqual(loadAppConfig(path.join(dir, "none.json")));
+    // fresh object each call (callers mutate in place)
+    expect(emptyConfig()).not.toBe(emptyConfig());
+    const merged = mergeConfigUpdate(emptyConfig(), { pushEnabled: true });
+    expect(merged).toEqual({ ...emptyConfig(), pushEnabled: true });
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("backupCorruptConfig", () => {
+  it("copies the unreadable file aside so it isn't lost when the caller refuses the write", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    writeFileSync(file, "{ not json");
+    const bak = backupCorruptConfig(file);
+    expect(bak).toBe(`${file}.corrupt.bak`);
+    expect(bak && readFileSync(bak, "utf8")).toBe("{ not json");
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns null (best-effort) when the source can't be copied", () => {
+    const dir = tmp();
+    expect(backupCorruptConfig(path.join(dir, "does-not-exist.json"))).toBeNull();
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// The core #741 hazard as a scenario test: a corrupt file must not become the empty base
+// that a merge writes back. This is what a POST /api/config write path must do.
+describe("#741 corrupt config is not silently wiped by a partial update", () => {
+  const richConfig = {
+    cwdPresets: [{ label: "proj", path: "/proj" }],
+    soundFile: null,
+    prRepos: ["o/r"],
+    launchers: [{ label: "Shell", command: "$SHELL" }],
+    userMcpServers: [{ id: "weather", url: "http://localhost:9000/mcp" }],
+    buttons: null,
+    chips: null,
+    pushEnabled: false,
+    worklogEnabled: false,
+    worklogIntervalHours: 6,
+    providers: [],
+  };
+
+  it("a valid base keeps every omitted field through a pushEnabled-only update", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    saveAppConfig(file, richConfig);
+    const loaded = loadAppConfigResult(file);
+    expect(loaded.status).toBe("ok");
+    const base = loaded.status === "ok" ? loaded.config : loadAppConfig(file);
+    const next = mergeConfigUpdate(base, { pushEnabled: true });
+    expect(next).toEqual({ ...richConfig, pushEnabled: true });
+    expect(next.cwdPresets).toEqual(richConfig.cwdPresets);
+    expect(next.launchers).toEqual(richConfig.launchers);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("a corrupt base is caught BEFORE merge, so the write path can refuse instead of wiping", () => {
+    const dir = tmp();
+    const file = path.join(dir, "config.json");
+    saveAppConfig(file, richConfig);
+    // Corrupt it the way a hand-edit would (append a stray token).
+    writeFileSync(file, readFileSync(file, "utf8") + "  oops");
+    const loaded = loadAppConfigResult(file);
+    expect(loaded.status).toBe("corrupt");
+    // The write path refuses here — but if it had fallen through to the OLD lenient load,
+    // the merge base would have been empty and every rich field erased. Prove that gap:
+    const wipedBase = loadAppConfig(file); // lenient path returns empty on corrupt
+    const wouldWipe = mergeConfigUpdate(wipedBase, { pushEnabled: true });
+    expect(wouldWipe.cwdPresets).toEqual([]); // <- the regression the fix prevents
+    expect(wouldWipe.launchers).toEqual([]);
+    // And the corrupt file can be preserved rather than lost.
+    const bak = backupCorruptConfig(file);
+    expect(bak && existsSync(bak)).toBe(true);
     rmSync(dir, { recursive: true, force: true });
   });
 });
