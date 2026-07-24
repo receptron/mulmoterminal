@@ -88,7 +88,10 @@ export async function createOrOpenPR(cwd: string): Promise<PrResult> {
 
   // `gh pr create` fails when a PR for this branch ALREADY exists — re-running the button
   // should open that PR, not the "open a new PR" compare page. Look it up before falling back.
-  const existing = await run("gh", ["pr", "list", "--head", branch, "--repo", repo, "--state", "open", "--json", "url", "--limit", "1"], cwd);
+  // No `--repo`: like the `gh pr create` above, gh infers the repo from `cwd` (the worktree).
+  // Passing repoRoot(cwd) here would be a filesystem PATH, but `--repo` only accepts an
+  // OWNER/REPO slug, so it would always error and defeat this lookup.
+  const existing = await run("gh", ["pr", "list", "--head", branch, "--state", "open", "--json", "url", "--limit", "1"], cwd);
   const existingUrl = existing.ok ? parsePrUrl(existing.stdout) : null;
   if (existingUrl) return { ok: true, url: existingUrl, via: "gh" };
 

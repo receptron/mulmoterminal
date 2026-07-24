@@ -51,6 +51,12 @@ describe("createOrOpenPR opens an existing PR (#748)", () => {
     });
     const res = await createOrOpenPR("/repo/wt");
     expect(res).toEqual({ ok: true, url: "https://github.com/o/r/pull/42", via: "gh" });
+    // Regression (#762 Codex review): the lookup must NOT pass `--repo` — `run(..., cwd)` runs
+    // gh inside the worktree so it infers the repo, and `--repo` only accepts an OWNER/REPO
+    // slug (repoRoot(cwd) is a filesystem path, which would always error and defeat the lookup).
+    const listCall = vi.mocked(spawnCollect).mock.calls.find((c) => c[0] === "gh" && c[1][1] === "list");
+    expect(listCall?.[1]).not.toContain("--repo");
+    expect(listCall?.[1]).toEqual(["pr", "list", "--head", "feature", "--state", "open", "--json", "url", "--limit", "1"]);
   });
 
   it("still returns a freshly created PR url via gh", async () => {
