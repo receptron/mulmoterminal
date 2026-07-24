@@ -184,7 +184,7 @@ watch(
       v-if="zoomed"
       type="button"
       data-testid="view-toggle"
-      class="absolute right-3 top-2 z-10 h-[26px] w-[26px] cursor-pointer rounded-md border border-border bg-panel text-[13px] leading-none text-fg"
+      class="absolute left-3 top-2 z-10 h-[26px] w-[26px] cursor-pointer rounded-md border border-border bg-panel text-[13px] leading-none text-fg"
       :title="listMode ? 'Show thumbnails' : 'Show list'"
       :aria-label="listMode ? 'Switch to thumbnail strip' : 'Switch to list'"
       @click="listMode = !listMode"
@@ -318,9 +318,10 @@ watch(
   min-height: 0;
   min-width: 0;
   background: var(--bg-deep);
-  /* Containing block for the absolutely-positioned view-toggle (☰) button. Without it the
-     toggle resolves against the viewport and lands over the global header's Settings gear,
-     covering it while a cell is expanded. */
+  /* Containing block for the absolutely-positioned view-toggle (☰) button, which sits at the
+     stage's TOP-LEFT. Without a containing block it resolves against the viewport and lands over
+     the global header's Settings gear; and the top-left corner (over the side panel) keeps it clear
+     of the zoomed cell's expand/close buttons, which are pinned to the cell's top-right. */
   position: relative;
 }
 
