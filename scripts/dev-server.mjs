@@ -21,12 +21,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-// DEV_SERVER_WATCH overrides the watched dir — used only by the supervisor's own smoke test.
-const WATCH_DIR = process.env.DEV_SERVER_WATCH ? path.resolve(process.env.DEV_SERVER_WATCH) : path.join(ROOT, "server");
+// Backend source lives in server/, but it also imports repo code from common/ and bin/
+// (e.g. server/config/config-schema.ts -> ../../common/modelIds.ts,
+// server/config/update-status.ts -> ../../bin/update-check.js). `node --watch` reloaded on
+// any imported module; watch those dirs too so editing them under `yarn dev` still reloads.
+const DEFAULT_WATCH_DIRS = ["server", "common", "bin"].map((d) => path.join(ROOT, d));
+// DEV_SERVER_WATCH overrides the watched set with a single dir — used only by the smoke test.
+const WATCH_DIRS = process.env.DEV_SERVER_WATCH ? [path.resolve(process.env.DEV_SERVER_WATCH)] : DEFAULT_WATCH_DIRS;
 // DEV_SERVER_ENTRY overrides the entry (and skips tsx) — used by the supervisor's own smoke
 // test to drive a lightweight stub instead of booting the full backend.
 const STUB = process.env.DEV_SERVER_ENTRY;
-const ENTRY = STUB ? path.resolve(STUB) : path.join(WATCH_DIR, "index.ts");
+const ENTRY = STUB ? path.resolve(STUB) : path.join(ROOT, "server", "index.ts");
 const NODE_ARGS = STUB ? [ENTRY] : ["--import", "tsx", "--env-file-if-exists=.env", ENTRY];
 
 // A crash that recurs within this window is treated as a crash-LOOP: back off (so we don't
@@ -37,7 +42,8 @@ const MIN_DELAY_MS = 250;
 const MAX_DELAY_MS = 4000;
 
 let child = null;
-let restarting = false; // a restart is already scheduled/in-flight — don't stack them
+let restartTimer = null; // non-null => a fresh backend is already scheduled; the single guard
+let killedForRestart = false; // this child was killed by us (file change), not a crash
 let shuttingDown = false;
 let delay = MIN_DELAY_MS;
 let startedAt = 0;
@@ -46,17 +52,25 @@ function log(msg) {
   console.log(`[dev-server] ${msg}`);
 }
 
-function start() {
-  restarting = false;
+// Bring up a backend if one isn't running. Every path that wants a (re)start routes through
+// scheduleBringUp -> bringUp; the restartTimer guard makes concurrent triggers (a crash that
+// lands in the middle of a file-change debounce) collapse to a single spawn instead of racing
+// two backends onto port 34567.
+function bringUp() {
+  restartTimer = null;
+  if (shuttingDown || child) return;
   startedAt = Date.now();
   child = spawn(process.execPath, NODE_ARGS, { cwd: ROOT, stdio: "inherit" });
 
   child.on("exit", (code, signal) => {
     child = null;
     if (shuttingDown) return;
-    // A restart we initiated (file change) killed it deliberately — start() is already queued.
-    if (restarting) return;
-
+    if (killedForRestart) {
+      killedForRestart = false;
+      delay = MIN_DELAY_MS; // a deliberate restart, not a crash — come back briskly
+      scheduleBringUp(delay);
+      return;
+    }
     const ranFor = Date.now() - startedAt;
     const how = signal ? `signal ${signal}` : `code ${code}`;
     if (ranFor < FAST_CRASH_MS) {
@@ -66,47 +80,46 @@ function start() {
       delay = MIN_DELAY_MS; // it ran a while, so this is a one-off — restart briskly
       log(`backend exited (${how}) — restarting in ${delay}ms`);
     }
-    scheduleStart(delay);
+    scheduleBringUp(delay);
   });
 }
 
-function scheduleStart(ms) {
-  restarting = true;
-  setTimeout(() => {
-    if (!shuttingDown) start();
-  }, ms);
+// Idempotent: if a bring-up is already scheduled, do nothing (this is what prevents a crash
+// and a file-change from each spawning their own backend).
+function scheduleBringUp(ms) {
+  if (shuttingDown || restartTimer) return;
+  restartTimer = setTimeout(bringUp, ms);
 }
 
 // Restart on a source change. fs.watch fires a burst of events per save, so debounce and
-// coalesce: kill the current child (its exit handler is short-circuited by `restarting`) and
-// bring up a fresh one. Full restart, matching what `node --watch` did per change.
+// coalesce. If a child is live, kill it — its exit handler brings up a fresh one (as a
+// deliberate restart). If it's already down/restarting, just ensure a bring-up is queued;
+// scheduleBringUp is a no-op when one already is. Full restart, matching `node --watch`.
 let debounce = null;
 function onChange(filename) {
-  if (!filename || restarting || shuttingDown) return;
+  if (!filename || shuttingDown) return;
   if (!/\.(ts|mjs|js|json)$/.test(filename)) return; // ignore editor temp files, etc.
   clearTimeout(debounce);
   debounce = setTimeout(() => {
-    log(`change detected (${filename}) — restarting backend`);
+    if (shuttingDown) return;
     delay = MIN_DELAY_MS;
     if (child) {
-      restarting = true;
-      const dying = child;
-      // When the killed child exits, bring up a fresh one. Not the generic exit handler,
-      // which returns early while `restarting` is set.
-      dying.once("exit", () => {
-        if (!shuttingDown) start();
-      });
-      dying.kill("SIGTERM");
+      log(`change detected (${filename}) — restarting backend`);
+      killedForRestart = true;
+      child.kill("SIGTERM");
     } else {
-      start();
+      log(`change detected (${filename}) — starting backend`);
+      scheduleBringUp(MIN_DELAY_MS);
     }
   }, 120);
 }
 
-try {
-  watch(WATCH_DIR, { recursive: true }, (_event, filename) => onChange(filename));
-} catch (err) {
-  log(`file watch unavailable (${err?.message ?? err}) — auto-reload on change disabled, crash-restart still on`);
+for (const dir of WATCH_DIRS) {
+  try {
+    watch(dir, { recursive: true }, (_event, filename) => onChange(filename));
+  } catch (err) {
+    log(`file watch unavailable for ${dir} (${err?.message ?? err}) — auto-reload for it disabled, crash-restart still on`);
+  }
 }
 
 // Clean teardown so Ctrl-C / concurrently's kill actually stops the backend.
@@ -119,4 +132,4 @@ for (const sig of ["SIGINT", "SIGTERM"]) {
 }
 
 log("starting backend with crash-restart + reload-on-change");
-start();
+bringUp();
