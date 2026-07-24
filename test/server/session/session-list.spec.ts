@@ -36,17 +36,16 @@ describe("selectSessionRows", () => {
     expect(ids(selectSessionRows(rows, filter({ isTranslationWorker: (id) => id === "worker" })))).toEqual(["keep"]);
   });
 
-  // Two mirror-image rules on the same dev-terminal set: the chat sidebar hides grid sessions,
-  // and the grid's OWN cwd-scoped resume picker shows ONLY them (#724). The grid's sessions must
-  // still appear in the cwd-scoped view, or they stop being resumable there.
+  // The rule with history: hiding grid sessions from the CHAT sidebar must not hide them
+  // from the grid's OWN cwd-scoped resume picker, or they stop being resumable there.
   it("hides grid sessions from the unscoped chat listing", () => {
     const rows = [disk("chat", 2), disk("grid", 3)];
     expect(ids(selectSessionRows(rows, filter({ isDevTerminal: (id) => id === "grid", includePending: true })))).toEqual(["chat"]);
   });
 
-  it("shows ONLY grid sessions in the cwd-scoped resume picker, dropping externally-started ones (#724)", () => {
+  it("keeps grid sessions in a cwd-scoped listing (the grid's own resume picker)", () => {
     const rows = [disk("chat", 2), disk("grid", 3)];
-    expect(ids(selectSessionRows(rows, filter({ isDevTerminal: (id) => id === "grid", includePending: false })))).toEqual(["grid"]);
+    expect(ids(selectSessionRows(rows, filter({ isDevTerminal: (id) => id === "grid", includePending: false })))).toEqual(["grid", "chat"]);
   });
 
   it("caps the listing, keeping the newest", () => {
