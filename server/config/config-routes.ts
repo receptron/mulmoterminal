@@ -19,6 +19,7 @@ import {
 } from "./app-config.js";
 import { type HeaderConfig } from "./header-config.js";
 import { type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
+import { type TerminalSubmitMode } from "../../common/terminalSubmit.js";
 import { launchOptions } from "./launch-options.js";
 import { badArrayField, badNullableArrayField } from "./config-body.js";
 import { getUpdateStatus } from "./update-status.js";
@@ -66,6 +67,12 @@ export function getPushEnabled(): boolean {
 // scheduler wiring (a restart, currently). Off by default.
 export function getWorklogConfig(): { enabled: boolean; intervalHours: number } {
   return { enabled: config.worklogEnabled, intervalHours: config.worklogIntervalHours };
+}
+
+// The Enter-key submit/newline byte mapping — read live so the phone remote-view submit
+// picks up a config edit on the next send without a restart (#772).
+export function getTerminalSubmit(): TerminalSubmitMode {
+  return config.terminalSubmit;
 }
 
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {

@@ -77,6 +77,37 @@ describe("sendTerminalInput", () => {
     expect(chunks).toEqual([`${PASTE_START}git status${PASTE_END}`, "\r"]);
   });
 
+  // #772: the byte(s) that submit come from the host's Claude binding, not a hardcoded CR.
+  // Default (no submitSequence dep) stays CR; an ESC+CR mapping must submit with ESC+CR.
+  it("submits with the configured submit sequence", async () => {
+    const chunks: string[] = [];
+    const submits: Array<() => void> = [];
+    const send = createTerminalInputSender({
+      writeToSession: (_id: string, chunk: string) => {
+        chunks.push(chunk);
+        return true;
+      },
+      submitSequence: () => "\x1b\r",
+      scheduleSubmit: (fn: () => void) => {
+        submits.push(fn);
+      },
+    });
+    const sent = send("s1", "hi");
+    await tick();
+    submits.shift()?.();
+    await expect(sent).resolves.toEqual({ sent: true });
+    expect(chunks).toEqual([`${PASTE_START}hi${PASTE_END}`, "\x1b\r"]);
+  });
+
+  it("defaults the submit sequence to CR when unset", async () => {
+    const { chunks, flushSubmit, send } = recorder();
+    const sent = send("s1", "hi");
+    await tick();
+    flushSubmit();
+    await sent;
+    expect(chunks).toEqual([`${PASTE_START}hi${PASTE_END}`, "\r"]);
+  });
+
   // The property that matters: exactly one paste, closed exactly once at the end.
   it("cannot be made to close the paste early", async () => {
     const { chunks, send } = recorder();

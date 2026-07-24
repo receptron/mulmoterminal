@@ -50,6 +50,9 @@ export interface RemoteHostHandlerDeps {
   // is submitted (#572). Answered in server/index.ts, where the agent kind and the
   // turn state live.
   canClearBox: (sessionId: string) => boolean;
+  // The byte(s) that submit in the host's Claude binding (#772), read live from config.
+  // The phone sends only text; which byte commits it is this environment fact.
+  submitSequence: () => string;
 }
 
 // Parse the optional `attachments` param ([{ storage_id }]) into storage ids. A
@@ -148,11 +151,17 @@ const mutateRemoteViewItem: CommandHandlers["mutateRemoteViewItem"] = async (par
 // since #445 — type into it. Screens are bounded by the terminal's own geometry
 // (rows x cols), so unlike collections they need no paging to stay under the 1 MiB
 // command-doc ceiling.
-type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession" | "canClearBox">;
+type TerminalScreenDeps = Pick<RemoteHostHandlerDeps, "listTerminalSessions" | "captureTerminalScreen" | "writeToSession" | "canClearBox" | "submitSequence">;
 
-const terminalScreenHandlers = ({ listTerminalSessions, captureTerminalScreen, writeToSession, canClearBox }: TerminalScreenDeps): CommandHandlers => {
+const terminalScreenHandlers = ({
+  listTerminalSessions,
+  captureTerminalScreen,
+  writeToSession,
+  canClearBox,
+  submitSequence,
+}: TerminalScreenDeps): CommandHandlers => {
   // One sender per host, so its per-session ordering actually spans every command.
-  const sendInput = createTerminalInputSender({ writeToSession, canClearBox });
+  const sendInput = createTerminalInputSender({ writeToSession, canClearBox, submitSequence });
   return {
     listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 

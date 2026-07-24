@@ -2,6 +2,8 @@ import { ref, type Ref } from "vue";
 import { presetLabel, type CwdPreset } from "../components/presets";
 import type { Launcher } from "../components/launchers";
 import type { UserMcpServer } from "../components/userMcp";
+import { DEFAULT_TERMINAL_SUBMIT_MODE, isTerminalSubmitMode } from "../../common/terminalSubmit";
+import { setTerminalSubmitMode } from "./terminalSubmitMode";
 
 // The custom attention-sound file is a SINGLETON ref shared across every
 // useAppConfig() caller — the beep player lives in the single view while the
@@ -217,6 +219,9 @@ export function useAppConfig() {
       prRepos.value = Array.isArray(c.prRepos) ? c.prRepos : [];
       launchers.value = Array.isArray(c.launchers) ? c.launchers : [];
       userMcpServers.value = Array.isArray(c.userMcpServers) ? c.userMcpServers : [];
+      // The Enter-key submit/newline byte mapping — read once so every terminal's key
+      // handler honours it (config.json-only; unset falls back to the standard binding).
+      setTerminalSubmitMode(isTerminalSubmitMode(c.terminalSubmit) ? c.terminalSubmit : DEFAULT_TERMINAL_SUBMIT_MODE);
       await migrateLegacyRecents();
     } catch {
       // the app still works; presets are just unavailable

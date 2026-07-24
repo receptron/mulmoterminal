@@ -61,6 +61,7 @@ describe("createRemoteHostHandlers · getFeed", () => {
       captureTerminalScreen: async () => ({ screen: "", suggestion: "" }),
       writeToSession: () => false,
       canClearBox: () => false,
+      submitSequence: () => "\r",
     });
   });
   afterEach(() => vi.mocked(listFeeds).mockReset());

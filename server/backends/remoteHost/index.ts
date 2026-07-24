@@ -59,6 +59,7 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
       captureTerminalScreen: deps.captureTerminalScreen,
       writeToSession: deps.writeToSession,
       canClearBox: deps.canClearBox,
+      submitSequence: deps.submitSequence,
     }),
     log: {
       info: (msg) => console.log(PREFIX, msg),

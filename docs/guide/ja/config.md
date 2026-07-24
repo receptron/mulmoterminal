@@ -63,6 +63,7 @@ nav_order: 4
 | `soundFile` | カスタム通知音（音声ファイルの絶対パス。設定モーダルからも変更可） |
 | `pushEnabled` | Web Push トグルの保存先（既定 `false` → [スマホ通知](notifications.html)） |
 | `worklogEnabled` / `worklogIntervalHours` | 定期 dev-work ログ（既定 OFF / 6 時間） |
+| `terminalSubmit` | どのバイトを**送信**／**改行**とみなすか — `"cr"`（既定）または `"esc-cr"`（→ [Enter — 送信と改行](#terminal-submit)） |
 
 ## 別のモデルで動かす（プロバイダ） {#providers}
 
@@ -82,6 +83,63 @@ Claude Code は Anthropic 互換のバックエンドなら何にでも接続で
 
 → **手順・検証済みモデル一覧・モデルの追加方法・トラブルシューティングは
 [OpenRouter で別のモデルを使う](providers.html) にまとめてあります。**
+
+## Enter — 送信と改行（`terminalSubmit`） {#terminal-submit}
+
+**Enter で送信するか、それとも改行を入れるか**を最終的に決めているのは MulmoTerminal ではなく
+**Claude Code（の TUI）**で、判定は端末が送る*バイト列*に基づきます。関係するバイト列は 2 つです。
+
+- **CR**（`\r`）— 素の **Enter** が送るバイト。
+- **ESC + CR**（`\x1b\r`）— **Option/Alt+Enter**、および MulmoTerminal の **Shift+Enter** が送るバイト。
+
+Claude Code の**標準**の割り当ては **CR＝送信 / ESC+CR＝改行**です。これが MulmoTerminal の既定なので、
+**割り当てを変更していない限りこの設定は不要**です。人によっては Claude Code を逆
+（**CR＝改行 / ESC+CR＝送信**）に設定していることがあり、その環境では Shift+Enter が*送信*になり、
+スマホの「送信」もテキストが*入力されるだけで送信されません*。`terminalSubmit` は、キーボードと
+スマホの両方をあなたの割り当てに合わせます。
+
+```jsonc
+{ "terminalSubmit": "cr" }      // 既定: Enter=送信 / Shift+Enter=改行
+{ "terminalSubmit": "esc-cr" }  // 逆向き: Enter は ESC+CR で送信 / Shift+Enter=改行
+```
+
+| モード | Enter | Shift+Enter・Option/Alt+Enter | スマホの「送信」（リモートビュー） |
+|---|---|---|---|
+| `cr`（既定） | 送信（`\r`） | 改行（`\x1b\r`） | `\r` で送信 |
+| `esc-cr` | 送信（`\x1b\r`） | 改行（`\r`） | `\x1b\r` で送信 |
+
+**どちらのモードでも意味は同じ**（Enter＝送信 / Shift・Option+Enter＝改行）で、あなたの Claude の
+割り当てに合わせて*バイトだけ*が入れ替わります。
+
+### どちらを選べばいい？
+
+ほとんどの人は既定（`cr`）のままで大丈夫です（設定不要）。`esc-cr` を選ぶのは、**MulmoTerminal で
+Shift+Enter が改行ではなく*送信*になってしまう場合だけ**です（言い換えると、素の Enter が送信されず
+改行になってしまう場合）。これは Claude Code が逆向きの割り当てになっているサインです。判断が付かない
+ときは `cr` のままにして、Shift+Enter がおかしいときにだけ `esc-cr` に切り替えてください。
+
+### 設定方法
+
+1. `~/.mulmoterminal/config.json` を開き（無ければ作成）、トップレベルにキーを追加します。逆向きの
+   割り当てなら次の通り:
+   ```json
+   { "terminalSubmit": "esc-cr" }
+   ```
+2. **ブラウザのタブを再読み込み**します — キーボードはページ読み込み時に値を読みます。
+3. **`mulmoterminal` を再起動**します — スマホのリモートビュー「送信」は起動時にファイルから値を
+   読むため、手編集を反映するには再起動が必要です。
+4. 確認: 素の **Enter** で送信され、**Shift+Enter** で改行が入ることを確かめます。
+
+値が不正（タイプミスや `"cr"` / `"esc-cr"` 以外）の場合は無視されて `"cr"` にフォールバックするので、
+書き間違えても Enter が壊れることはありません。
+
+### 補足
+
+- **スマホ** — ソフトキーボードは素の **Enter** しか送れません（Shift+Enter は無く、Android では
+  Return キーが通常の Enter ですらないことが多い）。そのためスマホでは Enter は上の表の通りに動き、
+  画面上のキーボードから改行は入れられません。複数行はリモートビューの入力欄から送ってください。
+- **日本語などの IME 入力** — 変換中の **Enter は変換確定**として扱われ、どちらのモードでも送信/改行
+  にはなりません。日本語入力に影響はありません。
 
 ## プロジェクトごとの `.mulmoterminal.json` {#per-dir}
 

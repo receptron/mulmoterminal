@@ -410,6 +410,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `pushEnabled` | `true` to send a **Web Push** to your registered devices when a background task finishes. Off by default; only sends while the **RemoteHost** channel is connected (see below). |
 | `worklogEnabled` | `true` to run the built-in **dev worklog** batch (see below). Off by default (each run spawns an LLM session, so it costs tokens). |
 | `worklogIntervalHours` | Worklog cadence in hours (default `6`, clamped to `1`–`168`). |
+| `terminalSubmit` | Which bytes Claude reads as **submit** vs **newline**: `"cr"` (default — Enter submits, Shift+Enter makes a newline) or `"esc-cr"` (for a Claude Code rebound the other way). Applies to the keyboard **and** the phone remote-view submit. See the [Configuration guide](https://receptron.github.io/mulmoterminal/guide/en/config.html#terminal-submit). |
 
 #### Header buttons
 
@@ -795,7 +796,9 @@ Favorited collections get their own toolbar buttons.
 - **Themes** — four terminal palettes (midnight / nord / daylight / solarized), your pick
   remembered; a project's `.mulmoterminal.json` can override per directory.
 - **Editing niceties** — **Shift+Enter** inserts a newline in the prompt, and on macOS
-  **Option** is treated as Meta so Claude's Alt-key bindings work.
+  **Option** is treated as Meta so Claude's Alt-key bindings work. If your Claude Code is
+  rebound so Enter and Shift+Enter behave backwards, flip them with
+  [`terminalSubmit`](https://receptron.github.io/mulmoterminal/guide/en/config.html#terminal-submit).
 
 ---
 
