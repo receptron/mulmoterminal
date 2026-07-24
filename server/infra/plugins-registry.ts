@@ -189,7 +189,11 @@ for (const { name, shadowedBy } of collisions) {
   console.warn(`[plugins] tool "${name}" is declared more than once — ${keeper} keeps the name; the other is not offered`);
 }
 
-const byName = Object.fromEntries(dispatchablePlugins.map((p) => [p.toolName, p]));
+// A Map, not a plain object: object index access reads through the prototype chain, so a
+// tool name like "constructor" or "__proto__" would resolve to Object.prototype's member
+// (a truthy function) and get dispatched as if it were a real plugin. Map.get only ever
+// returns own entries.
+const byName = new Map(dispatchablePlugins.map((p) => [p.toolName, p]));
 
 // MCP tool definitions the broker registers — gui-chat-protocol ToolDefinitions
 // ({ name, description, prompt?, parameters }), one per DISPATCHABLE plugin plus the
@@ -208,7 +212,7 @@ export const toolSummaries = toolDefinitions.map((d) => ({
 // { data?, jsonData?, message?, instructions?, title? } the broker forwards.
 export function mountAllRoutes(app: Express) {
   app.post("/api/plugin/:toolName", async (req, res) => {
-    const plugin = byName[req.params.toolName];
+    const plugin = byName.get(req.params.toolName);
     if (!plugin) return res.status(404).json({ error: `Unknown tool: ${req.params.toolName}` });
     try {
       res.json(await plugin.execute(req.body));

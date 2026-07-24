@@ -57,16 +57,21 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string }): voi
     const rangeHeader = req.headers.range;
     if (rangeHeader) {
       const range = parseByteRange(rangeHeader, stat.size);
-      if (!range) {
+      // A well-formed but unsatisfiable range earns a 416; a malformed / unsupported one is
+      // ignored (fall through to the full 200), per RFC 7233 — a 416 breaks a media seek.
+      if (range.kind === "unsatisfiable") {
         res.status(416).setHeader("Content-Range", `bytes */${stat.size}`);
-        res.json({ error: "invalid range" });
+        res.json({ error: "range not satisfiable" });
         return;
       }
-      res.status(206);
-      res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
-      res.setHeader("Content-Length", String(range.end - range.start + 1));
-      streamFileToResponse(abs, res, { start: range.start, end: range.end });
-      return;
+      if (range.kind === "range") {
+        res.status(206);
+        res.setHeader("Content-Range", `bytes ${range.start}-${range.end}/${stat.size}`);
+        res.setHeader("Content-Length", String(range.end - range.start + 1));
+        streamFileToResponse(abs, res, { start: range.start, end: range.end });
+        return;
+      }
+      // range.kind === "ignore" → serve the whole file below.
     }
 
     res.setHeader("Content-Length", String(stat.size));

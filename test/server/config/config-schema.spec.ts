@@ -105,6 +105,15 @@ describe("dirConfigJsonSchema", () => {
     expect(skills.maxItems).toBe(MAX_SKILL_FILTER);
   });
 
+  // Regression (#748): zod v4's z.record over an enum is exhaustive, so the generated schema
+  // marked every palette key `required` — the skill's own `colors: { background }` (one color)
+  // then failed self-validation with 22 missing-key errors. partialRecord leaves them optional.
+  it("does not require every palette key in the colors schema", () => {
+    const props = isRecord(dirConfigJsonSchema().properties) ? dirConfigJsonSchema().properties : {};
+    const colors = isRecord(props) && isRecord(props.colors) ? props.colors : {};
+    expect(colors.required ?? []).toEqual([]); // a single-color write must validate
+  });
+
   it("buttons require their run payload and chips constrain builtin ids (matches runtime)", () => {
     const json = JSON.stringify(dirConfigJsonSchema());
     expect(json).toContain('"required":["id","label","run","cmd"]'); // shell needs cmd
