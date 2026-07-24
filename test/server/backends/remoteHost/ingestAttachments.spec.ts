@@ -56,7 +56,8 @@ const pathOf = (id: string) => `users/user-1/uploads/${id}`;
 describe("createIngestAttachments", () => {
   it("returns [] for no ids without even checking sign-in", async () => {
     const h = harness();
-    expect(await createIngestAttachments(h.deps)([])).toEqual([]);
+    const { attachments } = await createIngestAttachments(h.deps)([]);
+    expect(attachments).toEqual([]);
     expect(h.log).toEqual([]); // uid() never read — nothing to ingest
   });
 
@@ -68,16 +69,28 @@ describe("createIngestAttachments", () => {
 
   it("maps each id to a path-only Attachment, in order", async () => {
     const h = harness();
-    const result = await createIngestAttachments(h.deps)(["a", "b"]);
-    expect(result).toEqual([
+    const { attachments } = await createIngestAttachments(h.deps)(["a", "b"]);
+    expect(attachments).toEqual([
       { path: "data/attachments/a.bin", mimeType: "mime/a" },
       { path: "data/attachments/b.bin", mimeType: "mime/b" },
     ]);
   });
 
+  // Regression (#746): the ingest itself deletes NOTHING — staging cleanup is deferred to the
+  // caller (startChat), which runs it only after spawning succeeds. So a spawn failure leaves
+  // the staged uploads intact for a retry.
+  it("does not delete any staged object until cleanupStaging is called", async () => {
+    const h = harness();
+    const { cleanupStaging } = await createIngestAttachments(h.deps)(["a", "b"]);
+    expect(h.deleted).toEqual([]); // nothing reaped during ingest
+    await cleanupStaging();
+    expect(h.deleted).toEqual([pathOf("a"), pathOf("b")]); // reaped only on explicit cleanup
+  });
+
   it("interpolates the id into users/{uid}/uploads/{id} for fetch and delete", async () => {
     const h = harness();
-    await createIngestAttachments(h.deps)(["a"]);
+    const { cleanupStaging } = await createIngestAttachments(h.deps)(["a"]);
+    await cleanupStaging();
     expect(h.log).toContain(`fetch:a`);
     expect(h.deleted).toEqual([pathOf("a")]);
   });
@@ -86,7 +99,8 @@ describe("createIngestAttachments", () => {
   // interleaved delete into phase 1 would reap a staged object before a later file is safe.
   it("saves every attachment before deleting any", async () => {
     const h = harness();
-    await createIngestAttachments(h.deps)(["a", "b", "c"]);
+    const { cleanupStaging } = await createIngestAttachments(h.deps)(["a", "b", "c"]);
+    await cleanupStaging();
     const firstDelete = h.log.findIndex((e) => e.startsWith("delete:"));
     const lastSave = h.log.map((e) => e.startsWith("save:")).lastIndexOf(true);
     expect(lastSave).toBeLessThan(firstDelete);
@@ -116,14 +130,15 @@ describe("createIngestAttachments", () => {
     expect(h.deleted).toEqual([]);
   });
 
-  // Phase 2 is best-effort: a delete that fails only logs and leaves an orphan for a TTL sweep —
-  // it must never drop an attachment that is already safely in the workspace.
+  // cleanupStaging is best-effort: a delete that fails only logs and leaves an orphan for a
+  // TTL sweep — it must never drop an attachment that is already safely in the workspace.
   it("still returns every attachment when a staging delete fails", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const h = harness({ deleteThrowsOn: pathOf("a") });
-    const result = await createIngestAttachments(h.deps)(["a", "b"]);
-    expect(result.map((r) => r.path)).toEqual(["data/attachments/a.bin", "data/attachments/b.bin"]);
-    expect(h.deleted).toContain(pathOf("b")); // the failure did not abort the rest of phase 2
+    const { attachments, cleanupStaging } = await createIngestAttachments(h.deps)(["a", "b"]);
+    expect(attachments.map((r) => r.path)).toEqual(["data/attachments/a.bin", "data/attachments/b.bin"]);
+    await cleanupStaging();
+    expect(h.deleted).toContain(pathOf("b")); // the failure did not abort the rest of the cleanup
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });

@@ -81,4 +81,11 @@ describe("stagedStorageIds", () => {
   it("is empty for an empty attachments array", () => {
     expect(stagedStorageIds(withAttachments([]))).toEqual([]);
   });
+
+  // Regression (#746): an expired command doc may carry no params at all. Destructuring
+  // `undefined`/`null` would throw a TypeError, breaking onExpire's never-throw contract.
+  it("is empty (never throws) when params is missing", () => {
+    expect(stagedStorageIds(undefined)).toEqual([]);
+    expect(stagedStorageIds(null)).toEqual([]);
+  });
 });

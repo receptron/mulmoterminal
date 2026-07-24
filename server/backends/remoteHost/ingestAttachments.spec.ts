@@ -21,11 +21,11 @@ describe("createIngestAttachments", () => {
         return { base64: "", contentType: "" };
       },
     });
-    expect(await ingest([])).toEqual([]);
+    expect(await ingest([])).toEqual({ attachments: [], cleanupStaging: expect.any(Function) });
     expect(touched).toBe(false);
   });
 
-  it("downloads each id, saves it, deletes staging, and returns path-only attachments in order", async () => {
+  it("downloads each id, saves it, and deletes staging only on cleanup, in order", async () => {
     const fetched: string[] = [];
     const deleted: string[] = [];
     const ingest = createIngestAttachments({
@@ -39,14 +39,17 @@ describe("createIngestAttachments", () => {
       },
     });
 
-    const out = await ingest(["a1", "b2"]);
+    const { attachments, cleanupStaging } = await ingest(["a1", "b2"]);
 
     expect(fetched).toEqual(["users/u1/uploads/a1", "users/u1/uploads/b2"]);
-    expect(deleted).toEqual(["users/u1/uploads/a1", "users/u1/uploads/b2"]);
-    expect(out).toEqual([
+    expect(deleted).toEqual([]); // nothing reaped until cleanup (#746 — retry-safe after spawn)
+    expect(attachments).toEqual([
       { path: "data/attachments/AAAA.jpg", mimeType: "image/jpeg" },
       { path: "data/attachments/AAAA.jpg", mimeType: "image/jpeg" },
     ]);
+
+    await cleanupStaging();
+    expect(deleted).toEqual(["users/u1/uploads/a1", "users/u1/uploads/b2"]);
   });
 
   it("throws when the host is not signed in", async () => {
@@ -85,7 +88,8 @@ describe("createIngestAttachments", () => {
         throw new Error("delete boom");
       },
     });
-    const out = await ingest(["a1"]);
-    expect(out).toHaveLength(1);
+    const { attachments, cleanupStaging } = await ingest(["a1"]);
+    expect(attachments).toHaveLength(1);
+    await expect(cleanupStaging()).resolves.toBeUndefined(); // best-effort — never throws
   });
 });

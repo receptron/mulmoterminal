@@ -12,7 +12,9 @@ import { isRecord } from "../session/transcript.js";
 
 // The routers 4xx their domain errors as `{ error }` — prefer that sentence, which names the
 // actual problem, over anything this side could invent. The status-only fallback covers a
-// body that is missing, not an object, or shaped some other way.
+// body that is missing, not an object, shaped some other way, OR carrying an EMPTY error
+// string (which would otherwise narrate as blank — read by the agent as a bare "Done").
 export function upstreamFailureMessage(status: number, body: unknown, fallback: string): string {
-  return isRecord(body) && typeof body.error === "string" ? body.error : `${fallback} (HTTP ${status})`;
+  const error = isRecord(body) && typeof body.error === "string" ? body.error.trim() : "";
+  return error ? error : `${fallback} (HTTP ${status})`;
 }

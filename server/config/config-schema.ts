@@ -248,7 +248,12 @@ const writableDirConfigSchema = z.object({
   dotColor: z.string().regex(HEX_COLOR_RE).optional(),
   buttonColor: z.string().regex(HEX_COLOR_RE).optional(),
   theme: themeIdSchema.optional(),
-  colors: z.record(z.enum(THEME_COLOR_KEYS), z.string().regex(PALETTE_COLOR_RE)).optional(),
+  // partialRecord, NOT record: zod v4's z.record over an enum key is EXHAUSTIVE — its JSON
+  // Schema marks every one of the ~23 palette keys `required`, so the shipped
+  // dir-config.schema.json rejects the common `colors: { background: … }` (the skill sets
+  // one color) with 22 missing-key errors. partialRecord keeps the same runtime key + value
+  // validation but leaves the keys optional in the generated schema.
+  colors: z.partialRecord(z.enum(THEME_COLOR_KEYS), z.string().regex(PALETTE_COLOR_RE)).optional(),
   sound: nonEmptyText.optional(),
   buttons: z.array(writableHeaderButtonSchema).max(MAX_BUTTONS).optional(),
   chips: z.array(writableHeaderChipSchema).max(MAX_CHIPS).optional(),

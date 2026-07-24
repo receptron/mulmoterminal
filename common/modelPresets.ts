@@ -197,7 +197,7 @@ export const MODEL_PRESETS: readonly ModelPreset[] = [
     provider: "openrouter",
     id: "nvidia/nemotron-3-ultra-550b-a55b",
     label: "Nemotron 3 Ultra 550B",
-    contextLength: 512_288,
+    contextLength: 524_288, // 512 KiB = 512 * 1024; was 512_288 (a typo)
     pricePerMTok: { input: 0.6, output: 3.6 },
     trials: measured(3, 3, 13),
   },
@@ -300,14 +300,19 @@ export const MODEL_PRESETS: readonly ModelPreset[] = [
 
 // Presets for one provider, plus whatever the user added to that provider's `models`.
 // A user entry with the same id as a preset keeps the preset's measured numbers rather
-// than appearing twice.
+// than appearing twice — and two user entries for the same id (even differing only in
+// case) collapse to one, so a dropdown never shows the same model twice.
 export function presetsForProvider(providerId: string, userModels: readonly string[] = []): ModelPreset[] {
   const presets = MODEL_PRESETS.filter((preset) => preset.provider === providerId);
   // Match `presetFor` (modelOption.ts), which compares ids case-insensitively: a user
   // entry that only differs from a preset in case is the same model, not a new one.
-  const known = new Set(presets.map((preset) => preset.id.toLowerCase()));
-  const added: ModelPreset[] = userModels
-    .filter((id) => !known.has(id.toLowerCase()))
-    .map((id) => ({ provider: providerId, id, label: id, contextLength: 0, pricePerMTok: { input: 0, output: 0 }, trials: { status: "unmeasured" } }));
+  const seen = new Set(presets.map((preset) => preset.id.toLowerCase()));
+  const added: ModelPreset[] = [];
+  for (const id of userModels) {
+    const key = id.toLowerCase();
+    if (seen.has(key)) continue; // already a preset OR an earlier user entry
+    seen.add(key);
+    added.push({ provider: providerId, id, label: id, contextLength: 0, pricePerMTok: { input: 0, output: 0 }, trials: { status: "unmeasured" } });
+  }
   return [...presets, ...added];
 }
