@@ -27,7 +27,8 @@ import {
 } from "../remoteView.js";
 import { mutateWriteApplied } from "../mutateStatus.js";
 import type { Attachment, IngestResult } from "./ingestAttachments.js";
-import { createTerminalInputSender } from "./terminalInput.js";
+import { createTerminalSender } from "./terminalInput.js";
+import { parseTerminalKeys } from "./terminalKeys.js";
 import type { SessionScreen, TerminalSessionSummary } from "./terminalScreen.js";
 import { feedSummary } from "../feed-summary.js";
 
@@ -162,7 +163,12 @@ const terminalScreenHandlers = ({
   submitSequence,
 }: TerminalScreenDeps): CommandHandlers => {
   // One sender per host, so its per-session ordering actually spans every command.
-  const sendInput = createTerminalInputSender({ writeToSession, canClearBox, submitSequence });
+  const { sendText, sendKeys } = createTerminalSender({ writeToSession, canClearBox, submitSequence });
+  const requireSessionId = (params: JsonObject): string => {
+    const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
+    if (!sessionId) throw new Error("sessionId is required");
+    return sessionId;
+  };
   return {
     listTerminalSessions: async () => ({ sessions: await listTerminalSessions() }) as unknown as JsonObject,
 
@@ -171,20 +177,24 @@ const terminalScreenHandlers = ({
     // session's cwd / branch / summary / prompt when the host knows them, so the phone can
     // head the terminal with what the grid cell shows (#786); the whole SessionScreen is
     // the wire shape, so a field added there reaches the phone without another edit here.
-    getTerminalScreen: async (params: JsonObject) => {
-      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-      if (!sessionId) throw new Error("sessionId is required");
-      return (await captureTerminalScreen(sessionId)) as unknown as JsonObject;
-    },
+    getTerminalScreen: async (params: JsonObject) => (await captureTerminalScreen(requireSessionId(params))) as unknown as JsonObject,
 
     // Type a line into the session and press Enter, as if the user were at the
     // keyboard. The phone sends only text; the framing, sanitizing and Enter timing
     // are terminalInput.ts's job.
     sendTerminalInput: async (params: JsonObject) => {
-      const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
-      if (!sessionId) throw new Error("sessionId is required");
+      const sessionId = requireSessionId(params);
       const text = typeof params.text === "string" ? params.text : "";
-      return (await sendInput(sessionId, text)) as unknown as JsonObject;
+      return (await sendText(sessionId, text)) as unknown as JsonObject;
+    },
+
+    // Press keys in the session (#781), which is how its select menus are answered —
+    // /model, a multiple-choice question, a permission prompt. The phone sends NAMES
+    // (["down", "enter"]); the bytes are the host's, from terminalKeys.ts's allow-list, so
+    // this cannot become a way to write arbitrary control input to the terminal.
+    sendTerminalKeys: async (params: JsonObject) => {
+      const sessionId = requireSessionId(params);
+      return (await sendKeys(sessionId, parseTerminalKeys(params.keys))) as unknown as JsonObject;
     },
   };
 };

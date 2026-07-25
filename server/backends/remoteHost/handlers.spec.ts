@@ -67,6 +67,10 @@ describe("createRemoteHostHandlers", () => {
       "google.calendar.listEvents",
       "google.calendar.listCalendars",
       "google.calendar.colors",
+      "listTerminalSessions",
+      "getTerminalScreen",
+      "sendTerminalInput",
+      "sendTerminalKeys",
     ]) {
       expect(typeof handlers[name]).toBe("function");
     }
@@ -242,5 +246,47 @@ describe("getTerminalScreen", () => {
 
   it("rejects a request with no session id", async () => {
     await expect(handlersFor({ screen: "", suggestion: "" }).getTerminalScreen({})).rejects.toThrow(/sessionId is required/);
+  });
+});
+
+// #781: the phone answers a select menu by naming KEYS. The mapping and the allow-list are
+// terminalKeys.ts's; what this covers is that the wire params reach it and that the bytes
+// reach the PTY.
+describe("sendTerminalKeys", () => {
+  const handlersFor = (writeToSession: (sessionId: string, chunk: string) => boolean) =>
+    createRemoteHostHandlers({
+      workspace: "/nowhere",
+      spawnChat: () => ({ chatId: "x" }),
+      ingest: async () => ({ attachments: [], cleanupStaging: async () => {} }),
+      ...unusedTerminalDeps,
+      writeToSession,
+    });
+
+  it("writes the named keys' bytes to the session", async () => {
+    const writes: Array<[string, string]> = [];
+    const handlers = handlersFor((sessionId, chunk) => {
+      writes.push([sessionId, chunk]);
+      return true;
+    });
+    expect(await handlers.sendTerminalKeys({ sessionId: "a", keys: ["2"] })).toEqual({ sent: true });
+    expect(writes).toEqual([["a", "2"]]);
+  });
+
+  it("rejects a request with no session id", async () => {
+    await expect(handlersFor(() => true).sendTerminalKeys({ keys: ["down"] })).rejects.toThrow(/sessionId is required/);
+  });
+
+  it("rejects a key it does not know, without writing anything", async () => {
+    const writes: string[] = [];
+    const handlers = handlersFor((_sessionId, chunk) => {
+      writes.push(chunk);
+      return true;
+    });
+    await expect(handlers.sendTerminalKeys({ sessionId: "a", keys: ["ctrl-c"] })).rejects.toThrow(/unknown key/);
+    expect(writes).toEqual([]);
+  });
+
+  it("rejects a missing keys param", async () => {
+    await expect(handlersFor(() => true).sendTerminalKeys({ sessionId: "a" })).rejects.toThrow(/keys must be an array/);
   });
 });

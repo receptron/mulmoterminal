@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 
-import { CLEAR_BOX, PASTE_END, PASTE_START, canClearInputBox, createTerminalInputSender, sanitizeTerminalInput } from "./terminalInput.js";
+import { CLEAR_BOX, PASTE_END, PASTE_START, canClearInputBox, createTerminalSender, sanitizeTerminalInput } from "./terminalInput.js";
 
 // Collects what would have reached the PTY, and runs the delayed Enter on demand
 // so the tests never wait on real time.
@@ -16,6 +16,7 @@ const tick = (): Promise<void> => new Promise((resolve) => setImmediate(resolve)
 const recorder = (writable = true, canClearBox?: (sessionId: string) => boolean) => {
   const chunks: string[] = [];
   const submits: Array<() => void> = [];
+  const presses: Array<() => void> = [];
   const deps = {
     writeToSession: (_sessionId: string, chunk: string) => {
       if (!writable) return false;
@@ -27,8 +28,21 @@ const recorder = (writable = true, canClearBox?: (sessionId: string) => boolean)
     scheduleSubmit: (fn: () => void) => {
       submits.push(fn);
     },
+    // Same for the gap between two keys of one send.
+    scheduleKey: (fn: () => void) => {
+      presses.push(fn);
+    },
   };
-  return { chunks, submits, flushSubmit: () => submits.shift()?.(), send: createTerminalInputSender(deps) };
+  const { sendText, sendKeys } = createTerminalSender(deps);
+  return {
+    chunks,
+    submits,
+    presses,
+    flushSubmit: () => submits.shift()?.(),
+    flushKey: () => presses.shift()?.(),
+    send: sendText,
+    sendKeys,
+  };
 };
 
 describe("sanitizeTerminalInput", () => {
@@ -83,7 +97,7 @@ describe("sendTerminalInput", () => {
     const chunks: string[] = [];
     const submits: Array<() => void> = [];
     const seen: string[] = [];
-    const send = createTerminalInputSender({
+    const { sendText: send } = createTerminalSender({
       writeToSession: (_id: string, chunk: string) => {
         chunks.push(chunk);
         return true;
@@ -147,7 +161,7 @@ describe("sendTerminalInput", () => {
     let submit: (() => void) | null = null;
     let alive = true;
     let writes = 0;
-    const send = createTerminalInputSender({
+    const { sendText: send } = createTerminalSender({
       writeToSession: () => {
         writes += 1;
         return alive;
@@ -206,6 +220,105 @@ describe("sendTerminalInput", () => {
     flushSubmit();
     await expect(after).resolves.toEqual({ sent: true });
     expect(chunks).toEqual([`${PASTE_START}ls${PASTE_END}`, "\r"]);
+  });
+});
+
+// #781: answering a select menu means pressing keys, so this path shares nothing with the
+// typing path above — what it must NOT do is as much the point as what it does.
+describe("sendTerminalKeys", () => {
+  it("writes one key immediately", async () => {
+    const { chunks, sendKeys } = recorder();
+    await expect(sendKeys("s1", ["3"])).resolves.toEqual({ sent: true });
+    expect(chunks).toEqual(["3"]);
+  });
+
+  // No bracketed paste (a menu ignores pasted text), no Ctrl-C clear (the box is not being
+  // typed into), no trailing submit (the caller says `enter` if it wants one).
+  it("adds no paste framing, no box clear and no submit of its own", async () => {
+    const { chunks, submits, sendKeys } = recorder(true, () => true);
+    await sendKeys("s1", ["down"]);
+    expect(chunks).toEqual(["\x1b[B"]);
+    expect(submits).toEqual([]);
+  });
+
+  it("writes each key as its own write, spaced apart", async () => {
+    const { chunks, sendKeys, flushKey } = recorder();
+    const sent = sendKeys("s1", ["down", "down", "enter"]);
+    await tick();
+    // The first key goes out at once; the rest wait on the gap, so a TUI re-rendering after
+    // a highlight move is not handed the next key in the same tick.
+    expect(chunks).toEqual(["\x1b[B"]);
+    flushKey();
+    await tick();
+    expect(chunks).toEqual(["\x1b[B", "\x1b[B"]);
+    flushKey();
+    await expect(sent).resolves.toEqual({ sent: true });
+    expect(chunks).toEqual(["\x1b[B", "\x1b[B", "\r"]);
+  });
+
+  it("reports a session with no live terminal", async () => {
+    const { sendKeys } = recorder(false);
+    await expect(sendKeys("ghost", ["down"])).rejects.toThrow(/no live terminal/);
+  });
+
+  // Unlike the paste's Enter, a key list is invisible to the phone as it goes, so a session
+  // that dies mid-list is reported rather than passed off as sent.
+  it("stops and reports when the session dies mid-list", async () => {
+    let alive = true;
+    const chunks: string[] = [];
+    const presses: Array<() => void> = [];
+    const { sendKeys } = createTerminalSender({
+      writeToSession: (_id: string, chunk: string) => {
+        if (!alive) return false;
+        chunks.push(chunk);
+        return true;
+      },
+      scheduleKey: (fn: () => void) => {
+        presses.push(fn);
+      },
+    });
+    const sent = sendKeys("s1", ["down", "down", "enter"]);
+    await tick();
+    alive = false;
+    presses.shift()?.();
+    await expect(sent).rejects.toThrow(/no live terminal/);
+    // The third key was never attempted.
+    expect(chunks).toEqual(["\x1b[B"]);
+    expect(presses).toEqual([]);
+  });
+
+  // The two paths write to one terminal. A key landing between a paste and its Enter would
+  // move the cursor through the draft instead of a menu, so they share the session's chain.
+  it("waits for a typed line's Enter before pressing a key", async () => {
+    const { chunks, flushSubmit, send, sendKeys } = recorder();
+    const typed = send("s1", "hello");
+    const pressed = sendKeys("s1", ["down"]);
+    await tick();
+    expect(chunks).toEqual([`${PASTE_START}hello${PASTE_END}`]);
+    flushSubmit();
+    await typed;
+    await expect(pressed).resolves.toEqual({ sent: true });
+    expect(chunks).toEqual([`${PASTE_START}hello${PASTE_END}`, "\r", "\x1b[B"]);
+  });
+
+  it("makes a typed line wait for a key send in flight", async () => {
+    const { chunks, flushSubmit, flushKey, send, sendKeys } = recorder();
+    const pressed = sendKeys("s1", ["down", "enter"]);
+    const typed = send("s1", "hello");
+    await tick();
+    expect(chunks).toEqual(["\x1b[B"]);
+    flushKey();
+    await pressed;
+    await tick();
+    expect(chunks).toEqual(["\x1b[B", "\r", `${PASTE_START}hello${PASTE_END}`]);
+    flushSubmit();
+    await expect(typed).resolves.toEqual({ sent: true });
+  });
+
+  it("does not make one session wait on another", async () => {
+    const { chunks, sendKeys } = recorder();
+    await Promise.all([sendKeys("s1", ["up"]), sendKeys("s2", ["down"])]);
+    expect(chunks).toEqual(["\x1b[A", "\x1b[B"]);
   });
 });
 

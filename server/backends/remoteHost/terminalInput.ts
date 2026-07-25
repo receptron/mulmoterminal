@@ -1,9 +1,9 @@
-// Typing into a live session from the phone (#445). The wire side is one string;
-// everything that makes it land correctly in a TUI lives here so it can be tested
-// without a PTY.
+// Writing into a live session from the phone: typing a line (#445) and pressing a key
+// (#781). The wire side is one string or one list of key names; everything that makes it
+// land correctly in a TUI lives here so it can be tested without a PTY.
 //
-// Three things matter, and all three are learned behaviour from the spawn paths in
-// server/index.ts:
+// For TYPING, three things matter, and all three are learned behaviour from the spawn
+// paths in server/index.ts:
 //
 //   1. Sanitize first. The text arrives from a phone, so it is untrusted: an
 //      embedded bracketed-paste terminator (\e[201~) or a bare ESC/Ctrl-C would
@@ -12,7 +12,14 @@
 //      keystrokes it might interpret one by one.
 //   3. Send the submitting Enter as a SEPARATE write a beat later — Claude's TUI
 //      drops a CR that arrives while it is still committing the paste.
+//
+// A KEY PRESS is the exact opposite and shares none of it: the bytes are the host's own
+// (terminalKeys.ts), so there is nothing to sanitize, and a menu wants keystrokes rather
+// than a paste. What the two paths DO share is the per-session write chain — see
+// sessionChain.ts.
 
+import { createSessionChain } from "./sessionChain.js";
+import { keyBytes, type TerminalKeyName } from "./terminalKeys.js";
 import type { SessionAgent } from "./terminalScreen.js";
 
 // Strip ALL control bytes (C0/C1 — ESC, Ctrl-C, CR/LF, and an embedded
@@ -53,6 +60,13 @@ export const canClearInputBox = (agent: SessionAgent | null | undefined, working
 // Matches DRAFT_SUBMIT_MS in server/index.ts: the same TUI, the same reason.
 export const SUBMIT_DELAY_MS = 150;
 
+// Between two keys of one send. Same reason as SUBMIT_DELAY_MS: a TUI re-rendering after a
+// highlight move can drop a key that arrives in that same tick, and "the arrow did nothing
+// but the Enter took effect" is exactly what #781 measured. Our tmux runs escape-time 0
+// (server/infra/tmux.ts), so a lone `escape` is forwarded at once rather than held back
+// waiting to see whether a longer sequence follows.
+export const KEY_INTERVAL_MS = 60;
+
 export interface TerminalInputDeps {
   // Write a chunk to the session's live PTY. False when no PTY is attached in this
   // process — a tmux session that outlived a restart is viewable (capture-pane) but
@@ -70,17 +84,26 @@ export interface TerminalInputDeps {
   submitSequence?: (sessionId: string) => string;
   // Injected so tests don't wait on real time.
   scheduleSubmit?: (submit: () => void) => void;
+  // The gap between two keys of one send (KEY_INTERVAL_MS). Separate from scheduleSubmit
+  // because they answer different questions, and a test drives each independently.
+  scheduleKey?: (press: () => void) => void;
 }
 
 const defaultSchedule = (submit: () => void): void => {
   setTimeout(submit, SUBMIT_DELAY_MS);
 };
 
+const defaultKeySchedule = (press: () => void): void => {
+  setTimeout(press, KEY_INTERVAL_MS);
+};
+
+const noLiveTerminal = (sessionId: string): Error => new Error(`session ${sessionId} has no live terminal on this host`);
+
 // Paste, then press Enter a beat later, resolving once the Enter has gone out.
 const typeAndSubmit = (deps: TerminalInputDeps, sessionId: string, safe: string): Promise<void> => {
   const clear = deps.canClearBox?.(sessionId) ? CLEAR_BOX : "";
   if (!deps.writeToSession(sessionId, `${clear}${PASTE_START}${safe}${PASTE_END}`)) {
-    return Promise.reject(new Error(`session ${sessionId} has no live terminal on this host`));
+    return Promise.reject(noLiveTerminal(sessionId));
   }
   const submit = deps.submitSequence?.(sessionId) ?? "\r";
   return new Promise((resolve) => {
@@ -93,34 +116,48 @@ const typeAndSubmit = (deps: TerminalInputDeps, sessionId: string, safe: string)
   });
 };
 
-// Types lines into sessions, one at a time per session.
+// Press keys, one write each, spaced by KEY_INTERVAL_MS.
 //
-// The Enter is deliberately a separate, delayed write, which means two sends that
-// overlap would interleave as paste-A, paste-B, CR, CR — the terminal would run the
-// two commands merged into one line, then submit an empty one. So each session gets
-// a chain: a send waits for the previous send's Enter before its own paste.
-// Different sessions never wait on each other.
-export const createTerminalInputSender = (deps: TerminalInputDeps) => {
-  const chains = new Map<string, Promise<void>>();
+// A write that fails throws and the rest are abandoned: unlike the paste's Enter — which is
+// best-effort because the paste is already on screen — a half-pressed key list is invisible
+// to the phone, so a dead session is reported rather than passed off as sent.
+const pressKeys = (deps: TerminalInputDeps, sessionId: string, keys: TerminalKeyName[]): Promise<void> =>
+  keys.reduce(
+    (previous, key, index) =>
+      previous.then(async () => {
+        if (index > 0) {
+          await new Promise<void>((resolve) => (deps.scheduleKey ?? defaultKeySchedule)(resolve));
+        }
+        if (!deps.writeToSession(sessionId, keyBytes(key))) {
+          throw noLiveTerminal(sessionId);
+        }
+      }),
+    Promise.resolve(),
+  );
 
-  return async (sessionId: string, text: string): Promise<{ sent: boolean }> => {
-    const safe = sanitizeTerminalInput(text);
-    if (!safe) {
-      throw new Error("text is required");
-    }
-    // A failed send must not poison the chain for the next one, so the stored link
-    // swallows the error; the caller still sees it through `run`.
-    const previous = chains.get(sessionId) ?? Promise.resolve();
-    const run = previous.then(() => typeAndSubmit(deps, sessionId, safe));
-    const link = run.catch(() => undefined);
-    chains.set(sessionId, link);
-    // Drop the entry once it is the last one, so sessions don't accumulate forever.
-    link.then(() => {
-      if (chains.get(sessionId) === link) {
-        chains.delete(sessionId);
+// Writes into sessions, one send at a time per session (sessionChain.ts) — a phone tapping a
+// key row while a typed line is still waiting for its Enter must not land the key inside
+// that line.
+//
+//   sendText — a line, sanitized and pasted, then submitted (#445).
+//   sendKeys — key presses, as if at the keyboard: no sanitizing (the bytes are ours), no
+//              paste, no box clear, no trailing submit. `enter` is just another key.
+export const createTerminalSender = (deps: TerminalInputDeps) => {
+  const inOrder = createSessionChain();
+
+  return {
+    sendText: async (sessionId: string, text: string): Promise<{ sent: boolean }> => {
+      const safe = sanitizeTerminalInput(text);
+      if (!safe) {
+        throw new Error("text is required");
       }
-    });
-    await run;
-    return { sent: true };
+      await inOrder(sessionId, () => typeAndSubmit(deps, sessionId, safe));
+      return { sent: true };
+    },
+
+    sendKeys: async (sessionId: string, keys: TerminalKeyName[]): Promise<{ sent: boolean }> => {
+      await inOrder(sessionId, () => pressKeys(deps, sessionId, keys));
+      return { sent: true };
+    },
   };
 };
