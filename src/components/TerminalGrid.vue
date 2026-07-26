@@ -7,6 +7,8 @@ import CockpitRowMenu from "./CockpitRowMenu.vue";
 import CockpitHeader from "./CockpitHeader.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
+import { clampStyle } from "../../common/cockpitLines";
+import { useCockpitLines } from "../composables/cockpitLines";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { canMoveCell, type Cell, type CellStatus } from "./gridTabs";
 import type { RunCommand } from "./runCommand";
@@ -68,6 +70,11 @@ const emit = defineEmits<{
 }>();
 
 const gridStyle = computed(() => trackStyle(layoutForCount(props.cells.length)));
+
+// How far each roster line clamps (config.json `cockpitLines`; 2/2/3 by default). A `title` on
+// each line carries the rest, so raising the clamp is a convenience rather than the only way to
+// read a long summary.
+const cockpitLines = useCockpitLines();
 
 // The keyboard-focused cell, so it can lift + zoom slightly in place. `focusin` bubbles from the
 // xterm textarea up to the grid, so one delegated listener suffices. It's sticky: focus moving to
@@ -239,13 +246,13 @@ watch(
             @move="(dir) => emit('move', row.uid, dir)"
           />
         </CockpitHeader>
-        <span v-if="row.summary" data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
+        <span v-if="row.summary" data-testid="cockpit-line" class="text-[12px] leading-[1.35]" :style="clampStyle(cockpitLines.summary)" :title="row.summary"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">summary</b> {{ row.summary }}</span
         >
-        <span data-testid="cockpit-line" class="line-clamp-2 overflow-hidden text-[12px] leading-[1.35]"
+        <span data-testid="cockpit-line" class="text-[12px] leading-[1.35]" :style="clampStyle(cockpitLines.prompt)" :title="row.prompt || row.fallback || ''"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">prompt</b> {{ row.prompt || row.fallback || "—" }}</span
         >
-        <span v-if="row.response" data-testid="cockpit-line" class="line-clamp-3 overflow-hidden text-[12px] leading-[1.35] text-dim"
+        <span v-if="row.response" data-testid="cockpit-line" class="text-[12px] leading-[1.35] text-dim" :style="clampStyle(cockpitLines.response)" :title="row.response"
           ><b class="mr-1 text-[10px] font-bold text-[#7a8aa0]">reply</b> {{ row.response }}</span
         >
       </div>

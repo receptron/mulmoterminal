@@ -7,6 +7,8 @@ import type { PushKind } from "../../common/pushKinds";
 import { DEFAULT_TERMINAL_SUBMIT_MODE, isTerminalSubmitMode } from "../../common/terminalSubmit";
 import { setTerminalSubmitMode } from "./terminalSubmitMode";
 import { setActiveKeymap } from "./activeKeymap";
+import { setCockpitLines } from "./cockpitLines";
+import { sanitizeCockpitLines } from "../../common/cockpitLines";
 
 // The custom attention-sound file is a SINGLETON ref shared across every
 // useAppConfig() caller — the beep player lives in the single view while the
@@ -249,6 +251,8 @@ export function useAppConfig() {
       // Keyboard shortcuts are opt-in: no `keymap` in config.json leaves this empty and
       // every shortcut stays off.
       setActiveKeymap(c.keymap);
+      // How far the cockpit roster clamps each line (config.json-only; unset keeps 2/2/3).
+      setCockpitLines(sanitizeCockpitLines(c.cockpitLines));
       await migrateLegacyRecents();
     } catch {
       // the app still works; presets are just unavailable

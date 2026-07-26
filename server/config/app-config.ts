@@ -22,6 +22,7 @@ import { DEFAULT_TERMINAL_SUBMIT_MODE, isTerminalSubmitMode, type TerminalSubmit
 import type { QuickCommand } from "../../common/quickCommands.js";
 import { DEFAULT_PUSH_KINDS, PUSH_KINDS, type PushKind } from "../../common/pushKinds.js";
 import { sanitizeKeymap, type Keymap } from "../../common/keymap.js";
+import { sanitizeCockpitLines, DEFAULT_COCKPIT_LINES, type CockpitLines } from "../../common/cockpitLines.js";
 import { readTextFile } from "../infra/read-text-file.js";
 import { writeFileAtomicSync } from "../files/atomic-write.js";
 
@@ -66,6 +67,9 @@ export interface AppConfig {
   // User-defined keyboard shortcuts (#829). NO defaults: an empty map means the shortcuts
   // are off, because every binding takes that key away from the terminal underneath.
   keymap: Keymap;
+  // How many lines each cockpit-roster row shows before clamping. Defaults keep the previous
+  // 2/2/3; raising `summary` trades roster length for reading a long one without opening the cell.
+  cockpitLines: CockpitLines;
 }
 
 // `id` becomes an MCP server name + `mcp__<id>` tool prefix, so restrict to a plain
@@ -216,6 +220,7 @@ export const emptyConfig = (): AppConfig => ({
   chips: null,
   pushEnabled: false,
   pushKinds: [...DEFAULT_PUSH_KINDS],
+  cockpitLines: DEFAULT_COCKPIT_LINES,
   worklogEnabled: false,
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
   providers: [],
@@ -249,6 +254,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     chips: sanitizeChips(o.chips),
     pushEnabled: sanitizePushEnabled(o.pushEnabled),
     pushKinds: sanitizePushKinds(o.pushKinds),
+    cockpitLines: sanitizeCockpitLines(o.cockpitLines),
     worklogEnabled: sanitizeWorklogEnabled(o.worklogEnabled),
     worklogIntervalHours: sanitizeWorklogIntervalHours(o.worklogIntervalHours),
     providers: sanitizeProviders(o.providers),

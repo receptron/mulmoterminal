@@ -355,6 +355,23 @@ button only type the text without submitting it.
 - Takes effect after a **tab reload** (keyboard) and a **server restart** (phone remote view).
 - Partial `POST /api/config` merge — write only `terminalSubmit`.
 
+## Cockpit roster line counts — `cockpitLines` in `~/.mulmoterminal/config.json`
+
+The roster beside a zoomed terminal shows three lines per session — **summary** (what it's doing
+now), **prompt**, **reply** — each clamped so a long roster still fits. The clamp is a trade: more
+lines each means fewer sessions on screen. Defaults are `2 / 2 / 3`, unchanged from before the
+setting existed.
+
+```json
+{ "cockpitLines": { "summary": 6, "prompt": 2, "response": 3 } }
+```
+
+- Each field is a whole number in **1–20**. Out of range, fractional, or non-numeric falls back to
+  that field's default — **per field**, so one typo doesn't discard the others.
+- Hovering a line shows the full text regardless, so raising the clamp is a convenience.
+- This is a **global** setting (`~/.mulmoterminal/config.json`), not per-directory: the roster
+  mixes sessions from every directory, so a per-directory value would make rows disagree.
+
 ## Dev-work log — `worklogEnabled` / `worklogIntervalHours`
 
 A built-in scheduled task, **off by default**. When on, it fires every `worklogIntervalHours` and
