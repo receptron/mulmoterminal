@@ -255,7 +255,13 @@ function buildTerminal(swallowedMouseModes: Set<number>): TerminalRuntime {
   const term = new Terminal({
     cursorBlink: true,
     fontSize: 14,
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', monospace",
+    // CJK fonts are named EXPLICITLY. None of the three coding fonts above carries a CJK glyph,
+    // and the canvas renderer does not fall back per-glyph the way the DOM one does — it draws a
+    // placeholder instead, so a Japanese line renders as a row of underscores while ASCII beside
+    // it is fine. Naming a font that HAS the glyph is what makes the atlas able to rasterize it.
+    // Ordered per-platform (macOS / Noto / Windows-JP / Windows-CN / Korean); the generic
+    // `monospace` still ends the list for anything none of them cover.
+    fontFamily: "'JetBrains Mono', 'Fira Code', 'Menlo', 'Hiragino Sans', 'Noto Sans CJK JP', 'Yu Gothic', 'Microsoft YaHei', 'Apple SD Gothic Neo', monospace",
     // Treat macOS Option as Meta so Claude's Alt bindings reach the PTY — Alt+Enter
     // (newline), Alt+B/F (word nav), Alt+Backspace (delete word). The cost is Option
     // dead-key accent entry (é etc.), which a coding terminal doesn't need.
