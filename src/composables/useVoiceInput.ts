@@ -13,6 +13,7 @@ import { onScopeDispose, ref, type Ref } from "vue";
 import { createVoiceCapture, localeToWhisperLanguage, type VoiceCaptureTransport } from "@mulmoclaude/core/whisper/client";
 import { browserLocale } from "../utils/browserLocale";
 import { modelReadiness, voiceAction } from "./voiceAction";
+import { resolveVoiceLanguage, voiceLanguage } from "./voiceLanguage";
 
 interface VoiceModelStatusResponse {
   capable: boolean;
@@ -85,7 +86,10 @@ export function useVoiceInput(opts: UseVoiceInputOptions): UseVoiceInput {
   const error = ref<string | null>(null);
 
   const transport = createVoiceTransport(capable, downloading);
-  const capture = createVoiceCapture(transport, () => localeToWhisperLanguage(browserLocale()), {
+  // Read per segment (the controller calls this getter per clip), so flipping the setting
+  // takes effect on the next thing you say rather than on the next reload.
+  const language = () => resolveVoiceLanguage(voiceLanguage.value, localeToWhisperLanguage(browserLocale()));
+  const capture = createVoiceCapture(transport, language, {
     onTranscript: (text) => {
       error.value = null;
       opts.onTranscript(text);

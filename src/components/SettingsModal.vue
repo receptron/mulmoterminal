@@ -8,6 +8,7 @@ import { useCost } from "../composables/useCost";
 import { activeKeymap } from "../composables/activeKeymap";
 import { keymapRows } from "./keymapLabels";
 import { useGoogleLink } from "../composables/useGoogleLink";
+import { VOICE_LANGUAGES, voiceLanguage } from "../composables/voiceLanguage";
 import SettingsButton from "./SettingsButton.vue";
 import SettingsField from "./SettingsField.vue";
 import GuideLinks from "./GuideLinks.vue";
@@ -262,6 +263,21 @@ function onThemeKey(e: KeyboardEvent, index: number) {
   themesEl.value?.querySelectorAll<HTMLElement>('[role="radio"]')[next]?.focus();
 }
 
+// Voice input's language mode. The setting is a singleton ref (localStorage-backed), so it
+// needs no prop/emit plumbing — but the section is only worth showing on a machine that can
+// transcribe at all, and capability lives on the server. One cheap GET when the modal opens;
+// a failed/absent probe leaves the section hidden rather than offering a setting for a mic
+// that will never appear.
+const voiceCapable = ref(false);
+async function refreshVoiceCapable() {
+  try {
+    const res = await fetch("/api/transcribe/model");
+    voiceCapable.value = res.ok && (((await res.json()) as { capable?: boolean }).capable ?? false);
+  } catch {
+    voiceCapable.value = false;
+  }
+}
+
 // Read-only estimated cost (Session / Today / Month), loaded when the modal opens.
 const { cost, error: costError, load: loadCost } = useCost();
 
@@ -290,6 +306,7 @@ onMounted(() => {
   nextTick(() => modalEl.value?.querySelector<HTMLElement>("input, button")?.focus());
   refreshCost();
   refreshGoogle();
+  refreshVoiceCapable();
 });
 watch([() => props.cwd, () => props.sessionId], refreshCost);
 onUnmounted(() => {
@@ -398,6 +415,25 @@ onUnmounted(() => {
         >
         <SettingsButton :disabled="!soundPath" title="Use the built-in chime" @click="clearSound">Use chime</SettingsButton>
       </div>
+
+      <template v-if="voiceCapable">
+        <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Voice input</h3>
+        <p class="mb-3 mt-1.5 text-[12px] text-dim">
+          The language you dictate in. Speaking a language the mic is not expecting comes back <strong>translated</strong> into the expected one — so pick the
+          one you actually speak rather than leaving it on your browser's.
+        </p>
+        <select
+          v-model="voiceLanguage"
+          aria-label="Language for voice input"
+          class="box-border w-full rounded-md border border-border bg-input px-2.5 py-[7px] text-[12px] text-fg focus:border-accent focus:outline-none"
+        >
+          <option value="locale">My browser's language</option>
+          <option value="auto">Detect from what I say</option>
+          <optgroup label="Always this language">
+            <option v-for="lang in VOICE_LANGUAGES" :key="lang.code" :value="lang.code">{{ lang.label }}</option>
+          </optgroup>
+        </select>
+      </template>
 
       <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Web Push notifications</h3>
       <p class="mb-3 mt-1.5 text-[12px] text-dim">
