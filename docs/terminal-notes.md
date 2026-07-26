@@ -101,6 +101,30 @@ change one and change the other (#834).
 - xterm exposes no pixel-to-cell mapping, so cell coordinates are derived from `.xterm-screen`'s
   own box. Reaching into `_core._renderService.dimensions` instead would need an `any`.
 
+### Dropped and pasted files — path first, bytes as the fallback
+
+A file dropped on the terminal inserts its **absolute path** (`dropPaths.ts`), because the agent
+reads the file itself — the path is the useful thing, not the bytes. The path is only reachable
+through the drag's `text/uri-list`; the `File` object hides it.
+
+Two cases have no path to insert, and both fall back to staging the bytes server-side
+(`files/dropped-files.ts`, `POST /api/files/dropped`) and inserting *that* path instead:
+
+- **Chrome withholds `text/uri-list`** on a file drop, so the path route yields nothing. Before the
+  fallback, dropping a screenshot on the browser most people use did nothing but show a hint.
+- **A pasted screenshot** (macOS ⌘⌃⇧4 → clipboard) has no file on disk in *any* browser.
+
+Staged under `~/.mulmoterminal/drops/<date>/<random>/<original name>` — deliberately **not** inside
+the session's working directory, so a screenshot dropped while working in a repo never turns up as
+an untracked file in someone's diff. The random parent is what makes the path unique; the original
+name is kept because it is often the only clue about what the file is. Swept after 7 days.
+
+Caps: 25 MiB per file (checked client-side too, so an oversized file fails before the upload),
+10 files per drop, and the raw data-URL bound is checked *before* decoding — the same ordering rule
+`audioAdmission.ts` uses, so a huge payload is refused without first being expanded into memory.
+
+A **text** paste is never intercepted: it must reach xterm natively, which is the common case.
+
 ### A terminal xterm has killed can only be replaced (#846)
 
 `Buffer.resize` in xterm 6.0.0 can finish with fewer lines than the viewport needs
@@ -189,6 +213,7 @@ looking) — flag them for QA on the release.
 | OSC 8 links | tmux `terminal-features '*:hyperlinks'` present; xterm `linkHandler` set | click Claude statusline `PR #NNNN` → opens the PR (no confirm dialog) |
 | OSC 52 clipboard | tmux `Ms` override + `set-clipboard on` present (`planMsOverride`) | Claude auto-copy reaches the browser clipboard |
 | File-path links | `registerFilePathLinks` order vs WebLinks; `/api/files/raw` cwd containment | click a generated file path → previews the file |
+| Drop / paste files | `dropPaths.ts` uri-list route, then the `POST /api/files/dropped` byte fallback | drop a file → path inserted (Safari); drop or paste a screenshot in Chrome → staged path inserted; a TEXT paste still reaches xterm untouched |
 | Enter / newline | `terminalSubmit` mapping + `isComposing` guard; `macOptionIsMeta` | Enter submits, Shift+Enter newlines; IME confirm not eaten; both `cr` and `esc-cr` |
 | Mouse / wheel | `guardMouseTracking` swallow set (1000/1002/1003/1006); wheel→SGR in alt buffer | wheel scrolls transcript (not prompt history); drag selects, doesn't emit mouse reports |
 | Reattach | `stripTerminalQueries` patterns; replay buffer size | reattaching a session doesn't leak `0;276;0c`-style junk; scrollback survives |

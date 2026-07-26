@@ -25,9 +25,32 @@ import { parseByteRange } from "./byte-range.js";
 import { rawServingPlan } from "./rawServingPlan.js";
 import { streamFileToResponse } from "./streamFile.js";
 import { authorizedServingBase, resolveContained } from "../files/pathContainment.js";
+import { admitDroppedFile, saveDroppedFile, sweepOldDrops } from "../files/dropped-files.js";
 
 export function mountFilesRoutes(app: Express, deps: { workspace: string; sessionCwds: () => Iterable<string> }): void {
   const root = path.resolve(deps.workspace);
+
+  // POST /api/files/dropped — stage bytes that arrived without a path and answer with the path
+  // to insert. The fallback for a drop whose path the browser withheld (Chrome) and the ONLY
+  // route for a pasted screenshot, which has no file on disk to name. See files/dropped-files.ts
+  // for where it lands and why that is outside the session's working directory.
+  app.post("/api/files/dropped", (req: Request, res: Response) => {
+    const body = (req.body ?? {}) as { dataUrl?: unknown; name?: unknown };
+    const admitted = admitDroppedFile(body.dataUrl, body.name);
+    if (!admitted.ok) {
+      res.status(admitted.status).json({ error: admitted.error });
+      return;
+    }
+    try {
+      const file = saveDroppedFile(admitted);
+      // After the write, not before: the user's drop lands even if the sweep throws, and a
+      // failed sweep is not worth a failed drop.
+      sweepOldDrops(new Date());
+      res.json({ path: file });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "failed to stage the dropped file" });
+    }
+  });
 
   app.get("/api/files/raw", (req: Request, res: Response) => {
     const rel = typeof req.query.path === "string" ? req.query.path : "";

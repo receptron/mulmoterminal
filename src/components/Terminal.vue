@@ -4,6 +4,7 @@ import { type ITheme } from "@xterm/xterm";
 import { FLIP_MS, shouldRefocusOnZoomChange } from "./cellFlip";
 import { terminalManagesAttention, terminalViewActive } from "./terminalViewActive";
 import { dragCarriesFiles, dropTextFromUriList } from "./dropPaths";
+import { stagedInsertText, filesFromClipboard } from "../composables/useStagedFiles";
 import { translateUiSentence } from "../utils/translateUi";
 import { useTheme, currentTermTheme, termThemeFor, type ThemeId } from "../composables/useTheme";
 import { badgeStyleFor } from "./dirBadge";
@@ -310,16 +311,49 @@ function insertText(text: string) {
 // Drop a file onto the terminal to insert its absolute path, like a native
 // terminal. Browsers expose the real path only via the drag's file:// URIs
 // (text/uri-list); the File object hides it. Browsers that withhold the path
-// (e.g. Chrome) yield no URIs — instead of silently inserting nothing, point the
-// user at the 📎 file-picker button, which is the path-in-Chrome route.
-function onDrop(e: DragEvent) {
+// (e.g. Chrome) yield no URIs — there we fall back to staging the BYTES server-side
+// and inserting that path instead, so the drop does the same thing either way. Only
+// when both routes come up empty do we point at the 📎 file-picker button.
+async function onDrop(e: DragEvent) {
   dragOver.value = false;
   const dt = e.dataTransfer;
   if (!dt || !dragCarriesFiles(dt.types)) return; // not a file drop — leave text drags alone
   e.preventDefault();
   const text = dropTextFromUriList(dt.getData("text/uri-list") || dt.getData("text/plain"));
-  if (text) insertText(text);
-  else showDropHint();
+  if (text) {
+    insertText(text);
+    return;
+  }
+  // No path from the browser. Stage the files instead — this is the Chrome path.
+  const files = Array.from(dt.files ?? []);
+  if (!files.length) {
+    showDropHint();
+    return;
+  }
+  staging.value = true;
+  try {
+    const staged = await stagedInsertText(files);
+    if (staged) insertText(staged);
+    else showDropHint();
+  } finally {
+    staging.value = false;
+  }
+}
+
+// A pasted screenshot (⌘⌃⇧4 → clipboard) has no file on disk in ANY browser, so the path
+// route can't apply — staging the bytes is the only way it can reach the agent. A text
+// paste is left entirely alone: it must reach xterm natively, which is the common case.
+async function onPaste(e: ClipboardEvent) {
+  const files = filesFromClipboard(e.clipboardData);
+  if (!files.length) return;
+  e.preventDefault();
+  staging.value = true;
+  try {
+    const staged = await stagedInsertText(files);
+    if (staged) insertText(staged);
+  } finally {
+    staging.value = false;
+  }
 }
 
 function onDragOver(e: DragEvent) {
@@ -335,6 +369,9 @@ function onDragOver(e: DragEvent) {
 // fall back to advice that always holds.
 const DROP_HINT_PICKER_EN = "This browser doesn't share a dropped file's path. Use the 📎 button in the header (Insert a file path) instead.";
 const DROP_HINT_TYPE_EN = "This browser doesn't share a dropped file's path — type or paste the path instead.";
+// True while dropped/pasted bytes are being written server-side. A multi-megabyte screenshot
+// takes a beat, and without a sign the terminal looks like it swallowed the drop.
+const staging = ref(false);
 const dropHint = ref(false);
 const dropHintText = ref("");
 const DROP_HINT_MS = 6000;
@@ -417,6 +454,7 @@ onUnmounted(() => {
       @dragover="onDragOver"
       @dragleave="dragOver = false"
       @drop="onDrop"
+      @paste="onPaste"
     />
     <Transition
       enter-active-class="transition-opacity duration-200 ease-[ease]"
@@ -433,6 +471,18 @@ onUnmounted(() => {
         <span>{{ dropHintText }}</span>
       </div>
     </Transition>
+    <!-- Staging can take a beat for a multi-megabyte screenshot; without this the terminal
+         looks like it swallowed the drop. Same placement as the hint, which it never shares
+         the screen with (one is "working", the other "that didn't work"). -->
+    <div
+      v-if="staging"
+      class="pointer-events-none absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-2 rounded-lg border border-border bg-elevated px-4 py-2.5 font-sans text-[13px] leading-[1.4] text-fg shadow-[0_4px_16px_rgba(0,0,0,0.45)]"
+      role="status"
+      data-testid="staging-indicator"
+    >
+      <span class="material-symbols-outlined shrink-0 animate-spin text-[18px]" aria-hidden="true">progress_activity</span>
+      <span>Saving file…</span>
+    </div>
   </div>
 </template>
 
