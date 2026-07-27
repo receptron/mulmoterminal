@@ -145,8 +145,11 @@ describe("buildDocPath", () => {
       }
     }
 
-    // UTC-14 through UTC+14 — the two ends that a UTC-only CI can never exercise.
-    it.each([["Pacific/Midway"], ["Pacific/Kiritimati"], ["UTC"]])("puts a local March 1st under /2026/03/ in %s", (tz) => {
+    // The full span of real offsets, UTC-12 (Etc/GMT+12, the tz database's minimum) through
+    // UTC+14 (Kiritimati) — the ends a UTC-only CI can never exercise. Pacific/Midway (UTC-11)
+    // is the westmost INHABITED zone, and the one whose shape matches the machine this bug
+    // was found on, so it is worth keeping alongside the synthetic extreme.
+    it.each([["Etc/GMT+12"], ["Pacific/Midway"], ["Pacific/Kiritimati"], ["UTC"]])("puts a local March 1st under /2026/03/ in %s", (tz) => {
       expect(underTz(tz, () => buildDocPath("x", localDate(2026, 3, 1), rand))).toContain("/2026/03/");
     });
 
