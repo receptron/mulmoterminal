@@ -55,7 +55,7 @@ interface Wired {
 
 // A terminal wired the way ensure() wires one: the #729 parser swallow, then the click guard
 // after open(). jsdom lays nothing out, so the screen element is given the grid's real geometry.
-async function openWiredTerminal(options: { tracked?: boolean } = {}): Promise<Wired> {
+async function openWiredTerminal(options: { tracked?: boolean; scrollSpeed?: number } = {}): Promise<Wired> {
   const term = new Terminal({ cols: COLS, rows: ROWS, allowProposedApi: true });
   openTerminals.push(term);
   const swallowedMouseModes = new Set<number>();
@@ -70,7 +70,7 @@ async function openWiredTerminal(options: { tracked?: boolean } = {}): Promise<W
   const screen = term.element?.querySelector<HTMLElement>(".xterm-screen");
   if (!screen) throw new Error("xterm did not create .xterm-screen — the click guard has nothing to bind to");
   screen.getBoundingClientRect = () => new DOMRect(0, 0, COLS * CELL_WIDTH_PX, ROWS * CELL_HEIGHT_PX);
-  guardMouseWheel(term, swallowedMouseModes);
+  guardMouseWheel(term, swallowedMouseModes, () => options.scrollSpeed ?? 1);
   guardMouseClicks(term, swallowedMouseModes);
   const sent: string[] = [];
   term.onData((data) => sent.push(data));
@@ -169,19 +169,68 @@ describe("guardMouseClicks on a real terminal", () => {
 });
 
 describe("guardMouseWheel on a real terminal", () => {
+  // A wheel event's deltaY is in PIXELS by default (deltaMode 0), which is what both a trackpad
+  // and a macOS wheel mouse send. One cell is CELL_HEIGHT_PX tall, so 120px is 6 lines.
   const wheel = (screen: HTMLElement, deltaY: number, clientX: number, clientY: number) =>
     screen.dispatchEvent(new WheelEvent("wheel", { deltaY, clientX, clientY, bubbles: true, cancelable: true }));
 
   it("reports the wheel at the cell under the pointer, not a fixed 1;1", async () => {
     const { screen, sent } = await openWiredTerminal();
-    wheel(screen, 120, 115, 250);
-    expect(sent).toEqual(["\x1b[<65;12;13M"]);
+    wheel(screen, 120, 115, 250); // 115px / 10px + 1 = col 12; 250px / 20px + 1 = row 13
+    expect(new Set(sent)).toEqual(new Set(["\x1b[<65;12;13M"]));
   });
 
   it("encodes direction: up is button 64, down is 65", async () => {
     const { screen, sent } = await openWiredTerminal();
     wheel(screen, -120, 5, 10);
-    expect(sent).toEqual(["\x1b[<64;1;1M"]);
+    expect(new Set(sent)).toEqual(new Set(["\x1b[<64;1;1M"]));
+  });
+
+  // The rate itself, which is the whole of #978: a 120px event is 6 cells of movement, so it is
+  // worth 6 notches — the same distance xterm's own scrollback would have travelled.
+  it("reports one notch per cell of movement, not one per event", async () => {
+    const { screen, sent } = await openWiredTerminal();
+    wheel(screen, 120, 115, 250);
+    expect(sent).toHaveLength(6);
+  });
+
+  // The regression #978 is actually about: a macOS trackpad emits a burst of tiny deltas per
+  // swipe. One report each meant a nudge scrolled a TUI dozens of lines.
+  it("banks a burst of tiny trackpad deltas instead of reporting each one", async () => {
+    const { screen, sent } = await openWiredTerminal();
+    for (let i = 0; i < 5; i++) wheel(screen, 2, 115, 250); // 2px: 0.15 notches each
+    expect(sent).toEqual([]);
+  });
+
+  // Banked, not discarded — the swipe still has to arrive, just at the speed of the gesture.
+  it("pays out the banked fraction once it adds up to a whole notch", async () => {
+    const { screen, sent } = await openWiredTerminal();
+    for (let i = 0; i < 20; i++) wheel(screen, 2, 115, 250); // 20 x 0.15 = 3 notches
+    expect(sent).toEqual(["\x1b[<65;12;13M", "\x1b[<65;12;13M", "\x1b[<65;12;13M"]);
+  });
+
+  // The banked motion must not leak back to xterm: its alt-buffer fallback is the ↑/↓ conversion
+  // #737 exists to replace, so an event worth less than a notch has to be consumed, not deferred.
+  it("consumes an event too small to report rather than letting the arrow fallback have it", async () => {
+    const { screen, sent } = await openWiredTerminal();
+    wheel(screen, 2, 115, 250);
+    expect(sent).toEqual([]);
+  });
+
+  it("drops the banked fraction when the swipe reverses, so the flick back doesn't overshoot", async () => {
+    const { screen, sent } = await openWiredTerminal();
+    for (let i = 0; i < 5; i++) wheel(screen, 2, 115, 250); // 0.75 notches banked downwards
+    wheel(screen, -4, 115, 250); // 0.3 notches up — nothing owed, the 0.75 is not credit
+    expect(sent).toEqual([]);
+  });
+
+  it("scales with the user's scroll speed", async () => {
+    const half = await openWiredTerminal({ scrollSpeed: 0.5 });
+    wheel(half.screen, 120, 115, 250);
+    expect(half.sent).toHaveLength(3);
+    const double = await openWiredTerminal({ scrollSpeed: 2 });
+    wheel(double.screen, 120, 115, 250);
+    expect(double.sent).toHaveLength(12);
   });
 
   it("stays silent in the normal buffer, where the wheel is xterm's own scrollback", async () => {

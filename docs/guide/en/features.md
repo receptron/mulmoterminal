@@ -96,6 +96,7 @@ so a very large unsaved buffer may not get out.
 | Launchers / cwd presets / PR repos | Extend launch commands, working-directory suggestions, and cross-repo PR targets in settings |
 | Themes | Midnight / Nord / Daylight / Solarized Light |
 | Terminal font size | Adjustable in settings (per browser), or pinned per directory with `fontSize` in `.mulmoterminal.json` |
+| Terminal scroll speed | Adjustable in settings (per browser, 0.25x-3x) — one control for both a shell's scrollback and a full-screen app like Claude Code; turn it down if a Mac trackpad swipe scrolls past what you were reading |
 | Terminal font | `fontFamily` in the global config, or per directory — CJK faces are in the default stack, so Japanese no longer falls back to whatever the browser picks |
 
 > **Do nothing and it works as before** — buttons/chips/colors only take effect for what you add, and the default look is unchanged.

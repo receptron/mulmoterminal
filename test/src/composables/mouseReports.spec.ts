@@ -4,9 +4,11 @@ import {
   cellFromPoint,
   clearResetModes,
   clickReportSequences,
+  createWheelTicker,
   isClickGesture,
   recordSwallowedModes,
   wantsMouseReports,
+  wheelNotches,
   wheelReportSequence,
 } from "../../../src/composables/mouseReports";
 
@@ -132,5 +134,81 @@ describe("isClickGesture", () => {
   it("rejects a drag — that is a text selection, not a click", () => {
     expect(isClickGesture(at(200, 100), at(204, 100))).toBe(false);
     expect(isClickGesture(at(200, 100), at(200, 140))).toBe(false);
+  });
+});
+
+describe("wheelNotches", () => {
+  const CELL_HEIGHT_PX = 20;
+  const ROWS = 24;
+  const PIXEL = 0;
+  const LINE = 1;
+  const PAGE = 2;
+  // One swipe's worth of events through one ticker, at the default speed.
+  const swipe = (deltas: number[], speed = 1, deltaMode = PIXEL): number[] => {
+    const ticker = createWheelTicker();
+    return deltas.map((deltaY) => wheelNotches(ticker, { deltaY, deltaMode }, CELL_HEIGHT_PX, ROWS, speed));
+  };
+
+  it("converts a pixel delta to whole cells of movement", () => {
+    expect(swipe([120])).toEqual([6]);
+  });
+
+  it("signs the notches: negative is up", () => {
+    expect(swipe([-120])).toEqual([-6]);
+  });
+
+  // The heart of #978: a macOS trackpad's per-event delta is a couple of pixels. Without the
+  // banking each of these was a full notch — a swipe worth dozens of them.
+  it("banks tiny trackpad deltas until they add up to a notch", () => {
+    expect(swipe([2, 2, 2, 2, 2])).toEqual([0, 0, 0, 0, 0]); // 0.15 notches each
+    expect(swipe(Array(20).fill(2)).reduce((a, b) => a + b, 0)).toBe(3);
+  });
+
+  // The swipe gain (#978), pinned as a rate: a cell of finger travel is worth 1.5 notches, and
+  // tmux's copy-mode is bound to one line per notch — so text moves 1.5 lines per cell of finger.
+  // Change one without the other and the scroll speed changes, not just its smoothness.
+  it("is worth 1.5 notches per cell of finger travel on a trackpad", () => {
+    expect(swipe(Array(10).fill(CELL_HEIGHT_PX / 10)).reduce((a, b) => a + b, 0)).toBe(1); // 1 cell -> 1.5, one paid
+    expect(swipe(Array(20).fill(CELL_HEIGHT_PX / 10)).reduce((a, b) => a + b, 0)).toBe(3); // 2 cells -> 3
+  });
+
+  it("carries the leftover fraction into the next event", () => {
+    expect(swipe([90, 90])).toEqual([4, 5]); // 4.5 cells then 4.5: 4 banked 0.5, then 5.0
+  });
+
+  it("drops the bank when the direction reverses", () => {
+    // 2.9 cells down banks 0.9; the flick back is 5.5 cells up. Spending that 0.9 against it
+    // would report only 4 — the gesture ending short of where it started.
+    expect(swipe([58, -110])).toEqual([2, -5]);
+  });
+
+  it("scales by the user's speed", () => {
+    expect(swipe([120], 0.5)).toEqual([3]);
+    expect(swipe([120], 2)).toEqual([12]);
+  });
+
+  it("takes a line-mode delta as lines, unscaled by the cell height", () => {
+    expect(swipe([3], 1, LINE)).toEqual([3]);
+  });
+
+  it("takes a page-mode delta as a screenful", () => {
+    expect(swipe([1], 1, PAGE)).toEqual([ROWS]);
+  });
+
+  // A momentum spike or a multi-page delta must not turn into hundreds of reports in one event.
+  it("caps one event's payout", () => {
+    expect(swipe([10], 1, PAGE)).toEqual([24]);
+  });
+
+  it("reports nothing for a motionless event", () => {
+    expect(swipe([0])).toEqual([0]);
+  });
+
+  // An unlaid-out terminal has no cell height, so pixels can't be converted. Falling back to one
+  // notch per event keeps the wheel working (the old behaviour) rather than going dead.
+  it("falls back to one notch per event when the cell height is unknown", () => {
+    const ticker = createWheelTicker();
+    expect(wheelNotches(ticker, { deltaY: 120, deltaMode: PIXEL }, 0, ROWS, 1)).toBe(1);
+    expect(wheelNotches(ticker, { deltaY: -120, deltaMode: PIXEL }, 0, ROWS, 1)).toBe(-1);
   });
 });

@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onUnmounted, nextTick } from "vue";
 import { MODAL_FOCUSABLE, trapTabKey } from "../utils/focusTrap";
 import { useTheme } from "../composables/useTheme";
 import { useTerminalFontSize } from "../composables/useTerminalFontSize";
+import { useTerminalScrollSpeed } from "../composables/useTerminalScrollSpeed";
 import { previewNotify } from "../composables/useAttentionSound";
 import { useCost } from "../composables/useCost";
 import { activeKeymap } from "../composables/activeKeymap";
@@ -281,6 +282,10 @@ const themesEl = ref<HTMLElement>();
 // desktop on the same server keep their own; a directory can pin its own in .mulmoterminal.json.
 const { fontSize, nudgeFontSize, min: fontSizeMin, max: fontSizeMax, step: fontSizeStep } = useTerminalFontSize();
 
+// Terminal scroll speed, same shape and the same per-browser reasoning as the font size: it is a
+// property of the pointing device, and a trackpad and a wheel mouse want different answers.
+const { scrollSpeed, nudgeScrollSpeed, min: scrollSpeedMin, max: scrollSpeedMax, step: scrollSpeedStep } = useTerminalScrollSpeed();
+
 // Google account link. The modal is v-if'd, so a fresh load on mount also picks up
 // out-of-band changes (`mulmoterminal google login`, a deleted token file).
 const {
@@ -443,6 +448,33 @@ onUnmounted(() => {
       </div>
       <p class="mb-3 mt-1.5 text-[12px] text-dim">
         Applies to every terminal on this browser. A directory can pin its own with <code>fontSize</code> in its <code>.mulmoterminal.json</code>.
+      </p>
+
+      <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Terminal scroll speed</h3>
+      <div class="flex items-center gap-2">
+        <button
+          type="button"
+          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-elevated text-fg hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="scrollSpeed <= scrollSpeedMin"
+          aria-label="Decrease terminal scroll speed"
+          @click="nudgeScrollSpeed(-scrollSpeedStep)"
+        >
+          −
+        </button>
+        <span class="min-w-[56px] text-center text-[13px] text-fg" aria-live="polite">{{ scrollSpeed }}×</span>
+        <button
+          type="button"
+          class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border border-border bg-elevated text-fg hover:bg-hover disabled:cursor-not-allowed disabled:opacity-40"
+          :disabled="scrollSpeed >= scrollSpeedMax"
+          aria-label="Increase terminal scroll speed"
+          @click="nudgeScrollSpeed(scrollSpeedStep)"
+        >
+          +
+        </button>
+      </div>
+      <p class="mb-3 mt-1.5 text-[12px] text-dim">
+        How far one wheel notch or trackpad swipe moves the terminal — 1× is the default. Lower it if a two-finger scroll on a Mac trackpad flies past what you
+        were reading. Per browser, and it covers both a shell's scrollback and a full-screen app like Claude Code.
       </p>
 
       <h3 class="mb-2 mt-3.5 text-[12px] font-semibold uppercase tracking-[0.04em] text-muted">Directory appearance</h3>

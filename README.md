@@ -462,7 +462,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 
 ![The Settings modal — theme, notification sound, PR repos, launch commands, and MCP servers](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/settings.png)
 
-*Open it from the ⚙ button in the toolbar. Pick a **theme**, set the **terminal font size**, set a custom **attention sound**, list the repos the cross-repo **PRs & Issues** view should aggregate, add **launch commands** for grid cells, and register your own **MCP servers** — no need to hand-edit the config file. Note that **theme and font size are stored per browser** (they're display preferences, so a phone and a desktop keep their own); the rest live in `~/.mulmoterminal/config.json` and are shared by every client.*
+*Open it from the ⚙ button in the toolbar. Pick a **theme**, set the **terminal font size** and **scroll speed**, set a custom **attention sound**, list the repos the cross-repo **PRs & Issues** view should aggregate, add **launch commands** for grid cells, and register your own **MCP servers** — no need to hand-edit the config file. Note that **theme, font size and scroll speed are stored per browser** (they're display preferences, so a phone and a desktop keep their own); the rest live in `~/.mulmoterminal/config.json` and are shared by every client.*
 
 | Field        | Meaning |
 | ------------ | ------- |
@@ -965,6 +965,10 @@ Favorited collections get their own toolbar buttons.
   **Option** is treated as Meta so Claude's Alt-key bindings work. If your Claude Code is
   rebound so Enter and Shift+Enter behave backwards, flip them with
   [`terminalSubmit`](https://receptron.github.io/mulmoterminal/guide/en/config.html#terminal-submit).
+- **Scroll speed** — one wheel notch or trackpad swipe moves the terminal the same distance
+  whether you're reading a shell's scrollback or a full-screen app like Claude Code. If a
+  two-finger scroll on a Mac trackpad flies past what you were reading, turn **terminal scroll
+  speed** down in Settings (0.25×–3×, per browser — it's a property of the pointing device).
 - **No accidental page zoom** — `Ctrl`+wheel and a trackpad pinch would rescale the whole
   page and drag the layout and the terminal's fit along with it, so both are ignored.
   Keyboard zoom (`Cmd`/`Ctrl` `+` / `-`) still works when you mean it, and a phone's finger

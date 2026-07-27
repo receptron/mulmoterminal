@@ -39,6 +39,25 @@ export const MS_OVERRIDE_ENTRY = "*:Ms=\\E]52;%p1%s;%p2%s\\007";
 // Appended (not set) so tmux's built-in overrides survive.
 const OSC52_MS_OVERRIDE = `,${MS_OVERRIDE_ENTRY}`;
 
+// The wheel inside tmux's own scrollback (copy-mode), one line per report instead of tmux's
+// default FIVE (#978). Nothing else in the stack has a five-line step, so this is what a reader
+// feels as "it jumps a paragraph at a time" while scrolling a long shell output: a plain shell
+// pane has no mouse mode of its own, so tmux's root binding puts the wheel into copy-mode, and
+// `send -X -N 5 scroll-up` is what copy-mode does with it.
+//
+// Only this path changes. A pane running a mouse-tracking program (Claude Code) never reaches
+// copy-mode — tmux forwards the report to the program with `send -M` — so the step size there
+// stays the program's own. The client compensates for the smaller step with a higher notch rate
+// (TRACKPAD_GAIN in src/composables/mouseReports.ts); the two are a matched pair, and changing
+// one alone changes the scroll SPEED, not just its smoothness.
+//
+// Both tables, because which one is live follows `mode-keys` (tmux derives it from $EDITOR), and
+// a user with a vi-ish EDITOR would otherwise keep the five-line jump.
+const WHEEL_SCROLL_BINDINGS: readonly string[] = ["copy-mode", "copy-mode-vi"].flatMap((table) => [
+  `bind -T ${table} WheelUpPane send -X -N 1 scroll-up`,
+  `bind -T ${table} WheelDownPane send -X -N 1 scroll-down`,
+]);
+
 // Minimal config for our server: no status bar (this is a terminal INSIDE a terminal),
 // instant escape, generous scrollback, follow the latest client's size, never destroy a
 // session just because our client detached (that IS the persistence), plus two fixes for
@@ -67,6 +86,7 @@ export const TMUX_CONF_LINES: readonly string[] = [
   // `\007` into a raw BEL — so the capability tmux stores emits `E]52;…` as literal text
   // instead of an OSC 52 sequence. Measured on tmux 3.6a.
   `set -ag terminal-overrides '${OSC52_MS_OVERRIDE}'`,
+  ...WHEEL_SCROLL_BINDINGS,
 ];
 
 export type MsOverridePlan = { kind: "ok" } | { kind: "append" } | { kind: "replace"; index: number };
@@ -97,6 +117,13 @@ export function planMsOverride(showStdout: string): MsOverridePlan {
 function applyLiveTmuxOptions(): void {
   tmux(["set", "-g", "mouse", "on"]);
   tmux(["set", "-g", "set-clipboard", "on"]);
+  // Rebinding is idempotent, so this needs no "is it already ours?" check (unlike the
+  // append-only overrides below). A tmux server started before this shipped keeps the
+  // five-line jump until it is rebound here — it outlives every node restart.
+  for (const table of ["copy-mode", "copy-mode-vi"]) {
+    tmux(["bind-key", "-T", table, "WheelUpPane", "send-keys", "-X", "-N", "1", "scroll-up"]);
+    tmux(["bind-key", "-T", table, "WheelDownPane", "send-keys", "-X", "-N", "1", "scroll-down"]);
+  }
   // Forward OSC 8 hyperlinks to the outer xterm (see TMUX_CONF_LINES). Append only when
   // absent — `set -as` does NOT de-dupe, so an unguarded call grows the list on every restart.
   if (!tmux(["show", "-g", "terminal-features"]).stdout.includes("hyperlinks")) {

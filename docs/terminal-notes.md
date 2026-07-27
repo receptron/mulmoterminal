@@ -107,6 +107,23 @@ change one and change the other (#834).
   - **Wheel** (#737) — xterm's fallback turns it into ↑/↓ arrows, which a TUI binds to input
     history, so scrolling spun the prompt. That fallback is still what an app which never asked
     for tracking gets (and the spec pins it) — the report only replaces it for one that did.
+    **Deltas are accumulated into whole notches** (`wheelNotches`), not reported one per event:
+    a macOS trackpad emits a burst of a few pixels per event, and one detent each scrolled a TUI
+    an order of magnitude faster than the same swipe scrolls the normal buffer (#978). The
+    conversion mirrors xterm's own (`deltaY / cellHeight`, fraction banked across events), so both
+    buffers travel the same distance. An event worth less than a notch is still **consumed** —
+    handing the leftover back would resurrect the ↑/↓ fallback. The user's `terminalScrollSpeed`
+    multiplier scales this and xterm's `scrollSensitivity` together, so one Settings control
+    covers both paths.
+- **The notch rate and tmux's copy-mode step are a matched pair** (#978). Under tmux — which is
+  every persistent session — the wheel report goes to *tmux*, not to the program: a pane with no
+  mouse mode of its own (a plain shell) makes tmux enter copy-mode, whose default is `send -X
+  -N 5 scroll-up`. Five lines per report is the "it jumps a paragraph at a time" complaint. So
+  `WHEEL_SCROLL_BINDINGS` (server/infra/tmux.ts) rebinds it to **one line**, and
+  `TRACKPAD_GAIN = 1.5` (mouseReports.ts) raises the notch rate to keep the same overall speed
+  — 1.5 lines per cell of finger travel. **Change one and the scroll SPEED changes**, not just
+  its smoothness. A pane running a mouse program (Claude Code) never reaches copy-mode (tmux
+  `send -M` forwards the report), so its step is the program's own and only the rate applies.
   - **Click** (#845) — a press and release that stayed put becomes an SGR press/release pair, so
     the app's own click targets ("Jump to bottom", "1 new message") respond. Nothing is
     `preventDefault()`ed, so xterm's selection is untouched.
@@ -213,7 +230,7 @@ looking) — flag them for QA on the release.
 | OSC 52 clipboard | tmux `Ms` override + `set-clipboard on` present (`planMsOverride`) | Claude auto-copy reaches the browser clipboard |
 | File-path links | `registerFilePathLinks` order vs WebLinks; `/api/files/raw` cwd containment | click a generated file path → previews the file |
 | Enter / newline | `terminalSubmit` mapping + `isComposing` guard; `macOptionIsMeta` | Enter submits, Shift+Enter newlines; IME confirm not eaten; both `cr` and `esc-cr` |
-| Mouse / wheel | `guardMouseTracking` swallow set (1000/1002/1003/1006); wheel→SGR in alt buffer | wheel scrolls transcript (not prompt history); drag selects, doesn't emit mouse reports |
+| Mouse / wheel | `guardMouseTracking` swallow set (1000/1002/1003/1006); wheel→SGR in alt buffer; `wheelNotches` accumulation vs xterm's own `consumeWheelEvent` | wheel scrolls transcript (not prompt history); drag selects, doesn't emit mouse reports; a trackpad swipe moves a TUI about as far as it moves the scrollback |
 | Reattach | `stripTerminalQueries` patterns; replay buffer size | reattaching a session doesn't leak `0;276;0c`-style junk; scrollback survives |
 
 **Fast isolation techniques** (learned the hard way):

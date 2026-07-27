@@ -50,6 +50,23 @@ describe("TMUX_CONF_LINES", () => {
     expect(TMUX_CONF_LINES.some((l) => l.includes("terminal-overrides") && l.includes("Ms="))).toBe(true);
   });
 
+  // #978: tmux's copy-mode wheel default is `send -X -N 5 scroll-up` — a plain shell pane has no
+  // mouse mode, so the wheel enters copy-mode and the scrollback moved five lines at a time,
+  // which reads as a jerky paragraph-sized jump. One line per report is the smooth end of it; the
+  // client's TRACKPAD_GAIN is calibrated against this number, so the two change together.
+  it("scrolls copy-mode one line per wheel report, not tmux's default five", () => {
+    ["copy-mode", "copy-mode-vi"].forEach((table) => {
+      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelUpPane send -X -N 1 scroll-up`);
+      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelDownPane send -X -N 1 scroll-down`);
+    });
+  });
+
+  // Both tables, because which one is live follows `mode-keys`, which tmux derives from $EDITOR:
+  // binding only `copy-mode` leaves anyone with a vi-ish EDITOR on the five-line jump.
+  it("binds both copy-mode tables, since mode-keys decides which is live", () => {
+    expect(TMUX_CONF_LINES.filter((l) => l.includes("WheelUpPane"))).toHaveLength(2);
+  });
+
   // #783: tmux strips OSC 8 hyperlinks (Claude's statusline `PR #NNNN`) unless told the outer
   // terminal has the `hyperlinks` feature — same shape as the Ms override above.
   it("forwards OSC 8 hyperlinks to the outer terminal", () => {

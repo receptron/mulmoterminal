@@ -26,7 +26,7 @@
 // (`cell-<uid>`), the single view's `single`, or an ephemeral id for command/Run
 // terminals (which are NOT persisted — their process is unresumable, so their slot
 // is released on unmount like before).
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
@@ -46,6 +46,7 @@ import { enterKeyOverride, submitSequence, DEFAULT_TERMINAL_SUBMIT_MODE, type En
 import { TERMINAL_FONT_SIZE_DEFAULT } from "../../common/terminalFontSize";
 import { TERMINAL_FONT_FAMILY_DEFAULT } from "../../common/terminalFontFamily";
 import { getTerminalSubmitMode } from "./terminalSubmitMode";
+import { getTerminalScrollSpeed } from "./useTerminalScrollSpeed";
 import { clipboardActionFor, selectionToCopy } from "../../common/terminalClipboard";
 import { getActiveKeymap } from "./activeKeymap";
 import { isCopyOnSelectEnabled } from "./copyOnSelect";
@@ -321,7 +322,7 @@ function guardMouseTracking(term: Terminal, swallowedMouseModes: Set<number>): v
     clearResetModes(swallowedMouseModes, params);
     return false;
   });
-  guardMouseWheel(term, swallowedMouseModes);
+  guardMouseWheel(term, swallowedMouseModes, getTerminalScrollSpeed);
 }
 
 // Terminal input -> the slot's CURRENT socket (survives reconnects: `c.ws` is re-read
@@ -370,6 +371,10 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
     cursorBlink: true,
     fontSize: font.size,
     fontFamily: font.family,
+    // The scrollback half of the scroll-speed setting (the alternate buffer's half is the wheel
+    // accumulator in ./terminalMouseInput). Read here rather than passed in: it is one per-browser
+    // value for every terminal, and setScrollSpeed() below carries a change to the live ones.
+    scrollSensitivity: getTerminalScrollSpeed(),
     // Treat macOS Option as Meta so Claude's Alt bindings reach the PTY — Alt+Enter
     // (newline), Alt+B/F (word nav), Alt+Backspace (delete word). The cost is Option
     // dead-key accent entry (é etc.), which a coding terminal doesn't need.
@@ -842,3 +847,19 @@ export function setFont(key: string, font: TerminalFont) {
   applyFont(c, font);
   fitAndSyncSize(c);
 }
+
+// The scroll speed changes nothing about the cell metrics, so unlike setFont this needs no
+// re-fit. Applied to EVERY slot, not one: the setting is per browser, and a terminal in another
+// grid cell that kept the old speed would look like the setting only half worked. The alternate
+// buffer's wheel handler reads the same value per event, so it needs no push.
+export function setScrollSpeed(speed: number) {
+  conns.forEach((c) => {
+    c.term.options.scrollSensitivity = speed;
+  });
+}
+
+// Watched here, at module scope, rather than in Terminal.vue the way the font is: the font is a
+// per-slot value (a directory can pin its own), the scroll speed is one value for the browser, so
+// a per-component watch would run the same global update once per open terminal. This manager
+// outlives every component, which is exactly the lifetime the watch wants.
+watch(getTerminalScrollSpeed, setScrollSpeed);

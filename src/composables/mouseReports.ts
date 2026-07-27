@@ -56,6 +56,77 @@ export function wheelReportSequence(deltaY: number, col: number, row: number): s
   return sgrReport(deltaY < 0 ? WHEEL_UP_BUTTON : WHEEL_DOWN_BUTTON, col, row);
 }
 
+// ── Wheel notches ────────────────────────────────────────────────────────────────────────
+// A wheel MOUSE emits one event per detent, so "one event, one report" is right for it. A
+// macOS trackpad does not: a two-finger swipe emits a burst of dozens of pixel-delta events
+// (plus momentum), and reporting each one as a detent handed a TUI ~3 lines per event — a
+// gentle swipe jumped a hundred lines and the reader lost their place (#978).
+//
+// The repair is the accumulation xterm does for its own scrollback and which the #737 swallow
+// bypasses: convert a delta to LINES, bank the fraction, and report only whole notches. Both
+// buffers then scroll at the same rate, and one multiplier (`speed`) tunes both.
+const DOM_DELTA_LINE = 1;
+const DOM_DELTA_PAGE = 2;
+// A trackpad's per-event delta is small; a wheel's is large (macOS/Chrome report ~120 per
+// detent). Below this threshold the gesture is treated as a trackpad swipe, which is the
+// distinction xterm itself draws rather than trying to identify the device.
+const TRACKPAD_PIXEL_DELTA = 50;
+// How many notches a swipe is worth per cell of finger travel. Above 1 because a notch is not a
+// line: what receives these reports is tmux's copy-mode, bound to ONE line per report (#978, see
+// WHEEL_SCROLL_BINDINGS in server/infra/tmux.ts), and a swipe should move the text a little
+// further than the finger — 1.5 lines per cell is what the previous five-lines-per-notch rate
+// worked out to, which is the speed this is calibrated to keep.
+//
+// The pair matters: drop tmux to one line without raising this and scrolling gets five times
+// slower; raise this without dropping tmux and it gets five times faster. Whatever a program
+// with its own mouse mode (Claude Code) does per report is its own, and this scales that too.
+const TRACKPAD_GAIN = 1.5;
+// A ceiling on one event's worth of reports: a page-mode delta, or a momentum spike at 3x speed,
+// would otherwise emit hundreds of them in one go — the runaway this fix exists to prevent. Set
+// above a screenful so nothing an ordinary gesture produces ever reaches it.
+const MAX_NOTCHES_PER_EVENT = 24;
+
+/** The banked fraction of a notch, per terminal. Wheel bursts only add up if what's left over
+ *  from one event survives into the next. */
+export interface WheelTicker {
+  residual: number;
+}
+
+export const createWheelTicker = (): WheelTicker => ({ residual: 0 });
+
+export interface WheelDelta {
+  deltaY: number;
+  deltaMode: number;
+}
+
+// `cellHeightPx <= 0` means the terminal isn't laid out yet, so pixels can't be converted to
+// lines. That falls back to the old one-event-one-notch behaviour rather than to silence: a
+// scroll that does nothing is worse than one that moves too far.
+function linesScrolled(ev: WheelDelta, cellHeightPx: number, rows: number): number {
+  if (ev.deltaMode === DOM_DELTA_PAGE) return ev.deltaY * rows;
+  if (ev.deltaMode === DOM_DELTA_LINE) return ev.deltaY;
+  // Anything else is pixels — DOM_DELTA_PIXEL is the only mode left, and a source that reports
+  // no mode at all is treated as one rather than as no motion, which would drop the event.
+  if (cellHeightPx <= 0) return Math.sign(ev.deltaY);
+  const lines = ev.deltaY / cellHeightPx;
+  return Math.abs(ev.deltaY) < TRACKPAD_PIXEL_DELTA ? lines * TRACKPAD_GAIN : lines;
+}
+
+/** How many wheel notches this event is worth, signed (negative = up). Fractions are banked in
+ *  `ticker` until they add up to a whole notch, so a burst of tiny trackpad deltas scrolls once
+ *  rather than once per event. `speed` is the user's multiplier (1 = xterm's own rate). */
+export function wheelNotches(ticker: WheelTicker, ev: WheelDelta, cellHeightPx: number, rows: number, speed: number): number {
+  const lines = linesScrolled(ev, cellHeightPx, rows) * speed;
+  if (!Number.isFinite(lines) || lines === 0) return 0;
+  // A reversal starts fresh: the fraction banked going down is not credit towards going up, and
+  // spending it there would make the first flick back overshoot.
+  if (Math.sign(lines) !== Math.sign(ticker.residual)) ticker.residual = 0;
+  ticker.residual += lines;
+  const notches = Math.trunc(ticker.residual);
+  ticker.residual -= notches;
+  return Math.max(-MAX_NOTCHES_PER_EVENT, Math.min(MAX_NOTCHES_PER_EVENT, notches));
+}
+
 /** The press/release pair for a main-button click on a 1-based cell. Both are sent because
  *  which of the two a TUI acts on is its own choice — a real terminal delivers both. */
 export function clickReportSequences(col: number, row: number): [string, string] {

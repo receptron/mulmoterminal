@@ -3,7 +3,7 @@
 // (what the app wants, where the pointer is, click vs drag, the byte sequences) are pure and
 // live in ./mouseReports; what is here is the wiring onto a live Terminal.
 import type { Terminal } from "@xterm/xterm";
-import { cellFromPoint, clickReportSequences, isClickGesture, wantsMouseReports, wheelReportSequence } from "./mouseReports";
+import { cellFromPoint, clickReportSequences, createWheelTicker, isClickGesture, wantsMouseReports, wheelNotches, wheelReportSequence } from "./mouseReports";
 import type { GridCell, PointerPosition } from "./mouseReports";
 
 // xterm's Linkifier marks the screen element while a link is under the pointer. That click
@@ -28,17 +28,35 @@ function cellUnderPointer(term: Terminal, pointer: PointerPosition): GridCell {
   return cellFromPoint(screen.getBoundingClientRect(), term.cols, term.rows, pointer);
 }
 
-/** Wheel -> the SGR wheel report the app asked for. Without this xterm converts the wheel into
+// xterm exposes no cell height, so it comes off the screen element's own box — the same
+// measurement the cell mapping uses. 0 means "not laid out yet", which wheelNotches reads as
+// "can't convert pixels to lines".
+function cellHeightOf(term: Terminal): number {
+  const screen = screenElementOf(term);
+  if (!screen || term.rows <= 0) return 0;
+  return screen.getBoundingClientRect().height / term.rows;
+}
+
+/** Wheel -> the SGR wheel reports the app asked for. Without this xterm converts the wheel into
  *  arrow keys for an alt-buffer app, which a TUI binds to input history — so scrolling spun the
- *  prompt history instead of the transcript (#737). */
-export function guardMouseWheel(term: Terminal, swallowedMouseModes: ReadonlySet<number>): void {
+ *  prompt history instead of the transcript (#737).
+ *
+ *  Deltas are accumulated into whole notches (see wheelNotches) rather than reported one per
+ *  event: a macOS trackpad emits a burst per swipe, and one report each scrolled a TUI far
+ *  faster than the same gesture scrolls the scrollback (#978). `scrollSpeed` is read per event,
+ *  so changing it in Settings applies to terminals that are already open. */
+export function guardMouseWheel(term: Terminal, swallowedMouseModes: ReadonlySet<number>, scrollSpeed: () => number): void {
+  const ticker = createWheelTicker();
   term.attachCustomWheelEventHandler((ev) => {
     if (!reportsMouseToApp(term, swallowedMouseModes)) return true;
-    const cell = cellUnderPointer(term, ev);
-    const seq = wheelReportSequence(ev.deltaY, cell.col, cell.row);
-    if (!seq) return true;
-    term.input(seq, false);
+    if (ev.deltaY === 0) return true;
+    const notches = wheelNotches(ticker, ev, cellHeightOf(term), term.rows, scrollSpeed());
+    // Consumed even at zero notches: this event's motion is banked, and handing the leftover
+    // back to xterm would resurrect the ↑/↓ fallback #737 exists to replace.
     ev.preventDefault();
+    const cell = cellUnderPointer(term, ev);
+    const seq = wheelReportSequence(notches, cell.col, cell.row);
+    if (seq) for (let i = 0; i < Math.abs(notches); i++) term.input(seq, false);
     return false;
   });
 }
