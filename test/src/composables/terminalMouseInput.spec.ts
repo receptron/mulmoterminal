@@ -240,6 +240,20 @@ describe("guardMouseWheel on a real terminal", () => {
     expect(sent).toEqual([]);
   });
 
+  // The bank is scoped to one stretch of tracked scrolling. A fraction left over when the app quit
+  // (or the buffer went back to normal) must not sit there and pay out on the first tiny event the
+  // NEXT app sees — that app would scroll from a gesture that ended before it started.
+  it("forgets the banked fraction across a trip through the normal buffer", async () => {
+    const { term, screen, sent } = await openWiredTerminal();
+    for (let i = 0; i < 6; i++) wheel(screen, 2, 115, 250); // 0.9 notches banked, none paid
+    expect(sent).toEqual([]);
+    await write(term, ALT_BUFFER_OFF);
+    wheel(screen, 2, 115, 250); // in the normal buffer: xterm's, and it empties the bank
+    await write(term, ALT_BUFFER_ON);
+    wheel(screen, 2, 115, 250); // 0.15 notches — on a stale 0.9 bank this would report
+    expect(sent).toEqual([]);
+  });
+
   // Not silence but deference: for an app that asked for nothing, xterm's own alt-buffer fallback
   // turns the wheel into ↓. That fallback is exactly what #737 is about — a TUI binds the arrows
   // to input history, so scrolling spun the prompt. It is only tolerable for an app that never

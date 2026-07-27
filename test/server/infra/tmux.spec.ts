@@ -56,8 +56,25 @@ describe("TMUX_CONF_LINES", () => {
   // client's TRACKPAD_GAIN is calibrated against this number, so the two change together.
   it("scrolls copy-mode one line per wheel report, not tmux's default five", () => {
     ["copy-mode", "copy-mode-vi"].forEach((table) => {
-      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelUpPane send -X -N 1 scroll-up`);
-      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelDownPane send -X -N 1 scroll-down`);
+      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelUpPane select-pane \\; send -X -N 1 scroll-up`);
+      expect(TMUX_CONF_LINES).toContain(`bind -T ${table} WheelDownPane select-pane \\; send -X -N 1 scroll-down`);
+    });
+  });
+
+  // `send -X` acts on the ACTIVE pane, so tmux's own default selects the pane under the pointer
+  // first. Dropping that (the tempting way to write "just change the 5 to a 1") scrolls the
+  // focused pane while the pointer is over another split — a worse bug than the one being fixed.
+  it("keeps tmux's pane selection, so a split under the pointer is the one that scrolls", () => {
+    TMUX_CONF_LINES.filter((l) => l.includes("Wheel")).forEach((line) => {
+      expect(line).toContain("select-pane \\;");
+    });
+  });
+
+  // In a conf FILE the separator must be escaped: a bare `;` ends the bind-key, leaving the key
+  // bound to `select-pane` alone and running the scroll once at startup.
+  it("escapes the command separator so the bind carries both commands", () => {
+    TMUX_CONF_LINES.filter((l) => l.includes("Wheel")).forEach((line) => {
+      expect(line).not.toMatch(/[^\\];/);
     });
   });
 

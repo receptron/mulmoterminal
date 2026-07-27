@@ -48,7 +48,14 @@ function cellHeightOf(term: Terminal): number {
 export function guardMouseWheel(term: Terminal, swallowedMouseModes: ReadonlySet<number>, scrollSpeed: () => number): void {
   const ticker = createWheelTicker();
   term.attachCustomWheelEventHandler((ev) => {
-    if (!reportsMouseToApp(term, swallowedMouseModes)) return true;
+    if (!reportsMouseToApp(term, swallowedMouseModes)) {
+      // The bank belongs to ONE stretch of tracked scrolling. Kept across the gap, a fraction left
+      // over before an app exited (or before the buffer went back to normal) would pay out on the
+      // first tiny event the NEXT app sees — a scroll it didn't ask for, from a gesture that was
+      // over. Nothing is lost: an unpaid fraction is by definition less than one notch.
+      ticker.residual = 0;
+      return true;
+    }
     if (ev.deltaY === 0) return true;
     const notches = wheelNotches(ticker, ev, cellHeightOf(term), term.rows, scrollSpeed());
     // Consumed even at zero notches: this event's motion is banked, and handing the leftover

@@ -53,10 +53,24 @@ const OSC52_MS_OVERRIDE = `,${MS_OVERRIDE_ENTRY}`;
 //
 // Both tables, because which one is live follows `mode-keys` (tmux derives it from $EDITOR), and
 // a user with a vi-ish EDITOR would otherwise keep the five-line jump.
-const WHEEL_SCROLL_BINDINGS: readonly string[] = ["copy-mode", "copy-mode-vi"].flatMap((table) => [
-  `bind -T ${table} WheelUpPane send -X -N 1 scroll-up`,
-  `bind -T ${table} WheelDownPane send -X -N 1 scroll-down`,
-]);
+//
+// `select-pane` is kept from tmux's own default: `send -X` acts on the ACTIVE pane, so dropping it
+// would scroll the focused pane when the pointer is over a different split. Nothing this app
+// creates is split, but a user can split one by hand, and the wrong pane scrolling is a worse bug
+// than the one being fixed.
+const WHEEL_SCROLL_TABLES = ["copy-mode", "copy-mode-vi"] as const;
+const WHEEL_SCROLL_KEYS = [
+  { key: "WheelUpPane", command: "select-pane ; send -X -N 1 scroll-up" },
+  { key: "WheelDownPane", command: "select-pane ; send -X -N 1 scroll-down" },
+] as const;
+
+// A conf FILE needs the command separator escaped (`\;`), or tmux ends the bind-key there and runs
+// the rest as its own command — which binds the key to `select-pane` alone. Passing the command as
+// ONE argument is what does the same job for the live rebinding below (an argv `;` is a separator
+// there too, and `\;` only reaches tmux as one because a shell would have unescaped it).
+const WHEEL_SCROLL_BINDINGS: readonly string[] = WHEEL_SCROLL_TABLES.flatMap((table) =>
+  WHEEL_SCROLL_KEYS.map(({ key, command }) => `bind -T ${table} ${key} ${command.replace(" ; ", " \\; ")}`),
+);
 
 // Minimal config for our server: no status bar (this is a terminal INSIDE a terminal),
 // instant escape, generous scrollback, follow the latest client's size, never destroy a
@@ -120,9 +134,8 @@ function applyLiveTmuxOptions(): void {
   // Rebinding is idempotent, so this needs no "is it already ours?" check (unlike the
   // append-only overrides below). A tmux server started before this shipped keeps the
   // five-line jump until it is rebound here — it outlives every node restart.
-  for (const table of ["copy-mode", "copy-mode-vi"]) {
-    tmux(["bind-key", "-T", table, "WheelUpPane", "send-keys", "-X", "-N", "1", "scroll-up"]);
-    tmux(["bind-key", "-T", table, "WheelDownPane", "send-keys", "-X", "-N", "1", "scroll-down"]);
+  for (const table of WHEEL_SCROLL_TABLES) {
+    for (const { key, command } of WHEEL_SCROLL_KEYS) tmux(["bind-key", "-T", table, key, command]);
   }
   // Forward OSC 8 hyperlinks to the outer xterm (see TMUX_CONF_LINES). Append only when
   // absent — `set -as` does NOT de-dupe, so an unguarded call grows the list on every restart.
