@@ -104,17 +104,58 @@ describe("sanitizeDocPrefix", () => {
 describe("buildDocPath", () => {
   const rand = "ab12cd34";
 
+  // buildDocPath reads the LOCAL calendar (getFullYear/getMonth), because a document written at
+  // 16:00 on Feb 28 in California belongs in its author's /02/, not in /03/ because it was
+  // already past midnight in London. So the fixtures have to be built in local time too.
+  //
+  // `new Date("2026-03-01T00:00:00Z")` does NOT mean "March 1st" — it is an instant, and midnight
+  // UTC on the 1st is still the PREVIOUS month everywhere west of Greenwich. Written that way,
+  // this suite passed in CI (UTC) and failed on a developer machine in US/Pacific.
+  //
+  // Month is 1-based here; Date's own argument is not, which is the other half of the trap.
+  const localDate = (year: number, month: number, day: number) => new Date(year, month - 1, day);
+
   it("composes a dated path under the documents directory", () => {
-    expect(buildDocPath("notes", new Date("2026-07-23T00:00:00Z"), rand)).toBe(`${DOCS_DIR}/2026/07/notes-${rand}.md`);
+    expect(buildDocPath("notes", localDate(2026, 7, 23), rand)).toBe(`${DOCS_DIR}/2026/07/notes-${rand}.md`);
   });
 
   it("zero-pads the month", () => {
-    expect(buildDocPath("x", new Date("2026-03-01T00:00:00Z"), rand)).toContain("/2026/03/");
+    expect(buildDocPath("x", localDate(2026, 3, 1), rand)).toContain("/2026/03/");
   });
 
   // The whole chain: whatever the title, the result is a path isDocPath will accept — which
   // is what keeps the write inside the workspace and lets the saved doc load afterwards.
   it.each([["../../escape"], ["foo/bar"], [""], ["!!!"], ["a".repeat(200)]])("always produces a path isDocPath accepts, for %j", (title) => {
-    expect(isDocPath(buildDocPath(title, new Date("2026-07-23T00:00:00Z"), rand))).toBe(true);
+    expect(isDocPath(buildDocPath(title, localDate(2026, 7, 23), rand))).toBe(true);
+  });
+
+  // The above only prove the fixtures are right on THIS machine. Since the whole defect was a
+  // clock the suite never controlled, drive the real function under both extremes: a date is
+  // filed by its local calendar or not, and either way every machine has to agree.
+  describe("files by the local calendar, wherever the machine is", () => {
+    function underTz<T>(tz: string, fn: () => T): T {
+      const before = process.env.TZ;
+      process.env.TZ = tz;
+      try {
+        return fn();
+      } finally {
+        // Restore rather than delete: a TZ this process inherited must survive the test.
+        if (before === undefined) delete process.env.TZ;
+        else process.env.TZ = before;
+      }
+    }
+
+    // UTC-14 through UTC+14 — the two ends that a UTC-only CI can never exercise.
+    it.each([["Pacific/Midway"], ["Pacific/Kiritimati"], ["UTC"]])("puts a local March 1st under /2026/03/ in %s", (tz) => {
+      expect(underTz(tz, () => buildDocPath("x", localDate(2026, 3, 1), rand))).toContain("/2026/03/");
+    });
+
+    // The converse, stated as the behaviour rather than an accident: the same INSTANT is filed
+    // under different months by design, because the two authors are on different days.
+    it("files one instant by each author's own month", () => {
+      const midnightUtcMar1 = new Date("2026-03-01T00:00:00Z");
+      expect(underTz("America/Los_Angeles", () => buildDocPath("x", midnightUtcMar1, rand))).toContain("/2026/02/");
+      expect(underTz("Asia/Tokyo", () => buildDocPath("x", midnightUtcMar1, rand))).toContain("/2026/03/");
+    });
   });
 });
