@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { TOOL_GROUPS, isToolGroup, groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOLS, CANVAS_TOOL_GROUP } from "../../common/toolGroups.js";
+import { TOOL_GROUPS, isToolGroup, groupOfTool, toolsInGroup, toolGroupServerId, AUTO_ALLOWED_TOOLS, CANVAS_TOOL_GROUP } from "../../common/toolGroups.js";
 
 describe("tool groups", () => {
   it("classifies the drawing tools as render", () => {
@@ -20,6 +20,21 @@ describe("tool groups", () => {
     expect(groupOfTool("google")).toBe("external");
     expect(groupOfTool("readXPost")).toBe("external");
     expect(groupOfTool("searchX")).toBe("external");
+  });
+
+  // The Canvas panel's empty state is built from this, so a group that under-reports its members
+  // silently drops a tool from the only place the user can read about it.
+  it("lists a group's members, and agrees with groupOfTool", () => {
+    const render = toolsInGroup("render");
+    expect(render).toContain("presentHtml");
+    expect(render).toContain("presentChart");
+    for (const tool of render) expect(groupOfTool(tool)).toBe("render");
+    for (const group of TOOL_GROUPS) expect(toolsInGroup(group).length).toBeGreaterThan(0);
+  });
+
+  it("puts no tool in two groups", () => {
+    const all = TOOL_GROUPS.flatMap((group) => toolsInGroup(group));
+    expect(new Set(all).size).toBe(all.length);
   });
 
   // Absent on purpose, not by omission — it starts another session, which no group describes.

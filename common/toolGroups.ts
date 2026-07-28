@@ -60,6 +60,11 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
 
 export const groupOfTool = (toolName: string): ToolGroup | null => GROUP_BY_TOOL.get(toolName) ?? null;
 
+// Every tool in a group, in the order declared above. The Canvas panel's empty state names them,
+// so a tool added to a group here reaches that list without a second edit — the list had been
+// written out by hand and named two of the four.
+export const toolsInGroup = (group: ToolGroup): string[] => [...GROUP_BY_TOOL].filter(([, g]) => g === group).map(([name]) => name);
+
 // The MCP server id a group is expected to be registered under. `--allowedTools` matches on
 // `mcp__<server id>__<tool>`, and the id comes from the USER's config key — so this is a
 // convention the enable-it-for-this-folder affordance has to write, and a user who registers

@@ -4,8 +4,8 @@ import GuiPanel from "../../../src/components/GuiPanel.vue";
 
 // The Canvas pane outlives the cell it was opened on: walking the zoom lands it on a launcher
 // with no session, or on a directory whose agent has no drawing tools. Its normal empty state
-// says "ask Claude to use presentDocument" — an instruction that cannot be followed in either
-// case, which is worse than saying nothing.
+// says "ask Claude to use one of these" and lists them — an instruction that cannot be followed
+// in either case, which is worse than saying nothing.
 vi.mock("../../../src/composables/usePubSub", () => ({ usePubSub: () => ({ subscribe: () => () => {} }) }));
 
 const mountPanel = (props: Record<string, unknown> = {}) =>
