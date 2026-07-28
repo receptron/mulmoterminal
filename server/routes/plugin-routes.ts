@@ -44,7 +44,7 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
     try {
       runWithHiddenMarker(hidden, sessionId, hiddenSessions, () => {
         const mode = spawnModeFor(agent, draft);
-        if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, codexifySkillSeed(message));
+        if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, { initialPrompt: codexifySkillSeed(message) });
         else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
         else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
       });

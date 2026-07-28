@@ -8,6 +8,7 @@
 // so the precedence rule below could not be tested without booting the server (#548).
 import { rewriteLoopbackForDocker } from "../infra/sandbox.js";
 import type { UserMcpServer } from "../config/config-schema.js";
+import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 
 export interface McpConfigInput {
   sessionId: string;
@@ -35,6 +36,32 @@ const GUI_SERVER_ID = "mulmoterminal-gui";
 // simply never reads these, and a session that starts in one view is not worth special-casing.
 export function guiMcpEnv(sessionId: string, port: string | number): Record<string, string> {
   return { MULMOTERMINAL_PORT: String(port), MULMOTERMINAL_SESSION_ID: sessionId };
+}
+
+// The same two surfaces, spelled for CODEX, which takes them as `-c mcp_servers.<id>.url=` at
+// spawn instead of reading a config file. It has no `${VAR}` expansion, so unlike the template
+// above these are resolved here — which is possible precisely because they are built per spawn.
+//
+// The GROUPS are the directory's, read from Claude Code's config by the caller: one switch in the
+// launcher, both agents. A grid cell whose directory registered nothing gets an empty list and
+// therefore no GUI tools, which is what it had before.
+export function codexGuiMcpServers({
+  sessionId,
+  host = DEFAULT_HOST,
+  port,
+  groups,
+  allTools,
+}: {
+  sessionId: string;
+  host?: string;
+  port: string | number;
+  groups: readonly ToolGroup[];
+  /** The single view, which carries every tool on one URL rather than a URL per group. */
+  allTools: boolean;
+}): { id: string; url: string }[] {
+  const base = `http://${host}:${port}/api/mcp`;
+  if (allTools) return [{ id: GUI_SERVER_ID, url: `${base}/${sessionId}` }];
+  return groups.map((group) => ({ id: toolGroupServerId(group), url: `${base}/${group}/${sessionId}` }));
 }
 
 export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers, sandbox = false }: McpConfigInput): string {

@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 
-import { mcpConfigJson, guiMcpEnv } from "../../../server/session/mcp-config.js";
+import { mcpConfigJson, guiMcpEnv, codexGuiMcpServers } from "../../../server/session/mcp-config.js";
 import { SANDBOX_HOST } from "../../../server/infra/sandbox.js";
+import { guiMcpUrlTemplate } from "../../../server/infra/gui-mcp-registration.js";
 
 const SESSION = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const GUI = "mulmoterminal-gui";
@@ -98,5 +99,43 @@ describe("guiMcpEnv", () => {
 
   it("stringifies a port given as a string too", () => {
     expect(guiMcpEnv("abc-123", "8080").MULMOTERMINAL_PORT).toBe("8080");
+  });
+});
+
+// codex takes its MCP servers as `-c mcp_servers.<id>.url=` at spawn rather than from a config
+// file, and has no `${VAR}` expansion — so unlike claude's grid template these are resolved here.
+// The two agents must land on the SAME urls: the group URL is what tells the server a session has
+// that group (see mcp-routes), and a codex cell that spelled it differently would light no Canvas.
+describe("codexGuiMcpServers", () => {
+  it("gives the single view the all-tools url under the gui server id", () => {
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: [], allTools: true })).toEqual([
+      { id: GUI, url: `http://127.0.0.1:34567/api/mcp/${SESSION}` },
+    ]);
+  });
+
+  // The single view carries every tool on one URL, so a group list is not consulted there —
+  // passing both must not produce five servers.
+  it("ignores the groups when the whole GUI MCP is attached", () => {
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: ["render", "media"], allTools: true })).toHaveLength(1);
+  });
+
+  it("gives a grid cell one url per registered group", () => {
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: ["render", "media"], allTools: false })).toEqual([
+      { id: "mulmoterminal-render", url: `http://127.0.0.1:34567/api/mcp/render/${SESSION}` },
+      { id: "mulmoterminal-media", url: `http://127.0.0.1:34567/api/mcp/media/${SESSION}` },
+    ]);
+  });
+
+  // The url claude's own registration expands to, modulo the two values it takes from the
+  // environment. Spelled out rather than derived, so a change to either side shows up here.
+  it("matches the shape claude's grid template expands to", () => {
+    const [{ url }] = codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: ["render"], allTools: false });
+    expect(guiMcpUrlTemplate("render").replace("${MULMOTERMINAL_PORT}", "34567").replace("${MULMOTERMINAL_SESSION_ID}", SESSION)).toBe(url);
+  });
+
+  // Nothing registered means no GUI tools, which is exactly what a grid codex cell had before
+  // the groups were wired — not a silent fallback to everything.
+  it("gives a directory that registered nothing no servers at all", () => {
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: [], allTools: false })).toEqual([]);
   });
 });

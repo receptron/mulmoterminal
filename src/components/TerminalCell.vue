@@ -1742,12 +1742,15 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <ModelPicker v-if="agent === 'claude'" v-model="launchChoice" />
         <!-- Canvas is a per-DIRECTORY registration in Claude Code's own MCP config, not a
              per-launch choice — but it only takes effect when a session starts, so this is
-             where it belongs: decided before the thing it configures exists. Claude only;
-             codex reaches the GUI tools by another route.
+             where it belongs: decided before the thing it configures exists.
+             BOTH agents: claude reads that config itself, and a codex cell is handed the same
+             groups as resolved URLs at spawn (server/session/spawn-codex.ts), so one switch
+             answers for both. It is still Claude Code's file — writing it needs the `claude`
+             CLI on PATH, which is why a failure here says so rather than silently doing nothing.
              One row per Canvas group: both draw into the same pane, and they are separate
              switches because a media call is slow, paid and writes files where a render call
              stops at the pane (see common/toolGroups.ts). -->
-        <template v-if="agent === 'claude' && canvasDir">
+        <template v-if="canvasDir">
           <!-- The hover names the server id and its tools (canvasTitle); it sits on the ROW so
                the text is reachable from the label as well as the box. -->
           <label

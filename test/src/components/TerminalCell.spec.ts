@@ -1921,4 +1921,31 @@ describe("TerminalCell", () => {
     expect(posted).toHaveLength(2);
     expect(posted.map((body) => body.cwd)).toEqual(["/home/me/alpha", "/home/me/alpha"]);
   });
+
+  // The switch writes Claude Code's per-folder MCP config, but it is no longer only claude's:
+  // a codex grid cell is handed the SAME groups as resolved `-c mcp_servers.*` urls at spawn
+  // (server/session/spawn-codex.ts). Hiding the rows on codex left that path with no way to be
+  // turned on from the cell that uses it.
+  it("offers the Canvas switches for codex as well as claude", async () => {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) return { ok: true, json: async () => ({ groups: ["render"] }) };
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, worktrees: [] }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/proj", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null);
+    await flushPromises();
+    const codexButton = w.findAll('[role="radio"]').find((b) => b.text() === "Codex");
+    expect(codexButton).toBeDefined();
+    await codexButton?.trigger("click");
+    await nextTick();
+
+    expect(w.find('[data-testid="cell-canvas-toggle-render"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-canvas-toggle-media"]').exists()).toBe(true);
+    // And it reads the same registration claude's rows do.
+    expect((w.find('[data-testid="cell-canvas-toggle-render"]').element as HTMLInputElement).checked).toBe(true);
+  });
 });

@@ -208,7 +208,7 @@ describe.skipIf(!isWindows)("spawnPty on Windows", () => {
   // escaping". That stopped being true when a `.cmd`-installed codex started going through
   // cmd.exe (#801): lose those quotes and the TOML value is no longer a string.
   it("round-trips codex's quoted TOML overrides through a .cmd shim", async () => {
-    const args = buildCodexArgs({ resume: null, model: "gpt-5", guiMcpUrl: "http://127.0.0.1:34567/api/mcp/abc-123" });
+    const args = buildCodexArgs({ resume: null, model: "gpt-5", guiMcpServers: [{ id: "mulmoterminal-gui", url: "http://127.0.0.1:34567/api/mcp/abc-123" }] });
     expect(args.some((a) => a.includes('"'))).toBe(true); // the case only exists while they are quoted
 
     rmSync(argsOut, { force: true });

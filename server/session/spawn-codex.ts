@@ -4,6 +4,8 @@
 import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
 import { buildCodexArgs } from "../agents/codex-args.js";
+import type { ToolGroup } from "../../common/toolGroups.js";
+import { codexGuiMcpServers } from "./mcp-config.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "../agents/codex-session.js";
 import { codexRolloutPath } from "../agents/codex-sessions.js";
 import { trackCodexActivity } from "./codex-activity-track.js";
@@ -61,14 +63,27 @@ export function createCodexSpawner(deps: SpawnDeps) {
     resumeRolloutId: string | null,
     cwd: string,
     attachGuiMcp: boolean,
-    initialPrompt: string | null,
+    // The two things only some callers have. An object rather than two more positional
+    // arguments: seven of those is past the point where a call site can be read.
+    options: {
+      /** Typed into codex's input box once it settles, for a session started to run something. */
+      initialPrompt?: string | null;
+      /** The tool groups this cell's DIRECTORY has registered, for a grid cell (gui=0). Read by
+       *  the caller because the lookup reads Claude Code's config files, and this is sync. */
+      mcpGroups?: readonly ToolGroup[];
+    } = {},
   ): PtyEntry {
+    const { initialPrompt = null, mcpGroups = [] } = options;
     const root = codexSessionsRoot();
     const before = snapshotSessions(root);
-    // Single view: point codex at the in-process GUI MCP (same per-session URL as claude's) so it
-    // can drive the GUI panel. Grid dev terminals pass gui=0 → no MCP.
-    const guiMcpUrl = attachGuiMcp ? `http://127.0.0.1:${PORT}/api/mcp/${sessionId}` : null;
-    const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpUrl });
+    // Two surfaces, the same two claude has:
+    //   single view (gui) — the whole GUI MCP on one per-session URL.
+    //   grid cell (gui=0) — one URL per tool group the DIRECTORY registered, which the caller
+    //     read from the same config claude's own switches write (see the launcher's Canvas
+    //     rows). codex cannot read that config itself, so the groups arrive resolved here.
+    // A grid cell whose directory registered nothing gets no MCP at all, exactly as before.
+    const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: mcpGroups, allTools: attachGuiMcp });
+    const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers });
     const { term, tmux } = ptySpawn(sessionId, deps.codexBin, args, cwd, true);
     const via = tmux ? " via tmux" : "";
     const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { buildCodexArgs } from "../../../server/agents/codex-args.js";
 
-const base = { resume: null, model: null, guiMcpUrl: null };
+const base = { resume: null, model: null, guiMcpServers: [] };
 
 describe("buildCodexArgs", () => {
   it("passes no id for a fresh session (codex mints its own)", () => {
@@ -24,7 +24,7 @@ describe("buildCodexArgs", () => {
     // Opaque endpoint token — buildCodexArgs embeds it verbatim (the real value is an
     // interpolated loopback URL; a static http literal here trips no-clear-text-protocols).
     const url = "gui-mcp-endpoint";
-    expect(buildCodexArgs({ ...base, guiMcpUrl: url })).toEqual([
+    expect(buildCodexArgs({ ...base, guiMcpServers: [{ id: "mulmoterminal-gui", url }] })).toEqual([
       "-c",
       `mcp_servers.mulmoterminal-gui.url="${url}"`,
       "-c",
@@ -32,8 +32,31 @@ describe("buildCodexArgs", () => {
     ]);
   });
 
+  // A GRID cell gets one server per tool group its directory registered, not the all-tools URL.
+  // Auto-approval is per server id, so every group needs its own line — a group the user enabled
+  // and codex then asks permission for on every call is the friction this flag exists to remove.
+  it("injects one server per group, each auto-approved", () => {
+    const args = buildCodexArgs({
+      ...base,
+      guiMcpServers: [
+        { id: "mulmoterminal-render", url: "render-endpoint" },
+        { id: "mulmoterminal-media", url: "media-endpoint" },
+      ],
+    });
+    expect(args).toEqual([
+      "-c",
+      `mcp_servers.mulmoterminal-render.url="render-endpoint"`,
+      "-c",
+      `mcp_servers.mulmoterminal-render.default_tools_approval_mode="approve"`,
+      "-c",
+      `mcp_servers.mulmoterminal-media.url="media-endpoint"`,
+      "-c",
+      `mcp_servers.mulmoterminal-media.default_tools_approval_mode="approve"`,
+    ]);
+  });
+
   it("orders model, GUI MCP, then the resume subcommand (no positional prompt)", () => {
-    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpUrl: "gui-mcp-endpoint" });
+    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpServers: [{ id: "mulmoterminal-gui", url: "gui-mcp-endpoint" }] });
     expect(args.slice(0, 2)).toEqual(["--model", "gpt-5.4"]);
     expect(args).toContain("-c");
     expect(args.slice(-2)).toEqual(["resume", "id1"]);

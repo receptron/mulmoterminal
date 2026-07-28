@@ -23,6 +23,8 @@ import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
+import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
+import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { handleCommandFrame } from "../session/pty-connection.js";
 import { closeWithError } from "../session/ws-frames.js";
 import { ProviderRefusedError } from "../session/provider-env.js";
@@ -200,17 +202,22 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   return { sessionId, live, resumeRolloutId };
 }
 
-function startCodexEntry(
-  deps: WsRouteDeps,
-  sessionId: string,
-  ws: WebSocket,
-  live: PtyEntry | undefined,
-  resumeRolloutId: string | null,
-  cwd: string,
-  attachGuiMcp: boolean,
-): PtyEntry {
+// Grouped rather than eight positional arguments: what this needs is a session to (re)attach,
+// a directory, and the GUI-tool decision — the last of which is now two values that only make
+// sense together (attach everything, or exactly these groups).
+interface CodexStart {
+  sessionId: string;
+  live: PtyEntry | undefined;
+  resumeRolloutId: string | null;
+  cwd: string;
+  attachGuiMcp: boolean;
+  mcpGroups: readonly ToolGroup[];
+}
+
+function startCodexEntry(deps: WsRouteDeps, ws: WebSocket, start: CodexStart): PtyEntry {
+  const { sessionId, live, resumeRolloutId, cwd, attachGuiMcp, mcpGroups } = start;
   if (live) return deps.reattachPty(live, ws, sessionId);
-  return deps.spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, null); // interactive: no seed
+  return deps.spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, { mcpGroups }); // interactive: no seed
 }
 
 async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
@@ -338,7 +345,7 @@ function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: s
 // codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs
 // codex without the GUI MCP and keeps it out of the sidebar; absent (single view) attaches the GUI
 // MCP so codex drives the GUI panel like claude.
-function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
+async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
@@ -346,9 +353,21 @@ function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: st
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
+  // A grid cell's GUI tools are whatever its DIRECTORY registered — the same switches claude's
+  // cells read, in the same file. claude picks them up itself; codex is handed resolved URLs at
+  // spawn, so the answer has to be read here, before the pty exists. Only for a spawn: a reattach
+  // keeps the tools its running process was started with.
+  const mcpGroups = !attachGuiMcp && !live ? await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []) : [];
+  // Reading files can take a moment; a client that left in that window would leave a pty nobody
+  // reaps, because the close handlers below are not wired yet (same guard as the claude path).
+  if (ws.readyState !== ws.OPEN) {
+    console.log(`[ws/codex] client left before spawn — abandoning ${sessionId}`);
+    return;
+  }
+
   let entry: PtyEntry;
   try {
-    entry = startCodexEntry(deps, sessionId, ws, live, resumeRolloutId, cwd, attachGuiMcp);
+    entry = startCodexEntry(deps, ws, { sessionId, live, resumeRolloutId, cwd, attachGuiMcp, mcpGroups });
   } catch (err) {
     console.error(`[ws/codex] failed to start ${sessionId}: ${messageOf(err)}`);
     return closeWithError(ws, "Failed to start codex. Is the `codex` CLI installed and on your PATH?");
@@ -396,5 +415,5 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   wss.on("connection", (ws, req) => void handleClaudeConnection(deps, ws, req));
   runWss.on("connection", (ws, req) => handleRunConnection(deps, ws, req));
   runLaunchWss.on("connection", (ws, req) => handleLaunchConnection(deps, ws, req));
-  runCodexWss.on("connection", (ws, req) => handleCodexConnection(deps, ws, req));
+  runCodexWss.on("connection", (ws, req) => void handleCodexConnection(deps, ws, req));
 }
