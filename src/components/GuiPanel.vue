@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
+import { usePubSub } from "../composables/usePubSub";
 import { getPlugin } from "../plugins-registry";
 import PluginFrame from "./PluginFrame.vue";
-import { TOOL_GROUPS, toolsInGroup, type ToolGroup } from "../../common/toolGroups";
+import { TOOL_GROUPS, groupOfTool, toolsInGroup } from "../../common/toolGroups";
+import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -30,11 +32,6 @@ const props = defineProps<{
   // both cases: there is nothing to ask, or nothing that could answer. Absent/null means the
   // panel is usable, which keeps the single view (where it always is) unchanged.
   unavailable?: "no-session" | "no-canvas-mcp" | null;
-  // The GUI tool groups this session actually reached us on, so the empty state lists what THIS
-  // terminal can be asked for rather than a fixed set — a cell with only `render` registered
-  // should not be told to ask for generateImage. Absent means "everything": the single view
-  // connects on the all-tools URL, where no group was ever selected (common/toolGroups.ts).
-  groups?: ToolGroup[];
 }>();
 const emit = defineEmits<{ toggleTools: [] }>();
 
@@ -104,19 +101,56 @@ const TOOL_HINTS = new Map<string, string>([
   ["searchX", "recent posts on X matching a query"],
 ]);
 
-// Every group this session has, each with ALL its members — the whole of what the terminal can
-// be asked for, not a sample. This is the only place the tools are named, and a user reading
-// "presentDocument or presentForm" has no way to learn that a chart, a web page or an image is
-// also on offer. Ordered by TOOL_GROUPS (blast radius, least first) rather than by the order the
-// session happened to connect its MCP clients in, so the list does not reshuffle between cells.
-const toolSections = computed(() => {
-  const session = props.groups;
-  const groups = session ? TOOL_GROUPS.filter((group) => session.includes(group)) : TOOL_GROUPS;
-  return groups.map((group) => ({
-    group,
-    tools: toolsInGroup(group).map((name) => ({ name, hint: TOOL_HINTS.get(name) ?? "" })),
-  }));
+// The tools the SERVER says this session has, asked for rather than reconstructed from the group
+// table. Two things make the static answer wrong: a grid cell reaches only the groups its
+// directory registered, and a plugin whose requiredEnv is unmet (searchX without X_BEARER_TOKEN)
+// is dropped at load — naming either in the hint below sends the user to a tool that was never
+// offered. `null` until the answer lands, which is NOT the same as "no tools": see toolSections.
+const availableTools = ref<string[] | null>(null);
+
+async function loadAvailableTools(sessionId: string | null) {
+  availableTools.value = null;
+  try {
+    const res = await fetch(sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools");
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    // Late reply for a session we have since walked away from would list another cell's tools.
+    if (sessionId !== props.sessionId) return;
+    if (!Array.isArray(body.tools)) return;
+    availableTools.value = body.tools.map((tool: { toolName?: unknown }) => tool?.toolName).filter((name: unknown): name is string => typeof name === "string");
+  } catch {
+    // Leave it unknown rather than empty — the hint falls back to the full list, which is a
+    // better answer than telling a working session it has nothing.
+  }
+}
+watch(() => props.sessionId, loadAvailableTools, { immediate: true });
+
+// The answer above is normally asked BEFORE it can be true: the browser is handed a session id
+// while claude is still being spawned, so its MCP client has not connected to the group URLs yet
+// and the server has not learned which tools this cell got. The same channel the grid's Canvas
+// button waits on says when that changes.
+const { subscribe: subscribeToolGroups } = usePubSub();
+const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
+  const msg = data as { sessionId?: string };
+  if (msg?.sessionId && msg.sessionId === props.sessionId) loadAvailableTools(props.sessionId);
 });
+onBeforeUnmount(() => offToolGroups());
+
+// What this session can be asked for, grouped. Ordered by TOOL_GROUPS (blast radius, least
+// first) rather than by the order the server happened to list them, so the hint does not
+// reshuffle between cells, and a group with nothing available drops out entirely.
+//
+// While the answer is unknown, every group's members — the full list is what the panel showed
+// before it could ask at all, and it beats an empty one during the moment after a cell switch.
+const toolSections = computed(() =>
+  TOOL_GROUPS.map((group) => {
+    const known = availableTools.value;
+    const names = known ? known.filter((name) => groupOfTool(name) === group) : toolsInGroup(group);
+    // toolsInGroup order, not the server's: the group table is where the reading order was chosen.
+    const ordered = toolsInGroup(group).filter((name) => names.includes(name));
+    return { group, tools: ordered.map((name) => ({ name, hint: TOOL_HINTS.get(name) ?? "" })) };
+  }).filter((section) => section.tools.length > 0),
+);
 
 // A session with no GUI tools at all. The grid never reaches this — it reports `unavailable`
 // first, and that outranks — but "ask Claude to use one of these:" above an EMPTY list is a

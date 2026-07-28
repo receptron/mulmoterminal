@@ -574,16 +574,26 @@ async function loadCanvasEnabled() {
 
 // Writes into the user's Claude Code config, so a failure is surfaced and the checkbox is put
 // back — a switch that shows "on" for a registration that was never written is the worst state.
+//
+// Busy is set HERE, when the write is queued, not when it starts running. Marking it at the
+// front of the queued callback would leave the checkbox live while it waits behind another
+// group's save: a second flip would queue a second write, and since a failed write puts its
+// checkbox back, the earlier failure's rollback would land on top of the later intent — flip on,
+// flip off, end up on. Disabled from the flip until the write settles, there is only ever one.
 function applyCanvas(group: ToolGroup): Promise<void> {
-  return queueCanvasWrite(() => writeCanvasGroup(group));
-}
-
-async function writeCanvasGroup(group: ToolGroup) {
-  const dir = canvasDir.value;
-  if (!dir) return;
+  if (!canvasDir.value) return Promise.resolve();
   const wanted = canvasEnabled.value[group];
   canvasBusy.value[group] = true;
   canvasError.value[group] = null;
+  return queueCanvasWrite(() => writeCanvasGroup(group, wanted));
+}
+
+async function writeCanvasGroup(group: ToolGroup, wanted: boolean) {
+  const dir = canvasDir.value;
+  if (!dir) {
+    canvasBusy.value[group] = false;
+    return;
+  }
   try {
     const res = await fetch("/api/gui-mcp-groups", {
       method: "POST",

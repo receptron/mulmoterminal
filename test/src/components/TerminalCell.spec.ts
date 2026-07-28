@@ -1811,4 +1811,64 @@ describe("TerminalCell", () => {
     expect(bare?.find('[data-testid="cell-chip-color"]').exists()).toBe(false);
     expect(bare?.attributes("style") ?? "").not.toContain("color-mix");
   });
+
+  // The two Canvas switches write to ONE file (Claude Code's MCP config, via `claude mcp
+  // add/remove`), so their POSTs are queued one behind the other. That queue is only half the
+  // guard: a checkbox left live while its write waits its turn can be flipped again, and since a
+  // failed write puts its own checkbox back, the earlier rollback would land on top of the later
+  // intent — flip on, flip off, end up on. So the flip disables the box immediately.
+  it("disables a Canvas switch from the flip until its write settles", async () => {
+    const write = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    globalThis.fetch = vi.fn(async (url: string, init?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) {
+        if (init?.method === "POST") return write.promise;
+        return { ok: true, json: async () => ({ groups: [] }) };
+      }
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, worktrees: [] }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/proj", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null);
+    await flushPromises();
+
+    const box = w.find('[data-testid="cell-canvas-toggle-render"]');
+    expect(box.exists()).toBe(true);
+    await box.setValue(true);
+    // Disabled while the write is in flight — not merely once it reaches the front of the queue.
+    expect(box.attributes("disabled")).toBeDefined();
+
+    write.resolve({ ok: true, json: async () => ({ ok: true }) });
+    await flushPromises();
+    await nextTick();
+    expect(w.find('[data-testid="cell-canvas-toggle-render"]').attributes("disabled")).toBeUndefined();
+  });
+
+  // A rejected write is the case the lock exists for: the checkbox goes back to where it was,
+  // and it must be the flip that was actually attempted.
+  it("puts the Canvas switch back when its write fails", async () => {
+    globalThis.fetch = vi.fn(async (url: string, init?: { method?: string }) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) {
+        if (init?.method === "POST") return { ok: false, status: 500, json: async () => ({}) };
+        return { ok: true, json: async () => ({ groups: [] }) };
+      }
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, worktrees: [] }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/proj", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null);
+    await flushPromises();
+    const box = w.find('[data-testid="cell-canvas-toggle-render"]');
+    await box.setValue(true);
+    await flushPromises();
+    await nextTick();
+
+    expect((w.find('[data-testid="cell-canvas-toggle-render"]').element as HTMLInputElement).checked).toBe(false);
+    expect(w.text()).toContain("failed");
+  });
 });

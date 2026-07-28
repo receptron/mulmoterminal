@@ -24,7 +24,7 @@ import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
 import { usePubSub } from "../composables/usePubSub";
 import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
-import { hasCanvasGroup, isToolGroup, type ToolGroup } from "../../common/toolGroups";
+import { hasCanvasGroup } from "../../common/toolGroups";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 
@@ -239,21 +239,11 @@ const canvasAvailable = ref(false);
 // "not enabled for this session" for the moment between switching cells and the reply landing
 // — a wrong explanation is worse than none, so nothing is claimed until it is known.
 const canvasChecked = ref(false);
-// EVERY group this session reached us on, not only the canvas ones: the pane's empty state lists
-// the GUI tools this terminal actually has, and a cell that also registered `data` or `external`
-// can be asked for those in the same conversation.
-//
-// Only handed to the panel once `canvasChecked` (see the template): until the reply lands this is
-// the starting `[]`, which as a group list means "this session has NO GUI tools" — a narrower
-// claim than we can make yet, and one the panel would answer with a dead end.
-const sessionGroups = ref<ToolGroup[]>([]);
-const readGroups = (groups: unknown): ToolGroup[] => (Array.isArray(groups) ? groups.filter(isToolGroup) : []);
 watch(
   [expandedSessionId, () => props.expandedUid],
   async ([sessionId]) => {
     canvasAvailable.value = false;
     canvasChecked.value = false;
-    sessionGroups.value = [];
     if (!sessionId) return;
     try {
       const res = await fetch(`/api/tools?sessionId=${encodeURIComponent(sessionId)}`);
@@ -266,7 +256,6 @@ watch(
       // presentCollection, which belongs to `data` and draws nothing without the collection
       // store behind it.
       canvasAvailable.value = hasCanvasGroup(body.groups);
-      sessionGroups.value = readGroups(body.groups);
       canvasChecked.value = true;
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
@@ -286,7 +275,6 @@ const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
   const msg = data as { sessionId?: string; groups?: string[] };
   if (!msg?.sessionId || msg.sessionId !== expandedSessionId.value) return;
   canvasAvailable.value = hasCanvasGroup(msg.groups);
-  sessionGroups.value = readGroups(msg.groups);
   canvasChecked.value = true;
 });
 onBeforeUnmount(() => offToolGroups());
@@ -652,7 +640,6 @@ watch(
           :session-id="expandedSessionId"
           :send-text-message="sendToExpandedCell"
           :unavailable="canvasUnavailable"
-          :groups="canvasChecked ? sessionGroups : undefined"
           :style="{ flex: `0 0 ${paneWidth}px` }"
           @toggle-tools="toggleRightPane('tools')"
         />
