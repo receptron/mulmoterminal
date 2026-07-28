@@ -159,8 +159,16 @@ async function readPersistedToolGroups(): Promise<SessionToolGroup[]> {
   }
 }
 
+// Ids a spawn has already superseded this process. Hydration reads the log as it was BEFORE
+// that spawn's reset marker could be appended, so without this it would put the old groups
+// back — the reset would win in the file and lose in memory.
+const resetToolGroupSessions = new Set<string>();
+
 export const sessionToolGroupsHydrated: Promise<void> = (async () => {
-  for (const { sessionId, group } of await readPersistedToolGroups()) addToolGroupInMemory(sessionId, group);
+  for (const { sessionId, group } of await readPersistedToolGroups()) {
+    if (resetToolGroupSessions.has(sessionId)) continue;
+    addToolGroupInMemory(sessionId, group);
+  }
 })();
 
 let toolGroupsPersist: Promise<void> = Promise.resolve();
@@ -194,11 +202,16 @@ export function sessionToolGroups(sessionId: string): ToolGroup[] {
 // id: the new process gets whatever the user's MCP config says NOW, so carrying the old answer
 // forward would keep asserting a capability the user may have just switched off. The marker is
 // appended rather than the file rewritten, for the same reason nothing else here is rewritten.
+// UNCONDITIONAL, and that is the point. Skipping the marker when the in-memory set looks empty
+// was wrong twice over on a resume at boot: hydration may not have run yet, so "empty" means
+// "not read yet" rather than "nothing there" — and the marker is the only thing that survives to
+// the NEXT restart, where a process-local memo would be gone and the log replayed from scratch.
+// One line per claude spawn, in a file that already grows per learned group.
 export function resetSessionToolGroups(sessionId: string): void {
   if (!SESSION_ID_RE.test(sessionId)) return;
-  // Nothing learned yet: a marker would say the same as the absence, and every fresh session
-  // would append one.
-  if (!toolGroupsBySession.has(sessionId)) return;
+  // Both flags set synchronously, before any await: a read landing between here and the append
+  // must not see the replaced process's capabilities, and hydration must not restore them.
+  resetToolGroupSessions.add(sessionId);
   toolGroupsBySession.set(sessionId, new Set());
   toolGroupsPersist = toolGroupsPersist
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
