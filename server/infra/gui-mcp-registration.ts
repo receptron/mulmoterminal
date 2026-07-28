@@ -77,6 +77,29 @@ const ownProp = (obj: unknown, key: string): unknown =>
 // — a per-directory entry under `projects` included.
 const scopeServerIds = (scope: unknown): string[] => serverIdsIn(ownProp(scope, "mcpServers"));
 
+// Every `.mcp.json` a session started in these directories would pick up.
+//
+// Project scope is NOT `<cwd>/.mcp.json` alone: Claude Code walks UP from its working directory
+// and takes every one it finds on the way. Measured against the real CLI — a file two levels up
+// is listed, one ABOVE the enclosing git root is listed (so this is a directory walk, not a repo
+// lookup), and a nearer file does not shadow a farther one, they merge. A cell launched in
+// `/repo/packages/app` therefore receives what `/repo/.mcp.json` registers, and reading only the
+// leaf reported the Canvas switch as off on a directory that has it.
+//
+// Both spellings of the directory, for the symlink reason above: Claude walks from its resolved
+// cwd, whose ancestors can differ from the lexical ones. Deduped, so the usual case (they are the
+// same path) reads each file once.
+function projectMcpFiles(...dirs: readonly string[]): string[] {
+  const files = new Set<string>();
+  for (const dir of dirs) {
+    for (let current = dir, parent = path.dirname(current); ; current = parent, parent = path.dirname(current)) {
+      files.add(path.join(current, ".mcp.json"));
+      if (parent === current) break; // reached the filesystem root
+    }
+  }
+  return [...files];
+}
+
 // Which groups this directory has registered. Read from Claude Code's config FILES, not from
 // `claude mcp list`: that command health-checks every registered server before it prints, which
 // costs seconds of network round-trips (more when one of the user's servers is down) — and the
@@ -85,22 +108,20 @@ const scopeServerIds = (scope: unknown): string[] => serverIdsIn(ownProp(scope, 
 // answer still follows a registration the user made with the CLI behind our back.
 //
 // All three scopes, because that is what the CLI shows and what the session will actually get:
-// local (ours, keyed by directory), project (`.mcp.json` in the repo), user (global).
+// local (ours, keyed by directory), project (every `.mcp.json` up the tree), user (global).
 export async function registeredGuiMcpGroups(cwd: string, groups: readonly ToolGroup[]): Promise<ToolGroup[]> {
   // Claude Code keys local scope by its OWN process.cwd(), which the OS resolves symlinks in,
   // while the path we are asked about is canonicalized only lexically (see existingWorkspace).
   // Both spellings are looked up so a directory reached through a symlink still matches.
-  const [config, project, real] = await Promise.all([
-    readJsonObject(claudeConfigFile()),
-    readJsonObject(path.join(cwd, ".mcp.json")),
-    realpath(cwd).catch(() => cwd),
-  ]);
+  const real = await realpath(cwd).catch(() => cwd);
+  const projectFiles = projectMcpFiles(cwd, real);
+  const [config, ...projects] = await Promise.all([claudeConfigFile(), ...projectFiles].map(readJsonObject));
   const perDir = ownProp(config, "projects");
   const ids = new Set([
     ...scopeServerIds(config),
     ...scopeServerIds(ownProp(perDir, cwd)),
     ...(real === cwd ? [] : scopeServerIds(ownProp(perDir, real))),
-    ...scopeServerIds(project),
+    ...projects.flatMap(scopeServerIds),
   ]);
   return groups.filter((group) => ids.has(toolGroupServerId(group)));
 }

@@ -72,6 +72,26 @@ describe("registeredGuiMcpGroups", () => {
     expect((await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).sort()).toEqual(["data", "media"]);
   });
 
+  // Project scope is a WALK, not a single file: measured against the real CLI, a cell launched in
+  // /repo/packages/app is served by /repo/.mcp.json. Reading only the leaf reported the switch as
+  // off on a directory that has it.
+  it("finds a .mcp.json in an ancestor directory", async () => {
+    const deep = path.join(cwd, "packages", "app");
+    mkdirSync(deep, { recursive: true });
+    writeFileSync(path.join(cwd, ".mcp.json"), JSON.stringify({ mcpServers: { "mulmoterminal-render": {} } }));
+    expect(await registeredGuiMcpGroups(deep, TOOL_GROUPS)).toEqual(["render"]);
+  });
+
+  // Also measured: a nearer file does not shadow a farther one, they merge — and the walk crosses
+  // above a git root, so it is a directory walk rather than a repo lookup.
+  it("merges the files up the tree rather than stopping at the nearest", async () => {
+    const deep = path.join(cwd, "packages", "app");
+    mkdirSync(deep, { recursive: true });
+    writeFileSync(path.join(cwd, ".mcp.json"), JSON.stringify({ mcpServers: { "mulmoterminal-render": {} } }));
+    writeFileSync(path.join(deep, ".mcp.json"), JSON.stringify({ mcpServers: { "mulmoterminal-data": {} } }));
+    expect((await registeredGuiMcpGroups(deep, TOOL_GROUPS)).sort()).toEqual(["data", "render"]);
+  });
+
   // Claude Code keys local scope by its own resolved cwd; ours is canonicalized only lexically.
   it("matches a directory reached through a symlink", async () => {
     const link = path.join(root, "link");

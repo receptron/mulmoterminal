@@ -90,18 +90,6 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
 
-    // A NEW claude process gets whatever the user's MCP config says NOW, so anything this id
-    // learned under a previous one is stale — including a group the user has since removed.
-    //
-    // But this function is also the REATTACH path: after the server restarts (a --watch reload
-    // included), the pty map is empty while the tmux session and its claude are still running, so
-    // ws-routes comes back through here and `new-session -A` picks the same process back up.
-    // Nothing is re-read there, and an MCP client that connected once will not connect again — so
-    // resetting would drop a capability with no way left to relearn it, and the panel would tell a
-    // cell that is still drawing that Canvas is not enabled for it. Surviving exactly that is what
-    // the persisted log is FOR; the unconditional reset was undoing it on every restart.
-    if (sandbox || !ptyWouldReattach(sessionId, true)) resetSessionToolGroups(sessionId);
-
     const { dir, resolved } = resolveSessionBackend({ cwd, sessionId, launch, canResume, sandbox });
 
     const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
@@ -141,7 +129,29 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // where the cleanup normally happens (#579).
     const entry = withSettingsCleanup(sessionId, spawnEntry);
 
+    // A NEW claude process gets whatever the user's MCP config says NOW, so anything this id
+    // learned under a previous one is stale — including a group the user has since removed.
+    //
+    // But this function is also the REATTACH path: after the server restarts (a --watch reload
+    // included), the pty map is empty while the tmux session and its claude are still running, so
+    // ws-routes comes back through here and `new-session -A` picks the same process back up.
+    // Nothing is re-read there, and an MCP client that connected once will not connect again — so
+    // resetting would drop a capability with no way left to relearn it, and the panel would tell a
+    // cell that is still drawing that Canvas is not enabled for it. Surviving exactly that is what
+    // the persisted log is FOR; the unconditional reset was undoing it on every restart.
+    //
+    // Asked HERE, one statement before the spawn, rather than up with the other decisions: the
+    // answer stops being true the moment the tmux session ends, and everything between the two
+    // (the provider resolution, the git probes, the settings file) is time in which it can. The
+    // remaining window is irreducible without tmux reporting which branch `-A` took, and what
+    // survives it is an over-reported group on a session that lost it — the next genuinely new
+    // process clears that, whereas the reverse mistake could not be undone at all.
+    function resetToolGroupsUnlessReattaching(): void {
+      if (sandbox || !ptyWouldReattach(sessionId, true)) resetSessionToolGroups(sessionId);
+    }
+
     function spawnEntry(): PtyEntry {
+      resetToolGroupsUnlessReattaching();
       if (sandbox) return spawnSandboxEntry(sessionId, args, cwd, ws, dir.addDirs);
       const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, { unset: resolved.unset, env: guiMcpEnv(sessionId, PORT) });
       console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);

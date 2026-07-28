@@ -19,9 +19,19 @@ let reattaching = false;
 let sandboxRuns = false;
 const resetSessionToolGroups = vi.fn();
 
+// Hooks so the ORDER of probe / reset / spawn can be asserted, not just their arguments.
+let probed = () => {};
+let spawned = () => {};
+
 vi.mock("../../../server/session/pty-spawn.js", () => ({
-  ptySpawn: () => ({ term: fakeTerm(), tmux: true }),
-  ptyWouldReattach: () => reattaching,
+  ptySpawn: () => {
+    spawned();
+    return { term: fakeTerm(), tmux: true };
+  },
+  ptyWouldReattach: () => {
+    probed();
+    return reattaching;
+  },
   sandboxWouldRun: () => sandboxRuns,
   spawnSandboxEntry: () => ({ term: fakeTerm(), ws: null, buffer: "", cwd: "/tmp", sandbox: true, active: false, agent: "claude" }),
 }));
@@ -66,9 +76,11 @@ const fakeWs = { readyState: 1, send: vi.fn(), close: vi.fn(), on: vi.fn() } as 
 const spawn = (options: Record<string, unknown>, ws: typeof fakeWs = null) => createClaudeSpawner(deps).spawnClaudePty(ID, null, ws, options);
 
 beforeEach(() => {
-  resetSessionToolGroups.mockClear();
+  resetSessionToolGroups.mockReset();
   reattaching = false;
   sandboxRuns = false;
+  probed = () => {};
+  spawned = () => {};
 });
 
 describe("spawnClaudePty and the tool-group reset", () => {
@@ -92,5 +104,17 @@ describe("spawnClaudePty and the tool-group reset", () => {
     sandboxRuns = true;
     spawn({ cwd: process.cwd(), attachGuiMcp: true }, fakeWs);
     expect(resetSessionToolGroups).toHaveBeenCalledWith(ID);
+  });
+
+  // The probe's answer expires the moment the tmux session ends, so it is taken one statement
+  // before the spawn rather than up with the other decisions — the provider resolution, the git
+  // probes and the settings file all sit between, and each is time the session can end in.
+  it("asks immediately before spawning, not before the rest of the setup", () => {
+    const order: string[] = [];
+    resetSessionToolGroups.mockImplementation(() => order.push("reset"));
+    probed = () => order.push("probe");
+    spawned = () => order.push("spawn");
+    spawn({ cwd: process.cwd(), attachGuiMcp: false });
+    expect(order).toEqual(["probe", "reset", "spawn"]);
   });
 });
