@@ -1871,4 +1871,54 @@ describe("TerminalCell", () => {
     expect((w.find('[data-testid="cell-canvas-toggle-render"]').element as HTMLInputElement).checked).toBe(false);
     expect(w.text()).toContain("failed");
   });
+
+  // A queued write can run long after the flip, and the launcher's directory field is editable
+  // the whole time. The write below waits behind another group's save; read at execution time,
+  // the switch ticked for alpha would register the MCP server against beta — a silent write to a
+  // folder the user never touched the switch in.
+  it("writes a queued Canvas registration to the directory it was flipped in", async () => {
+    const first = deferred<{ ok: boolean; json: () => Promise<unknown> }>();
+    const posted: { cwd: string; group: string; enabled: boolean }[] = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) {
+        if (init?.method === "POST") {
+          posted.push(JSON.parse(String(init.body)));
+          // Only the FIRST write hangs; the second is what has to wait behind it.
+          return posted.length === 1 ? first.promise : { ok: true, json: async () => ({ ok: true }) };
+        }
+        return { ok: true, json: async () => ({ groups: [] }) };
+      }
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, worktrees: [] }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/proj", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null, { defaultCwd: "/home/me/alpha" });
+    await flushPromises();
+
+    // media goes first and hangs; render queues behind it, both flipped in alpha.
+    await w.find('[data-testid="cell-canvas-toggle-media"]').setValue(true);
+    await w.find('[data-testid="cell-canvas-toggle-render"]').setValue(true);
+    expect(posted).toHaveLength(1);
+
+    // The user retypes the directory while render's write is still queued. The launcher reloads
+    // the switches for the new directory behind a 300ms debounce, so let it fire — that reload is
+    // what moves canvasDir off alpha, and it is exactly what the queued write must not pick up.
+    vi.useFakeTimers();
+    try {
+      await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/beta");
+      await vi.advanceTimersByTimeAsync(400);
+
+      first.resolve({ ok: true, json: async () => ({ ok: true }) });
+      await vi.advanceTimersByTimeAsync(0);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flushPromises();
+
+    expect(posted).toHaveLength(2);
+    expect(posted.map((body) => body.cwd)).toEqual(["/home/me/alpha", "/home/me/alpha"]);
+  });
 });

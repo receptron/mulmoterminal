@@ -580,20 +580,20 @@ async function loadCanvasEnabled() {
 // group's save: a second flip would queue a second write, and since a failed write puts its
 // checkbox back, the earlier failure's rollback would land on top of the later intent — flip on,
 // flip off, end up on. Disabled from the flip until the write settles, there is only ever one.
+// The DIRECTORY is captured here too, for the same reason: a queued write can run long after the
+// flip, and the launcher's directory field is editable the whole time. Read at execution time, a
+// switch ticked for A would register the MCP server against whatever B the user had typed by
+// then — a silent write to a folder they never touched the switch in.
 function applyCanvas(group: ToolGroup): Promise<void> {
-  if (!canvasDir.value) return Promise.resolve();
+  const dir = canvasDir.value;
+  if (!dir) return Promise.resolve();
   const wanted = canvasEnabled.value[group];
   canvasBusy.value[group] = true;
   canvasError.value[group] = null;
-  return queueCanvasWrite(() => writeCanvasGroup(group, wanted));
+  return queueCanvasWrite(() => writeCanvasGroup(group, dir, wanted));
 }
 
-async function writeCanvasGroup(group: ToolGroup, wanted: boolean) {
-  const dir = canvasDir.value;
-  if (!dir) {
-    canvasBusy.value[group] = false;
-    return;
-  }
+async function writeCanvasGroup(group: ToolGroup, dir: string, wanted: boolean) {
   try {
     const res = await fetch("/api/gui-mcp-groups", {
       method: "POST",
@@ -604,8 +604,13 @@ async function writeCanvasGroup(group: ToolGroup, wanted: boolean) {
     const data = await res.json();
     if (!data.ok) throw new Error(data.message || "claude mcp failed");
   } catch (e) {
-    canvasEnabled.value[group] = !wanted;
-    canvasError.value[group] = e instanceof Error ? e.message : String(e);
+    // Only if the switches still belong to the directory this write was for. Moved on, they are
+    // showing what the NEW directory has registered, and putting one back would report another
+    // folder's failure as that directory's state.
+    if (canvasDir.value === dir) {
+      canvasEnabled.value[group] = !wanted;
+      canvasError.value[group] = e instanceof Error ? e.message : String(e);
+    }
   } finally {
     canvasBusy.value[group] = false;
   }
