@@ -23,6 +23,12 @@ const props = defineProps<{
   sessionId: string | null;
   sendTextMessage: (text: string) => boolean;
   toolsOpen?: boolean;
+  // Why this panel cannot show anything, when that is knowable. The pane outlives the cell it
+  // was opened on — walking the zoom to a launcher or to a directory with no render MCP leaves
+  // it mounted — and the empty-state hint below ("ask Claude to use presentDocument") is a LIE
+  // in both cases: there is nothing to ask, or nothing that could answer. Absent/null means the
+  // panel is usable, which keeps the single view (where it always is) unchanged.
+  unavailable?: "no-session" | "no-render-mcp" | null;
 }>();
 const emit = defineEmits<{ toggleTools: [] }>();
 
@@ -35,6 +41,10 @@ const { upsert } = useSessionFeed(results, {
   historyKey: "toolResults",
   channel: (id) => `session:${id}`,
   identify: (result) => result.uuid,
+  // Drop the previous session's views the moment the session changes, rather than when its
+  // replacement's history arrives: until then the panel would still be showing another cell's
+  // drawings under this cell's name.
+  onSessionChange: () => (results.value = []),
 });
 
 // A plugin view changed its state (e.g. a form field edited / submitted). Per the
@@ -83,12 +93,29 @@ const hasContent = computed(() => results.value.length > 0);
       </button>
     </div>
     <div class="flex-1 overflow-y-auto px-4 py-3 font-sans text-[14px] leading-normal text-fg">
-      <div v-if="!hasContent" class="text-[13px] text-dim">
+      <!-- Unavailable outranks empty: both look like "nothing here", but only one of them is
+           something the user can act on by talking to the agent. -->
+      <div v-if="unavailable" data-testid="canvas-unavailable" class="text-[13px] text-dim">
+        <template v-if="unavailable === 'no-session'">
+          <div class="font-medium text-secondary">No session here</div>
+          <p class="mt-1">This cell has no terminal running yet. Start one and its drawings will appear here.</p>
+        </template>
+        <template v-else>
+          <div class="font-medium text-secondary">Canvas is not enabled for this directory</div>
+          <p class="mt-1">
+            Its agent has no drawing tools, so nothing can appear here. Turn on
+            <span class="whitespace-nowrap font-medium">CANVAS (render MCPs)</span> in this cell's launcher, then restart the cell.
+          </p>
+        </template>
+      </div>
+      <div v-else-if="!hasContent" class="text-[13px] text-dim">
         Ask Claude to use <code class="rounded-[4px] bg-subtle px-[5px] py-px">presentDocument</code> or
         <code class="rounded-[4px] bg-subtle px-[5px] py-px">presentForm</code>
         to render content here.
       </div>
-      <template v-for="r in results" :key="r.uuid">
+      <!-- Guarded as well as cleared on session change: a stale view rendered under an
+           "unavailable" heading would contradict it. -->
+      <template v-for="r in unavailable ? [] : results" :key="r.uuid">
         <PluginFrame v-if="getPlugin(r.toolName)" class="frame" :css="getPlugin(r.toolName)!.css" :height="getPlugin(r.toolName)!.height">
           <component
             :is="getPlugin(r.toolName)!.viewComponent"

@@ -232,13 +232,16 @@ function sendToExpandedCell(text: string): boolean {
 // Re-asked on every expand, not only when the session id changes: a cell that has just started
 // may not have connected its MCP client yet, and re-expanding is how a user retries anything.
 const canvasAvailable = ref(false);
+// Whether the answer above has come back yet for the CURRENT cell. Without it the panel says
+// "not enabled for this directory" for the moment between switching cells and the reply landing
+// — a wrong explanation is worse than none, so nothing is claimed until it is known.
+const canvasChecked = ref(false);
 watch(
   [expandedSessionId, () => props.expandedUid],
   async ([sessionId]) => {
-    if (!sessionId) {
-      canvasAvailable.value = false;
-      return;
-    }
+    canvasAvailable.value = false;
+    canvasChecked.value = false;
+    if (!sessionId) return;
     try {
       const res = await fetch(`/api/tools?sessionId=${encodeURIComponent(sessionId)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -249,13 +252,24 @@ watch(
       // whole question — and matching on a `present*` prefix would count presentCollection,
       // which belongs to `data` and draws nothing without the collection store behind it.
       canvasAvailable.value = Array.isArray(body.groups) && body.groups.includes("render");
+      canvasChecked.value = true;
     } catch {
-      // Unreachable server: no button rather than one that opens an empty panel.
+      // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
+      // so the panel does not blame the directory for what is our own failure to ask.
       if (sessionId === expandedSessionId.value) canvasAvailable.value = false;
     }
   },
   { immediate: true },
 );
+
+// What the Canvas pane should say instead of its "ask Claude to draw something" hint. The pane
+// outlives the cell it was opened on, so walking the zoom lands it on cells that can never fill
+// it — a launcher or a command cell (no session), or a directory with no render MCP.
+const canvasUnavailable = computed<"no-session" | "no-render-mcp" | null>(() => {
+  if (!expandedSessionId.value) return "no-session";
+  if (canvasChecked.value && !canvasAvailable.value) return "no-render-mcp";
+  return null;
+});
 const filesPane = ref<InstanceType<typeof FilesPane> | null>(null);
 // What the pane looked like in each cell, so coming back to a terminal doesn't mean opening
 // the same three directories again. Saved state only — the buffer went to disk on the way out
@@ -608,6 +622,7 @@ watch(
           v-else-if="rightPane === 'canvas'"
           :session-id="expandedSessionId"
           :send-text-message="sendToExpandedCell"
+          :unavailable="canvasUnavailable"
           :style="{ flex: `0 0 ${paneWidth}px` }"
           @toggle-tools="toggleRightPane('tools')"
         />
