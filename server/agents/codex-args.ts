@@ -6,6 +6,12 @@ export interface GuiMcpServer {
   /** The MCP server id codex registers it under — `mulmoterminal-gui`, or `mulmoterminal-<group>`. */
   id: string;
   url: string;
+  /**
+   * Run this server's tools without asking. codex approves per SERVER, not per tool, so this may
+   * only be set for a server whose every tool is in AUTO_ALLOWED_TOOLS — see codexGuiMcpServers,
+   * which is where that judgement is made.
+   */
+  autoApprove: boolean;
 }
 
 export interface CodexArgsInput {
@@ -41,11 +47,12 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
     // Windows spec spawns these exact arguments through a shim and compares the argv that
     // comes out — lose the quotes and the value stops being a TOML string.
     //
-    // Auto-approval is per server id, so it is repeated rather than set once: a group the user
-    // enabled and codex then asks permission for on every call is the same friction the single
-    // view was given this flag to avoid.
+    // Auto-approval is per server id, so it is repeated rather than set once — and it is a
+    // property of the server rather than a blanket setting, because codex cannot express
+    // claude's per-TOOL `--allowedTools`. A server holding one tool that spends money is
+    // therefore approved as a whole or not at all; see codexGuiMcpServers.
     args.push("-c", `mcp_servers.${server.id}.url="${server.url}"`);
-    args.push("-c", `mcp_servers.${server.id}.default_tools_approval_mode="approve"`);
+    if (server.autoApprove) args.push("-c", `mcp_servers.${server.id}.default_tools_approval_mode="approve"`);
   }
   if (input.resume) args.push("resume", input.resume);
   return args;

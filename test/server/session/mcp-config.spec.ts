@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { mcpConfigJson, guiMcpEnv, codexGuiMcpServers } from "../../../server/session/mcp-config.js";
 import { SANDBOX_HOST } from "../../../server/infra/sandbox.js";
 import { guiMcpUrlTemplate } from "../../../server/infra/gui-mcp-registration.js";
+import { TOOL_GROUPS, toolsInGroup, toolGroupServerId, AUTO_ALLOWED_TOOLS, type ToolGroup } from "../../../common/toolGroups.js";
 
 const SESSION = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
 const GUI = "mulmoterminal-gui";
@@ -109,7 +110,7 @@ describe("guiMcpEnv", () => {
 describe("codexGuiMcpServers", () => {
   it("gives the single view the all-tools url under the gui server id", () => {
     expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: [], allTools: true })).toEqual([
-      { id: GUI, url: `http://127.0.0.1:34567/api/mcp/${SESSION}` },
+      { id: GUI, url: `http://127.0.0.1:34567/api/mcp/${SESSION}`, autoApprove: true },
     ]);
   });
 
@@ -120,9 +121,9 @@ describe("codexGuiMcpServers", () => {
   });
 
   it("gives a grid cell one url per registered group", () => {
-    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: ["render", "media"], allTools: false })).toEqual([
-      { id: "mulmoterminal-render", url: `http://127.0.0.1:34567/api/mcp/render/${SESSION}` },
-      { id: "mulmoterminal-media", url: `http://127.0.0.1:34567/api/mcp/media/${SESSION}` },
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: ["render", "media"], allTools: false }).map((s) => [s.id, s.url])).toEqual([
+      ["mulmoterminal-render", `http://127.0.0.1:34567/api/mcp/render/${SESSION}`],
+      ["mulmoterminal-media", `http://127.0.0.1:34567/api/mcp/media/${SESSION}`],
     ]);
   });
 
@@ -137,5 +138,34 @@ describe("codexGuiMcpServers", () => {
   // the groups were wired — not a silent fallback to everything.
   it("gives a directory that registered nothing no servers at all", () => {
     expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: [], allTools: false })).toEqual([]);
+  });
+});
+
+// codex approves per SERVER; claude is handed a list of TOOLS. AUTO_ALLOWED_TOOLS deliberately
+// withholds the ones that spend money or write files (presentDocument resolves image placeholders
+// through the image backend; the whole media group generates), so waving a group through would
+// hand codex what that list exists to keep behind a prompt.
+describe("codexGuiMcpServers auto-approval", () => {
+  const groupsOf = (groups: ToolGroup[]) => codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups, allTools: false });
+
+  it("does not auto-approve a group holding a tool that is not auto-allowed", () => {
+    for (const server of groupsOf([...TOOL_GROUPS])) expect(server.autoApprove).toBe(false);
+  });
+
+  // Stated as the RULE rather than the current answer: if presentDocument ever joins the list,
+  // render becomes approvable and this keeps agreeing with AUTO_ALLOWED_TOOLS instead of a
+  // hardcoded false.
+  it("follows AUTO_ALLOWED_TOOLS rather than a fixed answer", () => {
+    for (const group of TOOL_GROUPS) {
+      const [server] = groupsOf([group]);
+      expect(server.id).toBe(toolGroupServerId(group));
+      expect(server.autoApprove).toBe(toolsInGroup(group).every((tool) => AUTO_ALLOWED_TOOLS.includes(tool)));
+    }
+  });
+
+  // The single view carries every tool under one id and has been approved wholesale since it was
+  // wired; narrowing it here would start prompting in a setup that works today.
+  it("leaves the single view approved", () => {
+    expect(codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups: [], allTools: true })[0].autoApprove).toBe(true);
   });
 });

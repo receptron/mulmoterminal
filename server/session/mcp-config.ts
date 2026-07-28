@@ -8,7 +8,8 @@
 // so the precedence rule below could not be tested without booting the server (#548).
 import { rewriteLoopbackForDocker } from "../infra/sandbox.js";
 import type { UserMcpServer } from "../config/config-schema.js";
-import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
+import { toolGroupServerId, toolsInGroup, AUTO_ALLOWED_TOOLS, type ToolGroup } from "../../common/toolGroups.js";
+import type { GuiMcpServer } from "../agents/codex-args.js";
 
 export interface McpConfigInput {
   sessionId: string;
@@ -45,6 +46,17 @@ export function guiMcpEnv(sessionId: string, port: string | number): Record<stri
 // The GROUPS are the directory's, read from Claude Code's config by the caller: one switch in the
 // launcher, both agents. A grid cell whose directory registered nothing gets an empty list and
 // therefore no GUI tools, which is what it had before.
+//
+// AUTO-APPROVAL is the part that does not carry over cleanly. claude is handed a list of TOOLS
+// (`--allowedTools` from AUTO_ALLOWED_TOOLS), and that list deliberately withholds the ones that
+// can spend money or write files — presentDocument resolves image placeholders through the image
+// backend, and the whole `media` group generates. codex approves per SERVER, so a group can only
+// be waved through when EVERY tool in it is on that list. Today none are, so a grid cell answers
+// codex's prompt instead — which is the same question claude asks, not a new obstacle.
+//
+// The single view is left as it was: it carries the whole GUI MCP under one id and has been
+// approved wholesale since it was wired, and narrowing it here would take a working setup and
+// start prompting in it. Deliberate divergence, not an oversight.
 export function codexGuiMcpServers({
   sessionId,
   host = DEFAULT_HOST,
@@ -58,10 +70,16 @@ export function codexGuiMcpServers({
   groups: readonly ToolGroup[];
   /** The single view, which carries every tool on one URL rather than a URL per group. */
   allTools: boolean;
-}): { id: string; url: string }[] {
+}): GuiMcpServer[] {
   const base = `http://${host}:${port}/api/mcp`;
-  if (allTools) return [{ id: GUI_SERVER_ID, url: `${base}/${sessionId}` }];
-  return groups.map((group) => ({ id: toolGroupServerId(group), url: `${base}/${group}/${sessionId}` }));
+  if (allTools) return [{ id: GUI_SERVER_ID, url: `${base}/${sessionId}`, autoApprove: true }];
+  return groups.map((group) => ({
+    id: toolGroupServerId(group),
+    url: `${base}/${group}/${sessionId}`,
+    // Every tool, not any: one unlisted member is enough to make approving the server a way to
+    // run it without asking.
+    autoApprove: toolsInGroup(group).every((tool) => AUTO_ALLOWED_TOOLS.includes(tool)),
+  }));
 }
 
 export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers, sandbox = false }: McpConfigInput): string {

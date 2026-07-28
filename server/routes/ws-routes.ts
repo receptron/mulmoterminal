@@ -23,6 +23,7 @@ import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
+import { bufferEarlyFrames } from "../session/early-frames.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { handleCommandFrame } from "../session/pty-connection.js";
@@ -353,6 +354,11 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { ur
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
+  // The browser sends its first frame — the terminal's real geometry — as soon as the socket
+  // opens, and the read below is the first thing on this path that waits. Collected from here so
+  // that frame is replayed into the pty rather than dropped on the floor (see early-frames.ts).
+  const early = bufferEarlyFrames<{ toString(): string }>(ws);
+
   // A grid cell's GUI tools are whatever its DIRECTORY registered — the same switches claude's
   // cells read, in the same file. claude picks them up itself; codex is handed resolved URLs at
   // spawn, so the answer has to be read here, before the pty exists. Only for a spawn: a reattach
@@ -362,7 +368,7 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { ur
   // reaps, because the close handlers below are not wired yet (same guard as the claude path).
   if (ws.readyState !== ws.OPEN) {
     console.log(`[ws/codex] client left before spawn — abandoning ${sessionId}`);
-    return;
+    return early.discard();
   }
 
   let entry: PtyEntry;
@@ -370,11 +376,14 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { ur
     entry = startCodexEntry(deps, ws, { sessionId, live, resumeRolloutId, cwd, attachGuiMcp, mcpGroups });
   } catch (err) {
     console.error(`[ws/codex] failed to start ${sessionId}: ${messageOf(err)}`);
+    early.discard();
     return closeWithError(ws, "Failed to start codex. Is the `codex` CLI installed and on your PATH?");
   }
 
   ws.on("message", (raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
   ws.on("close", () => deps.handleClientClose(entry, ws, sessionId));
+  // After the real listener is installed, so ordering holds for a frame that lands mid-replay.
+  early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
 }
 
 export function mountTerminalWebSockets(deps: WsRouteDeps) {

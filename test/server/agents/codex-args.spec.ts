@@ -24,7 +24,7 @@ describe("buildCodexArgs", () => {
     // Opaque endpoint token — buildCodexArgs embeds it verbatim (the real value is an
     // interpolated loopback URL; a static http literal here trips no-clear-text-protocols).
     const url = "gui-mcp-endpoint";
-    expect(buildCodexArgs({ ...base, guiMcpServers: [{ id: "mulmoterminal-gui", url }] })).toEqual([
+    expect(buildCodexArgs({ ...base, guiMcpServers: [{ id: "mulmoterminal-gui", url, autoApprove: true }] })).toEqual([
       "-c",
       `mcp_servers.mulmoterminal-gui.url="${url}"`,
       "-c",
@@ -39,8 +39,8 @@ describe("buildCodexArgs", () => {
     const args = buildCodexArgs({
       ...base,
       guiMcpServers: [
-        { id: "mulmoterminal-render", url: "render-endpoint" },
-        { id: "mulmoterminal-media", url: "media-endpoint" },
+        { id: "mulmoterminal-render", url: "render-endpoint", autoApprove: true },
+        { id: "mulmoterminal-media", url: "media-endpoint", autoApprove: true },
       ],
     });
     expect(args).toEqual([
@@ -56,9 +56,17 @@ describe("buildCodexArgs", () => {
   });
 
   it("orders model, GUI MCP, then the resume subcommand (no positional prompt)", () => {
-    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpServers: [{ id: "mulmoterminal-gui", url: "gui-mcp-endpoint" }] });
+    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpServers: [{ id: "mulmoterminal-gui", url: "gui-mcp-endpoint", autoApprove: true }] });
     expect(args.slice(0, 2)).toEqual(["--model", "gpt-5.4"]);
     expect(args).toContain("-c");
     expect(args.slice(-2)).toEqual(["resume", "id1"]);
+  });
+
+  // codex approves per server, so a group holding a tool that is not auto-allowed gets the url
+  // and nothing else — the prompt is the point. See codexGuiMcpServers.
+  it("omits the approval line for a server that is not auto-approved", () => {
+    const args = buildCodexArgs({ ...base, guiMcpServers: [{ id: "mulmoterminal-media", url: "media-endpoint", autoApprove: false }] });
+    expect(args).toEqual(["-c", `mcp_servers.mulmoterminal-media.url="media-endpoint"`]);
+    expect(args.join(" ")).not.toContain("approval_mode");
   });
 });
