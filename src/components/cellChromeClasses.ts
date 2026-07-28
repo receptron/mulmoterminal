@@ -41,7 +41,11 @@ export const CELL_ACTIONS = "flex flex-none gap-1";
 // Split into box / size / ink for the same reason as the dot: a caller that resizes a button
 // or gives it its own colours swaps ONE piece instead of layering a second utility for a
 // property that is already set.
-export const CELL_BTN_BOX = "inline-flex items-center justify-center rounded-md border-none bg-transparent leading-none";
+// Shape WITHOUT a fill, so the idle and pressed variants can each name their own `bg-*` instead
+// of layering one over `bg-transparent` — which of two competing utilities wins is decided by
+// Tailwind's output order, not by the order they are written in (the same rule as the dot above).
+export const CELL_BTN_SHAPE = "inline-flex items-center justify-center rounded-md border-none leading-none";
+export const CELL_BTN_BOX = `${CELL_BTN_SHAPE} bg-transparent`;
 export const CELL_BTN_SIZE = "h-[26px] w-7 text-[16px]";
 export const CELL_BTN_INK = "cursor-pointer text-[var(--cell-btn,var(--text-secondary))] hover:bg-hover hover:text-fg";
 export const CELL_BTN = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} ${CELL_BTN_INK}`;
@@ -50,6 +54,17 @@ export const CELL_BTN = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} ${CELL_BTN_INK}`;
 // dimming is what says it is there but unavailable. Same idiom as the launcher's ▶ button.
 export const CELL_BTN_INK_DISABLEABLE = `enabled:cursor-pointer text-[var(--cell-btn,var(--text-secondary))] enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-40`;
 export const CELL_BTN_DISABLEABLE = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} ${CELL_BTN_INK_DISABLEABLE}`;
+
+// The header button whose pane is CURRENTLY OPEN. Files, Canvas and Tools share one slot beside
+// the enlarged terminal, so exactly one of them can be in this state — and which one has to be
+// readable without moving the pointer. Idle chrome differs from hover by a background alone,
+// which says nothing once the cursor is elsewhere, so this fills AND recolours the ink.
+//
+// The same --bg-selected the rest of the app marks a selection with, rather than a colour of its
+// own: a header button is not a new kind of selected thing. Note it is not `--cell-btn`-tinted —
+// a directory's chrome colour drives the IDLE ink, and letting it drive this one too would make
+// "selected" mean a different shade per directory.
+export const CELL_BTN_ACTIVE = `${CELL_BTN_SHAPE} ${CELL_BTN_SIZE} cursor-pointer bg-selected text-accent hover:bg-selected-hover hover:text-accent`;
 export const CELL_CLOSE_BTN = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} cursor-pointer text-[var(--cell-btn,var(--text-secondary))] hover:bg-[var(--err-hover-bg)] hover:text-err-text`;
 
 // A path clipped from the FRONT: `rtl` puts the ellipsis at the start so the tail — the

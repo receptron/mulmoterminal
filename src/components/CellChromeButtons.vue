@@ -10,7 +10,7 @@
 // No `.stop` on the clicks: the enclosing header's zoom gesture already ignores anything
 // inside a button (shouldZoomOnHeaderClick), and stopping here would only hide that.
 import { computed } from "vue";
-import { CELL_BTN, CELL_BTN_DISABLEABLE, CELL_CLOSE_BTN } from "./cellChromeClasses";
+import { CELL_BTN, CELL_BTN_ACTIVE, CELL_BTN_DISABLEABLE, CELL_CLOSE_BTN } from "./cellChromeClasses";
 
 const props = defineProps<{
   expanded: boolean;
@@ -31,6 +31,16 @@ const canvasTitle = computed(() => {
   if (!props.canvasAvailable) return "No render MCP for this directory — turn on Canvas in the launcher, then restart this cell";
   return props.rightPane === "canvas" ? "Hide canvas" : "Show canvas";
 });
+
+// Pressed buttons get a DIFFERENT class string, not an extra one: the two carry competing `bg-*`
+// utilities, and appending would leave which of them wins to Tailwind's output order.
+//
+// Which pane is open was only in `aria-pressed` and the tooltip before — true for a screen reader
+// and for whoever hovers, invisible to everyone looking at the header.
+const filesClass = computed(() => (props.filesOpen ? CELL_BTN_ACTIVE : CELL_BTN));
+// A disabled Canvas cannot be the open pane, so the pressed style never has to survive `disabled:`.
+const canvasClass = computed(() => (props.rightPane === "canvas" ? CELL_BTN_ACTIVE : CELL_BTN_DISABLEABLE));
+const toolsClass = computed(() => (props.rightPane === "tools" ? CELL_BTN_ACTIVE : CELL_BTN));
 </script>
 
 <template>
@@ -49,7 +59,7 @@ const canvasTitle = computed(() => {
   <button
     v-if="expanded"
     class="cell-btn"
-    :class="CELL_BTN"
+    :class="filesClass"
     :aria-pressed="!!filesOpen"
     :title="filesOpen ? 'Hide files' : 'Show files'"
     :aria-label="filesOpen ? 'Hide files' : 'Show files'"
@@ -64,7 +74,7 @@ const canvasTitle = computed(() => {
     v-if="expanded"
     data-testid="cell-canvas-btn"
     class="cell-btn"
-    :class="CELL_BTN_DISABLEABLE"
+    :class="canvasClass"
     :disabled="!canvasAvailable"
     :aria-pressed="rightPane === 'canvas'"
     :title="canvasTitle"
@@ -76,7 +86,7 @@ const canvasTitle = computed(() => {
   <button
     v-if="expanded"
     class="cell-btn"
-    :class="CELL_BTN"
+    :class="toolsClass"
     :aria-pressed="rightPane === 'tools'"
     :title="rightPane === 'tools' ? 'Hide tools' : 'Show tools'"
     :aria-label="rightPane === 'tools' ? 'Hide tools' : 'Show tools'"
