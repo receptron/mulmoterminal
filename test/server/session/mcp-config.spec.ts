@@ -141,26 +141,27 @@ describe("codexGuiMcpServers", () => {
   });
 });
 
-// codex approves per SERVER; claude is handed a list of TOOLS. AUTO_ALLOWED_TOOLS deliberately
-// withholds the ones that spend money or write files (presentDocument resolves image placeholders
-// through the image backend; the whole media group generates), so waving a group through would
-// hand codex what that list exists to keep behind a prompt.
+// codex approves per SERVER; claude is handed a list of TOOLS (AUTO_ALLOWED_TOOLS, which withholds
+// the ones that can spend money). The same list cannot be expressed here — a group is waved through
+// as a whole, or every call in it asks — and the owner chose to wave it through (2026-07-28). So a
+// codex cell can spend on presentDocument / generateImage without asking while a claude cell in the
+// same directory still asks. Pinned because it is a deliberate asymmetry, not a leftover.
 describe("codexGuiMcpServers auto-approval", () => {
   const groupsOf = (groups: ToolGroup[]) => codexGuiMcpServers({ sessionId: SESSION, port: 34567, groups, allTools: false });
 
-  it("does not auto-approve a group holding a tool that is not auto-allowed", () => {
-    for (const server of groupsOf([...TOOL_GROUPS])) expect(server.autoApprove).toBe(false);
+  it("approves every group it attaches", () => {
+    const servers = groupsOf([...TOOL_GROUPS]);
+    expect(servers).toHaveLength(TOOL_GROUPS.length);
+    for (const server of servers) expect(server.autoApprove).toBe(true);
   });
 
-  // Stated as the RULE rather than the current answer: if presentDocument ever joins the list,
-  // render becomes approvable and this keeps agreeing with AUTO_ALLOWED_TOOLS instead of a
-  // hardcoded false.
-  it("follows AUTO_ALLOWED_TOOLS rather than a fixed answer", () => {
-    for (const group of TOOL_GROUPS) {
-      const [server] = groupsOf([group]);
-      expect(server.id).toBe(toolGroupServerId(group));
-      expect(server.autoApprove).toBe(toolsInGroup(group).every((tool) => AUTO_ALLOWED_TOOLS.includes(tool)));
-    }
+  // The group claude keeps entirely behind a prompt. Named rather than left to the loop above, so
+  // narrowing the policy later has to change a test that says what it is giving up.
+  it("approves media too, whose tools claude never auto-allows", () => {
+    const [media] = groupsOf(["media"]);
+    expect(media.id).toBe(toolGroupServerId("media"));
+    expect(media.autoApprove).toBe(true);
+    expect(toolsInGroup("media").some((tool) => AUTO_ALLOWED_TOOLS.includes(tool))).toBe(false);
   });
 
   // The single view carries every tool under one id and has been approved wholesale since it was

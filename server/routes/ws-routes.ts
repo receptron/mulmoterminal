@@ -10,7 +10,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { messageOf } from "../errors.js";
-import { SESSION_ID_RE } from "../config/env.js";
+import { PORT, SESSION_ID_RE } from "../config/env.js";
 import { resolveWorkspace } from "../config/workspace.js";
 import { getHeaderConfig } from "../config/config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "../config/header-context.js";
@@ -24,6 +24,8 @@ import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
 import { bufferEarlyFrames } from "../session/early-frames.js";
+import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
+import { codexGuiMcpServers } from "../session/mcp-config.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { handleCommandFrame } from "../session/pty-connection.js";
@@ -320,7 +322,7 @@ function handleRunConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: stri
 // configured launch command as a persistent, reattachable PTY. Reuses the /ws session
 // lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
 // and is marked a dev-terminal session so it stays out of the chat sidebar.
-function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
+async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
   const index = parseIndexParam(url.searchParams.get("launcher"));
   const shell = url.searchParams.get("shell") === "1";
@@ -331,16 +333,33 @@ function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: s
   markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
 
+  // Same reason as the codex path below — the browser's first frame is the terminal's geometry
+  // and it arrives while this is still reading files.
+  const early = bufferEarlyFrames<{ toString(): string }>(ws);
+
+  // A launcher that runs codex gets the directory's registered tool groups too. The chip and the
+  // agent toggle land in the same cell and look the same, so a Canvas that lights up for one and
+  // never for the other reads as a broken feature. Only for a spawn, and only for codex — every
+  // other command is passed through untouched (see launcher-gui-mcp.ts).
+  const groups = live ? [] : await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
+  const launchCommand = launcherCommandWithGuiMcp(command, codexGuiMcpServers({ sessionId, port: PORT, groups, allTools: false }), process.platform);
+  if (ws.readyState !== ws.OPEN) {
+    console.log(`[ws/launch] client left before spawn — abandoning ${sessionId}`);
+    return early.discard();
+  }
+
   let entry: PtyEntry;
   try {
-    entry = startLaunchEntry(deps, sessionId, ws, live, command, cwd);
+    entry = startLaunchEntry(deps, sessionId, ws, live, launchCommand, cwd);
   } catch (err) {
     console.error(`[ws/launch] failed to start ${sessionId}: ${messageOf(err)}`);
+    early.discard();
     return closeWithError(ws, "Failed to start the launch command.");
   }
 
   ws.on("message", (raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
   ws.on("close", () => deps.handleClientClose(entry, ws, sessionId));
+  early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
 }
 
 // codex terminal (?cwd=<dir>, ?session=<id> to reattach/resume). ?gui=0 (grid dev terminal) runs
@@ -423,6 +442,6 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
 
   wss.on("connection", (ws, req) => void handleClaudeConnection(deps, ws, req));
   runWss.on("connection", (ws, req) => handleRunConnection(deps, ws, req));
-  runLaunchWss.on("connection", (ws, req) => handleLaunchConnection(deps, ws, req));
+  runLaunchWss.on("connection", (ws, req) => void handleLaunchConnection(deps, ws, req));
   runCodexWss.on("connection", (ws, req) => void handleCodexConnection(deps, ws, req));
 }

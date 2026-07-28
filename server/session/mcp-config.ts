@@ -8,7 +8,7 @@
 // so the precedence rule below could not be tested without booting the server (#548).
 import { rewriteLoopbackForDocker } from "../infra/sandbox.js";
 import type { UserMcpServer } from "../config/config-schema.js";
-import { toolGroupServerId, toolsInGroup, AUTO_ALLOWED_TOOLS, type ToolGroup } from "../../common/toolGroups.js";
+import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import type { GuiMcpServer } from "../agents/codex-args.js";
 
 export interface McpConfigInput {
@@ -47,16 +47,21 @@ export function guiMcpEnv(sessionId: string, port: string | number): Record<stri
 // launcher, both agents. A grid cell whose directory registered nothing gets an empty list and
 // therefore no GUI tools, which is what it had before.
 //
-// AUTO-APPROVAL is the part that does not carry over cleanly. claude is handed a list of TOOLS
-// (`--allowedTools` from AUTO_ALLOWED_TOOLS), and that list deliberately withholds the ones that
-// can spend money or write files — presentDocument resolves image placeholders through the image
-// backend, and the whole `media` group generates. codex approves per SERVER, so a group can only
-// be waved through when EVERY tool in it is on that list. Today none are, so a grid cell answers
-// codex's prompt instead — which is the same question claude asks, not a new obstacle.
+// AUTO-APPROVAL does not carry over cleanly, and the difference is decided here. claude is handed
+// a list of TOOLS (`--allowedTools`, from AUTO_ALLOWED_TOOLS) and that list deliberately withholds
+// the ones that can spend money — presentDocument resolves image placeholders through the image
+// backend, and the whole `media` group generates. codex approves per SERVER, so the same list
+// cannot be expressed: a group is waved through as a whole, or every call in it asks.
 //
-// The single view is left as it was: it carries the whole GUI MCP under one id and has been
-// approved wholesale since it was wired, and narrowing it here would take a working setup and
-// start prompting in it. Deliberate divergence, not an oversight.
+// It is waved through, by the owner's decision (2026-07-28). Prompting on every drawing call is
+// what the flag was added to the single view to avoid, and the single view has carried the whole
+// GUI MCP — generateImage included — approved wholesale since it was wired. So a codex cell can
+// spend on presentDocument / generateImage / presentMulmoScript without asking, and a claude cell
+// in the same directory still asks. That asymmetry is intentional and it is codex's approval
+// model, not an oversight.
+//
+// If it should ever be narrowed, this is the one place: `autoApprove` is a per-server property so
+// the policy stays a value here rather than a flag scattered through the argv builder.
 export function codexGuiMcpServers({
   sessionId,
   host = DEFAULT_HOST,
@@ -73,13 +78,7 @@ export function codexGuiMcpServers({
 }): GuiMcpServer[] {
   const base = `http://${host}:${port}/api/mcp`;
   if (allTools) return [{ id: GUI_SERVER_ID, url: `${base}/${sessionId}`, autoApprove: true }];
-  return groups.map((group) => ({
-    id: toolGroupServerId(group),
-    url: `${base}/${group}/${sessionId}`,
-    // Every tool, not any: one unlisted member is enough to make approving the server a way to
-    // run it without asking.
-    autoApprove: toolsInGroup(group).every((tool) => AUTO_ALLOWED_TOOLS.includes(tool)),
-  }));
+  return groups.map((group) => ({ id: toolGroupServerId(group), url: `${base}/${group}/${sessionId}`, autoApprove: true }));
 }
 
 export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers, sandbox = false }: McpConfigInput): string {
