@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { makeTempDir } from "../../support/tempDir.js";
+import { writeFileSync, mkdirSync, rmSync, symlinkSync, realpathSync } from "node:fs";
 import path from "node:path";
 import {
   containedPath,
@@ -12,7 +12,7 @@ import {
   namesAWindowsDevice,
 } from "../../../server/files/pathContainment";
 
-const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-files-"));
+const tmp = () => makeTempDir("mt-files-");
 
 describe("containedPath (write/read containment)", () => {
   const base = "/proj/root";

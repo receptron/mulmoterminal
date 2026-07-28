@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { makeTempDir } from "../../support/tempDir.js";
+import { writeFileSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import request from "supertest";
 import { currentVersion, listEntries, mdToHtmlDoc, mountFilesBrowseRoutes, MAX_EDIT_BYTES } from "../../../server/files/files-browse";
 import { backupDirFor } from "../../../server/files/backup-store";
 
-const tmp = () => mkdtempSync(path.join(tmpdir(), "mt-files-"));
+const tmp = () => makeTempDir("mt-files-");
 
 describe("listEntries", () => {
   it("lists directories first, then files, each alphabetical, with sizes", () => {
@@ -209,8 +209,8 @@ describe("currentVersion", () => {
 // user resolves by dropping one side — happens to content nobody deliberately threw away.
 describe("browse routes keep backups", () => {
   const withStore = async (run: (app: express.Express, dir: string, backups: string) => Promise<void>) => {
-    const dir = mkdtempSync(path.join(tmpdir(), "mt-files-"));
-    const backups = mkdtempSync(path.join(tmpdir(), "mt-backups-"));
+    const dir = makeTempDir("mt-files-");
+    const backups = makeTempDir("mt-backups-");
     writeFileSync(path.join(dir, "a.md"), "one");
     const app = express();
     app.use(express.json());
@@ -283,7 +283,7 @@ describe("browse routes keep backups", () => {
 
   // Refusing a save because the BACKUP failed would be exactly backwards.
   it("still reads and writes when the backup store is unusable", async () => {
-    const dir = mkdtempSync(path.join(tmpdir(), "mt-files-"));
+    const dir = makeTempDir("mt-files-");
     writeFileSync(path.join(dir, "a.md"), "one");
     const blocked = path.join(dir, "blocked");
     writeFileSync(blocked, "a file where the backup root should be");
