@@ -10,6 +10,7 @@ import CollectionsBrowseOverlay from "./components/CollectionsBrowseOverlay.vue"
 import AccountingOverlay from "./components/AccountingOverlay.vue";
 import WikiBrowseOverlay from "./components/WikiBrowseOverlay.vue";
 import PrsOverlay from "./components/PrsOverlay.vue";
+import DecisionsOverlay from "./components/DecisionsOverlay.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
 import GridView from "./components/GridView.vue";
 import { useRoute } from "vue-router";
@@ -401,6 +402,7 @@ function onSession(id: string) {
     <WikiBrowseOverlay />
     <!-- Full-screen cross-repo PR list; opened by the toolbar's call_merge button. -->
     <PrsOverlay />
+    <DecisionsOverlay />
     <!-- Full-screen file explorer + editor; opened by a terminal header's Files button. -->
     <FilesOverlay />
     <AppSettingsModal

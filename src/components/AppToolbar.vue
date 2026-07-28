@@ -12,6 +12,7 @@ import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../compo
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
 import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
+import { useDecisionsView, decisionsGotoIndex } from "../composables/useDecisionsView";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import { useUpdateStatus } from "../composables/useUpdateStatus";
 import { useGithubStar } from "../composables/useGithubStar";
@@ -51,6 +52,7 @@ const { view: browseView } = useCollectionBrowse();
 const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = usePrsView();
+const { isOpen: decisionsOpen } = useDecisionsView();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
 const { badge: updateBadge } = useUpdateStatus();
 const { visible: starVisible, confirming: starConfirming, title: starTitle, activate: activateStar } = useGithubStar();
@@ -91,6 +93,7 @@ const collectionsActive = computed(() => browseView.value.mode === "index" && br
 const accountingActive = computed(() => accountingOpen.value);
 const wikiActive = computed(() => wikiOpen.value);
 const prsActive = computed(() => prsOpen.value);
+const decisionsActive = computed(() => decisionsOpen.value);
 function favActive(s: Shortcut): boolean {
   return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
 }
@@ -122,6 +125,11 @@ function showWorklog(): void {
 }
 function showPrs(): void {
   prsGotoIndex();
+}
+// The decision log defaults to the server's workspace (the view resolves it) — the toolbar has no
+// single directory to speak for, unlike a terminal header's button.
+function showDecisions(): void {
+  decisionsGotoIndex(null);
 }
 </script>
 
@@ -157,6 +165,7 @@ function showPrs(): void {
       </template>
       <!-- Grid only (#886): branches under supervision are a grid concern. -->
       <LauncherButton v-if="inGrid" icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
+      <LauncherButton v-if="inGrid" icon="how_to_vote" title="Decisions" label="Decisions" :active="decisionsActive" @click="showDecisions" />
       <LauncherButton
         v-if="inGrid"
         icon="history_edu"

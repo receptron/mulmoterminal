@@ -26,6 +26,9 @@ export const routes: RouteRecordRaw[] = [
   { path: "/feeds/:slug", name: "feedDetail", component: Stub },
   { path: "/accounting", name: "accounting", component: Stub },
   { path: "/prs", name: "prs", component: Stub },
+  // Read-only decision log: the questions a human was asked in a project and what they chose,
+  // read back out of Claude's transcripts (#1008). Optional ?cwd= scopes it to one project.
+  { path: "/decisions", name: "decisions", component: Stub },
   // Full-screen file explorer + editor, rooted at a project dir (?cwd=). Opened from a
   // terminal header's Files button.
   { path: "/files", name: "files", component: Stub },

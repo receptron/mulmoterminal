@@ -867,6 +867,19 @@ PRs show a CI-rollup / review-decision / draft badge; each repo lists its latest
 issues. Rows are real links, per-repo errors don't sink the view, and the two lists load
 independently. Backed by `GET /api/prs` and `GET /api/issues`.
 
+**Decisions.** The toolbar's **Decisions** button opens a full-screen log of the questions a
+human was actually asked in this project and what they chose — read back out of Claude's own
+transcripts, newest first. Each entry shows the question, **every option with its description**
+(so the branch that was *not* taken is still there), and the answer.
+
+The three ways an answer arrives are kept apart, because two of them are about the *question*
+rather than the choice: an answer picked from the options, one the user **wrote instead** (the
+options missed), and one **never given** (asked, never resolved). Each is a filter, and a
+written-in answer is marked in the list. An incomplete scan says so rather than showing a short
+list as the whole truth. Read-only — nothing here writes, and the transcripts stay the original.
+Backed by `GET /api/decisions`; a terminal header button can open it scoped to that cell's
+directory with `open: { view: "decisions" }`.
+
 ---
 
 ## Cost & token usage
@@ -1484,6 +1497,7 @@ src/
     FilesOverlay.vue                         file browser + CodeMirror editor
     GitBranchChip.vue, ModelContextBadge.vue header chips / badges
     PrsOverlay.vue                           cross-repo PRs & Issues
+    DecisionsOverlay.vue                     decision log (what was asked, what was chosen)
     Wiki*View.vue, Collections*.vue, AccountingOverlay.vue   workspace views
     TimelineOverlay.vue, ToolsPane.vue, NotificationBell.vue, RemoteHostControl.vue
     SettingsModal.vue                        ⚙ settings

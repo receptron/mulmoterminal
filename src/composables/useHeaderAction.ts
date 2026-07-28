@@ -3,6 +3,7 @@
 // Terminal.vue (it emits `run` to open a command cell), so it never reaches here — the branch below
 // is only a defensive no-op warn.
 import { filesGotoIndex } from "./useFilesView";
+import { decisionsGotoIndex } from "./useDecisionsView";
 import { prsGotoIndex } from "./usePrsView";
 import { wikiGotoIndex } from "./useWikiBrowse";
 import { browseGotoIndex } from "./useCollectionBrowse";
@@ -44,6 +45,7 @@ function revealDir(dirPath: string): void {
 
 function openView(view: string, cwd: string | null): void {
   if (view === "prs") prsGotoIndex();
+  else if (view === "decisions") decisionsGotoIndex(cwd);
   else if (view === "wiki") wikiGotoIndex();
   else if (view === "collections") browseGotoIndex("collection");
   else if (view === "accounting") accountingViewOpen();
