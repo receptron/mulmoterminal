@@ -9,8 +9,10 @@ import { registerGuiMcpGroup, unregisterGuiMcpGroup, registeredGuiMcpGroups } fr
 
 export function mountGuiMcpRoutes(app: Express): void {
   // Which GUI tool groups this directory has registered with Claude Code, so the launcher can
-  // show the Canvas switch in the right position. Read back from `claude mcp list` per request
-  // rather than remembered — the user can add or remove one with the CLI behind our back.
+  // show the Canvas switch in the right position. Read from Claude Code's config files per
+  // request rather than remembered — the user can add or remove one with the CLI behind our
+  // back — but WITHOUT shelling out to `claude mcp list`, whose health check made the launcher
+  // wait seconds for a switch position that is sitting in a file.
   //
   // Same no-fallback rule as /api/dir-config-detail: this REPORTS ON the directory it was asked
   // about, and answering about the default workspace under another directory's name is worse
@@ -18,7 +20,7 @@ export function mountGuiMcpRoutes(app: Express): void {
   app.get("/api/gui-mcp-groups", async (req, res) => {
     const cwd = existingWorkspaceFromQuery(req.query.cwd);
     if (!cwd) return res.json({ groups: [] });
-    res.json({ groups: await registeredGuiMcpGroups(claudeAdapter.bin(), cwd, TOOL_GROUPS) });
+    res.json({ groups: await registeredGuiMcpGroups(cwd, TOOL_GROUPS) });
   });
 
   // Turn a group on or off for this directory. Writes through `claude mcp` into LOCAL scope —

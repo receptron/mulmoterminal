@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-// Long enough for `claude mcp list`, which health-checks every registered server, and short
+// Long enough for `claude mcp add`, which validates the server it is registering, and short
 // enough that a hung CLI surfaces as an error the UI can show rather than a request that never
 // answers.
 const DEFAULT_TIMEOUT_MS = 15_000;

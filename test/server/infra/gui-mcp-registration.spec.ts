@@ -1,6 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, symlinkSync, realpathSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
-import { guiMcpUrlTemplate, listMentionsServer } from "../../../server/infra/gui-mcp-registration.js";
+import { guiMcpUrlTemplate, registeredGuiMcpGroups } from "../../../server/infra/gui-mcp-registration.js";
+import { TOOL_GROUPS } from "../../../common/toolGroups.js";
 
 // The url is registered ONCE, into the user's own Claude Code config, and then read at every
 // connect. It has to stay a template: the port and session id are only known per spawn, and
@@ -22,28 +26,71 @@ describe("guiMcpUrlTemplate", () => {
   });
 });
 
-describe("listMentionsServer", () => {
-  const list = ["mulmoterminal-render: http://127.0.0.1:34567/api/mcp/render/x - connected", "playwright: npx @playwright/mcp - connected"].join("\n");
+// Read from the config FILES, never by running `claude mcp list` — that command health-checks
+// every registered server first, and the launcher was paying that wait before it could draw the
+// Canvas switch.
+describe("registeredGuiMcpGroups", () => {
+  let root = "";
+  let home = "";
+  let cwd = "";
+  const previousConfigDir = process.env.CLAUDE_CONFIG_DIR;
 
-  it("finds a registered server", () => {
-    expect(listMentionsServer(list, "mulmoterminal-render")).toBe(true);
+  const writeClaudeConfig = (value: unknown) => writeFileSync(path.join(home, ".claude.json"), JSON.stringify(value));
+
+  beforeEach(() => {
+    // realpath'd: on macOS the temp dir is itself behind a symlink (/var -> /private/var), which
+    // would make every path in here exercise the symlink case by accident.
+    root = realpathSync(mkdtempSync(path.join(tmpdir(), "gui-mcp-")));
+    home = path.join(root, "home");
+    cwd = path.join(root, "repo");
+    mkdirSync(home);
+    mkdirSync(cwd);
+    process.env.CLAUDE_CONFIG_DIR = home;
   });
 
-  it("does not find one that is absent", () => {
-    expect(listMentionsServer(list, "mulmoterminal-data")).toBe(false);
+  afterEach(() => {
+    if (previousConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = previousConfigDir;
+    rmSync(root, { recursive: true, force: true });
   });
 
-  // The id also appears INSIDE the url of the line above it. Matching anywhere in the output
-  // would report every group as registered as soon as one was.
-  it("matches the id at the start of a line, not inside another server's url", () => {
-    expect(listMentionsServer("other: http://x/api/mcp/render/y - ok", "render")).toBe(false);
+  it("reports the groups registered for this directory in local scope", async () => {
+    writeClaudeConfig({ projects: { [cwd]: { mcpServers: { "mulmoterminal-render": { type: "http" } } } } });
+    expect(await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).toEqual(["render"]);
   });
 
-  it("tolerates indentation", () => {
-    expect(listMentionsServer("   mulmoterminal-render: http://x - ok", "mulmoterminal-render")).toBe(true);
+  // Local scope is keyed by directory: another project's registration is not this one's.
+  it("does not report a group registered for a different directory", async () => {
+    writeClaudeConfig({ projects: { [path.join(root, "elsewhere")]: { mcpServers: { "mulmoterminal-render": {} } } } });
+    expect(await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).toEqual([]);
   });
 
-  it("reads empty output as nothing registered", () => {
-    expect(listMentionsServer("", "mulmoterminal-render")).toBe(false);
+  // The three scopes `claude mcp list` merges are the three the session will actually get.
+  it("also counts user scope and the repo's .mcp.json", async () => {
+    writeClaudeConfig({ mcpServers: { "mulmoterminal-media": {} } });
+    writeFileSync(path.join(cwd, ".mcp.json"), JSON.stringify({ mcpServers: { "mulmoterminal-data": {} } }));
+    expect((await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).sort()).toEqual(["data", "media"]);
+  });
+
+  // Claude Code keys local scope by its own resolved cwd; ours is canonicalized only lexically.
+  it("matches a directory reached through a symlink", async () => {
+    const link = path.join(root, "link");
+    symlinkSync(cwd, link);
+    writeClaudeConfig({ projects: { [cwd]: { mcpServers: { "mulmoterminal-render": {} } } } });
+    expect(await registeredGuiMcpGroups(link, TOOL_GROUPS)).toEqual(["render"]);
+  });
+
+  // The file is rewritten live by Claude Code, so a read can land mid-write.
+  it("reads a missing or unparsable config as nothing registered", async () => {
+    expect(await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).toEqual([]);
+    writeFileSync(path.join(home, ".claude.json"), "{ half-writ");
+    expect(await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).toEqual([]);
+  });
+
+  // An indexed lookup would resolve these through Object.prototype and report a group that the
+  // user never registered.
+  it("does not read inherited object members as registrations", async () => {
+    writeClaudeConfig({ projects: { [cwd]: { mcpServers: { constructor: {}, toString: {} } } } });
+    expect(await registeredGuiMcpGroups(cwd, TOOL_GROUPS)).toEqual([]);
   });
 });
