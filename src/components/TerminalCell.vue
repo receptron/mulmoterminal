@@ -11,6 +11,7 @@ import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import DirBadge from "./DirBadge.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
 import { CANVAS_TOOL_GROUPS, toolGroupServerId, toolsInGroup, type ToolGroup } from "../../common/toolGroups";
+import { queueCanvasWrite } from "./canvasWriteQueue";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
@@ -573,7 +574,11 @@ async function loadCanvasEnabled() {
 
 // Writes into the user's Claude Code config, so a failure is surfaced and the checkbox is put
 // back — a switch that shows "on" for a registration that was never written is the worst state.
-async function applyCanvas(group: ToolGroup) {
+function applyCanvas(group: ToolGroup): Promise<void> {
+  return queueCanvasWrite(() => writeCanvasGroup(group));
+}
+
+async function writeCanvasGroup(group: ToolGroup) {
   const dir = canvasDir.value;
   if (!dir) return;
   const wanted = canvasEnabled.value[group];
@@ -660,18 +665,20 @@ const reuseWorktree = async (w: Worktree) => {
 async function carryCanvasInto(worktreePath: string) {
   if (!canvasDir.value || worktreePath === canvasDir.value) return;
   const enabled = CANVAS_TOOL_GROUPS.filter((group) => canvasEnabled.value[group]);
-  try {
-    // Serially, not Promise.all: each POST shells out to `claude mcp add`, which read-modify-
-    // writes the SAME local-scope config file — two in flight can lose one of the two entries.
-    for (const group of enabled) {
-      await fetch("/api/gui-mcp-groups", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ cwd: worktreePath, group, enabled: true }),
-      });
-    }
-  } catch {
-    // best-effort — a worktree without the registration still launches, just without Canvas
+  // Through the same queue as the switches, one group at a time: a launch that fires while a
+  // checkbox is still saving would otherwise be the very concurrent write the queue exists for.
+  for (const group of enabled) {
+    await queueCanvasWrite(async () => {
+      try {
+        await fetch("/api/gui-mcp-groups", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ cwd: worktreePath, group, enabled: true }),
+        });
+      } catch {
+        // best-effort — a worktree without the registration still launches, just without Canvas
+      }
+    });
   }
 }
 
