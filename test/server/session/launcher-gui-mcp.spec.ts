@@ -52,6 +52,17 @@ describe("launcherCommandWithGuiMcp", () => {
     for (const word of words) expect(word).toContain('="');
   });
 
+  // "Byte for byte" has to include the tail. A trailing backslash-newline continuation that gets
+  // trimmed away leaves the shell reading an unterminated command.
+  it("keeps trailing text the command line depends on", () => {
+    const out = rewrite("codex --model gpt-5 \\\n  --search");
+    expect(out.endsWith(" --model gpt-5 \\\n  --search")).toBe(true);
+  });
+
+  it("keeps the command's own leading whitespace", () => {
+    expect(rewrite("  codex").startsWith("  codex -c ")).toBe(true);
+  });
+
   it("leaves a command that is not codex alone", () => {
     expect(rewrite("$SHELL")).toBe("$SHELL");
     expect(rewrite("claude")).toBe("claude");

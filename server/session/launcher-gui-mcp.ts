@@ -39,11 +39,17 @@ export function launcherCommandWithGuiMcp(command: string, servers: readonly Gui
     if (server.autoApprove) parts.push(`-c`, quote(`mcp_servers.${server.id}.default_tools_approval_mode="approve"`));
     return parts;
   });
-  // Sliced rather than split-and-rejoined: everything after the program is the user's text,
-  // quoting and spacing included, and it is put back byte for byte.
-  const trimmed = command.trim();
-  const boundary = trimmed.search(/\s/);
-  const program = boundary === -1 ? trimmed : trimmed.slice(0, boundary);
-  const rest = boundary === -1 ? "" : trimmed.slice(boundary);
-  return `${program} ${flags.join(" ")}${rest}`;
+  // Scanned rather than split-and-rejoined: everything around the program is the user's text —
+  // quoting, spacing, and a trailing backslash-newline continuation included — and it is put back
+  // byte for byte. Trimming the tail would turn such a continuation into an unterminated command.
+  //
+  // Two index walks rather than one anchored regex: `^(\s*)(\S+)([\s\S]*)$` backtracks
+  // super-linearly on a long command (sonarjs flags it), and this says the same thing.
+  const isSpace = (index: number): boolean => /\s/.test(command[index]);
+  let start = 0;
+  while (start < command.length && isSpace(start)) start++;
+  if (start === command.length) return command; // whitespace only — nothing to run
+  let end = start;
+  while (end < command.length && !isSpace(end)) end++;
+  return `${command.slice(0, end)} ${flags.join(" ")}${command.slice(end)}`;
 }
