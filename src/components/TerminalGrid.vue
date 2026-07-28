@@ -22,6 +22,8 @@ import ToolsPane from "./ToolsPane.vue";
 import { clampPaneWidth, splitterKeyWidth, MIN_GUI, MIN_TERMINAL } from "./splitterWidth";
 import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
+import { usePubSub } from "../composables/usePubSub";
+import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 
@@ -261,6 +263,19 @@ watch(
   },
   { immediate: true },
 );
+
+// The answer above is normally asked BEFORE it can be true: the browser is handed a session id
+// while claude is still being spawned, so its MCP client has not connected yet. Waiting for the
+// server to say so is what stops that first "no" from standing until the user collapses and
+// re-expands the cell.
+const { subscribe: subscribeToolGroups } = usePubSub();
+const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
+  const msg = data as { sessionId?: string; groups?: string[] };
+  if (!msg?.sessionId || msg.sessionId !== expandedSessionId.value) return;
+  canvasAvailable.value = Array.isArray(msg.groups) && msg.groups.includes("render");
+  canvasChecked.value = true;
+});
+onBeforeUnmount(() => offToolGroups());
 
 // What the Canvas pane should say instead of its "ask Claude to draw something" hint. The pane
 // outlives the cell it was opened on, so walking the zoom lands it on cells that can never fill

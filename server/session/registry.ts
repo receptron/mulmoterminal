@@ -14,7 +14,7 @@ import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, mergeOwnedActivity, parseActivityState, type PersistedActivity } from "./activity-state.js";
 import { devTerminalSessionLine, parseDevTerminalSessionIds } from "./dev-terminal-sessions.js";
-import { parseSessionToolGroups, sessionToolGroupLine, type SessionToolGroup } from "./session-tool-groups.js";
+import { parseSessionToolGroups, sessionToolGroupLine, TOOL_GROUP_RESET, type SessionToolGroup } from "./session-tool-groups.js";
 import type { ToolGroup } from "../../common/toolGroups.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
 
@@ -188,6 +188,22 @@ export function markSessionToolGroup(sessionId: string, group: ToolGroup): void 
 
 export function sessionToolGroups(sessionId: string): ToolGroup[] {
   return [...(toolGroupsBySession.get(sessionId) ?? [])];
+}
+
+// Forget what a session had, because it is being replaced. Called on every claude spawn for the
+// id: the new process gets whatever the user's MCP config says NOW, so carrying the old answer
+// forward would keep asserting a capability the user may have just switched off. The marker is
+// appended rather than the file rewritten, for the same reason nothing else here is rewritten.
+export function resetSessionToolGroups(sessionId: string): void {
+  if (!SESSION_ID_RE.test(sessionId)) return;
+  // Nothing learned yet: a marker would say the same as the absence, and every fresh session
+  // would append one.
+  if (!toolGroupsBySession.has(sessionId)) return;
+  toolGroupsBySession.set(sessionId, new Set());
+  toolGroupsPersist = toolGroupsPersist
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.appendFile(SESSION_TOOL_GROUPS_FILE, sessionToolGroupLine(sessionId, TOOL_GROUP_RESET)))
+    .catch((e) => console.error(`[session-tool-groups] failed to persist reset: ${messageOf(e)}`));
 }
 
 // Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a

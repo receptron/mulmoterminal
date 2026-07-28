@@ -7,7 +7,7 @@ import { guiMcpEnv } from "./mcp-config.js";
 import { getUserMcpServers, getPrWorkdirFooter } from "../config/config-routes.js";
 import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
-import { knownSessions, launchChoices, ptys } from "./registry.js";
+import { knownSessions, launchChoices, ptys, resetSessionToolGroups } from "./registry.js";
 import { ptySpawn, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
 import { attachDraftInjection } from "./draft-injection.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -89,6 +89,10 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // Falls back to the host spawn if the Docker daemon isn't reachable.
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
+
+    // The process about to start gets whatever the user's MCP config says NOW, so anything this
+    // id learned under a previous one is stale — including a group the user has since removed.
+    resetSessionToolGroups(sessionId);
 
     const { dir, resolved } = resolveSessionBackend({ cwd, sessionId, launch, canResume, sandbox });
 

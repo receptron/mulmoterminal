@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { parseSessionToolGroups, sessionToolGroupLine } from "../../../server/session/session-tool-groups.js";
+import { parseSessionToolGroups, sessionToolGroupLine, TOOL_GROUP_RESET } from "../../../server/session/session-tool-groups.js";
 
 const ID = "11111111-1111-1111-1111-111111111111";
 const ID2 = "22222222-2222-2222-2222-222222222222";
@@ -63,5 +63,34 @@ describe("sessionToolGroupLine", () => {
   it("keeps earlier entries when the last line is truncated", () => {
     const file = `${sessionToolGroupLine(ID, "render")}\n${ID2} ren`;
     expect(parseSessionToolGroups(file, isValidId)).toEqual([{ sessionId: ID, group: "render" }]);
+  });
+});
+
+// What a session HAS is decided by the claude process currently running for it, and that is
+// replaced on every restart/resume — with whatever the user's MCP config says at that moment.
+// Without a reset, disabling Canvas and restarting the same id would leave the old capability
+// asserted for the life of the log.
+describe("the reset marker", () => {
+  it("drops what the session learned before it", () => {
+    expect(parseSessionToolGroups(`${ID} render\n${ID} data\n${ID} -`, isValidId)).toEqual([]);
+  });
+
+  it("keeps what the session learns after it", () => {
+    expect(parseSessionToolGroups(`${ID} render\n${ID} -\n${ID} data`, isValidId)).toEqual([{ sessionId: ID, group: "data" }]);
+  });
+
+  // The log is shared, so one session's restart must not disturb another's.
+  it("resets only the session it names", () => {
+    expect(parseSessionToolGroups(`${ID} render\n${ID2} render\n${ID} -`, isValidId)).toEqual([{ sessionId: ID2, group: "render" }]);
+  });
+
+  it("is written by the same line builder", () => {
+    expect(sessionToolGroupLine(ID, TOOL_GROUP_RESET)).toBe(`\n${ID} -`);
+  });
+
+  // Replay ORDER is what makes a reset mean anything — a set union of the file would not.
+  it("survives a round trip through the builder", () => {
+    const file = sessionToolGroupLine(ID, "render") + sessionToolGroupLine(ID, TOOL_GROUP_RESET) + sessionToolGroupLine(ID, "media");
+    expect(parseSessionToolGroups(file, isValidId)).toEqual([{ sessionId: ID, group: "media" }]);
   });
 });

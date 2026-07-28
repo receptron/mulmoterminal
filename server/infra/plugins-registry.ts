@@ -32,7 +32,7 @@ import { artifactsFileOps } from "../backends/artifacts.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
-import { groupOfTool, toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
+import { groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOLS, type ToolGroup } from "../../common/toolGroups.js";
 import { missingRequiredEnv, soleExecutor } from "./server-tool-load.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -235,4 +235,15 @@ export function allowedToolNames(group: ToolGroup | null = null) {
   const serverId = group === null ? MCP_SERVER_NAME : toolGroupServerId(group);
   const defs = group === null ? toolDefinitions : toolDefinitions.filter((d) => groupOfTool(d.name) === group);
   return defs.map((d) => `mcp__${serverId}__${d.name}`);
+}
+
+// The fully-qualified names a GRID cell pre-approves: the auto-allowed tools, each under the
+// server id of the group it belongs to. Derived per TOOL rather than per group because "which
+// tools may this directory reach" and "which may run without asking" are different questions —
+// see AUTO_ALLOWED_TOOLS for the one that forces them apart.
+export function autoAllowedToolNames() {
+  return AUTO_ALLOWED_TOOLS.flatMap((name) => {
+    const group = groupOfTool(name);
+    return group === null ? [] : [`mcp__${toolGroupServerId(group)}__${name}`];
+  });
 }

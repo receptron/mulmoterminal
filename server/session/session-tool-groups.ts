@@ -17,35 +17,56 @@
 
 import { isToolGroup, type ToolGroup } from "../../common/toolGroups.js";
 
-/** One entry of the log: `<session id> <group>`. */
+/**
+ * A session's RESET marker. What a session has is decided by the claude process currently
+ * running for it, and that process is replaced on every restart/resume — with whatever the
+ * user's MCP config says at THAT moment. Without this, disabling Canvas and restarting the same
+ * session id would leave the old capability asserted for the life of the log, so the panel
+ * would keep offering tools the new process cannot call.
+ *
+ * A marker rather than rewriting the file: the log is append-only because MULMOTERMINAL_HOME is
+ * shared between server instances, and a read-merge-write loses whichever finishes first.
+ */
+export const TOOL_GROUP_RESET = "-";
+
+/** One entry of the log: `<session id> <group>`, or `<session id> -` for a restart. */
 export interface SessionToolGroup {
   sessionId: string;
   group: ToolGroup;
 }
 
-function entryFromLine(line: string, isValidId: (id: string) => boolean): SessionToolGroup[] {
+type Entry = { sessionId: string; group: ToolGroup | null };
+
+function entryFromLine(line: string, isValidId: (id: string) => boolean): Entry[] {
   const [sessionId, group, ...rest] = line.trim().split(/\s+/);
   // `rest` non-empty means the line has more than the two fields it should — a truncated
   // append or a hand-edit. Dropped rather than guessed at, like the legacy parser does.
-  if (rest.length > 0 || !sessionId || !isValidId(sessionId) || !isToolGroup(group)) return [];
-  return [{ sessionId, group }];
+  if (rest.length > 0 || !sessionId || !isValidId(sessionId)) return [];
+  if (group === TOOL_GROUP_RESET) return [{ sessionId, group: null }];
+  return isToolGroup(group) ? [{ sessionId, group }] : [];
 }
 
 /**
- * The entries a file holds. Anything unusable is dropped rather than carried along — a bad
- * session id would end up compared against real ones, and a bad group name against a real URL.
+ * The entries a file holds, replayed IN ORDER so a reset drops what came before it for that
+ * session — the ordering is the whole reason this is not a set union.
+ *
+ * Anything unusable is dropped rather than carried along: a bad session id would end up
+ * compared against real ones, and a bad group name against a real URL.
  */
 export function parseSessionToolGroups(contents: string, isValidId: (id: string) => boolean): SessionToolGroup[] {
-  const seen = new Set<string>();
-  return contents.split("\n").flatMap((line) => {
-    const entries = entryFromLine(line, isValidId);
-    return entries.filter(({ sessionId, group }) => {
-      const key = `${sessionId} ${group}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  });
+  const bySession = new Map<string, Set<ToolGroup>>();
+  for (const line of contents.split("\n")) {
+    for (const { sessionId, group } of entryFromLine(line, isValidId)) {
+      if (group === null) {
+        bySession.set(sessionId, new Set());
+        continue;
+      }
+      const groups = bySession.get(sessionId) ?? new Set<ToolGroup>();
+      groups.add(group);
+      bySession.set(sessionId, groups);
+    }
+  }
+  return [...bySession].flatMap(([sessionId, groups]) => [...groups].map((group) => ({ sessionId, group })));
 }
 
 /**
@@ -53,6 +74,6 @@ export function parseSessionToolGroups(contents: string, isValidId: (id: string)
  * reason it does in dev-terminal-sessions.ts: whatever the file ended with, an appended entry
  * starts its own line, so a file that was cut off mid-write costs one entry and not the rest.
  */
-export function sessionToolGroupLine(sessionId: string, group: ToolGroup): string {
+export function sessionToolGroupLine(sessionId: string, group: ToolGroup | typeof TOOL_GROUP_RESET): string {
   return `\n${sessionId} ${group}`;
 }

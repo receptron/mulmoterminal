@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { TOOL_GROUPS, isToolGroup, groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOL_GROUPS } from "../../common/toolGroups.js";
+import { TOOL_GROUPS, isToolGroup, groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOLS } from "../../common/toolGroups.js";
 
 describe("tool groups", () => {
   it("classifies the drawing tools as render", () => {
@@ -44,8 +44,18 @@ describe("tool groups", () => {
     expect(TOOL_GROUPS.map(toolGroupServerId)).toEqual(["mulmoterminal-render", "mulmoterminal-data", "mulmoterminal-media", "mulmoterminal-external"]);
   });
 
-  it("auto-allows render and nothing else", () => {
-    expect(AUTO_ALLOWED_TOOL_GROUPS).toEqual(["render"]);
+  // Per TOOL, not per group: "which tools may this directory reach" and "which may run without
+  // asking" are different questions, and presentDocument is the case that forces them apart —
+  // its execute resolves image placeholders through the image backend, a PAID call. Auto-
+  // allowing it would let a model spend money under a switch labelled "let the agent draw".
+  it("auto-allows only tools that call nothing external", () => {
+    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml"]);
+    expect(AUTO_ALLOWED_TOOLS).not.toContain("presentDocument");
+  });
+
+  // They still have to BE render tools — a directory that enabled Canvas is what grants them.
+  it("auto-allows nothing outside the render group", () => {
+    for (const name of AUTO_ALLOWED_TOOLS) expect(groupOfTool(name)).toBe("render");
   });
 
   it("accepts only the real group names", () => {

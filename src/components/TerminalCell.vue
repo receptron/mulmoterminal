@@ -615,6 +615,7 @@ async function createWorktreeAndLaunch() {
     const wt = await res.json();
     if (typeof wt.path === "string") {
       worktreeTask.value = "";
+      await carryCanvasInto(wt.path);
       launchIn(wt.path);
     }
   } catch {
@@ -622,7 +623,30 @@ async function createWorktreeAndLaunch() {
   }
 }
 
-const reuseWorktree = (w: Worktree) => launchIn(w.path);
+const reuseWorktree = async (w: Worktree) => {
+  await carryCanvasInto(w.path);
+  launchIn(w.path);
+};
+
+// Claude Code keys local-scope MCP config by the CLI's working directory, and a worktree launch
+// starts claude in the WORKTREE — not in the repository the switch above was set for. Without
+// this the session gets no render tools even though the launcher plainly says Canvas is on.
+//
+// Copied rather than moved: the repository keeps its own registration, and a worktree is a
+// throwaway room that should start out like the repo it came from. Failures are swallowed —
+// the launch itself is what the user asked for, and the Canvas button will report the truth.
+async function carryCanvasInto(worktreePath: string) {
+  if (!canvasEnabled.value || !canvasDir.value || worktreePath === canvasDir.value) return;
+  try {
+    await fetch("/api/gui-mcp-groups", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ cwd: worktreePath, group: CANVAS_GROUP, enabled: true }),
+    });
+  } catch {
+    // best-effort — a worktree without the registration still launches, just without Canvas
+  }
+}
 
 // Remove a managed worktree (＋ its branch). A dirty one is confirmed first so work
 // is never discarded silently.

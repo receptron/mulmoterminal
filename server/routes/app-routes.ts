@@ -170,7 +170,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
 
   // The agent-facing MCP surface (routes/mcp-routes.ts): the in-process GUI MCP server over
   // Streamable HTTP, and the worker-only landing point the hidden translation worker reports to.
-  mountMcpRoutes(app);
+  mountMcpRoutes(app, { publish: (c, d) => deps.publish(c, d) });
 
   // Serve Vite build output
   app.use(express.static(path.join(clientDir, "../dist")));

@@ -11,7 +11,7 @@ import type { Express, Request, Response } from "express";
 
 import { PORT, SESSION_ID_RE } from "../config/env.js";
 import { buildGuiMcpServer } from "../mcp/broker.js";
-import { translationWorkerIds, markSessionToolGroup } from "../session/registry.js";
+import { translationWorkerIds, markSessionToolGroup, sessionToolGroups } from "../session/registry.js";
 import { isToolGroup, type ToolGroup } from "../../common/toolGroups.js";
 import { submitTranslation } from "../session/translation-worker.js";
 import { translationSubmitOutcome } from "../session/translation-submit.js";
@@ -19,7 +19,21 @@ import { translationSubmitOutcome } from "../session/translation-submit.js";
 // No SSE stream and no session teardown in stateless mode, so everything but POST is refused.
 const rejectNonPost = (_req: Request, res: Response) => res.status(405).set("Allow", "POST").json({ error: "method not allowed" });
 
-export function mountMcpRoutes(app: Express): void {
+// A session's tool groups are LEARNED, and the client cannot predict when: the browser is
+// handed the session id before claude is even spawned, so the panel's first question about it
+// is normally asked before claude's MCP client has connected. Without a push, that first "no"
+// would stand until the user collapsed and re-expanded the cell.
+//
+// Its own channel rather than the `sessions` one: that channel's consumer guards with
+// `"id" in d` and feeds whatever passes to applyActivity, so a foreign message shaped like
+// this would be read as an activity update.
+export const TOOL_GROUPS_CHANNEL = "tool-groups";
+
+export interface McpRouteDeps {
+  publish: (channel: string, data: unknown) => void;
+}
+
+export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
   // We run in STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
   // request, no session header and no initialize handshake required across requests. The SDK
   // forbids reusing a stateless transport, so it is never cached.
@@ -62,7 +76,12 @@ export function mountMcpRoutes(app: Express): void {
     // Reaching us here IS the evidence that this session has the group — nothing else tells
     // us, since the registration lives in the user's own MCP config. Marked before the request
     // is served so a panel asking right after the first ListTools already sees it.
-    if (SESSION_ID_RE.test(sessionId)) markSessionToolGroup(sessionId, group);
+    if (SESSION_ID_RE.test(sessionId) && !sessionToolGroups(sessionId).includes(group)) {
+      markSessionToolGroup(sessionId, group);
+      // Announced only on the transition, so the panel is told once per handshake rather than
+      // on every tool call for the life of the session.
+      deps.publish(TOOL_GROUPS_CHANNEL, { sessionId, groups: sessionToolGroups(sessionId) });
+    }
     return handleMcpRequest(req, res, sessionId, group);
   });
   app.get("/api/mcp/:group/:sessionId", rejectNonPost);

@@ -60,8 +60,15 @@ export const groupOfTool = (toolName: string): ToolGroup | null => GROUP_BY_TOOL
 // the same URL under another name simply gets permission prompts (nothing breaks).
 export const toolGroupServerId = (group: ToolGroup): string => `mulmoterminal-${group}`;
 
-// Groups whose tools MulmoTerminal pre-approves via `--allowedTools`, so they run without a
-// permission prompt. Only `render`: it cannot touch anything outside the Canvas panel, so
-// silent execution is the point. Everything else goes through Claude Code's normal prompt —
-// which is the whole reason the groups are split by blast radius above.
-export const AUTO_ALLOWED_TOOL_GROUPS: readonly ToolGroup[] = ["render"];
+// The tools MulmoTerminal pre-approves via `--allowedTools`, so they run without a permission
+// prompt. A list of TOOLS, not of groups: a group says which tools a directory can reach, and
+// that is not the same question as which may run unattended.
+//
+// `presentDocument` is the case that forces them apart, and it is deliberately ABSENT. Its
+// execute runs `fillImages` before saving, which resolves every image placeholder in the
+// markdown through the image backend — a PAID generation call. Auto-allowing it would let a
+// model spend money silently under a switch the UI presents as "let the agent draw", so it
+// keeps Claude Code's prompt (answer it once per project and the prompt stops).
+//
+// The three below save an artifact and draw it, and call nothing external.
+export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml"];
