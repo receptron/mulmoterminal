@@ -40,13 +40,16 @@ describe("the canvas pane's unavailable states", () => {
   // the SESSION rather than the directory: the switch is per directory but takes effect at
   // startup, so a session older than the switch lacks the tools while the directory has them —
   // blaming the directory would send the user to a switch that is already on.
-  it("names the session's missing render MCP, and how to fix it", async () => {
-    const w = mountPanel({ sessionId: "s1", unavailable: "no-render-mcp" });
+  it("names the session's missing canvas MCPs, and how to fix it", async () => {
+    const w = mountPanel({ sessionId: "s1", unavailable: "no-canvas-mcp" });
     await flushPromises();
     const text = w.text();
     expect(text).toContain("not enabled for this session");
     expect(text).not.toContain("not enabled for this directory");
+    // Both switches, since either one fills the pane — naming only render sends someone who
+    // wants a generated image to the wrong checkbox.
     expect(text).toContain("CANVAS (render MCPs)");
+    expect(text).toContain("CANVAS (media MCPs)");
     expect(text).toContain("restart");
     expect(text).not.toContain("presentDocument");
   });
@@ -58,7 +61,7 @@ describe("the canvas pane's unavailable states", () => {
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => ({ toolResults: [{ uuid: "u1", toolName: "presentDocument", data: {} }] }) })),
     );
-    const w = mountPanel({ sessionId: "s1", unavailable: "no-render-mcp" });
+    const w = mountPanel({ sessionId: "s1", unavailable: "no-canvas-mcp" });
     await flushPromises();
     expect(w.find(".frame").exists()).toBe(false);
     expect(w.find('[data-testid="canvas-unavailable"]').exists()).toBe(true);

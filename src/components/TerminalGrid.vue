@@ -24,7 +24,7 @@ import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
 import { usePubSub } from "../composables/usePubSub";
 import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
-import { CANVAS_TOOL_GROUP } from "../../common/toolGroups";
+import { hasCanvasGroup, isToolGroup, type ToolGroup } from "../../common/toolGroups";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 
@@ -239,11 +239,17 @@ const canvasAvailable = ref(false);
 // "not enabled for this session" for the moment between switching cells and the reply landing
 // — a wrong explanation is worse than none, so nothing is claimed until it is known.
 const canvasChecked = ref(false);
+// EVERY group this session reached us on, not only the canvas ones: the pane's empty state lists
+// the GUI tools this terminal actually has, and a cell that also registered `data` or `external`
+// can be asked for those in the same conversation.
+const sessionGroups = ref<ToolGroup[]>([]);
+const readGroups = (groups: unknown): ToolGroup[] => (Array.isArray(groups) ? groups.filter(isToolGroup) : []);
 watch(
   [expandedSessionId, () => props.expandedUid],
   async ([sessionId]) => {
     canvasAvailable.value = false;
     canvasChecked.value = false;
+    sessionGroups.value = [];
     if (!sessionId) return;
     try {
       const res = await fetch(`/api/tools?sessionId=${encodeURIComponent(sessionId)}`);
@@ -251,10 +257,12 @@ watch(
       const body = await res.json();
       // Late reply for a cell we have since walked away from would show the wrong button.
       if (sessionId !== expandedSessionId.value) return;
-      // The GROUPS, not the tool names. Every cell here is a grid cell, so "has render" is the
-      // whole question — and matching on a `present*` prefix would count presentCollection,
-      // which belongs to `data` and draws nothing without the collection store behind it.
-      canvasAvailable.value = Array.isArray(body.groups) && body.groups.includes(CANVAS_TOOL_GROUP);
+      // The GROUPS, not the tool names. Every cell here is a grid cell, so "has a canvas group"
+      // is the whole question — and matching on a `present*` prefix would count
+      // presentCollection, which belongs to `data` and draws nothing without the collection
+      // store behind it.
+      canvasAvailable.value = hasCanvasGroup(body.groups);
+      sessionGroups.value = readGroups(body.groups);
       canvasChecked.value = true;
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
@@ -273,7 +281,8 @@ const { subscribe: subscribeToolGroups } = usePubSub();
 const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
   const msg = data as { sessionId?: string; groups?: string[] };
   if (!msg?.sessionId || msg.sessionId !== expandedSessionId.value) return;
-  canvasAvailable.value = Array.isArray(msg.groups) && msg.groups.includes(CANVAS_TOOL_GROUP);
+  canvasAvailable.value = hasCanvasGroup(msg.groups);
+  sessionGroups.value = readGroups(msg.groups);
   canvasChecked.value = true;
 });
 onBeforeUnmount(() => offToolGroups());
@@ -281,9 +290,9 @@ onBeforeUnmount(() => offToolGroups());
 // What the Canvas pane should say instead of its "ask Claude to draw something" hint. The pane
 // outlives the cell it was opened on, so walking the zoom lands it on cells that can never fill
 // it — a launcher or a command cell (no session), or a directory with no render MCP.
-const canvasUnavailable = computed<"no-session" | "no-render-mcp" | null>(() => {
+const canvasUnavailable = computed<"no-session" | "no-canvas-mcp" | null>(() => {
   if (!expandedSessionId.value) return "no-session";
-  if (canvasChecked.value && !canvasAvailable.value) return "no-render-mcp";
+  if (canvasChecked.value && !canvasAvailable.value) return "no-canvas-mcp";
   return null;
 });
 const filesPane = ref<InstanceType<typeof FilesPane> | null>(null);
@@ -639,6 +648,7 @@ watch(
           :session-id="expandedSessionId"
           :send-text-message="sendToExpandedCell"
           :unavailable="canvasUnavailable"
+          :groups="sessionGroups"
           :style="{ flex: `0 0 ${paneWidth}px` }"
           @toggle-tools="toggleRightPane('tools')"
         />

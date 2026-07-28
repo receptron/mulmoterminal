@@ -18,11 +18,24 @@ export type ToolGroup = (typeof TOOL_GROUPS)[number];
 
 export const isToolGroup = (value: unknown): value is ToolGroup => TOOL_GROUPS.some((group) => group === value);
 
-// The group the Canvas pane is made of. The launcher switch registers it, the panel's
-// availability is decided by it, and the server routes on it — named here rather than written
-// as `"render"` at each of those sites, so a rename cannot leave one of them silently pointing
-// at a group that no longer exists.
-export const CANVAS_TOOL_GROUP: ToolGroup = "render";
+// The groups the Canvas pane is made of. The launcher offers a switch per group, the panel's
+// availability is decided by them, and the server routes on them — named here rather than
+// written as `"render"` / `"media"` at each of those sites, so a rename cannot leave one of them
+// silently pointing at a group that no longer exists.
+//
+// `media` is in because its tools DRAW: generateImage and presentMulmoScript land in the same
+// panel a render tool does. It is a separate switch rather than part of one because the two
+// differ in what a call costs — render stops at the pane, media is slow, paid and writes files —
+// and that is exactly the line the grouping exists to draw. Neither media tool is in
+// AUTO_ALLOWED_TOOLS, so enabling the group still leaves Claude Code's permission prompt in
+// front of the spend (same reasoning as presentDocument below).
+export const CANVAS_TOOL_GROUPS: readonly ToolGroup[] = ["render", "media"];
+
+// Does a session/directory reach the Canvas at all? Asked of the group list the server reports,
+// whose members arrive as plain strings — validated rather than cast, since an unknown name from
+// a newer server must not count as a canvas group.
+export const hasCanvasGroup = (groups: unknown): boolean =>
+  Array.isArray(groups) && groups.some((group) => isToolGroup(group) && CANVAS_TOOL_GROUPS.includes(group));
 
 // Which group each GUI tool belongs to.
 //

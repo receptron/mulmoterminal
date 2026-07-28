@@ -10,7 +10,7 @@ import { useWorkItem } from "../composables/useWorkItem";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import DirBadge from "./DirBadge.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
-import { CANVAS_TOOL_GROUP } from "../../common/toolGroups";
+import { CANVAS_TOOL_GROUPS, toolGroupServerId, toolsInGroup, type ToolGroup } from "../../common/toolGroups";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
@@ -520,15 +520,30 @@ const worktrees = ref<Worktree[]>([]);
 const worktreeTask = ref("");
 let worktreesReq = 0;
 
-// Whether this directory lets its agents draw into the Canvas panel. NOT MulmoTerminal state:
-// it is a `render`-group MCP server registered in Claude Code's own local-scope config for this
-// directory, so the switch reads and writes through /api/gui-mcp-groups and `claude mcp list`
-// stays the one place it can be seen. Read per directory, like the worktree list above.
+// Whether this directory lets its agents draw into the Canvas panel, per Canvas GROUP (render,
+// media). NOT MulmoTerminal state: each is an MCP server registered in Claude Code's own
+// local-scope config for this directory, so the switches read and write through
+// /api/gui-mcp-groups and `claude mcp list` stays the one place they can be seen. Read per
+// directory, like the worktree list above.
+//
+// One record per group rather than a flag per group: the two switches differ only in the group
+// they name, so adding a third to CANVAS_TOOL_GROUPS should not mean a third copy of this block.
+const byCanvasGroup = <T,>(value: T): Record<ToolGroup, T> => Object.fromEntries(CANVAS_TOOL_GROUPS.map((group) => [group, value])) as Record<ToolGroup, T>;
+
 const canvasDir = ref<string | null>(null);
-const canvasEnabled = ref(false);
-const canvasBusy = ref(false);
-const canvasError = ref<string | null>(null);
+const canvasEnabled = ref(byCanvasGroup(false));
+const canvasBusy = ref(byCanvasGroup(false));
+const canvasError = ref(byCanvasGroup<string | null>(null));
 let canvasReq = 0;
+
+// What the switch actually does, spelled out for the hover: the MCP SERVER ID it registers and
+// the tools that id brings with it. The row's visible label can only name the group, and the
+// group name alone ("render", "media") does not say which server appears in `claude mcp list`
+// nor what the agent gains — that is exactly what a user checking the box wants to know.
+// Derived from toolGroups.ts rather than written out, so a tool added to a group shows up here
+// without a second edit (the Canvas empty state names them the same way).
+const canvasTitle = (group: ToolGroup): string =>
+  `Registers the MCP server "${toolGroupServerId(group)}" for this directory — tools: ${toolsInGroup(group).join(", ")}`;
 
 async function loadCanvasEnabled() {
   const dir = dirInput.value.trim() || props.defaultCwd;
@@ -545,8 +560,10 @@ async function loadCanvasEnabled() {
     // the new directory's name.
     if (reqId !== canvasReq) return;
     canvasDir.value = dir;
-    canvasEnabled.value = Array.isArray(data.groups) && data.groups.includes(CANVAS_TOOL_GROUP);
-    canvasError.value = null;
+    const registered: unknown[] = Array.isArray(data.groups) ? data.groups : [];
+    canvasEnabled.value = byCanvasGroup(false);
+    for (const group of CANVAS_TOOL_GROUPS) canvasEnabled.value[group] = registered.includes(group);
+    canvasError.value = byCanvasGroup(null);
   } catch {
     // No switch rather than one whose position is a guess — flipping a wrong "off" would run
     // `claude mcp remove` on a registration the user may actually have.
@@ -556,26 +573,26 @@ async function loadCanvasEnabled() {
 
 // Writes into the user's Claude Code config, so a failure is surfaced and the checkbox is put
 // back — a switch that shows "on" for a registration that was never written is the worst state.
-async function applyCanvas() {
+async function applyCanvas(group: ToolGroup) {
   const dir = canvasDir.value;
   if (!dir) return;
-  const wanted = canvasEnabled.value;
-  canvasBusy.value = true;
-  canvasError.value = null;
+  const wanted = canvasEnabled.value[group];
+  canvasBusy.value[group] = true;
+  canvasError.value[group] = null;
   try {
     const res = await fetch("/api/gui-mcp-groups", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwd: dir, group: CANVAS_TOOL_GROUP, enabled: wanted }),
+      body: JSON.stringify({ cwd: dir, group, enabled: wanted }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (!data.ok) throw new Error(data.message || "claude mcp failed");
   } catch (e) {
-    canvasEnabled.value = !wanted;
-    canvasError.value = e instanceof Error ? e.message : String(e);
+    canvasEnabled.value[group] = !wanted;
+    canvasError.value[group] = e instanceof Error ? e.message : String(e);
   } finally {
-    canvasBusy.value = false;
+    canvasBusy.value[group] = false;
   }
 }
 
@@ -631,20 +648,28 @@ const reuseWorktree = async (w: Worktree) => {
 };
 
 // Claude Code keys local-scope MCP config by the CLI's working directory, and a worktree launch
-// starts claude in the WORKTREE — not in the repository the switch above was set for. Without
+// starts claude in the WORKTREE — not in the repository the switches above were set for. Without
 // this the session gets no render tools even though the launcher plainly says Canvas is on.
+//
+// Every group that is on, not just render: a worktree that inherited half the switches would be
+// a launcher telling the truth about the repo and a lie about the room it just opened.
 //
 // Copied rather than moved: the repository keeps its own registration, and a worktree is a
 // throwaway room that should start out like the repo it came from. Failures are swallowed —
 // the launch itself is what the user asked for, and the Canvas button will report the truth.
 async function carryCanvasInto(worktreePath: string) {
-  if (!canvasEnabled.value || !canvasDir.value || worktreePath === canvasDir.value) return;
+  if (!canvasDir.value || worktreePath === canvasDir.value) return;
+  const enabled = CANVAS_TOOL_GROUPS.filter((group) => canvasEnabled.value[group]);
   try {
-    await fetch("/api/gui-mcp-groups", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwd: worktreePath, group: CANVAS_TOOL_GROUP, enabled: true }),
-    });
+    // Serially, not Promise.all: each POST shells out to `claude mcp add`, which read-modify-
+    // writes the SAME local-scope config file — two in flight can lose one of the two entries.
+    for (const group of enabled) {
+      await fetch("/api/gui-mcp-groups", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ cwd: worktreePath, group, enabled: true }),
+      });
+    }
   } catch {
     // best-effort — a worktree without the registration still launches, just without Canvas
   }
@@ -1696,28 +1721,43 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
         <!-- Canvas is a per-DIRECTORY registration in Claude Code's own MCP config, not a
              per-launch choice — but it only takes effect when a session starts, so this is
              where it belongs: decided before the thing it configures exists. Claude only;
-             codex reaches the GUI tools by another route. -->
-        <label v-if="agent === 'claude' && canvasDir" class="flex w-full max-w-[360px] items-center justify-between gap-2">
-          <!-- The group is named, not just the feature: the switch registers ONE MCP server
-               (`mulmoterminal-render`) and the other groups are added with `claude mcp add`, so
-               a label reading only "Canvas" would suggest it covers all of them. `normal-case`
-               on the suffix — the section labels around it are uppercased by class, and
-               "(RENDER MCPS)" reads as a different thing than the server it names. -->
-          <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">Canvas <span class="normal-case">(render MCPs)</span></span>
-          <span class="flex items-center gap-2">
-            <span v-if="canvasBusy" class="font-sans text-[11px] text-dim">saving…</span>
-            <span v-else-if="canvasError" class="font-sans text-[11px] text-err-text" :title="canvasError">failed</span>
-            <input
-              v-model="canvasEnabled"
-              data-testid="cell-canvas-toggle"
-              type="checkbox"
-              class="h-3.5 w-3.5 cursor-pointer accent-accent"
-              :disabled="canvasBusy"
-              :aria-label="`Register the render MCP group so the agent can draw in ${canvasDir}`"
-              @change="applyCanvas"
-            />
-          </span>
-        </label>
+             codex reaches the GUI tools by another route.
+             One row per Canvas group: both draw into the same pane, and they are separate
+             switches because a media call is slow, paid and writes files where a render call
+             stops at the pane (see common/toolGroups.ts). -->
+        <template v-if="agent === 'claude' && canvasDir">
+          <!-- The hover names the server id and its tools (canvasTitle); it sits on the ROW so
+               the text is reachable from the label as well as the box. -->
+          <label
+            v-for="group in CANVAS_TOOL_GROUPS"
+            :key="group"
+            class="flex w-full max-w-[360px] items-center justify-between gap-2"
+            :title="canvasTitle(group)"
+          >
+            <!-- The group is named, not just the feature: each switch registers ONE MCP server
+               (`mulmoterminal-<group>`) and the remaining groups are added with `claude mcp
+               add`, so a label reading only "Canvas" would suggest it covers all of them.
+               `normal-case` on the suffix — the section labels around it are uppercased by
+               class, and "(RENDER MCPS)" reads as a different thing than the server it names. -->
+            <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim"
+              >Canvas <span class="normal-case">({{ group }} MCPs)</span></span
+            >
+            <span class="flex items-center gap-2">
+              <span v-if="canvasBusy[group]" class="font-sans text-[11px] text-dim">saving…</span>
+              <span v-else-if="canvasError[group]" class="font-sans text-[11px] text-err-text" :title="canvasError[group]!">failed</span>
+              <input
+                v-model="canvasEnabled[group]"
+                :data-testid="`cell-canvas-toggle-${group}`"
+                type="checkbox"
+                class="h-3.5 w-3.5 cursor-pointer accent-accent"
+                :disabled="canvasBusy[group]"
+                :title="canvasTitle(group)"
+                :aria-label="`Register the MCP server ${toolGroupServerId(group)} (${toolsInGroup(group).join(', ')}) so the agent can draw in ${canvasDir}`"
+                @change="applyCanvas(group)"
+              />
+            </span>
+          </label>
+        </template>
         <div v-if="isGitRepo" data-testid="cell-worktrees" class="flex w-full max-w-[360px] flex-col items-stretch gap-1.5">
           <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">or isolate in a worktree (git repo)</span>
           <div class="flex gap-1.5">

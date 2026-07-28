@@ -3,7 +3,7 @@ import { ref, computed } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { getPlugin } from "../plugins-registry";
 import PluginFrame from "./PluginFrame.vue";
-import { CANVAS_TOOL_GROUP, toolsInGroup } from "../../common/toolGroups";
+import { TOOL_GROUPS, toolsInGroup, type ToolGroup } from "../../common/toolGroups";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -29,7 +29,12 @@ const props = defineProps<{
   // it mounted — and the empty-state hint below ("ask Claude to use one of these") is a LIE in
   // both cases: there is nothing to ask, or nothing that could answer. Absent/null means the
   // panel is usable, which keeps the single view (where it always is) unchanged.
-  unavailable?: "no-session" | "no-render-mcp" | null;
+  unavailable?: "no-session" | "no-canvas-mcp" | null;
+  // The GUI tool groups this session actually reached us on, so the empty state lists what THIS
+  // terminal can be asked for rather than a fixed set — a cell with only `render` registered
+  // should not be told to ask for generateImage. Absent means "everything": the single view
+  // connects on the all-tools URL, where no group was ever selected (common/toolGroups.ts).
+  groups?: ToolGroup[];
 }>();
 const emit = defineEmits<{ toggleTools: [] }>();
 
@@ -77,19 +82,41 @@ async function onUpdateResult(existing: ToolResult, update: Partial<ToolResult>)
 
 const hasContent = computed(() => results.value.length > 0);
 
-// What each drawing tool produces, so the empty state says what asking for one would get rather
-// than only naming it. A Map for the same reason common/toolGroups.ts uses one, and consulted
-// with a fallback: the NAMES come from the group table, so a render tool added there shows up
-// here immediately — unnamed rather than missing, which is the failure that is noticed.
-const CANVAS_TOOL_HINTS = new Map<string, string>([
+// What each tool produces, so the empty state says what asking for one would get rather than
+// only naming it. A Map for the same reason common/toolGroups.ts uses one, and consulted with a
+// fallback: the NAMES come from the group table, so a tool added there shows up here
+// immediately — unnamed rather than missing, which is the failure that is noticed.
+const TOOL_HINTS = new Map<string, string>([
   ["presentDocument", "a formatted document, written in markdown"],
   ["presentForm", "a form to fill in and send back"],
   ["presentChart", "a chart from a set of data"],
   ["presentHtml", "a self-contained web page"],
+
+  ["presentCollection", "a collection from this workspace, laid out to browse"],
+  ["manageCollection", "reads and writes those collections and their schemas"],
+  ["manageAccounting", "reads and writes the workspace's books"],
+
+  ["generateImage", "an image generated from a prompt"],
+  ["presentMulmoScript", "a MulmoScript presentation, built and played here"],
+
+  ["google", "your linked Google account: Calendar, Tasks, Drive"],
+  ["readXPost", "one post on X, fetched by URL or id"],
+  ["searchX", "recent posts on X matching a query"],
 ]);
 
-// The complete render group, not a sample of it.
-const canvasTools = computed(() => toolsInGroup(CANVAS_TOOL_GROUP).map((name) => ({ name, hint: CANVAS_TOOL_HINTS.get(name) ?? "" })));
+// Every group this session has, each with ALL its members — the whole of what the terminal can
+// be asked for, not a sample. This is the only place the tools are named, and a user reading
+// "presentDocument or presentForm" has no way to learn that a chart, a web page or an image is
+// also on offer. Ordered by TOOL_GROUPS (blast radius, least first) rather than by the order the
+// session happened to connect its MCP clients in, so the list does not reshuffle between cells.
+const toolSections = computed(() => {
+  const session = props.groups;
+  const groups = session ? TOOL_GROUPS.filter((group) => session.includes(group)) : TOOL_GROUPS;
+  return groups.map((group) => ({
+    group,
+    tools: toolsInGroup(group).map((name) => ({ name, hint: TOOL_HINTS.get(name) ?? "" })),
+  }));
+});
 </script>
 
 <template>
@@ -123,21 +150,25 @@ const canvasTools = computed(() => toolsInGroup(CANVAS_TOOL_GROUP).map((name) =>
           <div class="font-medium text-secondary">Canvas is not enabled for this session</div>
           <p class="mt-1">
             Its agent was started without the drawing tools, so nothing can appear here. They are handed out at startup: turn on
-            <span class="whitespace-nowrap font-medium">CANVAS (render MCPs)</span> in this cell's launcher, then restart the cell.
+            <span class="whitespace-nowrap font-medium">CANVAS (render MCPs)</span> — or <span class="whitespace-nowrap font-medium">CANVAS (media MCPs)</span>,
+            for generated images and MulmoScript — in this cell's launcher, then restart the cell.
           </p>
         </template>
       </div>
-      <!-- The whole group is listed rather than an example or two: this is the only place the
-           tools are named, and a user reading "presentDocument or presentForm" has no way to
-           learn that a chart or a web page is also on offer. -->
+      <!-- Grouped, and the group is named: the switches in the launcher are per group, so a user
+           who wants a tool that isn't listed needs to know WHICH one to turn on. The heading is
+           dropped when there is only one — naming a division of one explains nothing. -->
       <div v-else-if="!hasContent" data-testid="canvas-empty" class="text-[13px] text-dim">
-        Ask Claude to use one of these to render content here:
-        <ul class="mt-1.5 list-disc space-y-1 pl-4 marker:text-border">
-          <li v-for="tool in canvasTools" :key="tool.name">
-            <code class="rounded-[4px] bg-subtle px-[5px] py-px">{{ tool.name }}</code>
-            <template v-if="tool.hint"> &mdash; {{ tool.hint }}</template>
-          </li>
-        </ul>
+        Ask Claude to use one of these:
+        <div v-for="section in toolSections" :key="section.group" class="mt-1.5">
+          <div v-if="toolSections.length > 1" class="text-[11px] uppercase tracking-[0.05em] text-muted">{{ section.group }}</div>
+          <ul class="mt-1 list-disc space-y-1 pl-4 marker:text-border">
+            <li v-for="tool in section.tools" :key="tool.name">
+              <code class="rounded-[4px] bg-subtle px-[5px] py-px">{{ tool.name }}</code>
+              <template v-if="tool.hint"> &mdash; {{ tool.hint }}</template>
+            </li>
+          </ul>
+        </div>
       </div>
       <!-- Guarded as well as cleared on session change: a stale view rendered under an
            "unavailable" heading would contradict it. -->

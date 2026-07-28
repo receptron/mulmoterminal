@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 
-import { TOOL_GROUPS, isToolGroup, groupOfTool, toolsInGroup, toolGroupServerId, AUTO_ALLOWED_TOOLS, CANVAS_TOOL_GROUP } from "../../common/toolGroups.js";
+import {
+  TOOL_GROUPS,
+  isToolGroup,
+  groupOfTool,
+  toolsInGroup,
+  toolGroupServerId,
+  AUTO_ALLOWED_TOOLS,
+  CANVAS_TOOL_GROUPS,
+  hasCanvasGroup,
+} from "../../common/toolGroups.js";
 
 describe("tool groups", () => {
   it("classifies the drawing tools as render", () => {
@@ -80,16 +89,38 @@ describe("tool groups", () => {
   });
 });
 
-// The launcher switch, the panel's availability check and the server all decide on this same
-// group. Written as a literal at each site, a rename would break Canvas detection silently and
+// The launcher switches, the panel's availability check and the server all decide on these same
+// groups. Written as literals at each site, a rename would break Canvas detection silently and
 // with no type error — which is what the repo's "shared wire values live in common/" rule is for.
-describe("CANVAS_TOOL_GROUP", () => {
-  it("names a real group", () => {
-    expect(TOOL_GROUPS).toContain(CANVAS_TOOL_GROUP);
+describe("CANVAS_TOOL_GROUPS", () => {
+  it("names only real groups", () => {
+    for (const group of CANVAS_TOOL_GROUPS) expect(TOOL_GROUPS).toContain(group);
   });
 
-  it("is the group the drawing tools belong to", () => {
-    expect(groupOfTool("presentDocument")).toBe(CANVAS_TOOL_GROUP);
-    expect(groupOfTool("presentHtml")).toBe(CANVAS_TOOL_GROUP);
+  // Both groups DRAW into the same pane; they are two switches because a media call costs money
+  // and writes files where a render call stops at the pane.
+  it("covers the drawing tools of both groups", () => {
+    expect(CANVAS_TOOL_GROUPS).toContain(groupOfTool("presentHtml"));
+    expect(CANVAS_TOOL_GROUPS).toContain(groupOfTool("presentDocument"));
+    expect(CANVAS_TOOL_GROUPS).toContain(groupOfTool("generateImage"));
+    expect(CANVAS_TOOL_GROUPS).toContain(groupOfTool("presentMulmoScript"));
+  });
+
+  // The groups a session cannot draw with. Counting one of them would open a Canvas pane that
+  // nothing can ever fill.
+  it("leaves out the groups that draw nothing", () => {
+    expect(CANVAS_TOOL_GROUPS).not.toContain("data");
+    expect(CANVAS_TOOL_GROUPS).not.toContain("external");
+  });
+
+  // Asked of whatever the server reported, which arrives as untyped JSON.
+  it("detects a canvas group in a reported group list", () => {
+    expect(hasCanvasGroup(["render"])).toBe(true);
+    expect(hasCanvasGroup(["data", "media"])).toBe(true);
+    expect(hasCanvasGroup(["data", "external"])).toBe(false);
+    expect(hasCanvasGroup([])).toBe(false);
+    expect(hasCanvasGroup(["renderer"])).toBe(false);
+    expect(hasCanvasGroup(undefined)).toBe(false);
+    expect(hasCanvasGroup("render")).toBe(false);
   });
 });
