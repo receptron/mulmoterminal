@@ -8,7 +8,7 @@ import { getUserMcpServers, getPrWorkdirFooter } from "../config/config-routes.j
 import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
 import { knownSessions, launchChoices, ptys, resetSessionToolGroups } from "./registry.js";
-import { ptySpawn, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
+import { ptySpawn, ptyWouldReattach, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
 import { attachDraftInjection } from "./draft-injection.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
 import { appendBoundedOutput } from "./terminal-replay.js";
@@ -90,9 +90,17 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
 
-    // The process about to start gets whatever the user's MCP config says NOW, so anything this
-    // id learned under a previous one is stale — including a group the user has since removed.
-    resetSessionToolGroups(sessionId);
+    // A NEW claude process gets whatever the user's MCP config says NOW, so anything this id
+    // learned under a previous one is stale — including a group the user has since removed.
+    //
+    // But this function is also the REATTACH path: after the server restarts (a --watch reload
+    // included), the pty map is empty while the tmux session and its claude are still running, so
+    // ws-routes comes back through here and `new-session -A` picks the same process back up.
+    // Nothing is re-read there, and an MCP client that connected once will not connect again — so
+    // resetting would drop a capability with no way left to relearn it, and the panel would tell a
+    // cell that is still drawing that Canvas is not enabled for it. Surviving exactly that is what
+    // the persisted log is FOR; the unconditional reset was undoing it on every restart.
+    if (sandbox || !ptyWouldReattach(sessionId, true)) resetSessionToolGroups(sessionId);
 
     const { dir, resolved } = resolveSessionBackend({ cwd, sessionId, launch, canResume, sandbox });
 

@@ -9,7 +9,7 @@ import type { WebSocket } from "ws";
 import { sanitizePtyEnv } from "../infra/pty-env.js";
 import { resolvePtyLaunchForEnv } from "../infra/resolve-bin.js";
 import { withoutUnset } from "./provider-env.js";
-import { tmuxAvailable, tmuxNewSessionArgs, tmuxScrubEnvNames } from "../infra/tmux.js";
+import { tmuxAvailable, tmuxHasSession, tmuxNewSessionArgs, tmuxScrubEnvNames } from "../infra/tmux.js";
 import {
   sandboxEnabled,
   sandboxPlatformSupported,
@@ -56,6 +56,18 @@ export interface PtySpawnEnv {
   unset?: readonly string[];
   /** Per-session variables to set on top of the inherited environment. */
   env?: Readonly<Record<string, string>>;
+}
+
+// Would ptySpawn ATTACH to a program that is already running, rather than start a new one?
+// `new-session -A` hides the difference — it returns a terminal either way — so a caller that
+// needs to know has to ask before calling.
+//
+// It matters to anything a caller does "because a new process is about to read the user's
+// config": on the attach path nothing is re-read, because nothing is re-started. The surviving
+// process is exactly the one that was there before, and it is past every decision it made at
+// startup. Must stay in lockstep with the branch below.
+export function ptyWouldReattach(sessionId: string, persistent: boolean): boolean {
+  return persistent && tmuxAvailable() && tmuxHasSession(sessionId);
 }
 
 // Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
