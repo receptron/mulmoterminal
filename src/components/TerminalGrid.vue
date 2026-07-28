@@ -24,6 +24,7 @@ import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
 import { usePubSub } from "../composables/usePubSub";
 import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
+import { CANVAS_TOOL_GROUP } from "../../common/toolGroups";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 
@@ -253,7 +254,7 @@ watch(
       // The GROUPS, not the tool names. Every cell here is a grid cell, so "has render" is the
       // whole question — and matching on a `present*` prefix would count presentCollection,
       // which belongs to `data` and draws nothing without the collection store behind it.
-      canvasAvailable.value = Array.isArray(body.groups) && body.groups.includes("render");
+      canvasAvailable.value = Array.isArray(body.groups) && body.groups.includes(CANVAS_TOOL_GROUP);
       canvasChecked.value = true;
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
@@ -272,7 +273,7 @@ const { subscribe: subscribeToolGroups } = usePubSub();
 const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
   const msg = data as { sessionId?: string; groups?: string[] };
   if (!msg?.sessionId || msg.sessionId !== expandedSessionId.value) return;
-  canvasAvailable.value = Array.isArray(msg.groups) && msg.groups.includes("render");
+  canvasAvailable.value = Array.isArray(msg.groups) && msg.groups.includes(CANVAS_TOOL_GROUP);
   canvasChecked.value = true;
 });
 onBeforeUnmount(() => offToolGroups());

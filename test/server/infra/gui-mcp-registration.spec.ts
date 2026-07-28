@@ -23,7 +23,7 @@ describe("guiMcpUrlTemplate", () => {
 });
 
 describe("listMentionsServer", () => {
-  const list = ["mulmoterminal-render: http://127.0.0.1:34567/api/mcp/render/x - ✓ Connected", "playwright: npx @playwright/mcp - ✓ Connected"].join("\n");
+  const list = ["mulmoterminal-render: http://127.0.0.1:34567/api/mcp/render/x - connected", "playwright: npx @playwright/mcp - connected"].join("\n");
 
   it("finds a registered server", () => {
     expect(listMentionsServer(list, "mulmoterminal-render")).toBe(true);

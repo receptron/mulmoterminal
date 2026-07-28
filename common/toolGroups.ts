@@ -18,6 +18,12 @@ export type ToolGroup = (typeof TOOL_GROUPS)[number];
 
 export const isToolGroup = (value: unknown): value is ToolGroup => TOOL_GROUPS.some((group) => group === value);
 
+// The group the Canvas pane is made of. The launcher switch registers it, the panel's
+// availability is decided by it, and the server routes on it — named here rather than written
+// as `"render"` at each of those sites, so a rename cannot leave one of them silently pointing
+// at a group that no longer exists.
+export const CANVAS_TOOL_GROUP: ToolGroup = "render";
+
 // Which group each GUI tool belongs to.
 //
 // A tool that is absent belongs to NO group and is therefore reachable only through the

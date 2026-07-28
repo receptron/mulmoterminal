@@ -8,6 +8,7 @@ import { useGitStatus } from "../composables/useGitStatus";
 import { formatCwd, worktreeLabel } from "./cwdDisplay";
 import DirBadge from "./DirBadge.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
+import { CANVAS_TOOL_GROUP } from "../../common/toolGroups";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
@@ -521,7 +522,6 @@ let worktreesReq = 0;
 // it is a `render`-group MCP server registered in Claude Code's own local-scope config for this
 // directory, so the switch reads and writes through /api/gui-mcp-groups and `claude mcp list`
 // stays the one place it can be seen. Read per directory, like the worktree list above.
-const CANVAS_GROUP = "render";
 const canvasDir = ref<string | null>(null);
 const canvasEnabled = ref(false);
 const canvasBusy = ref(false);
@@ -543,7 +543,7 @@ async function loadCanvasEnabled() {
     // the new directory's name.
     if (reqId !== canvasReq) return;
     canvasDir.value = dir;
-    canvasEnabled.value = Array.isArray(data.groups) && data.groups.includes(CANVAS_GROUP);
+    canvasEnabled.value = Array.isArray(data.groups) && data.groups.includes(CANVAS_TOOL_GROUP);
     canvasError.value = null;
   } catch {
     // No switch rather than one whose position is a guess — flipping a wrong "off" would run
@@ -564,7 +564,7 @@ async function applyCanvas() {
     const res = await fetch("/api/gui-mcp-groups", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwd: dir, group: CANVAS_GROUP, enabled: wanted }),
+      body: JSON.stringify({ cwd: dir, group: CANVAS_TOOL_GROUP, enabled: wanted }),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
@@ -641,7 +641,7 @@ async function carryCanvasInto(worktreePath: string) {
     await fetch("/api/gui-mcp-groups", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ cwd: worktreePath, group: CANVAS_GROUP, enabled: true }),
+      body: JSON.stringify({ cwd: worktreePath, group: CANVAS_TOOL_GROUP, enabled: true }),
     });
   } catch {
     // best-effort — a worktree without the registration still launches, just without Canvas

@@ -1,6 +1,6 @@
 # feat — grid の拡大セルでも Canvas を出す
 
-grid のセルで走っているエージェントが `presentDocument` / `presentHTML` / `presentForm` /
+grid のセルで走っているエージェントが `presentDocument` / `presentHtml` / `presentForm` /
 `presentMulmoScript` を呼んでも、今は**どこにも出ない**。Canvas は single view 専用で、
 `GuiPanel` はそこに 1 つだけマウントされている（`App.vue:389`）。
 
@@ -63,7 +63,7 @@ grid は `--strict-mcp-config` を付けないので、ユーザーの `.mcp.jso
 
 | グループ | URL | 中身 | 性質 | `--allowedTools` |
 |---|---|---|---|---|
-| **render** | `/api/mcp/render/:sessionId` | markdown・html・form・chart | Canvas に描いて終わる。パネル外に副作用なし | **自動許可** |
+| **render** | `/api/mcp/render/:sessionId` | presentDocument・presentHtml・presentForm・presentChart | Canvas に描く。ただし presentDocument だけは fillImages を通す（有料生成） | **presentDocument 以外を自動許可** |
 | **data** | `/api/mcp/data/:sessionId` | `manageCollection`・`manageAccounting` | workspace の構造化データを読み書き | プロンプト |
 | **media** | `/api/mcp/media/:sessionId` | generate-image・mulmoscript | 生成が高価。ファイルを産む | プロンプト |
 | **external** | `/api/mcp/external/:sessionId` | google・x | third-party のアカウント / API | プロンプト |
@@ -97,7 +97,7 @@ plugins, workerTool)` は**プラグインのリストを受け取る**ので、
 
 | | 置き場所 | MulmoClaude への影響 |
 |---|---|---|
-| **A（採用）** | MulmoTerminal 内のマッピング表（`server/infra/tool-groups.ts` を 1 枚） | **なし。** ローカル変更のみ |
+| **A（採用）** | MulmoTerminal 内のマッピング表（`common/toolGroups.ts` を 1 枚） | **なし。** ローカル変更のみ |
 | B | `ToolDefinition` に `group` を足し各プラグインが自己申告 | protocol + プラグイン 10 個の変更・bump・publish、MulmoClaude 側の取り込み |
 
 B の方が設計としては綺麗（プラグイン自身が自分の性質を知っている）が、コストが釣り合わない。

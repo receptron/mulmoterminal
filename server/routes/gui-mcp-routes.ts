@@ -15,10 +15,10 @@ export function mountGuiMcpRoutes(app: Express): void {
   // Same no-fallback rule as /api/dir-config-detail: this REPORTS ON the directory it was asked
   // about, and answering about the default workspace under another directory's name is worse
   // than answering "unknown".
-  app.get("/api/gui-mcp-groups", (req, res) => {
+  app.get("/api/gui-mcp-groups", async (req, res) => {
     const cwd = existingWorkspaceFromQuery(req.query.cwd);
     if (!cwd) return res.json({ groups: [] });
-    res.json({ groups: registeredGuiMcpGroups(claudeAdapter.bin(), cwd, TOOL_GROUPS) });
+    res.json({ groups: await registeredGuiMcpGroups(claudeAdapter.bin(), cwd, TOOL_GROUPS) });
   });
 
   // Turn a group on or off for this directory. Writes through `claude mcp` into LOCAL scope —
@@ -27,12 +27,16 @@ export function mountGuiMcpRoutes(app: Express): void {
   //
   // It takes effect on the cell's NEXT start: the tools are handed to claude when the session
   // spawns, so a session already running keeps whatever it was given.
-  app.post("/api/gui-mcp-groups", (req, res) => {
+  app.post("/api/gui-mcp-groups", async (req, res) => {
     const cwd = existingWorkspace(typeof req.body?.cwd === "string" ? req.body.cwd : null);
     const { group, enabled } = req.body ?? {};
     if (!cwd) return res.status(400).json({ ok: false, message: "unknown directory" });
     if (!isToolGroup(group)) return res.status(400).json({ ok: false, message: `unknown tool group: ${group}` });
-    const result = enabled ? registerGuiMcpGroup(claudeAdapter.bin(), cwd, group) : unregisterGuiMcpGroup(claudeAdapter.bin(), cwd, group);
+    // Checked rather than coerced: this writes to the user's Claude Code config, and a missing
+    // or misspelled field arriving as falsy would silently REMOVE a registration the caller
+    // meant to add.
+    if (typeof enabled !== "boolean") return res.status(400).json({ ok: false, message: "enabled must be a boolean" });
+    const result = await (enabled ? registerGuiMcpGroup(claudeAdapter.bin(), cwd, group) : unregisterGuiMcpGroup(claudeAdapter.bin(), cwd, group));
     res.json(result);
   });
 }

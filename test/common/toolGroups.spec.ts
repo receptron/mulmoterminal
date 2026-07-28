@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { TOOL_GROUPS, isToolGroup, groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOLS } from "../../common/toolGroups.js";
+import { TOOL_GROUPS, isToolGroup, groupOfTool, toolGroupServerId, AUTO_ALLOWED_TOOLS, CANVAS_TOOL_GROUP } from "../../common/toolGroups.js";
 
 describe("tool groups", () => {
   it("classifies the drawing tools as render", () => {
@@ -62,5 +62,19 @@ describe("tool groups", () => {
     expect(isToolGroup("render")).toBe(true);
     expect(isToolGroup("gui")).toBe(false);
     expect(isToolGroup(undefined)).toBe(false);
+  });
+});
+
+// The launcher switch, the panel's availability check and the server all decide on this same
+// group. Written as a literal at each site, a rename would break Canvas detection silently and
+// with no type error — which is what the repo's "shared wire values live in common/" rule is for.
+describe("CANVAS_TOOL_GROUP", () => {
+  it("names a real group", () => {
+    expect(TOOL_GROUPS).toContain(CANVAS_TOOL_GROUP);
+  });
+
+  it("is the group the drawing tools belong to", () => {
+    expect(groupOfTool("presentDocument")).toBe(CANVAS_TOOL_GROUP);
+    expect(groupOfTool("presentHtml")).toBe(CANVAS_TOOL_GROUP);
   });
 });
