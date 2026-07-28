@@ -36,12 +36,16 @@ describe("the canvas pane's unavailable states", () => {
     expect(w.text()).not.toContain("presentDocument");
   });
 
-  // The tools were never registered for this directory, so asking would fail every time.
-  it("names the directory's missing render MCP, and how to fix it", async () => {
+  // This session's agent was started without the tools, so asking would fail every time. Said of
+  // the SESSION rather than the directory: the switch is per directory but takes effect at
+  // startup, so a session older than the switch lacks the tools while the directory has them —
+  // blaming the directory would send the user to a switch that is already on.
+  it("names the session's missing render MCP, and how to fix it", async () => {
     const w = mountPanel({ sessionId: "s1", unavailable: "no-render-mcp" });
     await flushPromises();
     const text = w.text();
-    expect(text).toContain("not enabled for this directory");
+    expect(text).toContain("not enabled for this session");
+    expect(text).not.toContain("not enabled for this directory");
     expect(text).toContain("CANVAS (render MCPs)");
     expect(text).toContain("restart");
     expect(text).not.toContain("presentDocument");

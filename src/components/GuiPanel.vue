@@ -101,9 +101,13 @@ const hasContent = computed(() => results.value.length > 0);
           <p class="mt-1">This cell has no terminal running yet. Start one and its drawings will appear here.</p>
         </template>
         <template v-else>
-          <div class="font-medium text-secondary">Canvas is not enabled for this directory</div>
+          <!-- The SESSION, not the directory. The tools are handed to the agent when it starts,
+               so a session begun before the switch was turned on has none of them while the
+               directory it runs in is enabled — saying "directory" there sends the user to a
+               switch that is already on. -->
+          <div class="font-medium text-secondary">Canvas is not enabled for this session</div>
           <p class="mt-1">
-            Its agent has no drawing tools, so nothing can appear here. Turn on
+            Its agent was started without the drawing tools, so nothing can appear here. They are handed out at startup: turn on
             <span class="whitespace-nowrap font-medium">CANVAS (render MCPs)</span> in this cell's launcher, then restart the cell.
           </p>
         </template>

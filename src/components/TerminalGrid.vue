@@ -236,7 +236,7 @@ function sendToExpandedCell(text: string): boolean {
 // may not have connected its MCP client yet, and re-expanding is how a user retries anything.
 const canvasAvailable = ref(false);
 // Whether the answer above has come back yet for the CURRENT cell. Without it the panel says
-// "not enabled for this directory" for the moment between switching cells and the reply landing
+// "not enabled for this session" for the moment between switching cells and the reply landing
 // — a wrong explanation is worse than none, so nothing is claimed until it is known.
 const canvasChecked = ref(false);
 watch(
@@ -258,7 +258,7 @@ watch(
       canvasChecked.value = true;
     } catch {
       // Unreachable server: no button rather than one that opens an empty panel. Left unchecked
-      // so the panel does not blame the directory for what is our own failure to ask.
+      // so the panel does not blame the session for what is our own failure to ask.
       if (sessionId === expandedSessionId.value) canvasAvailable.value = false;
     }
   },
