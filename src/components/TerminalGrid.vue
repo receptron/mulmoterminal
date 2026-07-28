@@ -242,6 +242,10 @@ const canvasChecked = ref(false);
 // EVERY group this session reached us on, not only the canvas ones: the pane's empty state lists
 // the GUI tools this terminal actually has, and a cell that also registered `data` or `external`
 // can be asked for those in the same conversation.
+//
+// Only handed to the panel once `canvasChecked` (see the template): until the reply lands this is
+// the starting `[]`, which as a group list means "this session has NO GUI tools" — a narrower
+// claim than we can make yet, and one the panel would answer with a dead end.
 const sessionGroups = ref<ToolGroup[]>([]);
 const readGroups = (groups: unknown): ToolGroup[] => (Array.isArray(groups) ? groups.filter(isToolGroup) : []);
 watch(
@@ -648,7 +652,7 @@ watch(
           :session-id="expandedSessionId"
           :send-text-message="sendToExpandedCell"
           :unavailable="canvasUnavailable"
-          :groups="sessionGroups"
+          :groups="canvasChecked ? sessionGroups : undefined"
           :style="{ flex: `0 0 ${paneWidth}px` }"
           @toggle-tools="toggleRightPane('tools')"
         />

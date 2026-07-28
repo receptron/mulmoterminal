@@ -117,6 +117,11 @@ const toolSections = computed(() => {
     tools: toolsInGroup(group).map((name) => ({ name, hint: TOOL_HINTS.get(name) ?? "" })),
   }));
 });
+
+// A session with no GUI tools at all. The grid never reaches this — it reports `unavailable`
+// first, and that outranks — but "ask Claude to use one of these:" above an EMPTY list is a
+// dead end for any caller that does, so the hint is dropped rather than left dangling.
+const hasTools = computed(() => toolSections.value.some((section) => section.tools.length > 0));
 </script>
 
 <template>
@@ -158,6 +163,7 @@ const toolSections = computed(() => {
       <!-- Grouped, and the group is named: the switches in the launcher are per group, so a user
            who wants a tool that isn't listed needs to know WHICH one to turn on. The heading is
            dropped when there is only one — naming a division of one explains nothing. -->
+      <div v-else-if="!hasContent && !hasTools" data-testid="canvas-no-tools" class="text-[13px] text-dim">This session has no GUI tools.</div>
       <div v-else-if="!hasContent" data-testid="canvas-empty" class="text-[13px] text-dim">
         Ask Claude to use one of these:
         <div v-for="section in toolSections" :key="section.group" class="mt-1.5">

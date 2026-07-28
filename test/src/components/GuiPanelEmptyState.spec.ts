@@ -67,6 +67,17 @@ describe("the canvas pane's empty state", () => {
     expect(itemsOf(w)).toHaveLength(TOOL_GROUPS.flatMap(toolsInGroup).length);
   });
 
+  // The boundary between the two meanings of "no groups": `undefined` is the single view, which
+  // reaches everything; `[]` is a session that reached nothing. Answering the second with the
+  // hint's heading and no list under it is a dead end, so the hint goes entirely.
+  it("drops the hint rather than heading an empty list when the session has no groups", async () => {
+    const w = mountPanel([]);
+    await flushPromises();
+    expect(w.find('[data-testid="canvas-empty"]').exists()).toBe(false);
+    expect(w.find('[data-testid="canvas-no-tools"]').exists()).toBe(true);
+    expect(w.text()).not.toContain("presentDocument");
+  });
+
   // Naming a tool says nothing about what asking for it would get.
   it("says what each one produces", async () => {
     const w = mountPanel();
