@@ -17,9 +17,12 @@ import type { Launcher, LaunchPick } from "./launchers";
 import { shouldFlipZoom } from "./cellChromeRules";
 import { formatCwd } from "./cwdDisplay";
 import FilesPane, { type FilesPaneState } from "./FilesPane.vue";
+import GuiPanel from "./GuiPanel.vue";
+import ToolsPane from "./ToolsPane.vue";
 import { clampPaneWidth, splitterKeyWidth, MIN_GUI, MIN_TERMINAL } from "./splitterWidth";
 import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
+import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
@@ -140,7 +143,19 @@ const remember = (key: string, value: string): void => {
     // storage blocked: the pane still works this session, it just isn't remembered
   }
 };
-const filesOpen = ref(stored(PANE_OPEN_KEY) === "1");
+// Which pane holds the one slot beside the enlarged terminal (see gridCell.ts):
+//   files  — the file tree/editor (the original occupant).
+//   canvas — what the agent DREW: the GUI plugin views for this cell's session.
+//   tools  — which GUI tools this session actually has, read-only.
+const isRightPane = (value: string | null): value is RightPane => value === "files" || value === "canvas" || value === "tools";
+// The key used to hold a boolean, where "1" meant the files pane was open — so an existing
+// browser is migrated rather than silently starting closed.
+function restoredPane(value: string | null): RightPane | null {
+  if (isRightPane(value)) return value;
+  return value === "1" ? "files" : null;
+}
+const rightPane = ref<RightPane | null>(restoredPane(stored(PANE_OPEN_KEY)));
+const filesOpen = computed(() => rightPane.value === "files");
 const paneWidth = ref(Number(stored(PANE_WIDTH_KEY)) || PANE_WIDTH_DEFAULT);
 const zoomRow = ref<HTMLElement | null>(null);
 const rowWidth = () => zoomRow.value?.clientWidth ?? 0;
@@ -152,30 +167,95 @@ const paneMax = computed(() => Math.max(0, rowWidthNow.value - MIN_TERMINAL));
 const paneMin = computed(() => Math.min(MIN_GUI, paneMax.value));
 
 function setFilesOpen(open: boolean): void {
-  if (!open) rememberPaneState(paneUid.value);
-  filesOpen.value = open;
-  // Closing drops the cell it was on, so re-opening lands on whichever cell is enlarged THEN
-  // rather than resuming a directory the user has since walked away from.
-  if (!open) {
+  setRightPane(open ? "files" : null);
+}
+
+// Switching panes is the same event as closing the files one, because the files pane unmounts
+// either way — so its buffer has to be saved on both paths, not just on close.
+function setRightPane(pane: RightPane | null): void {
+  const leavingFiles = filesOpen.value && pane !== "files";
+  if (leavingFiles) rememberPaneState(paneUid.value);
+  rightPane.value = pane;
+  // Leaving files drops the cell it was on, so coming back lands on whichever cell is enlarged
+  // THEN rather than resuming a directory the user has since walked away from.
+  if (leavingFiles) {
     paneCwd.value = null;
     paneUid.value = null;
   }
-  remember(PANE_OPEN_KEY, open ? "1" : "0");
+  remember(PANE_OPEN_KEY, pane ?? "");
 }
 
 // The header toggle. Closing unmounts the pane, buffer and all, so the buffer is saved on the
 // way out — the pane's OWN close button has already flushed by the time it emits, which is why
 // that path stays separate rather than routing through here.
 async function toggleFiles(): Promise<void> {
-  // Closing unmounts the buffer with the pane, so a buffer that could be neither saved nor
-  // backed up keeps the pane open — the error is visible in it.
+  await toggleRightPane("files");
+}
+
+// The unread-canvas chip on a tiled cell: enlarge that cell AND put the pane beside it, in one
+// click. Two steps because the pane only exists while a cell is enlarged — asking the user to
+// expand first and then find the button is the gesture this chip exists to remove.
+async function openCanvasFor(uid: number): Promise<void> {
   if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
-  setFilesOpen(!filesOpen.value);
+  if (props.expandedUid !== uid) emit("toggle-expand", uid);
+  setRightPane("canvas");
+}
+
+// A pane button: opens its pane, or closes it when it is already the one showing.
+async function toggleRightPane(pane: RightPane): Promise<void> {
+  // Leaving files unmounts the buffer with the pane, so a buffer that could be neither saved
+  // nor backed up keeps it open — the error is visible in it. Checked whichever pane was asked
+  // for: files unmounts when another pane takes the slot exactly as it does when closed.
+  if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
+  setRightPane(rightPane.value === pane ? null : pane);
 }
 
 // The enlarged cell's project dir — what the pane browses. A cell that hasn't reported one yet
 // (a launcher, a session still starting) falls back to the grid's default.
 const expandedCwd = computed(() => props.cells.find((c) => c.uid === props.expandedUid)?.cwd ?? props.defaultCwd);
+
+// The enlarged cell's session — what Canvas and Tools read. Null for a cell with no session
+// yet (a launcher, a command cell), which both panes already render as empty.
+const expandedSessionId = computed(() => props.cells.find((c) => c.uid === props.expandedUid)?.session ?? null);
+
+// GUI -> LLM for the enlarged cell (a submitted form's answer). App.vue routes this through the
+// single view's Terminal ref; here the slot key is derivable from the uid, so the connection
+// runtime can be addressed directly rather than threading a component ref through the Teleport.
+function sendToExpandedCell(text: string): boolean {
+  return props.expandedUid === null ? false : conn.submitText(`cell-${props.expandedUid}`, text);
+}
+
+// Does the enlarged cell's session have the drawing tools? Only the server knows: a grid cell
+// reaches them through the user's own per-folder MCP config, and the server learns which groups
+// a session has from the URLs it connects to.
+//
+// Re-asked on every expand, not only when the session id changes: a cell that has just started
+// may not have connected its MCP client yet, and re-expanding is how a user retries anything.
+const canvasAvailable = ref(false);
+watch(
+  [expandedSessionId, () => props.expandedUid],
+  async ([sessionId]) => {
+    if (!sessionId) {
+      canvasAvailable.value = false;
+      return;
+    }
+    try {
+      const res = await fetch(`/api/tools?sessionId=${encodeURIComponent(sessionId)}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      // Late reply for a cell we have since walked away from would show the wrong button.
+      if (sessionId !== expandedSessionId.value) return;
+      // The GROUPS, not the tool names. Every cell here is a grid cell, so "has render" is the
+      // whole question — and matching on a `present*` prefix would count presentCollection,
+      // which belongs to `data` and draws nothing without the collection store behind it.
+      canvasAvailable.value = Array.isArray(body.groups) && body.groups.includes("render");
+    } catch {
+      // Unreachable server: no button rather than one that opens an empty panel.
+      if (sessionId === expandedSessionId.value) canvasAvailable.value = false;
+    }
+  },
+  { immediate: true },
+);
 const filesPane = ref<InstanceType<typeof FilesPane> | null>(null);
 // What the pane looked like in each cell, so coming back to a terminal doesn't mean opening
 // the same three directories again. Saved state only — the buffer went to disk on the way out
@@ -491,21 +571,22 @@ watch(
          in both. Hidden outright when nothing is zoomed, like .zoom-main itself. -->
     <div ref="zoomRow" :class="zoomed ? 'flex min-h-0 min-w-0 flex-auto' : 'hidden'">
       <div ref="zoomMain" class="zoom-main" />
-      <template v-if="filesOpen">
+      <template v-if="rightPane">
         <div
           class="w-[5px] flex-none cursor-col-resize bg-border hover:bg-accent focus-visible:bg-accent"
           role="separator"
           aria-orientation="vertical"
-          aria-label="Resize file pane"
+          aria-label="Resize side pane"
           :aria-valuenow="paneWidth"
           :aria-valuemin="paneMin"
           :aria-valuemax="paneMax"
-          title="Drag (or use arrow keys) to resize the file pane"
+          title="Drag (or use arrow keys) to resize the side pane"
           tabindex="0"
           @pointerdown.prevent="onSplitterDown"
           @keydown="onSplitterKey"
         />
         <FilesPane
+          v-if="rightPane === 'files'"
           ref="filesPane"
           :cwd="paneCwd"
           :initial-state="paneState"
@@ -520,6 +601,23 @@ watch(
             <span class="truncate font-mono text-[11px] text-muted" :title="paneCwd ?? ''">{{ formatCwd(paneCwd, home) }}</span>
           </template>
         </FilesPane>
+        <!-- Canvas and Tools follow the enlarged cell's SESSION, not its directory, and neither
+             holds an unsaved buffer — so unlike the files pane they re-root unconditionally and
+             need none of its decline-a-re-root machinery. -->
+        <GuiPanel
+          v-else-if="rightPane === 'canvas'"
+          :session-id="expandedSessionId"
+          :send-text-message="sendToExpandedCell"
+          :style="{ flex: `0 0 ${paneWidth}px` }"
+          @toggle-tools="toggleRightPane('tools')"
+        />
+        <ToolsPane
+          v-else-if="rightPane === 'tools'"
+          :session-id="expandedSessionId"
+          :style="{ flex: `0 0 ${paneWidth}px` }"
+          class="border-l border-border"
+          @close="setRightPane(null)"
+        />
       </template>
     </div>
     <div class="grid" :style="gridStyle">
@@ -530,12 +628,17 @@ watch(
           :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :files-open="filesOpen"
+          :right-pane="rightPane"
+          :canvas-available="canvasAvailable"
           :zoomed="zoomed"
           :command="cell.command"
           :home="home"
           :reorderable="reorderable"
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @toggle-files="toggleFiles"
+          @toggle-canvas="toggleRightPane('canvas')"
+          @open-canvas="openCanvasFor(cell.uid)"
+          @toggle-tools="toggleRightPane('tools')"
           @close="emit('close', cell.uid)"
           @move="(dir) => emit('move', cell.uid, dir)"
           @status="(s) => emit('status', cell.uid, s)"
@@ -547,6 +650,8 @@ watch(
           :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :files-open="filesOpen"
+          :right-pane="rightPane"
+          :canvas-available="canvasAvailable"
           :zoomed="zoomed"
           :launcher="cell.launcher"
           :session="cell.session"
@@ -555,6 +660,9 @@ watch(
           :reorderable="reorderable"
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @toggle-files="toggleFiles"
+          @toggle-canvas="toggleRightPane('canvas')"
+          @open-canvas="openCanvasFor(cell.uid)"
+          @toggle-tools="toggleRightPane('tools')"
           @close="emit('close', cell.uid)"
           @move="(dir) => emit('move', cell.uid, dir)"
           @status="(s) => emit('status', cell.uid, s)"
@@ -567,6 +675,8 @@ watch(
           :class="cellClass(cell.uid)"
           :expanded="cell.uid === expandedUid"
           :files-open="filesOpen"
+          :right-pane="rightPane"
+          :canvas-available="canvasAvailable"
           :zoomed="zoomed"
           :initial-session-id="cell.session"
           :initial-cwd="cell.cwd"
@@ -581,6 +691,9 @@ watch(
           :reorderable="reorderable"
           @toggle-expand="emit('toggle-expand', cell.uid)"
           @toggle-files="toggleFiles"
+          @toggle-canvas="toggleRightPane('canvas')"
+          @open-canvas="openCanvasFor(cell.uid)"
+          @toggle-tools="toggleRightPane('tools')"
           @session="(id) => emit('session', cell.uid, id)"
           @agent="(a) => emit('agent', cell.uid, a)"
           @cwd="(c) => emit('cwd', cell.uid, c)"

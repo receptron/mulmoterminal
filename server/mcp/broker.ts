@@ -28,6 +28,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprot
 import { randomUUID } from "node:crypto";
 import { toolDefinitions } from "../infra/plugins-registry.js";
 import { offeredTools, routeToolCall, SUBMIT_TRANSLATION_TOOL_NAME } from "./tool-gate.js";
+import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import { interpretToolEnvelope } from "./tool-envelope.js";
 import { isRecord } from "../../common/isRecord.js";
 
@@ -71,21 +72,28 @@ const SUBMIT_TRANSLATION_TOOL = {
  * @param baseUrl    the mulmoterminal host origin to POST plugin dispatch + results to
  * @param opts.submitTranslationTool  expose the worker-only `submitTranslation` tool
  *                                    (set only for hidden translation-worker sessions)
+ * @param opts.group  serve only one GROUP of the GUI tools (the `/api/mcp/<group>/<id>` URLs,
+ *                    which exist so a directory can enable a subset through Claude Code's own
+ *                    per-folder MCP config). Null/absent = every tool, the single view's URL.
  */
-export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { submitTranslationTool?: boolean } = {}): Server {
-  const server = new Server({ name: "mulmoterminal-gui", version: "0.0.0" }, { capabilities: { tools: {} } });
+export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { submitTranslationTool?: boolean; group?: ToolGroup | null } = {}): Server {
+  const group = opts.group ?? null;
+  // The advertised server name follows the id a group is expected to be registered under, so
+  // what a user sees in `claude mcp list` matches what they wrote in their own config.
+  const serverName = group === null ? "mulmoterminal-gui" : toolGroupServerId(group);
+  const server = new Server({ name: serverName, version: "0.0.0" }, { capabilities: { tools: {} } });
 
-  // Both layers of the worker gate live in mcp/tool-gate.ts (pure/tested): a worker is
-  // offered submitTranslation alone, and anything else it names is refused below.
+  // Both layers of the worker AND group gates live in mcp/tool-gate.ts (pure/tested): the
+  // offer is filtered here, and anything outside it that gets named anyway is refused below.
   const isWorker = !!opts.submitTranslationTool;
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: offeredTools(isWorker, toolDefinitions, SUBMIT_TRANSLATION_TOOL),
+    tools: offeredTools(isWorker, toolDefinitions, SUBMIT_TRANSLATION_TOOL, group),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    const route = routeToolCall(name, isWorker);
+    const route = routeToolCall(name, isWorker, group);
 
     // Worker-only result tool: deliver the structured translations back to the
     // waiting request (keyed by session id), bypassing the plugin dispatch path.

@@ -6,13 +6,50 @@ import type { Express } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import type { createToolStores } from "../session/tool-store.js";
 import { planToolResultUpdate } from "./toolResultPlan.js";
+import { groupOfTool, type ToolGroup } from "../../common/toolGroups.js";
+
+export interface ToolSummary {
+  toolName: string;
+  title: string;
+  description?: string;
+}
 
 export interface ToolRouteDeps {
   stores: ReturnType<typeof createToolStores>;
   /** The GUI plugin tools this server exposes, for the pane's "Available Tools" list. */
-  toolSummaries: unknown;
+  toolSummaries: ToolSummary[];
+  /** Which tool groups a session actually reached us on — see session/session-tool-groups.ts. */
+  sessionToolGroups: (sessionId: string) => ToolGroup[];
+  sessionToolGroupsHydrated: Promise<void>;
+  /**
+   * Is this a GRID cell? The two kinds of session get their GUI tools by different routes, and
+   * "no groups learned" means the opposite thing for each — see narrowedTools.
+   */
+  isGridSession: (sessionId: string) => boolean;
+  devTerminalSessionsHydrated: Promise<void>;
   publish: (channel: string, data: unknown) => void;
   sessionChannel: (id: string) => string;
+}
+
+// An UNGROUPED tool (spawnBackgroundChat) belongs to no group URL, so it cannot have reached a
+// grid cell — it is listed only for a session we did not narrow at all.
+const hasGroup = (group: ToolGroup | null, groups: readonly ToolGroup[]): boolean => group !== null && groups.includes(group);
+
+/**
+ * The tools a session actually has.
+ *
+ * The rule that matters: an EMPTY group list means opposite things for the two kinds of session,
+ * and conflating them is what let a grid cell with no MCP registered report every tool — and so
+ * offer a Canvas button that opened a panel nothing could ever fill.
+ *
+ *   single view — carries the whole GUI MCP on --mcp-config and never connects to a group URL,
+ *                 so it learns no groups and nonetheless has everything.
+ *   grid cell   — has exactly what its directory registered with Claude Code. Nothing
+ *                 registered, nothing learned, nothing available.
+ */
+export function narrowedTools(tools: readonly ToolSummary[], groups: readonly ToolGroup[], isGrid: boolean): ToolSummary[] {
+  if (!isGrid) return [...tools];
+  return tools.filter((tool) => hasGroup(groupOfTool(tool.toolName), groups));
 }
 
 export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
@@ -46,11 +83,23 @@ export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
     res.json({ sessionId, toolResults: await deps.stores.toolResultsStore.get(sessionId) });
   });
 
-  // The GUI plugin tools available this session (for the tools pane's "Available
-  // Tools" list). The full set claude can call — built-ins, other MCP — is not
-  // enumerable server-side; those still show up in the tool-call history below.
-  app.get("/api/tools", (_req, res) => {
-    res.json({ tools: deps.toolSummaries });
+  // The GUI plugin tools, for the tools pane's "Available Tools" list. The full set claude
+  // can call — built-ins, other MCP — is not enumerable server-side; those still show up in
+  // the tool-call history below.
+  //
+  // `?sessionId=` narrows it to what THAT session actually has. It is no longer the same for
+  // every session: a grid cell reaches the GUI tools through one URL per group, registered in
+  // the user's own per-folder MCP config, so two cells can differ. Without the parameter the
+  // answer stays the whole set (the single view, which carries every tool).
+  app.get("/api/tools", async (req, res) => {
+    const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : null;
+    if (sessionId === null || !SESSION_ID_RE.test(sessionId)) return res.json({ tools: deps.toolSummaries });
+    // Both sets are persisted and hydrated at boot; asked before either resolves, a grid cell
+    // would read as having nothing and a resumed one as having lost its groups.
+    await Promise.all([deps.sessionToolGroupsHydrated, deps.devTerminalSessionsHydrated]);
+    const groups = deps.sessionToolGroups(sessionId);
+    const isGrid = deps.isGridSession(sessionId);
+    res.json({ tools: narrowedTools(deps.toolSummaries, groups, isGrid), groups });
   });
 
   // Replay a session's tool-call history (every tool, via the Pre/PostToolUse hooks)

@@ -32,8 +32,10 @@ const PTY_ROWS = 30;
 // `unset` drops variables the session must NOT inherit — ANTHROPIC_API_KEY for a provider
 // session, which would silently outrank its auth token (#579). It cannot be expressed in
 // the settings `env` block, which can set a variable but not remove one.
-export function spawnPty(bin: string, args: string[], cwd: string, unset: readonly string[] = []): IPty {
-  const env = withoutUnset(sanitizePtyEnv(process.env, path.delimiter), unset);
+// `extra` is set on the spawned process ON TOP of the sanitized inherited environment —
+// per-session values the child needs and our own process cannot carry (a session id).
+export function spawnPty(bin: string, args: string[], cwd: string, unset: readonly string[] = [], extra: Readonly<Record<string, string>> = {}): IPty {
+  const env = { ...withoutUnset(sanitizePtyEnv(process.env, path.delimiter), unset), ...extra };
   // On Windows neither the name nor the arguments reach node-pty as they are: its PATH
   // lookup ignores executable extensions (so `claude` misses claude.exe, #794), and a batch
   // shim has to be run through cmd.exe (#798). See infra/resolve-bin.ts.
@@ -48,6 +50,14 @@ export function sandboxWouldRun(attachGuiMcp: boolean): boolean {
   return sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && dockerAvailable() && sandboxImageExists();
 }
 
+/** How a spawn's environment differs from ours. One object so ptySpawn keeps a readable arity. */
+export interface PtySpawnEnv {
+  /** Variables the session must NOT inherit (a provider session's ANTHROPIC_API_KEY). */
+  unset?: readonly string[];
+  /** Per-session variables to set on top of the inherited environment. */
+  env?: Readonly<Record<string, string>>;
+}
+
 // Spawn a terminal, wrapping it in a persistent tmux session when tmux is available and
 // `persistent` is set, so it survives the server dying. `tmux new-session -A` creates it
 // (running file+args) or reattaches the surviving one. Returns whether tmux backs it.
@@ -57,15 +67,17 @@ export function ptySpawn(
   args: string[],
   cwd: string,
   persistent: boolean,
-  unset: readonly string[] = [],
+  options: PtySpawnEnv = {},
 ): { term: IPty; tmux: boolean } {
+  const { unset = [], env = {} } = options;
   if (persistent && tmuxAvailable()) {
     // A pane inherits the tmux SERVER's environment, so stripping our own copy is not
-    // enough — the server may already carry the name from an earlier session.
+    // enough — the server may already carry the name from an earlier session. For the same
+    // reason `env` goes to `new-session -e` rather than onto the tmux CLIENT we spawn here.
     if (unset.length > 0) tmuxScrubEnvNames(unset);
-    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd), cwd, unset), tmux: true };
+    return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd, env), cwd, unset), tmux: true };
   }
-  return { term: spawnPty(file, args, cwd, unset), tmux: false };
+  return { term: spawnPty(file, args, cwd, unset, env), tmux: false };
 }
 
 // Spawn the single-view session inside a Docker container (the sandbox path). Exports the

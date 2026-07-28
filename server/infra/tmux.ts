@@ -240,8 +240,16 @@ export const tmuxSessionName = (id: string): string => `${SESSION_PREFIX}${id}`;
 // it doesn't exist, else ATTACH to the running one (the command is ignored). This one
 // primitive covers both first launch and reattach-after-restart. Returned as the args
 // for pty.spawn("tmux", ...).
-export function tmuxNewSessionArgs(id: string, file: string, args: string[], cwd: string): string[] {
-  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, "--", file, ...args];
+// `env` is set on the new session with `-e`, NOT inherited from our own process: a tmux pane
+// takes the tmux SERVER's environment, and that server outlives any one session, so a variable
+// exported here would either be missing or — worse — hold a previous session's value.
+//
+// With `-A` the flag only applies when the session is CREATED; reattaching an existing one
+// keeps the environment it was created with, which is what we want (its claude process is
+// already running with the value it was given).
+export function tmuxNewSessionArgs(id: string, file: string, args: string[], cwd: string, env: Readonly<Record<string, string>> = {}): string[] {
+  const envArgs = Object.entries(env).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
+  return ["-L", SERVER_SOCKET, "-f", CONF_FILE, "new-session", "-A", "-s", tmuxSessionName(id), "-c", cwd, ...envArgs, "--", file, ...args];
 }
 
 // Is a persistent session for this id currently alive in our tmux server?

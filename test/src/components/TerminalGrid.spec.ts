@@ -648,7 +648,8 @@ describe("file pane beside the enlarged cell", () => {
   it("remembers being open across a remount, and the pane's own close puts it away", async () => {
     const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
     await openPane(w);
-    expect(localStorage.getItem("files_pane_open")).toBe("1");
+    // The key now names WHICH pane holds the slot, not just whether the files one is open.
+    expect(localStorage.getItem("files_pane_open")).toBe("files");
 
     const reopened = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
     expect(paneOf(reopened).exists()).toBe(true);
@@ -656,7 +657,16 @@ describe("file pane beside the enlarged cell", () => {
     await paneOf(reopened).vm.$emit("close");
     await nextTick();
     expect(paneOf(reopened).exists()).toBe(false);
-    expect(localStorage.getItem("files_pane_open")).toBe("0");
+    expect(localStorage.getItem("files_pane_open")).toBe("");
+  });
+
+  // The key held "1" before the slot could hold anything but files, so an existing browser
+  // would otherwise come back with the pane closed for no reason it could explain.
+  it("migrates the old boolean value", async () => {
+    localStorage.setItem("files_pane_open", "1");
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
+    await flushPromises();
+    expect(paneOf(w).exists()).toBe(true);
   });
 });
 
@@ -691,7 +701,7 @@ describe("file pane width restored from storage", () => {
     localStorage.setItem("files_pane_width", "400");
     const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
     await flushPromises();
-    const sep = w.find('[role="separator"][aria-label="Resize file pane"]');
+    const sep = w.find('[role="separator"][aria-label="Resize side pane"]');
     expect(sep.attributes("aria-valuenow")).toBe("400");
     expect(sep.attributes("aria-valuemin")).toBe("360"); // MIN_GUI, there being room for it
     expect(sep.attributes("aria-valuemax")).toBe(String(ROW - 320)); // the terminal keeps MIN_TERMINAL

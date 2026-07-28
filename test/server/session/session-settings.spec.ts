@@ -145,7 +145,7 @@ describe("the argv a Windows spawn ends up with", () => {
       permissionMode: "auto",
       attachGuiMcp: true,
       mcpConfig,
-      guiMcpTools: "mulmoterminal_readXPost,mulmoterminal_searchX",
+      allowedTools: "mulmoterminal_readXPost,mulmoterminal_searchX",
     });
     expect(args.filter((a) => a.includes('"'))).toEqual([]);
   });

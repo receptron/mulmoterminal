@@ -14,6 +14,8 @@ import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, mergeOwnedActivity, parseActivityState, type PersistedActivity } from "./activity-state.js";
 import { devTerminalSessionLine, parseDevTerminalSessionIds } from "./dev-terminal-sessions.js";
+import { parseSessionToolGroups, sessionToolGroupLine, type SessionToolGroup } from "./session-tool-groups.js";
+import type { ToolGroup } from "../../common/toolGroups.js";
 import type { Activity, KnownSession, PtyEntry } from "./types.js";
 
 // Per-session "working" state, driven by Claude hooks (see /api/hook):
@@ -140,6 +142,52 @@ export function markDevTerminalSession(id: string): void {
   if (!SESSION_ID_RE.test(id) || devTerminalSessions.has(id)) return;
   devTerminalSessions.add(id);
   appendDevTerminalSession(id);
+}
+
+// Which GUI tool groups a session actually has. Learned from the group URLs it connects to
+// (see session-tool-groups.ts) rather than configured here — a grid cell's GUI tools come
+// from the user's own per-folder MCP config, which we do not read. Read it through
+// sessionToolGroups() so callers can't mutate the stored set.
+const toolGroupsBySession = new Map<string, Set<ToolGroup>>();
+const SESSION_TOOL_GROUPS_FILE = path.join(MULMOTERMINAL_HOME, "session-tool-groups.json");
+
+async function readPersistedToolGroups(): Promise<SessionToolGroup[]> {
+  try {
+    return parseSessionToolGroups(await fs.readFile(SESSION_TOOL_GROUPS_FILE, "utf8"), isValidSessionId);
+  } catch {
+    return [];
+  }
+}
+
+export const sessionToolGroupsHydrated: Promise<void> = (async () => {
+  for (const { sessionId, group } of await readPersistedToolGroups()) addToolGroupInMemory(sessionId, group);
+})();
+
+let toolGroupsPersist: Promise<void> = Promise.resolve();
+function appendSessionToolGroup(sessionId: string, group: ToolGroup): void {
+  toolGroupsPersist = toolGroupsPersist
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.appendFile(SESSION_TOOL_GROUPS_FILE, sessionToolGroupLine(sessionId, group)))
+    .catch((e) => console.error(`[session-tool-groups] failed to persist: ${messageOf(e)}`));
+}
+
+function addToolGroupInMemory(sessionId: string, group: ToolGroup): boolean {
+  const groups = toolGroupsBySession.get(sessionId) ?? new Set<ToolGroup>();
+  if (groups.has(group)) return false;
+  groups.add(group);
+  toolGroupsBySession.set(sessionId, groups);
+  return true;
+}
+
+// Note that a session reached us on a group's URL, then persist. A no-op once known, so the
+// per-request MCP calls (one server is built per request) don't append on every tool call.
+export function markSessionToolGroup(sessionId: string, group: ToolGroup): void {
+  if (!SESSION_ID_RE.test(sessionId)) return;
+  if (addToolGroupInMemory(sessionId, group)) appendSessionToolGroup(sessionId, group);
+}
+
+export function sessionToolGroups(sessionId: string): ToolGroup[] {
+  return [...(toolGroupsBySession.get(sessionId) ?? [])];
 }
 
 // Restore the `working` + blocked/done (`waiting`) flags across a server restart (e.g. a

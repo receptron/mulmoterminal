@@ -9,10 +9,28 @@
 //
 // No `.stop` on the clicks: the enclosing header's zoom gesture already ignores anything
 // inside a button (shouldZoomOnHeaderClick), and stopping here would only hide that.
-import { CELL_BTN, CELL_CLOSE_BTN } from "./cellChromeClasses";
+import { computed } from "vue";
+import { CELL_BTN, CELL_BTN_DISABLEABLE, CELL_CLOSE_BTN } from "./cellChromeClasses";
 
-defineProps<{ expanded: boolean; filesOpen?: boolean }>();
-const emit = defineEmits<{ (e: "toggle-expand" | "close" | "toggle-files"): void }>();
+const props = defineProps<{
+  expanded: boolean;
+  filesOpen?: boolean;
+  // Which side pane this cell is showing, so each button can read as pressed. The three share
+  // one slot beside the enlarged terminal, so at most one is ever pressed.
+  rightPane?: "files" | "canvas" | "tools" | null;
+  // Whether this cell's session actually has the drawing tools — i.e. whether its directory has
+  // the `render` MCP group registered with Claude Code. False disables the button rather than
+  // removing it: the pane would open empty, and that is worth SAYING rather than hiding.
+  canvasAvailable?: boolean;
+}>();
+const emit = defineEmits<{ (e: "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools"): void }>();
+
+// The unavailable case names the fix, not just the state: the registration is per directory and
+// only read when a session starts, so it takes a restart even once switched on.
+const canvasTitle = computed(() => {
+  if (!props.canvasAvailable) return "No render MCP for this directory — turn on Canvas in the launcher, then restart this cell";
+  return props.rightPane === "canvas" ? "Hide canvas" : "Show canvas";
+});
 </script>
 
 <template>
@@ -38,6 +56,33 @@ const emit = defineEmits<{ (e: "toggle-expand" | "close" | "toggle-files"): void
     @click="emit('toggle-files')"
   >
     <span class="material-symbols-outlined" aria-hidden="true">folder_open</span>
+  </button>
+  <!-- Shown but DISABLED when this session has no render MCP: the pane would open empty and
+       never fill, and hiding the button outright leaves nothing to explain why. The title is
+       where the fix goes, since a disabled control is the moment someone asks. -->
+  <button
+    v-if="expanded"
+    data-testid="cell-canvas-btn"
+    class="cell-btn"
+    :class="CELL_BTN_DISABLEABLE"
+    :disabled="!canvasAvailable"
+    :aria-pressed="rightPane === 'canvas'"
+    :title="canvasTitle"
+    :aria-label="canvasTitle"
+    @click="emit('toggle-canvas')"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">draw</span>
+  </button>
+  <button
+    v-if="expanded"
+    class="cell-btn"
+    :class="CELL_BTN"
+    :aria-pressed="rightPane === 'tools'"
+    :title="rightPane === 'tools' ? 'Hide tools' : 'Show tools'"
+    :aria-label="rightPane === 'tools' ? 'Hide tools' : 'Show tools'"
+    @click="emit('toggle-tools')"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">build</span>
   </button>
   <button class="cell-btn cell-close" :class="CELL_CLOSE_BTN" title="Close terminal" aria-label="Close terminal" @click="emit('close')">
     <span class="material-symbols-outlined" aria-hidden="true">close</span>

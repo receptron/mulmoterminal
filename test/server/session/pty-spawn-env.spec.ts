@@ -51,13 +51,13 @@ describe("spawnPty — the environment it hands the pty", () => {
 // there is what actually protects it — but the non-tmux path has only this.
 describe("ptySpawn — carries the removal down both paths", () => {
   it("applies it on the direct spawn", () => {
-    ptySpawn("s1", "claude", [], "/tmp", false, ["ANTHROPIC_API_KEY"]);
+    ptySpawn("s1", "claude", [], "/tmp", false, { unset: ["ANTHROPIC_API_KEY"] });
     expect(envOf()).not.toHaveProperty("ANTHROPIC_API_KEY");
   });
 
   it("applies it on the tmux spawn too", () => {
     tmuxOn = true;
-    const result = ptySpawn("s1", "claude", [], "/tmp", true, ["ANTHROPIC_API_KEY"]);
+    const result = ptySpawn("s1", "claude", [], "/tmp", true, { unset: ["ANTHROPIC_API_KEY"] });
     expect(result.tmux).toBe(true);
     expect(envOf()).not.toHaveProperty("ANTHROPIC_API_KEY");
   });
@@ -69,7 +69,7 @@ describe("ptySpawn — carries the removal down both paths", () => {
 describe("ptySpawn — the tmux server's own environment", () => {
   it("scrubs the names from the running server before a provider spawn", () => {
     tmuxOn = true;
-    ptySpawn("s1", "claude", [], "/tmp", true, ["ANTHROPIC_API_KEY"]);
+    ptySpawn("s1", "claude", [], "/tmp", true, { unset: ["ANTHROPIC_API_KEY"] });
     expect(scrub).toHaveBeenCalledWith(["ANTHROPIC_API_KEY"]);
   });
 

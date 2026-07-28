@@ -8,6 +8,9 @@ export interface SpawnDeps {
   permissionMode: string;
   /** Tool names auto-allowed for every session, already comma-joined. */
   guiMcpTools: string;
+  // The --allowedTools list for a GRID cell, whose GUI tools come from the user's own
+  // per-folder MCP config rather than from --mcp-config. See GRID_MCP_TOOLS in index.ts.
+  gridMcpTools: string;
   /** Bytes of pty output kept for a client that reattaches later. */
   outputBufferLimit: number;
   hookSettingsJson: (host: string, sessionId: string, env?: Record<string, string>) => string;

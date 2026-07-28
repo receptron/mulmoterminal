@@ -24,6 +24,19 @@ export interface McpConfigInput {
 const DEFAULT_HOST = "127.0.0.1";
 const GUI_SERVER_ID = "mulmoterminal-gui";
 
+// The counterpart for GRID cells, which are handed no --mcp-config at all: their GUI tools
+// come from the user's OWN per-folder MCP config (`claude mcp add -s local`, `.mcp.json`),
+// where the URL is a static string and cannot carry a session id. Claude Code expands
+// `${VAR}` in an MCP url at connect time, so the two moving parts ride in the environment:
+//
+//   "url": "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/render/${MULMOTERMINAL_SESSION_ID}"
+//
+// Set on every claude spawn, not just grid ones — the single view carries its own config and
+// simply never reads these, and a session that starts in one view is not worth special-casing.
+export function guiMcpEnv(sessionId: string, port: string | number): Record<string, string> {
+  return { MULMOTERMINAL_PORT: String(port), MULMOTERMINAL_SESSION_ID: sessionId };
+}
+
 export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers, sandbox = false }: McpConfigInput): string {
   const mcpServers: Record<string, { type: string; url: string }> = {};
   // The user's servers go in FIRST so the built-in GUI entry below always wins on a clashing

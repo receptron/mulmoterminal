@@ -10,7 +10,7 @@ const base: ClaudeArgsInput = {
   permissionMode: "auto",
   attachGuiMcp: true,
   mcpConfig: "{gui-mcp}",
-  guiMcpTools: "mcp__gui__a,mcp__gui__b",
+  allowedTools: "mcp__gui__a,mcp__gui__b",
 };
 
 const cfg = (over: Partial<ClaudeArgsInput> = {}): ClaudeArgsInput => ({ ...base, ...over });
@@ -35,7 +35,10 @@ describe("buildClaudeArgs", () => {
     ]);
   });
 
-  it("grid dev terminal (attachGuiMcp=false): no GUI MCP, no --strict-mcp-config, no --allowedTools", () => {
+  // A grid cell's GUI tools arrive through the USER's own per-folder MCP config, so it must
+  // get neither --mcp-config nor --strict-mcp-config (which would ignore that config) — but it
+  // still pre-approves the render group, or every draw stops at a permission prompt.
+  it("grid dev terminal (attachGuiMcp=false): no GUI MCP, no --strict-mcp-config, but keeps --allowedTools", () => {
     const args = buildClaudeArgs({ ...base, attachGuiMcp: false });
     expect(args).toEqual([
       "--session-id",
@@ -46,9 +49,15 @@ describe("buildClaudeArgs", () => {
       "auto",
       "--append-system-prompt",
       SESSION_SUMMARY_PROMPT,
+      "--allowedTools",
+      "mcp__gui__a,mcp__gui__b",
     ]);
     expect(args).not.toContain("--mcp-config");
     expect(args).not.toContain("--strict-mcp-config");
+  });
+
+  it("omits --allowedTools entirely when there is nothing to pre-approve", () => {
+    const args = buildClaudeArgs({ ...base, attachGuiMcp: false, allowedTools: "" });
     expect(args).not.toContain("--allowedTools");
   });
 

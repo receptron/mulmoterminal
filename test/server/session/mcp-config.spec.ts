@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { mcpConfigJson } from "../../../server/session/mcp-config.js";
+import { mcpConfigJson, guiMcpEnv } from "../../../server/session/mcp-config.js";
 import { SANDBOX_HOST } from "../../../server/infra/sandbox.js";
 
 const SESSION = "3f2504e0-4f89-41d3-9a0c-0305e82c3301";
@@ -85,5 +85,18 @@ describe("mcpConfigJson", () => {
 
   it("produces parseable JSON", () => {
     expect(() => JSON.parse(mcpConfigJson({ sessionId: SESSION, port: 34567, userMcpServers: [] }))).not.toThrow();
+  });
+});
+
+// A grid cell gets no --mcp-config: its GUI tools come from the user's own per-folder MCP
+// config, where the url is a static string. Claude Code expands ${VAR} in it at connect time,
+// so the session id and port reach the url through the environment instead.
+describe("guiMcpEnv", () => {
+  it("carries the port and session id the url template interpolates", () => {
+    expect(guiMcpEnv("abc-123", 34567)).toEqual({ MULMOTERMINAL_PORT: "34567", MULMOTERMINAL_SESSION_ID: "abc-123" });
+  });
+
+  it("stringifies a port given as a string too", () => {
+    expect(guiMcpEnv("abc-123", "8080").MULMOTERMINAL_PORT).toBe("8080");
   });
 });

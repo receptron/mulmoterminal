@@ -74,3 +74,49 @@ describe("CellChromeButtons — the file pane toggle", () => {
     expect(buttons[1].attributes("aria-label")).toBe("Show files");
   });
 });
+
+// The Canvas pane can only fill for a session whose directory registered the `render` MCP
+// group. Absent, the pane opens empty — so the button stays and explains itself instead of
+// disappearing, which would leave nothing to ask about.
+describe("the canvas button", () => {
+  const canvasButton = (props: Record<string, unknown>) =>
+    mount(CellChromeButtons, { props: { expanded: true, ...props } }).find('[data-testid="cell-canvas-btn"]');
+
+  it("is absent until the cell is enlarged (the pane needs the room)", () => {
+    const w = mount(CellChromeButtons, { props: { expanded: false, canvasAvailable: true } });
+    expect(w.find('[data-testid="cell-canvas-btn"]').exists()).toBe(false);
+  });
+
+  it("is enabled when the session has the render tools", () => {
+    const btn = canvasButton({ canvasAvailable: true });
+    expect(btn.exists()).toBe(true);
+    expect(btn.attributes("disabled")).toBeUndefined();
+    expect(btn.attributes("title")).toBe("Show canvas");
+  });
+
+  it("is present but disabled when it does not", () => {
+    const btn = canvasButton({ canvasAvailable: false });
+    expect(btn.exists()).toBe(true);
+    expect(btn.attributes("disabled")).toBeDefined();
+  });
+
+  // A disabled control is exactly when someone asks why — so the title carries the fix, and
+  // names the restart, which is easy to miss because every other dir setting applies live.
+  it("says how to fix it, restart included", () => {
+    const title = canvasButton({ canvasAvailable: false }).attributes("title") ?? "";
+    expect(title).toContain("Canvas");
+    expect(title).toContain("restart");
+  });
+
+  // Without `enabled:`-prefixed hovers a disabled button still lights up under the cursor and
+  // reads as pressable.
+  it("does not offer hover affordances while disabled", () => {
+    expect(canvasButton({ canvasAvailable: false }).classes()).not.toContain("hover:bg-hover");
+    expect(canvasButton({ canvasAvailable: false }).classes()).toContain("disabled:opacity-40");
+  });
+
+  it("reads as pressed while the canvas pane is the one showing", () => {
+    expect(canvasButton({ canvasAvailable: true, rightPane: "canvas" }).attributes("aria-pressed")).toBe("true");
+    expect(canvasButton({ canvasAvailable: true, rightPane: "files" }).attributes("aria-pressed")).toBe("false");
+  });
+});

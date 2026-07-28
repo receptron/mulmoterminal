@@ -9,6 +9,12 @@
 // change to what the grid needs cannot land in two of the three.
 import type { CellStatus } from "./gridTabs";
 
+// The pane showing beside the ENLARGED cell. One slot, three possible occupants, never two at
+// once — the row is already `roster | terminal | pane`, and a fourth column leaves the terminal
+// unreadable on a laptop. Declared with the rest of the grid's contract because every cell type
+// renders the toggles and none of them owns the state.
+export type RightPane = "files" | "canvas" | "tools";
+
 export interface GridCellProps {
   expanded: boolean;
   // True while SOME cell in the grid is zoomed → this cell is a filmstrip thumbnail
@@ -17,11 +23,22 @@ export interface GridCellProps {
   // Whether the file pane is showing beside the enlarged cell, so its toggle can read as
   // pressed. Grid state, not the cell's: only the expanded cell renders the toggle.
   filesOpen?: boolean;
+  // Which of the three side panes is showing, so each toggle can read as pressed without three
+  // booleans that could disagree. Grid state for the same reason filesOpen is.
+  rightPane?: RightPane | null;
+  // Whether the ENLARGED cell's session has the drawing tools at all — i.e. whether its
+  // directory registered the `render` MCP group. False leaves the Canvas button in place but
+  // DISABLED: the pane would open empty, and a button that explains why beats one that isn't
+  // there to ask about.
+  canvasAvailable?: boolean;
   home: string | null;
 }
 
 export interface GridCellEmits {
-  (e: "toggle-expand" | "close" | "toggle-files"): void;
+  // `open-canvas` is the unread-canvas chip on an UN-expanded cell: enlarge me AND open the
+  // pane, in one gesture. Distinct from `toggle-canvas`, which toggles the pane on the cell
+  // that is already enlarged.
+  (e: "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "open-canvas"): void;
   // Swap this cell left (-1) or right (+1) in manual sort mode.
   (e: "move", dir: -1 | 1): void;
   // Report activity up so the grid can attention-sort in auto mode.

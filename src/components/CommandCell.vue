@@ -201,8 +201,12 @@ function onHeaderClick(event: MouseEvent) {
           <CellChromeButtons
             :expanded="expanded"
             :files-open="filesOpen"
+            :right-pane="rightPane"
+            :canvas-available="canvasAvailable"
             @toggle-expand="emit('toggle-expand')"
             @toggle-files="emit('toggle-files')"
+            @toggle-canvas="emit('toggle-canvas')"
+            @toggle-tools="emit('toggle-tools')"
             @close="emit('close')"
           />
         </span>

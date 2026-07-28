@@ -32,6 +32,7 @@ import { artifactsFileOps } from "../backends/artifacts.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
+import { groupOfTool, toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import { missingRequiredEnv, soleExecutor } from "./server-tool-load.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -224,6 +225,14 @@ export function mountAllRoutes(app: Express) {
 
 // Fully-qualified MCP tool names for claude's --allowedTools (auto-run, no prompt).
 // Includes host tools so they run without a permission prompt too.
-export function allowedToolNames() {
-  return toolDefinitions.map((d) => `mcp__${MCP_SERVER_NAME}__${d.name}`);
+//
+// `group` names one of the per-group URLs instead of the all-tools surface. The prefix has to
+// change with it: --allowedTools matches on `mcp__<server id>__<tool>`, and a group is
+// registered under its own id (common/toolGroups.ts). Passing a group the session may not
+// even have registered is harmless — an allowlist entry for a server that isn't there matches
+// nothing, which is exactly what lets the grid pass `render` unconditionally.
+export function allowedToolNames(group: ToolGroup | null = null) {
+  const serverId = group === null ? MCP_SERVER_NAME : toolGroupServerId(group);
+  const defs = group === null ? toolDefinitions : toolDefinitions.filter((d) => groupOfTool(d.name) === group);
+  return defs.map((d) => `mcp__${serverId}__${d.name}`);
 }

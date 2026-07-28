@@ -136,3 +136,63 @@ describe("describeTool", () => {
     expect(describeTool({ name: "x" })).toBe("");
   });
 });
+
+// A group URL exists so a directory can switch a SUBSET of the GUI tools on through Claude
+// Code's own per-folder MCP config. Both layers matter for the same reason they do for the
+// worker gate: not offering a tool is not a control, because a model can name one it was
+// never shown.
+describe("the tool-group gate", () => {
+  describe("what a group URL offers", () => {
+    it("offers only the group's tools", () => {
+      expect(names(offeredTools(false, PLUGINS, WORKER_TOOL, "render"))).toEqual(["presentHtml"]);
+      expect(names(offeredTools(false, PLUGINS, WORKER_TOOL, "data"))).toEqual(["manageCollection"]);
+    });
+
+    it("offers nothing for a group none of the tools belong to", () => {
+      expect(names(offeredTools(false, PLUGINS, WORKER_TOOL, "media"))).toEqual([]);
+    });
+
+    // The map can go stale when a plugin is added; this is the direction it fails in.
+    it("withholds an unclassified tool from every group", () => {
+      for (const group of ["render", "data", "media", "external"] as const) {
+        expect(names(offeredTools(false, PLUGINS, WORKER_TOOL, group))).not.toContain("spawnBackgroundChat");
+      }
+    });
+
+    // The single view's URL, which must keep offering everything.
+    it("offers every tool when no group is given", () => {
+      expect(names(offeredTools(false, PLUGINS, WORKER_TOOL))).toEqual(["manageCollection", "presentHtml", "spawnBackgroundChat"]);
+    });
+
+    // The worker gate is the narrower one and has to win: a translation worker reached through
+    // a group URL still gets its one tool, never the group's.
+    it("still gives a translation worker submitTranslation alone", () => {
+      expect(names(offeredTools(true, PLUGINS, WORKER_TOOL, "render"))).toEqual([SUBMIT_TRANSLATION_TOOL_NAME]);
+    });
+  });
+
+  describe("what a group URL will actually run", () => {
+    it("dispatches a tool that is in the group", () => {
+      expect(routeToolCall("presentHtml", false, "render")).toEqual({ kind: "dispatch" });
+    });
+
+    it("refuses a real tool from another group, even though it was never offered", () => {
+      const route = routeToolCall("manageCollection", false, "render");
+      expect(route.kind).toBe("refused");
+      expect(route.kind === "refused" && route.message).toContain("render");
+    });
+
+    it("refuses an unclassified tool", () => {
+      expect(routeToolCall("spawnBackgroundChat", false, "render").kind).toBe("refused");
+    });
+
+    it("dispatches anything when no group is given", () => {
+      expect(routeToolCall("manageCollection", false)).toEqual({ kind: "dispatch" });
+      expect(routeToolCall("spawnBackgroundChat", false)).toEqual({ kind: "dispatch" });
+    });
+
+    it("refuses the worker's tool on a group URL like it does anywhere else", () => {
+      expect(routeToolCall(SUBMIT_TRANSLATION_TOOL_NAME, false, "render").kind).toBe("refused");
+    });
+  });
+});

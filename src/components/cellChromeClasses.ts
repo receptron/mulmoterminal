@@ -45,6 +45,11 @@ export const CELL_BTN_BOX = "inline-flex items-center justify-center rounded-md 
 export const CELL_BTN_SIZE = "h-[26px] w-7 text-[16px]";
 export const CELL_BTN_INK = "cursor-pointer text-[var(--cell-btn,var(--text-secondary))] hover:bg-hover hover:text-fg";
 export const CELL_BTN = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} ${CELL_BTN_INK}`;
+// Ink for a button that can be DISABLED. The hover affordances are `enabled:`-prefixed, or a
+// button that cannot be pressed still lights up under the cursor and reads as pressable; the
+// dimming is what says it is there but unavailable. Same idiom as the launcher's ▶ button.
+export const CELL_BTN_INK_DISABLEABLE = `enabled:cursor-pointer text-[var(--cell-btn,var(--text-secondary))] enabled:hover:bg-hover enabled:hover:text-fg disabled:cursor-default disabled:opacity-40`;
+export const CELL_BTN_DISABLEABLE = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} ${CELL_BTN_INK_DISABLEABLE}`;
 export const CELL_CLOSE_BTN = `${CELL_BTN_BOX} ${CELL_BTN_SIZE} cursor-pointer text-[var(--cell-btn,var(--text-secondary))] hover:bg-[var(--err-hover-bg)] hover:text-err-text`;
 
 // A path clipped from the FRONT: `rtl` puts the ellipsis at the start so the tail — the

@@ -86,7 +86,7 @@ describe("buildClaudeArgs with addDirs", () => {
     permissionMode: "auto",
     attachGuiMcp: false,
     mcpConfig: "{}",
-    guiMcpTools: "",
+    allowedTools: "",
   };
 
   it("passes one variadic flag holding every directory", () => {
@@ -97,7 +97,7 @@ describe("buildClaudeArgs with addDirs", () => {
 
   // `--add-dir <directories...>` is variadic: a VALUE after it would be swallowed into the list.
   it("puts the flag last, so nothing can follow it", () => {
-    const args = buildClaudeArgs({ ...base, addDirs: ["/a"], model: "opus", attachGuiMcp: true, guiMcpTools: "t" });
+    const args = buildClaudeArgs({ ...base, addDirs: ["/a"], model: "opus", attachGuiMcp: true, allowedTools: "t" });
     expect(args[args.length - 2]).toBe("--add-dir");
     expect(args[args.length - 1]).toBe("/a");
   });
@@ -158,7 +158,7 @@ describe("path resolution parity", () => {
       permissionMode: "auto",
       attachGuiMcp: false,
       mcpConfig: "{}",
-      guiMcpTools: "",
+      allowedTools: "",
       addDirs: dirs,
     });
     const flagged = args.slice(args.indexOf("--add-dir") + 1);

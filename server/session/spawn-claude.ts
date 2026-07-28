@@ -2,7 +2,8 @@
 // piece of index.ts (#548 step 3c): it spans the sandbox decision, the CLI args, the
 // sidebar's optimistic row, the draft typed into the input box, and teardown on exit.
 import type { WebSocket } from "ws";
-import { CLAUDE_CWD } from "../config/env.js";
+import { CLAUDE_CWD, PORT } from "../config/env.js";
+import { guiMcpEnv } from "./mcp-config.js";
 import { getUserMcpServers, getPrWorkdirFooter } from "../config/config-routes.js";
 import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
@@ -108,9 +109,13 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       permissionMode: deps.permissionMode,
       attachGuiMcp,
       mcpConfig,
-      // Auto-allow the GUI tools + the user's own configured MCP servers (mcp__<id>), so
-      // their tools don't trip a permission prompt on every call.
-      guiMcpTools: [deps.guiMcpTools, ...getUserMcpServers().map((s) => `mcp__${s.id}`)].join(","),
+      // Single view: auto-allow the GUI tools + the user's own configured MCP servers
+      // (mcp__<id>), so their tools don't trip a permission prompt on every call.
+      // Grid: no --mcp-config at all, so there is nothing of ours to name — except the tool
+      // GROUPS the directory may have registered itself, which we pre-approve blind
+      // (see GRID_MCP_TOOLS). The user's own servers keep their normal prompts there, since
+      // that path never went through our allowlist before.
+      allowedTools: attachGuiMcp ? [deps.guiMcpTools, ...getUserMcpServers().map((s) => `mcp__${s.id}`)].join(",") : deps.gridMcpTools,
       addDirs: dir.addDirs,
       workdirFooter: sessionWorkdirFooter(cwd),
     });
@@ -126,7 +131,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
 
     function spawnEntry(): PtyEntry {
       if (sandbox) return spawnSandboxEntry(sessionId, args, cwd, ws, dir.addDirs);
-      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, resolved.unset);
+      const { term, tmux } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, { unset: resolved.unset, env: guiMcpEnv(sessionId, PORT) });
       console.log(`[pty] spawned claude (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}`);
       return { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
     }

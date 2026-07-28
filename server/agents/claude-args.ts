@@ -15,10 +15,16 @@ export interface ClaudeArgsInput {
   // true  (single view): attach the in-process GUI MCP, auto-allow its tools, and
   //        isolate to it with --strict-mcp-config (main's classic behavior).
   // false (grid dev terminal): no GUI MCP and no --strict-mcp-config, so the user's
-  //        + project's MCP servers load normally.
+  //        + project's MCP servers load normally — INCLUDING a GUI tool group the
+  //        directory registered itself (see common/toolGroups.ts).
   attachGuiMcp: boolean;
   mcpConfig: string; // GUI MCP config JSON (--mcp-config), used only when attachGuiMcp
-  guiMcpTools: string; // comma-joined GUI tool names (--allowedTools), used only when attachGuiMcp
+  // Comma-joined fully-qualified tool names for --allowedTools. Passed in BOTH modes: a grid
+  // cell gets no --mcp-config, but still needs its render-group tools pre-approved so they
+  // don't stop at a permission prompt on every call. Verified that --allowedTools alone (no
+  // --mcp-config, no --strict-mcp-config) pre-approves without restricting anything else —
+  // it is an additive allowlist, not "only these".
+  allowedTools: string;
   // What this session runs (#579): an alias (sonnet/opus/haiku) or a backend's own model
   // name. Null leaves the choice to Claude Code. `--model` outranks both the settings
   // `model` key and ANTHROPIC_MODEL, so it is the one place the decision has to be made.
@@ -44,8 +50,12 @@ export function buildClaudeArgs(input: ClaudeArgsInput): string[] {
   guiArgs.push("--append-system-prompt", appended);
   if (input.model) guiArgs.push("--model", input.model);
   if (input.attachGuiMcp) {
-    guiArgs.push("--mcp-config", input.mcpConfig, "--strict-mcp-config", "--allowedTools", input.guiMcpTools);
+    guiArgs.push("--mcp-config", input.mcpConfig, "--strict-mcp-config");
   }
+  // Outside the block: --strict-mcp-config is what makes --mcp-config the ONLY source, and a
+  // grid cell wants neither — but it does want its render-group tools auto-allowed, and those
+  // reach it through the user's own MCP config. Empty means nothing to pre-approve.
+  if (input.allowedTools) guiArgs.push("--allowedTools", input.allowedTools);
   // LAST, and one flag for the whole list: `--add-dir` is variadic (`<directories...>`), so a
   // flag placed after it would be fine but a VALUE would be swallowed. Keeping it at the end
   // means nothing can ever follow it.

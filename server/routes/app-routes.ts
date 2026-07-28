@@ -22,6 +22,7 @@ import { mountSessionRoutes } from "../routes/session-routes.js";
 import { mountToolRoutes } from "../routes/tool-routes.js";
 import { mountRepoRoutes } from "../routes/repo-routes.js";
 import { mountDirRoutes } from "../routes/dir-routes.js";
+import { mountGuiMcpRoutes } from "../routes/gui-mcp-routes.js";
 import { mountOpenDirRoute } from "../files/open-dir.js";
 import { mountGitRemoteRoute } from "../git/gitRemote.js";
 import { mountWorktreeRoutes } from "../git/worktree-routes.js";
@@ -39,7 +40,7 @@ import { mountNotificationRoutes } from "../backends/notifier.js";
 import { mountWhisperRoutes } from "../backends/whisper.js";
 import { mountSchedulerRoutes } from "../backends/scheduler.js";
 import { mountFilesRoutes } from "../backends/files.js";
-import { ptys } from "../session/registry.js";
+import { ptys, sessionToolGroups, sessionToolGroupsHydrated, devTerminalSessions, devTerminalSessionsHydrated } from "../session/registry.js";
 import { mountShortcutsRoutes } from "../backends/shortcuts.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "../backends/html.js";
@@ -212,6 +213,10 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   mountToolRoutes(app, {
     stores: deps.toolStores,
     toolSummaries: deps.toolSummaries,
+    sessionToolGroups,
+    sessionToolGroupsHydrated,
+    isGridSession: (id) => devTerminalSessions.has(id),
+    devTerminalSessionsHydrated,
     publish: (c, d) => deps.publish(c, d),
     sessionChannel: deps.sessionChannel,
   });
@@ -232,6 +237,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // Directory-scoped reads for a terminal cell: scripts, skills, dir config, git status,
   // PR phase, resolved header, custom sound. All keyed by ?cwd= (see routes/dir-routes.ts).
   mountDirRoutes(app);
+  mountGuiMcpRoutes(app);
 
   // GRID-ONLY (dev_tool): POST /api/open-dir reveals a cell's working directory in the
   // OS file manager (a browser tab can't, but this local server can).

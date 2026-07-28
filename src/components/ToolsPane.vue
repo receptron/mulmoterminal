@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onUnmounted } from "vue";
+import { ref, watch, onUnmounted } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 
 // The tools pane mirrors MulmoClaude's right sidebar: an "Available Tools" list
@@ -31,17 +31,29 @@ const toolCalls = ref<ToolCall[]>([]);
 const expandedTools = ref<Set<string>>(new Set());
 const expandedCalls = ref<Set<string>>(new Set());
 
-// Available tools are the same for every session; load once.
-async function loadAvailableTools() {
+// NOT the same for every session any more. A grid cell reaches the GUI tools through one URL
+// per group, registered in the USER's own per-folder MCP config — so two cells can have
+// different tools, and the list has to be asked for per session. Without a session id the
+// server answers with the whole set (the single view, which carries every tool).
+//
+// Reloaded on every session change rather than cached per id: the server learns a session's
+// groups from the connections it makes, so the answer for one id can go from "everything" to
+// the real subset within a second of that session starting.
+async function loadAvailableTools(sessionId: string | null) {
+  const url = sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools";
   try {
-    const res = await fetch("/api/tools");
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    availableTools.value = (await res.json()).tools ?? [];
+    const body = await res.json();
+    // Late reply for a session we have since switched away from: dropping it keeps the list
+    // from showing another cell's tools.
+    if (sessionId !== props.sessionId) return;
+    availableTools.value = body.tools ?? [];
   } catch {
-    availableTools.value = [];
+    if (sessionId === props.sessionId) availableTools.value = [];
   }
 }
-loadAvailableTools();
+watch(() => props.sessionId, loadAvailableTools, { immediate: true });
 
 function callKey(c: ToolCall, i: number): string {
   return c.toolUseId ?? `${c.toolName}-${i}`;

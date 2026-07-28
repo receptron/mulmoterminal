@@ -33,6 +33,29 @@ describe("tmuxNewSessionArgs", () => {
     expect(dashdash).toBeGreaterThan(0);
     expect(args.slice(dashdash + 1)).toEqual(["/bin/zsh", "-lc", "exec codex"]);
   });
+
+  it("passes no -e when there is no per-session environment", () => {
+    expect(args).not.toContain("-e");
+  });
+
+  // A pane takes the tmux SERVER's environment, which outlives any one session — so a
+  // per-session value has to be set ON the session with -e, never exported into our own env.
+  describe("with a per-session environment", () => {
+    const withEnv = tmuxNewSessionArgs("id1", "/bin/zsh", ["-lc", "exec claude"], "/proj", { MULMOTERMINAL_PORT: "34567", MULMOTERMINAL_SESSION_ID: "abc" });
+
+    it("sets each variable with -e KEY=VALUE", () => {
+      expect(withEnv).toContain("-e");
+      expect(withEnv).toContain("MULMOTERMINAL_PORT=34567");
+      expect(withEnv).toContain("MULMOTERMINAL_SESSION_ID=abc");
+    });
+
+    // After `--` they would be arguments to the program, not tmux flags.
+    it("keeps them before `--`, and the program after it", () => {
+      const dashdash = withEnv.indexOf("--");
+      expect(withEnv.indexOf("MULMOTERMINAL_PORT=34567")).toBeLessThan(dashdash);
+      expect(withEnv.slice(dashdash + 1)).toEqual(["/bin/zsh", "-lc", "exec claude"]);
+    });
+  });
 });
 
 describe("TMUX_CONF_LINES", () => {
