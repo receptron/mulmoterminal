@@ -5,6 +5,8 @@ export interface SpawnDeps {
   claudeBin: string;
   codexBin: string;
   codexModel: string | null;
+  antigravityBin: string;
+  antigravityModel: string | null;
   permissionMode: string;
   /** Tool names auto-allowed for every session, already comma-joined. */
   guiMcpTools: string;
