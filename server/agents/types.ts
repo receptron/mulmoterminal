@@ -1,5 +1,5 @@
 // The per-agent surface a hosted coding-agent CLI needs; shared plumbing (PTY, grid, GUI-MCP) stays out.
-export type AgentKind = "claude" | "codex";
+export type AgentKind = "claude" | "codex" | "antigravity";
 
 export interface AgentAdapter {
   readonly kind: AgentKind;

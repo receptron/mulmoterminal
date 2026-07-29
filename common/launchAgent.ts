@@ -4,7 +4,7 @@
 // Deliberately NOT the configured `launchers` list: those are arbitrary user commands, and
 // the phone picks from a fixed set the host can name. "shell" is the OS default shell, the
 // same thing the header's new-terminal button opens.
-export const LAUNCH_AGENTS = ["shell", "claude", "codex"] as const;
+export const LAUNCH_AGENTS = ["shell", "claude", "codex", "antigravity"] as const;
 
 export type LaunchAgent = (typeof LAUNCH_AGENTS)[number];
 

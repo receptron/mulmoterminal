@@ -1,0 +1,6 @@
+import type { AgentAdapter } from "./types.js";
+
+export const antigravityAdapter = {
+  kind: "antigravity",
+  bin: () => process.env.ANTIGRAVITY_BIN || "agy",
+} satisfies AgentAdapter;
