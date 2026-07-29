@@ -1735,6 +1735,16 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           >
             Codex
           </button>
+          <button
+            type="button"
+            class="cursor-pointer rounded-[5px] border-none px-3.5 py-1 font-sans text-[12px] font-medium"
+            :class="agent === 'antigravity' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
+            role="radio"
+            :aria-checked="agent === 'antigravity'"
+            @click="agent = 'antigravity'"
+          >
+            Antigravity
+          </button>
         </div>
         <label class="flex w-full max-w-[360px] flex-col items-center gap-1.5">
           <span class="font-sans text-[11px] uppercase tracking-[0.05em] text-dim">Working directory</span>

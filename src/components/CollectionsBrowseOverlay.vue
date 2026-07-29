@@ -69,6 +69,16 @@ useEscapeToClose(isOpen, close);
         >
           Codex
         </button>
+        <button
+          type="button"
+          class="cursor-pointer rounded-[5px] border-0 px-3.5 py-[3px] font-sans text-[12px] font-medium"
+          :class="launchAgent === 'antigravity' ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
+          role="radio"
+          :aria-checked="launchAgent === 'antigravity'"
+          @click="launchAgent = 'antigravity'"
+        >
+          Antigravity
+        </button>
       </div>
     </div>
     <div class="min-h-0 flex-1">
