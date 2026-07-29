@@ -1,4 +1,6 @@
 import type { WebSocket } from "ws";
+import { PORT } from "../config/env.js";
+import { guiMcpEnv } from "./mcp-config.js";
 import { buildAntigravityArgs } from "../agents/antigravity-args.js";
 import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
@@ -49,7 +51,7 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       model: deps.antigravityModel,
       skipPermissions: true,
     });
-    const { term, tmux } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true);
+    const { term, tmux } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true, { env: guiMcpEnv(sessionId, PORT) });
     const via = tmux ? " via tmux" : "";
     const resumeNote = resumeConversationId ? ` (resume ${resumeConversationId})` : "";
     console.log(`[pty] spawned antigravity (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
