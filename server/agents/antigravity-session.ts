@@ -27,15 +27,23 @@ export function ensureAntigravityMcpConfig(): void {
       {
         mcpServers: {
           "mulmoterminal-render": {
+            type: "http",
+            url: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/render/${MULMOTERMINAL_SESSION_ID}",
             serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/render/${MULMOTERMINAL_SESSION_ID}",
           },
           "mulmoterminal-media": {
+            type: "http",
+            url: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/media/${MULMOTERMINAL_SESSION_ID}",
             serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/media/${MULMOTERMINAL_SESSION_ID}",
           },
           "mulmoterminal-data": {
+            type: "http",
+            url: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/data/${MULMOTERMINAL_SESSION_ID}",
             serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/data/${MULMOTERMINAL_SESSION_ID}",
           },
           "mulmoterminal-gui": {
+            type: "http",
+            url: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/${MULMOTERMINAL_SESSION_ID}",
             serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/${MULMOTERMINAL_SESSION_ID}",
           },
         },

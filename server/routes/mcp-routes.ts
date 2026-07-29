@@ -62,7 +62,7 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
   }
 
   app.post("/api/mcp/:sessionId", (req, res) => handleMcpRequest(req, res, req.params.sessionId, null));
-  app.get("/api/mcp/:sessionId", rejectNonPost);
+  app.get("/api/mcp/:sessionId", (req, res) => handleMcpRequest(req, res, req.params.sessionId, null));
   app.delete("/api/mcp/:sessionId", rejectNonPost);
 
   // One URL per tool group. Registered SECOND so the single-segment route above keeps its
@@ -84,7 +84,15 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     }
     return handleMcpRequest(req, res, sessionId, group);
   });
-  app.get("/api/mcp/:group/:sessionId", rejectNonPost);
+  app.get("/api/mcp/:group/:sessionId", (req, res) => {
+    const { group, sessionId } = req.params;
+    if (!isToolGroup(group)) return res.status(404).json({ error: `unknown tool group: ${group}` });
+    if (SESSION_ID_RE.test(sessionId) && !sessionToolGroups(sessionId).includes(group)) {
+      markSessionToolGroup(sessionId, group);
+      deps.publish(TOOL_GROUPS_CHANNEL, { sessionId, groups: sessionToolGroups(sessionId) });
+    }
+    return handleMcpRequest(req, res, sessionId, group);
+  });
   app.delete("/api/mcp/:group/:sessionId", rejectNonPost);
 
   // The array is handed to the waiting request as-is; translateViaHiddenChat validates it.
