@@ -18,6 +18,14 @@ export function antigravityBrainRoot(): string {
   return path.join(antigravityHome(), "brain");
 }
 
+function writeJsonQuietly(file: string, data: unknown): void {
+  try {
+    const dir = path.dirname(file);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  } catch {}
+}
+
 export function ensureAntigravityMcpConfig(port: string | number, sessionId: string, cwd?: string): void {
   const mcpConfig = {
     mcpServers: {
@@ -35,30 +43,27 @@ export function ensureAntigravityMcpConfig(port: string | number, sessionId: str
       },
     },
   };
-  const content = JSON.stringify(mcpConfig, null, 2);
 
-  const targets = [
-    path.join(os.homedir(), ".gemini", "config", "mcp_config.json"),
-    path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "mcp_config.json"),
-  ];
+  const pluginManifest = { name: "mulmoterminal", version: "1.0.0" };
+  const globalPluginsConfig = {
+    entries: [{ path: "~/.gemini/config/plugins/mulmoterminal" }],
+  };
+
+  // Global Antigravity config paths
+  writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "mcp_config.json"), mcpConfig);
+  writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "mcp_config.json"), mcpConfig);
+  writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "plugin.json"), pluginManifest);
+  writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins.json"), globalPluginsConfig);
+
+  // Workspace-level .agents/ plugin paths
   if (cwd) {
-    targets.push(path.join(cwd, ".gemini", "config", "mcp_config.json"));
+    writeJsonQuietly(path.join(cwd, ".gemini", "config", "mcp_config.json"), mcpConfig);
+    writeJsonQuietly(path.join(cwd, ".agents", "plugins", "mulmoterminal", "mcp_config.json"), mcpConfig);
+    writeJsonQuietly(path.join(cwd, ".agents", "plugins", "mulmoterminal", "plugin.json"), pluginManifest);
+    writeJsonQuietly(path.join(cwd, ".agents", "plugins.json"), {
+      entries: [{ path: "plugins/mulmoterminal" }],
+    });
   }
-
-  for (const file of targets) {
-    try {
-      const dir = path.dirname(file);
-      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-      writeFileSync(file, content, "utf8");
-    } catch {}
-  }
-
-  try {
-    const pluginJsonFile = path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "plugin.json");
-    if (!existsSync(pluginJsonFile)) {
-      writeFileSync(pluginJsonFile, JSON.stringify({ name: "mulmoterminal", version: "1.0.0" }, null, 2), "utf8");
-    }
-  } catch {}
 }
 
 export function listAntigravitySessions(root: string): string[] {
