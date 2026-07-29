@@ -34,6 +34,7 @@ export function ensureAntigravityMcpConfig(port: string | number, sessionId: str
       "mulmoterminal-gui": {
         command: "node",
         args: ["--import", "tsx", bridgeScriptPath],
+        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/${sessionId}`,
         env: {
           MULMOTERMINAL_PORT: String(port),
           MULMOTERMINAL_SESSION_ID: sessionId,
