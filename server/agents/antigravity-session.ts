@@ -1,4 +1,4 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
@@ -16,6 +16,35 @@ export function antigravityHome(): string {
 
 export function antigravityBrainRoot(): string {
   return path.join(antigravityHome(), "brain");
+}
+
+export function ensureAntigravityMcpConfig(): void {
+  const file = path.join(os.homedir(), ".gemini", "config", "mcp_config.json");
+  try {
+    const dir = path.dirname(file);
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+    const content = JSON.stringify(
+      {
+        mcpServers: {
+          "mulmoterminal-render": {
+            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/render/${MULMOTERMINAL_SESSION_ID}",
+          },
+          "mulmoterminal-media": {
+            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/media/${MULMOTERMINAL_SESSION_ID}",
+          },
+          "mulmoterminal-data": {
+            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/data/${MULMOTERMINAL_SESSION_ID}",
+          },
+          "mulmoterminal-gui": {
+            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/${MULMOTERMINAL_SESSION_ID}",
+          },
+        },
+      },
+      null,
+      2,
+    );
+    writeFileSync(file, content, "utf8");
+  } catch {}
 }
 
 export function listAntigravitySessions(root: string): string[] {

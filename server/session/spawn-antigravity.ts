@@ -2,7 +2,7 @@ import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
 import { guiMcpEnv } from "./mcp-config.js";
 import { buildAntigravityArgs } from "../agents/antigravity-args.js";
-import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
+import { antigravityBrainRoot, ensureAntigravityMcpConfig, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
 import { antigravityConversationIds, claimedAntigravityConversations, ptys } from "./registry.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -43,6 +43,7 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       initialPrompt?: string | null;
     } = {},
   ): PtyEntry {
+    ensureAntigravityMcpConfig();
     const root = antigravityBrainRoot();
     const before = snapshotAntigravitySessions(root);
 
