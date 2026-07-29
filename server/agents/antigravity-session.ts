@@ -18,32 +18,46 @@ export function antigravityBrainRoot(): string {
   return path.join(antigravityHome(), "brain");
 }
 
-export function ensureAntigravityMcpConfig(): void {
-  const file = path.join(os.homedir(), ".gemini", "config", "mcp_config.json");
-  try {
-    const dir = path.dirname(file);
-    if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-    const content = JSON.stringify(
-      {
-        mcpServers: {
-          "mulmoterminal-render": {
-            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/sse/render/${MULMOTERMINAL_SESSION_ID}",
-          },
-          "mulmoterminal-media": {
-            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/sse/media/${MULMOTERMINAL_SESSION_ID}",
-          },
-          "mulmoterminal-data": {
-            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/sse/data/${MULMOTERMINAL_SESSION_ID}",
-          },
-          "mulmoterminal-gui": {
-            serverUrl: "http://127.0.0.1:${MULMOTERMINAL_PORT}/api/mcp/sse/${MULMOTERMINAL_SESSION_ID}",
-          },
-        },
+export function ensureAntigravityMcpConfig(port: string | number, sessionId: string, cwd?: string): void {
+  const mcpConfig = {
+    mcpServers: {
+      "mulmoterminal-render": {
+        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/render/${sessionId}`,
       },
-      null,
-      2,
-    );
-    writeFileSync(file, content, "utf8");
+      "mulmoterminal-media": {
+        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/media/${sessionId}`,
+      },
+      "mulmoterminal-data": {
+        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/data/${sessionId}`,
+      },
+      "mulmoterminal-gui": {
+        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/${sessionId}`,
+      },
+    },
+  };
+  const content = JSON.stringify(mcpConfig, null, 2);
+
+  const targets = [
+    path.join(os.homedir(), ".gemini", "config", "mcp_config.json"),
+    path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "mcp_config.json"),
+  ];
+  if (cwd) {
+    targets.push(path.join(cwd, ".gemini", "config", "mcp_config.json"));
+  }
+
+  for (const file of targets) {
+    try {
+      const dir = path.dirname(file);
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      writeFileSync(file, content, "utf8");
+    } catch {}
+  }
+
+  try {
+    const pluginJsonFile = path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "plugin.json");
+    if (!existsSync(pluginJsonFile)) {
+      writeFileSync(pluginJsonFile, JSON.stringify({ name: "mulmoterminal", version: "1.0.0" }, null, 2), "utf8");
+    }
   } catch {}
 }
 

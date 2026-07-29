@@ -43,7 +43,7 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       initialPrompt?: string | null;
     } = {},
   ): PtyEntry {
-    ensureAntigravityMcpConfig();
+    ensureAntigravityMcpConfig(PORT, sessionId, cwd);
     const root = antigravityBrainRoot();
     const before = snapshotAntigravitySessions(root);
 
