@@ -1,7 +1,8 @@
 import type { WebSocket } from "ws";
 import { buildAntigravityArgs } from "../agents/antigravity-args.js";
+import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
-import { ptys } from "./registry.js";
+import { antigravityConversationIds, claimedAntigravityConversations, ptys } from "./registry.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
 import { appendBoundedOutput } from "./terminal-replay.js";
 import type { PtyEntry } from "./types.js";
@@ -20,6 +21,17 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     });
   }
 
+  function rememberAntigravitySession(sessionId: string, root: string, before: Set<string>): void {
+    watchForAntigravitySession(root, before, { claimed: claimedAntigravityConversations, isCancelled: () => !ptys.has(sessionId) })
+      .then((meta) => {
+        if (!meta) return;
+        claimedAntigravityConversations.add(meta.id);
+        antigravityConversationIds.set(sessionId, meta.id);
+        console.log(`[pty] captured antigravity conversation ID ${meta.id} for session ${sessionId}`);
+      })
+      .catch(() => {});
+  }
+
   function spawnAntigravityPty(
     sessionId: string,
     ws: WebSocket | null,
@@ -29,6 +41,9 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       initialPrompt?: string | null;
     } = {},
   ): PtyEntry {
+    const root = antigravityBrainRoot();
+    const before = snapshotAntigravitySessions(root);
+
     const args = buildAntigravityArgs({
       resume: resumeConversationId,
       model: deps.antigravityModel,
@@ -41,6 +56,13 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
 
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "antigravity" };
     ptys.set(sessionId, entry);
+
+    if (resumeConversationId) {
+      antigravityConversationIds.set(sessionId, resumeConversationId);
+    } else {
+      rememberAntigravitySession(sessionId, root, before);
+    }
+
     wireAntigravityRelay(entry, sessionId);
     return entry;
   }

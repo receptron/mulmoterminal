@@ -85,6 +85,10 @@ export const codexRolloutIds = new Map<string, string>();
 // (which would let both cold-resume the same conversation). Serialized by the single event loop.
 export const claimedCodexRollouts = new Set<string>();
 
+// mulmoterminal session key -> the antigravity conversation id it maps to.
+export const antigravityConversationIds = new Map<string, string>();
+export const claimedAntigravityConversations = new Set<string>();
+
 // Hidden translation-worker sessions run in CLAUDE_CWD — the workspace the user has
 // already trusted — because claude blocks on its workspace-trust dialog in any
 // untrusted dir (no input ever comes, so the worker would hang). Their session ids

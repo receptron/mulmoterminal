@@ -21,7 +21,7 @@ import { tmuxHasSession } from "../infra/tmux.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
-import { codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
+import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
 import { bufferEarlyFrames } from "../session/early-frames.js";
 import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
@@ -406,20 +406,27 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { ur
   early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
 }
 
+function resolveAntigravitySession(requested: string | null): { sessionId: string; live: PtyEntry | undefined; resumeConversationId: string | null } {
+  const hasLivePty = !!requested && ptys.has(requested);
+  const live = hasLivePty && requested ? ptys.get(requested) : undefined;
+  const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
+  const resumeConversationId = !live && !tmuxAlive && requested ? (antigravityConversationIds.get(requested) ?? requested) : null;
+  const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeConversationId }, randomUUID);
+  return { sessionId, live, resumeConversationId };
+}
+
 async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
-  const sessionId = requested ?? randomUUID();
-  const live = ptys.get(sessionId);
+  const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
+  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
   if (live) {
     deps.reattachPty(live, ws, sessionId);
-    ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live.cwd }));
     return;
   }
-  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd }));
   const early = bufferEarlyFrames<{ toString(): string }>(ws);
   let entry: PtyEntry;
   try {
-    entry = deps.spawnAntigravityPty(sessionId, ws, null, cwd);
+    entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd);
   } catch (err) {
     console.error(`[ws/antigravity] failed to start ${sessionId}: ${messageOf(err)}`);
     early.discard();
