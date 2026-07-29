@@ -391,6 +391,10 @@ today — **Claude Code** (the default), **Codex**, and **Antigravity** (`agy`).
   per directory and shared by every session running there — and reaches the bridge through the agy
   process's own environment instead.
 
+  The Docker sandbox does NOT cover agy: it stays claude-only until `buildDockerRunArgs` is
+  generalized (see `plans/feat-multi-agent-support.md`, PR#5). `agy` also ships as a standalone
+  binary rather than an npm package, so the sandbox image has nothing to install.
+
 **Choosing an agent.** The single view has a **New Codex session** button; each grid
 cell's launch form and the Collections browser carry a **Claude / Codex / Antigravity**
 toggle (your choice is remembered).
