@@ -12,6 +12,7 @@ import DirBadge from "./DirBadge.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
 import { TOOL_GROUPS, TOOL_GROUP_HEADINGS, toolGroupServerId, toolsInGroup, type ToolGroup } from "../../common/toolGroups";
 import { queueMcpWrite } from "./mcpWriteQueue";
+import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
@@ -112,9 +113,7 @@ const launched = ref(props.initialSessionId !== null);
 const sessionId = ref<string | null>(props.initialSessionId);
 // The agent this cell runs (Claude by default). Fixed once launched; restored from the
 // persisted cell on reload so a codex / antigravity cell reconnects to its WS endpoint.
-const agent = ref<"claude" | "codex" | "antigravity">(
-  props.initialAgent === "codex" ? "codex" : props.initialAgent === "antigravity" ? "antigravity" : "claude",
-);
+const agent = ref<TerminalAgent>(asTerminalAgent(props.initialAgent));
 const connectKey = ref(0);
 
 // The directory this terminal runs in (shown in the header, sent to the server).

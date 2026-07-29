@@ -1,4 +1,5 @@
 import type { RunCommand } from "./runCommand";
+import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { isRecord } from "../../common/isRecord";
 
 // The grid is ONE flat, ordered list of terminal cells, split into pages of 9
@@ -112,11 +113,13 @@ export function setCwd(state: GridState, uid: number, cwd: string): GridState {
   return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, cwd } : c)) };
 }
 
-// Record which agent a cell launched ("codex" / "antigravity"; Claude is the default/absent) so a
-// reloaded cell reconnects to the right endpoint.
-export function setCellAgent(state: GridState, uid: number, agent: "claude" | "codex" | "antigravity"): GridState {
-  const cellAgent = agent === "claude" ? undefined : agent;
-  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, agent: cellAgent } : c)) };
+// Claude is stored as the ABSENCE of the field, so a cell written before the field existed and a
+// cell running Claude are the same thing on disk.
+const storedCellAgent = (agent: TerminalAgent): Cell["agent"] => (agent === "claude" ? undefined : agent);
+
+// Record which agent a cell launched, so a reloaded cell reconnects to the right endpoint.
+export function setCellAgent(state: GridState, uid: number, agent: TerminalAgent): GridState {
+  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, agent: storedCellAgent(agent) } : c)) };
 }
 
 // A cell's launcher ran a script.json command: attach it, turning the launch cell
@@ -469,7 +472,7 @@ export function parseGridState(raw: string | null): GridState | null {
       session: c.session,
       cwd: c.cwd,
       launcher: asLauncher(c.launcher),
-      agent: c.agent === "codex" ? "codex" : c.agent === "antigravity" ? "antigravity" : undefined,
+      agent: storedCellAgent(asTerminalAgent(c.agent)),
     }));
     const expandedIdx = running.findIndex((c: Cell) => c.uid === parsed.expanded);
     const expanded = typeof parsed.expanded === "number" && expandedIdx >= 0 ? expandedIdx : null;

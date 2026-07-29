@@ -208,8 +208,9 @@ async function codexLastTurn(sessionKey: string): Promise<LastTurn> {
 // change; nothing sets it any more.
 export const LAST_TURN_MAX_BYTES = 64 * 1024 * 1024;
 
-export async function sessionLastTurn(cwd: string, id: string, agent: "claude" | "codex"): Promise<LastTurn> {
+export async function sessionLastTurn(cwd: string, id: string, agent: "claude" | "codex" | "antigravity"): Promise<LastTurn> {
   if (agent === "codex") return codexLastTurn(id);
+  if (agent === "antigravity") return EMPTY_TURN;
   try {
     return lastTurnFromClaudeParsed(readTailRecords(path.join(projectSessionsDir(cwd), `${id}.jsonl`)));
   } catch {

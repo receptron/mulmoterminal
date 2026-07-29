@@ -54,7 +54,7 @@ export interface HeaderContext {
   branch: string | null;
   repo: string | null;
   model: string | null;
-  agent: "claude" | "codex";
+  agent: "claude" | "codex" | "antigravity";
   session: string | null;
   remoteUrl: string | null;
   dirty: number;

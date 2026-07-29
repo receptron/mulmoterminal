@@ -44,7 +44,7 @@ async function remoteInfo(cwd: string): Promise<{ remoteUrl: string | null; repo
 
 export interface SessionMeta {
   session: string | null;
-  agent: "claude" | "codex";
+  agent: "claude" | "codex" | "antigravity";
   model: string | null;
 }
 

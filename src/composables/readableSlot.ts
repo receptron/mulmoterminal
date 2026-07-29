@@ -4,6 +4,8 @@
 // is a module singleton, so a filter written inside it can only be tested by
 // standing the whole thing up.
 
+import { terminalAgent, type TerminalAgent } from "../../common/sessionAgent";
+
 // A slot's readability, flattened out of the connection runtime. Everything here is
 // a plain value so a caller can construct one; the manager maps its Conn onto it.
 export interface SlotCandidate {
@@ -14,14 +16,14 @@ export interface SlotCandidate {
   sessionId: string | null; // absent until the server reports one
   cwd: string | null;
   codex: boolean;
-  antigravity?: boolean;
+  antigravity: boolean;
 }
 
 export interface SlotInfo {
   key: string;
   sessionId: string;
   cwd: string | null;
-  agent: "claude" | "codex" | "antigravity";
+  agent: TerminalAgent;
 }
 
 // The readable form of a slot, or null when there is nothing to read. A slot without a
@@ -33,6 +35,6 @@ export function readableSlot(candidate: SlotCandidate): SlotInfo | null {
     key: candidate.key,
     sessionId: candidate.sessionId,
     cwd: candidate.cwd,
-    agent: candidate.antigravity ? "antigravity" : candidate.codex ? "codex" : "claude",
+    agent: terminalAgent(candidate),
   };
 }

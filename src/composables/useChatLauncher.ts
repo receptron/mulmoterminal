@@ -13,8 +13,9 @@
 // prompt is auto-sent as claude's first turn (startChat / actions).
 
 import { ref, watch } from "vue";
+import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 
-export type Agent = "claude" | "codex" | "antigravity";
+export type Agent = TerminalAgent;
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
 let openSessionFn: OpenSessionFn | null = null;
 
@@ -22,7 +23,7 @@ let openSessionFn: OpenSessionFn | null = null;
 // browser (CollectionsBrowseOverlay); persisted in localStorage so the choice survives reloads.
 const LAUNCH_AGENT_KEY = "mt-launch-agent";
 const saved = localStorage.getItem(LAUNCH_AGENT_KEY);
-export const launchAgent = ref<Agent>(saved === "codex" ? "codex" : saved === "antigravity" ? "antigravity" : "claude");
+export const launchAgent = ref<Agent>(asTerminalAgent(saved));
 watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 
 /** App.vue registers how to make a session visible (close the overlay + select it).

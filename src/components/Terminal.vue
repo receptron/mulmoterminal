@@ -15,6 +15,7 @@ import { terminalHeaderStyleFor } from "./cellHeaderStyle";
 import { useVoiceInput } from "../composables/useVoiceInput";
 import { useGitStatus } from "../composables/useGitStatus";
 import * as conn from "../composables/useTerminalConnections";
+import { terminalAgent } from "../../common/sessionAgent";
 import RunMenu from "./RunMenu.vue";
 import SkillMenu from "./SkillMenu.vue";
 import { skillSeed } from "./skillSeed";
@@ -144,7 +145,7 @@ const headerButtonsCwd = computed(() => (props.command || props.launcher ? null 
 const { buttons: headerButtons } = useHeaderButtons({
   cwd: headerButtonsCwd,
   session: computed(() => props.sessionId),
-  agent: computed<"claude" | "codex" | "antigravity">(() => (props.antigravity ? "antigravity" : props.codex ? "codex" : "claude")),
+  agent: computed(() => terminalAgent(props)),
   model: computed(() => sessionContext.value?.model ?? null),
 });
 
@@ -161,7 +162,7 @@ function onHeaderButton(button: HeaderButton): void {
     label: button.label,
     cwd: serverCwd.value,
     session: props.sessionId,
-    agent: props.antigravity ? "antigravity" : props.codex ? "codex" : "claude",
+    agent: terminalAgent(props),
     model: sessionContext.value?.model ?? null,
   };
   emit("run", command);

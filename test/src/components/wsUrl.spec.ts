@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, buildAntigravityWsUrl, connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl.js";
+import {
+  buildTerminalWsUrl,
+  buildRunWsUrl,
+  buildLaunchWsUrl,
+  buildCodexWsUrl,
+  buildAntigravityWsUrl,
+  connWsUrl,
+  type ConnTargetUrlInput,
+} from "../../../src/components/wsUrl.js";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {

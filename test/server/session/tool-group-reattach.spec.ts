@@ -54,6 +54,8 @@ const deps = {
   claudeBin: "claude",
   codexBin: "codex",
   codexModel: null,
+  antigravityBin: "agy",
+  antigravityModel: null,
   permissionMode: "default",
   guiMcpTools: "mcp__mulmoterminal-gui",
   gridMcpTools: "mcp__mulmoterminal-render__presentHtml",

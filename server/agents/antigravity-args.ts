@@ -6,9 +6,8 @@ export interface AntigravityArgsInput {
   resume: string | null;
   // Model override (--model), or null to use agy's configured default.
   model?: string | null;
-  // Reasoning effort (--effort), or null for default.
-  effort?: "low" | "medium" | "high" | null;
-  // Dangerously skip permissions (--dangerously-skip-permissions)
+  // Auto-approve tool permission requests (--dangerously-skip-permissions), the counterpart of
+  // claude's `--permission-mode auto`.
   skipPermissions?: boolean;
 }
 
@@ -17,10 +16,6 @@ export function buildAntigravityArgs(input: AntigravityArgsInput): string[] {
 
   if (input.model) {
     args.push("--model", input.model);
-  }
-
-  if (input.effort) {
-    args.push("--effort", input.effort);
   }
 
   if (input.skipPermissions) {
