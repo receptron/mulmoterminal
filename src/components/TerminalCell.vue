@@ -554,10 +554,12 @@ const mcpGroupTitle = (group: ToolGroup): string =>
 async function loadMcpGroups() {
   const dir = dirInput.value.trim() || props.defaultCwd;
   const reqId = ++mcpGroupReq;
-  if (launched.value || !dir) {
-    mcpGroupDir.value = null;
-    return;
-  }
+  // Cleared BEFORE the fetch, not only on the failure path: the switches showing while the answer
+  // is in flight are the PREVIOUS directory's, and a flip during that gap writes to the previous
+  // directory (applyMcpGroup captures mcpGroupDir, which is what keeps a queued write honest).
+  // The rows come back a moment later with this directory's real positions.
+  mcpGroupDir.value = null;
+  if (launched.value || !dir) return;
   try {
     const res = await fetch(`/api/gui-mcp-groups?cwd=${encodeURIComponent(dir)}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -659,7 +661,7 @@ async function createWorktreeAndLaunch() {
     const wt = await res.json();
     if (typeof wt.path === "string") {
       worktreeTask.value = "";
-      await carryMcpGroups(wt.path);
+      await syncMcpGroupsInto(wt.path);
       launchIn(wt.path);
     }
   } catch {
@@ -668,7 +670,7 @@ async function createWorktreeAndLaunch() {
 }
 
 const reuseWorktree = async (w: Worktree) => {
-  await carryMcpGroups(w.path);
+  await syncMcpGroupsInto(w.path);
   launchIn(w.path);
 };
 
@@ -676,27 +678,46 @@ const reuseWorktree = async (w: Worktree) => {
 // starts claude in the WORKTREE — not in the repository the switches above were set for. Without
 // this the session gets no GUI tools even though the launcher plainly says the group is on.
 //
-// Every group that is on, not just the Canvas ones: a worktree that inherited half the switches
-// would be a launcher telling the truth about the repo and a lie about the room it just opened.
+// A SYNC of every group, not a copy of the ticked ones. A REUSED worktree can carry a
+// registration from an earlier launch, and mirroring only the "on" groups leaves that stale one
+// standing: uncheck `external` in the repo, reuse the worktree it was once on for, and the
+// session gets external tools the launcher shows as off. Over-granting is the direction that
+// matters, so a group that is off here is removed there.
 //
 // Copied rather than moved: the repository keeps its own registration, and a worktree is a
 // throwaway room that should start out like the repo it came from. Failures are swallowed —
 // the launch itself is what the user asked for, and the Canvas button will report the truth.
-async function carryMcpGroups(worktreePath: string) {
+//
+// Only the groups that actually DIFFER are written, because each write shells out to the
+// `claude` CLI and the launch waits on them. The target's current state is one config-file read
+// (the GET does not shell out); when it cannot be read, every group is written rather than
+// assumed — a wrong assumption here is the stale registration this exists to clear.
+async function syncMcpGroupsInto(worktreePath: string) {
   if (!mcpGroupDir.value || worktreePath === mcpGroupDir.value) return;
-  const enabled = TOOL_GROUPS.filter((group) => mcpGroupEnabled.value[group]);
+  let already: unknown[] | null = null;
+  try {
+    const res = await fetch(`/api/gui-mcp-groups?cwd=${encodeURIComponent(worktreePath)}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.groups)) already = data.groups;
+    }
+  } catch {
+    // leave it null: write every group
+  }
+  const wanted = (group: ToolGroup) => mcpGroupEnabled.value[group];
+  const changed = TOOL_GROUPS.filter((group) => already === null || already.includes(group) !== wanted(group));
   // Through the same queue as the switches, one group at a time: a launch that fires while a
   // checkbox is still saving would otherwise be the very concurrent write the queue exists for.
-  for (const group of enabled) {
+  for (const group of changed) {
     await queueMcpWrite(async () => {
       try {
         await fetch("/api/gui-mcp-groups", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ cwd: worktreePath, group, enabled: true }),
+          body: JSON.stringify({ cwd: worktreePath, group, enabled: wanted(group) }),
         });
       } catch {
-        // best-effort — a worktree without the registration still launches, just without Canvas
+        // best-effort — a worktree without the registration still launches, just without the tools
       }
     });
   }
@@ -729,6 +750,11 @@ watch([dirInput, () => props.defaultCwd], () => {
     skipDirWatch = false; // a fillDir() already loaded these immediately — don't schedule another
     return;
   }
+  // The tool-group switches belong to a directory, and this one just stopped being it. They go
+  // as soon as the field changes rather than 300ms later, so a flip cannot land on the directory
+  // the user has typed their way off. The reload below puts them back for the new one.
+  mcpGroupReq++;
+  mcpGroupDir.value = null;
   resumableTimer = setTimeout(() => {
     loadResumable();
     loadScripts();

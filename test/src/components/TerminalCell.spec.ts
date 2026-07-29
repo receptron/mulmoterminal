@@ -1045,6 +1045,9 @@ describe("TerminalCell", () => {
     const w = mountCell(null, { defaultCwd: "/home/me/repo" });
     await flushPromises();
     await w.find('[data-testid="worktree-reuse"]').trigger("click");
+    // The launch waits on the tool-group sync — one read of the worktree's registrations, plus a
+    // write per group that disagrees with the launcher (syncMcpGroupsInto).
+    await flushPromises();
     const term = w.findComponent({ name: "TerminalView" });
     expect(term.exists()).toBe(true);
     expect(term.props("cwd")).toBe("/wt/old-task");
@@ -1982,5 +1985,75 @@ describe("TerminalCell", () => {
     await w.find('[data-testid="cell-mcp-toggle-external"]').setValue(true);
     await flushPromises();
     expect(posted).toEqual([{ cwd: "/home/me/alpha", group: "external", enabled: true }]);
+  });
+
+  // A REUSED worktree can carry a registration from an earlier launch. Mirroring only the ticked
+  // groups into it leaves that one standing, so the session gets tools the launcher shows as off
+  // — `external` reaching a third-party account is the case that makes it matter. The groups that
+  // already agree are left alone, because every write shells out to the `claude` CLI.
+  it("clears a stale worktree registration for a group that is switched off", async () => {
+    const posted: { cwd: string; group: string; enabled: boolean }[] = [];
+    const groupsByCwd: Record<string, string[]> = {
+      "/home/me/repo": ["render"],
+      "/wt/old-task": ["render", "external"],
+    };
+    globalThis.fetch = vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) {
+        if (init?.method === "POST") {
+          posted.push(JSON.parse(String(init.body)));
+          return { ok: true, json: async () => ({ ok: true }) };
+        }
+        const cwd = decodeURIComponent(u.split("cwd=")[1] ?? "");
+        return { ok: true, json: async () => ({ groups: groupsByCwd[cwd] ?? [] }) };
+      }
+      if (u.includes("/api/worktrees"))
+        return {
+          ok: true,
+          json: async () => ({ isGit: true, base: "main", worktrees: [{ path: "/wt/old-task", branch: "agent/old-task", task: "old-task", dirty: false }] }),
+        };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null, { defaultCwd: "/home/me/repo" });
+    await flushPromises();
+    await w.find('[data-testid="worktree-reuse"]').trigger("click");
+    await flushPromises();
+
+    // render agrees on both sides, data and media are off and absent — only the stale one moves.
+    expect(posted).toEqual([{ cwd: "/wt/old-task", group: "external", enabled: false }]);
+  });
+
+  // The switches belong to a DIRECTORY, and the reload behind them is debounced. Left on screen
+  // during that gap they are the previous directory's positions, and flipping one writes the MCP
+  // registration there — a directory the user has already typed their way off.
+  it("takes the switches away the moment the directory field changes", async () => {
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/gui-mcp-groups")) return { ok: true, json: async () => ({ groups: ["render"] }) };
+      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: false, worktrees: [] }) };
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/alpha", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(null, { defaultCwd: "/home/me/alpha" });
+    await flushPromises();
+    expect(w.find('[data-testid="cell-mcp-toggle-render"]').exists()).toBe(true);
+
+    vi.useFakeTimers();
+    try {
+      await w.find('[data-testid="cell-dir-input"]').setValue("/home/me/beta");
+      // Before the 300ms reload: no rows at all rather than beta's name over alpha's positions.
+      expect(w.find('[data-testid="cell-mcp-toggle-render"]').exists()).toBe(false);
+      await vi.advanceTimersByTimeAsync(400);
+    } finally {
+      vi.useRealTimers();
+    }
+    await flushPromises();
+    await nextTick();
+    expect((w.find('[data-testid="cell-mcp-toggle-render"]').element as HTMLInputElement).checked).toBe(true);
   });
 });
