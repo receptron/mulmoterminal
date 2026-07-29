@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const WATCH_POLL_MS = 500;
@@ -27,19 +28,16 @@ function writeJsonQuietly(file: string, data: unknown): void {
 }
 
 export function ensureAntigravityMcpConfig(port: string | number, sessionId: string, cwd?: string): void {
+  const bridgeScriptPath = fileURLToPath(new URL("../mcp/stdio-bridge.ts", import.meta.url));
   const mcpConfig = {
     mcpServers: {
-      "mulmoterminal-render": {
-        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/render/${sessionId}`,
-      },
-      "mulmoterminal-media": {
-        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/media/${sessionId}`,
-      },
-      "mulmoterminal-data": {
-        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/data/${sessionId}`,
-      },
       "mulmoterminal-gui": {
-        serverUrl: `http://127.0.0.1:${port}/api/mcp/sse/${sessionId}`,
+        command: "node",
+        args: ["--import", "tsx", bridgeScriptPath],
+        env: {
+          MULMOTERMINAL_PORT: String(port),
+          MULMOTERMINAL_SESSION_ID: sessionId,
+        },
       },
     },
   };
