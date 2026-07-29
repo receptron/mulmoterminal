@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # The interactive agent CLI. Pin nothing here — a rebuild picks up the latest, matching
 # how the host runs the newest `claude`.
-RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @anthropic-ai/claude-code @google/antigravity-cli
 
 # Run as the unprivileged `node` user (uid 1000). Phase 1 is macOS-only: Docker Desktop
 # maps bind-mount ownership transparently there. The server gates the sandbox off on Linux

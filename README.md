@@ -354,10 +354,7 @@ SDK; we drive the real interactive CLI and relay its TTY over the WebSocket.
 
 ## Agents: Claude & Codex
 
-MulmoTerminal drives **interactive coding-agent CLIs**, not just Claude. An
-`AgentAdapter` seam abstracts the per-agent bits (which binary to spawn, how it resumes)
-so the PTY, grid, persistence, and GUI-panel plumbing stay shared. Two adapters ship
-today — **Claude Code** (the default) and **Codex**.
+MulmoTerminal supports three first-class AI coding agents today — **Claude Code** (the default), **Codex**, and **Antigravity** (`agy`).
 
 - **Claude** — spawned as `claude` (override with `CLAUDE_BIN`). The server passes
   `--session-id <uuid>`, so it knows the live session's id even before its transcript
@@ -371,6 +368,11 @@ today — **Claude Code** (the default) and **Codex**.
   `CODEX_HOME`) and maps the new rollout to the session — attributed only when it's
   unambiguous, never by "newest wins". Resume reattaches a live PTY, adopts a surviving
   tmux session, or cold-resumes the rollout id.
+- **Antigravity** — spawned as `agy` (override with `ANTIGRAVITY_BIN`; `ANTIGRAVITY_MODEL` sets
+  `--model`). Antigravity runs on its own WebSocket (`/ws/antigravity`) and supports
+  conversation resume, model/effort flags, and turn activity tracking. The server discovers session
+  UUIDs in `~/.gemini/antigravity-cli/brain/` (home overridable via `ANTIGRAVITY_HOME`) to resume
+  conversations across page reloads.
 
 **Choosing an agent.** The single view has a **New Codex session** button; each grid
 cell's launch form and the Collections browser carry a **Claude / Codex** toggle (your
@@ -501,6 +503,9 @@ the `claude` / `codex` sessions themselves.
 | `CODEX_BIN`  | `codex`        | The Codex CLI binary to spawn. |
 | `CODEX_MODEL`| codex default  | Model passed to Codex as `--model` (unset = Codex's own default). |
 | `CODEX_HOME` | `~/.codex`     | Codex home — where its session rollouts and MulmoTerminal-mirrored skills live. |
+| `ANTIGRAVITY_BIN` | `agy`     | The Antigravity CLI binary to spawn. |
+| `ANTIGRAVITY_MODEL` | agy default | Model passed to Antigravity as `--model` (unset = agy's own default). |
+| `ANTIGRAVITY_HOME` | `~/.gemini/antigravity-cli` | Antigravity home directory containing session brain storage. |
 | `MULMOTERMINAL_HOME` | `~/.mulmoterminal` | Root for managed **git worktrees**. |
 | `WAIT_REAP_GRACE_MS` | `1800000` | How long a **waiting** background session is kept before it's auto-reaped (`0` or negative = never). |
 
