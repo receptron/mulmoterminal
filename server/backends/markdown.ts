@@ -6,9 +6,10 @@
 // saveNewDoc here.
 //
 // MulmoTerminal specifics vs MulmoClaude:
-//   - Docs are plain files under <workspace>/artifacts/documents/YYYY/MM/ — the
-//     `artifacts/documents/` prefix is what the package's isFilePath() recognises,
-//     so the View loads/saves/live-refreshes them.
+//   - NEW docs are plain files under <workspace>/artifacts/documents/YYYY/MM/
+//     (saveNewDoc + docPath.ts). loadDoc/saveDoc are NOT limited to those: the
+//     tool's `path` argument takes any `.md` on disk, so the View also opens and
+//     writes back a repo's README — see backends/openPath.ts.
 //   - Images come back as base64 data URIs from Gemini (no image store / serving
 //     route), inlined straight into the markdown — so fillImages needs no storage
 //     and PDF export needs no image-resolution step.
@@ -20,7 +21,8 @@ import { renderMarpDeck, fillImagePlaceholders } from "@mulmoclaude/markdown-plu
 import type { MarkdownHostApp, ExportPdfOptions } from "@mulmoclaude/markdown-plugin";
 import { publishFileChange } from "./fileChange.js";
 import { generateImage } from "./image-gen.js";
-import { buildDocPath, isDocPath } from "./docPath.js";
+import { buildDocPath } from "./docPath.js";
+import { markdownByPath } from "./openPath.js";
 
 // Set once at boot (server/index.ts) — workspace = CLAUDE_CWD. File-change
 // live-refresh is forwarded by the shared publisher (see fileChange.ts).
@@ -43,15 +45,21 @@ const MARKDOWN_PDF_CSS = `
 `;
 
 export const markdownHostApp: MarkdownHostApp = {
+  // Any `.md` the tool was pointed at — a repo's README, `docs/design.md`, an
+  // absolute path — not just this app's own `artifacts/documents/**.md`. The
+  // resolution rules and the overwrite-only write live in backends/openPath.ts
+  // (→ @mulmoclaude/core/files), shared with MulmoClaude's document-store.ts so the
+  // same `path` argument means the same thing in both apps.
   async loadDoc(rel) {
-    if (!isDocPath(rel)) throw new Error(`invalid document path: ${rel}`);
-    const content = await fs.promises.readFile(absFor(rel), "utf8");
-    return { content };
+    return { content: await markdownByPath.read(rel) };
   },
 
   async saveDoc(rel, markdown) {
-    if (!isDocPath(rel)) throw new Error(`invalid document path: ${rel}`);
-    await fs.promises.writeFile(absFor(rel), markdown);
+    await markdownByPath.write(rel, markdown);
+    // Fire-and-forget refresh for any other View on this file. An ABSOLUTE path has
+    // no post-write mtime to stat (the publisher is workspace-relative), so it falls
+    // back to Date.now() — the channel name still matches what the View subscribed
+    // to, which is what makes the refresh land.
     await publishFileChange(rel);
     return { path: rel };
   },

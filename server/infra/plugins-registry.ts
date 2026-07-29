@@ -29,6 +29,7 @@ import type { PluginRuntime, PluginFactoryResult } from "gui-chat-protocol";
 import { generateImage } from "../backends/image-gen.js";
 import { markdownHostApp } from "../backends/markdown.js";
 import { artifactsFileOps } from "../backends/artifacts.js";
+import { htmlByPath } from "../backends/openPath.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
@@ -55,7 +56,15 @@ const APP_CONTEXT = { generateImage, ...markdownHostApp };
 // area. `artifacts` is the shared, user-browsable output area (rooted at
 // <workspace>/artifacts), used by @mulmoclaude/chart-plugin's executeChart to
 // persist the chart document. Plugins that don't write artifacts ignore it.
-const FILES_CONTEXT = { artifacts: artifactsFileOps };
+//
+// `byPath` is the uncontained one — a file the tool call NAMED, anywhere on disk —
+// and it is extension-scoped, so this single shared object can only carry one
+// plugin's version of it. presentHtml is the only reader today (its tool-call path
+// runs through this generic loader, so without it `presentHtml(path)` would refuse
+// anything outside artifacts/html). The moment a second plugin wants `byPath`,
+// FILES_CONTEXT has to become per-tool — MulmoClaude doesn't hit this because it
+// assembles the context per route.
+const FILES_CONTEXT = { artifacts: artifactsFileOps, byPath: htmlByPath };
 
 function loadConfig() {
   const raw = fs.readFileSync(path.join(PLUGINS_DIR, "plugins.json"), "utf8");

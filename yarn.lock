@@ -1899,7 +1899,7 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/common/-/common-1.1.1.tgz#38c57cb4d6530679996e9ce2732d3be207ad3872"
   integrity sha512-bq47GoDVsKFraKrvRpzhkRJHQ6/omXCIRYrMNch7mq8eXU/kRNHFU7e+rfdoNaoDnLt1S/lZY5nZu7RVoPx9CA==
 
-"@mulmoclaude/core@^1.5.0", "@mulmoclaude/core@^1.7.0", "@mulmoclaude/core@^1.7.1":
+"@mulmoclaude/core@^1.5.0", "@mulmoclaude/core@^1.7.0":
   version "1.7.1"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-1.7.1.tgz#c897bffcad2e04b2f645e1c1b5cfaaf190f36b54"
   integrity sha512-ExmlCh0valjpD35NpEGnn3bTSL3qQKqfwygaxFbClVufPCGS5wJyBxnkMWRB8bVtfXxIQO5IZl7cTqLW/I+amA==
@@ -1907,6 +1907,21 @@
     "@duckdb/node-api" "^1.5.5-r.1"
     "@mulmoclaude/common" "^1.1.1"
     "@mulmoclaude/markdown-utils" "^1.3.1"
+    fast-xml-parser "^5.10.1"
+    google-auth-library "^10.9.1"
+    iconv-lite "^0.7.3"
+    js-yaml "^5.2.2"
+    zod "^4.4.3"
+
+"@mulmoclaude/core@^1.8.0":
+  version "1.8.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-1.8.0.tgz#d812e752daacfe3f375fe51836f399acc584c3a7"
+  integrity sha512-AAYHJ3M3msdMwrhtBuh7d0QOcSaHLyYCkoZiB9UXUd3oFAq91w+ijqvPmhjEBY4asmGEUNa4VhPBa8rm65z4uA==
+  dependencies:
+    "@duckdb/node-api" "^1.5.5-r.1"
+    "@mulmoclaude/common" "^1.1.1"
+    "@mulmoclaude/markdown-utils" "^1.3.1"
+    dompurify "^3.4.12"
     fast-xml-parser "^5.10.1"
     google-auth-library "^10.9.1"
     iconv-lite "^0.7.3"
@@ -1925,21 +1940,22 @@
   dependencies:
     "@mulmoclaude/core" "^1.5.0"
 
-"@mulmoclaude/html-plugin@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/html-plugin/-/html-plugin-1.1.0.tgz#69ad9808888a4804d0f2c157a96e6f735228585c"
-  integrity sha512-slPinvHSpF/x4uar4iSJzUGBVbo3kY5l+EsiEnEIB0wFY7fMZQnTwYdKFKX7ruINwL1XQe+DuK46J14CNliigw==
+"@mulmoclaude/html-plugin@^1.2.0":
+  version "1.2.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/html-plugin/-/html-plugin-1.2.0.tgz#3a1bd68b6fccdcb936ecef0afcb4889fcabc9ac9"
+  integrity sha512-i0nAQU0kyeGQd1mTXIdVVHtSeUp0XnN0rl1fpe+Bn/uee/LWrmEHOX1fMufqjjy90STdPkI24Q6T5QDDJuHvag==
   dependencies:
     "@mulmoclaude/common" "^1.1.1"
-    "@mulmoclaude/core" "^1.7.0"
+    "@mulmoclaude/core" "^1.8.0"
 
-"@mulmoclaude/markdown-plugin@^1.1.0":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-1.1.0.tgz#8c0c05096d8832683ef1c35278d7bd0cdd101a56"
-  integrity sha512-kfi6e2P/vBXJy+CwRp8fXmOKPFdG8zRC9VM7VHcBVWl4zGrWAbQoT+EobjxXT5sKNV0Dsn7v6ROlkCN70hoRag==
+"@mulmoclaude/markdown-plugin@^1.3.0":
+  version "1.3.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-1.3.0.tgz#c004c6c97bd0f1377403018642ab1f4cacf7de4d"
+  integrity sha512-y0FU6Ju4r4nMHLMN4TXfyQzqzGsAQS65MMikIKM5QHZ2bP1swBGTEMsImq1R0I0oeDTo0tstZMWDneOXFBSXPQ==
   dependencies:
     "@marp-team/marp-core" "^4.4.0"
     "@mulmoclaude/common" "^1.1.1"
+    "@mulmoclaude/core" "^1.8.0"
     "@mulmoclaude/markdown-utils" "^1.3.1"
     js-yaml "^5.2.2"
     marked "^18.0.7"

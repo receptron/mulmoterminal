@@ -9,6 +9,7 @@ import { hideErrorStacks } from "./infra/hide-error-stacks.js";
 import { toolSummaries } from "./infra/plugins-registry.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
+import { initOpenPathBackend } from "./backends/openPath.js";
 import { getUserMcpServers, getWorklogConfig, getTerminalSubmit, getQuickCommands, APP_CONFIG_FILE } from "./config/config-routes.js";
 import { enforceKeymap } from "./config/keymap-check.js";
 import { readFileSync } from "node:fs";
@@ -425,6 +426,11 @@ initMarkdownBackend({ workspace: CLAUDE_CWD });
 // Give the artifacts FileOps backend its workspace root (<workspace>/artifacts) so
 // @mulmoclaude/chart-plugin's executeChart can persist chart documents there.
 initArtifactsBackend({ workspace: CLAUDE_CWD });
+
+// Give the by-path backend the same workspace — presentDocument / presentHtml's
+// `path` argument resolves workspace-relative values against it (absolute ones are
+// taken as-is), and the /htmlfile mount resolves its `ws` scope from it.
+initOpenPathBackend({ workspace: CLAUDE_CWD });
 
 // Create the mulmoScript server ops (stories dir under <workspace>/artifacts,
 // generation fan-out on the plugin pubsub channel). After initArtifactsBackend —

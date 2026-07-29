@@ -12,11 +12,14 @@
 //   2. Serving the page for the iframe — the View renders `<iframe src=
 //      "/artifacts/html/…">` (htmlArtifactPreviewUrl). We serve that path from the
 //      workspace with an HTML preview CSP (sandboxed-ish: inline scripts + a curated
-//      CDN allowlist, but connect-src 'none' so a page can't phone home).
+//      CDN allowlist, but connect-src 'none' so a page can't phone home). A page the
+//      tool was POINTED at rather than wrote lives anywhere on disk, so it is served
+//      from a second, uncontained mount — `/htmlfile` (mountHtmlFileRoute below).
 import path from "node:path";
 import type { Express, Request, Response, NextFunction } from "express";
-import { executeHtmlDispatch } from "@mulmoclaude/html-plugin";
+import { executeHtmlDispatch, HTML_FILE_MOUNT } from "@mulmoclaude/html-plugin";
 import { artifactsFileOps } from "./artifacts.js";
+import { htmlByPath, resolveHtmlRequest } from "./openPath.js";
 import { publishFileChange } from "./fileChange.js";
 import { statFileOr404 } from "./statFileOr404.js";
 import { streamFileToResponse } from "./streamFile.js";
@@ -61,7 +64,10 @@ export function mountHtmlDispatchRoute(app: Express): void {
     // A tool-call (no `kind`) is left to the package execute via the catch-all.
     if (args.kind !== "loadHtml" && args.kind !== "saveHtml") return next();
     try {
-      const result = await executeHtmlDispatch({ files: { artifacts: artifactsFileOps } }, args as never);
+      // `byPath` is what lets the source editor load/save a page OUTSIDE
+      // artifacts/html — presentHtml's `path` form takes any .html on disk. Without
+      // it the package degrades to its old artifacts-only behaviour.
+      const result = await executeHtmlDispatch({ files: { artifacts: artifactsFileOps, byPath: htmlByPath } }, args as never);
       if (args.kind === "saveHtml" && typeof args.path === "string") {
         // Live-refresh via the shared publisher: the "html" scope forwards to
         // plugin:html:file:<path>, the channel the open View subscribes to.
@@ -95,5 +101,53 @@ export function mountHtmlPreviewRoute(app: Express, deps: { workspace: string })
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
     streamFileToResponse(abs, res);
+  });
+}
+
+// `.htm` as well as `.html`: the tool's `path` gate (isPresentableHtmlPath) accepts
+// both, so refusing one here would mean a tool call that reports success and an iframe
+// that always 404s.
+const HTML_DOCUMENT_EXT_RE = /\.html?$/i;
+
+/** Serve `GET /htmlfile/<scope>/<segments…>` — the iframe source for a page OUTSIDE
+ *  `artifacts/html/`, which presentHtml's `path` form can be pointed at (the View
+ *  builds this URL with htmlFileUrl). Same guards and the same CSP as the artifacts
+ *  preview route above, with ONE deliberate difference: there is no containment root,
+ *  because such a page legitimately lives anywhere on disk. The trust boundary is the
+ *  loopback-only listener plus the same-origin guard — an iframe `src` can carry no
+ *  Authorization header, so bearer auth was never part of it.
+ *
+ *  Unlike MulmoClaude's mount, this one serves DOCUMENTS only, not a page's images or
+ *  media: MulmoTerminal's own /artifacts/html route has always been .html-only, and
+ *  matching it keeps one answer for "what a presented page can load from disk".
+ *
+ *  NEVER split `reqPath` here. Segmenting before percent-decoding lets a `%2F` smuggle
+ *  a separator past the `.`/`..`/dotfile checks; resolveHtmlFileRequestPath decodes
+ *  per segment and refuses any that still contains one. */
+export function mountHtmlFileRoute(app: Express): void {
+  app.get(new RegExp(`^${HTML_FILE_MOUNT}/(.+)`), (req: Request, res: Response) => {
+    const reqPath = req.params[0] ?? "";
+    if (!HTML_DOCUMENT_EXT_RE.test(reqPath)) {
+      res.status(404).json({ error: "not found" });
+      return;
+    }
+    void resolveHtmlRequest(reqPath)
+      .then((abs) => {
+        if (abs === null) {
+          res.status(404).json({ error: "not found" });
+          return;
+        }
+        // statSync follows symlinks, so isFile() judges the TARGET — a link to a
+        // directory or a FIFO named `page.html` is refused rather than hanging a read.
+        const stat = statFileOr404(res, abs);
+        if (!stat) return;
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
+        streamFileToResponse(abs, res);
+      })
+      .catch(() => {
+        if (!res.headersSent) res.status(404).json({ error: "not found" });
+      });
   });
 }

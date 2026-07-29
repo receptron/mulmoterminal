@@ -45,7 +45,7 @@ import { ptys, sessionToolGroups, sessionToolGroupsHydrated, devTerminalSessions
 import { mountShortcutsRoutes } from "../backends/shortcuts.js";
 import { mountDecisionRoutes } from "./decision-routes.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
-import { mountHtmlDispatchRoute, mountHtmlPreviewRoute } from "../backends/html.js";
+import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/html.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/mulmoscript.js";
 import { CLAUDE_CWD, MULMOTERMINAL_HOME, PORT, SESSION_ID_RE } from "../config/env.js";
 import { FILE_WRITE_CHANNEL } from "../../common/fileWriteChannel.js";
@@ -161,6 +161,10 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // Serve presentHtml pages for the View's iframe (GET /artifacts/html/<rest>) with an
   // HTML preview CSP. The View navigates the iframe to this URL (htmlArtifactPreviewUrl).
   mountHtmlPreviewRoute(app, { workspace: CLAUDE_CWD });
+
+  // The same, for a page presentHtml was POINTED at rather than wrote (GET
+  // /htmlfile/<scope>/…, built by htmlFileUrl). No containment root — see the route.
+  mountHtmlFileRoute(app);
 
   // Shared launcher favorites (GET/PUT /api/shortcuts) over the same
   // <workspace>/config/shortcuts.json MulmoClaude uses — backs the collections toolbar.
