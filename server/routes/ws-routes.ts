@@ -417,9 +417,12 @@ function resolveAntigravitySession(requested: string | null): { sessionId: strin
 
 async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
+  const attachGuiMcp = url.searchParams.get("gui") !== "0";
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
+  if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
   if (live) {
+    live.active = attachGuiMcp;
     deps.reattachPty(live, ws, sessionId);
     return;
   }
@@ -432,6 +435,7 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
     early.discard();
     return closeWithError(ws, "Failed to start Antigravity. Is the `agy` CLI installed and on your PATH?");
   }
+  entry.active = attachGuiMcp;
   ws.on("message", (raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
   ws.on("close", () => deps.handleClientClose(entry, ws, sessionId));
   early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
