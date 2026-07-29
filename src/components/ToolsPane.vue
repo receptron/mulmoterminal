@@ -86,10 +86,11 @@ watch(() => props.sessionId, loadAvailableTools, { immediate: true });
 // the pane — closing and reopening it, or switching cells — which is exactly the "No GUI plugin
 // tools enabled." a freshly started session showed.
 //
-// So re-ask when the server says it has learned this session's groups. The same channel and the
-// same reason as the grid's Canvas button (TerminalGrid.vue) — asked once at mount, both were
-// asking too early. Re-asking rather than reading the pushed `groups`: the reply also carries the
-// tool DESCRIPTIONS and `guiOnlyHistory`, which the push does not.
+// So re-ask when the server says that session's MCP client is up. The same channel and the same
+// reason as the grid's Canvas button and the GUI panel's tool hint — all three asked once at
+// mount, and all three were asking too early. Re-asking rather than reading the pushed `groups`:
+// the reply also carries the tool DESCRIPTIONS and `guiOnlyHistory`, which the push does not, and
+// the announcement for a single-view session carries no groups at all (see mcp-routes.ts).
 const { subscribe: subscribeToolGroups } = usePubSub();
 const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
   const msg = data as { sessionId?: string };

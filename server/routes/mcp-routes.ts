@@ -42,7 +42,32 @@ export interface McpRouteDeps {
   guiCallHistory: (sessionId: string) => GuiCallRecorder | null;
 }
 
+// Sessions whose MCP client has made contact, so the announcement below is sent once per session
+// rather than on every tool call. In-memory only: after a restart a session announcing itself
+// again is exactly right, since the panel it is telling has also just reconnected.
+const announcedSessions = new Set<string>();
+
 export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
+  /**
+   * Tell the panel this session's MCP client is up, so anything it asked too early can be re-asked.
+   *
+   * The pane is handed a session id while the agent is still being spawned, so its first
+   * `/api/tools` lands before there is anything to answer with. The GROUP route below already
+   * announces (with the groups it just learned) and that fixed the grid; a single-view session
+   * connects on the ALL-TOOLS url, learns no group, and so announced nothing — leaving that pane
+   * on whatever the too-early answer said for the rest of the session.
+   *
+   * Deliberately carries NO `groups` field. The grid reads that field to decide whether a cell has
+   * the Canvas MCP, and an all-tools session genuinely has no groups to report — sending `[]` would
+   * read as "this cell cannot draw" for a session that can. Consumers that need groups ignore a
+   * message without them; consumers that only need "ask again" (the tools pane) act on both.
+   */
+  function announceMcpContact(sessionId: string): void {
+    if (announcedSessions.has(sessionId)) return;
+    announcedSessions.add(sessionId);
+    deps.publish(TOOL_GROUPS_CHANNEL, { sessionId });
+  }
+
   // We run in STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
   // request, no session header and no initialize handshake required across requests. The SDK
   // forbids reusing a stateless transport, so it is never cached.
@@ -50,6 +75,9 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     if (!SESSION_ID_RE.test(sessionId)) {
       return res.status(400).json({ error: "invalid sessionId" });
     }
+    // Both routes, because both kinds of session are asked about too early. The group route's own
+    // announcement below carries the groups it learned; this one only says "I am here".
+    announceMcpContact(sessionId);
     // Hidden translation workers (and only they) get the worker-only submitTranslation
     // tool, so a normal chat's tool list stays clean.
     // A translation worker is a hidden claude session with no pane to feed, so it never gets a

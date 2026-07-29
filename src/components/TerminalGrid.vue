@@ -292,6 +292,11 @@ const { subscribe: subscribeToolGroups } = usePubSub();
 const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
   const msg = data as { sessionId?: string; groups?: string[] };
   if (!msg?.sessionId || msg.sessionId !== expandedSessionId.value) return;
+  // A message with no `groups` is the bare "my MCP client is up" announcement, sent for every
+  // session so a pane that asked too early can ask again. It says nothing about groups — an
+  // all-tools session has none to report — and reading it as an empty list would tell a cell
+  // that can draw that it cannot.
+  if (!Array.isArray(msg.groups)) return;
   canvasAvailable.value = hasCanvasGroup(msg.groups);
   canvasChecked.value = true;
 });
