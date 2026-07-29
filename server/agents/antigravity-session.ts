@@ -49,12 +49,15 @@ export function ensureAntigravityMcpConfig(port: string | number, sessionId: str
 
   // Global Antigravity config paths
   writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "mcp_config.json"), mcpConfig);
+  writeJsonQuietly(path.join(os.homedir(), ".gemini", "antigravity-cli", "mcp_config.json"), mcpConfig);
   writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "mcp_config.json"), mcpConfig);
   writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins", "mulmoterminal", "plugin.json"), pluginManifest);
   writeJsonQuietly(path.join(os.homedir(), ".gemini", "config", "plugins.json"), globalPluginsConfig);
 
-  // Workspace-level .agents/ plugin paths
+  // Workspace-level config paths (.mcp.json, .agents/, .gemini/)
   if (cwd) {
+    writeJsonQuietly(path.join(cwd, ".mcp.json"), mcpConfig);
+    writeJsonQuietly(path.join(cwd, ".agents", "mcp_config.json"), mcpConfig);
     writeJsonQuietly(path.join(cwd, ".gemini", "config", "mcp_config.json"), mcpConfig);
     writeJsonQuietly(path.join(cwd, ".agents", "plugins", "mulmoterminal", "mcp_config.json"), mcpConfig);
     writeJsonQuietly(path.join(cwd, ".agents", "plugins", "mulmoterminal", "plugin.json"), pluginManifest);
