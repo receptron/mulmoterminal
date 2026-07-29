@@ -18,7 +18,7 @@ import { mountTmuxRoutes } from "../infra/tmux-routes.js";
 import { mountHookRoute } from "../routes/hook-routes.js";
 import { mountPluginRoutes } from "../routes/plugin-routes.js";
 import { mountMcpRoutes } from "../routes/mcp-routes.js";
-import { brokerRecordsGuiCalls, guiCallRecorderFor } from "../mcp/gui-call-history.js";
+import { guiCallRecorderFor, historyIsGuiOnly } from "../mcp/gui-call-history.js";
 import type { SessionAgent } from "../../common/sessionAgent.js";
 import { mountSessionRoutes } from "../routes/session-routes.js";
 import { mountToolRoutes } from "../routes/tool-routes.js";
@@ -87,10 +87,10 @@ export interface AppRouteDeps extends SessionActivityDeps {
 // The channel a directory-config change is announced on.
 const DIR_CONFIG_CHANNEL = "dir-config";
 
-// The two signals that decide whether the MCP broker writes this session's tool-call history —
-// and, through /api/tools, whether the pane tells the user its history is GUI-tools-only. Read
-// here so both answers come from one place: they must agree, or the pane disclaims a history it
-// is not actually giving (or worse, keeps quiet about one it is).
+// The two signals behind both halves of the broker-fed history: whether it is written at all, and
+// whether the pane tells the user it holds the GUI tools alone. Read here so the two answers are
+// built from one reading of the session — they are not the same question (the claim is stricter,
+// see historyIsGuiOnly), but they must never be built from different facts.
 const sessionCallReporting = (deps: AppRouteDeps, sessionId: string) => ({
   agent: deps.agentOfSession(sessionId),
   reportsOwnCalls: hookedSessions.has(sessionId),
@@ -264,9 +264,10 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
     sessionToolGroupsHydrated,
     isGridSession: (id) => devTerminalSessions.has(id),
     devTerminalSessionsHydrated,
-    // The same call that gates the broker's recorder, so the pane's disclaimer and the history it
-    // disclaims can never disagree.
-    guiOnlyHistory: (id) => brokerRecordsGuiCalls(sessionCallReporting(deps, id)),
+    // Built from the same two signals as the broker's recorder, but with the stricter rule the
+    // user-facing claim needs — see historyIsGuiOnly for why the pane must not answer this the
+    // moment a session id exists.
+    guiOnlyHistory: (id) => historyIsGuiOnly(sessionCallReporting(deps, id)),
     publish: (c, d) => deps.publish(c, d),
     sessionChannel: deps.sessionChannel,
   });

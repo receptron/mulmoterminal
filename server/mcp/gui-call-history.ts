@@ -50,6 +50,25 @@ export function brokerRecordsGuiCalls({ agent, reportsOwnCalls }: { agent: Sessi
   return !reportsOwnCalls && agent !== "claude";
 }
 
+/**
+ * Does this session's history hold the GUI tools ALONE — the claim the pane makes to the user?
+ *
+ * Stricter than the recording gate above, and deliberately so. The gate runs when a tool call
+ * ARRIVES, by which point the session has certainly been spawned. This runs whenever the pane
+ * asks, and the pane asks EARLY: the browser is handed a session id while the agent is still
+ * being spawned, so a claude session can be asked about before `spawnClaudePty` has registered
+ * its hooks. Both signals then say "not claude" and the gate would answer yes — leaving the pane
+ * telling the user that claude's complete, hook-fed history contains GUI calls only.
+ *
+ * So this claim additionally requires that we can SEE the session at all. A null agent means no
+ * pty and no tmux pane — either the session has not started yet, or it is gone; neither is
+ * something to make a statement about. Saying nothing about a GUI-only history is a smaller
+ * error than mislabelling a complete one, and the pane re-asks when the session announces itself.
+ */
+export function historyIsGuiOnly(session: { agent: SessionAgent | null; reportsOwnCalls: boolean }): boolean {
+  return session.agent !== null && brokerRecordsGuiCalls(session);
+}
+
 /** The same two writers `/api/hook` uses, so both feeds land in one store in one shape. */
 export interface ToolCallSink {
   recordToolCallStart: (sessionId: string, call: ToolCallStart) => Promise<void>;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-import { brokerRecordsGuiCalls, guiCallRecorderFor, type ToolCallSink } from "../../../server/mcp/gui-call-history.js";
+import { brokerRecordsGuiCalls, guiCallRecorderFor, historyIsGuiOnly, type ToolCallSink } from "../../../server/mcp/gui-call-history.js";
 
 const sink = (): ToolCallSink & { starts: unknown[]; ends: unknown[] } => {
   const starts: unknown[] = [];
@@ -42,6 +42,26 @@ describe("brokerRecordsGuiCalls", () => {
   // Neither signal says claude, so nothing else is writing this history.
   it("records an unknown session", () => {
     expect(brokerRecordsGuiCalls({ agent: null, reportsOwnCalls: false })).toBe(true);
+  });
+});
+
+describe("historyIsGuiOnly", () => {
+  it("says so for the sessions the broker actually feeds", () => {
+    expect(historyIsGuiOnly({ agent: "codex", reportsOwnCalls: false })).toBe(true);
+    expect(historyIsGuiOnly({ agent: "shell", reportsOwnCalls: false })).toBe(true);
+  });
+
+  it("says nothing for a hook-fed session", () => {
+    expect(historyIsGuiOnly({ agent: "claude", reportsOwnCalls: true })).toBe(false);
+  });
+
+  // The claim is asked EARLY — the browser holds a session id before the agent is spawned — so a
+  // claude session can be asked about before spawnClaudePty registers its hooks. Both signals then
+  // say "not claude", and answering the recording gate here would tell the user that claude's
+  // complete hook-fed history contains GUI calls only. Nothing visible means nothing claimed.
+  it("says nothing about a session it cannot see yet", () => {
+    expect(brokerRecordsGuiCalls({ agent: null, reportsOwnCalls: false })).toBe(true);
+    expect(historyIsGuiOnly({ agent: null, reportsOwnCalls: false })).toBe(false);
   });
 });
 

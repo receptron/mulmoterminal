@@ -51,24 +51,31 @@ const expandedCalls = ref<Set<string>>(new Set());
 // Reloaded on every session change rather than cached per id: the server learns a session's
 // groups from the connections it makes, so the answer for one id can go from "everything" to
 // the real subset within a second of that session starting.
+//
+// The session id is NOT enough to tell two loads apart, and since the re-ask below there are
+// routinely two in flight for the id that is current — the early one asked at mount and the one
+// the announcement triggered. Both pass a session-id guard, so an older reply landing second
+// would restore the empty list this pane exists to get rid of. Only the newest may apply, which
+// is the same rule and the same counter useSessionFeed keeps (#620).
+let latestToolsLoad = 0;
 async function loadAvailableTools(sessionId: string | null) {
+  const loadId = ++latestToolsLoad;
   const url = sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools";
+  // Overtaken: a load for another session (we switched away), or a newer load for this one.
+  const overtaken = () => sessionId !== props.sessionId || loadId !== latestToolsLoad;
   try {
     const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body = await res.json();
-    // Late reply for a session we have since switched away from: dropping it keeps the list
-    // from showing another cell's tools.
-    if (sessionId !== props.sessionId) return;
+    if (overtaken()) return;
     availableTools.value = body.tools ?? [];
     guiOnlyHistory.value = body.guiOnlyHistory === true;
   } catch {
-    if (sessionId === props.sessionId) {
-      availableTools.value = [];
-      // Unknown, so claim nothing: a note that appears on a failed request would be a statement
-      // about a history we could not ask about.
-      guiOnlyHistory.value = false;
-    }
+    if (overtaken()) return;
+    availableTools.value = [];
+    // Unknown, so claim nothing: a note that appears on a failed request would be a statement
+    // about a history we could not ask about.
+    guiOnlyHistory.value = false;
   }
 }
 watch(() => props.sessionId, loadAvailableTools, { immediate: true });

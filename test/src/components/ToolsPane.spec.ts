@@ -27,7 +27,9 @@ function deferred<T>() {
   const promise = new Promise<T>((r) => {
     resolve = r;
   });
-  return { promise, resolve };
+  // `settled` is the test's own flag for "we have moved past the phase this gate stands in", so a
+  // fetch stub can answer differently before and after without a second gate.
+  return { promise, resolve, settled: false };
 }
 
 // Route fetch by URL so /api/tools and /api/tool-calls/:id can return distinct
@@ -133,6 +135,32 @@ describe("ToolsPane", () => {
     capturedGroups?.({ sessionId: "b", groups: ["data"] });
     await flushPromises();
     expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+  });
+
+  // Since the re-ask there are routinely two /api/tools loads in flight for the SAME session — the
+  // early one asked at mount and the one the announcement triggered. A session-id guard passes both,
+  // so an older reply landing second would restore the empty list the re-ask exists to get rid of.
+  it("drops an older tools reply that lands after the re-ask's", async () => {
+    const earlyGate = deferred<undefined>();
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      // The first load hangs; the one the announcement triggers answers straight away.
+      return earlyGate.settled
+        ? Promise.resolve(jsonRes({ tools: [{ toolName: "presentDocument" }], guiOnlyHistory: true }))
+        : earlyGate.promise.then(() => jsonRes({ tools: [], guiOnlyHistory: false }));
+    });
+
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    earlyGate.settled = true;
+    capturedGroups?.({ sessionId: "a", groups: ["render"] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    // The pre-announcement reply arrives late. It must not put the empty list back.
+    earlyGate.resolve(undefined);
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(true);
   });
 
   // A broker-fed history holds ONLY the GUI tools. An empty list there means "called no GUI tool",
