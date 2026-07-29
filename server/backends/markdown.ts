@@ -56,10 +56,13 @@ export const markdownHostApp: MarkdownHostApp = {
 
   async saveDoc(rel, markdown) {
     await markdownByPath.write(rel, markdown);
-    // Fire-and-forget refresh for any other View on this file. An ABSOLUTE path has
-    // no post-write mtime to stat (the publisher is workspace-relative), so it falls
-    // back to Date.now() — the channel name still matches what the View subscribed
-    // to, which is what makes the refresh land.
+    // Refresh any other View on this file. An ABSOLUTE path has no post-write mtime
+    // to stat (the shared publisher joins onto the workspace), so it falls back to
+    // Date.now() and logs one `[file-change] stat failed` line per save — cosmetic:
+    // the channel name still matches what the View subscribed to, which is what makes
+    // the refresh land, and mtimeMs only cache-busts. The real fix is teaching
+    // @mulmoclaude/core's publisher about absolute paths, which is MulmoClaude's call
+    // (its saveDoc publishes exactly the same way).
     await publishFileChange(rel);
     return { path: rel };
   },

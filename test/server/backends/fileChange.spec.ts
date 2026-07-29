@@ -50,6 +50,15 @@ describe("initFileChangePublisher", () => {
     expect(typeof payload.mtimeMs).toBe("number");
   });
 
+  it("forwards a document OUTSIDE artifacts/documents too — the write site accepts any .md", async () => {
+    const rel = "README.md";
+    seedFile(rel);
+
+    await publishFileChange(rel);
+
+    expect(published.map((p) => p.channel)).toEqual([`plugin:markdown:file:${rel}`]);
+  });
+
   it("forwards an html artifact to the html plugin channel", async () => {
     const rel = "artifacts/html/2026/06/page.html";
     seedFile(rel);

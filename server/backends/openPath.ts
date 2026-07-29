@@ -13,12 +13,7 @@
 // this one deliberately does not confine. Opposite purposes — don't reach for the
 // wrong one.
 import { realpath } from "node:fs/promises";
-import {
-  createByPathFileOps,
-  resolveHtmlFileRequestPath,
-  HTML_EXTENSIONS,
-  MARKDOWN_EXTENSIONS,
-} from "@mulmoclaude/core/files";
+import { createByPathFileOps, resolveHtmlFileRequestPath, HTML_EXTENSIONS, MARKDOWN_EXTENSIONS } from "@mulmoclaude/core/files";
 import type { FileOps } from "gui-chat-protocol";
 
 // Injected at boot (server/index.ts), like the artifacts backend: the ops below are

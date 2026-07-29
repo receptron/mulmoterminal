@@ -7,7 +7,7 @@ import path from "node:path";
 import type { Server } from "node:http";
 import { initArtifactsBackend } from "../../../server/backends/artifacts.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../../../server/backends/html.js";
-import { initOpenPathBackend, resetOpenPathBackend } from "../../../server/backends/openPath.js";
+import { initOpenPathBackend, resetOpenPathBackend, resolveHtmlRequest } from "../../../server/backends/openPath.js";
 
 let server: Server;
 let base: string;
@@ -136,10 +136,11 @@ describe("htmlfile route", () => {
     expect((await fetch(`${base}/htmlfile/nope/docs/report.html`)).status).toBe(404);
   });
 
-  it("404s a traversal segment", async () => {
-    // Percent-encoded: a literal `..` is collapsed by the URL parser before the
-    // request is even sent, so it would never reach the route.
-    expect((await fetch(`${base}/htmlfile/ws/docs/%2e%2e/docs/report.html`)).status).toBe(404);
+  it("refuses a traversal segment at the resolver", async () => {
+    // Not reachable over HTTP — every URL parser between here and the route collapses
+    // `..` (and `%2e%2e`) before the request is sent — so assert the resolver the
+    // route delegates to. The smuggled form that DOES survive the wire is below.
+    expect(await resolveHtmlRequest("ws/docs/../report.html")).toBeNull();
   });
 
   it("404s a %2F-smuggled separator (the parser decodes per segment)", async () => {
