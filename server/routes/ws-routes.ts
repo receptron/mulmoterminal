@@ -21,7 +21,7 @@ import { tmuxHasSession } from "../infra/tmux.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
-import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
+import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, markSessionToolGroup, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
 import { bufferEarlyFrames } from "../session/early-frames.js";
 import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
@@ -420,6 +420,10 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
+
+  const mcpGroups = attachGuiMcp ? TOOL_GROUPS : await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
+  for (const group of mcpGroups) markSessionToolGroup(sessionId, group);
+
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
   if (live) {
     live.active = attachGuiMcp;
