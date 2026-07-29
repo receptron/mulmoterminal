@@ -2,6 +2,7 @@
 // the query it sends — including ?gui=0, which tells the server to run a plain dev
 // terminal (no GUI MCP) — is unit-testable without xterm/WebSocket.
 import type { RunCommand } from "./runCommand";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 // What the launch form picked for THIS session (#584), overriding the directory's own
 // default. Either half may be absent: a bare model is a valid pick on the default
@@ -43,7 +44,7 @@ export function buildTerminalWsUrl(input: TerminalWsUrlInput): string {
 
 export type RunWsUrlInput = { host: string; secure: boolean; cwd?: string | null } & (
   | { index: number } // position in the directory's script.json (the server resolves it)
-  | { buttonId: string; session: string | null; agent: "claude" | "codex" | "antigravity"; model: string | null } // a header run:"shell" button, re-resolved server-side
+  | { buttonId: string; session: string | null; agent: TerminalAgent; model: string | null } // a header run:"shell" button, re-resolved server-side
 );
 
 // The command-terminal endpoint. The browser sends only a REFERENCE — a script INDEX
@@ -87,31 +88,28 @@ export function buildLaunchWsUrl({ host, secure, sessionId, cwd, launcher, shell
   return `${proto}//${host}/ws/launch?${params.toString()}`;
 }
 
-export interface CodexWsUrlInput {
+export interface AgentWsUrlInput {
   host: string;
   secure: boolean;
-  sessionId: string | null; // reattach/resume this codex session; null => fresh
+  sessionId: string | null; // reattach/resume this session; null => fresh
   cwd?: string | null;
   devTerminal?: boolean; // grid dev terminal: no GUI MCP (?gui=0). Single view omits it => GUI MCP.
 }
 
-// The codex-terminal endpoint (a first-class codex session). Persistent & reattachable like
-// /ws; the browser sends the mulmoterminal session id to reattach/resume — the server maps it
-// to codex's own rollout id. ?gui=0 (grid) runs codex without the GUI MCP.
-export function buildCodexWsUrl(input: CodexWsUrlInput): string {
-  return sessionTerminalWsUrl("ws/codex", input);
-}
+// Every non-Claude agent has its own endpoint, and they differ only in the path: persistent &
+// reattachable like /ws, and the browser sends the MulmoTerminal session id, which the server maps
+// to that agent's own conversation id. Claude keeps `buildTerminalWsUrl` because /ws carries one
+// thing these don't — the launch form's provider/model choice.
+//
+// A Record rather than a string built from the name, so adding an agent to TERMINAL_AGENTS without
+// giving it an endpoint fails to compile instead of producing a 404 URL at runtime.
+const AGENT_WS_PATH: Record<Exclude<TerminalAgent, "claude">, string> = {
+  codex: "ws/codex",
+  antigravity: "ws/antigravity",
+};
 
-export interface AntigravityWsUrlInput {
-  host: string;
-  secure: boolean;
-  sessionId: string | null;
-  cwd?: string | null;
-  devTerminal?: boolean;
-}
-
-export function buildAntigravityWsUrl(input: AntigravityWsUrlInput): string {
-  return sessionTerminalWsUrl("ws/antigravity", input);
+export function buildAgentWsUrl(agent: Exclude<TerminalAgent, "claude">, input: AgentWsUrlInput): string {
+  return sessionTerminalWsUrl(AGENT_WS_PATH[agent], input);
 }
 
 // What a connection slot is pointed at, as far as choosing an endpoint is concerned. Named
@@ -124,8 +122,8 @@ export interface ConnTargetUrlInput {
   command: RunCommand | null;
   // A configured launcher by index, or the OS default shell.
   launcher: { index: number } | { shell: true } | null;
-  codex?: boolean;
-  antigravity?: boolean;
+  // Which agent this slot runs. Absent means Claude, the default.
+  agent?: TerminalAgent;
   launch?: LaunchChoice | null;
 }
 
@@ -138,9 +136,9 @@ function runCommandWsUrl(command: RunCommand, host: string, secure: boolean): st
 }
 
 // Which endpoint a slot connects to. The order is the rule: a Run command is ephemeral and
-// outranks everything; then a configured launcher; then codex; then antigravity; then a Claude session, the
-// default. Getting it wrong is silent and destructive-adjacent — a restored codex cell that
-// falls through to `/ws` comes back as Claude, and a command cell that does re-runs its
+// outranks everything; then a configured launcher; then the slot's own agent; then a Claude
+// session, the default. Getting it wrong is silent and destructive-adjacent — a restored codex
+// cell that falls through to `/ws` comes back as Claude, and a command cell that does re-runs its
 // script as an agent session.
 //
 // `host`/`secure` are parameters rather than reads of `location`, which is what lets this be
@@ -152,7 +150,8 @@ export function connWsUrl(target: ConnTargetUrlInput, resumeId: string | null, h
       ? buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, shell: true })
       : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
   }
-  if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
-  if (target.antigravity) return buildAntigravityWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+  if (target.agent && target.agent !== "claude") {
+    return buildAgentWsUrl(target.agent, { host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+  }
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal, launch: target.launch });
 }

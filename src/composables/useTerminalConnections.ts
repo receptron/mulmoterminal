@@ -54,6 +54,7 @@ import { isCopyOnSelectEnabled } from "./copyOnSelect";
 import { createFilePathLinkProvider } from "./terminalFilePathLinkProvider";
 import { tryOpenInPane } from "./filesPaneOpener";
 import { filesGotoFile } from "./useFilesView";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 export type ConnStatus = "connecting" | "connected" | "disconnected";
 
@@ -107,20 +108,19 @@ export interface ConnTarget {
   // (`{ shell: true }`, the header "new terminal" button). Unlike `command` this is a
   // PERSISTENT session — it reconnects on drop and reattaches by session id, like a Claude cell.
   launcher: { index: number } | { shell: true } | null;
-  // A first-class codex session (/ws/codex) instead of a Claude one. Persistent &
-  // reattachable like a Claude cell; the server discovers + resumes codex's own id.
-  codex?: boolean;
-  // A first-class antigravity session (/ws/antigravity).
-  antigravity?: boolean;
+  // A first-class non-Claude session (/ws/codex, /ws/antigravity) instead of a Claude one.
+  // Persistent & reattachable like a Claude cell; the server discovers + resumes that agent's
+  // own conversation id. Absent means Claude.
+  agent?: TerminalAgent;
   // The provider/model the launch form picked for this session (#584). Claude only —
   // it rides the /ws query and overrides the directory's default.
   launch?: LaunchChoice | null;
 }
 
 // The `terminalSubmit` mapping describes the user's CLAUDE binding, so it only applies to
-// Claude cells. A launcher / codex / antigravity / command / dev-terminal cell is a shell or another TUI
+// Claude cells. A launcher / another agent / command / dev-terminal cell is a shell or another TUI
 // where a bare Enter must stay xterm's native \r — a reversed setting must not rewrite it.
-export const isClaudeTarget = (t: ConnTarget): boolean => !t.devTerminal && !t.command && !t.launcher && !t.codex && !t.antigravity;
+export const isClaudeTarget = (t: ConnTarget): boolean => !t.devTerminal && !t.command && !t.launcher && (t.agent ?? "claude") === "claude";
 
 // The submit/newline byte mapping in effect for one connection: the user's `terminalSubmit`
 // setting for a Claude cell, the standard binding for everything else. Used by the keyboard
@@ -799,8 +799,7 @@ const slotCandidate = (c: Conn): SlotCandidate => ({
   isShellLauncher: !!c.target.launcher && "shell" in c.target.launcher,
   sessionId: c.knownSessionId,
   cwd: c.knownCwd ?? c.target.cwd,
-  codex: !!c.target.codex,
-  antigravity: !!c.target.antigravity,
+  agent: c.target.agent ?? "claude",
 });
 
 export function listSlots(): SlotInfo[] {

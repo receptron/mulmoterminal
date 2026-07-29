@@ -16,11 +16,12 @@ import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../ses
 import { codexifySkillSeed } from "../agents/codex-skills.js";
 import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
-import type { SpawnClaudePty, SpawnCodexPty } from "../session/spawners.js";
+import type { SpawnClaudePty, SpawnCodexPty, SpawnAntigravityPty } from "../session/spawners.js";
 
 export interface PluginRouteDeps {
   spawnClaudePty: SpawnClaudePty;
   spawnCodexPty: SpawnCodexPty;
+  spawnAntigravityPty: SpawnAntigravityPty;
   /** Put a hidden spawn on the scheduled-session retention (#541). Nobody watches a
    *  background worker and the chat list keeps it behind a filter, so the hook-driven reap
    *  is the only thing that would ever end it — and a worker blocked on a permission prompt
@@ -44,12 +45,14 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
     const sessionId = randomUUID();
     // ws is null: the session runs headless until the user opens it (reattach replays the buffered
     // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
-    // typed into its input box. codex has no editable-draft path (no stable TUI ready-marker), so its
-    // seed always auto-runs as codex's positional first-turn prompt, with the GUI MCP attached.
+    // typed into its input box. The other agents have no editable-draft path (no stable TUI
+    // ready-marker), so their seed always auto-runs as a first-turn prompt on the command line —
+    // codex positionally, agy through `--prompt-interactive`.
     try {
       runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () => {
         const mode = spawnModeFor(agent, draft);
         if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, { initialPrompt: codexifySkillSeed(message) });
+        else if (mode === "antigravity-run") deps.spawnAntigravityPty(sessionId, null, null, CLAUDE_CWD, { initialPrompt: codexifySkillSeed(message) });
         else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
         else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
       });

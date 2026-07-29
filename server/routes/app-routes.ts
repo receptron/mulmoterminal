@@ -53,6 +53,7 @@ import { resolveWorkspace } from "../config/workspace.js";
 import type { createToolStores } from "../session/tool-store.js";
 import type { createClaudeSpawner } from "../session/spawn-claude.js";
 import type { createCodexSpawner } from "../session/spawn-codex.js";
+import type { createAntigravitySpawner } from "../session/spawn-antigravity.js";
 import type { createTranslationWorker } from "../session/translation-worker.js";
 import type { createTitleManager } from "../session/session-title.js";
 import { tmuxHasSession, tmuxKillSession, tmuxListSessionIds, tmuxAttachedClientCount } from "../infra/tmux.js";
@@ -71,6 +72,7 @@ export interface AppRouteDeps extends SessionActivityDeps {
   toolSummaries: Parameters<typeof mountToolRoutes>[1]["toolSummaries"];
   spawnClaudePty: ReturnType<typeof createClaudeSpawner>["spawnClaudePty"];
   spawnCodexPty: ReturnType<typeof createCodexSpawner>["spawnCodexPty"];
+  spawnAntigravityPty: ReturnType<typeof createAntigravitySpawner>["spawnAntigravityPty"];
   translateViaHiddenChat: ReturnType<typeof createTranslationWorker>["translateViaHiddenChat"];
   freshenRosterTitle: ReturnType<typeof createTitleManager>["freshenRosterTitle"];
   reap: (id: string) => void;
@@ -102,6 +104,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountPluginRoutes(app, {
     spawnClaudePty: deps.spawnClaudePty,
     spawnCodexPty: deps.spawnCodexPty,
+    spawnAntigravityPty: deps.spawnAntigravityPty,
     registerBackgroundSession: deps.registerBackgroundSession,
   });
 

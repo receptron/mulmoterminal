@@ -20,6 +20,7 @@ import { refreshHostKeychainIfExpired, writeSandboxCredentials } from "../infra/
 import { tmuxHasSession } from "../infra/tmux.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
+import { antigravityBrainRoot, antigravityConversationExists } from "../agents/antigravity-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
@@ -37,7 +38,7 @@ import type { PtyEntry } from "../session/types.js";
 import type { SpawnClaudePty, SpawnCodexPty, SpawnAntigravityPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
 import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
 import { normalizeAgent, parseIndexParam } from "./routeParams.js";
-import { codexResumeId } from "../agents/codex-resume.js";
+import { agentResumeId } from "../agents/agent-resume.js";
 
 export interface WsRouteDeps {
   /** The http server these endpoints hang their `upgrade` handler off. */
@@ -196,9 +197,9 @@ function resolveCodexSession(requested: string | null): { sessionId: string; liv
   const hasLivePty = !!requested && ptys.has(requested);
   const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeRolloutId = codexResumeId(requested, {
-    mappedRolloutId: requested ? codexRolloutIds.get(requested) : null,
-    rolloutExists: () => !!requested && codexRolloutExists(codexSessionsRoot(), requested),
+  const resumeRolloutId = agentResumeId(requested, {
+    mappedId: requested ? codexRolloutIds.get(requested) : null,
+    conversationExists: () => !!requested && codexRolloutExists(codexSessionsRoot(), requested),
     hasLivePty: !!live,
     tmuxAlive,
   });
@@ -410,7 +411,16 @@ function resolveAntigravitySession(requested: string | null): { sessionId: strin
   const hasLivePty = !!requested && ptys.has(requested);
   const live = hasLivePty && requested ? ptys.get(requested) : undefined;
   const tmuxAlive = !live && !!requested && tmuxHasSession(requested);
-  const resumeConversationId = !live && !tmuxAlive && requested ? (antigravityConversationIds.get(requested) ?? requested) : null;
+  // The same rule codex resumes by, including the part that is easy to drop: the key is only
+  // treated as a conversation id when a conversation by that name EXISTS. Without the check every
+  // key resumes, which means a stale one is handed to `agy --conversation` — agy answers a
+  // conversation it cannot find by starting a fresh one, silently, under the old session's id.
+  const resumeConversationId = agentResumeId(requested, {
+    mappedId: requested ? antigravityConversationIds.get(requested) : null,
+    conversationExists: () => !!requested && antigravityConversationExists(antigravityBrainRoot(), requested),
+    hasLivePty,
+    tmuxAlive,
+  });
   const { sessionId } = resolveReattachableId(requested, { hasLivePty, tmuxAlive, canResume: !!resumeConversationId }, randomUUID);
   return { sessionId, live, resumeConversationId };
 }
@@ -443,7 +453,7 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
   }
   let entry: PtyEntry;
   try {
-    entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd, mcpGroups);
+    entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd, { mcpGroups });
   } catch (err) {
     console.error(`[ws/antigravity] failed to start ${sessionId}: ${messageOf(err)}`);
     early.discard();

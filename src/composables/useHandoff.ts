@@ -11,6 +11,7 @@ import { pasteText, listSlots } from "./useTerminalConnections";
 import type { SlotInfo } from "./readableSlot";
 import { formatCwd } from "../components/cwdDisplay";
 import { isRecord } from "../../common/isRecord";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 // A terminal whose last exchange can be pulled: how to name it in the menu, and what
 // the server needs to find its log.
@@ -23,7 +24,7 @@ export interface HandoffTarget {
 export interface HandoffSource {
   sessionId: string;
   cwd: string | null;
-  agent: "claude" | "codex" | "antigravity";
+  agent: TerminalAgent;
 }
 
 // Slot keys are `cell-<uid>`; the uid is what the user sees on the cell, so a menu

@@ -1,7 +1,7 @@
 // Whether the phone's "open a terminal here" request can be served, and what to publish
 // (#831). Pure (no I/O) so every refusal is unit-tested; the caller supplies the session's
 // directory and how many browsers are listening.
-import { isLaunchAgent, type LaunchAgent } from "../../../common/launchAgent.js";
+import { LAUNCH_AGENTS, isLaunchAgent, type LaunchAgent } from "../../../common/launchAgent.js";
 
 // What the grid needs to open the cell. The cwd is the HOST's answer for the session the
 // phone was looking at — the phone never sends a path, so a remote client cannot name a
@@ -29,7 +29,7 @@ export interface LaunchTerminalInput {
 export const NO_BROWSER_ERROR = "no MulmoTerminal browser is open — the grid opens the terminal, so a tab must be connected";
 
 export function decideLaunchTerminal({ agent, sessionId, cwdOf, listenerCount }: LaunchTerminalInput): LaunchTerminalDecision {
-  if (!isLaunchAgent(agent)) return { ok: false, error: "agent must be one of: shell, claude, codex" };
+  if (!isLaunchAgent(agent)) return { ok: false, error: `agent must be one of: ${LAUNCH_AGENTS.join(", ")}` };
   if (typeof sessionId !== "string" || !sessionId) return { ok: false, error: "sessionId is required" };
   const cwd = cwdOf(sessionId);
   if (!cwd) return { ok: false, error: `no working directory known for session '${sessionId}'` };

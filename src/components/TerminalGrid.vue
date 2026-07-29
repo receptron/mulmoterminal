@@ -27,6 +27,7 @@ import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
 import { hasCanvasGroup } from "../../common/toolGroups";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 // Renders the grid, auto-sized to the cell count, fully controlled by GridView:
 // `cells` is the active page's slice (≤9) when nothing is zoomed, and `expandedUid`
@@ -75,7 +76,7 @@ const emit = defineEmits<{
   (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
-  (e: "agent", uid: number, value: "claude" | "codex" | "antigravity"): void;
+  (e: "agent", uid: number, value: TerminalAgent): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();

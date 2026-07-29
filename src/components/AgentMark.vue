@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import type { TerminalAgent } from "../../common/sessionAgent";
 // The agents' marks, drawn rather than picked: Material Symbols is an icon set, not a brand
 // set, so anything from it (`code`, `auto_awesome`) says "generic AI thing" twice and leaves the
 // reader to work out which row is which. These are the shapes each tool is actually known by.
@@ -6,7 +7,7 @@
 // Geometry only — no text, no logotype — and both inherit `currentColor`, so a window past its
 // warning threshold turns its mark amber along with its number rather than staying a fixed swatch
 // beside coloured text.
-defineProps<{ agent: "claude" | "codex" | "antigravity" }>();
+defineProps<{ agent: TerminalAgent }>();
 
 // Anthropic's burst: spokes around a centre. Drawn from one radius so the arms stay even at the
 // 13px this renders at, where a hand-placed path goes lopsided.

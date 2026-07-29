@@ -1,10 +1,11 @@
 import { computed } from "vue";
 import { isBackground, isUnread, matchesFilter, type Session, type Filter } from "./useSessions";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 // The event contract App.vue wires to both session-list layouts (the vertical
 // Sidebar and the horizontal SessionTabBar); v-model:filter drives update:filter.
 export type SessionListEmits = {
-  (e: "select", id: string, agent: "claude" | "codex" | "antigravity"): void;
+  (e: "select", id: string, agent: TerminalAgent): void;
   (e: "new" | "new-codex" | "new-antigravity" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 };

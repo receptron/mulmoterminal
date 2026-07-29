@@ -403,6 +403,7 @@ mountAppRoutes(app, {
   toolSummaries,
   spawnClaudePty,
   spawnCodexPty,
+  spawnAntigravityPty,
   translateViaHiddenChat,
   freshenRosterTitle,
   forgetTitle,

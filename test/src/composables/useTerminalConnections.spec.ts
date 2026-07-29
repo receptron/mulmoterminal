@@ -763,7 +763,8 @@ describe("isClaudeTarget", () => {
   it("is false for shell / codex / command / dev-terminal cells", () => {
     expect(conn.isClaudeTarget({ ...base, launcher: { shell: true } })).toBe(false);
     expect(conn.isClaudeTarget({ ...base, launcher: { index: 0 } })).toBe(false);
-    expect(conn.isClaudeTarget({ ...base, codex: true })).toBe(false);
+    expect(conn.isClaudeTarget({ ...base, agent: "codex" })).toBe(false);
+    expect(conn.isClaudeTarget({ ...base, agent: "antigravity" })).toBe(false);
     expect(conn.isClaudeTarget({ ...base, command: { source: "script", index: 0, label: "dev", cwd: null } })).toBe(false);
     expect(conn.isClaudeTarget({ ...base, devTerminal: true })).toBe(false);
   });

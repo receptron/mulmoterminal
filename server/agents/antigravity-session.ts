@@ -32,6 +32,13 @@ export function listAntigravitySessions(root: string): string[] {
   }
 }
 
+// Does agy hold a conversation by this id? The cold-resume probe: after a restart the in-memory
+// session -> conversation map is gone, so this is all that separates a key worth resuming from a
+// key that only ever named a MulmoTerminal session.
+export function antigravityConversationExists(root: string, id: string): boolean {
+  return UUID_RE.test(id) && existsSync(path.join(root, id));
+}
+
 export function snapshotAntigravitySessions(root: string = antigravityBrainRoot()): Set<string> {
   return new Set(listAntigravitySessions(root));
 }

@@ -16,6 +16,17 @@ describe("buildAntigravityArgs", () => {
     expect(buildAntigravityArgs({ ...base, skipPermissions: true })).toEqual(["--dangerously-skip-permissions"]);
   });
 
+  it("runs a seed as the first turn with --prompt-interactive", () => {
+    expect(buildAntigravityArgs({ ...base, initialPrompt: "do the thing" })).toEqual(["--prompt-interactive", "do the thing"]);
+  });
+
+  // It takes a value, so a flag after it would be read as part of the prompt.
+  it("puts the seed last", () => {
+    const args = buildAntigravityArgs({ resume: "a4dbbf1e-9cba-4879-a84a-d397b47e4f47", skipPermissions: true, initialPrompt: "go" });
+    expect(args[args.length - 2]).toBe("--prompt-interactive");
+    expect(args[args.length - 1]).toBe("go");
+  });
+
   it("adds --conversation <id> when resume ID is provided", () => {
     expect(buildAntigravityArgs({ resume: "a4dbbf1e-9cba-4879-a84a-d397b47e4f47" })).toEqual(["--conversation", "a4dbbf1e-9cba-4879-a84a-d397b47e4f47"]);
   });

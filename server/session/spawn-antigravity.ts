@@ -9,25 +9,12 @@ import { buildAntigravityArgs } from "../agents/antigravity-args.js";
 import { syncAntigravityMcpConfig } from "../agents/antigravity-mcp.js";
 import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
+import { wireAgentPtyRelay } from "./pty-relay.js";
 import { antigravityConversationIds, claimedAntigravityConversations, ptys } from "./registry.js";
-import { sendExitAndClose, sendFrame } from "./ws-frames.js";
-import { appendBoundedOutput } from "./terminal-replay.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 
 export function createAntigravitySpawner(deps: SpawnDeps) {
-  function wireAntigravityRelay(entry: PtyEntry, sessionId: string): void {
-    entry.term.onData((data) => {
-      entry.buffer = appendBoundedOutput(entry.buffer, data, deps.outputBufferLimit);
-      sendFrame(entry.ws, { type: "output", data });
-    });
-    entry.term.onExit(({ exitCode, signal }) => {
-      console.log(`[pty] antigravity exited code=${exitCode} signal=${signal}`);
-      sendExitAndClose(entry.ws, exitCode, signal);
-      deps.reap(sessionId);
-    });
-  }
-
   function rememberAntigravityConversation(sessionId: string, root: string, before: ReadonlySet<string>): void {
     watchForAntigravitySession(root, before, { claimed: claimedAntigravityConversations, isCancelled: () => !ptys.has(sessionId) })
       .then((id) => {
@@ -44,18 +31,23 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     ws: WebSocket | null,
     resumeConversationId: string | null,
     cwd: string,
-    // The tool groups this cell's DIRECTORY has registered, read by the caller (the lookup reads
-    // Claude Code's config files, and this is sync). agy reads its MCP servers from a file in the
-    // directory rather than from a flag, so that file is brought in line with them here, on the
-    // way past: a directory whose switches were flipped before this shipped — or with the `claude
-    // mcp` CLI directly — needs no second action to work.
-    mcpGroups: readonly ToolGroup[] = [],
+    options: {
+      /** The tool groups this cell's DIRECTORY has registered, read by the caller (the lookup
+       *  reads Claude Code's config files, and this is sync). agy reads its MCP servers from a
+       *  file in the directory rather than from a flag, so that file is brought in line with them
+       *  here, on the way past: a directory whose switches were flipped before this shipped — or
+       *  with the `claude mcp` CLI directly — needs no second action to work. */
+      mcpGroups?: readonly ToolGroup[];
+      /** Run this as the session's first turn (a collection action, a background chat). */
+      initialPrompt?: string | null;
+    } = {},
   ): PtyEntry {
+    const { mcpGroups = [], initialPrompt = null } = options;
     syncAntigravityMcpConfig(cwd, mcpGroups);
     const root = antigravityBrainRoot();
     const before = snapshotAntigravitySessions(root);
 
-    const args = buildAntigravityArgs({ resume: resumeConversationId, model: deps.antigravityModel, skipPermissions: true });
+    const args = buildAntigravityArgs({ resume: resumeConversationId, model: deps.antigravityModel, skipPermissions: true, initialPrompt });
     // The session id reaches the GUI MCP bridge through this environment and nowhere else — the
     // config file agy reads is shared by every session in the directory (see antigravity-mcp.ts).
     const { term, tmux } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true, { env: guiMcpEnv(sessionId, PORT) });
@@ -74,7 +66,7 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       rememberAntigravityConversation(sessionId, root, before);
     }
 
-    wireAntigravityRelay(entry, sessionId);
+    wireAgentPtyRelay(entry, sessionId, deps);
     return entry;
   }
 

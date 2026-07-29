@@ -9,8 +9,7 @@ const readable = (over: Partial<SlotCandidate> = {}): SlotCandidate => ({
   isShellLauncher: false,
   sessionId: "sess-2",
   cwd: "/w/proj",
-  codex: false,
-  antigravity: false,
+  agent: "claude" as const,
   ...over,
 });
 
@@ -20,11 +19,11 @@ describe("readableSlot", () => {
   });
 
   it("reports a codex cell as codex, so its rollout is read rather than a transcript", () => {
-    expect(readableSlot(readable({ codex: true }))?.agent).toBe("codex");
+    expect(readableSlot(readable({ agent: "codex" }))?.agent).toBe("codex");
   });
 
   it("reports an antigravity cell as antigravity", () => {
-    expect(readableSlot(readable({ antigravity: true }))?.agent).toBe("antigravity");
+    expect(readableSlot(readable({ agent: "antigravity" }))?.agent).toBe("antigravity");
   });
 
   it("drops a slot with no session id — the id is what locates the log", () => {

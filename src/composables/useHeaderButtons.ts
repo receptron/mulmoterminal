@@ -5,6 +5,7 @@
 // default header); an empty `buttons` array means nothing extra is shown.
 import { ref, type Ref } from "vue";
 import { useAutoRefresh } from "./useAutoRefresh";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 export interface OpenTarget {
   url?: string;
@@ -36,7 +37,7 @@ export function hasPickFileButton(buttons: readonly HeaderButton[]): boolean {
 interface Params {
   cwd: Ref<string | null>;
   session: Ref<string | null>;
-  agent: Ref<"claude" | "codex" | "antigravity">;
+  agent: Ref<TerminalAgent>;
   model?: Ref<string | null>;
 }
 

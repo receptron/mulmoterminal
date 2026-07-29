@@ -74,8 +74,8 @@ const props = defineProps<
     uid: number;
     initialSessionId: string | null;
     initialCwd: string | null;
-    // The persisted agent for this cell: "codex" / "antigravity"; absent (or "claude") resumes as a normal Claude session.
-    initialAgent?: "codex" | "antigravity" | null;
+    // The persisted agent for this cell; absent (or "claude") resumes as a normal Claude session.
+    initialAgent?: TerminalAgent | null;
     defaultCwd: string | null;
     presets: CwdPreset[];
     // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
@@ -102,8 +102,8 @@ const emit = defineEmits<
     (e: "run" | "runSpare", value: RunCommand): void;
     // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
     (e: "launch", value: LaunchPick): void;
-    // The agent chosen (Claude/Codex/Antigravity) for this fresh launch, so the grid persists it.
-    (e: "agent", value: "claude" | "codex" | "antigravity"): void;
+    // The agent chosen for this fresh launch, so the grid persists it.
+    (e: "agent", value: TerminalAgent): void;
   }
 >();
 
@@ -1367,8 +1367,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           :session-id="sessionId"
           :connect-key="connectKey"
           :cwd="cwd"
-          :codex="agent === 'codex'"
-          :antigravity="agent === 'antigravity'"
+          :agent="agent"
           :launch="launchChoice"
           :hide-header="filmstrip"
           :expanded="expanded"
@@ -1494,9 +1493,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 {{ askMsg }}
               </p>
             </span>
-            <CopyCodeBlock v-if="sessionId" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent === 'codex' ? 'codex' : 'claude'" />
+            <CopyCodeBlock v-if="sessionId" :class="CELL_BTN" :session-id="sessionId" :cwd="cwd" :agent="agent" />
             <button
-              v-if="sessionId && agent !== 'codex'"
+              v-if="sessionId && agent === 'claude'"
               class="cell-btn"
               :class="CELL_BTN"
               title="Activity timeline"

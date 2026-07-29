@@ -8,6 +8,7 @@ import { sendWebPush } from "../infra/web-push.js";
 import { HOST_ID as REMOTE_HOST_ID } from "../backends/remoteHost/index.js";
 import { buildPushText } from "./activity-hook.js";
 import type { PushKind } from "../../common/pushKinds.js";
+import { asTerminalAgent } from "../../common/sessionAgent.js";
 import { aiTitles, isBackgroundSession, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
 import { sessionLastTurn, LAST_RESPONSE_MAX } from "./session-reads.js";
 import { buildPushDetail, pushWhere, shouldSuppressPush, wantsPushKind } from "./taskPushRules.js";
@@ -23,8 +24,7 @@ const PUSH_BODY_MAX = 160;
 // is worse than saying nothing. Which log to read depends on the agent, so it goes
 // through sessionLastTurn rather than assuming a claude transcript.
 async function latestReply(sessionId: string, cwd: string): Promise<string | null> {
-  const agent = ptys.get(sessionId)?.agent === "codex" ? "codex" : "claude";
-  const turn = await sessionLastTurn(cwd, sessionId, agent);
+  const turn = await sessionLastTurn(cwd, sessionId, asTerminalAgent(ptys.get(sessionId)?.agent));
   const reply = turn.reply?.trim();
   // Capped like every other writer of lastResponses — the map is declared as holding
   // truncated text, and it is served in the roster payload for every listed session.

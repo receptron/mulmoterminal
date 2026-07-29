@@ -58,6 +58,7 @@ import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
 import { fetchDirConfig, invalidateDirConfig, useDirPriorities } from "../composables/useDirConfig";
 import { nextSortMode } from "./sortModeButton";
+import type { TerminalAgent } from "../../common/sessionAgent";
 import { usePubSub } from "../composables/usePubSub";
 import type { LaunchAgent } from "../../common/launchAgent";
 
@@ -334,7 +335,7 @@ function onAddTerminal() {
 }
 const onSession = (uid: number, id: string) => (state.value = setSession(state.value, uid, id));
 const onCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, uid, cwd));
-const onAgent = (uid: number, agent: "claude" | "codex" | "antigravity") => (state.value = setCellAgent(state.value, uid, agent));
+const onAgent = (uid: number, agent: TerminalAgent) => (state.value = setCellAgent(state.value, uid, agent));
 // Pass the on-screen order so closing the zoomed cell stays zoomed on its filmstrip
 // neighbour (previous, or next when it was the first) instead of collapsing the grid.
 const onClose = (uid: number) =>
@@ -378,14 +379,20 @@ onMounted(() => {
 // grid instead of routing here. openTerminalAt then queues + navigates while we're deactivated.
 const SLOT_UID_RE = /^cell-(\d+)$/;
 let offNewTerminal: (() => void) | null = null;
-// Each kind is already expressible as a cell: a shell is a shell launcher, codex is marked
-// with `agent`, and Claude is the plain default. The session id arrives from the server once
-// the cell opens its socket, so all three persist and reconnect like any other cell.
-const cellForAgent = (cwd: string, agent: LaunchAgent | undefined): Omit<Cell, "uid"> => {
-  if (agent === "claude") return { session: null, cwd };
-  if (agent === "codex") return { session: null, cwd, agent: "codex" };
-  return shellCell(cwd);
+// Each kind is already expressible as a cell: a shell is a shell launcher, a non-Claude agent is
+// marked with `agent`, and Claude is the plain default. The session id arrives from the server once
+// the cell opens its socket, so they all persist and reconnect like any other cell.
+//
+// A Record over LAUNCH_AGENTS rather than an if-chain: the chain ended in `shellCell`, so adding an
+// agent to that list without a case here silently opened a SHELL under its name. Now it does not
+// compile.
+const CELL_FOR_AGENT: Record<LaunchAgent, (cwd: string) => Omit<Cell, "uid">> = {
+  shell: (cwd) => shellCell(cwd),
+  claude: (cwd) => ({ session: null, cwd }),
+  codex: (cwd) => ({ session: null, cwd, agent: "codex" }),
+  antigravity: (cwd) => ({ session: null, cwd, agent: "antigravity" }),
 };
+const cellForAgent = (cwd: string, agent: LaunchAgent | undefined): Omit<Cell, "uid"> => (agent ? CELL_FOR_AGENT[agent](cwd) : shellCell(cwd));
 
 const openNewTerminal = ({ cwd, afterSlotKey, agent }: NewTerminalRequest) => {
   const match = afterSlotKey?.match(SLOT_UID_RE);

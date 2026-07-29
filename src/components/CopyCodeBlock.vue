@@ -11,8 +11,9 @@ import { ref, onUnmounted } from "vue";
 import { fetchLastTurn } from "../composables/useHandoff";
 import { copyOutcomeFor, copyOutcomeMessage, clipboardAvailable, turnOf } from "./codeBlockCopy";
 import { trapTabKey, MODAL_FOCUSABLE } from "../utils/focusTrap";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
-const props = defineProps<{ sessionId: string; cwd: string | null; agent: "claude" | "codex" }>();
+const props = defineProps<{ sessionId: string; cwd: string | null; agent: TerminalAgent }>();
 
 const busy = ref(false);
 const note = ref<string | null>(null);

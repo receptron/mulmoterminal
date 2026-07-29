@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
+  antigravityConversationExists,
   listAntigravitySessions,
   snapshotAntigravitySessions,
   pickFreshAntigravitySession,
@@ -55,5 +56,28 @@ describe("antigravity-session", () => {
     }, 50);
 
     expect(await watchForAntigravitySession(brainDir, before, { pollMs: 20, maxWaitMs: 1000 })).toBe(uuid);
+  });
+
+  // The cold-resume guard. Without it every requested key is handed to `agy --conversation`,
+  // and agy answers a conversation it cannot find by silently starting a fresh one under the
+  // old session's id.
+  describe("antigravityConversationExists", () => {
+    const uuid = "a4dbbf1e-9cba-4879-a84a-d397b47e4f47";
+
+    it("is true for a conversation directory that is there", () => {
+      fs.mkdirSync(path.join(brainDir, uuid));
+      expect(antigravityConversationExists(brainDir, uuid)).toBe(true);
+    });
+
+    it("is false for a key that never named a conversation", () => {
+      expect(antigravityConversationExists(brainDir, uuid)).toBe(false);
+    });
+
+    // The key reaches this straight from a URL query, so a traversal must not become a probe
+    // of the filesystem outside the brain root.
+    it("is false for anything that is not a uuid", () => {
+      expect(antigravityConversationExists(brainDir, "../../etc")).toBe(false);
+      expect(antigravityConversationExists(brainDir, "")).toBe(false);
+    });
   });
 });

@@ -4,7 +4,7 @@
 // is a module singleton, so a filter written inside it can only be tested by
 // standing the whole thing up.
 
-import { terminalAgent, type TerminalAgent } from "../../common/sessionAgent";
+import type { TerminalAgent } from "../../common/sessionAgent";
 
 // A slot's readability, flattened out of the connection runtime. Everything here is
 // a plain value so a caller can construct one; the manager maps its Conn onto it.
@@ -15,8 +15,7 @@ export interface SlotCandidate {
   isShellLauncher: boolean; // the OS shell — no agent, so no log
   sessionId: string | null; // absent until the server reports one
   cwd: string | null;
-  codex: boolean;
-  antigravity: boolean;
+  agent: TerminalAgent;
 }
 
 export interface SlotInfo {
@@ -31,10 +30,5 @@ export interface SlotInfo {
 // so a cell that hasn't launched has nothing to offer yet.
 export function readableSlot(candidate: SlotCandidate): SlotInfo | null {
   if (!candidate.connected || candidate.isCommand || candidate.isShellLauncher || !candidate.sessionId) return null;
-  return {
-    key: candidate.key,
-    sessionId: candidate.sessionId,
-    cwd: candidate.cwd,
-    agent: terminalAgent(candidate),
-  };
+  return { key: candidate.key, sessionId: candidate.sessionId, cwd: candidate.cwd, agent: candidate.agent };
 }

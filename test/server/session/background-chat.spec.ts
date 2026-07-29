@@ -24,6 +24,13 @@ describe("parseBackgroundChat", () => {
     expect(ok({ message: "  spaced  " }).message).toBe("spaced");
   });
 
+  // Every agent the UI offers has to survive the parse, or the toggle silently spawns claude.
+  it("keeps an agent it hosts, and falls back to claude for one it does not", () => {
+    expect(ok({ message: "go", agent: "codex" }).agent).toBe("codex");
+    expect(ok({ message: "go", agent: "antigravity" }).agent).toBe("antigravity");
+    expect(ok({ message: "go", agent: "gpt-9" }).agent).toBe("claude");
+  });
+
   describe("rejection", () => {
     const rejected = (body: unknown) => {
       const parsed = parseBackgroundChat(body);

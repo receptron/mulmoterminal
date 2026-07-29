@@ -10,7 +10,7 @@ import type { QuickCommandChip } from "./quickCommands.js";
 // Map a tmux pane's current command onto the kinds the phone knows. Anything else is a
 // shell or a one-off program the phone has no special input for — "shell" is the right
 // answer for both, since that is where typed commands belong.
-const AGENT_COMMANDS: Record<string, SessionAgent> = { claude: "claude", codex: "codex" };
+const AGENT_COMMANDS: Record<string, SessionAgent> = { claude: "claude", codex: "codex", agy: "antigravity" };
 
 export const agentFromPaneCommand = (command: string | null): SessionAgent | null => {
   if (!command) {

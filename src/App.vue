@@ -30,6 +30,7 @@ import { usePubSub } from "./composables/usePubSub";
 import { openTerminalAt } from "./composables/useNewTerminal";
 import { LAUNCH_TERMINAL_CHANNEL, isLaunchAgent, type LaunchAgent } from "../common/launchAgent";
 import { clampTerminalWidth, maxTerminalWidth, MIN_TERMINAL, splitterKeyWidth } from "./components/splitterWidth";
+import { type TerminalAgent } from "../common/sessionAgent";
 
 // View mode is now the URL: the multi-terminal grid is /terminals, everything else
 // (chat + the collection/accounting overlays) lives under the single-view shell.
@@ -67,9 +68,9 @@ function onRunScript(command: PendingCommand) {
 }
 
 const activeId = ref<string | null>(null);
-// Which agent the single view runs (Claude by default). Codex connects to /ws/codex with the
-// GUI MCP attached; Antigravity connects to /ws/antigravity.
-const singleAgent = ref<"claude" | "codex" | "antigravity">("claude");
+// Which agent the single view runs (Claude by default). A non-Claude one connects to its own
+// endpoint (/ws/codex, /ws/antigravity) with the GUI MCP attached, so it drives the GUI panel too.
+const singleAgent = ref<TerminalAgent>("claude");
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
 
@@ -228,7 +229,7 @@ function configureAppearance(): void {
   showSettings.value = false;
 }
 
-function selectSession(id: string, agent: "claude" | "codex" | "antigravity" = "claude") {
+function selectSession(id: string, agent: TerminalAgent = "claude") {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
   singleAgent.value = agent; // resume the row's agent (codex rows reconnect via /ws/codex)
   activeId.value = id;
@@ -368,8 +369,7 @@ function onSession(id: string) {
           :style="{ flex: `0 0 ${terminalWidth}px` }"
           persist-key="single"
           :session-id="activeId"
-          :codex="singleAgent === 'codex'"
-          :antigravity="singleAgent === 'antigravity'"
+          :agent="singleAgent"
           :connect-key="connectKey"
           :dir-cwd="effectiveCwd"
           :dir-name="singleDirConfig.name"

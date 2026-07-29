@@ -27,6 +27,9 @@ describe("agentFromPaneCommand", () => {
   it("recognises the agents the phone treats specially", () => {
     expect(agentFromPaneCommand("claude")).toBe("claude");
     expect(agentFromPaneCommand("codex")).toBe("codex");
+    // The pane runs `agy`, and the kind is "antigravity" — the one place the two names differ,
+    // which is exactly why a session that outlived a restart used to come back as a shell.
+    expect(agentFromPaneCommand("agy")).toBe("antigravity");
   });
 
   // Anything else is where typed commands belong, which is what "shell" means here —
