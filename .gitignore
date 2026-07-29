@@ -31,5 +31,3 @@ dist-ssr
 # Local to each checkout — not shared.
 .mulmoterminal.json
 script.json
-.agents
-.gemini

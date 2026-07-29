@@ -6,6 +6,7 @@ import { existingWorkspace, existingWorkspaceFromQuery } from "../config/workspa
 import { claudeAdapter } from "../agents/claude.js";
 import { TOOL_GROUPS, isToolGroup } from "../../common/toolGroups.js";
 import { registerGuiMcpGroup, unregisterGuiMcpGroup, registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
+import { syncAntigravityMcpConfig } from "../agents/antigravity-mcp.js";
 
 export function mountGuiMcpRoutes(app: Express): void {
   // Which GUI tool groups this directory has registered with Claude Code, so the launcher can
@@ -29,6 +30,10 @@ export function mountGuiMcpRoutes(app: Express): void {
   //
   // It takes effect on the cell's NEXT start: the tools are handed to claude when the session
   // spawns, so a session already running keeps whatever it was given.
+  //
+  // agy cannot be handed anything at spawn — it reads its servers from `.agents/mcp_config.json`
+  // in the directory — so that file is rewritten from the registry the switch just changed. One
+  // switch, every agent, and still only one place that RECORDS the answer.
   app.post("/api/gui-mcp-groups", async (req, res) => {
     const cwd = existingWorkspace(typeof req.body?.cwd === "string" ? req.body.cwd : null);
     const { group, enabled } = req.body ?? {};
@@ -39,6 +44,7 @@ export function mountGuiMcpRoutes(app: Express): void {
     // meant to add.
     if (typeof enabled !== "boolean") return res.status(400).json({ ok: false, message: "enabled must be a boolean" });
     const result = await (enabled ? registerGuiMcpGroup(claudeAdapter.bin(), cwd, group) : unregisterGuiMcpGroup(claudeAdapter.bin(), cwd, group));
+    if (result.ok) syncAntigravityMcpConfig(cwd, await registeredGuiMcpGroups(cwd, TOOL_GROUPS));
     res.json(result);
   });
 }

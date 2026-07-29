@@ -4,8 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import {
-  antigravityHome,
-  antigravityBrainRoot,
   listAntigravitySessions,
   snapshotAntigravitySessions,
   pickFreshAntigravitySession,
@@ -45,9 +43,7 @@ describe("antigravity-session", () => {
     const uuid2 = "5fd4f183-39d4-4842-8e03-114e966e7fa5";
     fs.mkdirSync(path.join(brainDir, uuid2));
 
-    const fresh = pickFreshAntigravitySession(brainDir, before);
-    expect(fresh).not.toBeNull();
-    expect(fresh?.id).toBe(uuid2);
+    expect(pickFreshAntigravitySession(brainDir, before)).toBe(uuid2);
   });
 
   it("watches and discovers a newly created session ID", async () => {
@@ -58,7 +54,6 @@ describe("antigravity-session", () => {
       fs.mkdirSync(path.join(brainDir, uuid));
     }, 50);
 
-    const meta = await watchForAntigravitySession(brainDir, before, { pollMs: 20, maxWaitMs: 1000 });
-    expect(meta?.id).toBe(uuid);
+    expect(await watchForAntigravitySession(brainDir, before, { pollMs: 20, maxWaitMs: 1000 })).toBe(uuid);
   });
 });

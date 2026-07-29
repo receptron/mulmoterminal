@@ -1,8 +1,13 @@
+// Starting an Antigravity (`agy`) session in a PTY. Like codex, agy mints its conversation id
+// itself, so a fresh session is watched until that id appears — that is what lets a later cold
+// reconnect resume it.
 import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
+import type { ToolGroup } from "../../common/toolGroups.js";
 import { guiMcpEnv } from "./mcp-config.js";
 import { buildAntigravityArgs } from "../agents/antigravity-args.js";
-import { antigravityBrainRoot, ensureAntigravityMcpConfig, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
+import { syncAntigravityMcpConfig } from "../agents/antigravity-mcp.js";
+import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
 import { antigravityConversationIds, claimedAntigravityConversations, ptys } from "./registry.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -23,13 +28,13 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     });
   }
 
-  function rememberAntigravitySession(sessionId: string, root: string, before: Set<string>): void {
+  function rememberAntigravityConversation(sessionId: string, root: string, before: ReadonlySet<string>): void {
     watchForAntigravitySession(root, before, { claimed: claimedAntigravityConversations, isCancelled: () => !ptys.has(sessionId) })
-      .then((meta) => {
-        if (!meta) return;
-        claimedAntigravityConversations.add(meta.id);
-        antigravityConversationIds.set(sessionId, meta.id);
-        console.log(`[pty] captured antigravity conversation ID ${meta.id} for session ${sessionId}`);
+      .then((id) => {
+        if (!id) return;
+        claimedAntigravityConversations.add(id);
+        antigravityConversationIds.set(sessionId, id);
+        console.log(`[pty] captured antigravity conversation ${id} for session ${sessionId}`);
       })
       .catch(() => {});
   }
@@ -39,19 +44,20 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     ws: WebSocket | null,
     resumeConversationId: string | null,
     cwd: string,
-    options: {
-      initialPrompt?: string | null;
-    } = {},
+    // The tool groups this cell's DIRECTORY has registered, read by the caller (the lookup reads
+    // Claude Code's config files, and this is sync). agy reads its MCP servers from a file in the
+    // directory rather than from a flag, so that file is brought in line with them here, on the
+    // way past: a directory whose switches were flipped before this shipped — or with the `claude
+    // mcp` CLI directly — needs no second action to work.
+    mcpGroups: readonly ToolGroup[] = [],
   ): PtyEntry {
-    ensureAntigravityMcpConfig(PORT, sessionId, cwd);
+    syncAntigravityMcpConfig(cwd, mcpGroups);
     const root = antigravityBrainRoot();
     const before = snapshotAntigravitySessions(root);
 
-    const args = buildAntigravityArgs({
-      resume: resumeConversationId,
-      model: deps.antigravityModel,
-      skipPermissions: true,
-    });
+    const args = buildAntigravityArgs({ resume: resumeConversationId, model: deps.antigravityModel, skipPermissions: true });
+    // The session id reaches the GUI MCP bridge through this environment and nowhere else — the
+    // config file agy reads is shared by every session in the directory (see antigravity-mcp.ts).
     const { term, tmux } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true, { env: guiMcpEnv(sessionId, PORT) });
     const via = tmux ? " via tmux" : "";
     const resumeNote = resumeConversationId ? ` (resume ${resumeConversationId})` : "";
@@ -63,7 +69,9 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     if (resumeConversationId) {
       antigravityConversationIds.set(sessionId, resumeConversationId);
     } else {
-      rememberAntigravitySession(sessionId, root, before);
+      // Only for a FRESH session: on resume the id is already known, and running the watcher could
+      // overwrite it with a mis-attributed concurrent conversation.
+      rememberAntigravityConversation(sessionId, root, before);
     }
 
     wireAntigravityRelay(entry, sessionId);

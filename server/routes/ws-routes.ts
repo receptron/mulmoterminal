@@ -21,7 +21,7 @@ import { tmuxHasSession } from "../infra/tmux.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
-import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, markSessionToolGroup, ptys } from "../session/registry.js";
+import { antigravityConversationIds, codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
 import { sandboxWouldRun } from "../session/pty-spawn.js";
 import { bufferEarlyFrames } from "../session/early-frames.js";
 import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
@@ -415,25 +415,35 @@ function resolveAntigravitySession(requested: string | null): { sessionId: strin
   return { sessionId, live, resumeConversationId };
 }
 
+// antigravity terminal (?cwd=<dir>, ?session=<id> to reattach/resume). Unlike claude and codex
+// there is no per-session GUI MCP surface to attach or withhold: agy reads its servers from a file
+// in the DIRECTORY, so every session there reaches whatever that directory registered — `?gui=0`
+// only keeps a grid dev terminal out of the sidebar.
 async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
   const { url, requested, cwd } = wsConnectionContext(req);
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
-
-  const mcpGroups = attachGuiMcp ? TOOL_GROUPS : await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
-  for (const group of mcpGroups) markSessionToolGroup(sessionId, group);
-
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
   if (live) {
     live.active = attachGuiMcp;
     deps.reattachPty(live, ws, sessionId);
     return;
   }
+  // Collected from here because the read below waits, and the browser's first frame — the
+  // terminal's real geometry — arrives while it does (see early-frames.ts).
   const early = bufferEarlyFrames<{ toString(): string }>(ws);
+  // The directory's registered groups, read here because the lookup reads Claude Code's config
+  // files and the spawner is sync. Only for a spawn: a reattach keeps what its process started
+  // with, and agy re-reads nothing.
+  const mcpGroups = await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
+  if (ws.readyState !== ws.OPEN) {
+    console.log(`[ws/antigravity] client left before spawn — abandoning ${sessionId}`);
+    return early.discard();
+  }
   let entry: PtyEntry;
   try {
-    entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd);
+    entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd, mcpGroups);
   } catch (err) {
     console.error(`[ws/antigravity] failed to start ${sessionId}: ${messageOf(err)}`);
     early.discard();
