@@ -13,6 +13,20 @@ const targetUrl = group
   ? `http://127.0.0.1:${port}/api/mcp/${group}/${sessionId}`
   : `http://127.0.0.1:${port}/api/mcp/${sessionId}`;
 
+function extractJsonLines(text: string): string[] {
+  const results: string[] = [];
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("data: ")) {
+      const dataStr = trimmed.slice(6).trim();
+      if (dataStr) results.push(dataStr);
+    } else if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+      results.push(trimmed);
+    }
+  }
+  return results;
+}
+
 const rl = readline.createInterface({
   input: process.stdin,
   terminal: false,
@@ -25,13 +39,16 @@ rl.on("line", async (line) => {
     const payload = JSON.parse(trimmed);
     const res = await fetch(targetUrl, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+      },
       body: JSON.stringify(payload),
     });
     if (res.ok) {
-      const data = await res.text();
-      if (data) {
-        process.stdout.write(data + "\n");
+      const text = await res.text();
+      for (const jsonLine of extractJsonLines(text)) {
+        process.stdout.write(jsonLine + "\n");
       }
     }
   } catch (err) {
