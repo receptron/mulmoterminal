@@ -198,6 +198,18 @@ force the DOM renderer or observe effects (`window.open`, buffer state) instead 
   device queries (a DA reply would surface as `0;276;0c` in the prompt).
 - The replay buffer tail is sliced carefully so a cut never lands inside an escape sequence (#434),
   and is sized (~1 MiB) so scrollback survives a reattach (#776).
+- **A tail cannot carry a mode the app set once.** `CSI ? 1049 h` is written at pty offset 0 — when
+  our tmux client attaches — and never again, so past 1 MiB it is certainly gone from the replay
+  and the browser restores into the **normal** buffer. Measured on a real session: the tail had
+  five `?1003h`/`?1006h` (apps re-set those) and **zero** `?1049h`. That alone switches the wheel
+  and click synthesis off for good, since both are gated on the alternate buffer (#1073).
+  So `reattachPty` asks tmux what the pane is in right now (`tmuxTerminalModes` — `alternate_on`
+  and the `mouse_*_flag`s) and prefixes the DECSETs to the replay. tmux owns this state, which is
+  why nothing here parses the pty stream for it.
+  - **One sequence per mode.** The client only swallows a `CSI ? … h` whose parameters are ALL
+    mouse modes; `CSI ? 1049 ; 1003 h` would reach xterm and put it into real mouse tracking,
+    turning every drag into coordinate reports — the #729 regression.
+  - Only tmux-backed sessions restore; a sandbox/tmux-less pty replays as before.
 
 ## The tmux passthrough rule
 
@@ -251,7 +263,7 @@ looking) — flag them for QA on the release.
 | File-path links | `registerFilePathLinks` order vs WebLinks; `/api/files/raw` cwd containment | click a generated file path → previews the file |
 | Enter / newline | `terminalSubmit` mapping + `isComposing` guard; `macOptionIsMeta` | Enter submits, Shift+Enter newlines; IME confirm not eaten; both `cr` and `esc-cr` |
 | Mouse / wheel | `guardMouseTracking` swallow set (1000/1002/1003/1006); wheel→SGR in alt buffer; `wheelNotches` accumulation vs xterm's own `consumeWheelEvent` | wheel scrolls transcript (not prompt history); drag selects, doesn't emit mouse reports; a trackpad swipe moves a TUI about as far as it moves the scrollback |
-| Reattach | `stripTerminalQueries` patterns; replay buffer size | reattaching a session doesn't leak `0;276;0c`-style junk; scrollback survives |
+| Reattach | `stripTerminalQueries` patterns; replay buffer size; `tmuxTerminalModes` still reports `alternate_on` / `mouse_*_flag` on the installed tmux | reattaching a session doesn't leak `0;276;0c`-style junk; scrollback survives; after a reload the wheel still scrolls a Claude cell's transcript (#1073) |
 
 **Fast isolation techniques** (learned the hard way):
 - A terminal behavior that works on a **direct `term.write()`** but fails through a live session ⇒
@@ -266,4 +278,4 @@ looking) — flag them for QA on the release.
 `docs/spawn-architecture.md` (session lifecycle), `docs/gui-protocol-spike.md`,
 `docs/remote-host-protocol.md` (what the phone can ask of a session),
 `src/composables/useTerminalConnections.ts`, `server/infra/tmux.ts`, `server/session/*.ts`.
-Issues: #206, #263/#264/#293, #265/#266, #434, #445, #572, #729, #737, #772/#780, #776, #778, #782, #783/#785.
+Issues: #206, #263/#264/#293, #265/#266, #434, #445, #572, #729, #737, #772/#780, #776, #778, #782, #783/#785, #1073.

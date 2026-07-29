@@ -23,6 +23,21 @@ export function stripTerminalQueries(data: string): string {
   return QUERY_PATTERNS.reduce((out, re) => out.replace(re, ""), data);
 }
 
+// The DECSETs that put a reattaching browser back into the screen buffer and mouse modes the app
+// set once and never repeated (#1073) — read from tmux, sent AHEAD of the replay so the tail
+// renders where it was written.
+//
+// ONE SEQUENCE PER MODE, never `CSI ? 1049 ; 1003 h`. The client only swallows a sequence whose
+// parameters are ALL mouse modes (src/composables/mouseTrackingModes.ts); a combined one would
+// reach xterm, which would then do the mouse tracking itself and turn every drag into coordinate
+// reports instead of a text selection — the regression #729 exists to prevent.
+//
+// Order within the prefix doesn't matter (the client records modes into a Set, and xterm's mouse
+// state survives the buffer switch). Preceding the replay is what matters.
+export function terminalModePrefix(modes: readonly number[]): string {
+  return modes.map((mode) => `${ESC}[?${mode}h`).join("");
+}
+
 // A CSI sequence closes with a final byte in 0x40-0x7E; an OSC string closes with BEL
 // or ST. Neither can appear inside the sequence before its terminator, so the first
 // occurrence IS the end.

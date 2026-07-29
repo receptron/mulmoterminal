@@ -55,6 +55,22 @@ const HTML_PREVIEW_CSP = [
   "connect-src 'none'",
 ].join("; ");
 
+// Both preview routes end here, and it is one function because of WHICH headers these are: the
+// CSP is what gives an LLM-authored page an opaque origin, so a mount that served HTML without
+// it would run that page against the app's own origin. Both existing routes assert the header
+// (test/server/backends/html.spec.ts) — this is what makes the NEXT mount inherit it rather
+// than have to remember it.
+//
+// statSync follows symlinks, so isFile() judges the TARGET — a link to a directory or a FIFO
+// named `page.html` is refused here rather than hanging a read.
+function sendHtmlDocument(res: Response, abs: string): void {
+  if (!statFileOr404(res, abs)) return;
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
+  streamFileToResponse(abs, res);
+}
+
 /** Intercept the View's dispatch (loadHtml/saveHtml) on /api/plugin/presentHtml,
  *  before the generic plugin catch-all (which handles the tool-call). MUST be
  *  registered BEFORE mountAllRoutes. */
@@ -95,12 +111,7 @@ export function mountHtmlPreviewRoute(app: Express, deps: { workspace: string })
       res.status(400).json({ error: "not an .html file" });
       return;
     }
-    const stat = statFileOr404(res, abs);
-    if (!stat) return;
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
-    streamFileToResponse(abs, res);
+    sendHtmlDocument(res, abs);
   });
 }
 
@@ -137,14 +148,7 @@ export function mountHtmlFileRoute(app: Express): void {
           res.status(404).json({ error: "not found" });
           return;
         }
-        // statSync follows symlinks, so isFile() judges the TARGET — a link to a
-        // directory or a FIFO named `page.html` is refused rather than hanging a read.
-        const stat = statFileOr404(res, abs);
-        if (!stat) return;
-        res.setHeader("Content-Type", "text/html; charset=utf-8");
-        res.setHeader("X-Content-Type-Options", "nosniff");
-        res.setHeader("Content-Security-Policy", HTML_PREVIEW_CSP);
-        streamFileToResponse(abs, res);
+        sendHtmlDocument(res, abs);
       })
       .catch(() => {
         if (!res.headersSent) res.status(404).json({ error: "not found" });

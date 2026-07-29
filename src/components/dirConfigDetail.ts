@@ -90,6 +90,11 @@ function extraRows(extras: Record<string, unknown>): DirConfigRow[] {
   if (skills.length) rows.push({ key: "skills", label: "Skill menu", value: skills.join(", "), color: null });
   const addDirs = stringList(extras.addDirs);
   if (addDirs.length) rows.push({ key: "addDirs", label: "Extra directories", value: addDirs.join(", "), color: null });
+  // Both booleans are a setting, so the test is the TYPE, not truthiness — `false` is the whole
+  // reason someone opens this panel for this key, and a falsy check would hide exactly that.
+  if (typeof extras.appendSystemPrompt === "boolean") {
+    rows.push({ key: "appendSystemPrompt", label: "Closing summary", value: extras.appendSystemPrompt ? "on" : "off", color: null });
+  }
   const buttons = stringList(extras.buttonLabels);
   if (buttons.length) rows.push({ key: "buttons", label: "Header buttons", value: buttons.join(", "), color: null });
   const chips = stringList(extras.chipLabels);

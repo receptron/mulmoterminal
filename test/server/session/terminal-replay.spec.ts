@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { appendBoundedOutput, stripTerminalQueries } from "../../../server/session/terminal-replay.js";
+import { appendBoundedOutput, stripTerminalQueries, terminalModePrefix } from "../../../server/session/terminal-replay.js";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
@@ -138,5 +138,22 @@ describe("appendBoundedOutput", () => {
   it("stays within the limit", () => {
     const stream = `${"z".repeat(500)}\n${"w".repeat(500)}`;
     expect(appendBoundedOutput(stream, "more", 64).length).toBeLessThanOrEqual(64);
+  });
+});
+
+describe("terminalModePrefix", () => {
+  it("re-establishes each mode the reattaching browser lost", () => {
+    expect(terminalModePrefix([1049, 1003, 1006])).toBe(`${ESC}[?1049h${ESC}[?1003h${ESC}[?1006h`);
+  });
+
+  it("sends nothing when the pane has nothing sticky to restore", () => {
+    expect(terminalModePrefix([])).toBe("");
+  });
+
+  // A combined `CSI ? 1049 ; 1003 h` is NOT all mouse modes, so the client would let it through to
+  // xterm — which would then track the mouse itself and turn every drag into coordinate reports
+  // instead of a text selection (#729). One sequence per mode is what keeps the swallow working.
+  it("never combines modes into one parameter list", () => {
+    expect(terminalModePrefix([1049, 1003, 1006])).not.toContain(";");
   });
 });

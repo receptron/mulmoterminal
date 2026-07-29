@@ -11,6 +11,27 @@ const snapshot = (percent: number): RateLimitSnapshot => ({
 
 const cachedPercent = (file: string): number | null | undefined => parseRateLimitCache(readFileSync(file, "utf8")).codex?.limits.fiveHour?.usedPercentage;
 
+// The file survives upgrades, so it is the one input guaranteed to have been written by a
+// different version of this code — junk in it must cost the head start, never the feature.
+describe("parseRateLimitCache", () => {
+  it.each([
+    ["not JSON at all", "{ not json"],
+    ["a JSON array", "[]"],
+    // #1074 swapped a hand-copied `isRecord` for the shared one, which REJECTS arrays where the
+    // copy accepted them. Same answer either way — pinned so the swap stays invisible.
+    ["an array holding what looks like an entry", '[{"codex":{"limits":{"fiveHour":{"usedPercentage":5}},"reportedAt_ms":1}}]'],
+    ["an entry that is an array", '{"codex":[{"limits":{"fiveHour":{"usedPercentage":5}},"reportedAt_ms":1}]}'],
+    ["an entry with no timestamp", '{"codex":{"limits":{"fiveHour":{"usedPercentage":5}}}}'],
+  ])("reads %s as an empty cache", (_case, text) => {
+    expect(parseRateLimitCache(text)).toEqual({});
+  });
+
+  it("keeps an entry that carries both the limits and the timestamp", () => {
+    const text = JSON.stringify(snapshot(42));
+    expect(parseRateLimitCache(text).codex?.limits.fiveHour?.usedPercentage).toBe(42);
+  });
+});
+
 describe("createRateLimitCacheWriter", () => {
   let dir: string;
   let file: string;

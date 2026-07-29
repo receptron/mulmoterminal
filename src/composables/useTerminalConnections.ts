@@ -623,7 +623,7 @@ function handleMessage(c: Conn, event: MessageEvent) {
     // exit / superseded / error — a terminal message. messageEffect decides which retries,
     // which fires onExit (NOT superseded — the session is alive in another tab), and the
     // wording; this applies it.
-    const effect = messageEffect(msg.type, !!c.target.command, msg.message);
+    const effect = messageEffect(msg.type, !!c.target.command, msg.message, exitCodeOf(msg));
     if (!effect.terminal) return;
     c.sawExit = true;
     if (effect.banner) c.term.write(effect.banner);

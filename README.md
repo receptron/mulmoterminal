@@ -1,6 +1,6 @@
 # mulmoterminal
 
-**Run a whole team of coding agents from your browser — and actually keep up with them.**
+**Run multiple Claude Code and Codex sessions in parallel — and see which one needs you.**
 
 A **browser terminal** for **parallel AI coding agents**: several **Claude Code** and **Codex**
 sessions side by side, each in its own cell, with the one that needs you marked in colour. Vibe
@@ -14,6 +14,9 @@ and a **phone push** reaches you when a turn finishes.
   view, everyday workflows, the full feature list, configuration, and mobile push notifications.
 - **ユーザーガイド:** [日本語](https://receptron.github.io/mulmoterminal/guide/ja/) —
   グリッドの使い方・日々のワークフロー・機能一覧・設定・スマホ通知の設定はこちら。
+- **Updates / アップデート情報:** new releases and features are announced **in Japanese** on X —
+  新バージョンや新機能のお知らせは X の
+  [Singularity Society (@SingularitySoci)](https://x.com/SingularitySoci) で。
 
 ![MulmoTerminal — a grid of live Claude Code sessions, each color-coded by state, updating in real time](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/hero.gif)
 
@@ -564,6 +567,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `decisionDigest` | Keep a **Markdown digest of the decisions this project's sessions asked for**, refreshed at startup and every few hours, so an agent can read what has already been decided before asking something similar. Written to `~/.mulmoterminal/decisions/<project>.md` (never into your repository) and served to agents by the bundled `mulmoterminal-decisions` skill. **Off by default** — it is a vision-stage idea, and it writes a file that would otherwise not exist. The digest holds dated facts, never inferred rules. |
 | `issueWorkComments` | Let a cell **comment on the issue it is working on**: once when it starts, and again when its PR merges (closing the issue if GitHub has not already). The comment names the working **directory** it happened in — the folder name only, never the path — so a reader can tell which clone. **Off by default**; it writes to GitHub, often on somebody else's issue. Needs `gh` logged in. See the [Configuration guide](https://receptron.github.io/mulmoterminal/guide/en/config.html#issue-work-comments). |
 | `prWorkdirFooter` | Ends a PR body with `work in <clone>` — the directory name of the clone the work happened in, so a PR says which of several side-by-side checkouts produced it. Applies to **both** paths that open PRs here: **⧉ Open PR** appends it to the PR it creates, and every Claude session is told to end the bodies it writes with the same line (the name is resolved by the server, so a session inside a managed worktree still names the main checkout). **On by default**; set `false` to opt out — read per PR and per session spawn, so no restart is needed (there is no Settings control for it). Appending is idempotent: an existing PR never gets a second copy. |
+| `appendSystemPrompt` | Whether a spawned Claude session is asked to end a reply with a **closing summary** — what was asked, what was achieved, what was not (see [Closing summary](#closing-summary)). **On by default**; set `false` to opt out, and a directory's `.mulmoterminal.json` outranks this. Read per spawn, so no restart is needed (there is no Settings control for it), though a session already running keeps what it was launched with. `true` / `false` only. |
 | `fontFamily` | The **terminal font** every session renders in — a CSS font-family stack, e.g. `"'Cica', 'MS Gothic', monospace"`. No Settings UI: edit the file, then **restart** (this config is read once at startup). Unset uses the built-in stack (JetBrains Mono / Fira Code / Menlo / Consolas, then CJK faces for Japanese, Korean and Chinese). Unlike the per-browser font **size**, this is one value for the whole host — it names fonts, and which fonts exist is a property of the machine. A directory can override it. See the [Configuration guide](https://receptron.github.io/mulmoterminal/guide/en/config.html#font-family). |
 
 Every MulmoTerminal on the machine shares this one file, so an older build could save over a key a
@@ -686,7 +690,8 @@ malformed file is ignored.
   "fontFamily": "'Cica', monospace",    // terminal font stack; overrides the global config
   "orderPriority": 10,                  // rank in the grid's "priority" ordering (lowest first)
   "sound": "./.mulmoterminal/alert.mp3", // attention sound, RELATIVE to this directory
-  "sounds": { "command-failed": "preset:gong" } // per-notification-kind override
+  "sounds": { "command-failed": "preset:gong" }, // per-notification-kind override
+  "appendSystemPrompt": false           // no closing summary here; omit to follow the global setting
 }
 ```
 
@@ -711,6 +716,7 @@ malformed file is ignored.
 | `fontFamily` | CSS font-family stack for this directory's terminals, overriding the global `fontFamily`. Use the names as your OS lists them (`"'Cica', 'MS Gothic', monospace"`). An unusable stack is ignored whole rather than half-applied; `monospace` is appended if you name no generic family. Prefer fonts whose fullwidth glyphs are exactly twice the Latin width, or box-drawing frames tear. |
 | `sound`      | Attention sound for this directory's sessions, a path **relative to the directory** (served at `GET /api/dir-sound`). The fallback for every kind. |
 | `sounds`     | Per-kind override of `sound`: `{ "command-failed": "preset:gong" }`. Each value is a `preset:<id>` or a directory-relative path, under the same confinement. |
+| `appendSystemPrompt` | Whether this directory's Claude sessions are asked to end a reply with a **closing summary** (see [Closing summary](#closing-summary)). Omit to follow the global `appendSystemPrompt`, which is on; `true` / `false` here outranks it. Read per spawn, so a new session in this directory picks up an edit without a restart. |
 | `addDirs`    | Extra directories this project's Claude sessions may read and edit — the terminal-side equivalent of opening several folders in one VS Code workspace, via Claude Code's `--add-dir`. Relative entries resolve against **this file's directory** (`"../shared-lib"`), a path that doesn't exist is dropped, max 16. In the Docker sandbox each one is bind-mounted too, so the grant is real inside the container — which widens the sandbox on purpose. Claude only: codex has no equivalent flag and ignores the key. |
 
 **Security.** `sound` and every `sounds` entry are directory-relative paths only — absolute
@@ -1484,7 +1490,17 @@ placed last with nothing after it.
 
 It is deliberately **not** written on every turn: mid-work replies and short factual answers
 carry no standing request, and a summary that always appears stops being read. The wording
-lives in `server/agents/session-summary-prompt.ts`; there is no setting to turn it off.
+lives in `server/agents/session-summary-prompt.ts`.
+
+**On by default, and switchable off** with `appendSystemPrompt: false` — in
+`~/.mulmoterminal/config.json`, or in a directory's `.mulmoterminal.json`, which outranks the
+global value. Read per spawn, so no restart is needed; a session already running keeps what it
+was launched with. Nothing in the app parses what the summary says, so turning it off costs no
+feature — the roster and push notifications simply show the raw tail of the reply.
+
+Which sections `--append-system-prompt` ends up carrying is decided in
+`server/agents/appended-prompt.ts`: this one and the `prWorkdirFooter` clone line are separate
+settings on the same flag, and with both off the flag is not passed at all.
 
 Passed inline rather than as `--append-system-prompt-file` for the same reason `--settings`
 is: the sandbox spawn runs in a container that cannot read a host path.
@@ -1503,12 +1519,13 @@ has its `/` and `.` characters replaced with `-` (e.g.
 A session's display **title** is derived by scanning its JSONL for, in order of
 preference:
 
-1. a live **AI title** the server generated for the session this run (see below),
-2. else the latest `ai-title` record's `aiTitle` (e.g. written by MulmoClaude),
-3. else the latest `last-prompt` record's `lastPrompt`,
-4. else the first real user message (slash/local-command wrappers like
+1. the **session note** the user wrote (see below),
+2. else a live **AI title** the server generated for the session this run (see below),
+3. else the latest `ai-title` record's `aiTitle` (e.g. written by MulmoClaude),
+4. else the latest `last-prompt` record's `lastPrompt`,
+5. else the first real user message (slash/local-command wrappers like
    `<local-command-…>` are skipped),
-5. else `"(untitled session)"`.
+6. else `"(untitled session)"`.
 
 In-memory sessions not yet persisted show as `"New session"` until their file
 appears, at which point the on-disk title takes over.
@@ -1527,6 +1544,23 @@ only when a title is **due**: none yet, the newest prompt was a trivial/context-
 ack (so the raw last prompt would be stale), or every few turns to keep a long session's
 title current. The title lives in memory (never written into Claude's own transcript); a
 resumed session falls back to any on-disk `ai-title`.
+
+### Session note
+
+Every tier above says what the **agent** said, which stops answering "which cell is this?"
+once several sessions are open. So a cell header also takes a **note you write yourself**: the
+pencil button beside the header text opens a one-line box (Enter saves, Esc cancels, clicking
+away saves). While a note is set it *replaces* the header line — the title it displaced stays in
+the tooltip — and it becomes the session's title in the sidebar list and on the phone's roster
+too, so one session goes by one name everywhere.
+
+Notes are capped at 200 characters and folded to a single line. They are stored per **session
+id** in `~/.mulmoterminal/session-memos.jsonl` and survive both the session being reaped and a
+server restart: resume the session and the note comes back. Saving one publishes it on the
+`sessions` channel, so every other open tab and the phone update without asking.
+
+`POST /api/session/:id/memo` with `{ "text": "…" }` writes one; an empty `text` erases it. The
+route answers with the **stored** text, which is what a reload will show.
 
 ---
 

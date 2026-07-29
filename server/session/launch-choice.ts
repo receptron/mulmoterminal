@@ -38,9 +38,9 @@ export function launchChoiceFromParams(params: URLSearchParams): DirModelChoice 
 
 export interface ChoiceInputs {
   // What the browser picked for the session it is starting now.
-  launch?: DirModelChoice;
+  launch?: DirModelChoice | undefined;
   // What THIS session id was started on, when this server is the one that started it.
-  remembered?: DirModelChoice;
+  remembered?: DirModelChoice | undefined;
   // The directory's own default.
   dir: DirModelChoice;
   // Continuing an existing conversation rather than beginning one.

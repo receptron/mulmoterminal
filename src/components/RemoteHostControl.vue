@@ -60,10 +60,11 @@ const errorText = (err: unknown): string => (err instanceof Error ? err.message 
 
 async function fetchStatus(url: string, method: "GET" | "POST", body?: unknown): Promise<FetchResult> {
   try {
+    // RequestInit spells its fields exact, and `body: undefined` is not the same as no body —
+    // so a GET here has to omit both keys rather than send them empty.
     const res = await fetch(url, {
       method,
-      headers: body ? { "content-type": "application/json" } : undefined,
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body ? { headers: { "content-type": "application/json" }, body: JSON.stringify(body) } : {}),
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => null);

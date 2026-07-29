@@ -15,12 +15,12 @@ export interface McpConfigInput {
   sessionId: string;
   // 127.0.0.1 rather than localhost avoids an IPv6/IPv4 resolution mismatch against the
   // server's listen address.
-  host?: string;
+  host?: string | undefined;
   port: string | number;
   // The user's own HTTP MCP servers (Settings).
   userMcpServers: readonly UserMcpServer[];
   // Inside a container the user's loopback URLs have to be rewritten to reach the host.
-  sandbox?: boolean;
+  sandbox?: boolean | undefined;
 }
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -70,7 +70,7 @@ export function codexGuiMcpServers({
   allTools,
 }: {
   sessionId: string;
-  host?: string;
+  host?: string | undefined;
   port: string | number;
   groups: readonly ToolGroup[];
   /** The single view, which carries every tool on one URL rather than a URL per group. */

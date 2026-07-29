@@ -9,6 +9,7 @@ import {
   type CaptureScreenDeps,
   type SessionListInput,
 } from "../../../../server/backends/remoteHost/terminalScreen.js";
+import { undefinedPaths } from "@mulmoclaude/core/remote-host/server";
 
 const ESC = String.fromCharCode(0x1b);
 
@@ -283,5 +284,43 @@ describe("definedScreenMeta", () => {
   // a prompt's own leading spaces are the user's text, not ours to edit.
   it("passes a value with surrounding whitespace through unchanged", () => {
     expect(definedScreenMeta({ prompt: "  fix it  " })).toEqual({ prompt: "  fix it  " });
+  });
+});
+
+// The regression itself (#1042). `expect(s.work).toBeUndefined()` passes for BOTH shapes, so it
+// has to be `Object.hasOwn` — the broken form is a present key HOLDING undefined, which Firestore
+// refuses, taking the whole reply down with it rather than just that field.
+//
+// Asserted against core's own `undefinedPaths` because core is what guards this write now (#1064):
+// the check and the shipping guard are then the same code, not two descriptions of one rule.
+describe("buildSessionList — the shape that reached Firestore (#1042)", () => {
+  const WORK = { pr: 987, issue: 979, phase: "ready" as const, headline: "hi" };
+
+  const listWith = (work: Map<string, typeof WORK>) =>
+    buildSessionList({
+      liveIds: ["with-work", "without-work"],
+      tmuxIds: [],
+      isResumable: () => true,
+      isGridSession: () => true,
+      detailOf: (id) => {
+        const summary = work.get(`/work/${id}`);
+        return { title: `session ${id}`, cwd: `/work/${id}`, agent: "claude" as const, ...(summary ? { work: summary } : {}) };
+      },
+    });
+
+  it("omits the key entirely for a session with no work item", () => {
+    const bare = listWith(new Map([["/work/with-work", WORK]])).find((session) => session.id === "without-work");
+    expect(bare).toBeDefined();
+    expect(bare && Object.hasOwn(bare, "work")).toBe(false);
+  });
+
+  it("still carries the work item for the session that has one", () => {
+    expect(listWith(new Map([["/work/with-work", WORK]])).find((session) => session.id === "with-work")?.work).toEqual(WORK);
+  });
+
+  // The end-to-end statement: whatever the mix, the reply is one Firestore will accept.
+  it("produces a list core's guard finds nothing to strip in", () => {
+    expect(undefinedPaths({ sessions: listWith(new Map([["/work/with-work", WORK]])) })).toEqual([]);
+    expect(undefinedPaths({ sessions: listWith(new Map()) })).toEqual([]);
   });
 });

@@ -21,7 +21,7 @@ export interface HookSettingsInput {
   // it lands identically on the host, under tmux — where a pane inherits the tmux SERVER's
   // environment, not ours — and inside a container. Omitted entirely when empty, so a
   // non-provider session's settings stay free of anything secret.
-  env?: Record<string, string>;
+  env?: Record<string, string> | undefined;
 }
 
 // Tag every hook with mulmoterminal's STABLE session id via a header. Claude reissues its own

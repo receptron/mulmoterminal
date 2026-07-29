@@ -7,9 +7,9 @@ export const ALLOWED_IMAGE_MIME = new Set(["image/png", "image/jpeg", "image/web
 const DEFAULT_IMAGE_MIME = "image/png";
 
 export type ImageResult = {
-  imageData?: string;
+  imageData?: string | undefined;
   mimeType: string;
-  text?: string;
+  text?: string | undefined;
 };
 
 const safeMimeType = (mimeType: string | undefined): string => (mimeType && ALLOWED_IMAGE_MIME.has(mimeType) ? mimeType : DEFAULT_IMAGE_MIME);

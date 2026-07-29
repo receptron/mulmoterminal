@@ -2,11 +2,11 @@
 // Knowing which servers are alive (#1061). Two things depend on this and both used to guess:
 // the launcher only noticed a peer when the PORT clashed, and the settings prune assumed the
 // only PTYs that ever existed were its own.
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { earliestStartedAt, isProcessAlive, liveInstances, registerInstance } from "../../bin/instances.js";
+import { earliestStartedAt, instancesDir, isProcessAlive, liveInstances, registerInstance } from "../../bin/instances.js";
 
 describe("isProcessAlive", () => {
   it("says yes for this very process", () => {
@@ -49,15 +49,19 @@ describe("earliestStartedAt", () => {
 // peer, and the over-pruning this whole change prevents would come straight back.
 describe("liveInstances — a live peer must not be erasable", () => {
   const dirs: string[] = [];
+  // Both, because `os.homedir()` reads USERPROFILE on Windows and HOME everywhere else —
+  // stubbing only HOME left the Windows run pointed at the runner's own home, so one test
+  // failed and the parse-guard one passed while asserting nothing ("the file is still there"
+  // is trivially true when the code never looked at that directory). Same shape, same reason
+  // as test/server/config/unknown-config-keys.spec.ts (#1079).
   const withHome = <T>(run: () => T): T => {
     const home = mkdtempHome();
-    const prev = process.env.HOME;
-    process.env.HOME = home;
+    vi.stubEnv("HOME", home);
+    vi.stubEnv("USERPROFILE", home);
     try {
       return run();
     } finally {
-      if (prev === undefined) delete process.env.HOME;
-      else process.env.HOME = prev;
+      vi.unstubAllEnvs();
     }
   };
   const mkdtempHome = () => {
@@ -66,8 +70,20 @@ describe("liveInstances — a live peer must not be erasable", () => {
     dirs.push(dir);
     return dir;
   };
-  const entriesDir = () => path.join(process.env.HOME ?? "", ".mulmoterminal", "instances");
+  const entriesDir = () => path.join(homedir(), ".mulmoterminal", "instances");
   afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+  // Guards the redirection itself. Without it, a home var the platform ignores makes every
+  // test in this block read some other directory, and the ones that assert a file SURVIVES
+  // keep passing while testing nothing.
+  it("redirects the directory the code actually reads, not just HOME", () => {
+    withHome(() => {
+      // `dirs` holds only homes THIS block created, so this fails on any platform whose
+      // homedir() ignores the vars we set — which is what happened on Windows.
+      expect(dirs).toContain(homedir());
+      expect(instancesDir()).toBe(path.join(homedir(), ".mulmoterminal", "instances"));
+    });
+  });
 
   it("leaves an entry it cannot parse alone, instead of deleting it", () => {
     withHome(() => {

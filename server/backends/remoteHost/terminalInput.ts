@@ -62,7 +62,7 @@ export interface TerminalInputDeps {
   // host KNOWS the session is idle, because Ctrl-C mid-turn interrupts the turn and in
   // a shell it kills whatever is running. Omitted means no — the old behaviour of
   // pasting on top of whatever is there.
-  canClearBox?: (sessionId: string) => boolean;
+  canClearBox?: ((sessionId: string) => boolean) | undefined;
   // The byte(s) that SUBMIT for this session (#772). The `terminalSubmit` mapping is the
   // host's Claude binding, so it applies only to Claude sessions — resolved per session id
   // (a shell/codex session in the picker stays on plain CR). Read per send so a config edit

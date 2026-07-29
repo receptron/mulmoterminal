@@ -16,11 +16,10 @@
 // "show nothing", and a gauge reading 0% when the truth is 83% is the worst thing this could do.
 
 import type { RateLimits, RateLimitWindow } from "../../common/rateLimits.js";
+import { isRecord } from "../../common/isRecord.js";
+import { finiteNumber } from "../../common/finiteNumber.js";
 
 export type { RateLimits, RateLimitWindow };
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
-const finiteNumber = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 function windowFrom(raw: unknown): RateLimitWindow | null {
   if (!isRecord(raw)) return null;

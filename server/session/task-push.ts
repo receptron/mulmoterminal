@@ -10,6 +10,7 @@ import { buildPushText } from "./activity-hook.js";
 import type { PushKind } from "../../common/pushKinds.js";
 import { asTerminalAgent } from "../../common/sessionAgent.js";
 import { aiTitles, isBackgroundSession, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
+import { clearedTranscripts } from "./cleared-transcripts.js";
 import { sessionLastTurn, LAST_RESPONSE_MAX } from "./session-reads.js";
 import { buildPushDetail, pushWhere, shouldSuppressPush, wantsPushKind } from "./taskPushRules.js";
 
@@ -43,7 +44,9 @@ export async function notifyTaskFinished(sessionId: string, kind: PushKind, mess
   if (shouldSuppressPush(isBackgroundSession(sessionId), translationWorkerIds.has(sessionId))) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = pushWhere(cwd);
-  const reply = kind === "finished" && cwd ? await latestReply(sessionId, cwd) : null;
+  // Not after a `/clear`: our transcript is frozen on the conversation the user just ended, so
+  // what it holds is neither this turn's reply nor anything to put back in the roster (#1085).
+  const reply = kind === "finished" && cwd && !clearedTranscripts.has(sessionId) ? await latestReply(sessionId, cwd) : null;
   if (reply) lastResponses.set(sessionId, reply); // keep the roster in step; we just read it
   const detail = buildPushDetail({ reply, lastPrompt: lastPrompts.get(sessionId), aiTitle: aiTitles.get(sessionId) });
   const { title, body } = buildPushText(kind, where, detail, message, { title: PUSH_TITLE_MAX, body: PUSH_BODY_MAX });

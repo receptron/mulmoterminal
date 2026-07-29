@@ -46,13 +46,17 @@ function fakeSocket(readyState = OPEN) {
   };
 }
 
-function setup() {
+function setup(terminalModes: readonly number[] = []) {
   const calls: string[] = [];
   const handlers = createConnectionHandlers({
     cancelReap: (id) => calls.push(`cancelReap:${id}`),
     reap: (id) => calls.push(`reap:${id}`),
     setWaiting: (id, waiting) => calls.push(`setWaiting:${id}:${waiting}`),
     armReapForDetached: (id) => calls.push(`armReap:${id}`),
+    terminalModesOf: (id) => {
+      calls.push(`terminalModes:${id}`);
+      return terminalModes;
+    },
   });
   return { ...handlers, calls };
 }
@@ -251,10 +255,54 @@ describe("reattachPty", () => {
     expect(s.parsed()[0].data).not.toContain("\x1b[c");
   });
 
-  it("sends nothing when there is no buffered output", () => {
+  it("sends nothing when there is no buffered output and no modes to restore", () => {
     const { reattachPty } = setup();
     const s = fakeSocket();
     reattachPty(entryWith({ ws: null, buffer: "" }), s.ws as never, SESSION);
+    expect(s.sent).toEqual([]);
+  });
+
+  // #1073: `CSI ? 1049 h` is written once at pty offset 0 and has long fallen off the bounded
+  // tail, so without this the browser restores into the NORMAL buffer and the wheel and click
+  // synthesis (#737/#845) stay switched off for the rest of the session.
+  it("re-establishes the pane's modes before replaying the tail", () => {
+    const { reattachPty } = setup([1049, 1003, 1006]);
+    const s = fakeSocket();
+    const entry = entryWith({ ws: null, buffer: "previous output", tmux: true });
+    reattachPty(entry, s.ws as never, SESSION);
+    expect(s.parsed()).toEqual([{ type: "output", data: `\x1b[?1049h\x1b[?1003h\x1b[?1006h${"previous output"}` }]);
+  });
+
+  it("restores the modes even when the tail is empty", () => {
+    // A session reattached right after a reset has nothing to replay and still owns the alt buffer.
+    const { reattachPty } = setup([1049]);
+    const s = fakeSocket();
+    reattachPty(entryWith({ ws: null, buffer: "", tmux: true }), s.ws as never, SESSION);
+    expect(s.parsed()).toEqual([{ type: "output", data: "\x1b[?1049h" }]);
+  });
+
+  it("asks nothing of tmux for a session that isn't tmux-backed", () => {
+    const { reattachPty, calls } = setup([1049]);
+    const s = fakeSocket();
+    reattachPty(entryWith({ ws: null, buffer: "sandboxed output" }), s.ws as never, SESSION);
+    expect(calls).toEqual([`cancelReap:${SESSION}`]);
+    expect(s.parsed()).toEqual([{ type: "output", data: "sandboxed output" }]);
+  });
+
+  it("leaves a pane with nothing sticky set replaying exactly as before", () => {
+    // A plain shell reports every flag off — restoring `?1049h` there would strand it in an
+    // alternate buffer it never asked for, losing its scrollback.
+    const { reattachPty } = setup([]);
+    const s = fakeSocket();
+    reattachPty(entryWith({ ws: null, buffer: "$ ls\n", tmux: true }), s.ws as never, SESSION);
+    expect(s.parsed()).toEqual([{ type: "output", data: "$ ls\n" }]);
+  });
+
+  it("does not query a socket that is already gone", () => {
+    const { reattachPty, calls } = setup([1049]);
+    const s = fakeSocket(CLOSED);
+    reattachPty(entryWith({ ws: null, buffer: "x", tmux: true }), s.ws as never, SESSION);
+    expect(calls).toEqual([`cancelReap:${SESSION}`]);
     expect(s.sent).toEqual([]);
   });
 

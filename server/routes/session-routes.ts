@@ -21,6 +21,9 @@ import {
   isBackgroundSession,
   lastPrompts,
   lastResponses,
+  sessionMemos,
+  sessionMemosHydrated,
+  setSessionMemo,
   translationWorkerIds,
 } from "../session/registry.js";
 import {
@@ -38,6 +41,7 @@ import { listCodexSessions } from "../agents/codex-sessions.js";
 import type { SessionMeta } from "../session/types.js";
 import { parseActivityIds, selectSessionRows } from "../session/session-list.js";
 import { sessionDetailView } from "../session/session-detail-view.js";
+import { clearedTranscripts } from "../session/cleared-transcripts.js";
 
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
@@ -52,6 +56,9 @@ const ACTIVITY_IDS_LIMIT = 200;
 export interface SessionRouteDeps {
   /** Kick off a re-title for a session the roster just showed, when it has moved on enough. */
   freshenRosterTitle: (sessionId: string, cwd: string, currentUserTurns: number) => void;
+  /** Fan a session's row out on the "sessions" channel, so every OTHER open cell, tab and
+   *  phone sees an edited memo without asking. */
+  publishActivity: (sessionId: string) => void;
 }
 
 // GRID-ONLY (dev_tool): initial per-session status + last prompt, so a grid cell
@@ -67,12 +74,38 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   const { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse, userTurns, usage, context, workPhase } = await readSessionSummary(cwd, id);
   // If we haven't titled it yet, kick off a summary; sessionDetailView falls back meanwhile.
   freshenRosterTitle(id, cwd, userTurns);
+  await sessionMemosHydrated; // a cell seeding on boot must not be told its memo is gone
   const view = sessionDetailView(
-    { lastPrompt: lastPrompts.get(id), lastResponse: lastResponses.get(id), aiTitle: aiTitles.get(id) },
+    { lastPrompt: lastPrompts.get(id), lastResponse: lastResponses.get(id), aiTitle: aiTitles.get(id), memo: sessionMemos.get(id) },
     { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse },
     activity.get(id) ?? {},
+    clearedTranscripts.has(id),
   );
   res.json({ id, cwd, ...view, usage, context, workPhase });
+}
+
+// The user's one-line note on a session (#1084). An empty text ERASES it — the same route, so a
+// cleared input box needs no second endpoint and cannot be half-applied.
+async function setMemo(req: Request<{ id: string }>, res: Response, publishActivity: SessionRouteDeps["publishActivity"]) {
+  const { id } = req.params;
+  if (!SESSION_ID_RE.test(id)) return res.status(400).json({ error: "invalid session id" });
+  const { text } = req.body ?? {};
+  if (typeof text !== "string") return res.status(400).json({ error: "text must be a string" });
+  await sessionMemosHydrated; // or a write during startup is undone by the file it raced
+  try {
+    // Awaited: acknowledging before the append lands would show the user a note that is not saved
+    // anywhere, and it would then disappear at the next restart with nothing having reported an
+    // error. The store rolls its own in-memory value back on failure, so a 500 leaves both sides
+    // agreeing that the memo was not written.
+    const memo = await setSessionMemo(id, text);
+    publishActivity(id);
+    // The STORED memo, not the request's: normalization collapses and caps what was typed, and a
+    // client that echoed its own text would show something the next reload disagrees with.
+    res.json({ id, memo });
+  } catch (err) {
+    console.error("[api] /api/session/:id/memo failed:", err);
+    res.status(500).json({ error: "failed to save the memo" });
+  }
 }
 
 // Attention state (working / waiting / event) for an explicit set of session ids.
@@ -135,6 +168,7 @@ async function sessionList(req: Request, res: Response) {
     // than whether the row is listed, and that flag is answered either way.
     if (includePending) await devTerminalSessionsHydrated;
     await backgroundSessionsHydrated;
+    await sessionMemosHydrated; // the memo is the row's TITLE when there is one — a race shows the agent's words instead
     const dir = projectSessionsDir(cwd);
     let files: string[] = [];
     try {
@@ -194,6 +228,7 @@ async function codexSessionList(req: Request, res: Response) {
 
 export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   app.get("/api/session/:id", (req, res) => sessionDetail(req, res, deps.freshenRosterTitle));
+  app.post("/api/session/:id/memo", (req, res) => setMemo(req, res, deps.publishActivity));
   app.get("/api/activity", activitySnapshot);
   app.get("/api/transcript/timeline", toolTimeline);
   app.get("/api/transcript/last-turn", lastTurn);

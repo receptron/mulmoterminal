@@ -103,6 +103,7 @@ describe("sessionRow", () => {
       lastPrompt: null,
       aiTitle: null,
       lastResponse: null,
+      memo: null,
     });
   });
 
@@ -132,6 +133,13 @@ describe("sessionRow", () => {
     });
   });
 
+  // A memo is what the cell header, the sidebar and the phone all name the session by, and this
+  // row is how an edit in one tab reaches the others.
+  it("carries the memo, and publishes null for a session with none", () => {
+    expect(sessionRow("S", undefined, null, { memo: "release check" }).memo).toBe("release check");
+    expect(sessionRow("S", undefined, null, {}).memo).toBeNull();
+  });
+
   it("keeps a null cwd, which is what a reaped session has", () => {
     expect(sessionRow("S", { working: true }, null, {}).cwd).toBeNull();
   });
@@ -139,19 +147,25 @@ describe("sessionRow", () => {
 
 describe("shouldRefreshReply", () => {
   it("refreshes when a turn just ended and there is a transcript to read", () => {
-    expect(shouldRefreshReply({ waiting: true }, "/ws")).toBe(true);
+    expect(shouldRefreshReply({ waiting: true }, "/ws", false)).toBe(true);
   });
 
   it("does not refresh a session that is not waiting", () => {
     // Re-reading on every publish would put a file read in the path of each hook.
-    expect(shouldRefreshReply({ working: true }, "/ws")).toBe(false);
-    expect(shouldRefreshReply({ waiting: false }, "/ws")).toBe(false);
-    expect(shouldRefreshReply({}, "/ws")).toBe(false);
-    expect(shouldRefreshReply(undefined, "/ws")).toBe(false);
+    expect(shouldRefreshReply({ working: true }, "/ws", false)).toBe(false);
+    expect(shouldRefreshReply({ waiting: false }, "/ws", false)).toBe(false);
+    expect(shouldRefreshReply({}, "/ws", false)).toBe(false);
+    expect(shouldRefreshReply(undefined, "/ws", false)).toBe(false);
   });
 
   it("does not refresh without a cwd — there is no transcript to read", () => {
-    expect(shouldRefreshReply({ waiting: true }, null)).toBe(false);
-    expect(shouldRefreshReply({ waiting: true }, "")).toBe(false);
+    expect(shouldRefreshReply({ waiting: true }, null, false)).toBe(false);
+    expect(shouldRefreshReply({ waiting: true }, "", false)).toBe(false);
+  });
+
+  it("does not refresh a cleared session — its transcript is the conversation the user ended", () => {
+    // The turn that ends AFTER a /clear is the one that used to put the pre-clear reply back
+    // into the roster (#1085): waiting is true and the cwd is right, so only this says no.
+    expect(shouldRefreshReply({ waiting: true }, "/ws", true)).toBe(false);
   });
 });

@@ -18,6 +18,26 @@ describe("messageEffect", () => {
   it("words the exit banner by whether the slot is a command", () => {
     expect(messageEffect("exit", true).banner).toContain("[finished]");
     expect(messageEffect("exit", false).banner).toContain("[session ended]");
+    expect(messageEffect("exit", true, undefined, 0).banner).toContain("[finished]");
+    expect(messageEffect("exit", false, undefined, 0).banner).toContain("[session ended]");
+  });
+
+  // A binary that could not run leaves NO other trace — no output, and under tmux the pane's
+  // own error is wiped by the alt-screen restore. The status is the only evidence there is, so
+  // a non-zero one must reach the screen instead of reading as a clean finish (#1063).
+  it("names a non-zero exit status in the banner", () => {
+    expect(messageEffect("exit", false, undefined, 1).banner).toContain("exit 1");
+    expect(messageEffect("exit", true, undefined, 127).banner).toContain("exit 127");
+  });
+
+  // Red for a failure, the same colour the error banner uses; green stays the clean-exit signal.
+  it("colours a non-zero exit like an error and a clean one like a success", () => {
+    const RED = "\x1b[31m";
+    const GREEN = "\x1b[33m";
+    expect(messageEffect("exit", false, undefined, 1).banner).toContain(RED);
+    expect(messageEffect("exit", false, undefined, 0).banner).toContain(GREEN);
+    // No status reported at all is not a failure — it is a server that named none.
+    expect(messageEffect("exit", false, undefined, null).banner).toContain(GREEN);
   });
 
   // THE decision this file exists for: superseded is terminal (don't reconnect — the two tabs

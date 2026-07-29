@@ -7,6 +7,28 @@ describe("dirConfigRows", () => {
     expect(dirConfigRows(null)).toEqual([]);
   });
 
+  // #1062. A boolean setting has no resolved value to read back off the per-cell config the way a
+  // colour does, so it reaches the preview through `extras`. Without a row, a file whose only
+  // setting is this one renders as "sets nothing this app applies" — the opposite of the truth,
+  // on the panel someone opens BECAUSE a setting looks like it isn't working.
+  describe("appendSystemPrompt", () => {
+    it.each([
+      ["off", false, "off"],
+      ["on", true, "on"],
+    ])("shows an explicit %s", (_case, appendSystemPrompt, value) => {
+      const rows = dirConfigRows({}, { appendSystemPrompt });
+      expect(rows).toEqual([{ key: "appendSystemPrompt", label: "Closing summary", value, color: null }]);
+    });
+
+    it.each([
+      ["the key is absent", {}],
+      ["the loader rejected the value", { appendSystemPrompt: null }],
+      ["it arrived as something other than a boolean", { appendSystemPrompt: "off" }],
+    ])("shows no row when %s", (_case, extras) => {
+      expect(dirConfigRows({}, extras)).toEqual([]);
+    });
+  });
+
   it("lists only what is set, name first and colours in the order the eye meets them", () => {
     const rows = dirConfigRows({ name: "proj", badgeColor: "#445566", headerColor: "#112233", fontSize: 14 });
     expect(rows.map((r) => r.key)).toEqual(["name", "headerColor", "badgeColor", "fontSize"]);

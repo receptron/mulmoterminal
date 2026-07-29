@@ -4,6 +4,7 @@
 import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
 import { buildCodexArgs } from "../agents/codex-args.js";
+import { codexAdapter } from "../agents/codex.js";
 import type { ToolGroup } from "../../common/toolGroups.js";
 import { codexGuiMcpServers } from "./mcp-config.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "../agents/codex-session.js";
@@ -11,6 +12,7 @@ import { codexRolloutPath } from "../agents/codex-sessions.js";
 import { trackCodexActivity } from "./codex-activity-track.js";
 import { claimedCodexRollouts, codexRolloutIds, ptys } from "./registry.js";
 import { ptySpawn } from "./pty-spawn.js";
+import { ptyStartLine } from "./pty-exit-log.js";
 import { wireAgentPtyRelay } from "./pty-relay.js";
 import { attachCodexAutoRun } from "./draft-injection.js";
 import type { PtyEntry } from "./types.js";
@@ -70,10 +72,10 @@ export function createCodexSpawner(deps: SpawnDeps) {
     // A grid cell whose directory registered nothing gets no MCP at all, exactly as before.
     const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: mcpGroups, allTools: attachGuiMcp });
     const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers });
-    const { term, tmux } = ptySpawn(sessionId, deps.codexBin, args, cwd, true);
-    const via = tmux ? " via tmux" : "";
-    const resumeNote = resumeRolloutId ? ` (resume ${resumeRolloutId})` : "";
-    console.log(`[pty] spawned codex (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
+    const { term, tmux, reattached } = ptySpawn(sessionId, deps.codexBin, args, cwd, true, { binEnvVar: codexAdapter.binEnvVar });
+    const spawnedAtMs = Date.now();
+    const note = resumeRolloutId ? `resume ${resumeRolloutId}` : null;
+    console.log(ptyStartLine({ agent: "codex", pid: term.pid, cwd, tmux, reattached, sessionId, note }));
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
     ptys.set(sessionId, entry);
     if (resumeRolloutId) {
@@ -88,7 +90,7 @@ export function createCodexSpawner(deps: SpawnDeps) {
     // A seed prompt is typed into codex's input box after it settles (not a CLI arg — see
     // attachCodexAutoRun), so a long collection-action prompt can't overflow tmux's command limit.
     const autoRun = initialPrompt ? attachCodexAutoRun(entry, initialPrompt) : undefined;
-    wireAgentPtyRelay(entry, sessionId, deps, autoRun);
+    wireAgentPtyRelay(entry, sessionId, spawnedAtMs, deps, autoRun);
     return entry;
   }
 

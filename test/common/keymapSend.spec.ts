@@ -18,7 +18,7 @@ const keydown = (over: Partial<{ key: string; shiftKey: boolean; altKey: boolean
   ...over,
 });
 
-const withSend = (send: Keymap["send"]): Keymap => ({ send });
+const withSend = (send: Keymap["send"]): Keymap => ({ ...(send ? { send } : {}) });
 
 describe("sendBytesFor", () => {
   it("returns the bound bytes for a matching keystroke", () => {

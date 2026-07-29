@@ -24,12 +24,22 @@ const RED = "\x1b[31m";
 const RESET = "\x1b[0m";
 const line = (colour: string, text: string) => `\r\n${colour}${text}${RESET}\r\n`;
 
+// A program that could not run at all leaves nothing else to read: it writes no output, and
+// under tmux whatever the pane did print is wiped by the alt-screen restore on the way out. The
+// status is then the only evidence there was, so a non-zero one is named and coloured rather
+// than folded into the same "[session ended]" a clean exit gets (#1063).
+const exitBanner = (isCommand: boolean, exitCode: number | null): string => {
+  const what = isCommand ? "finished" : "session ended";
+  if (exitCode === null || exitCode === 0) return line(GREEN, `[${what}]`);
+  return line(RED, `[${what} — exit ${exitCode}]`);
+};
+
 // `isCommand` is whether this slot runs a one-off Run command rather than an agent session —
 // it only changes the wording of the exit banner.
-export function messageEffect(type: string | undefined, isCommand: boolean, errorMessage?: unknown): MessageEffect {
+export function messageEffect(type: string | undefined, isCommand: boolean, errorMessage?: unknown, exitCode: number | null = null): MessageEffect {
   switch (type) {
     case "exit":
-      return { terminal: true, callsOnExit: true, banner: line(GREEN, isCommand ? "[finished]" : "[session ended]") };
+      return { terminal: true, callsOnExit: true, banner: exitBanner(isCommand, exitCode) };
     case "superseded":
       return { terminal: true, callsOnExit: false, banner: line(GREEN, "[detached — this session is open in another window]") };
     case "error": {

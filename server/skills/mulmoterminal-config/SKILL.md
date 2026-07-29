@@ -267,6 +267,18 @@ that don't resolve to a real skill are simply ignored.
 { "skills": ["review-diff", "commit-msg"] }
 ```
 
+### Closing summary — `appendSystemPrompt`
+
+Whether this directory's sessions are asked to end a reply with a short summary of what was
+asked, what was achieved and what was not. **Omit it to follow the global setting**, which is on
+— see the global section below for what the instruction says and what changes without it.
+
+```json
+{ "appendSystemPrompt": false }
+```
+
+`true` / `false` only; a directory that sets it outranks the global value.
+
 ### `${var}` substitution (in `cmd` / `text` / `open` / custom chip `text`)
 
 `${dir}` `${dirName}` `${branch}` `${repo}` `${model}` `${agent}` `${session}` `${remoteUrl}`
@@ -483,6 +495,28 @@ setting existed.
   every directory, so a per-directory value would make neighbouring rows disagree.
 - Takes effect after a **tab reload**.
 - Partial `POST /api/config` merge — write only `cockpitLines`.
+
+## Closing summary — `appendSystemPrompt` in `~/.mulmoterminal/config.json`
+
+Every session MulmoTerminal starts is asked to end a reply with a short summary — **what was
+asked, what was achieved, what was not** — under a `---` rule. It exists for the grid: coming back
+to a cell later, that is otherwise only recoverable by scrolling the whole session.
+
+```json
+{ "appendSystemPrompt": false }
+```
+
+- **On by default**, and only an explicit `false` turns it off — a config that predates the
+  setting keeps the instruction.
+- **Nothing in the app reads what the summary says.** Turning it off costs no feature; the "last
+  reply" in the roster and in push notifications just becomes the raw tail of the reply.
+- Applies to **sessions started from then on** — no server restart, but a running session keeps
+  what it was launched with. Reopen a cell to see the change.
+- A directory's `.mulmoterminal.json` **wins** over this (see `appendSystemPrompt` above).
+- Independent of `prWorkdirFooter`: both ride on `--append-system-prompt`, and turning one off
+  leaves the other.
+- `true` / `false` only. There is **no way to substitute custom wording** — do not offer one.
+- Partial `POST /api/config` merge — write only `appendSystemPrompt`.
 
 ## Dev-work log — `worklogEnabled` / `worklogIntervalHours`
 

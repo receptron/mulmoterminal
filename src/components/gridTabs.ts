@@ -25,7 +25,7 @@ export interface Cell {
   cwd: string | null;
   // A running command cell (a script.json entry or a header shell button), with the
   // directory it runs in. Ephemeral — command cells are never persisted.
-  command?: RunCommand | null;
+  command?: RunCommand | null | undefined;
   // A running launcher (shell/codex/custom). Persistent & reattachable like a session.
   launcher?: CellLauncher | null;
   // The agent this cell runs. "codex" / "antigravity"; absent = Claude (the default).
@@ -114,12 +114,16 @@ export function setCwd(state: GridState, uid: number, cwd: string): GridState {
 }
 
 // Claude is stored as the ABSENCE of the field, so a cell written before the field existed and a
-// cell running Claude are the same thing on disk.
+// cell running Claude are the same thing on disk. Used when READING a persisted cell; the writer
+// below has to go further and drop the key entirely.
 const storedCellAgent = (agent: TerminalAgent): Cell["agent"] => (agent === "claude" ? undefined : agent);
 
 // Record which agent a cell launched, so a reloaded cell reconnects to the right endpoint.
 export function setCellAgent(state: GridState, uid: number, agent: TerminalAgent): GridState {
-  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, agent: storedCellAgent(agent) } : c)) };
+  // Claude is the ABSENT case, so switching back to it removes the key rather than setting it
+  // to undefined — a persisted cell round-trips through JSON, where only the former survives.
+  const applied = ({ agent: _previous, ...rest }: Cell): Cell => (agent === "claude" ? rest : { ...rest, agent });
+  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? applied(c) : c)) };
 }
 
 // A cell's launcher ran a script.json command: attach it, turning the launch cell

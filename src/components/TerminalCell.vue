@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, useTemplateRef } from "vue";
+import { ref, computed, nextTick, watch, onMounted, onUnmounted, useTemplateRef } from "vue";
 import TerminalView from "./Terminal.vue";
 import { usePubSub } from "../composables/usePubSub";
 import { useDirColors } from "../composables/useDirConfig";
@@ -16,6 +16,7 @@ import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { unsavedWork } from "./unsavedWork";
 import { relativeTime as relativeTimeFrom, usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText } from "./cellActivity";
+import { MEMO_MAX_LENGTH, normalizeMemo } from "../../common/sessionMemo";
 import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import GitBranchChip from "./GitBranchChip.vue";
 import WorkItemChip from "./WorkItemChip.vue";
@@ -75,7 +76,7 @@ const props = defineProps<
     initialSessionId: string | null;
     initialCwd: string | null;
     // The persisted agent for this cell; absent (or "claude") resumes as a normal Claude session.
-    initialAgent?: TerminalAgent | null;
+    initialAgent?: TerminalAgent | null | undefined;
     defaultCwd: string | null;
     presets: CwdPreset[];
     // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
@@ -161,6 +162,12 @@ const lastPrompt = ref<string | null>(null);
 // the header because a raw follow-up prompt goes stale ("ok") or context-dependent once
 // the session is a back-and-forth. Null until the server generates/pushes one.
 const aiTitle = ref<string | null>(null);
+// The user's own one-line note on this session (#1084). It outranks both of the above in the
+// header: they say what the agent said, this says what the cell is FOR — the question six open
+// cells stop answering. Null until the server pushes one.
+const memo = ref<string | null>(null);
+const memoEditing = ref(false);
+const memoDraft = ref("");
 
 // Cumulative token usage for this session (from /api/session/:id, refreshed when a
 // turn finishes). Null until first fetched.
@@ -206,6 +213,7 @@ interface ActivityMsg {
   event?: string | null;
   lastPrompt?: string | null;
   aiTitle?: string | null;
+  memo?: string | null;
 }
 const isActivityMsg = (d: unknown): d is ActivityMsg => typeof d === "object" && d !== null && "id" in d;
 
@@ -224,7 +232,14 @@ let latestBadgeReq = 0;
 function applyActivity(d: ActivityMsg) {
   activityGen++;
   const next = applyActivityPush(
-    { working: working.value, waiting: waiting.value, event: activityEvent.value, lastPrompt: lastPrompt.value, aiTitle: aiTitle.value },
+    {
+      working: working.value,
+      waiting: waiting.value,
+      event: activityEvent.value,
+      lastPrompt: lastPrompt.value,
+      aiTitle: aiTitle.value,
+      memo: memo.value,
+    },
     d,
   );
   working.value = next.working;
@@ -232,6 +247,9 @@ function applyActivity(d: ActivityMsg) {
   activityEvent.value = next.event;
   lastPrompt.value = next.lastPrompt;
   aiTitle.value = next.aiTitle;
+  // Not while the box is open: the push that lands as another tab saves would otherwise
+  // overwrite the sentence being typed here, mid-word.
+  if (!memoEditing.value) memo.value = next.memo;
 }
 
 // This session's detail, or nothing to apply. Nothing covers three cases the callers all
@@ -946,6 +964,10 @@ function teardown() {
   activityEvent.value = null;
   lastPrompt.value = null;
   aiTitle.value = null;
+  // The memo belongs to the SESSION, not to the cell — it stays on disk and comes back when that
+  // session is resumed. What must not survive is showing it against whatever this cell runs next.
+  memo.value = null;
+  memoEditing.value = false;
   usage.value = null;
   context.value = null;
   cwd.value = props.defaultCwd;
@@ -1071,7 +1093,53 @@ const dotStatusClass = computed(() => DOT_STATUS[status.value]);
 const statusLabel = computed(() => STATUS_LABEL[status.value]);
 watch(status, (s) => emit("status", s), { immediate: true });
 
-const headerText = computed(() => cellHeaderText(aiTitle.value, lastPrompt.value, sessionId.value));
+const headerText = computed(() => cellHeaderText(memo.value, aiTitle.value, lastPrompt.value, sessionId.value));
+// A memo displaces the AI title from the line, so the tooltip is where that title goes — losing
+// it entirely would make the note cost information rather than add it. With no memo the tooltip
+// is what it always was: the raw prompt, which the header abbreviates.
+const headerTitleAttr = computed(() => (memo.value ? aiTitle.value || lastPrompt.value || "" : lastPrompt.value || aiTitle.value || ""));
+
+const memoInput = useTemplateRef<HTMLInputElement>("memoInput");
+
+function startMemoEdit() {
+  if (!sessionId.value) return; // a launcher cell has no session to hang a note on yet
+  memoDraft.value = memo.value ?? "";
+  memoEditing.value = true;
+  void nextTick(() => memoInput.value?.select());
+}
+
+function cancelMemoEdit() {
+  memoEditing.value = false;
+}
+
+// Save, then let the server's answer win: it normalizes and caps, so what is shown here after a
+// save is what a reload will show. Blur saves too — closing the box by clicking away is the
+// ordinary way to leave a text field, and losing the sentence to it would be the bug.
+async function saveMemo() {
+  if (!memoEditing.value) return; // Enter or Escape already closed it; the blur that follows is not a second save
+  const id = sessionId.value;
+  memoEditing.value = false;
+  if (!id) return;
+  const text = normalizeMemo(memoDraft.value);
+  if (text === (memo.value ?? "")) return; // unchanged — an append log should not grow for a no-op
+  const previous = memo.value;
+  memo.value = text || null;
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(id)}/memo`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`memo save failed: ${res.status}`);
+    const data: unknown = await res.json();
+    const saved = typeof data === "object" && data !== null && "memo" in data ? (data as { memo: unknown }).memo : null;
+    if (sessionId.value === id && typeof saved === "string") memo.value = saved || null;
+  } catch {
+    // Put back what the server still has, rather than leaving a note on screen that no other
+    // tab — and no reload — will ever show.
+    if (sessionId.value === id) memo.value = previous;
+  }
+}
 
 // Per-cell token usage badge: ⇡ total input (fresh + cache) · ⇣ output generated.
 const usageView = computed(() => usageBadge(usage.value));
@@ -1334,12 +1402,46 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 >
               </template>
             </template>
+            <!-- The user's note REPLACES the AI title here rather than adding a row: the header
+               keeps one height whatever a cell is doing, and the title it displaced is still in
+               the tooltip. -->
+            <input
+              v-if="memoEditing"
+              ref="memoInput"
+              v-model="memoDraft"
+              data-testid="cell-memo-input"
+              class="min-w-0 flex-auto rounded border border-accent bg-input px-1 py-px font-sans text-[12px] text-fg focus:outline-none"
+              type="text"
+              :maxlength="MEMO_MAX_LENGTH"
+              placeholder="What is this session for?"
+              aria-label="Note for this session"
+              spellcheck="false"
+              @click.stop
+              @keydown.enter.prevent="saveMemo"
+              @keydown.escape.prevent="cancelMemoEdit"
+              @blur="saveMemo"
+            />
             <span
+              v-else
               data-testid="cell-prompt"
               class="min-w-0 flex-auto truncate font-sans text-[12px] text-[var(--cell-header-fg,var(--text-secondary))]"
-              :title="lastPrompt || aiTitle || ''"
+              :title="headerTitleAttr"
               >{{ headerText }}</span
             >
+            <!-- Sized like the chips beside it rather than like a header action, so a cell with
+               a note is exactly as tall as one without. -->
+            <button
+              v-if="sessionId && !memoEditing"
+              type="button"
+              data-testid="cell-memo-edit"
+              class="inline-flex flex-none cursor-pointer items-center rounded-[10px] px-1 py-px hover:bg-hover"
+              :class="memo ? 'text-accent' : 'text-dim'"
+              :title="memo ? 'Edit this session\'s note' : 'Add a note to this session'"
+              :aria-label="memo ? 'Edit this session\'s note' : 'Add a note to this session'"
+              @click.stop="startMemoEdit"
+            >
+              <span class="material-symbols-outlined text-[14px]" aria-hidden="true">edit_note</span>
+            </button>
           </div>
           <!-- Expand/restore + close stay on row 1 (the info row) and OUTSIDE the info
              track, so they're always pinned top-right. `.stop` so they don't trigger the

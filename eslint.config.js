@@ -87,6 +87,16 @@ export default [
     },
   },
   {
+    // no-redundant-optional assumes `?: T` already admits undefined, so `?: T | undefined`
+    // says nothing new. Every tsconfig here sets exactOptionalPropertyTypes, which makes the
+    // two DIFFERENT types — `?: T` forbids the key from holding undefined — so the rule's
+    // premise no longer holds and it flags the only way to spell "undefined is a valid value".
+    // Turn it back on if the flag ever comes off.
+    rules: {
+      "sonarjs/no-redundant-optional": "off",
+    },
+  },
+  {
     // `const { secret, ...rest } = obj` is how you drop a field by construction —
     // the named siblings are the point, not dead code. Scoped to where the
     // typescript-eslint rule owns unused-vars; plain .js keeps the plugin default.

@@ -14,6 +14,7 @@ import {
 } from "../../../server/session/session-settings.js";
 import { hookSettingsJson } from "../../../server/session/hook-settings.js";
 import { buildClaudeArgs } from "../../../server/agents/claude-args.js";
+import { appendedSystemPrompt } from "../../../server/agents/appended-prompt.js";
 
 const SESSION = "settings-spec-session";
 const fileFor = (id: string) => path.join(os.homedir(), ".mulmoterminal", "settings", `${id}.json`);
@@ -146,6 +147,9 @@ describe("the argv a Windows spawn ends up with", () => {
       attachGuiMcp: true,
       mcpConfig,
       allowedTools: "mulmoterminal_readXPost,mulmoterminal_searchX",
+      // Resolved as a real spawn resolves it, both sections on — this argument is prose written
+      // by hand, so it is the one most likely to grow a quote (#942, #973).
+      appendedPrompt: appendedSystemPrompt({ dirSetting: null, globalSetting: true, workdirFooter: "work in mulmoterminal2" }),
     });
     expect(args.filter((a) => a.includes('"'))).toEqual([]);
   });

@@ -273,6 +273,15 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 
 - スキル名（slug）は英数字始まりで `a-z 0-9 - _` のみ。存在しない slug は無視されます。
 
+### このディレクトリの返信まとめ（`appendSystemPrompt`）
+
+```json
+{ "appendSystemPrompt": false }
+```
+
+このプロジェクトのセッションに、返信の最後のまとめを書かせるかどうか。書かなければグローバル設定
+（既定 ON）に従います。→ [返信の最後のまとめを切る](#append-system-prompt)
+
 ## 自分の配色を作る（`themes`） {#custom-themes}
 
 組み込みの 4 つ（Midnight / Nord / Daylight / Solarized Light）以外の配色を、`~/.mulmoterminal/config.json`
@@ -1031,6 +1040,44 @@ PR 作成のたびにファイルから読み直しています）。
 - 行の追記に失敗した場合（`gh` が無い、通信エラーなど）でも、**PR の作成自体は成功**して開き
   ます。行が付かないだけです。
 
+## 返信の最後のまとめを切る（`appendSystemPrompt`） {#append-system-prompt}
+
+MulmoTerminal は起動する Claude セッション全部に、**返信の最後に短いまとめを書く**よう指示を
+足しています（`--append-system-prompt`）。内容は「**何を頼まれたか / 何ができたか / 何ができて
+いないか**」の 3 点で、`---` の区切り線の下に出ます。
+
+グリッドの話です。セルをしばらく放っておいて戻ってきたとき、何を頼んだのかとその結果は、まとめが
+無ければセッションを遡って読むしかありません。
+
+**既定は ON**。切るときは `~/.mulmoterminal/config.json` に:
+
+```json
+{
+  "appendSystemPrompt": false
+}
+```
+
+**次に起動するセッションから**反映されます。サーバの再起動は要りませんが、**動いているセッションは
+そのまま**です（この指示はセッション起動時に一度だけ渡すため）。切ったことを確かめるには、セルを
+一度閉じて開き直してください。
+
+ディレクトリごとに変えたいときは、そのプロジェクトの `.mulmoterminal.json` に書きます。**書いた方が
+グローバルより優先**です。
+
+```json
+{
+  "appendSystemPrompt": false
+}
+```
+
+補足:
+
+- **切っても MulmoTerminal の機能は何も欠けません。** まとめの中身をアプリが読んでいる箇所は
+  無く、ロスターやプッシュ通知に出る「最後の返信」が、まとめではなく素の末尾になるだけです。
+- [この PR はどのクローンの作業か](#pr-workdir-footer)（`prWorkdirFooter`）とは**別の設定**です。
+  同じ `--append-system-prompt` に乗りますが、片方を切ってももう片方は残ります。
+- 値は `true` / `false` のみです。**自分の文面に差し替える指定は今のところありません**。
+
 ## issue に「やっています」と書く（`issueWorkComments`） {#issue-work-comments}
 
 `work` chip は**自分に**どのセルがどの issue かを教えます。こちらは**issue の側に**伝える設定です。
@@ -1145,6 +1192,7 @@ Merged in #983. Work done in `mulmoterminal5`.
 | `keymap` | ユーザ定義のキーボードショートカット。**既定は空——何も割り当てられていない**（→ [キーボードショートカット](#keymap)） |
 | `copyOnSelect` | マウスで選択し終えた時点で、キーを押さずにクリップボードへ入れる。**既定 OFF**（→ [選択したらコピー](#copy-on-select)） |
 | `prWorkdirFooter` | 作成した PR の本文末尾に `work in <クローン名>` を書く（→ [この PR はどのクローンの作業か](#pr-workdir-footer)）。**既定 ON**、`false` で無効 |
+| `appendSystemPrompt` | 返信の最後に「何を頼まれたか / できたこと / できていないこと」のまとめを書かせる（→ [返信の最後のまとめを切る](#append-system-prompt)）。**既定 ON**、`false` で無効。`.mulmoterminal.json` の指定が優先 |
 | `cockpitLines` | コックピットのロスター各行を何行で打ち切るか（既定 `2 / 2 / 3` → [ロスターの表示行数](#cockpit-lines)） |
 | `fontFamily` | 全ターミナルのフォント（CSS の font-family スタック）（→ [ターミナルのフォント](#font-family)） |
 

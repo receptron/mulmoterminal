@@ -8,6 +8,7 @@ import {
   addCell,
   setSession,
   setCwd,
+  setCellAgent,
   closeCell,
   toggleExpand,
   switchPage,
@@ -495,6 +496,32 @@ describe("setSession / setCwd / toggleExpand", () => {
   it("always allows collapsing, even down to one cell", () => {
     const stranded = make([cell(0, U(0)), cell(1)], { expanded: 0 });
     expect(toggleExpand(stranded, 0).expanded).toBeNull();
+  });
+});
+
+// `agent` is how a reloaded cell knows to reconnect via /ws/codex, and Claude is the ABSENT
+// case — so switching back to it has to REMOVE the key. A persisted grid round-trips through
+// JSON, where `agent: undefined` and no key are indistinguishable on the way out but only the
+// latter can be written; exactOptionalPropertyTypes is what makes the difference expressible.
+describe("setCellAgent", () => {
+  it("records codex on the matching cell", () => {
+    expect(setCellAgent(make([cell(0, U(0)), cell(1, U(1))]), 0, "codex").cells[0].agent).toBe("codex");
+  });
+
+  it("leaves the other cells alone", () => {
+    const s = setCellAgent(make([cell(0, U(0)), cell(1, U(1))]), 0, "codex");
+    expect(Object.hasOwn(s.cells[1], "agent")).toBe(false);
+  });
+
+  it("drops the key when switching back to claude, rather than setting it undefined", () => {
+    const codex = setCellAgent(make([cell(0, U(0))]), 0, "codex");
+    const claude = setCellAgent(codex, 0, "claude");
+    expect(Object.hasOwn(claude.cells[0], "agent")).toBe(false);
+  });
+
+  it("keeps the rest of the cell intact across the switch", () => {
+    const s = setCellAgent(make([cell(0, U(0), "/repo")]), 0, "codex");
+    expect(s.cells[0]).toMatchObject({ uid: 0, session: U(0), cwd: "/repo" });
   });
 });
 

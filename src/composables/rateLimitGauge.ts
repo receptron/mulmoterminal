@@ -13,7 +13,7 @@ export interface RateLimitSnapshot {
   codex: RateLimits | null;
   /** Why the Claude half is missing, when it is (#1011). The server's own words, so the two
    *  cannot describe the same situation differently. */
-  claudeProbe?: ClaudeProbeState;
+  claudeProbe?: ClaudeProbeState | undefined;
 }
 
 export type ClaudeProbeState = "ok" | "no-claude" | "no-windows" | "no-report";

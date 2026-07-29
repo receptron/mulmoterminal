@@ -27,8 +27,10 @@ import {
   launchChoices,
   persistActivityState,
   ptys,
+  sessionMemos,
   titleInFlight,
 } from "./registry.js";
+import { clearedTranscripts, forgetClearedTranscript } from "./cleared-transcripts.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
 import { sessionRow, shouldRefreshReply } from "./activity-transition.js";
 import { flagEffect, type ActivityFlag } from "./activity-flag.js";
@@ -36,6 +38,8 @@ import type { WorkPhase } from "./workPhase.js";
 import { readLatestResponse } from "./session-reads.js";
 import { cleanupSessionSettings } from "./session-settings.js";
 import { cleanupSessionDrops } from "./session-drops.js";
+import { runCompletionHook } from "./completion-hooks.js";
+import { messageOf } from "../errors.js";
 import { cleanupSandbox } from "../infra/sandbox.js";
 import { tmuxKillSession } from "../infra/tmux.js";
 
@@ -138,6 +142,9 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   launchChoices.delete(id); // the picked backend dies with the session that used it
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
+  // The transcript stops being frozen here: the next claude on this id (`--resume`, or a restart
+  // after `/exit` — which reaches reap through term.onExit) appends to that file again.
+  forgetClearedTranscript(id);
   deps.forgetTitle(id);
   deps.sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
   deps.forgetWorkPhase(id); // the live turn dies with the session
@@ -165,6 +172,11 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // Files dropped into this session were copied to tmp for it alone; nothing else refers to them.
   cleanupSessionDrops(id);
   deps.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
+  // The session is gone, so this is its last chance to report an outcome (#1070). Failure is
+  // the right answer HERE because the hook is one-shot and a finished turn already claimed it
+  // on the way past: reaching teardown with the hook still unfired means no Stop ever came —
+  // a worker blocked on a dialog nobody can answer, or one that died before its first turn.
+  void runCompletionHook(id, { didError: true }).catch((err) => console.error(`[completion-hook] ${messageOf(err)}`));
 }
 
 // Publish a session's current activity (working + waiting) to subscribers.
@@ -173,11 +185,12 @@ function publishActivity(deps: SessionLifecycleDeps, id: string) {
   // `cwd` rides along so the attention-sound player can pick up that directory's custom
   // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.
   const cwd = ptys.get(id)?.cwd ?? null;
-  if (shouldRefreshReply(a, cwd)) refreshLastResponse(id, cwd);
+  if (shouldRefreshReply(a, cwd, clearedTranscripts.has(id))) refreshLastResponse(id, cwd);
   const row = sessionRow(id, a, cwd, {
     lastPrompt: lastPrompts.get(id),
     aiTitle: aiTitles.get(id),
     lastResponse: lastResponses.get(id),
+    memo: sessionMemos.get(id),
   });
   deps.sessionActivityPublisher.publish(id, { working: row.working, waiting: row.waiting, event: row.event, workPhase: deps.workPhaseOf(id) });
   deps.publish(SESSIONS_CHANNEL, row);

@@ -47,6 +47,10 @@ describe("extractRateLimits", () => {
     expect(extractRateLimits("not json")).toBeNull();
     expect(extractRateLimits(payload("nope"))).toBeNull();
     expect(extractRateLimits(payload({ five_hour: 5 }))).toBeNull();
+    // #1074 swapped a hand-copied `isRecord` for the shared one, which REJECTS arrays where the
+    // copy accepted them. Same answer either way — pinned so the swap stays invisible.
+    expect(extractRateLimits([])).toBeNull();
+    expect(extractRateLimits(payload([{ used_percentage: 23.5 }]))).toBeNull();
   });
 });
 

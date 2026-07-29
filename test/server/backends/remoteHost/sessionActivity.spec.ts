@@ -1,14 +1,21 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
 
-import { createSessionActivityPublisher, type SessionActivityStore } from "../../../../server/backends/remoteHost/sessionActivity.js";
+import { createSessionActivityPublisher, type SessionActivity, type SessionActivityStore } from "../../../../server/backends/remoteHost/sessionActivity.js";
 import type { WorkPhase } from "../../../../server/session/workPhase.js";
 
 const UID = "user-1";
 const HOST = "mulmoterminal";
 
 const recorder = () => {
-  const writes: Array<{ sessionId: string; rev: number; working: boolean; waiting: boolean; event?: string | null; workPhase?: WorkPhase | null }> = [];
+  const writes: Array<{
+    sessionId: string;
+    rev: number;
+    working: boolean;
+    waiting: boolean;
+    event?: string | null | undefined;
+    workPhase?: WorkPhase | null | undefined;
+  }> = [];
   const removes: string[] = [];
   const store: SessionActivityStore = {
     write: async (_uid, _hostId, sessionId, payload) => {
@@ -235,5 +242,16 @@ describe("what actually reaches the store", () => {
     const written = payloads[0] as Record<string, unknown>;
     expect(Object.hasOwn(written, "event")).toBe(true);
     expect(written.event).toBeNull();
+  });
+
+  // The payload names its fields one by one rather than copying the activity, which is what keeps
+  // it typed without a cast — and also what would silently drop a field added to SessionActivity
+  // later. `Required<>` is the tripwire: a new field stops this literal compiling, and adding it
+  // here then fails the assertion until the builder carries it too.
+  it("writes every field SessionActivity declares", () => {
+    const full: Required<SessionActivity> = { working: true, waiting: false, event: "Stop", workPhase: "implementing" };
+    const { payloads, store } = raw();
+    publisher(store).publish("s1", full);
+    expect(payloads[0]).toMatchObject(full);
   });
 });

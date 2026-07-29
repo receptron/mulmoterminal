@@ -36,5 +36,5 @@ export const MANAGE_COLLECTION: ToolDefinition = {
   name: tool.definition.name,
   description: tool.definition.description,
   prompt: tool.prompt,
-  parameters: { ...tool.definition.inputSchema, type: "object" } as ToolDefinition["parameters"],
+  parameters: { ...tool.definition.inputSchema, type: "object" } as NonNullable<ToolDefinition["parameters"]>,
 };

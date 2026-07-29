@@ -14,6 +14,9 @@ import type { DirModelChoice } from "./provider-env.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, mergeOwnedActivity, parseActivityState, type PersistedActivity } from "./activity-state.js";
 import { parseSessionIdLog, sessionIdLogLine } from "./session-id-log.js";
+import { applySessionMemo, createMemoWriteGuard, sessionMemoLine, sessionMemoRecord } from "./session-memos.js";
+import { normalizeMemo } from "../../common/sessionMemo.js";
+import { forEachJsonlRecord } from "../infra/jsonl-file.js";
 import { devTerminalCwdLine, hydrateCwdsInto } from "./dev-terminal-cwds.js";
 import { parseSessionToolGroups, sessionToolGroupLine, TOOL_GROUP_RESET, type SessionToolGroup } from "./session-tool-groups.js";
 import type { ToolGroup } from "../../common/toolGroups.js";
@@ -219,6 +222,69 @@ function rememberSessionCwd(id: string, cwd: string): void {
     .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
     .then(() => fs.appendFile(DEV_TERMINAL_CWDS_FILE, devTerminalCwdLine(id, cwd)))
     .catch((e) => console.error(`[dev-terminal-cwds] failed to persist: ${messageOf(e)}`));
+}
+
+// The one-line note the user wrote on a session (#1084). Their own words about what a cell is
+// for, which is the one thing nothing else here knows: lastPrompt and aiTitle both describe what
+// the agent said. Kept across reap and across a restart — a note the user typed is theirs, and
+// resuming the session brings it back.
+export const sessionMemos = new Map<string, string>();
+const SESSION_MEMOS_FILE = path.join(MULMOTERMINAL_HOME, "session-memos.jsonl");
+
+// Ids this process has already written. Hydration reads the file as it was BEFORE our append
+// could reach it, so without this an edit made during startup is overwritten by the old value —
+// and an ERASE has no map entry to notice, so the erased memo would come back from the dead.
+const memoWrittenIds = new Set<string>();
+
+export const sessionMemosHydrated: Promise<void> = (async () => {
+  try {
+    // Streamed rather than read whole: nothing caps this file, since it grows for as long as the
+    // user keeps editing memos.
+    await forEachJsonlRecord(SESSION_MEMOS_FILE, (parsed) => {
+      const record = sessionMemoRecord(parsed, isValidSessionId);
+      if (record && !memoWrittenIds.has(record.id)) applySessionMemo(sessionMemos, record);
+    });
+  } catch {
+    // absent on first run / unreadable => no memos, which is how every session starts anyway
+  }
+})();
+
+let memoPersist: Promise<void> = Promise.resolve();
+const memoWrites = createMemoWriteGuard();
+
+/**
+ * Store a session's memo, or erase it when the text normalizes to empty. Resolves to what was
+ * stored — the store's answer, not the request's — once the append is ON DISK.
+ *
+ * AWAITED, unlike the fire-and-forget appenders above, and the difference is what is being
+ * written: a cwd or an id is derived state this server can work out again, while a memo is a
+ * sentence the user typed and nothing can reconstruct. So a failed write REJECTS and puts the
+ * previous value back, rather than logging and leaving a note on screen that is not saved
+ * anywhere and vanishes at the next restart (CodeRabbit).
+ */
+export async function setSessionMemo(id: string, text: string): Promise<string> {
+  const memo = normalizeMemo(text);
+  if (!isValidSessionId(id)) return memo;
+  const previous = sessionMemos.get(id);
+  const ticket = memoWrites.begin(id);
+  memoWrittenIds.add(id);
+  applySessionMemo(sessionMemos, { id, text: memo });
+  const append = memoPersist
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.appendFile(SESSION_MEMOS_FILE, sessionMemoLine(id, memo, Date.now())));
+  // The CHAIN must survive this write failing — it is what serializes the appends, and a rejected
+  // promise left in it would take down every memo written afterwards.
+  memoPersist = append.catch(() => {});
+  try {
+    await append;
+  } catch (e) {
+    // Only while this is still the newest write for the id. Matching on the VALUE instead would
+    // roll back over a later write that carried the same text and succeeded — leaving this process
+    // serving the old note while the disk holds the new one (Codex).
+    if (memoWrites.isLatest(id, ticket)) applySessionMemo(sessionMemos, { id, text: previous ?? "" });
+    throw new Error(`failed to persist the memo: ${messageOf(e)}`, { cause: e });
+  }
+  return memo;
 }
 
 // Which GUI tool groups a session actually has. Learned from the group URLs it connects to

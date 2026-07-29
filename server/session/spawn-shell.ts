@@ -8,6 +8,7 @@ import { getLaunchers } from "../config/config-routes.js";
 import { launcherAt, shellInvocation } from "./shell-command.js";
 import { ptys } from "./registry.js";
 import { ptySpawn, spawnPty } from "./pty-spawn.js";
+import { ptyExitLine, ptyStartLine } from "./pty-exit-log.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
 import { appendBoundedOutput } from "./terminal-replay.js";
 import type { PtyEntry } from "./types.js";
@@ -21,13 +22,14 @@ export function createShellSpawners(deps: SpawnDeps) {
   function spawnCommandPty(command: string, cwd: string, ws: WebSocket): IPty {
     const { shell, args } = shellInvocation(command, false, process.platform, process.env.SHELL);
     const term = spawnPty(shell, args, cwd);
-    console.log(`[pty] spawned command (pid=${term.pid}) in ${cwd}: ${command}`);
+    const spawnedAtMs = Date.now();
+    console.log(ptyStartLine({ agent: "command", pid: term.pid, cwd, tmux: false, reattached: false, note: command }));
 
     term.onData((data) => {
       sendFrame(ws, { type: "output", data });
     });
     term.onExit(({ exitCode, signal }) => {
-      console.log(`[pty] command exited code=${exitCode} signal=${signal}`);
+      console.log(ptyExitLine({ agent: "command", exitCode, signal, lifetimeMs: Date.now() - spawnedAtMs, cwd }));
       sendExitAndClose(ws, exitCode, signal);
     });
     return term;
@@ -47,8 +49,11 @@ export function createShellSpawners(deps: SpawnDeps) {
   function spawnLauncherPty(sessionId: string, ws: WebSocket, command: string, cwd: string): PtyEntry {
     // Persistent: reattaches a surviving tmux session (command ignored) or creates one.
     const { shell, args } = shellInvocation(command, true, process.platform, process.env.SHELL);
-    const { term, tmux } = ptySpawn(sessionId, shell, args, cwd, true);
-    console.log(`[pty] spawned launcher (pid=${term.pid}${tmux ? " via tmux" : ""}) in ${cwd}: ${command}`);
+    const { term, tmux, reattached } = ptySpawn(sessionId, shell, args, cwd, true);
+    const spawnedAtMs = Date.now();
+    // The command is only what a FRESH session runs — an attach picked up whatever was already
+    // there — so naming it on that line would describe a program nobody started.
+    console.log(ptyStartLine({ agent: "launcher", pid: term.pid, cwd, tmux, reattached, sessionId, note: reattached ? null : command }));
 
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "shell" };
     ptys.set(sessionId, entry);
@@ -58,7 +63,7 @@ export function createShellSpawners(deps: SpawnDeps) {
       sendFrame(entry.ws, { type: "output", data });
     });
     term.onExit(({ exitCode, signal }) => {
-      console.log(`[pty] launcher exited code=${exitCode} signal=${signal}`);
+      console.log(ptyExitLine({ agent: "launcher", exitCode, signal, lifetimeMs: Date.now() - spawnedAtMs, cwd, sessionId }));
       sendExitAndClose(entry.ws, exitCode, signal);
       deps.reap(sessionId);
     });

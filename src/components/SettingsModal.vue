@@ -38,8 +38,8 @@ const props = defineProps<{
   launchers?: Launcher[];
   quickCommands?: QuickCommand[];
   userMcpServers?: UserMcpServer[];
-  cwd?: string | null;
-  sessionId?: string | null;
+  cwd?: string | null | undefined;
+  sessionId?: string | null | undefined;
   // Directories to offer a config preview for: the recent-dir presets, plus the focused
   // session's own directory when it isn't one of them yet.
   dirPaths?: string[];

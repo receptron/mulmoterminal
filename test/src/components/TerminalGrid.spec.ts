@@ -674,12 +674,27 @@ describe("file pane beside the enlarged cell", () => {
 // window, or the other zoom mode. Without a clamp at open time it is applied as-is, and a
 // remembered 900px against a 1000px row leaves the terminal 100px wide (xterm reflow garbage).
 describe("file pane width restored from storage", () => {
-  const ROW = 1000;
+  // The roster splits the STAGE and the pane splits the row inside it (#1077), so the two widths
+  // have to agree the way the real layout makes them agree: one stubbed width for every element
+  // would have the roster and the pane dividing the same pixels, and the pane's numbers would be
+  // measuring the roster's clamp instead of its own.
+  const STAGE = 1400;
+  const SEPARATOR = 5;
+  const ROSTER = 360; // the width the roster starts at
+  const ROW = STAGE - SEPARATOR - ROSTER;
+  // A separator is flex-none and the pane keeps a 1px border even when squeezed to nothing, so
+  // neither is the terminal's to spend.
+  const PANE_ROOM = ROW - (SEPARATOR + 1);
   let clientWidth: PropertyDescriptor | undefined;
   beforeEach(() => {
     localStorage.clear();
     clientWidth = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, "clientWidth");
-    Object.defineProperty(window.HTMLElement.prototype, "clientWidth", { configurable: true, get: () => ROW });
+    Object.defineProperty(window.HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains("stage") ? STAGE : ROW;
+      },
+    });
   });
   afterEach(() => {
     if (clientWidth) Object.defineProperty(window.HTMLElement.prototype, "clientWidth", clientWidth);
@@ -690,8 +705,9 @@ describe("file pane width restored from storage", () => {
     localStorage.setItem("files_pane_width", "900");
     const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
     await flushPromises();
-    // 1000 wide, terminal keeps MIN_TERMINAL (320) → the pane gets the remaining 680.
-    expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain("680px");
+    // 1000 wide, terminal keeps MIN_TERMINAL (320), the separator and border take PANE_CHROME →
+    // the pane gets what is left.
+    expect(w.findComponent({ name: "FilesPane" }).attributes("style")).toContain(`${PANE_ROOM - 320}px`);
   });
 
   // The single view's splitter announces its range; a screen-reader user resizing this one gets
@@ -704,7 +720,7 @@ describe("file pane width restored from storage", () => {
     const sep = w.find('[role="separator"][aria-label="Resize side pane"]');
     expect(sep.attributes("aria-valuenow")).toBe("400");
     expect(sep.attributes("aria-valuemin")).toBe("360"); // MIN_GUI, there being room for it
-    expect(sep.attributes("aria-valuemax")).toBe(String(ROW - 320)); // the terminal keeps MIN_TERMINAL
+    expect(sep.attributes("aria-valuemax")).toBe(String(PANE_ROOM - 320)); // the terminal keeps MIN_TERMINAL
   });
 
   it("leaves a width that already fits alone", async () => {

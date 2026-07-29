@@ -87,6 +87,9 @@ describe("buildClaudeArgs with addDirs", () => {
     attachGuiMcp: false,
     mcpConfig: "{}",
     allowedTools: "",
+    // Nothing to append: these cases are about where --add-dir sits, and the flag it must not
+    // end up behind is exercised in claude-args.spec.
+    appendedPrompt: null,
   };
 
   it("passes one variadic flag holding every directory", () => {
@@ -159,6 +162,7 @@ describe("path resolution parity", () => {
       attachGuiMcp: false,
       mcpConfig: "{}",
       allowedTools: "",
+      appendedPrompt: null,
       addDirs: dirs,
     });
     const flagged = args.slice(args.indexOf("--add-dir") + 1);

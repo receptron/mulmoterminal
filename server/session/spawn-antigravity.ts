@@ -5,11 +5,13 @@ import type { WebSocket } from "ws";
 import { PORT } from "../config/env.js";
 import type { ToolGroup } from "../../common/toolGroups.js";
 import { guiMcpEnv } from "./mcp-config.js";
+import { antigravityAdapter } from "../agents/antigravity.js";
 import { buildAntigravityArgs } from "../agents/antigravity-args.js";
 import { syncAntigravityMcpConfig } from "../agents/antigravity-mcp.js";
 import { antigravityBrainRoot, snapshotAntigravitySessions, watchForAntigravitySession } from "../agents/antigravity-session.js";
 import { ptySpawn } from "./pty-spawn.js";
 import { wireAgentPtyRelay } from "./pty-relay.js";
+import { ptyStartLine } from "./pty-exit-log.js";
 import { antigravityConversationIds, claimedAntigravityConversations, ptys } from "./registry.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
@@ -50,10 +52,13 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
     const args = buildAntigravityArgs({ resume: resumeConversationId, model: deps.antigravityModel, skipPermissions: true, initialPrompt });
     // The session id reaches the GUI MCP bridge through this environment and nowhere else — the
     // config file agy reads is shared by every session in the directory (see antigravity-mcp.ts).
-    const { term, tmux } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true, { env: guiMcpEnv(sessionId, PORT) });
-    const via = tmux ? " via tmux" : "";
-    const resumeNote = resumeConversationId ? ` (resume ${resumeConversationId})` : "";
-    console.log(`[pty] spawned antigravity (pid=${term.pid}${via}) in ${cwd}${resumeNote}`);
+    const { term, tmux, reattached } = ptySpawn(sessionId, deps.antigravityBin, args, cwd, true, {
+      env: guiMcpEnv(sessionId, PORT),
+      binEnvVar: antigravityAdapter.binEnvVar,
+    });
+    const spawnedAtMs = Date.now();
+    const note = resumeConversationId ? `resume ${resumeConversationId}` : null;
+    console.log(ptyStartLine({ agent: "antigravity", pid: term.pid, cwd, tmux, reattached, sessionId, note }));
 
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "antigravity" };
     ptys.set(sessionId, entry);
@@ -66,7 +71,7 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
       rememberAntigravityConversation(sessionId, root, before);
     }
 
-    wireAgentPtyRelay(entry, sessionId, deps);
+    wireAgentPtyRelay(entry, sessionId, spawnedAtMs, deps);
     return entry;
   }
 

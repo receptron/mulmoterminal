@@ -84,6 +84,11 @@ export interface AppConfig {
   // which of several side-by-side clones produced it. ON unless explicitly disabled — the
   // line is the whole point of the feature, and a reader who doesn't want it sets `false`.
   prWorkdirFooter: boolean;
+  // Append the built-in closing-summary instructions to every spawned session's system prompt
+  // (#942, opt-out in #1062). ON unless explicitly disabled, like the footer above: the grid is
+  // what it exists for, and nothing in the app parses what it produces — a reader who doesn't
+  // want the instruction sets `false`. A directory's own `.mulmoterminal.json` outranks this.
+  appendSystemPrompt: boolean;
   // How many lines each cockpit-roster row shows before clamping (#877). Defaults keep the
   // previous 2/2/3; raising `summary` trades roster length for reading a long one in place.
   cockpitLines: CockpitLines;
@@ -307,6 +312,13 @@ export function sanitizePrWorkdirFooter(input: unknown): boolean {
   return input !== false;
 }
 
+// Same default-ON rule, for the same reason: a missing key must leave every config written
+// before #1062 behaving as it did. Its own function rather than an alias of the footer's —
+// the planned third value (a user's own wording) widens this one and not that one.
+export function sanitizeAppendSystemPrompt(input: unknown): boolean {
+  return input !== false;
+}
+
 // Positive whole hours, clamped to [1, 168]. Anything else falls back to the default.
 export function sanitizeWorklogIntervalHours(input: unknown): number {
   if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) return DEFAULT_WORKLOG_INTERVAL_HOURS;
@@ -340,6 +352,7 @@ export const emptyConfig = (): AppConfig => ({
   decisionDigest: false,
   issueWorkComments: false,
   prWorkdirFooter: true,
+  appendSystemPrompt: true,
   cockpitLines: { ...DEFAULT_COCKPIT_LINES },
   fontFamily: null,
 });
@@ -382,6 +395,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     decisionDigest: sanitizeDecisionDigest(o.decisionDigest),
     issueWorkComments: sanitizeIssueWorkComments(o.issueWorkComments),
     prWorkdirFooter: sanitizePrWorkdirFooter(o.prWorkdirFooter),
+    appendSystemPrompt: sanitizeAppendSystemPrompt(o.appendSystemPrompt),
     cockpitLines: sanitizeCockpitLines(o.cockpitLines),
     fontFamily: normalizeFontFamily(o.fontFamily),
   };
@@ -485,6 +499,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     issueWorkComments: updated("issueWorkComments", sanitizeIssueWorkComments, base.issueWorkComments),
     fontFamily: updated("fontFamily", normalizeFontFamily, base.fontFamily),
     prWorkdirFooter: updated("prWorkdirFooter", sanitizePrWorkdirFooter, base.prWorkdirFooter),
+    appendSystemPrompt: updated("appendSystemPrompt", sanitizeAppendSystemPrompt, base.appendSystemPrompt),
     cockpitLines: updated("cockpitLines", sanitizeCockpitLines, base.cockpitLines),
   };
 }
@@ -516,6 +531,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     decisionDigest: config.decisionDigest,
     issueWorkComments: config.issueWorkComments,
     prWorkdirFooter: config.prWorkdirFooter,
+    appendSystemPrompt: config.appendSystemPrompt,
     cockpitLines: config.cockpitLines,
     fontFamily: config.fontFamily,
   };

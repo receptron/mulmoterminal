@@ -20,10 +20,10 @@ export interface PushResult {
 }
 export interface PrResult {
   ok: boolean;
-  url?: string;
+  url?: string | undefined;
   via?: "gh" | "compare";
-  reason?: Reason;
-  detail?: string;
+  reason?: Reason | undefined;
+  detail?: string | undefined;
 }
 
 const DETAIL_LIMIT = 500;

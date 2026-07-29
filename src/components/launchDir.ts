@@ -7,11 +7,11 @@
 
 export interface LaunchDirSources {
   // This cell's persisted directory, restored from the grid layout.
-  initialCwd?: string | null;
+  initialCwd?: string | null | undefined;
   // The user's recent directories, most recent first.
   presets: readonly { path: string }[];
   // The server's workspace default.
-  defaultCwd?: string | null;
+  defaultCwd?: string | null | undefined;
 }
 
 // Persisted cell dir → most recent preset → server default → empty.

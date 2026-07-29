@@ -36,6 +36,7 @@ MulmoTerminal — a browser terminal for parallel Claude Code and Codex agents �
 | Feature | Description |
 |---|---|
 | That agent's current work | The header shows "what it's doing right now" |
+| Session note | Your own one line about **what a cell is for** — everything else in the header is what the agent said, which stops telling cells apart once several are open. The pencil beside the header text opens a box (Enter saves, Esc cancels); while a note is set it replaces the header line, and the title it displaced moves to the tooltip. The note is also the session's name in the sidebar list and on the phone. Kept per session: close the cell, restart the server, resume that session and it comes back |
 | Git status chip | `⎇ branch ●changes ↑ahead ↓behind`, always shown |
 | PR phase / work phase | Each roster row badges the branch's **PR state** (draft / CI fail / changes / ready / merged …) and the work phase (planning / editing) |
 | Model / context size | e.g. `Opus · ctx 35%` — the active model and how full the context is |

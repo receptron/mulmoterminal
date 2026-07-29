@@ -43,6 +43,7 @@ import {
   dirSkillsField,
   dirProviderField,
   dirModelField,
+  dirAppendSystemPromptField,
   type ThemeId,
   type HeaderButton,
   type HeaderChip,
@@ -75,6 +76,9 @@ export interface DirConfig extends DirChrome {
   // Extra directories this dir's sessions may touch (#908) — already resolved to absolute
   // paths against the config's own directory, and already checked to exist.
   addDirs: string[] | null;
+  // Whether this directory's sessions carry the built-in closing-summary instructions (#1062).
+  // null = the key is absent, so the global `appendSystemPrompt` decides.
+  appendSystemPrompt: boolean | null;
 }
 
 // What the browser receives: the raw sound path stays server-side (streamed via
@@ -155,6 +159,7 @@ const EMPTY: DirConfig = {
   provider: null,
   model: null,
   addDirs: null,
+  appendSystemPrompt: null,
 };
 
 export function loadDirConfig(cwd: string): DirConfig {
@@ -186,6 +191,7 @@ export function loadDirConfig(cwd: string): DirConfig {
       provider: dirProviderField.parse(raw.provider),
       model: dirModelField.parse(raw.model),
       addDirs: resolveAddDirs(raw.addDirs, base, (p) => statSync(p).isDirectory()),
+      appendSystemPrompt: dirAppendSystemPromptField.parse(raw.appendSystemPrompt),
     };
   } catch {
     return EMPTY;
@@ -250,12 +256,13 @@ export interface DirConfigDetail {
 const chipLabel = (chip: HeaderChip): string => (typeof chip === "string" ? chip : chip.label);
 
 function dirConfigExtras(cwd: string): DirConfigExtras {
-  const { provider, model, skills, addDirs, buttons, chips } = loadDirConfig(cwd);
+  const { provider, model, skills, addDirs, appendSystemPrompt, buttons, chips } = loadDirConfig(cwd);
   return {
     provider,
     model,
     skills,
     addDirs,
+    appendSystemPrompt,
     buttonLabels: (buttons ?? []).map((button) => button.label),
     chipLabels: (chips ?? []).map(chipLabel),
   };

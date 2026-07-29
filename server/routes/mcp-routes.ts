@@ -7,6 +7,7 @@
 // tool — it is a landing point for that tool and nothing else, which is why it sits with the
 // MCP surface rather than with the translation routes (#548).
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Express, Request, Response } from "express";
 
 import { PORT, SESSION_ID_RE } from "../config/env.js";
@@ -47,13 +48,22 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
       submitTranslationTool: translationWorkerIds.has(sessionId),
       group,
     });
-    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
+    // No sessionIdGenerator at all is the SDK's stateless mode. Spelling it `undefined` says
+    // the same thing to the runtime but not to the type — the option is exact-optional.
+    const transport = new StreamableHTTPServerTransport({});
     res.on("close", () => {
       transport.close();
       server.close();
     });
     try {
-      await server.connect(transport);
+      // A cast, which this codebase otherwise refuses — and it asserts only what the SDK itself declares.
+      // @modelcontextprotocol/sdk@1.30.0 writes `class StreamableHTTPServerTransport implements Transport`,
+      // yet types that class's onclose/onerror/onmessage accessors `T | undefined` while Transport spells
+      // them `?: T`. Under exactOptionalPropertyTypes the class therefore fails the interface it claims; the
+      // sibling WebStandardStreamableHTTPServerTransport declares them correctly, which is what makes this a
+      // declaration bug rather than a real mismatch. Upstream issue (open, names this exact workaround):
+      // https://github.com/modelcontextprotocol/typescript-sdk/issues/2083 — drop the cast when it lands.
+      await server.connect(transport as unknown as Transport);
       await transport.handleRequest(req, res, req.body);
     } catch (err) {
       console.error(`[mcp] request failed for ${sessionId}:`, err);

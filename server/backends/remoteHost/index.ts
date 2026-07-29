@@ -14,15 +14,18 @@
 // runner reads the CURRENT session's firestore/storage (both change on each
 // (re)connect — see session.ts).
 import type { Express } from "express";
-import { createRemoteHost, startHostRunner, type RemoteHostLifecycle } from "@mulmoclaude/core/remote-host/server";
+import {
+  createPresenceProbe,
+  createRemoteHost,
+  startHostRunner,
+  startResilientHostRunner,
+  type RemoteHostLifecycle,
+} from "@mulmoclaude/core/remote-host/server";
 import { publish, clear, listFor } from "@mulmoclaude/core/notifier";
 
 import type { RunnerHealth } from "../../../common/remoteHostHealth.js";
-import { createPresenceProbe } from "./presenceProbe.js";
-import { startResilientRunner } from "./resilientRunner.js";
 import { createHealthNotice } from "./healthNotice.js";
 import { createRemoteHostHandlers, type RemoteHostHandlerDeps } from "./handlers.js";
-import { firestoreSafeHandlers } from "./firestoreSafeResult.js";
 import { createSaveAttachment } from "./attachmentStore.js";
 import { buildIngestAttachments } from "./ingestAttachments.js";
 import { onExpire } from "./onExpire.js";
@@ -67,10 +70,12 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
     restore,
     signOut,
     currentUid,
-    // Wrapped so a listener death is retried here instead of ending the session: core
-    // gives up after five tries (~31s), which any sleep or network move outlasts (#823).
+    // core's runner recovers in place; this is the ring outside it, which starts a WHOLE new
+    // runner and escalates to the client when even that stops helping (#823, #1064). It lives in
+    // core because its give-up clock has to agree with core's own listen-retry window — the two
+    // drifted apart once already, and a host carrying its own copy cannot see that happen.
     startRunner: (channel, handlers, options) =>
-      startResilientRunner({
+      startResilientHostRunner({
         start: (runnerOptions) => startHostRunner(currentFirestore(), channel, handlers, runnerOptions),
         options,
         onHealth,
@@ -82,21 +87,20 @@ export function initRemoteHostBackend(deps: RemoteHostBackendDeps): void {
     // Expired offline-queued startChat commands: delete the phone's staged Storage
     // uploads before the runner removes the doc (protocol v2 offline queue).
     onExpire,
-    // Every reply passes the undefined guard before core writes it to Firestore (#1042).
-    handlers: firestoreSafeHandlers(
-      createRemoteHostHandlers({
-        workspace: deps.workspace,
-        spawnChat: deps.spawnChat,
-        ingest,
-        listTerminalSessions: deps.listTerminalSessions,
-        captureTerminalScreen: deps.captureTerminalScreen,
-        writeToSession: deps.writeToSession,
-        canClearBox: deps.canClearBox,
-        submitSequence: deps.submitSequence,
-        launchTerminal: deps.launchTerminal,
-      }),
-      { warn: (message) => log.warn(message) },
-    ),
+    // No `expectedUndefined` on the runner options on purpose: every handler here is written to
+    // omit an absent key rather than send `undefined` (#1042), so anything core reports is a
+    // regression worth hearing about — declaring a path would be declaring it acceptable.
+    handlers: createRemoteHostHandlers({
+      workspace: deps.workspace,
+      spawnChat: deps.spawnChat,
+      ingest,
+      listTerminalSessions: deps.listTerminalSessions,
+      captureTerminalScreen: deps.captureTerminalScreen,
+      writeToSession: deps.writeToSession,
+      canClearBox: deps.canClearBox,
+      submitSequence: deps.submitSequence,
+      launchTerminal: deps.launchTerminal,
+    }),
     log: { ...log, debug: () => undefined },
   });
 }

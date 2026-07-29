@@ -125,9 +125,16 @@ describe("htmlfile route", () => {
     expect(csp).toContain("connect-src 'none'");
   });
 
+  // The separator after `abs` is JOINED IN, never left to the split. A POSIX absolute path
+  // begins with the separator, so splitting it yields a leading "" that supplies that slash
+  // for free — on Windows there is no such element and the drive letter fuses onto the scope
+  // (`/htmlfile/absC%3A/…`), which parses as the scope "absC:" and 404s. Dropping the empty
+  // element and joining explicitly gives `abs/C%3A/…` there, which is the drive-letter form
+  // core's parser is written for and which nothing else in CI exercises (#1079).
+  const htmlFileAbsUrl = (abs: string) => ["abs", ...abs.split(path.sep).filter(Boolean).map(encodeURIComponent)].join("/");
+
   it("serves a page by absolute path", async () => {
-    const abs = path.join(ws, REPO_REL);
-    const res = await fetch(`${base}/htmlfile/abs${abs.split(path.sep).map(encodeURIComponent).join("/")}`);
+    const res = await fetch(`${base}/htmlfile/${htmlFileAbsUrl(path.join(ws, REPO_REL))}`);
     expect(res.status).toBe(200);
     expect(await res.text()).toContain("REPO");
   });

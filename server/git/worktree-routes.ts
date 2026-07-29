@@ -14,7 +14,7 @@ interface WorktreeRouteOptions {
 // A failed git/gh command is a 500; a precondition the user can fix (no remote, not
 // a GitHub repo, …) is a 409. Mirrors the create/remove status convention.
 const SERVER_ERROR_REASONS = new Set(["failed", "push-failed"]);
-function statusFor(result: { ok: boolean; reason?: string }): number {
+function statusFor(result: { ok: boolean; reason?: string | undefined }): number {
   if (result.ok) return 200;
   return SERVER_ERROR_REASONS.has(result.reason ?? "") ? 500 : 409;
 }

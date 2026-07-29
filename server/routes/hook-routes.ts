@@ -7,23 +7,23 @@ import { SESSION_ID_RE } from "../config/env.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
 import { writtenFilePath } from "../files/tool-writes.js";
 import { activityHookEffects, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../session/activity-hook.js";
+import { runCompletionHook } from "../session/completion-hooks.js";
+import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/header-hook.js";
 import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
+import { clearedTranscripts, markTranscriptCleared } from "../session/cleared-transcripts.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/task-push.js";
 import { preferredHeaderPrompt } from "../session/transcript.js";
 import { failPendingTranslation } from "../session/translation-worker.js";
 import type { SessionActivityDeps } from "../session/session-activity-deps.js";
-import { publishesDirConfig, toolHookRecord } from "../session/tool-hook.js";
+import { publishesDirConfig, toolHookRecord, type ToolCallEnd, type ToolCallStart } from "../session/tool-hook.js";
 
 // The header shows one line, so a longer prompt is stored truncated rather than in full.
 
 export interface HookDeps extends SessionActivityDeps {
-  recordToolCallStart: (sessionId: string, call: { toolUseId?: string; toolName?: string; toolInput?: unknown }) => Promise<void>;
-  recordToolCallEnd: (
-    sessionId: string,
-    call: { toolUseId?: string; toolName?: string; toolInput?: unknown; toolOutput?: unknown; durationMs?: number; status: "completed" | "failed" },
-  ) => Promise<void>;
+  recordToolCallStart: (sessionId: string, call: ToolCallStart) => Promise<void>;
+  recordToolCallEnd: (sessionId: string, call: ToolCallEnd) => Promise<void>;
   /** Tell clients watching that directory to re-read its .mulmoterminal.json. */
   publishDirConfig: (cwd: string) => void;
   publishFileWrite: (file: string) => void;
@@ -45,6 +45,12 @@ function handleActivityHook(deps: HookDeps, sessionId: string, event: string, ac
   // though a background Stop publishes twice.
   const kind = pushKindFor(event, notificationType);
   if (kind) void notifyTaskFinished(sessionId, kind, message, deps.uiPort);
+  // A finished turn is the ONLY success signal a PTY-hosted agent gives us (#1070). It is not
+  // a process exit — `claude` sits at its prompt afterwards — so a worker that never reaches
+  // Stop (blocked on a permission dialog nobody can answer, or dead before its first turn) is
+  // exactly the failed refresh, and reap reports it as such. No-op unless a hook is registered,
+  // which only a hidden feeds worker ever does.
+  if (event === "Stop") void runCompletionHook(sessionId, { didError: false }).catch((err) => console.error(`[completion-hook] ${messageOf(err)}`));
 }
 
 interface HookToolPayload {
@@ -84,7 +90,10 @@ async function handleToolHook(deps: HookDeps, sessionId: string, event: string, 
 // last MEANINGFUL prompt (preferredHeaderPrompt) while still tracking the latest for
 // an all-trivial session.
 async function trackPromptForHeader(sessionId: string, prompt: string, cwd: string | undefined) {
-  if (!lastPrompts.has(sessionId)) {
+  // Not for a cleared session: there is no task to restore there, and the transcript this would
+  // read is the conversation the user ended. The mark outlives the restart that emptied
+  // `lastPrompts`, which is the only time this branch is reached after a clear (#1085).
+  if (!lastPrompts.has(sessionId) && !clearedTranscripts.has(sessionId)) {
     const seeded = cwd ? await latestUserPrompt(cwd, sessionId) : null;
     if (seeded) lastPrompts.set(sessionId, seeded);
   }
@@ -97,9 +106,17 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 // so it's regenerated fresh on the next turn (leaving it in `aiTitles` — even as "" — would read as
 // "already titled" and suppress that regeneration). The cockpit's last reply is blanked the same way as
 // the prompt (empty beats `?? transcriptResponse`) so it can't show the pre-clear answer.
-function clearHeaderPrompt(deps: HookDeps, sessionId: string): void {
+//
+// Blanking alone does not hold: claude has just moved to a NEW transcript, so ours is frozen on the
+// ended conversation, and the readers that run at the next turn end put its title and its reply
+// straight back (#1085). `markTranscriptCleared` is what tells them not to.
+//
+// Publish LAST, and after the mark is durable: the publish itself re-reads the reply for a session
+// that is `waiting`, which is the very read the mark exists to stop.
+async function clearHeaderPrompt(deps: HookDeps, sessionId: string, cwd: string | undefined): Promise<void> {
   lastPrompts.set(sessionId, "");
   lastResponses.set(sessionId, "");
+  await markTranscriptCleared(sessionId, cwd);
   deps.forgetTitle(sessionId);
   deps.publishActivity(sessionId);
 }
@@ -117,7 +134,7 @@ async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string
     deps.noteTitleTurn(sessionId, effect.text);
     return;
   }
-  if (effect.kind === "clear") return clearHeaderPrompt(deps, sessionId);
+  if (effect.kind === "clear") return clearHeaderPrompt(deps, sessionId, cwd);
   void deps.maybeGenerateTitle(sessionId, cwd);
 }
 

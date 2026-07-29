@@ -76,13 +76,18 @@ const clampMaxResults = (value: unknown): number => {
 export const createGoogleCalendarCreateEvent =
   (deps: GoogleCalendarDeps): CommandHandler =>
   async (params: JsonObject) => {
+    // The core's input types are exact-optional, so an omitted field has to be an absent KEY
+    // — `{ colorId: undefined }` would ask the API to unset the colour rather than leave it.
+    const description = typeof params.description === "string" ? params.description : undefined;
+    const calendarId = optionalString(params, "calendarId");
+    const colorId = optionalString(params, "colorId");
     const input = {
       summary: requiredString(params, "summary"),
       startDateTime: asDateTime(requiredString(params, "start"), "start"),
       endDateTime: asDateTime(requiredString(params, "end"), "end"),
-      description: typeof params.description === "string" ? params.description : undefined,
-      calendarId: optionalString(params, "calendarId"),
-      colorId: optionalString(params, "colorId"),
+      ...(description === undefined ? {} : { description }),
+      ...(calendarId ? { calendarId } : {}),
+      ...(colorId ? { colorId } : {}),
     };
     const event = await deps.createEvent(await deps.getAccessToken(), input);
     // Spread rebuilds an anonymous object type — CalendarEventSummary has no
@@ -96,7 +101,7 @@ export const createGoogleCalendarListEvents =
     const timeMin = optionalDateTime(params, "timeMin");
     const maxResults = clampMaxResults(params.maxResults);
     const calendarId = optionalString(params, "calendarId");
-    const events = await deps.listEvents(await deps.getAccessToken(), { timeMin, maxResults, calendarId });
+    const events = await deps.listEvents(await deps.getAccessToken(), { maxResults, ...(timeMin ? { timeMin } : {}), ...(calendarId ? { calendarId } : {}) });
     return { events: events.map((event) => ({ ...event })) };
   };
 

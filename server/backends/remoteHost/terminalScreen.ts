@@ -52,6 +52,13 @@ export interface SessionDetail {
   work?: SessionWorkSummary;
 }
 
+// What a host's `detailOf` may hand over. Deliberately looser than SessionDetail: writing
+// `work: map.get(cwd)` leaves the key behind holding `undefined`, and buildSessionList is
+// what drops it. The wire shape must not carry such a key — see the note there (#1042).
+export interface SessionDetailDraft extends Omit<SessionDetail, "work"> {
+  work?: SessionWorkSummary | undefined;
+}
+
 // The work item as the phone should see it, or undefined when there is nothing to say. Kept here
 // rather than at the call site so the "what counts as worth sending" rule has one home: a merged
 // or closed PR is finished work, which is also why the header chip clears itself on merge.
@@ -71,7 +78,7 @@ export interface SessionListInput {
   // grid's cells, so the single-view chat session and any tmux shell that was never a grid
   // cell are excluded — even while they are live and resumable.
   isGridSession: (id: string) => boolean;
-  detailOf: (id: string) => SessionDetail;
+  detailOf: (id: string) => SessionDetailDraft;
 }
 
 // Live sessions first, then by title, so the phone's list is stable across polls.
@@ -153,7 +160,11 @@ export interface SessionScreen extends SessionScreenMeta {
 // written to a Firestore command doc, which rejects an `undefined` value outright, and the
 // phone renders each field it receives as its own labelled row — an empty one would read as
 // "this session has no branch" instead of "not known".
-export function definedScreenMeta(meta: SessionScreenMeta): SessionScreenMeta {
+// What the host hands over BEFORE the trim: every field is a string it may not be able to
+// answer. The trimmed result is a SessionScreenMeta, where an unanswered field has no key.
+type ScreenMetaDraft = Partial<Record<keyof SessionScreenMeta, string | undefined>>;
+
+export function definedScreenMeta(meta: ScreenMetaDraft): SessionScreenMeta {
   return Object.fromEntries(Object.entries(meta).filter(([, value]) => value !== undefined && value.trim() !== ""));
 }
 

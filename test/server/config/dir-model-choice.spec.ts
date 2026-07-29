@@ -130,6 +130,7 @@ describe("what actually reaches argv", () => {
       attachGuiMcp: false,
       mcpConfig: "{}",
       allowedTools: "",
+      appendedPrompt: null,
     });
 
   it("passes a usable id through as the --model value", () => {

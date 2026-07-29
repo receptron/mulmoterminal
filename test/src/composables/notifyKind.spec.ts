@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { notifyKindOf, type ActivityState } from "../../../src/composables/notifyKind";
 
-const msg = (id: string, working?: boolean, waiting?: boolean, event?: string) => ({ id, working, waiting, event });
+// Each field is spread only when given, so the fixture is the frame the server actually
+// sends: an unobserved flag arrives as an ABSENT key, never as one holding undefined.
+const msg = (id: string, working?: boolean, waiting?: boolean, event?: string) => ({
+  id,
+  ...(working === undefined ? {} : { working }),
+  ...(waiting === undefined ? {} : { waiting }),
+  ...(event === undefined ? {} : { event }),
+});
 const fresh = () => new Map<string, ActivityState>();
 
 describe("notifyKindOf", () => {

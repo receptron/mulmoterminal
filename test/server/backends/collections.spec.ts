@@ -6,7 +6,8 @@ import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
-import { initCollectionsBackend, mountCollectionRoutes } from "../../../server/backends/collections.js";
+import { initCollectionsBackend, mountCollectionRoutes, visibilityGate } from "../../../server/backends/collections.js";
+import { actionVisible } from "@mulmoclaude/core/collection";
 import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
 
 // The registry engine fetches remote index.json / bundles — mock it so the route
@@ -754,5 +755,35 @@ describe("mobile custom views (phone-frame preview)", () => {
 
   it("GET /:slug/remote-view/:viewId/items 404s an unknown view", async () => {
     expect((await fetch(`${base}/api/collections/photoscol/remote-view/nope/items`)).status).toBe(404);
+  });
+});
+
+// visibilityGate rebuilds an action's state gate so core's exact-optional parameter accepts it
+// (the schema parse leaves the key holding `undefined`). It is the AUTHORIZATION check — the
+// client hides out-of-state buttons, but a crafted request can still target one — so the two
+// spellings of the same gate must both survive the rebuild. `when` belongs to the seeded kinds,
+// `require` to mutate; forwarding only one silently makes that kind's actions always runnable.
+describe("visibilityGate", () => {
+  const WHEN = { field: "status", in: ["ready"] };
+
+  it("forwards a seeded action's `when`", () => {
+    expect(visibilityGate({ id: "a", label: "A", kind: "chat", role: "r", template: "t", when: WHEN })).toEqual({ when: WHEN });
+  });
+
+  it("forwards a mutate action's `require`", () => {
+    expect(visibilityGate({ id: "a", label: "A", kind: "mutate", set: { status: "done" }, require: WHEN })).toEqual({ require: WHEN });
+  });
+
+  it("drops the key entirely for an ungated action, rather than leaving it undefined", () => {
+    const gate = visibilityGate({ id: "a", label: "A", kind: "mutate", set: { status: "done" } });
+    expect(Object.hasOwn(gate, "when")).toBe(false);
+    expect(Object.hasOwn(gate, "require")).toBe(false);
+  });
+
+  // The gate is what actionVisible reads, so the round trip is what actually has to hold.
+  it("keeps a mutate action hidden on a record that fails its `require`", () => {
+    const gate = visibilityGate({ id: "a", label: "A", kind: "mutate", set: { status: "done" }, require: WHEN });
+    expect(actionVisible(gate, { status: "draft" })).toBe(false);
+    expect(actionVisible(gate, { status: "ready" })).toBe(true);
   });
 });

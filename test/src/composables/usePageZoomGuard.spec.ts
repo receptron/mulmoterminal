@@ -5,7 +5,7 @@ import { installPageZoomGuard } from "../../../src/composables/usePageZoomGuard"
 // A minimal window double: records listeners (with the options they were registered under, so
 // the passive:false contract is testable) and drops them on removeEventListener.
 function fakeTarget() {
-  const listeners = new Map<string, { fn: EventListener; options?: AddEventListenerOptions }>();
+  const listeners = new Map<string, { fn: EventListener; options?: AddEventListenerOptions | undefined }>();
   return {
     addEventListener: (type: string, fn: EventListener, options?: AddEventListenerOptions) => listeners.set(type, { fn, options }),
     removeEventListener: (type: string, fn: EventListener) => {

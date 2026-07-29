@@ -13,6 +13,7 @@ import {
   titlePending,
   titleTurnCounts,
 } from "../../../server/session/registry.js";
+import { clearedTranscripts } from "../../../server/session/cleared-transcripts.js";
 
 const SESSION = "11111111-2222-3333-4444-555555555555";
 
@@ -41,6 +42,7 @@ beforeEach(async () => {
   for (const m of [aiTitles, titleTurnCounts, titleEpoch, lastTitledUserTurns, lastTitleAttemptMs]) m.clear();
   titlePending.clear();
   titleInFlight.clear();
+  clearedTranscripts.clear();
 });
 
 afterEach(async () => {
@@ -187,6 +189,34 @@ describe("maybeGenerateTitle", () => {
     await running;
     expect(aiTitles.has(SESSION)).toBe(false);
     expect(published).toEqual([]);
+  });
+
+  it("does not title a cleared session from its frozen transcript", async () => {
+    // The epoch guard above only voids a generation that was ALREADY running. This is the turn
+    // AFTER the /clear: forgetTitle left the session untitled, so the next prompt flags it as
+    // due — and the only turns on disk are the ones the user just cleared away (#1085).
+    const { maybeGenerateTitle, published, summarized } = setup();
+    await writeTranscript([userTurn("continue GitHub issue 1048")]);
+    clearedTranscripts.add(SESSION);
+    titlePending.add(SESSION);
+    await maybeGenerateTitle(SESSION, cwd);
+    expect(summarized).toEqual([]); // never even read the pre-clear turns
+    expect(aiTitles.has(SESSION)).toBe(false);
+    expect(published).toEqual([]);
+  });
+
+  it("titles again once the session is no longer cleared", async () => {
+    // reap() drops the mark, so resuming that id (which appends to the file again) restores
+    // the normal behaviour rather than leaving the roster row blank for good.
+    const { maybeGenerateTitle } = setup();
+    await writeTranscript([userTurn("add a retry to the uploader")]);
+    clearedTranscripts.add(SESSION);
+    titlePending.add(SESSION);
+    await maybeGenerateTitle(SESSION, cwd);
+    clearedTranscripts.delete(SESSION);
+    titlePending.add(SESSION);
+    await maybeGenerateTitle(SESSION, cwd);
+    expect(aiTitles.get(SESSION)).toBe("Generated title");
   });
 
   it("does not summarize twice when a second trigger lands mid-generation", async () => {

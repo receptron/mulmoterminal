@@ -9,7 +9,7 @@ import type { IPty } from "node-pty";
 import type { WebSocket } from "ws";
 import { messageOf } from "../errors.js";
 import { isResizeFrame } from "./ws-frames.js";
-import { stripTerminalQueries } from "./terminal-replay.js";
+import { stripTerminalQueries, terminalModePrefix } from "./terminal-replay.js";
 import type { PtyEntry } from "./types.js";
 
 /** A frame as it arrives off the socket. Only `toString()` is used — ws hands us a
@@ -24,6 +24,9 @@ export interface ConnectionDeps {
   setWaiting: (id: string, waiting: boolean) => void;
   /** Socket gone: keep, grace, or reap according to what the session was doing. */
   armReapForDetached: (id: string) => void;
+  /** The screen-buffer / mouse modes this session's pane is in right now, for the replay to
+   *  re-establish (#1073). Empty when there is nothing to restore. */
+  terminalModesOf: (id: string) => readonly number[];
 }
 
 // browser -> command PTY. Like handleClientFrame but for the session-less command
@@ -65,10 +68,16 @@ export function createConnectionHandlers(deps: ConnectionDeps) {
       entry.ws.close();
     }
     entry.ws = ws;
-    if (entry.buffer && ws.readyState === ws.OPEN) {
+    if (ws.readyState === ws.OPEN) {
+      // The replay is a bounded TAIL, and the modes an app sets once at startup — the alternate
+      // buffer above all — fell off its front long ago. Restore them first, or the browser draws
+      // this into the normal buffer and the wheel stops reaching the app (#1073). Only a tmux
+      // session can be asked; anything else replays as before.
+      const prefix = entry.tmux ? terminalModePrefix(deps.terminalModesOf(sessionId)) : "";
       // Strip terminal queries from the replay so xterm doesn't re-answer them as stray input
       // (e.g. a DA reply surfacing as "0;276;0c" in the prompt) — see terminal-replay.ts.
-      ws.send(JSON.stringify({ type: "output", data: stripTerminalQueries(entry.buffer) }));
+      const data = prefix + stripTerminalQueries(entry.buffer);
+      if (data) ws.send(JSON.stringify({ type: "output", data }));
     }
     return entry;
   }

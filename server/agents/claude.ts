@@ -6,5 +6,6 @@ import type { AgentAdapter } from "./types.js";
 export const claudeAdapter = {
   kind: "claude",
   bin: () => process.env.CLAUDE_BIN || "claude",
+  binEnvVar: "CLAUDE_BIN",
   draftReadyMarker: /shift\+tab to cycle/,
 } satisfies AgentAdapter;

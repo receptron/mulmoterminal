@@ -9,5 +9,7 @@ import type { SessionAgent } from "./sessionAgent.js";
 export interface QuickCommand {
   label: string;
   text: string;
-  agents?: SessionAgent[];
+  // `| undefined` because quickCommandSchema `satisfies z.ZodType<QuickCommand>`, and
+  // Zod's `.optional()` produces `T | undefined`, not "key may be absent".
+  agents?: SessionAgent[] | undefined;
 }

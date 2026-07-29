@@ -12,7 +12,7 @@ const DEFAULT_SCHEDULE = "on-demand";
 
 export interface FeedLike {
   slug: string;
-  schema: { title: string; icon: string; ingest?: { kind?: string; schedule?: string } };
+  schema: { title: string; icon: string; ingest?: { kind?: string | undefined; schedule?: string | undefined } | undefined };
 }
 
 export function feedSummary(feed: FeedLike, lastFetchedAt: string | null): FeedSummary {

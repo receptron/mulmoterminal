@@ -9,6 +9,7 @@
 // happens to visit, at their expense.
 import { ref } from "vue";
 import { parseRateLimits } from "../../common/rateLimits";
+import { isRecord } from "../../common/isRecord";
 import type { ClaudeProbeState, RateLimitSnapshot } from "./rateLimitGauge";
 
 const FETCH_TIMEOUT_MS = 8000;
@@ -25,7 +26,6 @@ const snapshot = ref<RateLimitSnapshot | null>(null);
 let timer: ReturnType<typeof setTimeout> | null = null;
 let watchers = 0;
 
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
 const PROBE_STATES: readonly ClaudeProbeState[] = ["ok", "no-claude", "no-windows", "no-report"];
 const isProbeState = (v: unknown): v is ClaudeProbeState => typeof v === "string" && (PROBE_STATES as readonly string[]).includes(v);
 

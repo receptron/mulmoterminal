@@ -4,7 +4,9 @@ import type { Part } from "@google/genai";
 
 import { extractImageResult, ALLOWED_IMAGE_MIME } from "../../../server/backends/imageResult.js";
 
-const imagePart = (data: string, mimeType?: string): Part => ({ inlineData: { data, mimeType } });
+// The MIME is spread rather than passed as `undefined`: genai's Blob spells it exact, so a
+// part with no MIME has to have no key — which is the case the allowlist fallback is for.
+const imagePart = (data: string, mimeType?: string): Part => ({ inlineData: { data, ...(mimeType ? { mimeType } : {}) } });
 const textPart = (text: string): Part => ({ text });
 
 describe("extractImageResult", () => {

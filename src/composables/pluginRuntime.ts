@@ -77,7 +77,10 @@ export function makeBrowserPluginRuntime(deps: MakeRuntimeDeps): BrowserPluginRu
     },
     openUrl: makeOpenUrl(scope),
     dispatch: makeDispatch(toolName),
-    endpoints: undefined,
+    // `endpoints` is left OFF rather than set to undefined: the protocol spells it exact, so
+    // the key holding undefined is a different type from no key. Every plugin here is the
+    // single-dispatch shape, so there is no URL map to expose (MulmoClaude passes one through
+    // for its multi-URL built-ins).
   };
 }
 

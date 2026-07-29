@@ -77,7 +77,7 @@ import { ref, onMounted } from "vue";
 // StackView, which wraps such tools in a fixed-height box. When set, the host
 // + shadow mount become that height so the plugin's `h-full` chain resolves; when
 // omitted, the frame flows naturally (chart/form/markdown).
-const props = defineProps<{ css?: string; height?: string }>();
+const props = defineProps<{ css?: string | undefined; height?: string | undefined }>();
 
 const hostEl = ref<HTMLDivElement>();
 const target = ref<HTMLDivElement | null>(null);

@@ -12,7 +12,7 @@
 
 export interface AgentResumeFacts {
   // The agent's own conversation id this server recorded for the key, if it started that session.
-  mappedId?: string | null;
+  mappedId?: string | null | undefined;
   // Whether the key is itself the id of a conversation on disk (the sidebar hands these over).
   // A thunk, not a value: it reads the filesystem, and a reattach must not pay for a probe
   // whose answer it is about to discard.

@@ -309,7 +309,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
 
   // Sidebar listing, one session's detail, the grid's attention poll, the tool timeline and
   // codex's own sessions (see routes/session-routes.ts).
-  mountSessionRoutes(app, { freshenRosterTitle: deps.freshenRosterTitle });
+  mountSessionRoutes(app, { freshenRosterTitle: deps.freshenRosterTitle, publishActivity: deps.publishActivity });
 
   // Explicit close (reliable deps.reap over HTTP) + one-shot orphan cleanup. Extracted to a
   // module so the origin guard / id validation / orphan-selection boundary are testable.

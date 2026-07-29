@@ -4,4 +4,5 @@ import type { AgentAdapter } from "./types.js";
 export const codexAdapter = {
   kind: "codex",
   bin: () => process.env.CODEX_BIN || "codex",
+  binEnvVar: "CODEX_BIN",
 } satisfies AgentAdapter;

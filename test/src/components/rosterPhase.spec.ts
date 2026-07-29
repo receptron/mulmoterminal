@@ -47,6 +47,23 @@ describe("mergeSessionMeta", () => {
     expect([merged.lastPrompt, merged.aiTitle, merged.lastResponse]).toEqual(["fix the login bug", "Login fix", "done"]);
   });
 
+  // aiTitle is ours, held in memory with no transcript fallback, so a successful fetch answers
+  // it outright: null means "there is none now". Merging it like the prompt is how a /clear'ed
+  // session kept showing the title of the conversation the user had just ended (#1085).
+  it("drops the summary when the fetch says there is none", () => {
+    expect(mergeSessionMeta(shown, { aiTitle: null }).aiTitle).toBeNull();
+  });
+
+  // The other two DO fall back to the transcript, which can transiently miss — so for them a
+  // null stays "no news". A session that has none sends "" (what /clear writes), which is a
+  // value and merges through.
+  it("keeps the prompt and reply on a null, and clears them on an empty string", () => {
+    const nulled = mergeSessionMeta(shown, { lastPrompt: null, lastResponse: null });
+    expect([nulled.lastPrompt, nulled.lastResponse]).toEqual(["fix the login bug", "done"]);
+    const cleared = mergeSessionMeta(shown, { lastPrompt: "", lastResponse: "" });
+    expect([cleared.lastPrompt, cleared.lastResponse]).toEqual(["", ""]);
+  });
+
   // workPhase is the opposite: a successful fetch is authoritative, and null is a real state
   // ("no tools yet / not working"). Merge it like the text and a finished agent keeps a
   // "planning" badge forever.

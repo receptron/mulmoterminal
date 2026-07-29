@@ -48,7 +48,7 @@ let latestFetch = 0;
 /** Parse a collection deep-link (`/collections/<slug>?selected=<itemId>`) into its
  *  parts. String ops + URLSearchParams only — no regex (lint bans backtracking-prone
  *  patterns). Returns null for anything that isn't a collection target. */
-export function parseCollectionTarget(target: string | undefined): { slug: string; itemId?: string } | null {
+export function parseCollectionTarget(target: string | undefined): { slug: string; itemId?: string | undefined } | null {
   if (!target) return null;
   const prefix = "/collections/";
   if (!target.startsWith(prefix)) return null;

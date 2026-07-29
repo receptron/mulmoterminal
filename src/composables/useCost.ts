@@ -4,7 +4,7 @@ import { isRecord } from "../../common/isRecord";
 // The /api/cost payload: estimated $ spend for the current session plus today /
 // month roll-ups. `session` is absent when no session id was requested.
 export interface CostRollup {
-  session?: number;
+  session?: number | undefined;
   today: number;
   month: number;
   currency: string;

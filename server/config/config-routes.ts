@@ -127,6 +127,13 @@ export function getPrWorkdirFooter(): boolean {
   return loadAppConfig(CONFIG_FILE).prWorkdirFooter;
 }
 
+// Whether a spawned session carries the built-in closing-summary instructions (#1062). Read from
+// disk per spawn for the same reason as the footer above: it has no Settings control, so served
+// from memory a hand-edit would need a server restart to take effect.
+export function getAppendSystemPrompt(): boolean {
+  return loadAppConfig(CONFIG_FILE).appendSystemPrompt;
+}
+
 export function mountConfigRoutes(app: Express, claudeCwd: string): void {
   // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
   // everything it can write — buttons/chips included — and round-trip it.

@@ -238,6 +238,11 @@ export const providerSchema = z.object({
 });
 export type Provider = z.infer<typeof providerSchema>;
 
+// Whether this directory's sessions carry the built-in closing-summary instructions (#1062).
+// A tri-state, unlike the global boolean it overrides: null means the key is absent, which is
+// what makes "follow the global setting" distinguishable from an explicit `false` here.
+export const dirAppendSystemPromptField = z.boolean().nullable().catch(null);
+
 // Which provider/model a directory's sessions run on. Both lenient: a typo must not stop
 // the directory's other settings from loading — resolveProvider reports the real problem
 // at spawn time, where the user sees it.
@@ -386,6 +391,9 @@ const writableDirConfigSchema = z.object({
   // Relative entries resolve against this file's own directory. Claude only; codex has no
   // equivalent flag and ignores the key.
   addDirs: z.array(nonEmptyText).max(MAX_ADD_DIRS).optional(),
+  // Whether this directory's sessions carry the built-in closing-summary instructions (#1062).
+  // Omit to follow `appendSystemPrompt` in the global config, which defaults to on.
+  appendSystemPrompt: z.boolean().optional(),
 });
 
 export function dirConfigJsonSchema(): Record<string, unknown> {

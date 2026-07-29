@@ -25,9 +25,9 @@ export interface ProviderConfig {
   // The NAME of the env var holding the key, never the key. The value is read from the
   // server's own environment, so no secret is stored in a config file the app serves.
   tokenEnv: string;
-  maxOutputTokens?: number;
+  maxOutputTokens?: number | undefined;
   // Extra model ids the user listed for this provider; offered alongside the presets.
-  models?: readonly string[];
+  models?: readonly string[] | undefined;
 }
 
 export interface DirModelChoice {

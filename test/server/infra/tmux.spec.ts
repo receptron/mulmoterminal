@@ -6,6 +6,7 @@ import {
   isResumableTmuxSession,
   parseTmuxEnvironment,
   parseAttachedClientCount,
+  parseTmuxTerminalModes,
   planMsOverride,
   MS_OVERRIDE_ENTRY,
 } from "../../../server/infra/tmux";
@@ -220,5 +221,33 @@ describe("parseAttachedClientCount", () => {
     expect(parseAttachedClientCount("no server running")).toBeNull();
     expect(parseAttachedClientCount("-1")).toBeNull();
     expect(parseAttachedClientCount("1.5")).toBeNull();
+  });
+});
+
+// Fields, in order: alternate_on, mouse_standard_flag, mouse_button_flag, mouse_all_flag,
+// mouse_utf8_flag, mouse_sgr_flag.
+describe("parseTmuxTerminalModes", () => {
+  // Measured on a live Claude Code 2.1.220 pane under tmux 3.6a.
+  it("reads a mouse TUI's pane as the alternate buffer plus its tracking and SGR modes", () => {
+    expect(parseTmuxTerminalModes("1,0,0,1,0,1\n")).toEqual([1049, 1003, 1006]);
+  });
+
+  it("reads a plain shell's pane as nothing to restore", () => {
+    expect(parseTmuxTerminalModes("0,0,0,0,0,0\n")).toEqual([]);
+  });
+
+  it("maps the older tracking flags too", () => {
+    expect(parseTmuxTerminalModes("1,1,1,0,1,1")).toEqual([1049, 1000, 1002, 1005, 1006]);
+  });
+
+  // A tmux that doesn't know a variable renders it EMPTY. The remaining fields must keep their
+  // own modes rather than sliding onto the previous one.
+  it("keeps the fields aligned when a variable is unknown to this tmux", () => {
+    expect(parseTmuxTerminalModes("1,0,0,,,1")).toEqual([1049, 1006]);
+  });
+
+  it("restores nothing from output tmux could not produce", () => {
+    expect(parseTmuxTerminalModes("")).toEqual([]);
+    expect(parseTmuxTerminalModes("no server running")).toEqual([]);
   });
 });

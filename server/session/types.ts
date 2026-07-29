@@ -47,12 +47,14 @@ export interface ToolResult {
 }
 
 // One entry in a session's tool-call history (Pre/PostToolUse hooks).
+// The optional fields carry `| undefined` because the hook payload they are copied from
+// may omit any of them, and a completed call assigns durationMs in place.
 export interface ToolCall {
-  toolUseId?: string;
-  toolName?: string;
+  toolUseId?: string | undefined;
+  toolName?: string | undefined;
   toolInput?: unknown;
   toolOutput?: unknown;
-  durationMs?: number;
+  durationMs?: number | undefined;
   status: string;
   at: number;
 }

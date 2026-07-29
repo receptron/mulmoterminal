@@ -143,11 +143,21 @@ export interface GridCell {
   row: number;
 }
 
+/** The four numbers a cell mapping needs out of the screen element's box. Named here rather
+ *  than taken as `DOMRect` so these rules stay usable without the DOM lib — a `DOMRect`
+ *  satisfies it structurally, and this is the module's only reference to a browser type. */
+export interface ScreenBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 const clamp = (value: number, max: number): number => Math.min(Math.max(value, 1), max);
 
 /** The 1-based cell under a pointer position, clamped to the grid. xterm 6 exposes no
  *  pixel-to-cell mapping, so the cell size comes from the screen element's own box. */
-export function cellFromPoint(rect: DOMRect, cols: number, rows: number, pointer: PointerPosition): GridCell {
+export function cellFromPoint(rect: ScreenBox, cols: number, rows: number, pointer: PointerPosition): GridCell {
   if (rect.width <= 0 || rect.height <= 0 || cols <= 0 || rows <= 0) return { col: 1, row: 1 };
   const col = Math.floor((pointer.clientX - rect.left) / (rect.width / cols)) + 1;
   const row = Math.floor((pointer.clientY - rect.top) / (rect.height / rows)) + 1;

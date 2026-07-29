@@ -6,6 +6,12 @@
 //   reconnecting — it died and is being re-subscribed with backoff (self-healing)
 //   offline      — re-subscribing stopped helping, or nothing is connected at all;
 //                  recovering needs a re-auth from the browser's parked session
+//
+// @mulmoclaude/core declares the same three fields, and the server hands this straight to core's
+// resilient runner — structurally, so the two cannot disagree without a type error. Kept here
+// anyway because the BROWSER renders it: core exposes the type only from `remote-host`, whose
+// entry imports firebase/firestore, and pulling that into the Vue bundle to describe three fields
+// is the wrong trade. If core ever gives the health type its own subpath, delete this and import.
 
 import { isRecord } from "./isRecord.js";
 export const RUNNER_HEALTH_STATES = ["online", "reconnecting", "offline"] as const;

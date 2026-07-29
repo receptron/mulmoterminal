@@ -46,7 +46,7 @@ import {
 } from "@mulmoclaude/core/collection/server";
 import type { CollectionMutateAction } from "@mulmoclaude/core/collection";
 // CollectionItem + actionVisible live in the isomorphic core entry.
-import { actionVisible, type CollectionItem } from "@mulmoclaude/core/collection";
+import { actionVisible, type ActionWithWhen, type CollectionAction, type CollectionItem } from "@mulmoclaude/core/collection";
 // Curated-registry engine (Discover tab): merged catalog fetch + bundle import.
 import { listRegistry, importRegistry } from "@mulmoclaude/core/collection/registry/server";
 import { clampLimit as clampViewLimit, clampOffset as clampViewOffset, normalizeFields, normalizeMutate } from "@mulmoclaude/core/remote-view";
@@ -477,6 +477,17 @@ const respondForMutateAction = async (
   res.json({ written: true, itemId, item: outcome.item });
 };
 
+// The action's state gate, rebuilt so core's exact-optional parameter accepts it: the schema
+// parse yields a `when: undefined` / `require: undefined` KEY, which that type rejects.
+//
+// BOTH names are forwarded. They are the same gate under two spellings — `when` on the seeded
+// kinds, `require` on mutate — and this call is the authorization check, so dropping either
+// would make that kind's actions unconditionally runnable by a crafted request.
+export const visibilityGate = (action: CollectionAction): ActionWithWhen => ({
+  ...("when" in action && action.when ? { when: action.when } : {}),
+  ...("require" in action && action.require ? { require: action.require } : {}),
+});
+
 // Per-record action (e.g. Repair / enrich this record).
 const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId: string }> = async (req, res) => {
   const collection = await resolveCollection(res, req.params.slug);
@@ -493,7 +504,7 @@ const itemActionHandler: RequestHandler<{ slug: string; itemId: string; actionId
   }
   // The action's `when` predicate is the authorization rule: the client hides
   // out-of-state buttons, but a stale/crafted request could still target one.
-  if (!actionVisible(action, record)) {
+  if (!actionVisible(visibilityGate(action), record)) {
     res.status(409).json({ error: `action '${action.id}' is not available for item '${req.params.itemId}' in its current state` });
     return;
   }

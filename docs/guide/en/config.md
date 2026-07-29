@@ -282,6 +282,15 @@ show everything.**
 
 - Skill names (slugs) must start alphanumeric and contain only `a-z 0-9 - _`; a slug that doesn't resolve is ignored.
 
+### Closing summary for this directory (`appendSystemPrompt`)
+
+```json
+{ "appendSystemPrompt": false }
+```
+
+Whether this project's sessions are asked to end a reply with a summary. Omit it to follow the
+global setting, which is on. → [Turning off the closing summary](#append-system-prompt)
+
 ## Make your own colour scheme (`themes`) {#custom-themes}
 
 Beyond the four built-ins (Midnight / Nord / Daylight / Solarized Light), define your own in
@@ -1058,6 +1067,46 @@ Notes:
 - If the line can't be added (no `gh`, a network error), the PR is still created and opened —
   you just don't get the line.
 
+## Turning off the closing summary (`appendSystemPrompt`) {#append-system-prompt}
+
+MulmoTerminal adds an instruction to every Claude session it starts (`--append-system-prompt`):
+**end a reply with a short summary** of **what was asked, what was achieved, and what was not**,
+under a `---` rule.
+
+The grid is the reason. Come back to a cell after a while and, without the summary, what you
+asked for and what came of it are only recoverable by scrolling back through the session.
+
+**On by default.** To turn it off, in `~/.mulmoterminal/config.json`:
+
+```json
+{
+  "appendSystemPrompt": false
+}
+```
+
+It applies to **sessions started from then on**. No server restart is needed, but **sessions
+already running keep it** — the instruction is handed over once, at spawn. To see the change,
+close a cell and open it again.
+
+To decide it per project, put it in that directory's `.mulmoterminal.json`. **The directory's
+answer wins** over the global one.
+
+```json
+{
+  "appendSystemPrompt": false
+}
+```
+
+Notes:
+
+- **Nothing in MulmoTerminal stops working without it.** No part of the app reads what the
+  summary says; the "last reply" shown in the roster and in push notifications is simply the raw
+  tail of the reply rather than a summary.
+- It is a **separate setting** from [Which clone made this PR](#pr-workdir-footer)
+  (`prWorkdirFooter`). Both ride on the same `--append-system-prompt`, and turning one off
+  leaves the other in place.
+- The value is `true` / `false` only — **there is no way to substitute your own wording yet**.
+
 ## Telling the issue you are on it (`issueWorkComments`) {#issue-work-comments}
 
 The `work` chip tells **you** which cell is on which issue. This tells **the issue** — so the
@@ -1176,6 +1225,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `keymap` | User-defined keyboard shortcuts. **Empty by default — nothing is bound** (→ [Keyboard shortcuts](#keymap)) |
 | `copyOnSelect` | Put a mouse selection on the clipboard the moment it settles, with no key pressed. **Off by default** (→ [Copy on select](#copy-on-select)) |
 | `prWorkdirFooter` | End a created PR's body with `work in <clone>` (→ [Which clone made this PR](#pr-workdir-footer)). **On by default**; `false` opts out |
+| `appendSystemPrompt` | Have replies end with a summary of what was asked / achieved / not done (→ [Turning off the closing summary](#append-system-prompt)). **On by default**; `false` opts out, and a directory's `.mulmoterminal.json` wins |
 | `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3` → [Cockpit roster line counts](#cockpit-lines)) |
 | `fontFamily` | The font every terminal renders in — a CSS font-family stack (→ [Terminal font](#font-family)) |
 

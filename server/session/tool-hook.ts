@@ -20,14 +20,14 @@ export interface ToolHookPayload {
 }
 
 export interface ToolCallStart {
-  toolUseId?: string;
-  toolName?: string;
+  toolUseId?: string | undefined;
+  toolName?: string | undefined;
   toolInput: unknown;
 }
 
 export interface ToolCallEnd extends ToolCallStart {
   toolOutput: unknown;
-  durationMs?: number;
+  durationMs?: number | undefined;
   status: "completed" | "failed";
 }
 

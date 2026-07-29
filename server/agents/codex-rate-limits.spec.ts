@@ -51,6 +51,15 @@ describe("extractCodexRateLimits", () => {
   it("ignores a window whose duration matches neither", () => {
     expect(extractCodexRateLimits({ primary: { used_percent: 5, window_minutes: 1, resets_at: 1 } })).toBeNull();
   });
+
+  // #1074 swapped a hand-copied `isRecord` for the shared one, which REJECTS arrays where the copy
+  // accepted them. Same answer either way — pinned so the swap stays invisible.
+  it.each([
+    ["the payload itself is an array", [{ primary: { used_percent: 5, window_minutes: FIVE_HOUR_MIN } }]],
+    ["a window is an array", { primary: [{ used_percent: 5, window_minutes: FIVE_HOUR_MIN }] }],
+  ])("is null when %s", (_case, raw) => {
+    expect(extractCodexRateLimits(raw)).toBeNull();
+  });
 });
 
 describe("latestRateLimitsInRollout", () => {
@@ -60,6 +69,17 @@ describe("latestRateLimitsInRollout", () => {
   // A long session writes the object many times; the last one is the state now.
   it("reads the newest entry, not the first", () => {
     expect(latestRateLimitsInRollout([line(5), "{}", line(42)])?.fiveHour?.usedPercentage).toBe(42);
+  });
+
+  // The search looks for the KEY rather than a fixed path precisely because Codex's surrounding
+  // shape has changed before — and an array on that path (a `content` list, a batch of events) is
+  // one of the shapes it has to survive. Losing it would blank the gauge with nothing to see.
+  it("finds the windows nested inside an array", () => {
+    const nested = JSON.stringify({
+      type: "event",
+      payload: { content: [{ rate_limits: { primary: { used_percent: 37, window_minutes: FIVE_HOUR_MIN, resets_at: 1 } } }] },
+    });
+    expect(latestRateLimitsInRollout([nested])?.fiveHour?.usedPercentage).toBe(37);
   });
 
   // The file is appended to while we read it, so the last line can be half-written. That must cost

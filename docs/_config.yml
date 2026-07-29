@@ -1,7 +1,8 @@
 title: MulmoTerminal Guide
 description: >-
-  User guide for MulmoTerminal — the grid view, everyday workflows, the full
-  feature list, and configuration. 日本語 / English.
+  Run multiple Claude Code and Codex sessions in parallel — a browser terminal grid
+  that shows which agent needs you. Setup, the grid view, git worktrees, phone push
+  and configuration. 日本語 / English.
 # Built via GitHub Actions (see .github/workflows/pages.yml) with Jekyll 4 + the just-the-docs
 # gem (docs/Gemfile), so we can use the current theme instead of the legacy Pages Jekyll 3.9 builder.
 theme: just-the-docs

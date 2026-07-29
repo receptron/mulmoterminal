@@ -4,6 +4,149 @@ Release notes for MulmoTerminal, mirrored from the [GitHub Releases](https://git
 
 This file records **what changed and why**. For **how to actually use** a new feature, a release may also ship a dated setup guide — linked at the top of its entry, and written as a snapshot of that moment. The living reference is always the [guide](https://receptron.github.io/mulmoterminal/).
 
+## mulmoterminal@2.7.0 — 2026-07-29
+
+> **Setup guide:** [What changed in this release](https://receptron.github.io/mulmoterminal/guide/en/v2.7.0.html) — written at release time. ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v2.7.0.html))
+
+A feature release. The headline is that a session can now carry **a note you wrote yourself** — but
+the fix worth upgrading for is that a second MulmoTerminal no longer deletes the running one's
+sessions.
+
+### A one-line note you write yourself, per session (#1086, closes #1084)
+
+Sessions are named by an AI title, the last prompt, or an id — all answers to *what was said*, none
+to **what this one is for**. A pencil beside the header text now takes one line of your own.
+
+It **replaces** the header's existing line instead of adding one, so the header keeps a constant
+height; the displaced title moves to the tooltip. Storage is per session id, server-side, in an
+append log at `~/.mulmoterminal/session-memos.jsonl`, and is **not** dropped on reap — close the
+cell, restart the server, resume that session and the note is back. The same note names the session
+in the sidebar, the resume picker, and the roster on the phone.
+
+### Draggable dividers in a zoomed cell (#1083, closes #1077)
+
+Zooming a cell splits it into the terminal plus a column. Both boundaries were fixed width, could
+not be changed, and nothing was remembered. They now respond to dragging and to the arrow keys, and
+the chosen width survives a reload.
+
+### Dropping a file works in Chrome, and from another machine (#1055, closes #993)
+
+Inserting a dropped file's path only ever worked when the browser handed over a real path — which
+**Chrome does not do**, and which is never true over a remote connection. Those cases printed a hint
+and stopped. Now the bytes are uploaded to the host, saved, and the saved path is inserted. Where a
+real path is available the old behaviour is unchanged: it is used directly, with no upload.
+
+### Background workers moved behind a Background chip (#1067, closes #1060)
+
+Scheduled collection syncs and similar unattended work started sessions that were listed among the
+user's own chats. They now sit behind a **Background** chip, leaving the default **All** to
+human-started chats. Deliberately a filter rather than a removal, unlike MulmoClaude's
+`origin: "system"`: a MulmoTerminal session is a live terminal, not a transcript, so hiding it
+entirely would remove the only way to inspect — or stop — it.
+
+### `appendSystemPrompt` turns off the closing-summary instruction (#1069, closes #1062)
+
+Every spawned session carried `--append-system-prompt` with the closing-summary instructions.
+Nothing in the app parses the result, so it is now optional. Default remains on; settable globally in
+`~/.mulmoterminal/config.json` and per directory in `.mulmoterminal.json`, with the directory
+winning. Independent of `prWorkdirFooter` — with both off, no flag is passed at all. A config
+without the key behaves exactly as before.
+
+### A second instance no longer deletes the first one's session settings (#1066, closes #1061)
+
+`pruneOrphanSettings` removed session settings whose PTY had no tmux session, on the reasoning that
+"a PTY without tmux died with the server that owned it". True of a *previous* lifetime, false of a
+*concurrent* one: a second instance cannot see the first one's live PTYs, so every one of those files
+read as abandoned. Eight live sessions lost their settings on the machine where this surfaced.
+
+Starting another instance now asks first, **whatever port it was given** — previously the prompt only
+appeared when the port clashed, so `--port <free>` started a second one in silence. The clash was
+never the problem; the shared `~/.mulmoterminal` is.
+
+### The wheel and TUI clicks survive a reattach (#1089, closes #1073)
+
+In Claude and Codex cells, wheel scrollback and clicking the agent's own UI elements died after any
+reattach — reload, sidebar switch, another tab, a dropped WebSocket. `?1049h` (enter alternate
+screen) is sent exactly once at pty offset 0 and is therefore never inside the trailing 1 MiB the
+server replays, so the client restored into the normal buffer with the wheel/click gate stuck false.
+
+Fixed by asking tmux for the current state and prefixing the replay with the matching DECSET. The
+alternative the issue proposed — tracking sticky state by scanning the pty byte stream — was not
+taken: tmux is the emulator that already holds this state, which removes both DECRST tracking and
+CSI sequences split across chunk boundaries. No client change at all.
+
+### `/clear` stops leaving the previous summary in the roster (#1087, closes #1085)
+
+After `/clear`, the cockpit roster kept showing the pre-clear AI summary and reply: gone for a
+moment, back as soon as the next turn ended. `/clear` moves the agent to a new session id and a new
+transcript, but the hooks are pinned to MulmoTerminal's own id, so `${mtId}.jsonl` becomes a file
+frozen at the moment of the clear.
+
+### Session startup failures are diagnosed, not guessed (#1068, #1082, closes #1063, #1078)
+
+The server caught the spawn exception, discarded it, and returned a fixed "codex is probably not
+installed". Measured, that text was right only on Windows; on macOS a missing binary produced a green
+`[session ended]` instead — symptom and explanation swapped. The binary is now checked before
+spawning, in the environment the PTY will actually receive, and what is found is what is reported.
+
+The server log gained three things (#1082): whether tmux **attached or created** — `tmux
+new-session -A` attaches to a live session and runs no command, so a resume never launches the agent
+and never reveals a broken PATH, argv or cwd, which is why "resume works, new sessions fail" was not
+the clue it looked like; a cwd diagnosis, since macOS runs `chdir` in the child and a deleted
+directory becomes `_exit(1)` rather than an exception; and the exit detail itself.
+
+### Scheduled feed refreshes report their failures (#1072, closes #1070)
+
+The feeds engine hands hidden workers a one-shot `onComplete`, and `feedsSpawnWorker` destructured
+only `{ message, hidden }` — dropping it. A periodic collection refresh that failed was recorded
+nowhere.
+
+### `exactOptionalPropertyTypes` is on across the project (#1053, #1081, closes #1048)
+
+Enabled in all four tsconfigs, so `field?: T` means "the key may be absent" and `{ work: undefined }`
+no longer type-checks — the exact shape that emptied the phone's session list in 2.6.0 (#1042). The
+runtime guard added then only protected the path toward Firestore; everything else passed the type
+checker untouched until now. #1053 fixed the same shape at five sites found by the change.
+
+### The remote-host workarounds moved into @mulmoclaude/core (#1051, #1057, #1075, #1088, closes #1064)
+
+Three files carried here (`firestoreSafeResult.ts`, `resilientRunner.ts`, `presenceProbe.ts`, 421
+lines) are now core's, on 1.10.0.
+
+Before that, #1051 taught the local guard to separate a **bug** (an `undefined` where none belongs,
+which has to be findable) from a **legitimately absent optional field** (warning about which every
+poll teaches everyone to ignore the log), and #1057 fixed two holes a local codex review found and
+reproduced: the guard rebuilt `Date`, `Map` and Firestore sentinels from their entries, turning a
+valid value into `{}`, and the session-activity publisher wrote to Firestore through a path the
+guard never saw.
+
+The outer ring is the one worth naming. It had drifted out of step with core's own listen-retry
+window — the local copy called a runner recovered after 60s, while core 1.9.0 waited five minutes
+before reporting a dead listener, so the outage clock was reset before it could ever reach the
+give-up threshold. A host with a dead credential relaunched forever and never asked the client to
+re-authenticate, with the UI reporting "online" throughout.
+
+### CI and tests
+
+- **Windows daily is green again** (#1080, closes #1079): red since `622ada44` on both Node 22.x and
+  24.x. Both failures were test-side portability bugs — the product code was correct on Windows —
+  but each meant the path was never actually verified there. It is now.
+- **Temp-dir path spelling** (#1052, #1056, #1059): `realpathSync` returns 8.3 short names on
+  Windows while `realpathSync.native` expands them. The implementation was unified first; #1056 was
+  its missing test-side pair, and #1059 swept the remaining 12 specs (of 64 that create a temp dir)
+  that actually resolve paths, rather than assuming the rest were fine.
+- **jscpd** (#1076, closes #1074): three real duplicates removed, 10 alerts down to 7. The remaining
+  seven are call sites of something already shared and are kept deliberately — a wrong abstraction is
+  worse than duplication.
+
+### Docs
+
+- The 2.6.0 guide was rewritten for end users (#1054): it had been explaining symptoms in terms of
+  the implementation.
+- README and both guides quote two third-party articles written about MulmoTerminal unprompted
+  (#1050).
+- The remaining user-facing `npx mulmoterminal` invocations say `@latest` (#1058).
+
 ## mulmoterminal@2.6.0 — 2026-07-29
 
 > **Setup guide:** [What changed in this release](https://receptron.github.io/mulmoterminal/guide/en/v2.6.0.html) — written at release time. ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v2.6.0.html))

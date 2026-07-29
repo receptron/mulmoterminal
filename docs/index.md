@@ -2,6 +2,7 @@
 title: Home
 layout: default
 nav_order: 1
+description: Run multiple Claude Code and Codex sessions in parallel — a browser terminal grid that shows which agent needs you. 複数の AI コーディングエージェントを並列で回し、どれが自分待ちかを一目で。ローカル・tmux 永続化・MIT。
 ---
 
 # MulmoTerminal Guide
@@ -118,3 +119,7 @@ The launcher detects it and prints the exact removal command; run that, then `np
 
 > Repo: [github.com/receptron/mulmoterminal](https://github.com/receptron/mulmoterminal) ·
 > npm: [`mulmoterminal`](https://www.npmjs.com/package/mulmoterminal) — `npx mulmoterminal@latest`
+
+> **アップデート情報 / Updates** — 新バージョンや新機能のお知らせは X の
+> [Singularity Society（@SingularitySoci）](https://x.com/SingularitySoci) で流しています
+> (release and feature announcements, in Japanese).

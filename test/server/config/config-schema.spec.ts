@@ -196,6 +196,16 @@ describe("dirConfigJsonSchema", () => {
     expect(orderPriority.type).toBe("integer");
   });
 
+  // Same reasoning again (#1062): the loader honours this key, so a schema without it is a key
+  // the config skill refuses to write. Boolean-only for now — the planned third value is a
+  // string, and blessing one here before the loader accepts it would write a config that loads
+  // as "unset" while the skill reports it as written.
+  it("includes appendSystemPrompt as a boolean, so the config skill can write it", () => {
+    const props = isRecord(dirConfigJsonSchema().properties) ? dirConfigJsonSchema().properties : {};
+    const appendSystemPrompt = isRecord(props) && isRecord(props.appendSystemPrompt) ? props.appendSystemPrompt : {};
+    expect(appendSystemPrompt.type).toBe("boolean");
+  });
+
   it("caps the skills allowlist at MAX_SKILL_FILTER", () => {
     const schema = dirConfigJsonSchema();
     const props = isRecord(schema.properties) ? schema.properties : {};

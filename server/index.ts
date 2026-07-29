@@ -14,6 +14,7 @@ import { getUserMcpServers, getWorklogConfig, getTerminalSubmit, getQuickCommand
 import { enforceKeymap } from "./config/keymap-check.js";
 import { readFileSync } from "node:fs";
 import { submitSequenceForAgent } from "../common/terminalSubmit.js";
+import { sessionDisplayName } from "../common/sessionMemo.js";
 import { refreshUpdateStatus } from "./config/update-status.js";
 import {
   tmuxAvailable,
@@ -23,6 +24,7 @@ import {
   tmuxPaneCommand,
   tmuxAttachedClientCount,
   tmuxCaptureStyledPane,
+  tmuxTerminalModes,
 } from "./infra/tmux.js";
 import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage } from "./infra/sandbox.js";
 import { bindSecurityWarning, browserOriginHostnames, createIsAllowedOrigin } from "./infra/allowed-origin.js";
@@ -50,8 +52,21 @@ import { generateTitleFromTurns } from "./config/header-title.js";
 import { mountTerminalWebSockets } from "./routes/ws-routes.js";
 import { createConnectionHandlers } from "./session/pty-connection.js";
 import type { SpawnDeps } from "./session/spawn-deps.js";
-import { activity, aiTitles, backgroundMarkers, devTerminalSessions, knownSessions, lastPrompts, ptys, sessionCwd } from "./session/registry.js";
+import {
+  activity,
+  aiTitles,
+  backgroundMarkers,
+  devTerminalSessions,
+  knownSessions,
+  lastPrompts,
+  ptys,
+  sessionCwd,
+  sessionMemos,
+  sessionMemosHydrated,
+} from "./session/registry.js";
+import { hydrateClearedTranscripts } from "./session/cleared-transcripts.js";
 import { runWithHiddenMarker } from "./session/hiddenMarker.js";
+import { registerCompletionHook } from "./session/completion-hooks.js";
 import { createToolStores } from "./session/tool-store.js";
 import { writeDecisionDigest } from "./session/decision-digest-file.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -203,6 +218,7 @@ const { reattachPty, handleClientFrame, handleClientClose } = createConnectionHa
   reap: (id) => reap(id),
   setWaiting: (id, waiting) => setWaiting(id, waiting),
   armReapForDetached: (id) => armReapForDetached(id),
+  terminalModesOf: (id) => tmuxTerminalModes(id),
 });
 
 // Mirrors session activity into Firestore so the phone's terminal viewer can refresh
@@ -430,6 +446,12 @@ initFileChangePublisher({ workspace: CLAUDE_CWD, pubsub });
 // before any publish/clear and before the collection watchers start.
 await initNotifier({ workspace: CLAUDE_CWD, pubsub });
 
+// Which sessions were `/clear`ed before this process started: tmux keeps their claude running
+// across a restart, so the mark that stops us reading their frozen transcript has to come back
+// with it (#1085). Awaited here — the readers are synchronous, and the first hook can arrive as
+// soon as we listen.
+await hydrateClearedTranscripts();
+
 // Give the markdown host app its workspace (for artifacts/documents storage).
 // File-change live-refresh is handled by the shared publisher above.
 initMarkdownBackend({ workspace: CLAUDE_CWD });
@@ -473,18 +495,23 @@ initAccountingBackend({ workspace: CLAUDE_CWD, pubsub });
 // MulmoTerminal's own session spawn — adapted to @mulmoclaude/core/feeds' AgentWorkerRunner
 // shape here (where spawnClaudePty lives) and injected, so the feeds backend never imports
 // the session layer. A MANUAL refresh spawns a VISIBLE session (hidden:false) the user can
-// watch; `onComplete` is honoured only for hidden (scheduled) workers, which MulmoTerminal
-// doesn't register yet, so it's unused for now. `roleId` is ignored (no role system).
+// watch, and the engine sends no `onComplete` for one — watching it IS the report.
+// `roleId` is ignored (no role system).
 //
-// A hidden one goes on the scheduled-session retention (#541): the chat list keeps it behind
-// the Background filter, so nobody is watching for it to finish and nothing else would ever
-// end it. `scheduledSessions` is defined further down, which is safe because the system task
-// that calls this is registered later still (initUserTaskScheduler).
-const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden }) => {
+// A hidden one gets two things a watched session doesn't need. It goes on the scheduled-session
+// retention (#541), because the chat list keeps it behind the Background filter so nobody is
+// waiting for it to finish and nothing else would ever end it. And it carries the engine's
+// completion hook (#1070), which is what turns a failed refresh into a bell instead of silence.
+// `scheduledSessions` is defined further down, which is safe because the system task that calls
+// this is registered later still (initUserTaskScheduler).
+const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden, onComplete }) => {
   const sessionId = randomUUID();
   try {
     runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () => spawnClaudePty(sessionId, null, null, { initialPrompt: message }));
     if (hidden) scheduledSessions.register(sessionId);
+    // AFTER a successful spawn: a launch that threw has no session to report on, and
+    // registering first would leave a hook nothing will ever fire or clear.
+    if (hidden && onComplete) registerCompletionHook(sessionId, onComplete);
     return { ok: true, chatId: sessionId };
   } catch (err) {
     return { ok: false, error: messageOf(err) };
@@ -537,6 +564,7 @@ const remoteHostListTerminalSessions = async () => {
   // row with no directory and no work item.
   const cwdOfSession = (id: string) => ptys.get(id)?.cwd ?? sessionCwd(id) ?? "";
   const work = await workByCwd([...new Set([...ptys.keys(), ...tmuxListSessionIds()])].map(cwdOfSession));
+  await sessionMemosHydrated; // the memo IS the phone's row title when there is one
   return buildSessionList({
     liveIds: [...ptys.keys()],
     tmuxIds: tmuxListSessionIds(),
@@ -552,7 +580,11 @@ const remoteHostListTerminalSessions = async () => {
       // holding undefined, and Firestore then refuses the entire reply rather than that one field.
       const summary = work.get(cwdOfSession(id));
       return {
-        title: aiTitles.get(id) ?? knownSessions.get(id)?.title ?? "",
+        // The same precedence as the cell header and the sidebar, through the same helper: the
+        // phone is where "which of these is which" is hardest, and it renders `title` and nothing
+        // else — so riding in that field is also what puts a memo on a phone with no core release
+        // and no schema change.
+        title: sessionDisplayName(sessionMemos.get(id), aiTitles.get(id), knownSessions.get(id)?.title),
         cwd: cwdOfSession(id),
         agent: agentOfSession(id),
         ...(summary ? { work: summary } : {}),

@@ -17,7 +17,7 @@ const props = defineProps<{
   filesOpen?: boolean;
   // Which side pane this cell is showing, so each button can read as pressed. The three share
   // one slot beside the enlarged terminal, so at most one is ever pressed.
-  rightPane?: "files" | "canvas" | "tools" | null;
+  rightPane?: "files" | "canvas" | "tools" | null | undefined;
   // Whether this cell's session actually has the drawing tools — i.e. whether its directory has
   // the `render` MCP group registered with Claude Code. False disables the button rather than
   // removing it: the pane would open empty, and that is worth SAYING rather than hiding.

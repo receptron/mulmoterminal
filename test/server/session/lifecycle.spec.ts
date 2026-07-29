@@ -9,10 +9,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createSessionLifecycle } from "../../../server/session/lifecycle.js";
 import type { WorkPhase } from "../../../server/session/workPhase.js";
 import { activity, aiTitles, hiddenSessions, knownSessions, lastPrompts, lastResponses, launchChoices, ptys } from "../../../server/session/registry.js";
+import { clearedTranscripts } from "../../../server/session/cleared-transcripts.js";
 
 vi.mock("../../../server/infra/tmux.js", () => ({ tmuxKillSession: vi.fn() }));
 vi.mock("../../../server/infra/sandbox.js", () => ({ cleanupSandbox: vi.fn() }));
 vi.mock("../../../server/session/session-settings.js", () => ({ cleanupSessionSettings: vi.fn() }));
+// The reply the roster shows is re-read from the transcript at the end of a turn; the tests
+// stand in for that file so the refresh can be observed without writing one.
+vi.mock("../../../server/session/session-reads.js", () => ({ readLatestResponse: vi.fn(() => "the reply on disk") }));
 
 const ID = "11111111-2222-4333-8444-555555555555";
 
@@ -30,6 +34,7 @@ const fakeEntry = (over: Record<string, unknown> = {}) => ({ term: { kill: vi.fn
 const clearRegistry = () => {
   for (const map of [ptys, activity, knownSessions, lastPrompts, lastResponses, aiTitles, launchChoices]) map.clear();
   hiddenSessions.clear();
+  clearedTranscripts.clear();
 };
 
 beforeEach(clearRegistry);
@@ -69,6 +74,15 @@ describe("reap", () => {
     createSessionLifecycle(deps).reap(ID);
     expect((entry as { term: { kill: ReturnType<typeof vi.fn> } }).term.kill).toHaveBeenCalled();
     expect(deps.publish).toHaveBeenCalledWith("sessions", expect.objectContaining({ id: ID, working: false, event: "closed" }));
+  });
+
+  // The mark says "our transcript is frozen on a conversation that ended". Teardown is where
+  // that stops being true: the next claude on this id appends to that file again (#1085).
+  it("stops treating the transcript as cleared", () => {
+    ptys.set(ID, fakeEntry());
+    clearedTranscripts.add(ID);
+    createSessionLifecycle(makeDeps()).reap(ID);
+    expect(clearedTranscripts.has(ID)).toBe(false);
   });
 
   it("does nothing for a session that was already reaped", () => {
@@ -127,6 +141,29 @@ describe("setWorking / setWaiting", () => {
       event: "Notification",
       workPhase: "implementing",
     });
+  });
+});
+
+// The end of a turn is when the roster's copy of the reply is refreshed from the transcript —
+// and, after a /clear, the moment the pre-clear reply used to come back (#1085). The rule itself
+// is shouldRefreshReply's; what is pinned here is that the lifecycle actually asks it about THIS
+// session, since passing a constant would read as working right up to the clear.
+describe("publishActivity's reply refresh", () => {
+  const endATurn = () => {
+    ptys.set(ID, fakeEntry({ ws: {} }));
+    createSessionLifecycle(makeDeps()).setWaiting(ID, true, "Stop");
+  };
+
+  it("re-reads the transcript when a turn ends", () => {
+    endATurn();
+    expect(lastResponses.get(ID)).toBe("the reply on disk");
+  });
+
+  it("leaves a cleared session's blank reply alone", () => {
+    lastResponses.set(ID, ""); // what /clear writes
+    clearedTranscripts.add(ID);
+    endATurn();
+    expect(lastResponses.get(ID)).toBe("");
   });
 });
 

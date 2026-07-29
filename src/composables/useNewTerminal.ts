@@ -20,7 +20,7 @@ export interface NewTerminalRequest {
   afterSlotKey: string | null;
   // What the new cell runs. Omitted means the OS default shell, which is what the header
   // button has always opened; the phone can also ask for claude or codex (#831).
-  agent?: LaunchAgent;
+  agent?: LaunchAgent | undefined;
 }
 type Handler = (req: NewTerminalRequest) => void;
 

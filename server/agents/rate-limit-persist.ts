@@ -12,11 +12,10 @@ import path from "node:path";
 import { MULMOTERMINAL_HOME } from "../config/env.js";
 import type { RateLimitSnapshot } from "./rate-limit-store.js";
 import { parseRateLimits } from "../../common/rateLimits.js";
+import { isRecord } from "../../common/isRecord.js";
+import { finiteNumber } from "../../common/finiteNumber.js";
 
 export const rateLimitCacheFile = (): string => path.join(MULMOTERMINAL_HOME, "rate-limits.json");
-
-const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null;
-const finite = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**
  * What was cached, as the store's own shape. Every field is re-validated rather than trusted: this
@@ -31,7 +30,7 @@ export function parseRateLimitCache(text: string): RateLimitSnapshot {
       const entry = parsed[agent];
       if (!isRecord(entry)) return [];
       const limits = parseRateLimits(entry.limits);
-      const reportedAt_ms = finite(entry.reportedAt_ms);
+      const reportedAt_ms = finiteNumber(entry.reportedAt_ms);
       return limits && reportedAt_ms !== null ? [[agent, { limits, reportedAt_ms }] as const] : [];
     });
     return Object.fromEntries(entries);

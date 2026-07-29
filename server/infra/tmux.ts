@@ -291,6 +291,47 @@ export function tmuxPaneCommand(id: string): string | null {
   return name === "" ? null : name;
 }
 
+// The pane state that an application SETS ONCE and then relies on forever: which screen buffer
+// it owns, and which mouse reports it asked for. Read back as the DEC private modes that would
+// re-establish it (#1073).
+//
+// Needed because the reattach replay is a bounded tail: `CSI ? 1049 h` is written at pty offset 0
+// (when our tmux client attaches) and never again, so past ~1 MiB it is gone from the replay and
+// the browser restores into the normal buffer — which silently disables the wheel and click
+// synthesis, both gated on the alternate buffer (see session/terminal-replay.ts).
+//
+// Asking tmux instead of tracking the byte stream is what keeps this small: tmux is the emulator
+// that owns the state, so there is no DECRST bookkeeping and no CSI split across pty chunks.
+//
+// 1001/1015/1016 are in the client's swallow set but tmux has no flag for them. No agent we run
+// asks for them, and the client needs 1006 plus one tracking mode — which this covers.
+const TERMINAL_MODE_FLAGS = [
+  { flag: "alternate_on", mode: 1049 },
+  { flag: "mouse_standard_flag", mode: 1000 },
+  { flag: "mouse_button_flag", mode: 1002 },
+  { flag: "mouse_all_flag", mode: 1003 },
+  { flag: "mouse_utf8_flag", mode: 1005 },
+  { flag: "mouse_sgr_flag", mode: 1006 },
+] as const;
+
+// Comma-separated, not space: a variable an older tmux doesn't know renders EMPTY, and only a
+// delimiter that survives an empty field keeps the rest of the values on their own modes.
+const TERMINAL_MODE_FORMAT = TERMINAL_MODE_FLAGS.map(({ flag }) => `#{${flag}}`).join(",");
+
+/** Parse one `TERMINAL_MODE_FORMAT` line into the modes that are on. Positional against the same
+ *  table the format is built from, so the two cannot drift. */
+export function parseTmuxTerminalModes(stdout: string): number[] {
+  const values = stdout.trim().split(",");
+  return TERMINAL_MODE_FLAGS.filter((_, i) => values[i] === "1").map(({ mode }) => mode);
+}
+
+// Empty rather than null when tmux can't answer: an unreadable session and a plain shell lead to
+// the same action — restore nothing — so a nullable would only push a `?? []` onto every caller.
+export function tmuxTerminalModes(id: string): number[] {
+  const r = tmux(["display-message", "-p", "-t", tmuxSessionName(id), TERMINAL_MODE_FORMAT]);
+  return r.status === 0 ? parseTmuxTerminalModes(r.stdout) : [];
+}
+
 // Parse `#{session_attached}`. Its own function so the "unreadable means nobody" rule is
 // testable: a caller deciding whether to KILL a session must not read a failure as 0.
 export function parseAttachedClientCount(stdout: string): number | null {

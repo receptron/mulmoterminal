@@ -12,7 +12,7 @@ export type CopyOutcome = { kind: "ok"; text: string; lang: string | null } | { 
 
 /** `tooLarge` is the server refusing to read an oversized transcript; it rides on the same
  *  response as the turn, so it is checked before the (necessarily empty) reply. */
-export function copyOutcomeFor(turn: { reply: string | null; tooLarge?: boolean }): CopyOutcome {
+export function copyOutcomeFor(turn: { reply: string | null; tooLarge?: boolean | undefined }): CopyOutcome {
   if (turn.tooLarge) return { kind: "too-large" };
   if (!turn.reply) return { kind: "no-turn" };
   const block = lastFencedBlock(turn.reply);
@@ -42,7 +42,7 @@ export const clipboardAvailable = (): boolean => typeof navigator !== "undefined
 
 /** True when `turn` is the shape fetchLastTurn returns. Kept next to the outcome logic so the
  *  component never has to widen a type to call it. */
-export const turnOf = (fetched: FetchedTurn & { tooLarge?: boolean }): { reply: string | null; tooLarge?: boolean } => ({
+export const turnOf = (fetched: FetchedTurn & { tooLarge?: boolean | undefined }): { reply: string | null; tooLarge?: boolean | undefined } => ({
   reply: fetched.reply,
   tooLarge: fetched.tooLarge,
 });

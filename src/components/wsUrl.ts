@@ -16,9 +16,9 @@ export interface TerminalWsUrlInput {
   host: string; // location.host
   secure: boolean; // location.protocol === "https:"
   sessionId: string | null; // resume this session; null => fresh session
-  cwd?: string | null; // launch in this directory
-  devTerminal?: boolean; // grid dev terminal: no GUI MCP (?gui=0)
-  launch?: LaunchChoice | null; // picked at launch; absent => the directory's default
+  cwd?: string | null | undefined; // launch in this directory
+  devTerminal?: boolean | undefined; // grid dev terminal: no GUI MCP (?gui=0)
+  launch?: LaunchChoice | null | undefined; // picked at launch; absent => the directory's default
 }
 
 // The two session-terminal endpoints (/ws for claude, /ws/codex for codex) send the

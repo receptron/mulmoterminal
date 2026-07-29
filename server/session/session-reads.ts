@@ -25,7 +25,7 @@ import {
 import { createFileCache, type FileStamp } from "./file-cache.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
 import { sessionListTitle } from "./sessionListTitle.js";
-import { activity, aiTitles, codexRolloutIds, isBackgroundSession, knownSessions } from "./registry.js";
+import { activity, aiTitles, codexRolloutIds, isBackgroundSession, knownSessions, sessionMemos } from "./registry.js";
 import { projectSessionsDir } from "./project-dir.js";
 import { lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./last-turn.js";
 import { forEachJsonlRecord, readTailRecords } from "../infra/jsonl-file.js";
@@ -242,7 +242,7 @@ export async function readSessionMeta(dir: string, file: string): Promise<Sessio
   ]);
 
   const id = path.basename(file, ".jsonl");
-  const title = sessionListTitle({ liveAiTitle: aiTitles.get(id), diskAiTitle: aiTitle, diskLastPrompt: lastPrompt, firstUserMsg });
+  const title = sessionListTitle({ memo: sessionMemos.get(id), liveAiTitle: aiTitles.get(id), diskAiTitle: aiTitle, diskLastPrompt: lastPrompt, firstUserMsg });
   const a = activity.get(id);
   return {
     id,

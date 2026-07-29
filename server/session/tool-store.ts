@@ -130,6 +130,21 @@ export function capToolOutput(output: unknown): unknown {
   return output;
 }
 
+// What the hook layer hands the call recorders. `status` is a plain string rather than the
+// hook's completed/failed union because this store only records what it was told, and
+// ToolCall.status is what it persists.
+interface ToolCallStartRecord {
+  toolUseId?: string | undefined;
+  toolName?: string | undefined;
+  toolInput?: unknown;
+}
+
+interface ToolCallEndRecord extends ToolCallStartRecord {
+  toolOutput?: unknown;
+  durationMs?: number | undefined;
+  status: string;
+}
+
 /** The panel's stores, bound to one pub/sub and one directory root. */
 export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolStoreDeps) {
   // GUI toolResults per session, persisted under ~/.mulmoterminal/toolresults so
@@ -165,7 +180,7 @@ export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolSto
   const toolCallsStore = createSessionStore<ToolCall>("toolcalls", root);
   const TOOLCALLS_LIMIT = 200;
   // PreToolUse: a tool started. Append a "running" entry (deduped by tool_use_id).
-  async function recordToolCallStart(sessionId: string, { toolUseId, toolName, toolInput }: { toolUseId?: string; toolName?: string; toolInput?: unknown }) {
+  async function recordToolCallStart(sessionId: string, { toolUseId, toolName, toolInput }: ToolCallStartRecord) {
     const list = await toolCallsStore.get(sessionId);
     if (toolUseId && list.some((c) => c.toolUseId === toolUseId)) return;
     const call = { toolUseId, toolName, toolInput, status: "running", at: Date.now() };
@@ -179,24 +194,7 @@ export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolSto
   // complete the matching entry by tool_use_id (or add one if we never saw the
   // start). A failed tool fires PostToolUseFailure, NOT PostToolUse, so both route
   // here — otherwise the entry would be stuck on "running".
-  async function recordToolCallEnd(
-    sessionId: string,
-    {
-      toolUseId,
-      toolName,
-      toolInput,
-      toolOutput,
-      durationMs,
-      status,
-    }: {
-      toolUseId?: string;
-      toolName?: string;
-      toolInput?: unknown;
-      toolOutput?: unknown;
-      durationMs?: number;
-      status: string;
-    },
-  ) {
+  async function recordToolCallEnd(sessionId: string, { toolUseId, toolName, toolInput, toolOutput, durationMs, status }: ToolCallEndRecord) {
     const list = await toolCallsStore.get(sessionId);
     const output = capToolOutput(toolOutput);
     let call = toolUseId ? list.find((c) => c.toolUseId === toolUseId) : undefined;

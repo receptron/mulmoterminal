@@ -6,6 +6,9 @@
     "resolveJsonModule": true,
 
     /* Linting */
+    /* See tsconfig.server.json for why: `field?: T` must mean "key absent", not
+       "key present holding undefined". */
+    "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,

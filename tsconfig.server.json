@@ -15,6 +15,10 @@
     "noEmit": true,
 
     "strict": true,
+    /* `field?: T` means "the key may be absent", not "the key may hold undefined".
+       Without this, `{ work: undefined }` type-checks against `work?: Summary` and
+       reaches Firestore, which rejects undefined at any depth (#1042). */
+    "exactOptionalPropertyTypes": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true

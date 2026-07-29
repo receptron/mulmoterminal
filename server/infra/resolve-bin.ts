@@ -24,7 +24,7 @@ const endsWithOneOf = (bin: string, extensions: readonly string[]): boolean => e
 
 // A name node-pty/CreateProcess already resolves on its own (absolute, or relative to a
 // directory) rather than by searching PATH.
-const namesAPath = (bin: string): boolean => bin.includes("\\") || bin.includes("/");
+export const namesAPath = (bin: string): boolean => bin.includes("\\") || bin.includes("/");
 
 // What node-pty is handed. `args` as a STRING is a raw command line that node-pty passes
 // through verbatim (its argsToCommandLine only quotes an argv ARRAY) — which is what lets
@@ -41,7 +41,7 @@ export function isExecutableFile(candidate: string): boolean {
 
 // A PATH entry may be quoted — `"C:\Program Files\tools"` — which the shells strip and a
 // plain join would not, leaving a path that matches nothing.
-const searchDirectories = (searchPath: string | undefined): string[] =>
+export const windowsSearchDirectories = (searchPath: string | undefined): string[] =>
   (searchPath ?? "")
     .split(";")
     .map((entry) => entry.replace(/^"(.*)"$/, "$1"))
@@ -52,7 +52,7 @@ const searchDirectories = (searchPath: string | undefined): string[] =>
 function searchPathFor(bin: string, extensions: readonly string[], searchPath: string | undefined, fileExists: (candidate: string) => boolean): string | null {
   const names = endsWithOneOf(bin, extensions) ? [bin] : extensions.map((ext) => bin + ext);
   return (
-    searchDirectories(searchPath)
+    windowsSearchDirectories(searchPath)
       .flatMap((dir) => names.map((name) => path.win32.join(dir, name)))
       .find(fileExists) ?? null
   );

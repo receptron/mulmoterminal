@@ -8,6 +8,8 @@
 // because the plan is API-key billed, because no session has answered yet, or because upstream
 // dropped the field (anthropics/claude-code#40094). None of those are zero, and a gauge reading
 // 0% when the truth is 83% is the worst thing this data can do.
+import { isRecord } from "./isRecord.js";
+import { finiteNumber } from "./finiteNumber.js";
 
 export interface RateLimitWindow {
   usedPercentage: number; // 0-100, fractional
@@ -18,9 +20,6 @@ export interface RateLimits {
   fiveHour: RateLimitWindow | null;
   sevenDay: RateLimitWindow | null;
 }
-
-const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
-const finiteNumber = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
 export function parseRateLimitWindow(raw: unknown): RateLimitWindow | null {
   if (!isRecord(raw)) return null;

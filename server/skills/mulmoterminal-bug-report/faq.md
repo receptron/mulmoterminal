@@ -86,6 +86,12 @@ file and open it in the browser viewer (source/text files render inline, #785), 
 screen-by-screen. Background and the parked shell-cell fix live in #782 and docs/terminal-notes.md;
 **do not open a new issue** — add repro details to #782.
 
+Scrolling that history with the wheel does work, and is a separate thing from selecting it. If the
+wheel itself stops moving a Claude/Codex cell after a reload or a session switch, that was #1073 —
+the alternate-screen SET fell off the front of the bounded replay, so the browser came back in the
+normal buffer and the wheel had nothing to deliver to. Fixed by restoring the pane's modes from
+tmux ahead of the replay; on a version that has the fix, report it as a new bug.
+
 ## The phone's terminal view shows no directory or branch
 
 source: server/backends/remoteHost/terminalScreen.ts

@@ -11,6 +11,9 @@ const base: ClaudeArgsInput = {
   attachGuiMcp: true,
   mcpConfig: "{gui-mcp}",
   allowedTools: "mcp__gui__a,mcp__gui__b",
+  // What a default spawn resolves to (appended-prompt.ts). The builder treats it as opaque
+  // text; the real constant is used here so the asserted argv is the one that ships.
+  appendedPrompt: SESSION_SUMMARY_PROMPT,
 };
 
 const cfg = (over: Partial<ClaudeArgsInput> = {}): ClaudeArgsInput => ({ ...base, ...over });
@@ -106,9 +109,10 @@ describe("model selection", () => {
   });
 });
 
-// #942: the closing-summary instruction rides on every session, with no config to turn it off.
-// A resumed session is the one that most needs it — it is the session someone came back to.
-describe("session summary prompt", () => {
+// #942, opt-out in #1062. WHICH sections the text holds is decided in appended-prompt.ts and
+// tested there; what has to hold here is that whatever the caller resolved rides on every spawn
+// shape exactly once — a resumed session most of all, since that is the one someone came back to.
+describe("appended system prompt", () => {
   const promptValue = (args: string[]): string | undefined => args[args.indexOf("--append-system-prompt") + 1];
 
   it.each([
@@ -118,6 +122,7 @@ describe("session summary prompt", () => {
     ["a session pinned to a model", cfg({ model: "opus" })],
   ])("appends it to %s", (_case, input) => {
     const args = buildClaudeArgs(input);
+    // ONE flag: given twice, which of the two wins is up to the CLI.
     expect(args.filter((a) => a === "--append-system-prompt")).toHaveLength(1);
     expect(promptValue(args)).toBe(SESSION_SUMMARY_PROMPT);
   });
@@ -129,35 +134,17 @@ describe("session summary prompt", () => {
     expect(args.indexOf("--append-system-prompt")).toBeLessThan(args.indexOf("--add-dir"));
     expect(promptValue(args)).toBe(SESSION_SUMMARY_PROMPT);
   });
-});
 
-// #872 was only ever appended by the ⧉ Open PR button, so PRs opened by the agent — nearly all
-// of them — carried nothing saying which clone they came from. The instruction now rides on the
-// session, with the name resolved server-side.
-describe("clone footer prompt", () => {
-  const promptValue = (args: string[]): string | undefined => args[args.indexOf("--append-system-prompt") + 1];
-
-  it("carries the exact line the PR body should end with", () => {
-    const value = promptValue(buildClaudeArgs(cfg({ workdirFooter: "work in myrepo3" })));
-    expect(value).toContain("work in myrepo3");
-    // Still ONE flag: given twice, which of the two wins is up to the CLI.
-    expect(buildClaudeArgs(cfg({ workdirFooter: "work in myrepo3" })).filter((a) => a === "--append-system-prompt")).toHaveLength(1);
-  });
-
-  it("keeps the closing-summary instruction alongside it", () => {
-    const value = promptValue(buildClaudeArgs(cfg({ workdirFooter: "work in myrepo3" })));
-    expect(value).toContain(SESSION_SUMMARY_PROMPT);
-  });
-
+  // The flag has to VANISH, not carry an empty string: `--append-system-prompt ""` would leave
+  // the next flag's value ambiguous to read and pointlessly parsed by the CLI.
+  //
+  // `undefined` is unreachable through the type — the field is required precisely so a new spawn
+  // path cannot drop the prompt by forgetting it — but the builder still has to place argv, not
+  // adjudicate, if one arrives from JS or from a value that was never resolved.
   it.each([
-    ["the footer is switched off / not a repo", null],
-    ["nothing was resolved", undefined],
-  ])("says nothing about a clone when %s", (_case, footer) => {
-    expect(promptValue(buildClaudeArgs(cfg({ workdirFooter: footer })))).toBe(SESSION_SUMMARY_PROMPT);
-  });
-
-  // Same argv constraint as the summary prompt: this text reaches a Windows `.cmd` parser.
-  it("contains no ASCII double quote", () => {
-    expect(promptValue(buildClaudeArgs(cfg({ workdirFooter: "work in myrepo3" })))).not.toContain(String.fromCharCode(34));
+    ["every section is switched off", null],
+    ["nothing was resolved at all", undefined],
+  ])("omits the flag entirely when %s", (_case, appendedPrompt) => {
+    expect(buildClaudeArgs(cfg({ appendedPrompt }))).not.toContain("--append-system-prompt");
   });
 });

@@ -262,6 +262,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     decisionDigest: false,
     issueWorkComments: false,
     prWorkdirFooter: true,
+    appendSystemPrompt: true,
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
     fontFamily: null,
   };
@@ -293,6 +294,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       decisionDigest: true, // opt-in, so only `true` proves it persisted rather than defaulted
       issueWorkComments: false, // opt-in, so only `true` proves it persisted rather than defaulted
       prWorkdirFooter: false, // the opt-out: it defaults ON, so only `false` proves it persisted
+      appendSystemPrompt: false, // same opt-out shape: defaults ON, so only `false` proves it persisted
       cockpitLines: { summary: 6, prompt: 2, response: 3 }, // a raised clamp must survive it too
       fontFamily: "Cica, monospace", // already normalized, so it must come back byte-identical
     };
@@ -351,6 +353,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       decisionDigest: false,
       issueWorkComments: false,
       prWorkdirFooter: true, // absent from the file — every config predating #872 stays enabled
+      appendSystemPrompt: true, // absent from the file — every config predating #1062 stays enabled
       fontFamily: null,
     });
     rmSync(dir, { recursive: true, force: true });
@@ -457,6 +460,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     decisionDigest: false,
     issueWorkComments: false,
     prWorkdirFooter: true,
+    appendSystemPrompt: true,
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
     fontFamily: null,
   };
@@ -520,6 +524,7 @@ describe("mergeConfigUpdate", () => {
     decisionDigest: false,
     issueWorkComments: false,
     prWorkdirFooter: true,
+    appendSystemPrompt: true,
     cockpitLines: { ...DEFAULT_COCKPIT_LINES },
     fontFamily: null,
     ...over,
@@ -560,6 +565,15 @@ describe("mergeConfigUpdate", () => {
     expect(mergeConfigUpdate(baseConfig(), { prWorkdirFooter: false }).prWorkdirFooter).toBe(false);
     // The opt-out must survive an unrelated update, or the next Settings save re-enables it.
     expect(mergeConfigUpdate(baseConfig({ prWorkdirFooter: false }), { chips: ["git"] }).prWorkdirFooter).toBe(false);
+  });
+
+  // #1062. No Settings UI writes this one either, so an omitting POST is the whole risk: the
+  // user hand-edits `false`, presses an unrelated Save, and the instruction comes back.
+  it("applies appendSystemPrompt from the body and keeps it when omitted", () => {
+    expect(mergeConfigUpdate(baseConfig(), { appendSystemPrompt: false }).appendSystemPrompt).toBe(false);
+    expect(mergeConfigUpdate(baseConfig({ appendSystemPrompt: false }), { chips: ["git"] }).appendSystemPrompt).toBe(false);
+    // A string is the planned third value; until it is accepted it must not read as the opt-out.
+    expect(mergeConfigUpdate(baseConfig(), { appendSystemPrompt: "custom text" }).appendSystemPrompt).toBe(true);
   });
 
   // No Settings UI writes this one, so the merge path is the only thing standing between a

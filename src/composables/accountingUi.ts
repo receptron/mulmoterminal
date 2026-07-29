@@ -19,11 +19,12 @@ const { subscribe } = usePubSub();
 // pattern-matches on `.ok`). Mirrors MulmoClaude's apiCall shape so the View's
 // `apiCall("/api/accounting", { method, body })` calls just work.
 function apiCall<T = unknown>(path: string, opts: { method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE"; body?: unknown }): Promise<ApiResult<T>> {
+  // RequestInit spells its fields exact, so a bodyless call omits both keys rather than
+  // sending them as undefined.
   const hasBody = opts.body !== undefined;
   return fetchJson<T>(path, {
     method: opts.method,
-    headers: hasBody ? { "content-type": "application/json" } : undefined,
-    body: hasBody ? JSON.stringify(opts.body) : undefined,
+    ...(hasBody ? { headers: { "content-type": "application/json" }, body: JSON.stringify(opts.body) } : {}),
   });
 }
 
