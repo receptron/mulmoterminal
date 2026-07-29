@@ -8,6 +8,7 @@ import {
   toolGroupServerId,
   AUTO_ALLOWED_TOOLS,
   CANVAS_TOOL_GROUPS,
+  TOOL_GROUP_HEADINGS,
   hasCanvasGroup,
 } from "../../common/toolGroups.js";
 
@@ -122,5 +123,21 @@ describe("CANVAS_TOOL_GROUPS", () => {
     expect(hasCanvasGroup(["renderer"])).toBe(false);
     expect(hasCanvasGroup(undefined)).toBe(false);
     expect(hasCanvasGroup("render")).toBe(false);
+  });
+});
+
+// The launcher draws one switch per group and labels it from here. A group with no heading would
+// render a blank label, and the Record type only catches that for a group added in the same
+// commit as its heading — this catches the value being emptied.
+describe("TOOL_GROUP_HEADINGS", () => {
+  it("names every group", () => {
+    for (const group of TOOL_GROUPS) expect(TOOL_GROUP_HEADINGS[group]?.trim()).toBeTruthy();
+  });
+
+  // The two groups that draw share a heading on purpose — they are one feature with two costs.
+  it("gives the drawing groups the Canvas heading", () => {
+    for (const group of CANVAS_TOOL_GROUPS) expect(TOOL_GROUP_HEADINGS[group]).toBe("Canvas");
+    expect(TOOL_GROUP_HEADINGS.data).not.toBe("Canvas");
+    expect(TOOL_GROUP_HEADINGS.external).not.toBe("Canvas");
   });
 });

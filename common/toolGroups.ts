@@ -37,6 +37,20 @@ export const CANVAS_TOOL_GROUPS: readonly ToolGroup[] = ["render", "media"];
 export const hasCanvasGroup = (groups: unknown): boolean =>
   Array.isArray(groups) && groups.some((group) => isToolGroup(group) && CANVAS_TOOL_GROUPS.includes(group));
 
+// What the launcher's switch for a group calls it. The group NAME is shown too (it is the MCP
+// server id the switch registers), so this line answers the other question: what does the agent
+// gain. Two groups share a heading on purpose — render and media both end up in the Canvas pane,
+// which is why CANVAS_TOOL_GROUPS above holds exactly those two.
+//
+// A Record, not a lookup with a fallback: adding a group to TOOL_GROUPS without deciding what to
+// call it should fail to compile, not ship a switch labelled "external".
+export const TOOL_GROUP_HEADINGS: Record<ToolGroup, string> = {
+  render: "Canvas",
+  data: "Workspace data",
+  media: "Canvas",
+  external: "External accounts",
+};
+
 // Which group each GUI tool belongs to.
 //
 // A tool that is absent belongs to NO group and is therefore reachable only through the

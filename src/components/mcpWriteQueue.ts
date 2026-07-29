@@ -1,15 +1,15 @@
 // One write at a time to Claude Code's MCP config.
 //
-// Every Canvas switch in the launcher POSTs to /api/gui-mcp-groups, which shells out to
+// Every tool-group switch in the launcher POSTs to /api/gui-mcp-groups, which shells out to
 // `claude mcp add` / `claude mcp remove`. Those read-modify-write Claude Code's own config, so
 // two in flight can lose one of the two registrations — leaving a checkbox showing "on" for a
 // server that was never written, which is the one state the switch must never reach.
 //
 // The queue is MODULE level, not per component: the file being written is Claude Code's, shared
 // by every directory, so two cells saving at once race exactly as two checkboxes in one cell do.
-export type CanvasWriteQueue = (write: () => Promise<void>) => Promise<void>;
+export type McpWriteQueue = (write: () => Promise<void>) => Promise<void>;
 
-export function createCanvasWriteQueue(): CanvasWriteQueue {
+export function createMcpWriteQueue(): McpWriteQueue {
   let chain: Promise<void> = Promise.resolve();
   return (write) => {
     // The SAME callback for both settlements, rather than `.then(write).catch(...)`: a rejected
@@ -20,4 +20,4 @@ export function createCanvasWriteQueue(): CanvasWriteQueue {
   };
 }
 
-export const queueCanvasWrite: CanvasWriteQueue = createCanvasWriteQueue();
+export const queueMcpWrite: McpWriteQueue = createMcpWriteQueue();
