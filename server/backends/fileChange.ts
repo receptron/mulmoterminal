@@ -26,12 +26,16 @@ const log = {
 // `artifacts/markdowns/**` (server/events/file-change.ts): there, a View editing a repo
 // file simply doesn't get the live-refresh event. Same widening belongs upstream; until
 // it lands, MulmoTerminal refreshes in a case MulmoClaude doesn't.
+// Case-insensitive, and `.htm` as well as `.html`, because that is what the write
+// side accepts: core's `classifyFilePath` compares against MARKDOWN_EXTENSIONS /
+// HTML_EXTENSIONS case-insensitively, so `README.MD` and `report.htm` both save. A
+// matcher narrower than the write site means a file that saves and never refreshes.
 function isMarkdownDoc(posixPath: string): boolean {
-  return posixPath.endsWith(".md");
+  return /\.md$/i.test(posixPath);
 }
 
 function isHtmlDoc(posixPath: string): boolean {
-  return posixPath.endsWith(".html");
+  return /\.html?$/i.test(posixPath);
 }
 
 /** Configure the shared publisher against MulmoTerminal's pubsub + workspace. Call

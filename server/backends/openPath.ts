@@ -30,11 +30,15 @@ function rootFor(): string {
   return workspace;
 }
 
+// `satisfies`, not `as`: core declares its own structural echo of the protocol's
+// FileOps (it keeps no dependency on gui-chat-protocol), and these are independently
+// versioned packages. A cast would go quiet the day the two shapes drift; this makes
+// the compiler check the conformance while keeping the inferred type.
 /** `files.byPath` for presentDocument — reads/overwrites any `.md` the tool named. */
-export const markdownByPath = createByPathFileOps({ rootFor, extensions: MARKDOWN_EXTENSIONS }) as FileOps;
+export const markdownByPath = createByPathFileOps({ rootFor, extensions: MARKDOWN_EXTENSIONS }) satisfies FileOps;
 
 /** `files.byPath` for presentHtml — reads/overwrites any `.html`/`.htm`. */
-export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENSIONS }) as FileOps;
+export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENSIONS }) satisfies FileOps;
 
 // The `/htmlfile` resolver wants a realpath'd root (a symlinked workspace would
 // otherwise resolve to a path the serving stat can't match). Cached — the workspace
