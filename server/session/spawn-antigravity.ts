@@ -38,13 +38,17 @@ export function createAntigravitySpawner(deps: SpawnDeps) {
        *  reads Claude Code's config files, and this is sync). agy reads its MCP servers from a
        *  file in the directory rather than from a flag, so that file is brought in line with them
        *  here, on the way past: a directory whose switches were flipped before this shipped — or
-       *  with the `claude mcp` CLI directly — needs no second action to work. */
-      mcpGroups?: readonly ToolGroup[];
+       *  with the `claude mcp` CLI directly — needs no second action to work.
+       *
+       *  REQUIRED, and deliberately not defaulted: the file is shared by every session in the
+       *  directory, so a caller that had not looked the groups up would not merely spawn without
+       *  GUI tools — it would CLEAR the entries every other session there is using. */
+      mcpGroups: readonly ToolGroup[];
       /** Run this as the session's first turn (a collection action, a background chat). */
       initialPrompt?: string | null;
-    } = {},
+    },
   ): PtyEntry {
-    const { mcpGroups = [], initialPrompt = null } = options;
+    const { mcpGroups, initialPrompt = null } = options;
     syncAntigravityMcpConfig(cwd, mcpGroups);
     const root = antigravityBrainRoot();
     const before = snapshotAntigravitySessions(root);

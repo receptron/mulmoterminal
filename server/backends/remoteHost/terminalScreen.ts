@@ -6,17 +6,37 @@ import { parseStyledRows, rowsToScreen, suggestionFromRows, type ScreenRow } fro
 import type { SessionAgent } from "../../../common/sessionAgent.js";
 import { workItemHeadline, type PrPhase, type WorkItem } from "../../../common/prPhase.js";
 import type { QuickCommandChip } from "./quickCommands.js";
+import { basename } from "node:path";
+import { getAgentAdapter } from "../../agents/registry.js";
+import type { AgentKind } from "../../agents/types.js";
 
 // Map a tmux pane's current command onto the kinds the phone knows. Anything else is a
 // shell or a one-off program the phone has no special input for — "shell" is the right
 // answer for both, since that is where typed commands belong.
-const AGENT_COMMANDS: Record<string, SessionAgent> = { claude: "claude", codex: "codex", agy: "antigravity" };
+//
+// Two spellings per agent: the DEFAULT binary name, and whatever `*_BIN` points at — a pane
+// reports the running program's own name, so a user who set `ANTIGRAVITY_BIN=/opt/agy-next` has
+// panes called `agy-next`, and matching only the default would report their agent as a shell.
+// The basename, because that is what a pane command is; the default stays in the map either way,
+// so overriding the variable never un-recognises sessions started before it was set.
+const AGENT_DEFAULT_COMMAND: Record<AgentKind, string> = { claude: "claude", codex: "codex", antigravity: "agy" };
+
+const agentCommands = (): Record<string, SessionAgent> => {
+  const map: Record<string, SessionAgent> = {};
+  for (const [kind, command] of Object.entries(AGENT_DEFAULT_COMMAND)) {
+    map[command] = kind as SessionAgent;
+    map[basename(getAgentAdapter(kind as AgentKind).bin())] = kind as SessionAgent;
+  }
+  return map;
+};
 
 export const agentFromPaneCommand = (command: string | null): SessionAgent | null => {
   if (!command) {
     return null;
   }
-  return AGENT_COMMANDS[command] ?? "shell";
+  // Rebuilt per call rather than cached: the env vars are read at call time everywhere else too
+  // (adapter.bin()), and this runs once per session row, not per frame.
+  return agentCommands()[command] ?? "shell";
 };
 
 // What a session is working on, as the phone needs it: numbers to identify it, a phase for the

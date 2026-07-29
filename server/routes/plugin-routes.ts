@@ -13,6 +13,8 @@ import { isRecord } from "../../common/isRecord.js";
 import { backgroundMarkers } from "../session/registry.js";
 import { runWithHiddenMarker } from "../session/hiddenMarker.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../session/background-chat.js";
+import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
+import { TOOL_GROUPS } from "../../common/toolGroups.js";
 import { codexifySkillSeed } from "../agents/codex-skills.js";
 import { manageCollectionHandler } from "../infra/collection-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
@@ -38,11 +40,15 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
   // bold/unread. `draft:true` makes `message` an editable DRAFT — typed into the input box
   // but NOT auto-submitted (the collection-plugin's startNewChatDraft / template cards),
   // so the user reviews and presses Enter.
-  app.post("/api/plugin/spawnBackgroundChat", (req, res) => {
+  app.post("/api/plugin/spawnBackgroundChat", async (req, res) => {
     const parsed = parseBackgroundChat(req.body);
     if (!parsed.ok) return res.json({ message: parsed.message });
     const { agent, draft, hidden, message } = parsed.request;
     const sessionId = randomUUID();
+    // agy reads its GUI MCP servers from a file in the working directory, shared with every other
+    // session there, so the groups have to be resolved BEFORE the spawn rewrites it — passing none
+    // would clear the entries those sessions are using (#1095 review).
+    const mcpGroups = agent === "antigravity" ? await registeredGuiMcpGroups(CLAUDE_CWD, TOOL_GROUPS).catch(() => []) : [];
     // ws is null: the session runs headless until the user opens it (reattach replays the buffered
     // output). A claude draft spawns with NO initial prompt (so it doesn't auto-run) and gets the text
     // typed into its input box. The other agents have no editable-draft path (no stable TUI
@@ -52,7 +58,8 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
       runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () => {
         const mode = spawnModeFor(agent, draft);
         if (mode === "codex-run") deps.spawnCodexPty(sessionId, null, null, CLAUDE_CWD, true, { initialPrompt: codexifySkillSeed(message) });
-        else if (mode === "antigravity-run") deps.spawnAntigravityPty(sessionId, null, null, CLAUDE_CWD, { initialPrompt: codexifySkillSeed(message) });
+        else if (mode === "antigravity-run")
+          deps.spawnAntigravityPty(sessionId, null, null, CLAUDE_CWD, { mcpGroups, initialPrompt: codexifySkillSeed(message) });
         else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
         else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
       });

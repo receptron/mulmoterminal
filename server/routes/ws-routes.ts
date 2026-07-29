@@ -455,6 +455,28 @@ function resolveAntigravitySession(requested: string | null): { sessionId: strin
   return { sessionId, live, resumeConversationId };
 }
 
+interface AntigravityStart {
+  sessionId: string;
+  live: PtyEntry | undefined;
+  resumeConversationId: string | null;
+  cwd: string;
+  attachGuiMcp: boolean;
+  mcpGroups: readonly ToolGroup[];
+}
+
+// Reattach or spawn, as ONE function handed to startAndWire — the reattach must not take a
+// shortcut around it. `reattachPty` only swaps the socket and replays the buffer; returning early
+// on it left a reloaded terminal printing output while ignoring every keystroke, and never
+// detaching or reaping when the socket closed.
+function startAntigravityEntry(deps: WsRouteDeps, ws: WebSocket, start: AntigravityStart): PtyEntry {
+  const { sessionId, live, resumeConversationId, cwd, attachGuiMcp, mcpGroups } = start;
+  const entry = live ? deps.reattachPty(live, ws, sessionId) : deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd, { mcpGroups });
+  // Single view (gui) = the attached session IS the actively-viewed pane. A grid dev-terminal
+  // cell (gui=0) is only "viewed" once focused, and says so with a `view` frame.
+  entry.active = attachGuiMcp;
+  return entry;
+}
+
 // antigravity terminal (?cwd=<dir>, ?session=<id> to reattach/resume). Unlike claude and codex
 // there is no per-session GUI MCP surface to attach or withhold: agy reads its servers from a file
 // in the DIRECTORY, so every session there reaches whatever that directory registered — `?gui=0`
@@ -465,28 +487,26 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live?.cwd ?? cwd }));
-  if (live) {
-    live.active = attachGuiMcp;
-    deps.reattachPty(live, ws, sessionId);
-    return;
-  }
+
   // Collected from here because the read below waits, and the browser's first frame — the
   // terminal's real geometry — arrives while it does (see early-frames.ts).
   const early = bufferEarlyFrames<{ toString(): string }>(ws);
   // The directory's registered groups, read here because the lookup reads Claude Code's config
-  // files and the spawner is sync. Only for a spawn: a reattach keeps what its process started
-  // with, and agy re-reads nothing.
-  const mcpGroups = await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
+  // files and the spawner is sync. Only for a SPAWN: a reattach keeps the tools its running
+  // process was started with, and rewriting the shared file on a reattach would speak for every
+  // other session in the directory.
+  const mcpGroups = live ? [] : await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
   if (ws.readyState !== ws.OPEN) {
     console.log(`[ws/antigravity] client left before spawn — abandoning ${sessionId}`);
     return early.discard();
   }
+  // The reattach goes THROUGH startAndWire like the spawn, not around it: reattachPty only swaps
+  // the socket and replays the buffer, so returning early here left a reloaded terminal printing
+  // output while ignoring every keystroke, and never detaching or reaping on close.
   const startFailureMessage = startFailureMessageFor("Antigravity");
-  startAndWire(deps, ws, { id: sessionId, tag: "antigravity", early, startFailureMessage }, () => {
-    const entry = deps.spawnAntigravityPty(sessionId, ws, resumeConversationId, cwd, { mcpGroups });
-    entry.active = attachGuiMcp;
-    return entry;
-  });
+  startAndWire(deps, ws, { id: sessionId, tag: "antigravity", early, startFailureMessage }, () =>
+    startAntigravityEntry(deps, ws, { sessionId, live, resumeConversationId, cwd, attachGuiMcp, mcpGroups }),
+  );
 }
 
 export function mountTerminalWebSockets(deps: WsRouteDeps) {

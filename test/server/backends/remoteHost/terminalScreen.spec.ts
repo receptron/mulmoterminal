@@ -33,6 +33,21 @@ describe("agentFromPaneCommand", () => {
     expect(agentFromPaneCommand("agy")).toBe("antigravity");
   });
 
+  // A pane reports the RUNNING program's name, so an overridden binary has a different one.
+  // The default stays recognised either way, or setting the variable would un-recognise every
+  // session started before it.
+  it("also recognises a binary the user pointed *_BIN at", () => {
+    const previous = process.env.ANTIGRAVITY_BIN;
+    process.env.ANTIGRAVITY_BIN = "/opt/bin/agy-next";
+    try {
+      expect(agentFromPaneCommand("agy-next")).toBe("antigravity");
+      expect(agentFromPaneCommand("agy")).toBe("antigravity");
+    } finally {
+      if (previous === undefined) delete process.env.ANTIGRAVITY_BIN;
+      else process.env.ANTIGRAVITY_BIN = previous;
+    }
+  });
+
   // Anything else is where typed commands belong, which is what "shell" means here —
   // zsh, bash, or a one-off program the phone has no special input for.
   it("treats anything else as a shell", () => {

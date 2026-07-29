@@ -29,7 +29,7 @@ describe("createAntigravitySpawner", () => {
 
   it("spawns an antigravity PTY entry and registers it in ptys registry", () => {
     const { spawnAntigravityPty } = createAntigravitySpawner(dummyDeps);
-    const entry = spawnAntigravityPty("session-1", null, null, "/test/dir");
+    const entry = spawnAntigravityPty("session-1", null, null, "/test/dir", { mcpGroups: [] });
 
     expect(entry.agent).toBe("antigravity");
     expect(entry.cwd).toBe("/test/dir");

@@ -17,7 +17,13 @@ import { createInterface } from "node:readline";
 const port = process.env.MULMOTERMINAL_PORT;
 const sessionId = process.env.MULMOTERMINAL_SESSION_ID;
 const group = process.env.MULMOTERMINAL_TOOL_GROUP;
-const url = `http://127.0.0.1:${port}/api/mcp/${group}/${sessionId}`;
+
+// Both segments are encoded and both are REQUIRED. They arrive from a config file on disk, which
+// a user can edit by hand, so a missing group must read as an error rather than build a path with
+// the literal text "undefined" in it — and a value carrying `/` or `..` must not steer the request
+// somewhere other than the tool-group route it names.
+const missing = ["MULMOTERMINAL_SESSION_ID", "MULMOTERMINAL_TOOL_GROUP", "MULMOTERMINAL_PORT"].find((name) => !process.env[name]) ?? null;
+const url = missing ? null : `http://127.0.0.1:${port}/api/mcp/${encodeURIComponent(group)}/${encodeURIComponent(sessionId)}`;
 
 const send = (message) => process.stdout.write(JSON.stringify(message) + "\n");
 
@@ -46,7 +52,7 @@ createInterface({ input: process.stdin, terminal: false }).on("line", async (lin
   let id;
   try {
     id = JSON.parse(line).id;
-    if (!sessionId) return fail(id, "mulmoterminal: no session — this MCP server only runs inside a mulmoterminal session");
+    if (missing) return fail(id, `mulmoterminal: ${missing} is not set — this MCP server only runs inside a mulmoterminal session`);
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
