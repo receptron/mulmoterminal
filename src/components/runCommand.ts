@@ -10,6 +10,6 @@ export type RunCommand =
       label: string;
       cwd: string | null;
       session: string | null;
-      agent: "claude" | "codex";
+      agent: "claude" | "codex" | "antigravity";
       model: string | null;
     };

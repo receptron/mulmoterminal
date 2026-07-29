@@ -27,8 +27,8 @@ export interface Cell {
   command?: RunCommand | null;
   // A running launcher (shell/codex/custom). Persistent & reattachable like a session.
   launcher?: CellLauncher | null;
-  // The agent this cell runs. "codex" reconnects via /ws/codex; absent = Claude (the default).
-  agent?: "codex";
+  // The agent this cell runs. "codex" / "antigravity"; absent = Claude (the default).
+  agent?: "codex" | "antigravity";
 }
 // How the grid orders its cells. "manual": the user's hand-arranged order (the move buttons);
 // "auto": attention-first, recomputed from each cell's live status; "priority": the rank each
@@ -112,11 +112,11 @@ export function setCwd(state: GridState, uid: number, cwd: string): GridState {
   return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, cwd } : c)) };
 }
 
-// Record which agent a cell launched (only "codex" is stored; Claude is the default/absent) so a
+// Record which agent a cell launched ("codex" / "antigravity"; Claude is the default/absent) so a
 // reloaded cell reconnects to the right endpoint.
-export function setCellAgent(state: GridState, uid: number, agent: "claude" | "codex"): GridState {
-  const codex: "codex" | undefined = agent === "codex" ? "codex" : undefined;
-  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, agent: codex } : c)) };
+export function setCellAgent(state: GridState, uid: number, agent: "claude" | "codex" | "antigravity"): GridState {
+  const cellAgent = agent === "claude" ? undefined : agent;
+  return { ...state, cells: state.cells.map((c) => (c.uid === uid ? { ...c, agent: cellAgent } : c)) };
 }
 
 // A cell's launcher ran a script.json command: attach it, turning the launch cell
@@ -469,7 +469,7 @@ export function parseGridState(raw: string | null): GridState | null {
       session: c.session,
       cwd: c.cwd,
       launcher: asLauncher(c.launcher),
-      agent: c.agent === "codex" ? "codex" : undefined,
+      agent: c.agent === "codex" ? "codex" : c.agent === "antigravity" ? "antigravity" : undefined,
     }));
     const expandedIdx = running.findIndex((c: Cell) => c.uid === parsed.expanded);
     const expanded = typeof parsed.expanded === "number" && expandedIdx >= 0 ? expandedIdx : null;

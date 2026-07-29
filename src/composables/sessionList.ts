@@ -4,8 +4,8 @@ import { isBackground, isUnread, matchesFilter, type Session, type Filter } from
 // The event contract App.vue wires to both session-list layouts (the vertical
 // Sidebar and the horizontal SessionTabBar); v-model:filter drives update:filter.
 export type SessionListEmits = {
-  (e: "select", id: string, agent: "claude" | "codex"): void;
-  (e: "new" | "new-codex" | "toggle-layout" | "refresh"): void;
+  (e: "select", id: string, agent: "claude" | "codex" | "antigravity"): void;
+  (e: "new" | "new-codex" | "new-antigravity" | "toggle-layout" | "refresh"): void;
   (e: "update:filter", f: Filter): void;
 };
 

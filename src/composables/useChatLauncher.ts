@@ -14,14 +14,15 @@
 
 import { ref, watch } from "vue";
 
-export type Agent = "claude" | "codex";
+export type Agent = "claude" | "codex" | "antigravity";
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
 let openSessionFn: OpenSessionFn | null = null;
 
-// Which agent a collection action / chat spawns. Bound to the Claude/Codex toggle in the collection
+// Which agent a collection action / chat spawns. Bound to the Claude/Codex/Antigravity toggle in the collection
 // browser (CollectionsBrowseOverlay); persisted in localStorage so the choice survives reloads.
 const LAUNCH_AGENT_KEY = "mt-launch-agent";
-export const launchAgent = ref<Agent>(localStorage.getItem(LAUNCH_AGENT_KEY) === "codex" ? "codex" : "claude");
+const saved = localStorage.getItem(LAUNCH_AGENT_KEY);
+export const launchAgent = ref<Agent>(saved === "codex" ? "codex" : saved === "antigravity" ? "antigravity" : "claude");
 watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 
 /** App.vue registers how to make a session visible (close the overlay + select it).

@@ -36,6 +36,14 @@ const visibleSessions = computed(() => filteredSessions.value.slice(0, MAX_TABS)
     >
       cx
     </button>
+    <button
+      class="h-[26px] w-[26px] shrink-0 cursor-pointer rounded-md border-0 bg-selected text-[12px] font-semibold uppercase leading-none text-secondary hover:bg-selected-hover"
+      title="New Antigravity session"
+      aria-label="New Antigravity session"
+      @click="emit('new-antigravity')"
+    >
+      ag
+    </button>
 
     <div class="flex shrink-0 items-center gap-1.5">
       <SessionFilters

@@ -35,7 +35,7 @@ const CONTEXT_WINDOWS: { match: string; tokens: number }[] = [
 ];
 const PERCENT = 100;
 
-const AGENT_NAME = { claude: "Claude", codex: "Codex" } as const;
+const AGENT_NAME = { claude: "Claude", codex: "Codex", antigravity: "Antigravity" } as const;
 export type BadgeAgent = keyof typeof AGENT_NAME;
 
 export function shortModelLabel(model: string): string {

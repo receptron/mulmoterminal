@@ -334,7 +334,7 @@ function onAddTerminal() {
 }
 const onSession = (uid: number, id: string) => (state.value = setSession(state.value, uid, id));
 const onCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, uid, cwd));
-const onAgent = (uid: number, agent: "claude" | "codex") => (state.value = setCellAgent(state.value, uid, agent));
+const onAgent = (uid: number, agent: "claude" | "codex" | "antigravity") => (state.value = setCellAgent(state.value, uid, agent));
 // Pass the on-screen order so closing the zoomed cell stays zoomed on its filmstrip
 // neighbour (previous, or next when it was the first) instead of collapsing the grid.
 const onClose = (uid: number) =>

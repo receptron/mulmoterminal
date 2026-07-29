@@ -36,7 +36,7 @@ export function hasPickFileButton(buttons: readonly HeaderButton[]): boolean {
 interface Params {
   cwd: Ref<string | null>;
   session: Ref<string | null>;
-  agent: Ref<"claude" | "codex">;
+  agent: Ref<"claude" | "codex" | "antigravity">;
   model?: Ref<string | null>;
 }
 

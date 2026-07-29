@@ -55,6 +55,8 @@ const props = defineProps<{
   launcher?: { index: number } | { shell: true } | null;
   // A first-class codex session — connects to /ws/codex instead of /ws (Claude).
   codex?: boolean;
+  // A first-class antigravity session — connects to /ws/antigravity.
+  antigravity?: boolean;
   // Provider/model picked in the launch form, for this session only (#584).
   launch?: LaunchChoice | null;
   runMenu?: boolean;
@@ -141,7 +143,7 @@ const headerButtonsCwd = computed(() => (props.command || props.launcher ? null 
 const { buttons: headerButtons } = useHeaderButtons({
   cwd: headerButtonsCwd,
   session: computed(() => props.sessionId),
-  agent: computed<"claude" | "codex">(() => (props.codex ? "codex" : "claude")),
+  agent: computed<"claude" | "codex" | "antigravity">(() => (props.antigravity ? "antigravity" : props.codex ? "codex" : "claude")),
   model: computed(() => sessionContext.value?.model ?? null),
 });
 
@@ -158,7 +160,7 @@ function onHeaderButton(button: HeaderButton): void {
     label: button.label,
     cwd: serverCwd.value,
     session: props.sessionId,
-    agent: props.codex ? "codex" : "claude",
+    agent: props.antigravity ? "antigravity" : props.codex ? "codex" : "claude",
     model: sessionContext.value?.model ?? null,
   };
   emit("run", command);

@@ -73,9 +73,8 @@ const props = defineProps<
     uid: number;
     initialSessionId: string | null;
     initialCwd: string | null;
-    // The persisted agent for this cell: "codex" reconnects via /ws/codex on reload; absent
-    // (or "claude") resumes as a normal Claude session.
-    initialAgent?: "codex" | null;
+    // The persisted agent for this cell: "codex" / "antigravity"; absent (or "claude") resumes as a normal Claude session.
+    initialAgent?: "codex" | "antigravity" | null;
     defaultCwd: string | null;
     presets: CwdPreset[];
     // Configured launch commands (shell/codex/…) offered next to Claude in this launcher.
@@ -102,8 +101,8 @@ const emit = defineEmits<
     (e: "run" | "runSpare", value: RunCommand): void;
     // The user picked a configured launcher (shell/codex/…) to run in this empty cell.
     (e: "launch", value: LaunchPick): void;
-    // The agent chosen (Claude/Codex) for this fresh launch, so the grid persists it.
-    (e: "agent", value: "claude" | "codex"): void;
+    // The agent chosen (Claude/Codex/Antigravity) for this fresh launch, so the grid persists it.
+    (e: "agent", value: "claude" | "codex" | "antigravity"): void;
   }
 >();
 
@@ -112,8 +111,10 @@ const emit = defineEmits<
 const launched = ref(props.initialSessionId !== null);
 const sessionId = ref<string | null>(props.initialSessionId);
 // The agent this cell runs (Claude by default). Fixed once launched; restored from the
-// persisted cell on reload so a codex cell reconnects to /ws/codex.
-const agent = ref<"claude" | "codex">(props.initialAgent === "codex" ? "codex" : "claude");
+// persisted cell on reload so a codex / antigravity cell reconnects to its WS endpoint.
+const agent = ref<"claude" | "codex" | "antigravity">(
+  props.initialAgent === "codex" ? "codex" : props.initialAgent === "antigravity" ? "antigravity" : "claude",
+);
 const connectKey = ref(0);
 
 // The directory this terminal runs in (shown in the header, sent to the server).
@@ -1368,6 +1369,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           :connect-key="connectKey"
           :cwd="cwd"
           :codex="agent === 'codex'"
+          :antigravity="agent === 'antigravity'"
           :launch="launchChoice"
           :hide-header="filmstrip"
           :expanded="expanded"

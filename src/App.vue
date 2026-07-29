@@ -68,8 +68,8 @@ function onRunScript(command: PendingCommand) {
 
 const activeId = ref<string | null>(null);
 // Which agent the single view runs (Claude by default). Codex connects to /ws/codex with the
-// GUI MCP attached, so it drives the GUI panel like Claude.
-const singleAgent = ref<"claude" | "codex">("claude");
+// GUI MCP attached; Antigravity connects to /ws/antigravity.
+const singleAgent = ref<"claude" | "codex" | "antigravity">("claude");
 const connectKey = ref(0);
 const terminalRef = ref<InstanceType<typeof TerminalView> | null>(null);
 
@@ -228,7 +228,7 @@ function configureAppearance(): void {
   showSettings.value = false;
 }
 
-function selectSession(id: string, agent: "claude" | "codex" = "claude") {
+function selectSession(id: string, agent: "claude" | "codex" | "antigravity" = "claude") {
   if (id !== activeId.value) clearDraftHint(); // switching away from a preparing draft
   singleAgent.value = agent; // resume the row's agent (codex rows reconnect via /ws/codex)
   activeId.value = id;
@@ -295,6 +295,12 @@ function newCodexSession() {
   connectKey.value++;
 }
 
+function newAntigravitySession() {
+  singleAgent.value = "antigravity";
+  activeId.value = null;
+  connectKey.value++;
+}
+
 // The server reports the live session id (a generated id for new sessions).
 // Adopt it as the active id so it highlights. The sidebar list itself is
 // driven server-side: the server publishes the new session on the "sessions"
@@ -324,6 +330,7 @@ function onSession(id: string) {
         @select="selectSession"
         @new="newSession"
         @new-codex="newCodexSession"
+        @new-antigravity="newAntigravitySession"
         @toggle-layout="toggleLayout"
         @refresh="refresh"
       />
@@ -335,6 +342,7 @@ function onSession(id: string) {
         @select="selectSession"
         @new="newSession"
         @new-codex="newCodexSession"
+        @new-antigravity="newAntigravitySession"
         @toggle-layout="toggleLayout"
         @refresh="refresh"
       />
@@ -361,6 +369,7 @@ function onSession(id: string) {
           persist-key="single"
           :session-id="activeId"
           :codex="singleAgent === 'codex'"
+          :antigravity="singleAgent === 'antigravity'"
           :connect-key="connectKey"
           :dir-cwd="effectiveCwd"
           :dir-name="singleDirConfig.name"

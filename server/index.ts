@@ -57,6 +57,8 @@ import { writeDecisionDigest } from "./session/decision-digest-file.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
 import { claudeAdapter } from "./agents/claude.js";
 import { codexAdapter } from "./agents/codex.js";
+import { antigravityAdapter } from "./agents/antigravity.js";
+import { createAntigravitySpawner } from "./session/spawn-antigravity.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import {
   agentFromPaneCommand,
@@ -116,8 +118,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const CLAUDE_BIN = claudeAdapter.bin();
 const CODEX_BIN = codexAdapter.bin();
+const ANTIGRAVITY_BIN = antigravityAdapter.bin();
 // Model override for codex sessions (--model); null uses codex's own configured default.
 const CODEX_MODEL = process.env.CODEX_MODEL || null;
+const ANTIGRAVITY_MODEL = process.env.ANTIGRAVITY_MODEL || null;
 // Permission mode for backend-spawned Claude sessions. Defaults to "auto" so
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
@@ -242,6 +246,8 @@ const spawnDeps: SpawnDeps = {
   claudeBin: CLAUDE_BIN,
   codexBin: CODEX_BIN,
   codexModel: CODEX_MODEL,
+  antigravityBin: ANTIGRAVITY_BIN,
+  antigravityModel: ANTIGRAVITY_MODEL,
   permissionMode: CLAUDE_PERMISSION_MODE,
   guiMcpTools: GUI_MCP_TOOLS,
   gridMcpTools: GRID_MCP_TOOLS,
@@ -257,6 +263,7 @@ const spawnDeps: SpawnDeps = {
 };
 const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
 const { spawnCodexPty } = createCodexSpawner(spawnDeps);
+const { spawnAntigravityPty } = createAntigravitySpawner(spawnDeps);
 const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
 // The hidden translation worker (session/translation-worker.ts). It drives a headless
@@ -735,6 +742,7 @@ mountTerminalWebSockets({
   handleClientClose,
   spawnClaudePty,
   spawnCodexPty,
+  spawnAntigravityPty,
   spawnCommandPty,
   spawnLauncherPty,
   resolveLauncher,

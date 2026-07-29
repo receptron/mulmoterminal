@@ -46,6 +46,13 @@ const { unreadCount, backgroundCount, filteredSessions, isUnread } = useSessionF
       >
         <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span> Codex
       </button>
+      <button
+        class="flex cursor-pointer items-center justify-center gap-1.5 rounded-md border-0 bg-selected p-2 text-[13px] text-secondary hover:bg-selected-hover"
+        title="New Antigravity session"
+        @click="emit('new-antigravity')"
+      >
+        <span class="material-symbols-outlined text-[18px]" aria-hidden="true">add</span> AGY
+      </button>
     </div>
 
     <div class="flex items-center gap-1.5 px-3 pb-2">

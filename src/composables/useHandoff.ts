@@ -23,7 +23,7 @@ export interface HandoffTarget {
 export interface HandoffSource {
   sessionId: string;
   cwd: string | null;
-  agent: "claude" | "codex";
+  agent: "claude" | "codex" | "antigravity";
 }
 
 // Slot keys are `cell-<uid>`; the uid is what the user sees on the cell, so a menu

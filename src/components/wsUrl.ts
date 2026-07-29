@@ -43,7 +43,7 @@ export function buildTerminalWsUrl(input: TerminalWsUrlInput): string {
 
 export type RunWsUrlInput = { host: string; secure: boolean; cwd?: string | null } & (
   | { index: number } // position in the directory's script.json (the server resolves it)
-  | { buttonId: string; session: string | null; agent: "claude" | "codex"; model: string | null } // a header run:"shell" button, re-resolved server-side
+  | { buttonId: string; session: string | null; agent: "claude" | "codex" | "antigravity"; model: string | null } // a header run:"shell" button, re-resolved server-side
 );
 
 // The command-terminal endpoint. The browser sends only a REFERENCE — a script INDEX
@@ -102,6 +102,18 @@ export function buildCodexWsUrl(input: CodexWsUrlInput): string {
   return sessionTerminalWsUrl("ws/codex", input);
 }
 
+export interface AntigravityWsUrlInput {
+  host: string;
+  secure: boolean;
+  sessionId: string | null;
+  cwd?: string | null;
+  devTerminal?: boolean;
+}
+
+export function buildAntigravityWsUrl(input: AntigravityWsUrlInput): string {
+  return sessionTerminalWsUrl("ws/antigravity", input);
+}
+
 // What a connection slot is pointed at, as far as choosing an endpoint is concerned. Named
 // separately from the connection manager's own `ConnTarget` so this module stays free of it
 // — TypeScript is structural, so a `ConnTarget` satisfies this.
@@ -113,6 +125,7 @@ export interface ConnTargetUrlInput {
   // A configured launcher by index, or the OS default shell.
   launcher: { index: number } | { shell: true } | null;
   codex?: boolean;
+  antigravity?: boolean;
   launch?: LaunchChoice | null;
 }
 
@@ -125,7 +138,7 @@ function runCommandWsUrl(command: RunCommand, host: string, secure: boolean): st
 }
 
 // Which endpoint a slot connects to. The order is the rule: a Run command is ephemeral and
-// outranks everything; then a configured launcher; then codex; then a Claude session, the
+// outranks everything; then a configured launcher; then codex; then antigravity; then a Claude session, the
 // default. Getting it wrong is silent and destructive-adjacent — a restored codex cell that
 // falls through to `/ws` comes back as Claude, and a command cell that does re-runs its
 // script as an agent session.
@@ -140,5 +153,6 @@ export function connWsUrl(target: ConnTargetUrlInput, resumeId: string | null, h
       : buildLaunchWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, launcher: target.launcher.index });
   }
   if (target.codex) return buildCodexWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
+  if (target.antigravity) return buildAntigravityWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal });
   return buildTerminalWsUrl({ host, secure, sessionId: resumeId, cwd: target.cwd, devTerminal: target.devTerminal, launch: target.launch });
 }

@@ -75,7 +75,7 @@ const emit = defineEmits<{
   (e: "launch", uid: number, pick: LaunchPick): void;
   (e: "move", uid: number, dir: -1 | 1): void;
   (e: "status", uid: number, value: CellStatus): void;
-  (e: "agent", uid: number, value: "claude" | "codex"): void;
+  (e: "agent", uid: number, value: "claude" | "codex" | "antigravity"): void;
   // Shared preset list events — uid-less since they mutate the one config list.
   (e: "record-cwd" | "remove-preset", value: string): void;
 }>();

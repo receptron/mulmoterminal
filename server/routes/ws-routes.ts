@@ -34,7 +34,7 @@ import { ProviderRefusedError } from "../session/provider-env.js";
 import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
 import type { PtyEntry } from "../session/types.js";
-import type { SpawnClaudePty, SpawnCodexPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
+import type { SpawnClaudePty, SpawnCodexPty, SpawnAntigravityPty, SpawnCommandPty, SpawnLauncherPty, ResolveLauncher } from "../session/spawners.js";
 import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
 import { normalizeAgent, parseIndexParam } from "./routeParams.js";
 import { codexResumeId } from "../agents/codex-resume.js";
@@ -51,6 +51,7 @@ export interface WsRouteDeps {
   handleClientClose: (entry: PtyEntry, ws: WebSocket, sessionId: string) => void;
   spawnClaudePty: SpawnClaudePty;
   spawnCodexPty: SpawnCodexPty;
+  spawnAntigravityPty: SpawnAntigravityPty;
   spawnCommandPty: SpawnCommandPty;
   spawnLauncherPty: SpawnLauncherPty;
   resolveLauncher: ResolveLauncher;
@@ -405,6 +406,30 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: { ur
   early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
 }
 
+async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req: { url?: string; headers?: unknown }) {
+  const { url, requested, cwd } = wsConnectionContext(req);
+  const sessionId = requested ?? randomUUID();
+  const live = ptys.get(sessionId);
+  if (live) {
+    deps.reattachPty(live, ws, sessionId);
+    ws.send(JSON.stringify({ type: "session", id: sessionId, cwd: live.cwd }));
+    return;
+  }
+  ws.send(JSON.stringify({ type: "session", id: sessionId, cwd }));
+  const early = bufferEarlyFrames<{ toString(): string }>(ws);
+  let entry: PtyEntry;
+  try {
+    entry = deps.spawnAntigravityPty(sessionId, ws, null, cwd);
+  } catch (err) {
+    console.error(`[ws/antigravity] failed to start ${sessionId}: ${messageOf(err)}`);
+    early.discard();
+    return closeWithError(ws, "Failed to start Antigravity. Is the `agy` CLI installed and on your PATH?");
+  }
+  ws.on("message", (raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
+  ws.on("close", () => deps.handleClientClose(entry, ws, sessionId));
+  early.release((raw) => deps.handleClientFrame(entry, ws, raw, sessionId));
+}
+
 export function mountTerminalWebSockets(deps: WsRouteDeps) {
   // Terminal WebSocket. Uses noServer + manual upgrade routing so it shares the
   // HTTP server with socket.io (the pub/sub at /ws/pubsub) without the two
@@ -420,7 +445,15 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   // First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
   // with session discovery + resume. Its own endpoint so /ws stays claude-only.
   const runCodexWss = new WebSocketServer({ noServer: true });
-  const serverFor: Record<TerminalWsKind, WebSocketServer> = { claude: wss, run: runWss, launch: runLaunchWss, codex: runCodexWss };
+  // First-class Antigravity sessions — persistent + reattachable like /ws/launch, but running agy.
+  const runAntigravityWss = new WebSocketServer({ noServer: true });
+  const serverFor: Record<TerminalWsKind, WebSocketServer> = {
+    claude: wss,
+    run: runWss,
+    launch: runLaunchWss,
+    codex: runCodexWss,
+    antigravity: runAntigravityWss,
+  };
   deps.server.on("upgrade", (req, socket, head) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
     const kind = terminalWsKind(pathname);
@@ -444,4 +477,5 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   runWss.on("connection", (ws, req) => handleRunConnection(deps, ws, req));
   runLaunchWss.on("connection", (ws, req) => void handleLaunchConnection(deps, ws, req));
   runCodexWss.on("connection", (ws, req) => void handleCodexConnection(deps, ws, req));
+  runAntigravityWss.on("connection", (ws, req) => void handleAntigravityConnection(deps, ws, req));
 }
