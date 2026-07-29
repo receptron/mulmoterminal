@@ -118,7 +118,7 @@ The launcher detects it and prints the exact removal command; run that, then `np
 
 > Repo: [github.com/receptron/mulmoterminal](https://github.com/receptron/mulmoterminal) ·
 > npm: [`mulmoterminal`](https://www.npmjs.com/package/mulmoterminal) — `npx mulmoterminal@latest`
-
+>
 > **アップデート情報 / Updates** — 新バージョンや新機能のお知らせは X の
 > [Singularity Society（@SingularitySoci）](https://x.com/SingularitySoci) で流しています
 > (release and feature announcements, in Japanese).
