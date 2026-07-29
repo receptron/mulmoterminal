@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl.js";
+import { buildTerminalWsUrl, buildRunWsUrl, buildLaunchWsUrl, buildCodexWsUrl, buildAntigravityWsUrl, connWsUrl, type ConnTargetUrlInput } from "../../../src/components/wsUrl.js";
 
 describe("buildTerminalWsUrl", () => {
   it("single view: session only, no gui=0", () => {
@@ -129,6 +129,25 @@ describe("buildCodexWsUrl", () => {
   });
 });
 
+describe("buildAntigravityWsUrl", () => {
+  it("targets /ws/antigravity with reattach session + cwd", () => {
+    const u = new URL(buildAntigravityWsUrl({ host: "h", secure: false, sessionId: "abc", cwd: "/work/proj" }));
+    expect(u.pathname).toBe("/ws/antigravity");
+    expect(u.searchParams.get("session")).toBe("abc");
+    expect(u.searchParams.get("cwd")).toBe("/work/proj");
+  });
+
+  it("fresh antigravity (null id): no session param", () => {
+    const u = new URL(buildAntigravityWsUrl({ host: "h", secure: false, sessionId: null }));
+    expect(u.pathname).toBe("/ws/antigravity");
+    expect(u.searchParams.has("session")).toBe(false);
+  });
+
+  it("uses wss when secure", () => {
+    expect(buildAntigravityWsUrl({ host: "h", secure: true, sessionId: null }).startsWith("wss://")).toBe(true);
+  });
+});
+
 describe("buildTerminalWsUrl — the launch picker's choice (#584)", () => {
   const base = { host: "h", secure: false, sessionId: null };
 
@@ -182,6 +201,10 @@ describe("connWsUrl — endpoint precedence", () => {
 
   it("sends a codex slot to the codex endpoint, not the Claude one", () => {
     expect(pathOf(connWsUrl(target({ codex: true }), "abc", HOST, false))).toBe("/ws/codex");
+  });
+
+  it("sends an antigravity slot to the antigravity endpoint, not the Claude one", () => {
+    expect(pathOf(connWsUrl(target({ antigravity: true }), "abc", HOST, false))).toBe("/ws/antigravity");
   });
 
   it("sends a launcher slot to the launch endpoint", () => {

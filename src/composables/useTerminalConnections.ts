@@ -110,15 +110,17 @@ export interface ConnTarget {
   // A first-class codex session (/ws/codex) instead of a Claude one. Persistent &
   // reattachable like a Claude cell; the server discovers + resumes codex's own id.
   codex?: boolean;
+  // A first-class antigravity session (/ws/antigravity).
+  antigravity?: boolean;
   // The provider/model the launch form picked for this session (#584). Claude only —
   // it rides the /ws query and overrides the directory's default.
   launch?: LaunchChoice | null;
 }
 
 // The `terminalSubmit` mapping describes the user's CLAUDE binding, so it only applies to
-// Claude cells. A launcher / codex / command / dev-terminal cell is a shell or another TUI
+// Claude cells. A launcher / codex / antigravity / command / dev-terminal cell is a shell or another TUI
 // where a bare Enter must stay xterm's native \r — a reversed setting must not rewrite it.
-export const isClaudeTarget = (t: ConnTarget): boolean => !t.devTerminal && !t.command && !t.launcher && !t.codex;
+export const isClaudeTarget = (t: ConnTarget): boolean => !t.devTerminal && !t.command && !t.launcher && !t.codex && !t.antigravity;
 
 // The submit/newline byte mapping in effect for one connection: the user's `terminalSubmit`
 // setting for a Claude cell, the standard binding for everything else. Used by the keyboard
@@ -798,6 +800,7 @@ const slotCandidate = (c: Conn): SlotCandidate => ({
   sessionId: c.knownSessionId,
   cwd: c.knownCwd ?? c.target.cwd,
   codex: !!c.target.codex,
+  antigravity: !!c.target.antigravity,
 });
 
 export function listSlots(): SlotInfo[] {

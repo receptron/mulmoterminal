@@ -14,13 +14,14 @@ export interface SlotCandidate {
   sessionId: string | null; // absent until the server reports one
   cwd: string | null;
   codex: boolean;
+  antigravity?: boolean;
 }
 
 export interface SlotInfo {
   key: string;
   sessionId: string;
   cwd: string | null;
-  agent: "claude" | "codex";
+  agent: "claude" | "codex" | "antigravity";
 }
 
 // The readable form of a slot, or null when there is nothing to read. A slot without a
@@ -28,5 +29,10 @@ export interface SlotInfo {
 // so a cell that hasn't launched has nothing to offer yet.
 export function readableSlot(candidate: SlotCandidate): SlotInfo | null {
   if (!candidate.connected || candidate.isCommand || candidate.isShellLauncher || !candidate.sessionId) return null;
-  return { key: candidate.key, sessionId: candidate.sessionId, cwd: candidate.cwd, agent: candidate.codex ? "codex" : "claude" };
+  return {
+    key: candidate.key,
+    sessionId: candidate.sessionId,
+    cwd: candidate.cwd,
+    agent: candidate.antigravity ? "antigravity" : candidate.codex ? "codex" : "claude",
+  };
 }

@@ -100,6 +100,7 @@ function currentTarget(): conn.ConnTarget {
     command: props.command ?? null,
     launcher: props.launcher ?? null,
     codex: !!props.codex,
+    antigravity: !!props.antigravity,
     launch: props.launch ?? null,
   };
 }
