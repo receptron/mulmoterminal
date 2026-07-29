@@ -14,6 +14,8 @@ export function parseIndexParam(raw: string | null): number {
 // else — including "CODEX", "", null, an array, or a missing param — falls back to claude, the
 // default backend. Case-sensitive on purpose: the query value comes straight from a URL, and a
 // mis-cased "CODEX" starting Claude is safer than guessing the user meant codex.
-export function normalizeAgent(raw: unknown): "codex" | "claude" {
-  return raw === "codex" ? "codex" : "claude";
+export function normalizeAgent(raw: unknown): "codex" | "antigravity" | "claude" {
+  if (raw === "codex") return "codex";
+  if (raw === "antigravity") return "antigravity";
+  return "claude";
 }

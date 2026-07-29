@@ -26,6 +26,10 @@ describe("normalizeAgent", () => {
     expect(normalizeAgent("codex")).toBe("codex");
   });
 
+  it("selects antigravity only for an exact 'antigravity'", () => {
+    expect(normalizeAgent("antigravity")).toBe("antigravity");
+  });
+
   it("falls back to claude for everything else", () => {
     for (const raw of ["claude", "", "gpt", null, undefined, 5, ["codex"], { agent: "codex" }]) {
       expect(normalizeAgent(raw)).toBe("claude");

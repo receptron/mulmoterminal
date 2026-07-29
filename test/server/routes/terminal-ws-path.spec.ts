@@ -9,6 +9,7 @@ describe("terminalWsKind", () => {
     ["/ws/run", "run"],
     ["/ws/launch", "launch"],
     ["/ws/codex", "codex"],
+    ["/ws/antigravity", "antigravity"],
   ])("routes %s to the %s socket", (pathname, kind) => {
     expect(terminalWsKind(pathname)).toBe(kind);
   });
