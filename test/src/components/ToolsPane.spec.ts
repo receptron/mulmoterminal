@@ -2,13 +2,16 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import ToolsPane from "../../../src/components/ToolsPane.vue";
 
-// Capture the pub/sub callback so tests can simulate a server push without a
-// real socket (mirrors Sidebar.spec.ts).
+// Capture the pub/sub callbacks so tests can simulate a server push without a real socket
+// (mirrors Sidebar.spec.ts). Kept per channel: the pane subscribes twice — its history feed, and
+// the tool-groups announcement that tells it to re-ask what tools this session has.
 let captured: ((data: unknown) => void) | null = null;
+let capturedGroups: ((data: unknown) => void) | null = null;
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
-    subscribe: (_channel: string, cb: (data: unknown) => void) => {
-      captured = cb;
+    subscribe: (channel: string, cb: (data: unknown) => void) => {
+      if (channel === "tool-groups") capturedGroups = cb;
+      else captured = cb;
       return () => {};
     },
   }),
@@ -36,6 +39,7 @@ function mockFetch(handler: (url: string) => Promise<unknown>) {
 describe("ToolsPane", () => {
   beforeEach(() => {
     captured = null;
+    capturedGroups = null;
   });
 
   it("lists available tools and renders history rows with running/completed/failed badges", async () => {
@@ -105,5 +109,59 @@ describe("ToolsPane", () => {
     await flushPromises();
     expect(wrapper.text()).toContain("NewTool");
     expect(wrapper.text()).not.toContain("OldTool");
+  });
+
+  // The pane asks what tools a session has while the agent is still starting, so the first answer
+  // is "none" — and it used to stand there until something remounted the pane. That is the
+  // "No GUI plugin tools enabled." a freshly launched session showed until it was redrawn.
+  it("re-asks for the tool list when the server announces this session's groups", async () => {
+    let toolsReply: unknown[] = [];
+    mockFetch((url) => Promise.resolve(jsonRes(url.startsWith("/api/tools") ? { tools: toolsReply } : { toolCalls: [] })));
+
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.text()).toContain("No GUI plugin tools enabled.");
+
+    // The agent's MCP client has now connected, so the server knows what it has.
+    toolsReply = [{ toolName: "presentDocument", description: "Render markdown" }];
+    capturedGroups?.({ sessionId: "a", groups: ["render"] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    // Another session's announcement must not repoint this pane.
+    toolsReply = [{ toolName: "manageCollection" }];
+    capturedGroups?.({ sessionId: "b", groups: ["data"] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+  });
+
+  // A broker-fed history holds ONLY the GUI tools. An empty list there means "called no GUI tool",
+  // not "did nothing" — without the note the pane looks identical to a claude session's and is read
+  // as the stronger claim. The SERVER decides it: a codex launcher chip carries no agent name the
+  // client could key off.
+  it("says the history is GUI-tools-only when the server reports it", async () => {
+    mockFetch((url) => Promise.resolve(jsonRes(url.startsWith("/api/tools") ? { tools: [], guiOnlyHistory: true } : { toolCalls: [] })));
+
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("No GUI tool calls yet.");
+  });
+
+  it("stays quiet for a hook-fed history, and when the tools request fails", async () => {
+    mockFetch((url) => Promise.resolve(jsonRes(url.startsWith("/api/tools") ? { tools: [], guiOnlyHistory: false } : { toolCalls: [] })));
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("No tool calls yet.");
+
+    // A failed /api/tools must not leave the note behind claiming something about a history we
+    // could not ask about.
+    globalThis.fetch = vi.fn((url: string) =>
+      String(url).startsWith("/api/tools") ? Promise.reject(new Error("offline")) : Promise.resolve(jsonRes({ toolCalls: [] })),
+    ) as unknown as typeof fetch;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
   });
 });

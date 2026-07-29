@@ -40,6 +40,9 @@ vi.mock("../../../server/session/registry.js", () => ({
   knownSessions: new Map(),
   launchChoices: new Map(),
   ptys: new Map(),
+  // Every claude spawn registers itself as reporting its own tool calls (the MCP broker reads this
+  // to decide it must NOT record them a second time — see mcp/gui-call-history.ts).
+  hookedSessions: new Set(),
   resetSessionToolGroups: (id: string) => resetSessionToolGroups(id),
 }));
 

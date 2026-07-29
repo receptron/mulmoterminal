@@ -31,6 +31,8 @@ import { offeredTools, routeToolCall, SUBMIT_TRANSLATION_TOOL_NAME } from "./too
 import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import { interpretToolEnvelope } from "./tool-envelope.js";
 import { isRecord } from "../../common/isRecord.js";
+import type { GuiCallRecorder } from "./gui-call-history.js";
+import { messageOf } from "../errors.js";
 
 // Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
 // whether a toolResult is published to the GUI; the rest is narration/metadata.
@@ -75,8 +77,15 @@ const SUBMIT_TRANSLATION_TOOL = {
  * @param opts.group  serve only one GROUP of the GUI tools (the `/api/mcp/<group>/<id>` URLs,
  *                    which exist so a directory can enable a subset through Claude Code's own
  *                    per-folder MCP config). Null/absent = every tool, the single view's URL.
+ * @param opts.history  feed each call into the tools pane's call history. Set only for agents
+ *                      that have no hooks of their own — see mcp/gui-call-history.ts, which
+ *                      also explains why claude must NOT get one.
  */
-export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { submitTranslationTool?: boolean; group?: ToolGroup | null } = {}): Server {
+export function buildGuiMcpServer(
+  sessionId: string,
+  baseUrl: string,
+  opts: { submitTranslationTool?: boolean; group?: ToolGroup | null; history?: GuiCallRecorder | null } = {},
+): Server {
   const group = opts.group ?? null;
   // The advertised server name follows the id a group is expected to be registered under, so
   // what a user sees in `claude mcp list` matches what they wrote in their own config.
@@ -102,19 +111,45 @@ export function buildGuiMcpServer(sessionId: string, baseUrl: string, opts: { su
       return { content: [{ type: "text", text: "Translation received. You are done." }] };
     }
 
+    // The tools pane's call history, for an agent that cannot report its own (codex, agy).
+    // Recorded around the DISPATCH so a slow plugin shows as "running…" while it runs, which
+    // is what claude's PreToolUse gives the pane. Null for claude — its hooks already report
+    // this same call — and for the hidden translation worker, which has no pane.
+    const history = opts.history ?? null;
+    const toolUseId = randomUUID();
+    const startedAt = Date.now();
+    const started = () => history?.start({ toolUseId, toolName: name, toolInput: args });
+    const finished = (toolOutput: unknown, status: "completed" | "failed") =>
+      history?.end({ toolUseId, toolName: name, toolInput: args, toolOutput, durationMs: Date.now() - startedAt, status });
+
     if (route.kind === "refused") {
+      // Recorded, not skipped: a tool the agent named and was refused is precisely what someone
+      // reading the history is looking for.
+      started();
+      finished(route.message, "failed");
       return { content: [{ type: "text", text: route.message }], isError: true };
     }
 
-    // Dispatch to the plugin's server-side handler, then interpret its envelope (tool-envelope.ts).
-    const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();
-    const { publish, narration } = interpretToolEnvelope(isRecord(parsed) ? parsed : {});
+    started();
+    try {
+      // Dispatch to the plugin's server-side handler, then interpret its envelope (tool-envelope.ts).
+      const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();
+      const { publish, narration } = interpretToolEnvelope(isRecord(parsed) ? parsed : {});
 
-    // A GUI toolResult, only when there is data to render.
-    if (publish) {
-      await postJson(`${baseUrl}/api/agent/toolResult`, { sessionId, toolName: name, uuid: randomUUID(), ...publish });
+      // A GUI toolResult, only when there is data to render.
+      if (publish) {
+        await postJson(`${baseUrl}/api/agent/toolResult`, { sessionId, toolName: name, uuid: randomUUID(), ...publish });
+      }
+      finished(narration, "completed");
+      return { content: [{ type: "text", text: narration }] };
+    } catch (err) {
+      // The dispatch route answered non-2xx, or its JSON was unreadable. Closing the entry here
+      // is the same reason PostToolUseFailure is registered alongside PostToolUse for claude:
+      // without it a failed call sits on "running…" for the life of the session. The error still
+      // propagates — the SDK turns it into the agent's error response, as before.
+      finished(messageOf(err), "failed");
+      throw err;
     }
-    return { content: [{ type: "text", text: narration }] };
   });
 
   return server;

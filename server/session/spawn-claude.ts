@@ -9,7 +9,7 @@ import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
 import { claudeAdapter } from "../agents/claude.js";
 import { appendedSystemPrompt } from "../agents/appended-prompt.js";
-import { knownSessions, launchChoices, ptys, resetSessionToolGroups } from "./registry.js";
+import { hookedSessions, knownSessions, launchChoices, ptys, resetSessionToolGroups } from "./registry.js";
 import { ptySpawn, ptyWouldReattach, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
 import { ptyExitLine, ptyStartLine } from "./pty-exit-log.js";
 import { attachDraftInjection } from "./draft-injection.js";
@@ -183,6 +183,10 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       return { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" };
     }
     ptys.set(sessionId, entry);
+    // Every claude spawn above carries `--settings` with the Pre/PostToolUse hooks, so from here
+    // on this session reports its own tool calls — which is what stops the MCP broker recording
+    // its GUI calls a second time (mcp/gui-call-history.ts).
+    hookedSessions.add(sessionId);
 
     if (!canResume) {
       // Brand-new (or restarted-idle) session: surface it in the sidebar before it's persisted.

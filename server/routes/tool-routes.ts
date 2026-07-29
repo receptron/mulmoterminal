@@ -27,6 +27,13 @@ export interface ToolRouteDeps {
    */
   isGridSession: (sessionId: string) => boolean;
   devTerminalSessionsHydrated: Promise<void>;
+  /**
+   * Is this session's tool-call history fed by the MCP broker rather than by hooks — i.e. does it
+   * hold the GUI tools ALONE? The pane says so, because an empty GUI-only history looks exactly
+   * like an agent that ran nothing. Answered server-side because the client cannot work it out:
+   * a codex launcher chip is a cell with no agent name on it (see mcp/gui-call-history.ts).
+   */
+  guiOnlyHistory: (sessionId: string) => boolean;
   publish: (channel: string, data: unknown) => void;
   sessionChannel: (id: string) => string;
 }
@@ -93,17 +100,20 @@ export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
   // answer stays the whole set (the single view, which carries every tool).
   app.get("/api/tools", async (req, res) => {
     const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : null;
-    if (sessionId === null || !SESSION_ID_RE.test(sessionId)) return res.json({ tools: deps.toolSummaries });
+    // With no session there is no history to describe either, so the flag stays false rather than
+    // disclaiming a pane that is showing nobody's history.
+    if (sessionId === null || !SESSION_ID_RE.test(sessionId)) return res.json({ tools: deps.toolSummaries, guiOnlyHistory: false });
     // Both sets are persisted and hydrated at boot; asked before either resolves, a grid cell
     // would read as having nothing and a resumed one as having lost its groups.
     await Promise.all([deps.sessionToolGroupsHydrated, deps.devTerminalSessionsHydrated]);
     const groups = deps.sessionToolGroups(sessionId);
     const isGrid = deps.isGridSession(sessionId);
-    res.json({ tools: narrowedTools(deps.toolSummaries, groups, isGrid), groups });
+    res.json({ tools: narrowedTools(deps.toolSummaries, groups, isGrid), groups, guiOnlyHistory: deps.guiOnlyHistory(sessionId) });
   });
 
-  // Replay a session's tool-call history (every tool, via the Pre/PostToolUse hooks)
-  // so the tools pane can render it when the user (re)selects that session. Loads
+  // Replay a session's tool-call history — every tool for claude (its Pre/PostToolUse hooks),
+  // the GUI tools alone for codex / agy (the broker; they have no hooks) — so the tools pane
+  // can render it when the user (re)selects that session. Loads
   // from disk (~/.mulmoterminal/toolcalls) on first access so it survives a reboot.
   app.get("/api/tool-calls/:sessionId", async (req, res) => {
     const { sessionId } = req.params;

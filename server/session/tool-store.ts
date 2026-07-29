@@ -169,11 +169,17 @@ export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolSto
     toolResultsStore.save(sessionId);
   }
 
-  // Per-session tool-call history, fed by Claude's PreToolUse/PostToolUse hooks so
-  // it captures EVERY tool call — built-ins (Bash, Read, …), the user's MCP tools,
-  // AND our GUI plugin tools — not just the GUI ones the broker sees. Published on a
-  // per-session channel the tools pane subscribes to. (The broker's toolResults
-  // store above is separate; it only drives rendering of GUI views.)
+  // Per-session tool-call history, published on a per-session channel the tools pane
+  // subscribes to. (The broker's toolResults store above is separate; it only drives
+  // rendering of GUI views.) It has two writers, and which one a session gets decides
+  // how complete its history is:
+  //
+  //   claude          — its PreToolUse/PostToolUse hooks, matcher "", so EVERY tool call:
+  //                     built-ins (Bash, Read, …), the user's MCP tools, and ours.
+  //   codex / agy     — the MCP broker, since neither has a hook mechanism. GUI tools only.
+  //
+  // Never both for one session — see mcp/gui-call-history.ts for why that would double
+  // rather than dedupe.
   //
   // Persisted under ~/.mulmoterminal/toolcalls via the same disk-backed store as
   // the toolResults, so the history survives a server reboot.

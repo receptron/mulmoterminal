@@ -88,6 +88,18 @@ export const codexRolloutIds = new Map<string, string>();
 // (which would let both cold-resume the same conversation). Serialized by the single event loop.
 export const claimedCodexRollouts = new Set<string>();
 
+// Sessions spawned with our `--settings` hooks, i.e. the ones that report their own tool calls to
+// /api/hook. Only spawn-claude registers them, because only claude has a hook mechanism.
+//
+// It exists so the MCP broker can tell whether a session's tool calls are ALREADY being recorded,
+// without asking what agent it is: a codex launcher chip runs codex through the login shell, so
+// its PtyEntry is honestly labelled "shell" and no agent name identifies it (see
+// mcp/gui-call-history.ts). What the broker actually needs to know is this, not the name.
+//
+// Never pruned. An id is a v4 uuid used once, the set costs a string per session, and forgetting
+// one would silently start double-recording that session's GUI calls — the opposite of cheap.
+export const hookedSessions = new Set<string>();
+
 // mulmoterminal session key -> the antigravity conversation id it maps to.
 export const antigravityConversationIds = new Map<string, string>();
 export const claimedAntigravityConversations = new Set<string>();

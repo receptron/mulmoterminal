@@ -429,6 +429,7 @@ mountAppRoutes(app, {
   reap,
   // Defined further down; reached only from a request, which cannot arrive before listen().
   registerBackgroundSession: (id: string) => scheduledSessions.register(id),
+  agentOfSession: (id: string) => agentOfSession(id),
   setWorking,
   setWaiting,
   publishActivity,

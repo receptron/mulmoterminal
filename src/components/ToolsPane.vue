@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, watch, onUnmounted } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
+import { usePubSub } from "../composables/usePubSub";
+import { TOOL_GROUPS_CHANNEL } from "../toolGroupsChannel";
 
 // The tools pane mirrors MulmoClaude's right sidebar: an "Available Tools" list
 // (the GUI plugin tools, with collapsible descriptions) and a "Tool Call History"
-// for the active session. The history is fed by Claude's PreToolUse/PostToolUse
-// hooks, so it shows EVERY tool call — built-ins (Bash, Read, …), other MCP tools,
-// and our GUI plugin tools — not just the GUI ones. Live updates arrive on the
+// for the active session. For a CLAUDE session the history is fed by its PreToolUse/PostToolUse
+// hooks, so it shows EVERY tool call — built-ins (Bash, Read, …), other MCP tools, and our GUI
+// plugin tools. For codex / agy, which have no hooks, it is fed by our MCP broker and holds the
+// GUI tools alone — /api/tools reports which, as `guiOnlyHistory`. Live updates arrive on the
 // toolcalls:<id> channel; history replays from /api/tool-calls/:id on (re)select.
 interface AvailableTool {
   toolName: string;
@@ -25,6 +28,15 @@ interface ToolCall {
 
 const props = defineProps<{ sessionId: string | null }>();
 const emit = defineEmits<{ close: [] }>();
+
+// Whether this session's history holds the GUI tools ALONE (the broker fed it) rather than every
+// tool (claude's hooks fed it). An empty GUI-only history looks exactly like an agent that ran
+// nothing, so the pane says which it is — see the note in the template.
+//
+// The SERVER decides it, and the client cannot: a codex launcher chip runs the user's own command
+// through the login shell, so nothing the browser holds about that cell names an agent at all
+// (server/mcp/gui-call-history.ts).
+const guiOnlyHistory = ref(false);
 
 const availableTools = ref<AvailableTool[]>([]);
 const toolCalls = ref<ToolCall[]>([]);
@@ -49,11 +61,34 @@ async function loadAvailableTools(sessionId: string | null) {
     // from showing another cell's tools.
     if (sessionId !== props.sessionId) return;
     availableTools.value = body.tools ?? [];
+    guiOnlyHistory.value = body.guiOnlyHistory === true;
   } catch {
-    if (sessionId === props.sessionId) availableTools.value = [];
+    if (sessionId === props.sessionId) {
+      availableTools.value = [];
+      // Unknown, so claim nothing: a note that appears on a failed request would be a statement
+      // about a history we could not ask about.
+      guiOnlyHistory.value = false;
+    }
   }
 }
 watch(() => props.sessionId, loadAvailableTools, { immediate: true });
+
+// The question above is normally asked BEFORE it can be answered: the browser is handed a session
+// id while the agent is still being spawned, so its MCP client has not connected and the server
+// has learned no groups yet. That first "nothing" then stood until something happened to remount
+// the pane — closing and reopening it, or switching cells — which is exactly the "No GUI plugin
+// tools enabled." a freshly started session showed.
+//
+// So re-ask when the server says it has learned this session's groups. The same channel and the
+// same reason as the grid's Canvas button (TerminalGrid.vue) — asked once at mount, both were
+// asking too early. Re-asking rather than reading the pushed `groups`: the reply also carries the
+// tool DESCRIPTIONS and `guiOnlyHistory`, which the push does not.
+const { subscribe: subscribeToolGroups } = usePubSub();
+const offToolGroups = subscribeToolGroups(TOOL_GROUPS_CHANNEL, (data) => {
+  const msg = data as { sessionId?: string };
+  if (msg?.sessionId && msg.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
+});
+onUnmounted(offToolGroups);
 
 function callKey(c: ToolCall, i: number): string {
   return c.toolUseId ?? `${c.toolName}-${i}`;
@@ -179,7 +214,10 @@ onUnmounted(() => window.clearTimeout(historyCopyTimer));
             {{ historyCopied ? "Copied" : "Copy all" }}
           </button>
         </div>
-        <div v-if="toolCalls.length === 0" class="text-[12px] text-dim">No tool calls yet.</div>
+        <div v-if="guiOnlyHistory" data-testid="gui-only-note" class="mb-1.5 text-[11px] leading-[1.35] text-dim">
+          This agent reports no hooks, so the list holds its GUI tool calls only — not its shell commands or file edits.
+        </div>
+        <div v-if="toolCalls.length === 0" class="text-[12px] text-dim">{{ guiOnlyHistory ? "No GUI tool calls yet." : "No tool calls yet." }}</div>
         <div v-for="(call, i) in toolCalls" :key="callKey(call, i)" data-testid="tool-call" class="mt-1.5 rounded-md border border-border bg-deep px-2 py-1.5">
           <button
             class="flex w-full cursor-pointer items-center justify-between gap-2 border-0 bg-transparent px-0 py-1 text-left text-inherit"

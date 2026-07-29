@@ -12,6 +12,7 @@ import type { Express, Request, Response } from "express";
 
 import { PORT, SESSION_ID_RE } from "../config/env.js";
 import { buildGuiMcpServer } from "../mcp/broker.js";
+import type { GuiCallRecorder } from "../mcp/gui-call-history.js";
 import { translationWorkerIds, markSessionToolGroup, sessionToolGroups } from "../session/registry.js";
 import { isToolGroup, type ToolGroup } from "../../common/toolGroups.js";
 import { submitTranslation } from "../session/translation-worker.js";
@@ -32,6 +33,13 @@ export const TOOL_GROUPS_CHANNEL = "tool-groups";
 
 export interface McpRouteDeps {
   publish: (channel: string, data: unknown) => void;
+  /**
+   * A recorder for this session's GUI tool calls, or null to record nothing. Resolved per
+   * request rather than per session id up front: a session's agent is known only once its PTY
+   * exists, and the same id is asked about again on every later call. See mcp/gui-call-history.ts
+   * for which agents get one and why claude must not.
+   */
+  guiCallHistory: (sessionId: string) => GuiCallRecorder | null;
 }
 
 export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
@@ -44,9 +52,13 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     }
     // Hidden translation workers (and only they) get the worker-only submitTranslation
     // tool, so a normal chat's tool list stays clean.
+    // A translation worker is a hidden claude session with no pane to feed, so it never gets a
+    // recorder — asking would only be an extra lookup for a guaranteed null.
+    const isWorker = translationWorkerIds.has(sessionId);
     const server = buildGuiMcpServer(sessionId, `http://127.0.0.1:${PORT}`, {
-      submitTranslationTool: translationWorkerIds.has(sessionId),
+      submitTranslationTool: isWorker,
       group,
+      history: isWorker ? null : deps.guiCallHistory(sessionId),
     });
     // No sessionIdGenerator at all is the SDK's stateless mode. Spelling it `undefined` says
     // the same thing to the runtime but not to the type — the option is exact-optional.
