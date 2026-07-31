@@ -52,12 +52,15 @@ export interface SpawnedChat {
   agent: Agent;
 }
 
-/** Show an ALREADY-spawned session — what a non-hidden spawn does, as its own step. A `hidden`
- *  caller that means to place the session itself can only find out whether it managed to at the
- *  end; without this it would have to commit to "the shell shows it" before spawning, and be wrong
- *  by the time it knew. */
-export function showSpawnedSession(spawned: SpawnedChat): void {
-  openSessionFn?.(spawned.id, { agent: spawned.agent });
+/** Show an ALREADY-spawned session in the SINGLE VIEW. The one caller left is the grid's
+ *  full-capacity fallback, which can only find out that it has no room at the end — without this
+ *  it would have to commit to where the session goes before spawning, and be wrong by the time it
+ *  knew.
+ *
+ *  `draft` is carried rather than defaulted: it is what shows the "preparing your draft…" hint
+ *  (App.vue), so a draft spawn arriving here without it looks like a turn already running. */
+export function showSpawnedSession(spawned: SpawnedChat & { draft?: boolean }): void {
+  openSessionFn?.(spawned.id, { agent: spawned.agent, draft: spawned.draft === true });
 }
 
 /** Spawn a new chat seeded with `prompt`; when not hidden, make it visible. With

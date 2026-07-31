@@ -505,7 +505,7 @@ function launchSkill(skill: BundledSkillName) {
 // Place an already-spawned chat as a cell. Every programmatically started chat arrives here —
 // the collection UI's actions and template cards, custom views, the Settings skill buttons —
 // via useChatLauncher's one choke point.
-const placeChat = ({ id, agent }: SpawnedChatRequest) => {
+const placeChat = ({ id, agent, draft }: SpawnedChatRequest) => {
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
@@ -516,7 +516,11 @@ const placeChat = ({ id, agent }: SpawnedChatRequest) => {
   // cross the cap while the spawn is in flight, and then the answer taken earlier is wrong.
   // (This fallback is what has to be replaced when the single view goes: see
   // plans/feat-remove-single-view.md.)
-  if (placed === state.value) showSpawnedSession({ id, agent });
+  // `draft` goes with it: the single view shows a "preparing your draft…" hint on one, and
+  // dropping the flag here would make a full grid the one case where startNewChatDraft looks like
+  // a turn already running. The CELL needs no such flag — the server types the draft into the PTY,
+  // so the terminal shows it either way; the hint is a single-view affordance.
+  if (placed === state.value) showSpawnedSession({ id, agent, draft });
   else state.value = placed;
 };
 // Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same

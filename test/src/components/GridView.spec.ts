@@ -501,6 +501,30 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     expect(openSession).toHaveBeenCalledWith(SPAWNED, expect.objectContaining({ agent: "claude" }));
     w.unmount();
   });
+
+  // The full-grid fallback is the ONE path where `draft` still has to reach the single view, and
+  // it is the easiest to drop: the cell it would otherwise have made needs no such flag (the
+  // server types the draft into the PTY), so nothing else here carries one. Without it a
+  // startNewChatDraft at MAX_TERMINALS silently loses the "preparing your draft…" hint and reads
+  // as a turn already running.
+  it("carries `draft` into the single-view fallback when the grid is full", async () => {
+    const openSession = vi.fn();
+    (await import("../../../src/composables/useChatLauncher")).registerChatOpener(openSession);
+    const { placeSpawnedChat } = await import("../../../src/composables/useSpawnedChat");
+    localStorage.setItem("grid_v2", filledGrid(81)); // MAX_TERMINALS
+    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: CellsStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
+    });
+    await flushPromises();
+
+    // Straight through the placement seam: a draft spawn is startNewChatDraft's, and going via a
+    // skill button would only ever produce draft:false.
+    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: true });
+    await flushPromises();
+
+    expect(openSession).toHaveBeenCalledWith(SPAWNED, expect.objectContaining({ agent: "claude", draft: true }));
+    w.unmount();
+  });
 });
 
 // #1114: the launch form's Shell option sends a launcher with no configured index — the grid has to
