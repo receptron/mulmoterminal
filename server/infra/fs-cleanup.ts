@@ -11,7 +11,7 @@
 // so a caller that cares can say so.
 import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
-import { spawnCapture } from "./spawnCapture.js";
+import { spawnCaptureAsync } from "./spawnCapture.js";
 
 /** Remove a file or tree; never throws. Returns false when it could not (a Windows lock),
  *  which is a fact a caller may want to log — not one that should end its own work. */
@@ -61,19 +61,22 @@ export function removeLegacySandboxDir(home: string): boolean {
  * (Codex, PR #1195).
  *
  * Best-effort and silent: Docker may be absent, stopped, or slow, and none of that is a reason to
- * hold up a boot. Guarded by the CALLER on the legacy directory existing, so a machine that never
- * ran the sandbox never invokes docker at all — which is nearly every machine, since it was
- * opt-in and macOS-only.
+ * hold up a boot. ASYNC and BOUNDED for that reason, not as a style choice — a wedged daemon makes
+ * `docker ps` hang, and the synchronous form has no timeout, so this would have blocked startup on
+ * exactly the machines it exists to help (Codex, PR #1195). The caller does not await it.
+ *
+ * Guarded by the CALLER on the legacy directory existing, so a machine that never ran the sandbox
+ * never invokes docker at all — which is nearly every machine, since it was opt-in and macOS-only.
  */
-export function removeLegacySandboxContainers(): void {
-  try {
-    const listed = spawnCapture("docker", ["ps", "-aq", "--filter", "name=^mulmoterminal-"]);
-    if (listed.status !== 0) return;
-    const ids = listed.stdout.split("\n").filter((id) => /^[0-9a-f]{6,}$/i.test(id.trim()));
-    if (ids.length === 0) return;
-    spawnCapture("docker", ["rm", "-f", ...ids]);
-    console.log(`[cleanup] removed ${ids.length} leftover sandbox container(s)`);
-  } catch {
-    // docker absent or unusable — nothing to do, and nothing worth saying
-  }
+export async function removeLegacySandboxContainers(): Promise<void> {
+  const listed = await spawnCaptureAsync("docker", ["ps", "-aq", "--filter", "name=^mulmoterminal-"], { timeoutMs: DOCKER_SWEEP_TIMEOUT_MS });
+  if (listed.status !== 0) return;
+  const ids = listed.stdout.split("\n").filter((id) => /^[0-9a-f]{6,}$/i.test(id.trim()));
+  if (ids.length === 0) return;
+  const removed = await spawnCaptureAsync("docker", ["rm", "-f", ...ids], { timeoutMs: DOCKER_SWEEP_TIMEOUT_MS });
+  if (removed.status === 0) console.log(`[cleanup] removed ${ids.length} leftover sandbox container(s)`);
 }
+
+// Shorter than spawnCapture's default: nothing waits on this, and a container left behind by a
+// feature that no longer exists is not worth minutes of a daemon that is not answering.
+const DOCKER_SWEEP_TIMEOUT_MS = 5_000;

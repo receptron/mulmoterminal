@@ -435,7 +435,7 @@ void sweepLegacyProbeTranscriptsOnce(CLAUDE_CWD, MULMOTERMINAL_HOME).catch(() =>
 // The directory is the EVIDENCE that this machine ever ran the sandbox, so the container sweep is
 // gated on it: nearly every install never turned it on (opt-in, macOS-only) and never invokes
 // docker here at all (Codex, PR #1195).
-if (removeLegacySandboxDir(MULMOTERMINAL_HOME)) removeLegacySandboxContainers();
+if (removeLegacySandboxDir(MULMOTERMINAL_HOME)) void removeLegacySandboxContainers().catch(() => {});
 
 // Codex costs nothing to read, so it is current before the first browser arrives.
 refreshCodexRateLimits();
