@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
-import { h, KeepAlive, type Component } from "vue";
+import { defineComponent, h, KeepAlive, type Component } from "vue";
 
 // App.vue renders GridView inside <KeepAlive>, and the grid registers its openers (new terminal,
 // spawned-chat placement) on ACTIVATE so a cached-but-hidden grid is never mutated behind the
@@ -551,6 +551,42 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     // was actually spawned in, rather than this grid's default.
     expect(adopted?.agent).toBe("codex");
     expect(adopted?.cwd).toBe("/proj");
+    w.unmount();
+  });
+
+  // CodeRabbit, on this PR. onActivated fires again when the user leaves the grid and comes
+  // straight back. Both runs read `cells` before either inserts, so the per-row guard cannot see
+  // the other — and the same unplaced session gets two cells fighting over one socket.
+  it("runs one adoption sweep at a time", async () => {
+    let asked = 0;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn(async (url: FetchUrl, init?: RequestInit) => {
+      if (String(url).includes("/api/sessions/unplaced")) {
+        asked++;
+        return new Promise<Response>(() => {}); // never resolves: both activations are in flight
+      }
+      return realFetch(url, init);
+    }) as typeof fetch;
+
+    const GridView = (await import("../../../src/components/GridView.vue")).default;
+    const holder = defineComponent({
+      props: { show: { type: Boolean, default: true } },
+      render() {
+        return h(KeepAlive, null, [this.show ? h(GridView) : h("div")]);
+      },
+    });
+    const w = mount(holder, {
+      props: { show: true },
+      global: { stubs: { TerminalGrid: CellsStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
+    });
+    await flushPromises();
+    expect(asked).toBe(1);
+
+    await w.setProps({ show: false }); // deactivate
+    await w.setProps({ show: true }); // ...and straight back
+    await flushPromises();
+
+    expect(asked).toBe(1); // the first sweep is still in flight, so the second is refused
     w.unmount();
   });
 

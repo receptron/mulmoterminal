@@ -275,6 +275,22 @@ const PLACED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "placed-sessions.json
 export const placedSessionsHydrated = hydrateIdLog(PLACED_SESSIONS_FILE, placedSessions);
 const appendPlacedSession = idLogAppender(PLACED_SESSIONS_FILE, "placed-sessions");
 
+/**
+ * A viewer now has this session, so it stops waiting for a home (see the unplaced marker).
+ *
+ * BOTH ids. The resolvers mint a FRESH one when the requested session can be served neither from a
+ * live pty nor from a transcript — a spawn that died before writing one, which is exactly the kind
+ * that ends up unplaced. Clearing only the new id would leave the requested one marked forever, so
+ * every activate would adopt it again and mint another session, accumulating cells (Codex, #1189).
+ *
+ * Cleared for ANY attach, not only a grid one: "unplaced" means nobody is looking, and a viewer is
+ * a viewer.
+ */
+export function markAttachedSessionPlaced(sessionId: string, requested: string | null): void {
+  markSessionPlaced(sessionId);
+  if (requested && requested !== sessionId) markSessionPlaced(requested);
+}
+
 /** The sessions a loading grid should adopt: spawned visible by the server, never taken. */
 export function unplacedSessionRows(): { id: string; agent: TerminalAgent }[] {
   return [...unplacedSessions].filter(([id]) => !placedSessions.has(id)).map(([id, agent]) => ({ id, agent }));

@@ -22,15 +22,13 @@ vi.mock("node:fs", () => {
 const REQUESTED = "11111111-1111-1111-1111-111111111111";
 const MINTED = "22222222-2222-2222-2222-222222222222";
 
+// The REAL helper, from the same freshly-reset module graph as the registry it writes to. A copy
+// of the rule here would keep passing while the real one drifted, which is the one thing this file
+// exists to prevent (CodeRabbit, PR #1189) — and importing it from a DIFFERENT graph would leave it
+// marking a registry instance the assertions never read.
 async function freshRegistry() {
   vi.resetModules();
   return import("../../../server/session/registry.js");
-}
-
-/** What ws-routes' markAttachedSessionPlaced does, against the real registry. */
-function attach(registry: { markSessionPlaced: (id: string) => void }, sessionId: string, requested: string | null): void {
-  registry.markSessionPlaced(sessionId);
-  if (requested && requested !== sessionId) registry.markSessionPlaced(requested);
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -39,7 +37,7 @@ describe("an attach clears the unplaced mark", () => {
   it("clears it when the session keeps the id it was asked for", async () => {
     const registry = await freshRegistry();
     registry.markUnplacedSession(REQUESTED);
-    attach(registry, REQUESTED, REQUESTED);
+    registry.markAttachedSessionPlaced(REQUESTED, REQUESTED);
     expect(registry.unplacedSessionRows()).toEqual([]);
   });
 
@@ -48,7 +46,7 @@ describe("an attach clears the unplaced mark", () => {
     // one stays marked, and the next activate does it all again.
     const registry = await freshRegistry();
     registry.markUnplacedSession(REQUESTED);
-    attach(registry, MINTED, REQUESTED);
+    registry.markAttachedSessionPlaced(MINTED, REQUESTED);
     expect(registry.unplacedSessionRows()).toEqual([]);
   });
 
@@ -56,14 +54,14 @@ describe("an attach clears the unplaced mark", () => {
     const registry = await freshRegistry();
     registry.markUnplacedSession(REQUESTED);
     registry.markUnplacedSession(MINTED);
-    attach(registry, REQUESTED, REQUESTED);
+    registry.markAttachedSessionPlaced(REQUESTED, REQUESTED);
     expect(registry.unplacedSessionRows().map((r) => r.id)).toEqual([MINTED]);
   });
 
   it("is harmless for a fresh session nobody requested", async () => {
     // The ordinary case: a new cell with no ?session= at all.
     const registry = await freshRegistry();
-    expect(() => attach(registry, MINTED, null)).not.toThrow();
+    expect(() => registry.markAttachedSessionPlaced(MINTED, null)).not.toThrow();
     expect(registry.unplacedSessionRows()).toEqual([]);
   });
 });

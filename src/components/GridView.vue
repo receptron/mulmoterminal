@@ -553,7 +553,14 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
 //
 // Asked on ACTIVATE rather than mount: the grid is kept alive across route changes, so mount fires
 // once per page load and would miss everything spawned while the user was elsewhere in the app.
+let adoptingUnplaced = false;
 async function adoptUnplacedSessions(): Promise<void> {
+  // One sweep at a time. onActivated can fire again before the fetch resolves — leave the grid and
+  // come straight back — and both runs would read `cells` before either inserted, so both would
+  // adopt the same session and give it two cells fighting over one socket. The per-row guard below
+  // cannot catch that: it reads state neither call has written yet.
+  if (adoptingUnplaced) return;
+  adoptingUnplaced = true;
   try {
     const res = await fetch("/api/sessions/unplaced");
     if (!res.ok) return;
@@ -574,6 +581,8 @@ async function adoptUnplacedSessions(): Promise<void> {
     }
   } catch {
     // Best effort: a grid that cannot ask still works, and the sessions stay marked for next time.
+  } finally {
+    adoptingUnplaced = false;
   }
 }
 onActivated(() => void adoptUnplacedSessions());
