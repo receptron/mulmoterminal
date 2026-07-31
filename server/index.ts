@@ -42,7 +42,7 @@ import { startRateLimitProbe } from "./agents/rate-limit-probe.js";
 import { hasBinary } from "./infra/has-binary.js";
 import { newProbeSessionId } from "./agents/probe-session.js";
 import { removeProbeTranscript, sweepLegacyProbeTranscriptsOnce } from "./agents/probe-transcript.js";
-import { removeLegacySandboxDir } from "./infra/fs-cleanup.js";
+import { removeLegacySandboxDir, removeLegacySandboxContainers } from "./infra/fs-cleanup.js";
 import { newestRolloutFile, codexSessionsDir, readRolloutTail } from "./agents/codex-rollout.js";
 import { latestRateLimitsInRollout } from "./agents/codex-rate-limits.js";
 import { rateLimitCacheFile, readRateLimitCache, createRateLimitCacheWriter } from "./agents/rate-limit-persist.js";
@@ -428,10 +428,14 @@ const startClaudeRateLimitProbe = (): void => {
 // window in which that matters is closed rather than reopened on every boot (Codex review on
 // #1030). It also means a 500MB transcript directory is read once, not once per `yarn dev` save.
 void sweepLegacyProbeTranscriptsOnce(CLAUDE_CWD, MULMOTERMINAL_HOME).catch(() => {});
-// The removed Docker sandbox exported a Keychain credential per session into
-// ~/.mulmoterminal/sandbox, and its only deleter went with the feature. Anyone whose server was
-// killed or upgraded mid-session still has a live one on disk (Codex, PR #1195).
-removeLegacySandboxDir(MULMOTERMINAL_HOME);
+// The removed Docker sandbox left two things behind when a server was killed or upgraded
+// mid-session: a per-session export of the Keychain credential on disk, and a container still
+// running with the workspace and ~/.claude mounted. Both deleters went with the feature.
+//
+// The directory is the EVIDENCE that this machine ever ran the sandbox, so the container sweep is
+// gated on it: nearly every install never turned it on (opt-in, macOS-only) and never invokes
+// docker here at all (Codex, PR #1195).
+if (removeLegacySandboxDir(MULMOTERMINAL_HOME)) removeLegacySandboxContainers();
 
 // Codex costs nothing to read, so it is current before the first browser arrives.
 refreshCodexRateLimits();

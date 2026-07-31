@@ -70,12 +70,20 @@ describe("removeLegacySandboxDir", () => {
     expect(existsSync(sandbox)).toBe(false);
   });
 
-  it("is happy when there is nothing to remove, so it can run on every boot", () => {
-    // The usual case by far: nobody ever turned the sandbox on. It runs unguarded at startup, so
-    // a throw here would be a boot failure over a directory that was never created.
+  it("answers FALSE when the directory was never there", () => {
+    // Not a detail: the answer is what gates the docker container sweep at boot. Reporting true
+    // for a machine that never ran the sandbox — nearly every machine, since it was opt-in and
+    // macOS-only — would invoke docker on every start for nothing.
     const home = tmp();
     expect(() => removeLegacySandboxDir(home)).not.toThrow();
+    expect(removeLegacySandboxDir(home)).toBe(false);
+  });
+
+  it("answers false the SECOND time, so the sweep runs once", () => {
+    const home = tmp();
+    mkdirSync(path.join(home, "sandbox"), { recursive: true });
     expect(removeLegacySandboxDir(home)).toBe(true);
+    expect(removeLegacySandboxDir(home)).toBe(false);
   });
 
   it("touches nothing else under the home directory", () => {

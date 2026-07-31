@@ -12,9 +12,12 @@ This file records **what changed and why**. For **how to actually use** a new fe
 `SANDBOX_MOUNT_CONFIGS`, `SANDBOX_SSH_AGENT_FORWARD` — no longer do anything, and
 `Dockerfile.sandbox` is gone. **Setting them is now silently ignored rather than an error**, so an
 existing `.env` keeps working; the session simply runs on the host, which is what it already did
-whenever Docker was unavailable. A leftover `~/.mulmoterminal/sandbox` directory is removed at
-startup: it held an exported Keychain credential per session, and the only thing that deleted those
-went with the feature.
+whenever Docker was unavailable.
+
+**If you ever ran it**, startup now cleans up after it once: the `~/.mulmoterminal/sandbox`
+directory (which held an exported Keychain credential per session) and any `mulmoterminal-<id>`
+container still running with your workspace mounted. Both had only one deleter and it went with the
+feature. If you never turned the sandbox on, nothing runs — not even a `docker` call.
 
 It was opt-in, macOS-only, and only ever wrapped the single-view session — which a later change
 removes. Keeping the sandbox would have meant porting it to the grid, which is the opposite of the

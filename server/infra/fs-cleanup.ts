@@ -9,8 +9,9 @@
 //
 // Failing to delete is not silent by accident: `removeQuietly` reports whether it managed it,
 // so a caller that cares can say so.
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import path from "node:path";
+import { spawnCapture } from "./spawnCapture.js";
 
 /** Remove a file or tree; never throws. Returns false when it could not (a Windows lock),
  *  which is a fact a caller may want to log — not one that should end its own work. */
@@ -41,5 +42,38 @@ const removeRecursively = (target: string): void => rmSync(target, { recursive: 
  * something a first run should have kept.
  */
 export function removeLegacySandboxDir(home: string): boolean {
-  return removeQuietly(path.join(home, "sandbox"));
+  const dir = path.join(home, "sandbox");
+  // Reports whether it was THERE, not whether the removal succeeded (removeQuietly answers true
+  // for a path that never existed). The caller uses that as the evidence that this machine ever
+  // ran the sandbox — see removeLegacySandboxContainers.
+  if (!existsSync(dir)) return false;
+  removeQuietly(dir);
+  return true;
+}
+
+/**
+ * Force-remove containers the sandbox left running.
+ *
+ * `docker run --rm` cleans up when the CONTAINER exits, not when its client dies — killing the
+ * client only detaches, which is why reap() force-removed the container explicitly. That call went
+ * with the feature, so a server killed or upgraded mid-session leaves a container running with the
+ * workspace and ~/.claude still mounted read-write, and nothing left in the app can reach it
+ * (Codex, PR #1195).
+ *
+ * Best-effort and silent: Docker may be absent, stopped, or slow, and none of that is a reason to
+ * hold up a boot. Guarded by the CALLER on the legacy directory existing, so a machine that never
+ * ran the sandbox never invokes docker at all — which is nearly every machine, since it was
+ * opt-in and macOS-only.
+ */
+export function removeLegacySandboxContainers(): void {
+  try {
+    const listed = spawnCapture("docker", ["ps", "-aq", "--filter", "name=^mulmoterminal-"]);
+    if (listed.status !== 0) return;
+    const ids = listed.stdout.split("\n").filter((id) => /^[0-9a-f]{6,}$/i.test(id.trim()));
+    if (ids.length === 0) return;
+    spawnCapture("docker", ["rm", "-f", ...ids]);
+    console.log(`[cleanup] removed ${ids.length} leftover sandbox container(s)`);
+  } catch {
+    // docker absent or unusable — nothing to do, and nothing worth saying
+  }
 }
