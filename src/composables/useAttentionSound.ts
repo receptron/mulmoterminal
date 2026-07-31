@@ -95,6 +95,7 @@ const CHIME_NOTES: Record<NotifyKind, readonly [number, number]> = {
   "command-done": [659, 988], // E5→B5
   "command-failed": [440, 330], // A4→E4
   "session-exited": [523, 392], // C5→G4
+  "worker-failed": [392, 262], // G4→C4, the lowest fall here: nothing else reports work lost
   "pr-ci-failed": [415, 311], // G#4→D#4
 };
 

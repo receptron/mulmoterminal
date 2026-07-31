@@ -46,7 +46,10 @@ const dotClass = (w: ReturnType<typeof mount>) => w.find(".cell-dot").classes();
 
 // Route by URL: /api/scripts (run list), /api/sessions (resume list), or
 // /api/session/:id (activity).
-function mockFetch(sessions: { id: string; title: string; mtime: number }[] = [], scripts: { index: number; label: string; command: string }[] = []) {
+function mockFetch(
+  sessions: { id: string; title: string; mtime: number; hidden?: boolean; failed?: boolean }[] = [],
+  scripts: { index: number; label: string; command: string }[] = [],
+) {
   globalThis.fetch = vi.fn(async (url: string) => {
     const u = String(url);
     if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/home/me/proj", scripts }) };
@@ -215,6 +218,44 @@ describe("TerminalCell", () => {
     expect(term.exists()).toBe(true);
     expect(term.props("sessionId")).toBe("77777777-7777-7777-7777-777777777777");
     expect(term.props("cwd")).toBe("/home/me/proj");
+  });
+
+  // A background worker has no cell and no bold row, so the launcher's list is where it is found.
+  // Unlabelled, it is indistinguishable from the user's own chats — and a FAILED one is the case
+  // nobody was ever told about, since it ran invisibly and ended without pulling any attention.
+  it("labels a background worker, and marks a failed one", async () => {
+    mockFetch([
+      { id: "77777777-7777-7777-7777-777777777777", title: "refresh feeds", mtime: Date.now(), hidden: true, failed: true },
+      { id: "88888888-8888-8888-8888-888888888888", title: "index the wiki", mtime: Date.now(), hidden: true },
+      { id: "99999999-9999-9999-9999-999999999999", title: "my own chat", mtime: Date.now() },
+    ]);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj" });
+    await flushPromises();
+    const items = w.findAll('[data-testid="cell-resume-item"]');
+
+    // Failed wins over the plain background label: one badge, and it is the one that matters.
+    expect(items[0].find('[data-testid="ri-failed"]').exists()).toBe(true);
+    expect(items[0].find('[data-testid="ri-background"]').exists()).toBe(false);
+
+    expect(items[1].find('[data-testid="ri-background"]').exists()).toBe(true);
+    expect(items[1].find('[data-testid="ri-failed"]').exists()).toBe(false);
+
+    // An ordinary chat gets neither — the labels have to MEAN something to be worth reading.
+    expect(items[2].find('[data-testid="ri-background"]').exists()).toBe(false);
+    expect(items[2].find('[data-testid="ri-failed"]').exists()).toBe(false);
+  });
+
+  it("resumes a failed background worker into the cell like any other session", async () => {
+    // The point of labelling it: you can open it and read what happened. Nothing about being a
+    // worker makes it a different kind of thing to attach to.
+    const workerId = "77777777-7777-7777-7777-777777777777";
+    mockFetch([{ id: workerId, title: "refresh feeds", mtime: Date.now(), hidden: true, failed: true }]);
+    const w = mountCell(null, { defaultCwd: "/home/me/proj" });
+    await flushPromises();
+    await w.find('[data-testid="cell-resume-item"]').trigger("click");
+    const term = w.findComponent({ name: "TerminalView" });
+    expect(term.exists()).toBe(true);
+    expect(term.props("sessionId")).toBe(workerId);
   });
 
   it("flags a resumable row that's already open in another terminal", async () => {

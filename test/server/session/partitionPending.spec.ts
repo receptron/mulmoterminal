@@ -22,7 +22,10 @@ describe("partitionPending", () => {
     const known: [string, KnownSession][] = [["b", meta("Draft", 42)]];
     const { keep, persisted } = partitionPending(known, new Set(), noActivity, noneHidden);
     expect(persisted).toEqual([]);
-    expect(keep).toEqual([{ kind: "pending", id: "b", title: "Draft", mtime: 42, working: false, waiting: false, event: null, hidden: false }]);
+    // `failed` is always false here, and that is a fact about pending rows rather than a default:
+    // a worker is recorded as failed at teardown, which drops it from knownSessions and so from
+    // this list — a row that is still pending has a live session behind it.
+    expect(keep).toEqual([{ kind: "pending", id: "b", title: "Draft", mtime: 42, working: false, waiting: false, event: null, hidden: false, failed: false }]);
   });
 
   it("derives working/waiting/event from the injected activity and hidden from isHidden", () => {

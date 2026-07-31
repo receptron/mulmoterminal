@@ -486,6 +486,23 @@ async function removeWorktree(w: Worktree): Promise<void> {
           @click="resume(s)"
         >
           <span data-testid="ri-title" class="truncate">{{ s.title }}</span>
+          <!-- A background worker is not the user's own chat, and a FAILED one is the only thing
+               here nobody was ever told about: it ran invisibly, ended badly, and pulled no
+               attention on the way. Naming it in the list is what makes it findable at all. -->
+          <span
+            v-if="s.failed"
+            data-testid="ri-failed"
+            class="flex-none whitespace-nowrap text-[11px] text-err-text"
+            title="This background worker ended without finishing a turn"
+            >● failed</span
+          >
+          <span
+            v-else-if="s.hidden"
+            data-testid="ri-background"
+            class="flex-none whitespace-nowrap text-[11px] text-dim"
+            title="Ran in the background — not a chat you opened"
+            >background</span
+          >
           <span
             v-if="sessionOpenElsewhere(s.id)"
             data-testid="ri-open"

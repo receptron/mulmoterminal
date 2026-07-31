@@ -14,6 +14,14 @@ export interface ResumableSession {
   id: string;
   title: string;
   mtime: number;
+  /** A background worker (spawnBackgroundChat hidden:true, a scheduled refresh) rather than a
+   *  chat someone opened. Already carried on every row the server sends; surfaced here because
+   *  the grid is where such a session is picked up, and an unlabelled one is indistinguishable
+   *  from the user's own work. */
+  hidden?: boolean;
+  /** That worker ended without ever completing a turn. A worker is quiet by design, so this is
+   *  the one outcome the quiet is wrong for. */
+  failed?: boolean;
 }
 
 export interface RunnableScript {

@@ -20,6 +20,10 @@ function toPendingRow(id: string, meta: KnownSession, activityOf: (id: string) =
     waiting: a?.waiting ?? false,
     event: a?.event ?? null,
     hidden: isHidden(id),
+    // A pending row is one whose session is still LIVE and has not persisted a transcript yet.
+    // A worker is only ever recorded as failed at teardown, which also drops it from
+    // knownSessions and so from this list — so a pending row cannot be a failed one.
+    failed: false,
   };
 }
 

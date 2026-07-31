@@ -10,8 +10,10 @@ import type { Express } from "express";
 import { CLAUDE_CWD, PORT } from "../config/env.js";
 import { messageOf } from "../errors.js";
 import { isRecord } from "../../common/isRecord.js";
-import { backgroundMarkers } from "../session/registry.js";
+import { backgroundMarkers, markFailedWorker } from "../session/registry.js";
 import { runWithHiddenMarker } from "../session/hiddenMarker.js";
+import { registerCompletionHook } from "../session/completion-hooks.js";
+import { SESSIONS_CHANNEL } from "../session/lifecycle.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../session/background-chat.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
 import { TOOL_GROUPS } from "../../common/toolGroups.js";
@@ -29,6 +31,9 @@ export interface PluginRouteDeps {
    *  is the only thing that would ever end it — and a worker blocked on a permission prompt
    *  never fires the hook that starts it. */
   registerBackgroundSession: (id: string) => void;
+  /** Announce a session event on the sessions channel. Used for the one thing a hidden worker
+   *  cannot announce for itself: that it ended badly. */
+  publish: (channel: string, data: unknown) => void;
 }
 
 export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
@@ -63,7 +68,26 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
         else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message });
         else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message });
       });
-      if (hidden) deps.registerBackgroundSession(sessionId);
+      if (hidden) {
+        deps.registerBackgroundSession(sessionId);
+        // A hidden worker is invisible on purpose, which is exactly why a FAILED one needs a
+        // record: nothing pulls the user's attention and nothing waits to be clicked, so the
+        // failure is otherwise never learned. The completion hook is the existing seam for it —
+        // a finished turn reports success first and this never fires; reaching teardown with no
+        // Stop means no turn ever completed (see completion-hooks.ts for why first-answer-wins).
+        //
+        // Registered AFTER the spawn: a launch that threw has no session to report on, and would
+        // leave a hook nothing will ever fire or clear. Safe against the feeds engine's own hook
+        // (last writer wins) because that dispatches through its own spawner, never this route.
+        registerCompletionHook(sessionId, ({ didError }) => {
+          if (!didError) return;
+          markFailedWorker(sessionId);
+          // Published as well as recorded: the record is what makes the failure FINDABLE later,
+          // this is what lets the user be told now. Its own event rather than reusing "closed",
+          // which every session raises and which is therefore useless as a failure signal.
+          deps.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "worker-failed" });
+        });
+      }
     } catch (err) {
       console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);
       return res.json({ message: `Failed to spawn a new session: ${messageOf(err)}` });

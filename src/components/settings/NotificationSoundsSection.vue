@@ -28,6 +28,7 @@ const NOTIFY_KIND_LABEL: Record<NotifyKind, string> = {
   "command-done": "Command finished",
   "command-failed": "Command failed",
   "session-exited": "Session ended",
+  "worker-failed": "Background worker failed",
   "pr-ci-failed": "PR CI failed",
 };
 const NOTIFY_KIND_HELP: Record<NotifyKind, string> = {
@@ -36,6 +37,7 @@ const NOTIFY_KIND_HELP: Record<NotifyKind, string> = {
   "command-done": "a Run cell's command exited cleanly",
   "command-failed": "a Run cell's command exited with an error, or never started",
   "session-exited": "a session's terminal ended — including when you close the cell yourself",
+  "worker-failed": "a background worker ended without finishing — nothing else reports this, since it has no terminal on screen",
   "pr-ci-failed": "a directory's PR went red. Only seen while the roster is on screen, since that is what polls it",
 };
 

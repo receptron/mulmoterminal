@@ -78,6 +78,10 @@ export interface SessionMeta {
    *  tab still lists, but it never renders bold/unread — a background helper
    *  finishing shouldn't pull the user's attention. */
   hidden: boolean;
+  /** That worker ended without ever completing a turn. The counterpart to `hidden`: a worker is
+   *  quiet by design, so this is the one outcome the quiet is wrong for, and it is carried on the
+   *  row so a picker can say which worker failed instead of making the user open each one. */
+  failed: boolean;
 }
 
 // Recency rank for an on-disk .jsonl, before its contents are read.

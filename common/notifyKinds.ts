@@ -9,10 +9,13 @@
 //   command-failed — a Run cell's command exited non-zero.
 //   session-exited — a session's PTY ended. Closing a cell yourself goes through the same
 //                    path, so this one fires on a deliberate close too.
+//   worker-failed  — a hidden background worker ended without ever completing a turn. The one
+//                    kind raised for a session with no cell on screen: a worker is invisible by
+//                    design, so nothing else would ever say so.
 //   pr-ci-failed   — a directory's PR phase became ci-failing. The phase poll runs only
 //                    while the roster is on screen, so a failure that lands while you are
 //                    in another view is not seen.
-export const NOTIFY_KINDS = ["finished", "waiting", "command-done", "command-failed", "session-exited", "pr-ci-failed"] as const;
+export const NOTIFY_KINDS = ["finished", "waiting", "command-done", "command-failed", "session-exited", "worker-failed", "pr-ci-failed"] as const;
 
 export type NotifyKind = (typeof NOTIFY_KINDS)[number];
 

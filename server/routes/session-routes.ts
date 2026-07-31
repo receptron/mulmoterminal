@@ -199,7 +199,7 @@ async function sessionList(req: Request, res: Response) {
       await Promise.all(
         top.map((s) =>
           s.kind === "pending"
-            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, event: s.event, hidden: s.hidden }
+            ? { id: s.id, title: s.title, mtime: s.mtime, working: s.working, waiting: s.waiting, event: s.event, hidden: s.hidden, failed: s.failed }
             : readSessionMeta(dir, s.file).catch(() => null),
         ),
       )

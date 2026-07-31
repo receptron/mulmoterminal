@@ -51,6 +51,14 @@ function rawKind(was: ActivityState, now: ActivityState, event: string | null): 
  * blocked one, and counted a background Stop's two rows as two separate beeps.
  */
 export function notifyKindOf(prev: Map<string, ActivityState>, msg: ActivityMsg): NotifyKind | null {
+  // A hidden worker ended badly. Checked BEFORE "closed", which the same teardown also raises:
+  // this is the specific answer and that is the generic one. It does not depend on `prev` — a
+  // worker has no cell, so nothing here ever saw it working, and requiring a baseline would drop
+  // the one notification that exists because nobody was watching.
+  if (msg.event === "worker-failed") {
+    prev.delete(msg.id);
+    return "worker-failed";
+  }
   // The PTY was reaped: forget the session, so an id that comes back is a baseline again and
   // not compared against a state from its previous life.
   if (msg.event === "closed") return prev.delete(msg.id) ? "session-exited" : null;

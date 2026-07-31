@@ -12,6 +12,7 @@ const pending = (id: string, mtime: number): SessionRow => ({
   waiting: false,
   event: null,
   hidden: false,
+  failed: false,
 });
 const ids = (rows: SessionRow[]) => rows.map((r) => r.id);
 const filter = (over: Partial<Parameters<typeof selectSessionRows>[1]> = {}) => ({

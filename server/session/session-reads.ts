@@ -25,7 +25,7 @@ import {
 import { createFileCache, type FileStamp } from "./file-cache.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
 import { sessionListTitle } from "./sessionListTitle.js";
-import { activity, aiTitles, codexRolloutIds, isBackgroundSession, knownSessions, sessionMemos } from "./registry.js";
+import { activity, aiTitles, codexRolloutIds, isBackgroundSession, isFailedWorker, knownSessions, sessionMemos } from "./registry.js";
 import { projectSessionsDir } from "./project-dir.js";
 import { lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./last-turn.js";
 import { forEachJsonlRecord, readTailRecords } from "../infra/jsonl-file.js";
@@ -248,6 +248,7 @@ export async function readSessionMeta(dir: string, file: string): Promise<Sessio
     waiting: a?.waiting ?? false,
     event: a?.event ?? null,
     hidden: isBackgroundSession(id),
+    failed: isFailedWorker(id),
   };
 }
 
