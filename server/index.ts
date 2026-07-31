@@ -71,6 +71,7 @@ import {
 import { hydrateClearedTranscripts } from "./session/cleared-transcripts.js";
 import { runWithHiddenMarker } from "./session/hiddenMarker.js";
 import { registerCompletionHook } from "./session/completion-hooks.js";
+import { spawnScheduledWorker } from "./session/scheduled-chat.js";
 import { createToolStores } from "./session/tool-store.js";
 import { writeDecisionDigest } from "./session/decision-digest-file.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
@@ -781,14 +782,15 @@ function refreshDecisionDigests(): void {
 refreshDecisionDigests();
 setInterval(refreshDecisionDigests, DECISION_DIGEST_INTERVAL_MS).unref();
 
+// A user's scheduled task runs as a BACKGROUND WORKER — see scheduled-chat.ts for why, and for
+// what follows from it (no grid cell, but a failed one still says so).
 function spawnScheduledChat(message: string): void {
   const sessionId = randomUUID();
   try {
-    spawnClaudePty(sessionId, null, null, { initialPrompt: message });
-    scheduledSessions.register(sessionId);
-    // The clearest case for the unplaced mark: a task firing at 3am has no browser to place its
-    // chat, and without this the only trace would be a row in a list nobody is looking at.
-    markUnplacedSession(sessionId);
+    spawnScheduledWorker(sessionId, {
+      spawn: (id) => spawnClaudePty(id, null, null, { initialPrompt: message }),
+      retain: (id) => scheduledSessions.register(id),
+    });
   } catch (err) {
     console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);
   }

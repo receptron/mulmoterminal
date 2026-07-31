@@ -630,7 +630,9 @@ disconnected, or with no device registered, the toggle is a no-op.
 **Dev worklog (cross-clone).** Set `worklogEnabled: true` in
 `~/.mulmoterminal/config.json` (and **restart** — the scheduler reads its tasks at boot)
 to register a built-in scheduled task. Every `worklogIntervalHours` (default 6) it spawns
-a Claude session that reviews the work you did across **all your saved working dirs**
+a Claude session — as a **background worker**: behind the Background filter, never bold,
+and it takes no grid cell, so an hourly task cannot fill the grid — that reviews the work
+you did across **all your saved working dirs**
 (`cwdPresets`) since it last ran, and writes it up as a short manager-style report.
 Multiple clones/worktrees of the same repo (e.g. `myapp`, `myapp2`) are **merged into one
 per-repository section**, each covering what problem was addressed, what got solved, what's
@@ -1490,7 +1492,8 @@ Key rules:
   exists) via the in-memory `knownSessions` registry + a `created` push; an
   unused one disappears when its PTY is reaped.
 - **Background workers get their own filter.** A session nobody started by hand —
-  a collection's scheduled refresh, or a plugin's `spawnBackgroundChat`
+  a collection's scheduled refresh, a **user scheduled task** (the dev worklog and
+  anything else the scheduler runs), or a plugin's `spawnBackgroundChat`
   `hidden: true` — is listed under the **Background** chip instead of among the
   chats, so a refresh schedule doesn't fill the history. It stays openable (a
   MulmoTerminal session is a live terminal, so a row you can't reach is a process

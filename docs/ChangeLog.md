@@ -6,6 +6,29 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 ## Unreleased
 
+### A scheduled task's chat is a background worker (#1196)
+
+A task the scheduler runs — the dev worklog, or anything else you have configured — now behaves
+like every other session nobody started by hand: it sits behind the **Background** filter rather
+than among your chats, never renders bold, and **takes no grid cell**.
+
+It was already half of one. Scheduled sessions have always been put on the background retention,
+whose whole reason is that nobody is waiting for them to finish; only the chat list still called
+them yours. The two agree now.
+
+The grid part is the one you would have noticed: a visible spawn is adopted as a cell the next time
+the grid loads, so an hourly task meant a cell per firing, indefinitely, without anyone asking for
+a terminal.
+
+**A failed one still tells you.** Being quiet is right while it works and wrong when it dies, so a
+scheduled task that ends without completing a turn is recorded and shows as `● failed` in the
+launcher's session list — the same signal a hidden `spawnBackgroundChat` gets. Turn the sound on
+under Settings → Notifications if you want to hear it.
+
+**What you lose:** a scheduled task's session no longer goes bold/unread when it finishes. If you
+were watching for that, look under the Background filter, or in the launcher's list for the
+workspace.
+
 ### The Docker sandbox is removed (#1194)
 
 `MULMOTERMINAL_SANDBOX` and its three companion variables — `MULMOTERMINAL_SANDBOX_IMAGE`,
