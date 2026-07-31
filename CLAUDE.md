@@ -114,15 +114,19 @@ startup: a bundled dispatcher at `<workspace>/.claude/hooks/mulmoclaude-dispatch
 That does **not** mean the bridge is off under MulmoTerminal, and this is the part worth knowing
 before you "fix" a missing mirror here. **Claude Code merges hooks from `--settings` and the
 project's `.claude/settings.json` — both fire** (verified by running `claude -p` with a hook in
-each; both markers appeared). We pass ours as inline JSON (`server/session/hook-settings.ts`),
-which layers on top rather than replacing. The dispatcher's mirroring is plain `fs`, and its
+each; both markers appeared). Ours go through `--settings` (`server/session/hook-settings.ts`) —
+inline JSON, or a 0600 file when the payload carries a provider token and always a file on Windows
+(`session-settings.ts`) — which layers on top rather than replacing. Whichever transport, the
+project file is still read. The dispatcher's mirroring is plain `fs`, and its
 follow-up POST to MulmoClaude goes through a `safePost` that swallows a refused connection. So in
 a workspace MulmoClaude has ever started against, **an agent MulmoTerminal spawned still gets its
 skills mirrored, with MulmoClaude not running.**
 
 The real gap is narrow: a workspace MulmoClaude has never started against has no dispatcher, so
-`data/skills/` is staged and never mirrored. Before reimplementing anything, check whether
-`<workspace>/.claude/settings.json` has the entry — that, not this host's code, is what decides.
+`data/skills/` is staged and never mirrored. Before reimplementing anything, check BOTH halves —
+`<workspace>/.claude/hooks/mulmoclaude-dispatcher.mjs` and the `PostToolUse` entry naming it in
+`<workspace>/.claude/settings.json`. Either alone does nothing (a settings entry survives a
+deleted script), and that pair, not this host's code, is what decides.
 
 `mulmoterminal-config` is the **entry point**: it routes to the skill that owns an area, and it
 reports on how things are configured now. The writing skills are `mulmoterminal-dirs` (per-project
