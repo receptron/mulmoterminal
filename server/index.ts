@@ -66,6 +66,7 @@ import {
   sessionCwd,
   sessionMemos,
   sessionMemosHydrated,
+  markUnplacedSession,
 } from "./session/registry.js";
 import { hydrateClearedTranscripts } from "./session/cleared-transcripts.js";
 import { runWithHiddenMarker } from "./session/hiddenMarker.js";
@@ -560,6 +561,9 @@ initFeedsBackend({ workspace: CLAUDE_CWD, spawnWorker: feedsSpawnWorker });
 const remoteHostSpawnChat = (message: string) => {
   const sessionId = randomUUID();
   spawnClaudePty(sessionId, null, null, { initialPrompt: message });
+  // Started from the PHONE, so by definition no browser placed it. Marked so the next grid to
+  // load adopts it instead of leaving a live agent with nowhere to appear.
+  markUnplacedSession(sessionId);
   return { chatId: sessionId };
 };
 // The phone's remote terminal view (#435). Both accessors live here because the PTY table
@@ -774,6 +778,9 @@ function spawnScheduledChat(message: string): void {
   try {
     spawnClaudePty(sessionId, null, null, { initialPrompt: message });
     scheduledSessions.register(sessionId);
+    // The clearest case for the unplaced mark: a task firing at 3am has no browser to place its
+    // chat, and without this the only trace would be a row in a list nobody is looking at.
+    markUnplacedSession(sessionId);
   } catch (err) {
     console.error(`[scheduler] failed to spawn chat for a scheduled task: ${messageOf(err)}`);
   }

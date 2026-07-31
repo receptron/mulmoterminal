@@ -335,7 +335,33 @@ store — it is not client-only here.
    So a `presentCollection` result renders in a grid cell exactly as it does in the single view.
    Nothing to build here; the seeding work is all that is left.
 
-#### PR3b — the durable half
+#### PR3b — the durable half — **DONE**
+
+Implemented, with two departures from what is written below:
+
+1. **No new pub/sub channel.** The plan opened with a `publishToOne` sibling of
+   `LAUNCH_TERMINAL_CHANNEL`. It is not needed: reconciliation runs on **activate**, not mount, so
+   switching to the grid picks up everything spawned while the user was elsewhere — and if the grid
+   is not mounted there is nothing to deliver to anyway. A channel would only shorten the window
+   for a chat spawned while the user is *already sitting on* `/terminals`, at the cost of a second
+   mechanism that has to be kept from double-placing what the browser just placed. Worth adding
+   later if that window proves annoying; not worth it up front.
+2. **The marker needs a second log, not one.** `MULMOTERMINAL_HOME` is shared between server
+   instances so these logs are append-only, and hydration reads the unplaced log as it was —
+   including ids that a later line has since answered. A single log would therefore re-adopt, on
+   every load, every session any grid has ever taken. So "placed" is its own append-only log and
+   `unplacedSessionIds()` is the difference. A spec pins exactly that (`does not hand back a
+   session that was placed BEFORE this process started`).
+
+Also worth recording: the mark is cleared on **any** attach, not just a grid one — "unplaced" means
+nobody is looking, and a viewer is a viewer. That is what stops a browser-placed chat coming back
+as a duplicate on the next load, and it lands at `ws-routes`' four attach points, the same choke
+points `markDevTerminalSession` uses.
+
+The cap policy is still unanswered, and this PR does not force it: a full grid simply leaves the
+session marked, so the next load with room adopts it. PR5 is where it has to be decided.
+
+---
 
 The server-side unplaced marker + reconciliation on grid load, i.e. the case where no tab was
 open at all. Details below.

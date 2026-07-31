@@ -61,7 +61,7 @@ import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
 import { fetchDirConfig, invalidateDirConfig, useDirPriorities } from "../composables/useDirConfig";
 import { nextSortMode } from "./sortModeButton";
-import type { TerminalAgent } from "../../common/sessionAgent";
+import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { usePubSub } from "../composables/usePubSub";
 import type { LaunchAgent } from "../../common/launchAgent";
 import type { LaunchPick } from "./launchers";
@@ -513,6 +513,10 @@ const gridRef = ref<InstanceType<typeof TerminalGrid> | null>(null);
 // the collection UI's actions and template cards, custom views, the Settings skill buttons —
 // via useChatLauncher's one choke point.
 const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
+  // Already adopted — by the unplaced sweep below, or by an earlier request for the same session.
+  // Two cells for one session fight over its socket: the server supersedes the prior one, so the
+  // older cell goes dead while still looking live.
+  if (state.value.cells.some((cell) => cell.session === id)) return;
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
@@ -543,6 +547,37 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
   // After the state renders: the grid has to be showing the cell before it can enlarge it.
   if (uid !== undefined) void nextTick(() => gridRef.value?.openCanvasFor(uid));
 };
+// Sessions the SERVER spawned that no cell has taken — a scheduled task's chat, one the phone
+// started, one an agent started from another session. The browser that asks for a chat places it
+// itself (placeChat above); this is the other half, for when there was no browser at all.
+//
+// Asked on ACTIVATE rather than mount: the grid is kept alive across route changes, so mount fires
+// once per page load and would miss everything spawned while the user was elsewhere in the app.
+async function adoptUnplacedSessions(): Promise<void> {
+  try {
+    const res = await fetch("/api/sessions/unplaced");
+    if (!res.ok) return;
+    const body = (await res.json()) as { sessions?: { id?: unknown; agent?: unknown; cwd?: unknown }[] };
+    for (const row of body.sessions ?? []) {
+      if (typeof row?.id !== "string" || !row.id) continue;
+      // Already here: the server clears the mark when a cell attaches, but this tab may still be
+      // holding a cell whose attach has not landed yet — and adopting twice would give one session
+      // two cells fighting over the same socket.
+      if (state.value.cells.some((cell) => cell.session === row.id)) continue;
+      const agent = asTerminalAgent(row.agent);
+      const placed = insertCellAfter(state.value, NO_ORIGIN_UID, sessionCell(row.id, typeof row.cwd === "string" ? row.cwd : defaultCwd.value, agent));
+      // A full grid drops the cell and hands the state straight back. Nothing to fall back to
+      // here — this session has been waiting, and it can keep waiting: the mark is only cleared
+      // by an attach, so the next load with room adopts it.
+      if (placed === state.value) break;
+      state.value = placed;
+    }
+  } catch {
+    // Best effort: a grid that cannot ask still works, and the sessions stay marked for next time.
+  }
+}
+onActivated(() => void adoptUnplacedSessions());
+
 // Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same
 // reason: <KeepAlive> keeps this grid alive while the user is in the single view, and a chat
 // started there must queue + navigate rather than silently mutate a hidden grid.

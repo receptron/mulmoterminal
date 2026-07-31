@@ -201,6 +201,55 @@ export function isBackgroundSession(id: string): boolean {
   return hiddenSessions.has(id) || backgroundSessions.has(id);
 }
 
+// Visible sessions the SERVER spawned that no grid cell has taken yet.
+//
+// A chat started from the collections UI is placed by the browser that asked for it, which covers
+// the common case and only that case: an agent calling spawnBackgroundChat, a scheduled task, or
+// the phone can all start a visible chat while no tab is open at all — and once the single view is
+// gone there is nowhere for such a session to appear. This is the durable half: the server
+// remembers that one is waiting, and the next grid to load adopts it.
+//
+// UNPLACED is the whole meaning, so the mark is cleared the moment a grid cell attaches (see
+// ws-routes, the one choke point for every grid attach). That keeps it server-side state with one
+// writer, rather than a dismissed-set growing in each tab — and it is why a browser-placed chat
+// does not come back as a second cell on the next load.
+//
+// Persisted because the case it exists for is precisely "nobody was looking": a mark held only in
+// memory would be lost by the restart that happens before anyone opens a tab.
+const unplacedSessions = new Set<string>();
+const UNPLACED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "unplaced-sessions.json");
+export const unplacedSessionsHydrated = hydrateIdLog(UNPLACED_SESSIONS_FILE, unplacedSessions);
+const appendUnplacedSession = idLogAppender(UNPLACED_SESSIONS_FILE, "unplaced-sessions");
+// Ids whose mark has been cleared this process. The log is append-only (MULMOTERMINAL_HOME is
+// shared between server instances, so a read-merge-write loses one of them), and hydration reads
+// it as it was BEFORE a clear could be appended — so without this a session adopted during startup
+// would be handed back as unplaced.
+const placedSessions = new Set<string>();
+
+/** Note that the server spawned a VISIBLE session nobody has a cell for yet. */
+export function markUnplacedSession(id: string): void {
+  if (!isValidSessionId(id) || unplacedSessions.has(id)) return;
+  unplacedSessions.add(id);
+  appendUnplacedSession(id);
+}
+
+/** A grid cell has taken this session — or the user closed it. Either way it is no longer waiting
+ *  for a home, and must not be adopted again on the next load. */
+export function markSessionPlaced(id: string): void {
+  if (!isValidSessionId(id)) return;
+  placedSessions.add(id);
+  unplacedSessions.delete(id);
+  appendPlacedSession(id);
+}
+const PLACED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "placed-sessions.json");
+export const placedSessionsHydrated = hydrateIdLog(PLACED_SESSIONS_FILE, placedSessions);
+const appendPlacedSession = idLogAppender(PLACED_SESSIONS_FILE, "placed-sessions");
+
+/** The sessions a loading grid should adopt: spawned visible by the server, never taken. */
+export function unplacedSessionIds(): string[] {
+  return [...unplacedSessions].filter((id) => !placedSessions.has(id));
+}
+
 // Sessions that connected on the ALL-TOOLS MCP url (`/api/mcp/:sessionId`). That url is handed
 // out by --mcp-config and by nothing else, so reaching it is proof the session carries the whole
 // GUI MCP — including the tools that belong to no group and are therefore unreachable through a

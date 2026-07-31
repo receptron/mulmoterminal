@@ -16,6 +16,10 @@ import {
   aiTitles,
   backgroundSessionsHydrated,
   failedWorkersHydrated,
+  unplacedSessionsHydrated,
+  placedSessionsHydrated,
+  unplacedSessionIds,
+  ptys,
   devTerminalSessions,
   devTerminalSessionsHydrated,
   isBackgroundSession,
@@ -241,5 +245,26 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   app.get("/api/transcript/timeline", toolTimeline);
   app.get("/api/transcript/last-turn", lastTurn);
   app.get("/api/sessions", sessionList);
+  // The sessions a loading grid should adopt: spawned VISIBLE by the server and never taken by a
+  // cell (a scheduled task's chat, one the phone started, one an agent started from another
+  // session). Deliberately its own endpoint answering a server-side marker, rather than the grid
+  // diffing "all sessions" against its own state: a diff would sweep up ordinary sessions and
+  // change what a reload does to a normal cell, which is the one thing this whole line of work
+  // must not do.
+  //
+  // Hidden workers are absent by construction — the mark is only ever set for a visible spawn —
+  // and a spec pins that, since "it happens not to be marked" and "it cannot be marked" read the
+  // same until someone adds a caller.
+  app.get("/api/sessions/unplaced", async (_req, res) => {
+    await Promise.all([unplacedSessionsHydrated, placedSessionsHydrated]);
+    const sessions = unplacedSessionIds().map((id) => {
+      const entry = ptys.get(id);
+      // A session whose PTY is gone (the server restarted, tmux ended) is still worth adopting —
+      // the cell resumes it from disk. It just cannot say which agent or directory it used, so
+      // the grid falls back to its own defaults.
+      return { id, agent: entry?.agent ?? null, cwd: entry?.cwd ?? null };
+    });
+    res.json({ sessions });
+  });
   app.get("/api/codex/sessions", codexSessionList);
 }

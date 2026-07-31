@@ -22,7 +22,14 @@ import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { antigravityBrainRoot, antigravityConversationExists } from "../agents/antigravity-session.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
-import { antigravityConversations, antigravityConversationsHydrated, codexRolloutIds, markDevTerminalSession, ptys } from "../session/registry.js";
+import {
+  antigravityConversations,
+  antigravityConversationsHydrated,
+  codexRolloutIds,
+  markDevTerminalSession,
+  markSessionPlaced,
+  ptys,
+} from "../session/registry.js";
 import { sandboxWouldRun, SpawnRefusedError } from "../session/pty-spawn.js";
 import { bufferEarlyFrames, type EarlyFrames } from "../session/early-frames.js";
 import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
@@ -324,6 +331,10 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
   // choke point for every grid attach — new, resumed, or reattached — so the mark is
   // recorded (and re-recorded after a reboot when the cell reconnects) exactly once.
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
+  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
+  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
+  // This is the one choke point every attach passes through — new, resumed or reattached.
+  markSessionPlaced(sessionId);
 
   // Tell the browser which session this is (it learns the id of new sessions) and
   // the EFFECTIVE cwd — where claude really runs. On reattach that's the live
@@ -457,6 +468,10 @@ async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
   if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
   const { sessionId, live, command } = resolved;
   markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
+  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
+  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
+  // This is the one choke point every attach passes through — new, resumed or reattached.
+  markSessionPlaced(sessionId);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // A launcher that runs codex gets the directory's registered tool groups too. The chip and the
@@ -485,6 +500,10 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUp
 
   const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
+  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
+  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
+  // This is the one choke point every attach passes through — new, resumed or reattached.
+  markSessionPlaced(sessionId);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // A grid cell's GUI tools are whatever its DIRECTORY registered — the same switches claude's
@@ -554,6 +573,10 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
   await antigravityConversationsHydrated;
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
+  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
+  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
+  // This is the one choke point every attach passes through — new, resumed or reattached.
+  markSessionPlaced(sessionId);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // The directory's registered groups, read here because the lookup reads Claude Code's config
