@@ -559,9 +559,12 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     w.unmount();
   });
 
-  it("leaves the grid alone when nothing was seeded", async () => {
-    // Every other spawn — a skill button, a template card, cron. Taking over the screen to show an
-    // empty pane is worse than leaving the grid as the user arranged it.
+  it("leaves the grid alone for a spawn that asks for no canvas", async () => {
+    // Every other spawn — a skill button, a template card, cron, an issue being started. Taking
+    // over the screen to show an empty pane is worse than leaving the grid as the user arranged it.
+    //
+    // The field is OMITTED here, not set false: `canvas` is opt-in precisely so a caller with no
+    // canvas to show says nothing. A required field broke useIssueStart the day it landed.
     const { placeSpawnedChat } = await import("../../../src/composables/useSpawnedChat");
     const opened: number[] = [];
     const CanvasGridStub = {
@@ -578,7 +581,7 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     });
     await flushPromises();
 
-    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: false, canvas: false });
+    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: false });
     await flushPromises();
 
     expect(opened).toEqual([]);

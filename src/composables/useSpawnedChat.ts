@@ -29,9 +29,13 @@ export interface SpawnedChatRequest {
   draft: boolean;
   /** A collection card is ALREADY waiting in this session's Canvas, so the cell should arrive
    *  enlarged with the pane open — otherwise the card sits behind two gestures nobody knows to
-   *  make. False for every other spawn: taking over the screen to show an EMPTY pane is worse
-   *  than leaving the grid alone. */
-  canvas: boolean;
+   *  make.
+   *
+   *  OPT-IN, not a field every caller answers: revealing is right only when something is already
+   *  in the pane, and taking over the screen to show an EMPTY one is worse than leaving the grid
+   *  as the user arranged it. A spawn with no canvas to show (an issue being started, a skill
+   *  button, cron) says nothing here and gets the grid's ordinary behaviour. */
+  canvas?: boolean;
 }
 type Handler = (req: SpawnedChatRequest) => void;
 
