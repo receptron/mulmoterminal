@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { removeQuietly, removeLegacySandboxDir } from "../../../server/infra/fs-cleanup";
+import { removeQuietly, removeLegacySandboxCredentials } from "../../../server/infra/fs-cleanup";
 
 const dirs: string[] = [];
 const tmp = () => {
@@ -59,40 +59,54 @@ describe("removeQuietly", () => {
 // own cleanup — which went with the feature. Without this, anyone whose server was killed or
 // upgraded mid-session keeps a live credential in a directory nothing will touch again
 // (Codex, PR #1195).
-describe("removeLegacySandboxDir", () => {
-  it("removes the directory and the credentials in it", () => {
-    const home = tmp();
-    const sandbox = path.join(home, "sandbox");
-    mkdirSync(sandbox, { recursive: true });
-    writeFileSync(path.join(sandbox, "creds-abc.json"), '{"accessToken":"secret"}');
+describe("removeLegacySandboxCredentials", () => {
+  const sandboxDir = (home: string) => path.join(home, "sandbox");
 
-    expect(removeLegacySandboxDir(home)).toBe(true);
-    expect(existsSync(sandbox)).toBe(false);
+  it("deletes the credential files", () => {
+    const home = tmp();
+    mkdirSync(sandboxDir(home), { recursive: true });
+    writeFileSync(path.join(sandboxDir(home), "creds-abc.json"), '{"accessToken":"secret"}');
+
+    expect(removeLegacySandboxCredentials(home)).toBe(true);
+    expect(existsSync(path.join(sandboxDir(home), "creds-abc.json"))).toBe(false);
+  });
+
+  // The directory OUTLIVES the credentials on purpose: it is what remembers that a container sweep
+  // is still owed. Removing both at once made the migration one-shot — a first boot with Docker not
+  // yet up would lose the sweep forever, and an orphan container would outlive every later start.
+  it("keeps the directory, because the container sweep has not answered yet", () => {
+    const home = tmp();
+    mkdirSync(sandboxDir(home), { recursive: true });
+    writeFileSync(path.join(sandboxDir(home), "creds-abc.json"), "{}");
+
+    removeLegacySandboxCredentials(home);
+
+    expect(existsSync(sandboxDir(home))).toBe(true);
+  });
+
+  it("keeps answering true while the directory is still there, so the sweep is retried", () => {
+    const home = tmp();
+    mkdirSync(sandboxDir(home), { recursive: true });
+    expect(removeLegacySandboxCredentials(home)).toBe(true);
+    expect(removeLegacySandboxCredentials(home)).toBe(true);
   });
 
   it("answers FALSE when the directory was never there", () => {
-    // Not a detail: the answer is what gates the docker container sweep at boot. Reporting true
-    // for a machine that never ran the sandbox — nearly every machine, since it was opt-in and
-    // macOS-only — would invoke docker on every start for nothing.
+    // Not a detail: the answer is what gates the docker call at boot. Reporting true for a machine
+    // that never ran the sandbox — nearly every machine, since it was opt-in and macOS-only —
+    // would invoke docker on every start for nothing.
     const home = tmp();
-    expect(() => removeLegacySandboxDir(home)).not.toThrow();
-    expect(removeLegacySandboxDir(home)).toBe(false);
-  });
-
-  it("answers false the SECOND time, so the sweep runs once", () => {
-    const home = tmp();
-    mkdirSync(path.join(home, "sandbox"), { recursive: true });
-    expect(removeLegacySandboxDir(home)).toBe(true);
-    expect(removeLegacySandboxDir(home)).toBe(false);
+    expect(() => removeLegacySandboxCredentials(home)).not.toThrow();
+    expect(removeLegacySandboxCredentials(home)).toBe(false);
   });
 
   it("touches nothing else under the home directory", () => {
     const home = tmp();
-    mkdirSync(path.join(home, "sandbox"), { recursive: true });
+    mkdirSync(sandboxDir(home), { recursive: true });
     writeFileSync(path.join(home, "config.json"), "{}");
     mkdirSync(path.join(home, "toolresults"), { recursive: true });
 
-    removeLegacySandboxDir(home);
+    removeLegacySandboxCredentials(home);
 
     expect(existsSync(path.join(home, "config.json"))).toBe(true);
     expect(existsSync(path.join(home, "toolresults"))).toBe(true);

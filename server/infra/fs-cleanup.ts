@@ -9,7 +9,7 @@
 //
 // Failing to delete is not silent by accident: `removeQuietly` reports whether it managed it,
 // so a caller that cares can say so.
-import { existsSync, rmSync } from "node:fs";
+import { existsSync, readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { spawnCaptureAsync } from "./spawnCapture.js";
 
@@ -41,14 +41,24 @@ const removeRecursively = (target: string): void => rmSync(target, { recursive: 
  * ours alone and nothing writes it any more, so there is no case where a second run could remove
  * something a first run should have kept.
  */
-export function removeLegacySandboxDir(home: string): boolean {
+export function removeLegacySandboxCredentials(home: string): boolean {
   const dir = path.join(home, "sandbox");
   // Reports whether it was THERE, not whether the removal succeeded (removeQuietly answers true
   // for a path that never existed). The caller uses that as the evidence that this machine ever
   // ran the sandbox — see removeLegacySandboxContainers.
   if (!existsSync(dir)) return false;
-  removeQuietly(dir);
+  // The FILES now; the directory itself only once the container sweep has answered. Splitting the
+  // two is what makes the retry work: the credentials are the urgent half and go immediately, and
+  // the empty directory is what remembers that a sweep is still owed. Removing both here made the
+  // migration one-shot — a first boot with Docker not yet up would lose the sweep forever, and any
+  // orphan container would outlive every later start (Codex, PR #1195).
+  for (const entry of readdirSync(dir)) removeQuietly(path.join(dir, entry));
   return true;
+}
+
+/** The migration is finished: no credentials, and the containers have been answered for. */
+function forgetLegacySandboxDir(home: string): void {
+  removeQuietly(path.join(home, "sandbox"));
 }
 
 /**
@@ -68,13 +78,18 @@ export function removeLegacySandboxDir(home: string): boolean {
  * Guarded by the CALLER on the legacy directory existing, so a machine that never ran the sandbox
  * never invokes docker at all — which is nearly every machine, since it was opt-in and macOS-only.
  */
-export async function removeLegacySandboxContainers(): Promise<void> {
+export async function removeLegacySandboxContainers(home: string): Promise<void> {
   const listed = await spawnCaptureAsync("docker", ["ps", "-aq", "--filter", "name=^mulmoterminal-"], { timeoutMs: DOCKER_SWEEP_TIMEOUT_MS });
+  // Docker absent, not up yet, or too slow to answer: leave the directory so the next boot asks
+  // again. Only a real answer retires the migration.
   if (listed.status !== 0) return;
   const ids = listed.stdout.split("\n").filter((id) => /^[0-9a-f]{6,}$/i.test(id.trim()));
-  if (ids.length === 0) return;
-  const removed = await spawnCaptureAsync("docker", ["rm", "-f", ...ids], { timeoutMs: DOCKER_SWEEP_TIMEOUT_MS });
-  if (removed.status === 0) console.log(`[cleanup] removed ${ids.length} leftover sandbox container(s)`);
+  if (ids.length > 0) {
+    const removed = await spawnCaptureAsync("docker", ["rm", "-f", ...ids], { timeoutMs: DOCKER_SWEEP_TIMEOUT_MS });
+    if (removed.status !== 0) return; // still owed — try again next boot
+    console.log(`[cleanup] removed ${ids.length} leftover sandbox container(s)`);
+  }
+  forgetLegacySandboxDir(home);
 }
 
 // Shorter than spawnCapture's default: nothing waits on this, and a container left behind by a
