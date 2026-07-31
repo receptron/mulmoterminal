@@ -31,7 +31,12 @@ export function overlayReturnPath(): string {
   // Resolved from the NAME rather than written as "/": that path is the default-view entry
   // and lands on the grid (#883). A string is what comes back, because this same value is
   // stored in history state, which the check above reads back as a string.
-  return typeof origin === "string" ? origin : router.resolve({ name: "chat" }).fullPath;
+  //
+  // The grid, not chat. This is the answer for an overlay with NO recorded origin — a direct load
+  // of /collections, a link, a restored tab — and the grid is where "/" already sends those. It
+  // also decides what renders BEHIND such an overlay (see viewIsGrid, and App.vue's shell), so
+  // pointing it at the view that is being removed would put the single view back on screen.
+  return typeof origin === "string" ? origin : router.resolve({ name: "terminals" }).fullPath;
 }
 
 /** The `state` to attach to an overlay's push: the view to come back to.

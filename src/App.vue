@@ -12,7 +12,6 @@ import WikiBrowseOverlay from "./components/WikiBrowseOverlay.vue";
 import PrsOverlay from "./components/PrsOverlay.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
 import GridView from "./components/GridView.vue";
-import { useRoute } from "vue-router";
 import AppSettingsModal from "./components/AppSettingsModal.vue";
 import AppToolbar from "./components/AppToolbar.vue";
 import { useSessions, type Filter } from "./composables/useSessions";
@@ -29,19 +28,24 @@ import { useAttentionSound, type SoundConfig } from "./composables/useAttentionS
 import { useUnloadGuard, reportActiveTerminals } from "./composables/useUnloadGuard";
 import { browserLocale } from "./utils/browserLocale";
 import { usePubSub } from "./composables/usePubSub";
+import { viewIsGrid } from "./composables/overlayOrigin";
 import { openTerminalAt } from "./composables/useNewTerminal";
 import { LAUNCH_TERMINAL_CHANNEL, isLaunchAgent, type LaunchAgent } from "../common/launchAgent";
 import { clampTerminalWidth, maxTerminalWidth, MIN_TERMINAL, splitterKeyWidth } from "./components/splitterWidth";
 import { type TerminalAgent } from "../common/sessionAgent";
 
-// View mode is now the URL: the multi-terminal grid is /terminals, everything else
-// (chat + the collection/accounting overlays) lives under the single-view shell.
-// Route-based on purpose: the OVERLAYS live inside the `!isGrid` block below, so widening
-// this to "the view underneath an overlay" stops them rendering at all — the URL changes and
-// the grid just stays on screen. Which BUTTONS the header offers is a separate question, and
-// the one that follows the underlying view (AppToolbar).
-const route = useRoute();
-const isGrid = computed(() => route.name === "terminals");
+// Which shell renders UNDER whatever is on screen: the grid, or the single view.
+//
+// `viewIsGrid` rather than `route.name === "terminals"`, so an overlay opened FROM the grid
+// keeps the grid behind it instead of mounting the single view's terminal there. The toolbar has
+// always answered that way (AppToolbar reads the same value); the shell did not, so the two
+// disagreed for the whole time an overlay was open.
+//
+// This was previously route-based on purpose, and the reason no longer holds: the overlays used
+// to live inside the `!isGrid` block, so widening this stopped them rendering at all. They are
+// siblings of both shells now — the two halves of that change have to travel together, which is
+// why the comment went with it.
+const isGrid = viewIsGrid;
 
 // The phone asked for a new terminal in a session's directory (#831). The grid is browser
 // state — the host can only ask — so SOMETHING has to be listening for this to be servable,
@@ -399,19 +403,25 @@ function onSession(id: string) {
         <ToolsPane v-if="showTools" :session-id="activeId" @close="toggleTools" />
       </div>
     </div>
-    <!-- Full-screen collection browser; shown when the launcher / an index card / a
-         ref hop opens it (driven by useCollectionBrowse). -->
-    <CollectionsBrowseOverlay />
-    <!-- Full-screen accounting view; opened by the toolbar's account_balance button
-         (driven by useAccountingView). Mutually exclusive with the browser above. -->
-    <AccountingOverlay />
-    <!-- Full-screen read-only wiki browser; opened by the toolbar's menu_book button
-         (driven by useWikiBrowse). Mutually exclusive with the overlays above. -->
-    <WikiBrowseOverlay />
-    <!-- Full-screen cross-repo PR list; opened by the toolbar's call_merge button. -->
-    <PrsOverlay />
-    <!-- Full-screen file explorer + editor; opened by a terminal header's Files button. -->
-    <FilesOverlay />
     <AppSettingsModal v-if="showSettings" :cwd="effectiveCwd" :session-id="activeId" :presets="presets" @launch-skill="launchSkill" @close="closeSettings" />
   </div>
+  <!-- The full-screen overlays, OUTSIDE both shells: each is route-driven and renders on top of
+       whichever view is underneath, so they must not be nested in one of them. While they lived
+       inside the single-view block, an overlay opened from the grid could only appear by taking
+       the grid off screen — which is why `isGrid` above had to widen in the same change.
+       AppSettingsModal is deliberately NOT here: GridView renders its own, and hoisting this one
+       would show two on /terminals. -->
+  <!-- Full-screen collection browser; shown when the launcher / an index card / a
+       ref hop opens it (driven by useCollectionBrowse). -->
+  <CollectionsBrowseOverlay />
+  <!-- Full-screen accounting view; opened by the toolbar's account_balance button
+       (driven by useAccountingView). Mutually exclusive with the browser above. -->
+  <AccountingOverlay />
+  <!-- Full-screen read-only wiki browser; opened by the toolbar's menu_book button
+       (driven by useWikiBrowse). Mutually exclusive with the overlays above. -->
+  <WikiBrowseOverlay />
+  <!-- Full-screen cross-repo PR list; opened by the toolbar's call_merge button. -->
+  <PrsOverlay />
+  <!-- Full-screen file explorer + editor; opened by a terminal header's Files button. -->
+  <FilesOverlay />
 </template>

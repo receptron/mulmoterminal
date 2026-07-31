@@ -393,7 +393,32 @@ open at all. Details below.
   background worker; the skill button's use of it is a workaround, not the same thing. Do not
   collapse the two while removing the workaround.
 
-### PR4 — make the grid self-sufficient
+### PR4 — make the grid self-sufficient — **DONE**
+
+Three of the six bullets below needed no work, and the one real change was bigger than "hoist":
+
+- **The hoist alone does nothing.** Every overlay is ROUTE-driven, so opening one leaves
+  `/terminals` — and `isGrid` was `route.name === "terminals"`, which meant the grid came off
+  screen and the single view mounted behind the overlay. Moving the overlays out of the `!isGrid`
+  block only helps if the grid can also BE the backdrop, so `App.vue` now binds to `viewIsGrid`
+  (the existing "which view is underneath" answer, which follows the overlay's origin). The two
+  halves had to travel together, exactly as the comment at `App.vue:39` warned.
+- **`viewIsGrid` had no tests**, and it now decides which shell renders rather than which buttons
+  show. Six cases added, verified to fail against a broken predicate.
+- **`AppSettingsModal` must NOT be hoisted** — `GridView` renders its own, so a hoist would show
+  two on `/terminals`. Five overlays moved, not six.
+- **`ToolsPane` is already beside the zoomed cell** (`TerminalGrid.vue:867`). The open question in
+  this section was already answered by earlier work.
+- **The AppToolbar `{name:"chat"}` switch STAYS**, deferred to PR5. Removing it here would strand
+  the single view — unreachable but still present — which is PR5's job, not this one's.
+
+**One regression this introduced, and fixed.** With the grid surviving under an overlay, a chat
+started from the collections browser was placed into a grid the user could not see: the
+queue-and-navigate path used to close the overlay *by accident*, and it stopped being taken the
+moment the grid stopped unmounting. `placeSpawnedChat` now navigates whenever the user is not
+already on `/terminals`, whether or not a mounted grid took the request.
+
+---
 
 Everything the single view currently owns has to exist in the grid *before* PR4.
 

@@ -58,22 +58,26 @@ describe("useFilesView return-to-origin", () => {
     expect(useFilesView().cwd.value).toBe("/work/app");
   });
 
-  // Regression (codex #273, mirrored here): the origin rides the history entry, so a
-  // /files reached WITHOUT filesGotoIndex (browser back/forward, direct load) must fall
-  // back to chat — never a stale origin captured by an earlier open.
-  it("falls back to chat for a history-driven /files, ignoring an earlier open's origin", async () => {
-    await router.push("/terminals");
+  // Regression (codex #273, mirrored here): the origin rides the history entry, so a /files
+  // reached WITHOUT filesGotoIndex (browser back/forward, direct load) must fall back to the
+  // default view — never a stale origin captured by an earlier open.
+  //
+  // The earlier open captures CHAT and the fallback is the grid (#1190), deliberately opposite
+  // values. Written the other way round the two answers coincide, and the test passes whether the
+  // stale origin was ignored or reused — which is the whole thing it exists to catch.
+  it("falls back to the default view for a history-driven /files, ignoring an earlier open's origin", async () => {
+    await router.push({ name: "chat" });
     await settle();
-    filesGotoIndex("/proj"); // captures /terminals into that entry's state
+    filesGotoIndex("/proj"); // captures /chat into that entry's state
     await settle();
 
-    await router.push({ name: "chat" });
+    await router.push("/terminals");
     await settle();
     await router.push("/files"); // fresh /files entry, no captured origin
     await settle();
 
     filesClose();
     await settle();
-    expect(router.currentRoute.value.name).toBe("chat");
+    expect(router.currentRoute.value.name).toBe("terminals");
   });
 });

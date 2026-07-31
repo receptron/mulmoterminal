@@ -58,12 +58,14 @@ export function registerSpawnedChatHandler(h: Handler): () => void {
 
 /** Show a spawned chat as a grid cell. If the grid isn't mounted yet, queue it and switch to it. */
 export function placeSpawnedChat(req: SpawnedChatRequest): void {
-  if (handler) {
-    handler(req);
-    return;
-  }
-  pending.push(req);
-  router.push({ name: "terminals" }).catch(() => {});
+  if (handler) handler(req);
+  else pending.push(req);
+  // Then SHOW it, whether or not a grid took it. Mounted is not the same as on screen: since
+  // #1190 the grid stays alive UNDERNEATH a full-screen overlay, so a chat started from the
+  // collections browser is placed into a grid the user cannot see. Navigating is also what closes
+  // that overlay — before the grid survived one, the queue-and-navigate path did this by accident,
+  // and it stopped happening the moment the grid stopped unmounting.
+  if (router.currentRoute.value.name !== "terminals") router.push({ name: "terminals" }).catch(() => {});
 }
 
 /** Test seam: drop anything queued by a previous case. Not used by the app. */

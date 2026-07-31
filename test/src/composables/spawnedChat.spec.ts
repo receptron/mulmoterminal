@@ -5,8 +5,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.hoisted, because vi.mock's factory is hoisted above the const it would otherwise close over.
-const { push } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()) }));
-vi.mock("../../../src/router", () => ({ router: { push } }));
+// `currentRoute` as well as `push`: placing now asks where the user IS before navigating, because
+// a mounted grid is not necessarily a visible one (it survives under a full-screen overlay).
+const { push, routeName } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()), routeName: { value: "terminals" as string } }));
+vi.mock("../../../src/router", () => ({
+  router: {
+    push,
+    currentRoute: {
+      get value() {
+        return { name: routeName.value };
+      },
+    },
+  },
+}));
 
 import { placeSpawnedChat, registerSpawnedChatHandler, resetSpawnedChatQueue, type SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
@@ -16,6 +27,7 @@ describe("placeSpawnedChat", () => {
   beforeEach(() => {
     resetSpawnedChatQueue();
     push.mockClear();
+    routeName.value = "terminals"; // the usual case: the user is looking at the grid
   });
 
   it("hands the request straight to a registered grid, without navigating", () => {
@@ -29,7 +41,23 @@ describe("placeSpawnedChat", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  // The grid survives under a full-screen overlay (#1190), so it can take the chat while the user
+  // is still looking at the collections browser. Placing it is not enough — before the grid stayed
+  // mounted, the queue-and-navigate path closed that overlay by accident, and the chat became
+  // invisible the moment that stopped happening.
+  it("switches to the grid even when a mounted one took the request", () => {
+    routeName.value = "collections";
+    const placed: SpawnedChatRequest[] = [];
+    registerSpawnedChatHandler((req) => placed.push(req));
+
+    placeSpawnedChat(chat("a"));
+
+    expect(placed).toEqual([chat("a")]);
+    expect(push).toHaveBeenCalledWith({ name: "terminals" });
+  });
+
   it("queues and switches to the grid when none is mounted", () => {
+    routeName.value = "chat";
     placeSpawnedChat(chat("a"));
 
     expect(push).toHaveBeenCalledWith({ name: "terminals" });
@@ -65,6 +93,7 @@ describe("placeSpawnedChat", () => {
     const off = registerSpawnedChatHandler((req) => placed.push(req));
     off();
 
+    routeName.value = "chat";
     placeSpawnedChat(chat("a"));
 
     expect(placed).toEqual([]);
