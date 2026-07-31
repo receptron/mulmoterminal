@@ -1,6 +1,7 @@
 // Process-wide settings read from the environment. Their own module because the session
 // registry persists under MULMOTERMINAL_HOME and validates ids with SESSION_ID_RE — taking
 // them from index.ts would make the registry import its own importer.
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -34,6 +35,35 @@ export const BIND_HOST = process.env.MULMOTERMINAL_HOST || "127.0.0.1";
 // The workspace used as the PTY cwd and as the root for persisted session state. index.ts
 // creates it at boot before anything spawns into it.
 export const CLAUDE_CWD = process.env.CLAUDE_CWD || path.join(os.homedir(), "mulmoclaude");
+
+/**
+ * Is this session running IN the workspace itself, rather than in some project directory?
+ *
+ * The one place that answers it, because each of the three rules below is a way for a feature
+ * gated on this to silently not turn on — and a second implementation would get a different one
+ * of them wrong.
+ *
+ *   - An ABSENT cwd is the workspace. The launch form's blank field means "the server's default"
+ *     (CellLaunchForm.vue), and spawnClaudePty defaults `cwd = CLAUDE_CWD`; a cell that never
+ *     named a directory must match.
+ *   - CANONICALISE first. The cwd arrives from a `?cwd=` query built out of a user preset, so a
+ *     trailing slash, a `..` and above all a SYMLINK are all ordinary — a `~/mulmoclaude` that is
+ *     a symlink is normal on a dev machine. A path that does not exist falls back to a normalised
+ *     string compare rather than throwing: a directory that is gone is a spawn failure, and it is
+ *     reported as one elsewhere, not swallowed here.
+ *   - EQUALITY, not prefix. `{workspace}/foo` is an ordinary project directory.
+ */
+export function isWorkspaceCwd(cwd: string | undefined): boolean {
+  const resolve = (target: string): string => {
+    try {
+      return fs.realpathSync(target);
+    } catch {
+      return path.resolve(target);
+    }
+  };
+  if (!cwd) return true;
+  return resolve(cwd) === resolve(CLAUDE_CWD);
+}
 
 // MulmoTerminal's own per-session GUI state (tool-result render data + tool-call history)
 // lives here, keyed by sessionId (a global UUID) — NOT under the workspace dir, so it stays

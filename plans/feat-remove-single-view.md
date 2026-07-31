@@ -162,6 +162,32 @@ Pure deletion, independent of everything else, no user-visible change with the f
   are documented, so README / docs guide / `mulmoterminal-model` + `-bug-report` skills need the
   same sweep. Removing a documented env var is a changelog line.
 
+### PR2 — the workspace cell gets the full GUI MCP — **DONE**
+
+Implemented as described below, with three changes to what was planned:
+
+1. **The wire flag was NOT renamed.** `attachGuiMcp` keeps its name and its meaning ("not a grid
+   cell"); the derivation is a named, exported predicate instead —
+   `carriesFullGuiMcp(attachGuiMcp, cwd)` in `spawn-claude.ts`. Exported so the invariant is
+   assertable: `test/server/session/full-gui-mcp.spec.ts` pins that a project-directory cell is
+   false. A rename would have touched the codex and antigravity paths for no behaviour change.
+2. **`--strict-mcp-config` stays on for the workspace cell**, which means its directory's OWN
+   `.mcp.json` servers do not load there — the single view's behaviour exactly. This is the one
+   real trade in PR2 and it was not called out in the original plan. It is right because the
+   point is parity with the view being deleted, and because dropping strict would double-register
+   the GUI MCP for a workspace directory that had also registered group URLs: the agent would see
+   `mcp__mulmoterminal-gui__presentChart` AND `mcp__mulmoterminal-render__presentChart`.
+3. **codex and antigravity are deliberately left grid-only**, with the reason in a comment at
+   `spawn-codex.ts`. The rule exists to make a workspace cell equivalent to the SINGLE VIEW, and
+   the single view only ever ran claude — so there is no codex behaviour to preserve, and applying
+   it would be a new capability rather than a migrated one.
+
+Confirmed rather than assumed: the per-session MCP config file is already reaped for every kind of
+session — `cleanupSessionSettings` removes it and runs from `lifecycle.ts` reap plus the boot
+sweep, so the extra files a workspace cell now writes need no new cleanup.
+
+---
+
 ### PR2 — the workspace cell gets the full GUI MCP
 
 Small and server-side. The wire flag keeps its current meaning; what changes is that the MCP

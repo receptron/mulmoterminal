@@ -70,6 +70,13 @@ export function createCodexSpawner(deps: SpawnDeps) {
     //     read from the same config claude's own switches write (see the launcher's Canvas
     //     rows). codex cannot read that config itself, so the groups arrive resolved here.
     // A grid cell whose directory registered nothing gets no MCP at all, exactly as before.
+    //
+    // DELIBERATELY not given claude's workspace-cwd rule (carriesFullGuiMcp, PR2): a codex cell in
+    // the workspace stays on its directory's registered groups. That rule exists to make a
+    // workspace cell equivalent to the SINGLE VIEW so the single view can be deleted, and the
+    // single view only ever ran claude — so there is no codex behaviour it would be preserving,
+    // and applying it would be a new capability rather than a migrated one. Revisit if a reason
+    // turns up; it is one call to carriesFullGuiMcp with `cwd`.
     const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: mcpGroups, allTools: attachGuiMcp });
     const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers });
     const { term, tmux, reattached } = ptySpawn(sessionId, deps.codexBin, args, cwd, true, { binEnvVar: codexAdapter.binEnvVar });
