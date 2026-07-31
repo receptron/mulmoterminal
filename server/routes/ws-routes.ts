@@ -294,6 +294,22 @@ function startCodexEntry(deps: WsRouteDeps, ws: WebSocket, start: CodexStart): P
   return deps.spawnCodexPty(sessionId, ws, resumeRolloutId, cwd, attachGuiMcp, { mcpGroups }); // interactive: no seed
 }
 
+/**
+ * A viewer now has this session, so it stops waiting for a home (see the unplaced marker).
+ *
+ * BOTH ids. The resolvers mint a FRESH one when the requested session can be served neither from a
+ * live pty nor from a transcript — a spawn that died before writing one, which is exactly the kind
+ * that ends up unplaced. Clearing only the new id would leave the requested one marked forever, so
+ * every activate would adopt it again and mint another session, accumulating cells (Codex, #1189).
+ *
+ * Cleared for ANY attach, not only a grid one: "unplaced" means nobody is looking, and a viewer is
+ * a viewer.
+ */
+function markAttachedSessionPlaced(sessionId: string, requested: string | null): void {
+  markSessionPlaced(sessionId);
+  if (requested && requested !== sessionId) markSessionPlaced(requested);
+}
+
 async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
@@ -331,10 +347,7 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
   // choke point for every grid attach — new, resumed, or reattached — so the mark is
   // recorded (and re-recorded after a reboot when the cell reconnects) exactly once.
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
-  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
-  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
-  // This is the one choke point every attach passes through — new, resumed or reattached.
-  markSessionPlaced(sessionId);
+  markAttachedSessionPlaced(sessionId, requested);
 
   // Tell the browser which session this is (it learns the id of new sessions) and
   // the EFFECTIVE cwd — where claude really runs. On reattach that's the live
@@ -468,10 +481,7 @@ async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
   if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
   const { sessionId, live, command } = resolved;
   markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
-  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
-  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
-  // This is the one choke point every attach passes through — new, resumed or reattached.
-  markSessionPlaced(sessionId);
+  markAttachedSessionPlaced(sessionId, requested);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // A launcher that runs codex gets the directory's registered tool groups too. The chip and the
@@ -500,10 +510,7 @@ async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUp
 
   const { sessionId, live, resumeRolloutId } = resolveCodexSession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
-  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
-  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
-  // This is the one choke point every attach passes through — new, resumed or reattached.
-  markSessionPlaced(sessionId);
+  markAttachedSessionPlaced(sessionId, requested);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // A grid cell's GUI tools are whatever its DIRECTORY registered — the same switches claude's
@@ -573,10 +580,7 @@ async function handleAntigravityConnection(deps: WsRouteDeps, ws: WebSocket, req
   await antigravityConversationsHydrated;
   const { sessionId, live, resumeConversationId } = resolveAntigravitySession(requested);
   if (!attachGuiMcp) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
-  // Someone now has this session on screen, so it is no longer waiting for a home. Cleared for
-  // ANY attach, not just a grid one: "unplaced" means nobody is looking, and a viewer is a viewer.
-  // This is the one choke point every attach passes through — new, resumed or reattached.
-  markSessionPlaced(sessionId);
+  markAttachedSessionPlaced(sessionId, requested);
   const early = announceSession(ws, sessionId, live?.cwd ?? cwd);
 
   // The directory's registered groups, read here because the lookup reads Claude Code's config

@@ -18,7 +18,7 @@ import {
   failedWorkersHydrated,
   unplacedSessionsHydrated,
   placedSessionsHydrated,
-  unplacedSessionIds,
+  unplacedSessionRows,
   ptys,
   devTerminalSessions,
   devTerminalSessionsHydrated,
@@ -257,12 +257,14 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   // same until someone adds a caller.
   app.get("/api/sessions/unplaced", async (_req, res) => {
     await Promise.all([unplacedSessionsHydrated, placedSessionsHydrated]);
-    const sessions = unplacedSessionIds().map((id) => {
+    const sessions = unplacedSessionRows().map(({ id, agent }) => {
       const entry = ptys.get(id);
       // A session whose PTY is gone (the server restarted, tmux ended) is still worth adopting —
-      // the cell resumes it from disk. It just cannot say which agent or directory it used, so
-      // the grid falls back to its own defaults.
-      return { id, agent: entry?.agent ?? null, cwd: entry?.cwd ?? null };
+      // the cell resumes it from disk. The AGENT comes from the mark rather than the entry for
+      // exactly that case: a codex session adopted as claude reconnects on the wrong endpoint, and
+      // the entry that would have said so is what is missing (Codex, PR #1189). The live entry
+      // still wins when there is one — it is the process actually running.
+      return { id, agent: entry?.agent ?? agent, cwd: entry?.cwd ?? null };
     });
     res.json({ sessions });
   });

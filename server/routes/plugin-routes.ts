@@ -68,7 +68,7 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
       // places it immediately (useChatLauncher), and this covers every other caller — an agent
       // calling the tool from another session, with no tab open at all. The mark is cleared the
       // moment any cell attaches, so the browser-placed case does not come back as a duplicate.
-      if (!hidden) markUnplacedSession(sessionId);
+      if (!hidden) markUnplacedSession(sessionId, agent);
       if (hidden) {
         deps.registerBackgroundSession(sessionId);
         // A hidden worker is invisible on purpose, which is exactly why a FAILED one needs a

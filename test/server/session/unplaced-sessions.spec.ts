@@ -50,14 +50,14 @@ describe("unplaced sessions", () => {
     const registry = await freshRegistry();
     await Promise.all([registry.unplacedSessionsHydrated, registry.placedSessionsHydrated]);
     registry.markUnplacedSession(A);
-    expect(registry.unplacedSessionIds()).toEqual([A]);
+    expect(registry.unplacedSessionRows().map((r) => r.id)).toEqual([A]);
   });
 
   it("drops it once a cell has attached", async () => {
     const registry = await freshRegistry();
     registry.markUnplacedSession(A);
     registry.markSessionPlaced(A);
-    expect(registry.unplacedSessionIds()).toEqual([]);
+    expect(registry.unplacedSessionRows().map((r) => r.id)).toEqual([]);
   });
 
   it("persists both facts, so neither is lost to a restart", async () => {
@@ -76,7 +76,7 @@ describe("unplaced sessions", () => {
     readBack = { "unplaced-sessions.json": `${A}\n${B}`, "placed-sessions.json": A };
     const registry = await freshRegistry();
     await Promise.all([registry.unplacedSessionsHydrated, registry.placedSessionsHydrated]);
-    expect(registry.unplacedSessionIds()).toEqual([B]);
+    expect(registry.unplacedSessionRows().map((r) => r.id)).toEqual([B]);
   });
 
   it("does not re-append an id it already holds", async () => {
@@ -87,12 +87,39 @@ describe("unplaced sessions", () => {
     expect(loggedTo("unplaced-sessions.json").split(A).length - 1).toBe(1);
   });
 
+  // Codex, on this PR. The id alone cannot reconnect a cell: adopting a codex session over
+  // claude's endpoint attaches to the wrong agent, and the live PtyEntry that would have said so
+  // is exactly what is missing in the case this marker exists for.
+  it("remembers which agent the session runs, and survives with it", async () => {
+    const registry = await freshRegistry();
+    registry.markUnplacedSession(A, "codex");
+    registry.markUnplacedSession(B); // default
+    expect(registry.unplacedSessionRows()).toEqual([
+      { id: A, agent: "codex" },
+      { id: B, agent: "claude" },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(loggedTo("unplaced-sessions.json")).toContain(`${A} codex`);
+  });
+
+  it("reads the agent back after a restart, and defaults a line written without one", async () => {
+    // The second half is the upgrade case: a log written before the agent field existed holds
+    // bare ids, and those sessions were all claude.
+    readBack = { "unplaced-sessions.json": `${A} antigravity\n${B}` };
+    const registry = await freshRegistry();
+    await Promise.all([registry.unplacedSessionsHydrated, registry.placedSessionsHydrated]);
+    expect(registry.unplacedSessionRows()).toEqual([
+      { id: A, agent: "antigravity" },
+      { id: B, agent: "claude" },
+    ]);
+  });
+
   it("ignores an id that is not a session id", async () => {
     const registry = await freshRegistry();
     registry.markUnplacedSession("../etc/passwd");
     registry.markSessionPlaced("../etc/passwd");
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(loggedTo("unplaced-sessions.json")).not.toContain("passwd");
-    expect(registry.unplacedSessionIds()).toEqual([]);
+    expect(registry.unplacedSessionRows().map((r) => r.id)).toEqual([]);
   });
 });

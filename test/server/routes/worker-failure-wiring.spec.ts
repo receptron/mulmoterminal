@@ -25,7 +25,7 @@ vi.mock("node:fs", () => {
 
 const { mountPluginRoutes } = await import("../../../server/routes/plugin-routes.js");
 const { runCompletionHook } = await import("../../../server/session/completion-hooks.js");
-const { isFailedWorker, unplacedSessionIds } = await import("../../../server/session/registry.js");
+const { isFailedWorker, unplacedSessionRows } = await import("../../../server/session/registry.js");
 
 const app = express();
 app.use(express.json());
@@ -49,12 +49,12 @@ async function spawn(hidden: boolean, agent = "claude"): Promise<string> {
 describe("what a spawn leaves waiting for a cell", () => {
   it("marks a visible chat as unplaced", async () => {
     const id = await spawn(false);
-    expect(unplacedSessionIds()).toContain(id);
+    expect(unplacedSessionRows().map((r) => r.id)).toContain(id);
   });
 
   it("does NOT mark a hidden worker", async () => {
     const id = await spawn(true);
-    expect(unplacedSessionIds()).not.toContain(id);
+    expect(unplacedSessionRows().map((r) => r.id)).not.toContain(id);
   });
 });
 

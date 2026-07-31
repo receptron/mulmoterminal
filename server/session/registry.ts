@@ -11,6 +11,7 @@ import { promises as fs } from "node:fs";
 import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import type { DirModelChoice } from "./provider-env.js";
+import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent.js";
 import { messageOf } from "../errors.js";
 import { buildActivitySnapshot, mergeOwnedActivity, parseActivityState, type PersistedActivity } from "./activity-state.js";
 import { parseSessionIdLog, sessionIdLogLine } from "./session-id-log.js";
@@ -216,21 +217,44 @@ export function isBackgroundSession(id: string): boolean {
 //
 // Persisted because the case it exists for is precisely "nobody was looking": a mark held only in
 // memory would be lost by the restart that happens before anyone opens a tab.
-const unplacedSessions = new Set<string>();
+// `<session id> <agent>` per line, because the ID ALONE is not enough to reconnect. A cell adopting
+// a codex session over claude's endpoint attaches to the wrong agent, and the live PtyEntry that
+// would have said so is exactly what is gone in the case this exists for — the server restarted,
+// or the pty was reaped, before anyone opened a tab (Codex, PR #1189).
+const unplacedSessions = new Map<string, TerminalAgent>();
 const UNPLACED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "unplaced-sessions.json");
-export const unplacedSessionsHydrated = hydrateIdLog(UNPLACED_SESSIONS_FILE, unplacedSessions);
-const appendUnplacedSession = idLogAppender(UNPLACED_SESSIONS_FILE, "unplaced-sessions");
+export const unplacedSessionsHydrated = (async () => {
+  try {
+    const contents = await fs.readFile(UNPLACED_SESSIONS_FILE, "utf8");
+    for (const line of contents.split("\n")) {
+      const [id, agent] = line.trim().split(/\s+/);
+      // A line with no agent is one written before this field existed; claude is what those were.
+      if (id && isValidSessionId(id)) unplacedSessions.set(id, asTerminalAgent(agent));
+    }
+  } catch {
+    // absent on first run / unreadable => nothing waiting
+  }
+})();
+let unplacedPersist: Promise<void> = Promise.resolve();
+function appendUnplacedSession(id: string, agent: TerminalAgent): void {
+  unplacedPersist = unplacedPersist
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.appendFile(UNPLACED_SESSIONS_FILE, `\n${id} ${agent}`))
+    .catch((e) => console.error(`[unplaced-sessions] failed to persist: ${messageOf(e)}`));
+}
 // Ids whose mark has been cleared this process. The log is append-only (MULMOTERMINAL_HOME is
 // shared between server instances, so a read-merge-write loses one of them), and hydration reads
 // it as it was BEFORE a clear could be appended — so without this a session adopted during startup
 // would be handed back as unplaced.
 const placedSessions = new Set<string>();
 
-/** Note that the server spawned a VISIBLE session nobody has a cell for yet. */
-export function markUnplacedSession(id: string): void {
+/** Note that the server spawned a VISIBLE session nobody has a cell for yet. The agent travels
+ *  with the id for the same reason it does everywhere else: the cell has to reconnect on the right
+ *  endpoint, and by the time this is read the running process may be gone. */
+export function markUnplacedSession(id: string, agent: TerminalAgent = "claude"): void {
   if (!isValidSessionId(id) || unplacedSessions.has(id)) return;
-  unplacedSessions.add(id);
-  appendUnplacedSession(id);
+  unplacedSessions.set(id, agent);
+  appendUnplacedSession(id, agent);
 }
 
 /** A grid cell has taken this session — or the user closed it. Either way it is no longer waiting
@@ -246,8 +270,8 @@ export const placedSessionsHydrated = hydrateIdLog(PLACED_SESSIONS_FILE, placedS
 const appendPlacedSession = idLogAppender(PLACED_SESSIONS_FILE, "placed-sessions");
 
 /** The sessions a loading grid should adopt: spawned visible by the server, never taken. */
-export function unplacedSessionIds(): string[] {
-  return [...unplacedSessions].filter((id) => !placedSessions.has(id));
+export function unplacedSessionRows(): { id: string; agent: TerminalAgent }[] {
+  return [...unplacedSessions].filter(([id]) => !placedSessions.has(id)).map(([id, agent]) => ({ id, agent }));
 }
 
 // Sessions that connected on the ALL-TOOLS MCP url (`/api/mcp/:sessionId`). That url is handed
