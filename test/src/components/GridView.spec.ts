@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { router } from "../../../src/router";
 import { defineComponent, h, KeepAlive, type Component } from "vue";
 
 // App.vue renders GridView inside <KeepAlive>, and the grid registers its openers (new terminal,
@@ -27,6 +28,14 @@ vi.mock("../../../src/composables/useGridActivity", () => ({
 type FetchUrl = string | URL | Request; // what a fetch stub's first argument can be
 
 // Config GET hydrates pushEnabled=true; capture POSTs so we can assert the toggle saves.
+// The grid is mounted here without the router plugin, and several of its behaviours now ask the
+// singleton where the user actually IS — shortcuts and the unplaced sweep only apply while
+// /terminals is on screen, since the grid stays mounted underneath an overlay (#1193).
+beforeEach(async () => {
+  await router.push("/terminals");
+  await flushPromises();
+});
+
 const posts: Array<{ url: string; body: unknown }> = [];
 beforeEach(() => {
   posts.length = 0;

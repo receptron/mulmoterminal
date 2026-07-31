@@ -62,6 +62,7 @@ import { useAppConfig } from "../composables/useAppConfig";
 import { fetchDirConfig, invalidateDirConfig, useDirPriorities } from "../composables/useDirConfig";
 import { nextSortMode } from "./sortModeButton";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
+import { router } from "../router";
 import { usePubSub } from "../composables/usePubSub";
 import type { LaunchAgent } from "../../common/launchAgent";
 import type { LaunchPick } from "./launchers";
@@ -74,6 +75,14 @@ import type { LaunchPick } from "./launchers";
 // cell reflows the list so terminals flow across page boundaries. Only the active
 // page is mounted — other pages' terminals live on as background PTYs and
 // reconnect when their page is shown again.
+// The ACTUAL route. The grid now stays mounted under a full-screen overlay, so "is the grid
+// mounted" and "is the grid what the user is looking at" have come apart — several things below
+// need the second question (Codex, PR #1193).
+//
+// The router singleton rather than useRoute(): this component is mounted without the plugin in its
+// own specs, and overlayOrigin reads the same singleton for the same reason.
+const onTerminalsRoute = () => router.currentRoute.value.name === "terminals";
+
 const init = initialState(localStorage.getItem(STATE_KEY), localStorage.getItem(LEGACY_KEY));
 const state = ref<GridState>(init.state);
 const persist = () => localStorage.setItem(STATE_KEY, JSON.stringify(state.value));
@@ -430,6 +439,12 @@ function closeSettings() {
 // CAPTURE phase because xterm binds keydown on its own textarea: capture runs first, so the
 // key can be claimed before the terminal turns it into a page-forward escape sequence.
 function onShortcutKey(e: KeyboardEvent) {
+  // Only while the grid is what the user is actually LOOKING at. It now stays mounted underneath a
+  // full-screen overlay, so without this a keystroke aimed at the collection browser or the wiki
+  // reaches the hidden grid — up to `terminal-close` closing its zoomed cell. CodeMirror is the
+  // worst of it: its editable surface is contenteditable, which isEditableTarget below does not
+  // exclude, so typing in an editor was reaching the shortcuts (Codex, PR #1193).
+  if (!onTerminalsRoute()) return;
   if (showSettings.value) return;
   const target = e.target instanceof HTMLElement ? e.target : null;
   if (target && isEditableTarget(target.tagName, Array.from(target.classList))) return;
@@ -512,11 +527,11 @@ const gridRef = ref<InstanceType<typeof TerminalGrid> | null>(null);
 // Place an already-spawned chat as a cell. Every programmatically started chat arrives here —
 // the collection UI's actions and template cards, custom views, the Settings skill buttons —
 // via useChatLauncher's one choke point.
-const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
+const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest): boolean => {
   // Already adopted — by the unplaced sweep below, or by an earlier request for the same session.
   // Two cells for one session fight over its socket: the server supersedes the prior one, so the
   // older cell goes dead while still looking live.
-  if (state.value.cells.some((cell) => cell.session === id)) return;
+  if (state.value.cells.some((cell) => cell.session === id)) return true;
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
@@ -533,7 +548,7 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
   // so the terminal shows it either way; the hint is a single-view affordance.
   if (placed === state.value) {
     showSpawnedSession({ id, agent, draft });
-    return;
+    return false; // the single view has it; do not drag the user to the grid
   }
   state.value = placed;
   // A collection is already waiting in this session's Canvas. The pane exists only beside an
@@ -542,10 +557,12 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
   // grid's own reveal (files-buffer flush included) rather than setting the two pieces of state
   // from here. Deliberately NOT done for an unseeded spawn: taking the screen to show an empty
   // pane is worse than leaving the grid as the user arranged it.
-  if (!canvas) return;
-  const uid = placed.cells.find((cell) => cell.session === id)?.uid;
-  // After the state renders: the grid has to be showing the cell before it can enlarge it.
-  if (uid !== undefined) void nextTick(() => gridRef.value?.openCanvasFor(uid));
+  if (canvas) {
+    const uid = placed.cells.find((cell) => cell.session === id)?.uid;
+    // After the state renders: the grid has to be showing the cell before it can enlarge it.
+    if (uid !== undefined) void nextTick(() => gridRef.value?.openCanvasFor(uid));
+  }
+  return true;
 };
 // Sessions the SERVER spawned that no cell has taken — a scheduled task's chat, one the phone
 // started, one an agent started from another session. The browser that asks for a chat places it
@@ -585,7 +602,18 @@ async function adoptUnplacedSessions(): Promise<void> {
     adoptingUnplaced = false;
   }
 }
-onActivated(() => void adoptUnplacedSessions());
+// Driven by the ACTUAL route, not by activation. Since #1193 the grid stays mounted underneath a
+// full-screen overlay, so opening PRs or the collection browser and coming back no longer
+// deactivates and reactivates it — and a session spawned while the user was in there would sit
+// without a cell until they switched to Chat and back, or reloaded (Codex, PR #1193). This fires
+// on both: the first mount, and every return to /terminals from an overlay.
+watch(
+  onTerminalsRoute,
+  (onGrid) => {
+    if (onGrid) void adoptUnplacedSessions();
+  },
+  { immediate: true },
+);
 
 // Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same
 // reason: <KeepAlive> keeps this grid alive while the user is in the single view, and a chat

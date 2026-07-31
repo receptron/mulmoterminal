@@ -22,7 +22,7 @@ describe("startCollectionChat", () => {
     registerChatOpener(vi.fn());
     resetSpawnedChatQueue();
     placed = [];
-    registerSpawnedChatHandler((req) => placed.push(req));
+    registerSpawnedChatHandler((req) => (placed.push(req), true));
   });
   afterEach(() => {
     vi.unstubAllGlobals();

@@ -46,10 +46,11 @@ export function registerNewTerminalHandler(h: Handler): () => void {
 // default shell when it is omitted. If the grid isn't mounted yet, queue the request and switch to it.
 export function openTerminalAt(cwd: string, afterSlotKey: string | null, agent?: LaunchAgent): void {
   const req: NewTerminalRequest = { cwd, afterSlotKey, agent };
-  if (handler) {
-    handler(req);
-    return;
-  }
-  pending.push(req);
-  router.push("/terminals").catch(() => {});
+  if (handler) handler(req);
+  else pending.push(req);
+  // Then SHOW the grid. Mounted is not the same as on screen: it now stays alive underneath a
+  // full-screen overlay, so the phone's launch (#831) would be reported as served while the new
+  // terminal appeared behind the wiki or the collection browser, seen by nobody. Before the grid
+  // survived an overlay, the queue-and-navigate branch did this by accident (Codex, PR #1193).
+  if (router.currentRoute.value.name !== "terminals") router.push("/terminals").catch(() => {});
 }

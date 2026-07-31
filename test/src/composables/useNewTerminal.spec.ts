@@ -2,8 +2,19 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { defineComponent, h, KeepAlive, ref, nextTick, onActivated, onDeactivated } from "vue";
 import { mount } from "@vue/test-utils";
 
-const { push } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()) }));
-vi.mock("../../../src/router/index", () => ({ router: { push } }));
+// `currentRoute` as well as `push`: opening now asks where the user IS before navigating, because
+// a mounted grid is not necessarily a visible one — it survives under a full-screen overlay.
+const { push, routeName } = vi.hoisted(() => ({ push: vi.fn(() => Promise.resolve()), routeName: { value: "terminals" as string } }));
+vi.mock("../../../src/router/index", () => ({
+  router: {
+    push,
+    currentRoute: {
+      get value() {
+        return { name: routeName.value };
+      },
+    },
+  },
+}));
 
 import { registerNewTerminalHandler, openTerminalAt } from "../../../src/composables/useNewTerminal";
 
@@ -11,6 +22,7 @@ describe("useNewTerminal", () => {
   beforeEach(() => {
     registerNewTerminalHandler(() => {})(); // drain any leftover pending + clear the handler
     push.mockClear();
+    routeName.value = "terminals"; // the usual case: the user is looking at the grid
   });
 
   it("calls the registered handler directly when the grid is mounted", () => {
@@ -23,11 +35,28 @@ describe("useNewTerminal", () => {
   });
 
   it("queues + navigates to /terminals with no grid, then drains on register (single-view path)", () => {
+    routeName.value = "chat"; // no grid mounted means the user is not looking at one
     openTerminalAt("/proj", "single");
     expect(push).toHaveBeenCalledWith("/terminals");
     const h = vi.fn();
     const off = registerNewTerminalHandler(h); // GridView mounts and registers
     expect(h).toHaveBeenCalledWith({ cwd: "/proj", afterSlotKey: "single" });
+    off();
+  });
+
+  // The grid stays mounted underneath a full-screen overlay (#1193), so it can take the request
+  // while the user is still looking at the wiki or the collection browser. Handing it over is not
+  // enough — the phone's launch would be reported as served and the terminal would appear behind
+  // the overlay, seen by nobody.
+  it("switches to the grid even when a mounted one took the request", () => {
+    routeName.value = "wiki";
+    const h = vi.fn();
+    const off = registerNewTerminalHandler(h);
+
+    openTerminalAt("/proj", null);
+
+    expect(h).toHaveBeenCalledOnce();
+    expect(push).toHaveBeenCalledWith("/terminals");
     off();
   });
 
@@ -68,6 +97,7 @@ describe("useNewTerminal", () => {
     expect(push).not.toHaveBeenCalled();
 
     active.value = false; // KeepAlive deactivates the probe (not unmounted)
+    routeName.value = "chat"; // ...and the user is somewhere else, which is why it deactivated
     await nextTick();
     openTerminalAt("/b", "single"); // no live handler → queue + navigate
     expect(push).toHaveBeenCalledWith("/terminals");

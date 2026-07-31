@@ -32,7 +32,7 @@ describe("placeSpawnedChat", () => {
 
   it("hands the request straight to a registered grid, without navigating", () => {
     const placed: SpawnedChatRequest[] = [];
-    registerSpawnedChatHandler((req) => placed.push(req));
+    registerSpawnedChatHandler((req) => (placed.push(req), true));
 
     placeSpawnedChat(chat("a"));
 
@@ -48,7 +48,7 @@ describe("placeSpawnedChat", () => {
   it("switches to the grid even when a mounted one took the request", () => {
     routeName.value = "collections";
     const placed: SpawnedChatRequest[] = [];
-    registerSpawnedChatHandler((req) => placed.push(req));
+    registerSpawnedChatHandler((req) => (placed.push(req), true));
 
     placeSpawnedChat(chat("a"));
 
@@ -63,6 +63,18 @@ describe("placeSpawnedChat", () => {
     expect(push).toHaveBeenCalledWith({ name: "terminals" });
   });
 
+  // Codex, on PR #1193. A FULL grid refuses the chat and falls back to showing it in the single
+  // view. Pushing to /terminals then would drag the user off the view the session just appeared
+  // in — the navigation added for overlays must not override the fallback that predates it.
+  it("does NOT switch to the grid when a full grid refused the chat", () => {
+    routeName.value = "collections";
+    registerSpawnedChatHandler(() => false); // MAX_TERMINALS: shown in the single view instead
+
+    placeSpawnedChat(chat("a"));
+
+    expect(push).not.toHaveBeenCalled();
+  });
+
   it("drains EVERY queued request in arrival order once the grid registers", () => {
     // A collection action can spawn more than one chat before the route changes; a single
     // slot would report the earlier ones as launched and show neither.
@@ -70,7 +82,7 @@ describe("placeSpawnedChat", () => {
     placeSpawnedChat(chat("b"));
 
     const placed: SpawnedChatRequest[] = [];
-    registerSpawnedChatHandler((req) => placed.push(req));
+    registerSpawnedChatHandler((req) => (placed.push(req), true));
 
     expect(placed.map((r) => r.id)).toEqual(["a", "b"]);
   });
@@ -80,7 +92,7 @@ describe("placeSpawnedChat", () => {
     // claude attaches to the wrong one. `draft` means the prompt is waiting in the input box.
     placeSpawnedChat(chat("queued", { agent: "codex", draft: true }));
     const placed: SpawnedChatRequest[] = [];
-    registerSpawnedChatHandler((req) => placed.push(req));
+    registerSpawnedChatHandler((req) => (placed.push(req), true));
     placeSpawnedChat(chat("direct", { agent: "antigravity" }));
 
     expect(placed).toEqual([chat("queued", { agent: "codex", draft: true }), chat("direct", { agent: "antigravity" })]);
@@ -90,7 +102,7 @@ describe("placeSpawnedChat", () => {
     // GridView drops its handler on deactivate: a chat started from the single view must not
     // silently mutate the cached grid behind it.
     const placed: SpawnedChatRequest[] = [];
-    const off = registerSpawnedChatHandler((req) => placed.push(req));
+    const off = registerSpawnedChatHandler((req) => (placed.push(req), true));
     off();
 
     routeName.value = "chat";
@@ -108,6 +120,7 @@ describe("placeSpawnedChat", () => {
     registerSpawnedChatHandler((req) => {
       seen.push(req.id);
       if (req.id === "first") placeSpawnedChat(chat("second"));
+      return true;
     });
 
     expect(seen).toEqual(["first", "second"]);
