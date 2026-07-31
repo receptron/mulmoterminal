@@ -1,4 +1,5 @@
 import { shallowRef } from "vue";
+import type { PartialWorkerStatus } from "../../common/workerStatus";
 
 // What the launch form can offer for the directory currently in its field: the sessions that can
 // be resumed there, the script.json entries that can be run there, and the worktrees the
@@ -10,18 +11,12 @@ import { shallowRef } from "vue";
 // - a read that fails clears the list, instead of leaving the previous directory's rows standing
 //   under a name they don't belong to.
 
-export interface ResumableSession {
+/** A row the launcher can resume into a cell. `hidden` / `failed` come from the shared wire type
+ *  the server fills — see common/workerStatus.ts for why they are OPTIONAL on this side. */
+export interface ResumableSession extends PartialWorkerStatus {
   id: string;
   title: string;
   mtime: number;
-  /** A background worker (spawnBackgroundChat hidden:true, a scheduled refresh) rather than a
-   *  chat someone opened. Already carried on every row the server sends; surfaced here because
-   *  the grid is where such a session is picked up, and an unlabelled one is indistinguishable
-   *  from the user's own work. */
-  hidden?: boolean;
-  /** That worker ended without ever completing a turn. A worker is quiet by design, so this is
-   *  the one outcome the quiet is wrong for. */
-  failed?: boolean;
 }
 
 export interface RunnableScript {
