@@ -102,31 +102,11 @@ spec pins the two together). It is in `common/` because the UI names skills too:
 section a skill can write ends in a `SkillLaunchButton`, whose `skill` prop is a `BundledSkillName`,
 so a slug naming nothing that ships is a type error rather than an agent that can't find it.
 
-### `data/skills/` staging is a different mechanism, and this host does not install it
-
-`BUNDLED_SKILL_NAMES` is about what MulmoTerminal *ships*. Separately, core's `skill-bridge`
-mirrors a workspace's `data/skills/<slug>/` staging into the `.claude/skills/<slug>/` the CLI
-actually discovers — that is how an agent authors a skill and has it go live. **This repo never
-imports `@mulmoclaude/core/skill-bridge`, and never provisions it.** MulmoClaude does, at server
-startup: a bundled dispatcher at `<workspace>/.claude/hooks/mulmoclaude-dispatcher.mjs` plus one
-`PostToolUse` entry in `<workspace>/.claude/settings.json`.
-
-That does **not** mean the bridge is off under MulmoTerminal, and this is the part worth knowing
-before you "fix" a missing mirror here. **Claude Code merges hooks from `--settings` and the
-project's `.claude/settings.json` — both fire** (verified by running `claude -p` with a hook in
-each; both markers appeared). Ours go through `--settings` (`server/session/hook-settings.ts`) —
-inline JSON, or a 0600 file when the payload carries a provider token and always a file on Windows
-(`session-settings.ts`) — which layers on top rather than replacing. Whichever transport, the
-project file is still read. The dispatcher's mirroring is plain `fs`, and its
-follow-up POST to MulmoClaude goes through a `safePost` that swallows a refused connection. So in
-a workspace MulmoClaude has ever started against, **an agent MulmoTerminal spawned still gets its
-skills mirrored, with MulmoClaude not running.**
-
-The real gap is narrow: a workspace MulmoClaude has never started against has no dispatcher, so
-`data/skills/` is staged and never mirrored. Before reimplementing anything, check BOTH halves —
-`<workspace>/.claude/hooks/mulmoclaude-dispatcher.mjs` and the `PostToolUse` entry naming it in
-`<workspace>/.claude/settings.json`. Either alone does nothing (a settings entry survives a
-deleted script), and that pair, not this host's code, is what decides.
+Core's `skill-bridge` — a workspace's `data/skills/` staged into the `.claude/skills/` the CLI
+discovers — is a separate mechanism we never import. MulmoClaude provisions it into
+`<workspace>/.claude/settings.json`, and Claude Code MERGES those hooks with our `--settings`, so
+it already fires for our sessions in any workspace MulmoClaude has started against. Don't
+reimplement it here; check that workspace first (#1191).
 
 `mulmoterminal-config` is the **entry point**: it routes to the skill that owns an area, and it
 reports on how things are configured now. The writing skills are `mulmoterminal-dirs` (per-project
