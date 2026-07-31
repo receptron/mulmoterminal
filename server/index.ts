@@ -42,6 +42,7 @@ import { startRateLimitProbe } from "./agents/rate-limit-probe.js";
 import { hasBinary } from "./infra/has-binary.js";
 import { newProbeSessionId } from "./agents/probe-session.js";
 import { removeProbeTranscript, sweepLegacyProbeTranscriptsOnce } from "./agents/probe-transcript.js";
+import { removeLegacySandboxDir } from "./infra/fs-cleanup.js";
 import { newestRolloutFile, codexSessionsDir, readRolloutTail } from "./agents/codex-rollout.js";
 import { latestRateLimitsInRollout } from "./agents/codex-rate-limits.js";
 import { rateLimitCacheFile, readRateLimitCache, createRateLimitCacheWriter } from "./agents/rate-limit-persist.js";
@@ -427,6 +428,10 @@ const startClaudeRateLimitProbe = (): void => {
 // window in which that matters is closed rather than reopened on every boot (Codex review on
 // #1030). It also means a 500MB transcript directory is read once, not once per `yarn dev` save.
 void sweepLegacyProbeTranscriptsOnce(CLAUDE_CWD, MULMOTERMINAL_HOME).catch(() => {});
+// The removed Docker sandbox exported a Keychain credential per session into
+// ~/.mulmoterminal/sandbox, and its only deleter went with the feature. Anyone whose server was
+// killed or upgraded mid-session still has a live one on disk (Codex, PR #1195).
+removeLegacySandboxDir(MULMOTERMINAL_HOME);
 
 // Codex costs nothing to read, so it is current before the first browser arrives.
 refreshCodexRateLimits();

@@ -12,11 +12,14 @@ This file records **what changed and why**. For **how to actually use** a new fe
 `SANDBOX_MOUNT_CONFIGS`, `SANDBOX_SSH_AGENT_FORWARD` — no longer do anything, and
 `Dockerfile.sandbox` is gone. **Setting them is now silently ignored rather than an error**, so an
 existing `.env` keeps working; the session simply runs on the host, which is what it already did
-whenever Docker was unavailable.
+whenever Docker was unavailable. A leftover `~/.mulmoterminal/sandbox` directory is removed at
+startup: it held an exported Keychain credential per session, and the only thing that deleted those
+went with the feature.
 
-It was opt-in, macOS-only, and single-view-only — and the single view is being removed. Keeping it
-would have meant porting it to the grid, which is the opposite of the point: the sandbox existed to
-contain ONE interactive session, and the grid runs many.
+It was opt-in, macOS-only, and only ever wrapped the single-view session — which a later change
+removes. Keeping the sandbox would have meant porting it to the grid, which is the opposite of the
+point: it existed to contain ONE interactive session, and the grid runs many. (This release does
+not remove the single view itself; that is separate work.)
 
 Nothing else changes. With the flag unset — the default, and how it shipped — every session already
 took the host path this now takes unconditionally.
