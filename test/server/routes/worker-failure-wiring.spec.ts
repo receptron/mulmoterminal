@@ -37,8 +37,8 @@ mountPluginRoutes(app, {
 });
 
 /** Spawn through the real route and hand back the id it minted. */
-async function spawn(hidden: boolean): Promise<string> {
-  const res = await request(app).post("/api/plugin/spawnBackgroundChat").send({ message: "do the thing", hidden });
+async function spawn(hidden: boolean, agent = "claude"): Promise<string> {
+  const res = await request(app).post("/api/plugin/spawnBackgroundChat").send({ message: "do the thing", hidden, agent });
   return String((res.body as { jsonData?: { chatId?: string } }).jsonData?.chatId);
 }
 
@@ -73,6 +73,16 @@ describe("a hidden worker that ends badly", () => {
     await runCompletionHook(id, { didError: false });
     await runCompletionHook(id, { didError: true }); // reap, moments later
 
+    expect(isFailedWorker(id)).toBe(false);
+  });
+
+  // Codex, on this PR. The only success signal a PTY-hosted agent gives us is Claude Code's Stop
+  // hook; codex and antigravity have no hook mechanism, so they can never report success — and a
+  // recorder registered for them would mark every SUCCESSFUL run failed at teardown. A signal
+  // that is wrong more often than right is worse than the silence it replaced.
+  it.each(["codex", "antigravity"])("says nothing for a hidden %s worker, which cannot report success", async (agent) => {
+    const id = await spawn(true, agent);
+    await runCompletionHook(id, { didError: true });
     expect(isFailedWorker(id)).toBe(false);
   });
 

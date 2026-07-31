@@ -76,13 +76,24 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
         // leave a hook nothing will ever fire or clear. Safe against the feeds engine's own hook
         // (last writer wins) because that dispatches through its own spawner, never this route.
         //
+        // CLAUDE ONLY, and that is a correctness limit rather than a scope choice. The single
+        // success signal a PTY-hosted agent gives us is a finished turn reported by Claude Code's
+        // Stop hook (hook-routes.ts); codex and antigravity have no hook mechanism at all, so
+        // they can never report success. Registering for them would mean every SUCCESSFUL hidden
+        // codex worker reached reap unreported and was marked failed — a signal that is wrong
+        // more often than it is right, which is worse than the silence it replaced.
+        // (Codex, PR #1188.) A non-claude hidden worker therefore keeps today's behaviour: no
+        // failure signal. Giving it one needs a completion signal for those agents first.
+        //
         // RECORDS ONLY, and synchronously. Announcing is reap's job: it publishes one teardown
         // message carrying this outcome, which is what keeps the generic notification from
         // racing ahead of the specific one. Staying synchronous is therefore a contract, not an
         // implementation detail — reap reads the flag immediately after firing this.
-        registerCompletionHook(sessionId, ({ didError }) => {
-          if (didError) markFailedWorker(sessionId);
-        });
+        if (agent === "claude") {
+          registerCompletionHook(sessionId, ({ didError }) => {
+            if (didError) markFailedWorker(sessionId);
+          });
+        }
       }
     } catch (err) {
       console.error(`[spawnBackgroundChat] failed for ${sessionId}: ${messageOf(err)}`);

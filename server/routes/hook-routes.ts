@@ -49,7 +49,10 @@ function handleActivityHook(deps: HookDeps, sessionId: string, event: string, ac
   // a process exit — `claude` sits at its prompt afterwards — so a worker that never reaches
   // Stop (blocked on a permission dialog nobody can answer, or dead before its first turn) is
   // exactly the failed refresh, and reap reports it as such. No-op unless a hook is registered,
-  // which only a hidden feeds worker ever does.
+  // which a hidden feeds worker does — and, since #1188, a hidden CLAUDE spawnBackgroundChat.
+  // Only claude: this endpoint is Claude Code's hook mechanism, so it is the only agent that can
+  // ever reach here to report success, and a hook registered for another one could only ever
+  // report failure.
   if (event === "Stop") void runCompletionHook(sessionId, { didError: false }).catch((err) => console.error(`[completion-hook] ${messageOf(err)}`));
 }
 
