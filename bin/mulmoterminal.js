@@ -87,7 +87,6 @@ const PATH_TOOLS = [
   { cmd: "gh", versionArg: "--version", required: true, why: "PRs & Issues view + one-click PRs", hint: "https://cli.github.com  (then: gh auth login)" },
   { cmd: "tmux", versionArg: "-V", required: false, why: "sessions survive a restart", hint: "brew install tmux  ·  apt install tmux" },
   { cmd: "codex", versionArg: "--version", required: false, why: "run OpenAI Codex as an agent", hint: "npm install -g @openai/codex" },
-  { cmd: "docker", versionArg: "--version", required: false, why: "the experimental Docker sandbox", hint: "https://docs.docker.com/get-started/get-docker/" },
   {
     cmd: "ffmpeg",
     versionArg: "-version",

@@ -32,9 +32,6 @@ export interface PtyEntry {
   // (see tmuxRedrawClient). Cleared by the first resize frame after the reattach — waiting for it
   // is the point, since that frame is where the client tells us the size it actually settled at.
   redrawPending?: boolean;
-  // True when `term` is a `docker run` client (single-view sandbox): reap force-removes
-  // the container, since killing the client alone can leave it running.
-  sandbox?: boolean;
   // What is running in this PTY. Recorded at spawn because nothing else can recover it
   // later, and the phone needs it to offer input that suits the session (mulmoserver#84).
   agent: SessionAgent;

@@ -107,7 +107,7 @@ browser console, and a screenshot if the symptom is visual.
 ## Environment
 - mulmoterminal / Node / OS / browser
 - tmux / gh / claude / codex
-- how it was started (npx, local dev, sandbox)
+- how it was started (npx, local dev)
 ## Attachments
 ```
 

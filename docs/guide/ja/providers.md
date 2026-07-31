@@ -324,7 +324,6 @@ yarn tsx scripts/model-trials.ts --provider openrouter --trials 3 qwen/qwen3-cod
 | ツールを使わず、文章だけ返ってくる | そのモデルの限界。上の一覧か `model-trials.ts` で確認を |
 | モデル選択欄が出ない | `providers` が未登録（[2 章](#2-接続先を登録する必須)）か、鍵が無い。フォームの「Use another model…」から不足箇所を確認できます |
 | ヘッダーにモデル名が出ない | 設定の `chips` に `ctx` が入っていない |
-| Docker サンドボックスで起動できない | **併用できません**。コンテナは環境変数を引き継がず、そのままだと選んだはずのプロバイダではなく Anthropic に接続してしまうため、明示的に拒否しています |
 
 ---
 

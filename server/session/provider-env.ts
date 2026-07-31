@@ -84,16 +84,7 @@ const providerEnv = (provider: ProviderConfig, model: string, token: string): Re
 });
 
 // What a session in this directory should run, or why it must not start.
-//
-// `sandbox` refuses the combination outright: the container inherits no environment and
-// cannot reach a loopback gateway, so a sandboxed provider session would silently run
-// against Anthropic instead of where the directory asked for.
-export function resolveProvider(
-  choice: DirModelChoice,
-  providers: readonly ProviderConfig[],
-  env: NodeJS.ProcessEnv,
-  sandbox: boolean = false,
-): ProviderResult {
+export function resolveProvider(choice: DirModelChoice, providers: readonly ProviderConfig[], env: NodeJS.ProcessEnv): ProviderResult {
   // The model becomes `claude --model <value>` in argv. Checked HERE rather than at each
   // entry point because this is the single gate every one of them passes through — the ws
   // query, a directory's .mulmoterminal.json, and whatever comes next (#590).
@@ -114,7 +105,6 @@ export function resolveProvider(
   // JSON.stringify, not quotes: this string comes from a file in whatever repository was
   // opened, and reaches a log line and the session's terminal.
   if (!provider) return { ok: false, reason: `unknown provider ${JSON.stringify(choice.provider)} — add it to config.json under "providers"` };
-  if (sandbox) return { ok: false, reason: `provider '${provider.id}' cannot run in the Docker sandbox yet` };
   const usable = usableProvider(provider, env);
   if (!usable.ok) return usable;
   if (!choice.model) return { ok: false, reason: `provider '${provider.id}' needs a model — set "model" in .mulmoterminal.json` };

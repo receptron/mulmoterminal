@@ -16,7 +16,7 @@ export interface SpawnDeps {
   /** Bytes of pty output kept for a client that reattaches later. */
   outputBufferLimit: number;
   hookSettingsJson: (host: string, sessionId: string, env?: Record<string, string>) => string;
-  mcpConfigJson: (sessionId: string, host?: string, sandbox?: boolean) => string;
+  mcpConfigJson: (sessionId: string, host?: string) => string;
   reap: (id: string) => void;
   setWorking: (id: string, working: boolean, event?: string) => void;
   /** Needed alongside setWorking because a finished codex turn flags the cell for attention,

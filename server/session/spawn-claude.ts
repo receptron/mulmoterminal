@@ -1,17 +1,16 @@
 // Starting a claude session in a PTY and wiring it to the browser. The most entangled
-// piece of index.ts (#548 step 3c): it spans the sandbox decision, the CLI args, the
+// piece of index.ts (#548 step 3c): it spans the CLI args, the
 // sidebar's optimistic row, the draft typed into the input box, and teardown on exit.
 import type { WebSocket } from "ws";
 import { CLAUDE_CWD, PORT, isWorkspaceCwd } from "../config/env.js";
 import { guiMcpEnv } from "./mcp-config.js";
 import { getUserMcpServers, getPrWorkdirFooter, getAppendSystemPrompt, getTerminalSubmit } from "../config/config-routes.js";
 import { submitSequenceForAgent } from "../../common/terminalSubmit.js";
-import { SANDBOX_HOST } from "../infra/sandbox.js";
 import { buildClaudeArgs } from "../agents/claude-args.js";
 import { claudeAdapter } from "../agents/claude.js";
 import { appendedSystemPrompt } from "../agents/appended-prompt.js";
 import { hookedSessions, knownSessions, launchChoices, ptys, resetSessionToolGroups } from "./registry.js";
-import { ptySpawn, ptyWouldReattach, sandboxWouldRun, spawnSandboxEntry } from "./pty-spawn.js";
+import { ptySpawn, ptyWouldReattach } from "./pty-spawn.js";
 import { ptyExitLine, ptyStartLine } from "./pty-exit-log.js";
 import { attachDraftInjection } from "./draft-injection.js";
 import { sendExitAndClose, sendFrame } from "./ws-frames.js";
@@ -77,7 +76,7 @@ function newSessionTitle(seed: string | undefined): string {
 //
 // Its own function because the spawn body is at its line budget and this is one decision made
 // from three sources, not part of spawning.
-function resolveSessionBackend(input: { cwd: string; sessionId: string; launch?: DirModelChoice | undefined; canResume: boolean; sandbox: boolean }) {
+function resolveSessionBackend(input: { cwd: string; sessionId: string; launch?: DirModelChoice | undefined; canResume: boolean }) {
   const dir = loadDirConfig(input.cwd);
   const choice = effectiveChoice({
     launch: input.launch,
@@ -85,7 +84,7 @@ function resolveSessionBackend(input: { cwd: string; sessionId: string; launch?:
     dir: { provider: dir.provider, model: dir.model },
     resuming: input.canResume,
   });
-  const resolved = requireResolution(resolveProvider(choice, getProviders(), process.env, input.sandbox));
+  const resolved = requireResolution(resolveProvider(choice, getProviders(), process.env));
   // Remembered so a later resume continues on the backend this session began on, instead of
   // silently moving to the directory's default mid-conversation.
   if (input.launch) launchChoices.set(input.sessionId, choice);
@@ -134,18 +133,14 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // Only --resume when the session has an on-disk transcript — claude doesn't write
     // a session's .jsonl until its first prompt, so a started-but-unused session can't
     // be resumed; we restart fresh (reusing the id via --session-id) instead.
-    // Sandbox only the SINGLE-VIEW interactive session: attachGuiMcp=true excludes grid
-    // dev terminals (?gui=0), and ws!==null excludes hidden background/translation workers.
-    // Falls back to the host spawn if the Docker daemon isn't reachable.
-    const sandbox = sandboxWouldRun(attachGuiMcp) && ws !== null;
     const canResume = resume !== null && sessionExistsOnDisk(resume, cwd);
 
-    const { dir, resolved } = resolveSessionBackend({ cwd, sessionId, launch, canResume, sandbox });
+    const { dir, resolved } = resolveSessionBackend({ cwd, sessionId, launch, canResume });
 
     const addDirs = sessionAddDirs(sessionId, dir.addDirs);
 
-    const hookSettings = deps.hookSettingsJson(sandbox ? SANDBOX_HOST : "localhost", sessionId, resolved.env);
-    const mcpJson = deps.mcpConfigJson(sessionId, sandbox ? SANDBOX_HOST : "127.0.0.1", sandbox);
+    const hookSettings = deps.hookSettingsJson("localhost", sessionId, resolved.env);
+    const mcpJson = deps.mcpConfigJson(sessionId, "127.0.0.1");
     // File-ized only when it is actually passed (fullGuiMcp), so a cell that never carries
     // the GUI MCP leaves no file behind for reap to clean up.
     const mcpConfig = fullGuiMcp ? mcpConfigArgument(sessionId, mcpJson) : mcpJson;
@@ -154,8 +149,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       sessionId,
       resume,
       canResume,
-      // In the sandbox the hooks + GUI MCP are reached over host.docker.internal. A
-      // provider session's settings carry its token, so they go to a 0600 file instead of
+      // A provider session's settings carry its token, so they go to a 0600 file instead of
       // argv — see session-settings.ts.
       settings: settingsArgument(sessionId, hookSettings, Object.keys(resolved.env).length > 0),
       permissionMode: deps.permissionMode,
@@ -200,12 +194,11 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // survives it is an over-reported group on a session that lost it — the next genuinely new
     // process clears that, whereas the reverse mistake could not be undone at all.
     function resetToolGroupsUnlessReattaching(): void {
-      if (sandbox || !ptyWouldReattach(sessionId, true)) resetSessionToolGroups(sessionId);
+      if (!ptyWouldReattach(sessionId, true)) resetSessionToolGroups(sessionId);
     }
 
     function spawnEntry(): PtyEntry {
       resetToolGroupsUnlessReattaching();
-      if (sandbox) return spawnSandboxEntry(sessionId, args, cwd, ws, addDirs);
       const spawnEnv = { unset: resolved.unset, env: guiMcpEnv(sessionId, PORT), binEnvVar: claudeAdapter.binEnvVar };
       const { term, tmux, reattached } = ptySpawn(sessionId, deps.claudeBin, args, cwd, true, spawnEnv);
       console.log(ptyStartLine({ agent: "claude", pid: term.pid, cwd, tmux, reattached, sessionId, note: canResume ? `resume ${resume}` : null }));

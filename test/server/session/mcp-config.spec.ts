@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 
 import { mcpConfigJson, guiMcpEnv, codexGuiMcpServers } from "../../../server/session/mcp-config.js";
-import { SANDBOX_HOST } from "../../../server/infra/sandbox.js";
 import { guiMcpUrlTemplate } from "../../../server/infra/gui-mcp-registration.js";
 import { TOOL_GROUPS, toolsInGroup, toolGroupServerId, AUTO_ALLOWED_TOOLS, type ToolGroup } from "../../../common/toolGroups.js";
 
@@ -21,8 +20,8 @@ describe("mcpConfigJson", () => {
     expect(config()[GUI].url).toContain("http://127.0.0.1:");
   });
 
-  it("uses the host it is given, which is how a container reaches the host machine", () => {
-    expect(config({ host: SANDBOX_HOST })[GUI].url).toBe(`http://${SANDBOX_HOST}:34567/api/mcp/${SESSION}`);
+  it("uses the host it is given", () => {
+    expect(config({ host: "gateway.example" })[GUI].url).toBe(`http://gateway.example:34567/api/mcp/${SESSION}`);
   });
 
   it("takes the port as given, whether a number or a string", () => {
@@ -56,35 +55,6 @@ describe("mcpConfigJson", () => {
       expect(Object.keys(servers)).toEqual([GUI]);
     });
   });
-
-  describe("in the sandbox", () => {
-    it("rewrites a user server's loopback host so the container can reach it", () => {
-      const servers = config({ sandbox: true, userMcpServers: [{ id: "local-tool", url: "http://localhost:7000/mcp" }] });
-      expect(servers["local-tool"].url).toBe(`http://${SANDBOX_HOST}:7000/mcp`);
-    });
-
-    it("rewrites the numeric loopback too", () => {
-      const servers = config({ sandbox: true, userMcpServers: [{ id: "local-tool", url: "http://127.0.0.1:7000/mcp" }] });
-      expect(servers["local-tool"].url).toBe(`http://${SANDBOX_HOST}:7000/mcp`);
-    });
-
-    it("leaves a remote user server alone", () => {
-      const servers = config({ sandbox: true, userMcpServers: [{ id: "notes", url: "https://notes.example.com/mcp" }] });
-      expect(servers.notes.url).toBe("https://notes.example.com/mcp");
-    });
-
-    // The GUI entry is built from the host parameter, never rewritten — the caller is the one
-    // that knows to pass the gateway host for a sandboxed spawn.
-    it("does not rewrite the GUI entry, which is built from the host it was given", () => {
-      expect(config({ sandbox: true })[GUI].url).toBe(`http://127.0.0.1:34567/api/mcp/${SESSION}`);
-    });
-
-    it("leaves user servers alone when not sandboxed", () => {
-      const servers = config({ sandbox: false, userMcpServers: [{ id: "local-tool", url: "http://localhost:7000/mcp" }] });
-      expect(servers["local-tool"].url).toBe("http://localhost:7000/mcp");
-    });
-  });
-
   it("produces parseable JSON", () => {
     expect(() => JSON.parse(mcpConfigJson({ sessionId: SESSION, port: 34567, userMcpServers: [] }))).not.toThrow();
   });

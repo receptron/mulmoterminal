@@ -161,7 +161,6 @@ MulmoTerminal は普段の開発ツールを操縦するコックピットなの
 | 任意 | `codex` | セルで [Codex セッション](basics.html#claude-and-codex)を Claude と並べて動かす | `npm i -g @openai/codex` |
 | 任意 | `ffmpeg` | [GUI パネル](features.html)の mulmo-script プラグインからの動画生成 | `brew install ffmpeg` · `sudo apt install ffmpeg` |
 | 任意 | `ollama` | [claude-ollama](claude-ollama.html) — 完全ローカルのモデルで Claude Code を動かす | [ollama.com/download](https://ollama.com/download) |
-| 任意 | `docker` | 実験的な Docker サンドボックス（単一ビュー・[OpenRouter](providers.html) とは併用不可） | [docs.docker.com](https://docs.docker.com/get-started/get-docker/) |
 
 必須以外が無くてもサーバは起動します（その行の機能が使えないだけ）。今のマシンに何が
 足りないかは **`npx mulmoterminal@latest init`** で確認できます。上の全コマンドをチェックしたうえで、

@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import path from "node:path";
 import { resolveAddDirs, MAX_ADD_DIRS } from "../../../server/config/config-schema";
 import { buildClaudeArgs } from "../../../server/agents/claude-args";
-import { buildDockerRunArgs } from "../../../server/infra/sandbox";
 
 // Built through `path.resolve`, never written as "/repo": the rule resolves with the platform's
 // own path module, so on Windows a literal POSIX string never matches what it produces
@@ -118,69 +117,16 @@ describe("buildClaudeArgs with addDirs", () => {
   });
 });
 
-describe("buildDockerRunArgs with addDirs", () => {
-  const run = (addDirs: string[] | null) => buildDockerRunArgs("s1", ["--session-id", "s1"], "/work", "/cfg/claude.json", null, addDirs);
-  const mounts = (args: string[]) => args.filter((_value, i) => args[i - 1] === "-v");
-
-  // Without the mount the flag names a path the container does not have: the agent sees
-  // nothing and nothing errors — the worst way for this to break.
-  it("bind-mounts each extra directory at its same absolute path", () => {
-    expect(mounts(run(["/shared-lib"]))).toContain("/shared-lib:/shared-lib");
-  });
-
-  it("still mounts the workspace", () => {
-    expect(mounts(run(["/shared-lib"]))).toContain("/work:/work");
-  });
-
-  it("adds no extra mount when there are none", () => {
-    const withNone = mounts(run(null));
-    expect(withNone.filter((m) => m.startsWith("/shared-lib"))).toEqual([]);
-    expect(withNone).toContain("/work:/work");
-  });
-
-  it("keeps the mount next to the workspace's, before the rest of the run args", () => {
-    const args = run(["/a", "/b"]);
-    expect(args.indexOf("/a:/a")).toBeGreaterThan(args.indexOf("/work:/work"));
-    expect(args.indexOf("/b:/b")).toBeGreaterThan(args.indexOf("/a:/a"));
-  });
-});
-
-describe("path resolution parity", () => {
-  // The CLI flag and the container mount must name the SAME string, or the agent is granted
-  // one path and the container exposes another.
-  it("hands the same absolute paths to the flag and to the mount", () => {
-    const dirs = resolveAddDirs(["../shared-lib"], BASE, exists([SIBLING]));
-    expect(dirs).not.toBeNull();
-    const args = buildClaudeArgs({
-      sessionId: "s1",
-      resume: null,
-      canResume: false,
-      settings: "/cfg/s.json",
-      permissionMode: "auto",
-      attachGuiMcp: false,
-      mcpConfig: "{}",
-      allowedTools: "",
-      appendedPrompt: null,
-      addDirs: dirs,
-    });
-    const flagged = args.slice(args.indexOf("--add-dir") + 1);
-    const mounted = buildDockerRunArgs("s1", args, "/work", "/cfg/c.json", null, dirs).filter((_value, i, all) => all[i - 1] === "-v");
-    flagged.forEach((dir) => expect(mounted).toContain(`${dir}:${dir}`));
-  });
-});
-
 // #938 rides on this same list: a pasted screenshot is saved outside the working directory,
-// and Claude Code asks permission to read outside it. The pair below is what keeps the two
-// features from taking anything away from each other.
-// A file dropped OR pasted into a session is saved outside its cwd, and the agent is granted that
-// directory through the same channel a user's own `addDirs` travels. Kept as one test because the
-// two halves fail separately: the flag without the mount reads fine and breaks only in the sandbox.
+// and Claude Code asks permission to read outside it. A file dropped OR pasted into a session is
+// saved outside its cwd, and the agent is granted that directory through the same channel a
+// user's own `addDirs` travels.
 describe("the session's drop directory shares the addDirs channel", () => {
   const DROPS = path.resolve("/drops/s1");
   // How spawn-claude composes it: the user's resolved list, then the app's own entry.
   const withDropsDir = (configured: string[]) => [...configured, DROPS];
 
-  it("reaches the flag and the mount together, alongside what the user configured", () => {
+  it("reaches the flag alongside what the user configured", () => {
     const dirs = withDropsDir(resolveAddDirs([DOCS], BASE, exists([DOCS])) ?? []);
     expect(dirs).toEqual([DOCS, DROPS]);
     const args = buildClaudeArgs({
@@ -196,9 +142,6 @@ describe("the session's drop directory shares the addDirs channel", () => {
       appendedPrompt: null,
     });
     expect(args.slice(args.indexOf("--add-dir") + 1)).toEqual([DOCS, DROPS]);
-    const mounted = buildDockerRunArgs("s1", args, "/work", "/cfg/c.json", null, dirs).filter((_value, i, all) => all[i - 1] === "-v");
-    expect(mounted).toContain(`${DROPS}:${DROPS}`);
-    expect(mounted).toContain(`${DOCS}:${DOCS}`);
   });
 
   // MAX_ADD_DIRS caps what a user may ask for; the app's own entry is added after that cap

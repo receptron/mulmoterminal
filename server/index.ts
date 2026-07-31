@@ -28,7 +28,6 @@ import {
   tmuxRedrawClient,
   tmuxWindowSize,
 } from "./infra/tmux.js";
-import { sandboxEnabled, sandboxPlatformSupported, dockerAvailable, ensureSandboxImage } from "./infra/sandbox.js";
 import { bindSecurityWarning, browserOriginHostnames, createIsAllowedOrigin } from "./infra/allowed-origin.js";
 import { serverErrorExit } from "./infra/server-exit.js";
 import { PORT, BIND_HOST, CLAUDE_CWD, MULMOTERMINAL_HOME, SESSION_ID_RE } from "./config/env.js";
@@ -301,7 +300,7 @@ const spawnDeps: SpawnDeps = {
   outputBufferLimit: OUTPUT_BUFFER_LIMIT,
   hookSettingsJson: (host, sessionId, env) => hookSettingsJson({ host, port: PORT, sessionId, env }),
   // The user's MCP servers are read per spawn, so a settings edit applies to the next session.
-  mcpConfigJson: (sessionId, host, sandbox) => mcpConfigJson({ sessionId, host, port: PORT, userMcpServers: getUserMcpServers(), sandbox }),
+  mcpConfigJson: (sessionId, host) => mcpConfigJson({ sessionId, host, port: PORT, userMcpServers: getUserMcpServers() }),
   reap: (id) => reap(id),
   setWorking: (id, working, event) => setWorking(id, working, event),
   setWaiting: (id, waiting, event) => setWaiting(id, waiting, event),
@@ -871,19 +870,7 @@ server.listen(Number(PORT), BIND_HOST, () => {
     const where = peers.map((p) => (p.port === null ? `pid ${p.pid}` : `port ${p.port}`)).join(", ");
     console.warn(`[instances] ${peers.length} other MulmoTerminal server(s) running (${where}) — they share ~/.mulmoterminal, which is not a supported setup`);
   }
-  if (sandboxEnabled()) {
-    if (!sandboxPlatformSupported()) {
-      console.log("[sandbox] MULMOTERMINAL_SANDBOX set but only supported on macOS for now — using host spawn");
-    } else if (!dockerAvailable()) {
-      console.log("[sandbox] MULMOTERMINAL_SANDBOX set but Docker daemon unreachable — using host spawn");
-    } else if (ensureSandboxImage()) {
-      console.log("[sandbox] on — single-view Claude runs in a Docker container");
-    } else {
-      console.log(
-        "[sandbox] sandbox image unavailable (build failed?) — using host spawn. Build it with: docker build -f Dockerfile.sandbox -t mulmoterminal-sandbox .",
-      );
-    }
-  }
+
   // Run the update check for the header badge (best-effort, non-blocking). Works under
   // `yarn dev` too, where the launcher — which used to be the only checker — isn't involved.
   void refreshUpdateStatus();

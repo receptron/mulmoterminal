@@ -64,13 +64,6 @@ describe("resolveProvider — refusals", () => {
     expect(result).toEqual({ ok: false, reason: expect.stringContaining("needs a model") });
   });
 
-  // The container inherits no environment and cannot reach a loopback gateway, so a
-  // sandboxed provider session would silently run against Anthropic instead.
-  it("refuses the Docker sandbox rather than silently running against Anthropic", () => {
-    const result = resolveProvider(CHOICE, PROVIDERS, WITH_TOKEN, true);
-    expect(result).toEqual({ ok: false, reason: expect.stringContaining("sandbox") });
-  });
-
   // Claude Code appends /v1/messages itself, so a baseUrl ending in /v1 404s at request
   // time — a failure that surfaces inside the session with no explanation.
   it("refuses a baseUrl that already ends in /v1", () => {
@@ -172,7 +165,7 @@ describe("requireResolution", () => {
     for (const refused of [
       resolveProvider({ provider: "typo", model: "m" }, PROVIDERS, WITH_TOKEN),
       resolveProvider({ provider: "openrouter", model: null }, PROVIDERS, WITH_TOKEN),
-      resolveProvider(CHOICE, PROVIDERS, WITH_TOKEN, true),
+      resolveProvider(CHOICE, PROVIDERS, {}), // the token missing from the environment
     ]) {
       expect(() => requireResolution(refused)).toThrow(ProviderRefusedError);
     }

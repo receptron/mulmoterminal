@@ -47,7 +47,6 @@ hard to diagnose from inside it:
 - This is a **partial `POST /api/config` merge** — write only `providers`. Send the array **complete**
   (existing entries included): it replaces rather than appends.
 - The server reads the environment **at startup**: after adding a key, it has to be restarted.
-- **Providers do not work in the Docker sandbox.** Say so rather than letting the user find out.
 
 ## Choosing a model — never invent an id
 
@@ -99,4 +98,3 @@ Work down this list; each maps to one of the rules above.
 | Session refuses to start | A `provider` id that isn't registered, or `tokenEnv` naming a variable that isn't set in the server's shell |
 | Worked yesterday, not today | The key was in a shell that's gone. The server reads the environment at startup |
 | Model answers but never edits files | Not a config problem — check the model's pass rate in `modelPresets.ts` |
-| Nothing works in the sandbox | Providers are unsupported there |

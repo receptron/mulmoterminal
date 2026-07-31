@@ -6,7 +6,6 @@
 //
 // Pure, with the port and the user's servers passed in: index.ts read both from module state,
 // so the precedence rule below could not be tested without booting the server (#548).
-import { rewriteLoopbackForDocker } from "../infra/sandbox.js";
 import type { UserMcpServer } from "../config/config-schema.js";
 import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import type { GuiMcpServer } from "../agents/codex-args.js";
@@ -19,8 +18,6 @@ export interface McpConfigInput {
   port: string | number;
   // The user's own HTTP MCP servers (Settings).
   userMcpServers: readonly UserMcpServer[];
-  // Inside a container the user's loopback URLs have to be rewritten to reach the host.
-  sandbox?: boolean | undefined;
 }
 
 const DEFAULT_HOST = "127.0.0.1";
@@ -81,12 +78,12 @@ export function codexGuiMcpServers({
   return groups.map((group) => ({ id: toolGroupServerId(group), url: `${base}/${group}/${sessionId}`, autoApprove: true }));
 }
 
-export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers, sandbox = false }: McpConfigInput): string {
+export function mcpConfigJson({ sessionId, host = DEFAULT_HOST, port, userMcpServers }: McpConfigInput): string {
   const mcpServers: Record<string, { type: string; url: string }> = {};
   // The user's servers go in FIRST so the built-in GUI entry below always wins on a clashing
   // id. sanitizeUserMcpServers already reserves that id; this is defense in depth.
   for (const server of userMcpServers) {
-    mcpServers[server.id] = { type: "http", url: sandbox ? rewriteLoopbackForDocker(server.url) : server.url };
+    mcpServers[server.id] = { type: "http", url: server.url };
   }
   mcpServers[GUI_SERVER_ID] = { type: "http", url: `http://${host}:${port}/api/mcp/${sessionId}` };
   return JSON.stringify({ mcpServers });

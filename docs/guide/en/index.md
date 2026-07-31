@@ -165,7 +165,6 @@ remaining row unlocks one feature.
 | Optional | `codex` | [Codex sessions](basics.html#claude-and-codex) in a cell, alongside Claude | `npm i -g @openai/codex` |
 | Optional | `ffmpeg` | video rendering from the [GUI panel](features.html)'s mulmo-script plugin | `brew install ffmpeg` · `sudo apt install ffmpeg` |
 | Optional | `ollama` | [claude-ollama](claude-ollama.html) — Claude Code against a fully local model | [ollama.com/download](https://ollama.com/download) |
-| Optional | `docker` | the experimental Docker sandbox (single view; can't be combined with [OpenRouter](providers.html)) | [docs.docker.com](https://docs.docker.com/get-started/get-docker/) |
 
 The server starts without the non-required ones — you only lose that row's feature. To see
 what's missing on this machine, run **`npx mulmoterminal@latest init`**: it reports every tool above,

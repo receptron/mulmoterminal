@@ -16,7 +16,6 @@ import { getHeaderConfig } from "../config/config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "../config/header-context.js";
 import { resolveButtonCommand, shellQuoteFor } from "../config/header-resolve.js";
 import { resolveScript } from "../files/scripts.js";
-import { refreshHostKeychainIfExpired, writeSandboxCredentials } from "../infra/sandbox.js";
 import { tmuxHasSession } from "../infra/tmux.js";
 import { launchChoiceFromParams } from "../session/launch-choice.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
@@ -30,7 +29,7 @@ import {
   markAttachedSessionPlaced,
   ptys,
 } from "../session/registry.js";
-import { sandboxWouldRun, SpawnRefusedError } from "../session/pty-spawn.js";
+import { SpawnRefusedError } from "../session/pty-spawn.js";
 import { bufferEarlyFrames, type EarlyFrames } from "../session/early-frames.js";
 import { launcherCommandWithGuiMcp } from "../session/launcher-gui-mcp.js";
 import { codexGuiMcpServers } from "../session/mcp-config.js";
@@ -343,17 +342,6 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
   // was the one route that let it fall on the floor (#1178, see early-frames.ts).
   const early = announceSession(ws, sessionId, reportedCwd);
 
-  // Before touching the Keychain for a sandbox session, refresh it if the token expired
-  // (macOS refreshes into the Keychain, not the file — so an untouched export can be a
-  // stale token the container 401s on). No-op unless a sandbox spawn/reattach applies.
-  if (live?.sandbox || sandboxWouldRun(attachGuiMcp)) {
-    await refreshHostKeychainIfExpired(deps.claudeBin);
-    // Renewal can block for seconds (it drives the host CLI). If the client vanished
-    // during that window the close handlers aren't wired yet, so spawning now would
-    // leak a PTY nobody reaps — bail instead.
-    if (!clientStillConnected(ws, "claude", sessionId, early)) return;
-  }
-
   // A provider refusal already says exactly what is wrong with the directory's config (#579), and a
   // refused spawn already names the binary and the PATH it searched, or the directory that is gone
   // (#1063, #1078); a generic hint would bury either.
@@ -361,10 +349,6 @@ async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
     err instanceof ProviderRefusedError || err instanceof SpawnRefusedError ? err.message : `Failed to start Claude: ${messageOf(err)}`;
 
   startAndWire(deps, ws, { id: sessionId, tag: "claude", early, startFailureMessage, size }, () => {
-    // A sandbox session's credential is snapshotted at spawn onto its mounted per-session
-    // file. On reconnect, re-sync it from the (now-refreshed) Keychain so a token that
-    // rotated since spawn doesn't leave the reattached session stuck at "Not logged in".
-    if (live?.sandbox) writeSandboxCredentials(sessionId);
     const entry = live ? deps.reattachPty(live, ws, sessionId) : deps.spawnClaudePty(sessionId, resume, ws, { cwd, attachGuiMcp, launch });
     // Single view (gui) = the attached session IS the actively-viewed pane, so mark it
     // read. A grid dev-terminal cell (gui=0) is only "viewed" once focused/zoomed (the

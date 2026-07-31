@@ -4,6 +4,23 @@ Release notes for MulmoTerminal, mirrored from the [GitHub Releases](https://git
 
 This file records **what changed and why**. For **how to actually use** a new feature, a release may also ship a dated setup guide — linked at the top of its entry, and written as a snapshot of that moment. The living reference is always the [guide](https://receptron.github.io/mulmoterminal/).
 
+## Unreleased
+
+### The Docker sandbox is removed (#1194)
+
+`MULMOTERMINAL_SANDBOX` and its three companion variables — `MULMOTERMINAL_SANDBOX_IMAGE`,
+`SANDBOX_MOUNT_CONFIGS`, `SANDBOX_SSH_AGENT_FORWARD` — no longer do anything, and
+`Dockerfile.sandbox` is gone. **Setting them is now silently ignored rather than an error**, so an
+existing `.env` keeps working; the session simply runs on the host, which is what it already did
+whenever Docker was unavailable.
+
+It was opt-in, macOS-only, and single-view-only — and the single view is being removed. Keeping it
+would have meant porting it to the grid, which is the opposite of the point: the sandbox existed to
+contain ONE interactive session, and the grid runs many.
+
+Nothing else changes. With the flag unset — the default, and how it shipped — every session already
+took the host path this now takes unconditionally.
+
 ## mulmoterminal@3.0.0 — 2026-07-31
 
 > **Setup guide:** [Start from the issue](https://receptron.github.io/mulmoterminal/guide/en/v3.0.0.html) — written at release time. ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v3.0.0.html))

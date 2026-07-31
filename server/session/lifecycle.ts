@@ -41,7 +41,6 @@ import { cleanupSessionSettings } from "./session-settings.js";
 import { cleanupSessionDrops } from "./session-drops.js";
 import { runCompletionHook } from "./completion-hooks.js";
 import { messageOf } from "../errors.js";
-import { cleanupSandbox } from "../infra/sandbox.js";
 import { tmuxKillSession } from "../infra/tmux.js";
 
 // The channel every session row is published on.
@@ -169,9 +168,6 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // explicit close / idle reap actually stops the program (no orphan within a live
   // server). A server crash never runs this, so sessions survive that (the point).
   if (entry.tmux) tmuxKillSession(id);
-  // A sandbox container likewise outlives its killed `docker run` client — force-remove
-  // it (and drop the throwaway per-session config).
-  if (entry.sandbox) cleanupSandbox(id);
   // A provider session's settings file holds its token — drop it with the session (#579).
   cleanupSessionSettings(id);
   // Files dropped into this session were copied to tmp for it alone; nothing else refers to them.

@@ -16,7 +16,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const ID = "11111111-2222-4333-8444-555555555555";
 
 let reattaching = false;
-let sandboxRuns = false;
 const resetSessionToolGroups = vi.fn();
 
 // Hooks so the ORDER of probe / reset / spawn can be asserted, not just their arguments.
@@ -32,8 +31,6 @@ vi.mock("../../../server/session/pty-spawn.js", () => ({
     probed();
     return reattaching;
   },
-  sandboxWouldRun: () => sandboxRuns,
-  spawnSandboxEntry: () => ({ term: fakeTerm(), ws: null, buffer: "", cwd: "/tmp", sandbox: true, active: false, agent: "claude" }),
 }));
 
 vi.mock("../../../server/session/registry.js", () => ({
@@ -72,18 +69,13 @@ const deps = {
   publishSessionCreated: vi.fn(),
 };
 
-// The sandbox only runs for a session with a viewer attached (`ws !== null`), so the socket is
-// part of what the third case is testing rather than incidental.
-const fakeWs = { readyState: 1, send: vi.fn(), close: vi.fn(), on: vi.fn() } as unknown as Parameters<
-  ReturnType<typeof createClaudeSpawner>["spawnClaudePty"]
->[2];
-
-const spawn = (options: Record<string, unknown>, ws: typeof fakeWs = null) => createClaudeSpawner(deps).spawnClaudePty(ID, null, ws, options);
+// `ws` is null throughout: every case here spawns headless, and the socket was only ever passed
+// to reach the sandbox branch, which is gone.
+const spawn = (options: Record<string, unknown>) => createClaudeSpawner(deps).spawnClaudePty(ID, null, null, options);
 
 beforeEach(() => {
   resetSessionToolGroups.mockReset();
   reattaching = false;
-  sandboxRuns = false;
   probed = () => {};
   spawned = () => {};
 });
@@ -100,15 +92,6 @@ describe("spawnClaudePty and the tool-group reset", () => {
     reattaching = true;
     spawn({ cwd: process.cwd(), attachGuiMcp: false });
     expect(resetSessionToolGroups).not.toHaveBeenCalled();
-  });
-
-  // A sandbox spawn starts a fresh container every time — a leftover tmux session for the id
-  // says nothing about it.
-  it("resets a sandbox spawn even when tmux has the id", () => {
-    reattaching = true;
-    sandboxRuns = true;
-    spawn({ cwd: process.cwd(), attachGuiMcp: true }, fakeWs);
-    expect(resetSessionToolGroups).toHaveBeenCalledWith(ID);
   });
 
   // The probe's answer expires the moment the tmux session ends, so it is taken one statement

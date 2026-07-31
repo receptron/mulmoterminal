@@ -331,7 +331,6 @@ If you are unsure where to start, try **Kimi K2.7 Code** (fast, coding-oriented)
 | Talks but never uses tools | the model's own limitation — check the table or `model-trials.ts` |
 | No MODEL select in the launch form | no provider is registered (step 2) or its key is missing; "Use another model…" in the form names what's missing |
 | No model in the header | `ctx` is not in your `chips` |
-| Can't start under the Docker sandbox | **not supported together.** The container inherits no environment, so the session would run against Anthropic instead of the backend you picked — it is refused rather than downgraded |
 
 ---
 

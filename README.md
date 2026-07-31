@@ -102,8 +102,7 @@ A drag inserts the file's **own** path where the browser exposes one via `file:/
 withholds it — **Chrome**, and every browser when MulmoTerminal is open **from another
 machine**, where a local path would name nothing on the host — the file's bytes are sent
 instead, saved to a private per-session directory under the OS temp dir, and *that* path is
-inserted. The session is granted that directory at launch (Claude Code's `--add-dir`, bind-mounted
-in the sandbox too), so the agent reads it without a permission prompt; the copies are removed
+inserted. The session is granted that directory at launch (Claude Code's `--add-dir`), so the agent reads it without a permission prompt; the copies are removed
 when the session ends, and any left by a crash are swept at the next start. Up to 110 MiB per
 file — the same ceiling as a phone attachment. **A session already running when you upgrade
 was launched without that grant**, so drops into it still prompt; new sessions don't.
@@ -212,7 +211,6 @@ Needs **Node ≥ 22.9**, plus these CLIs on your `PATH`:
 | **Required** | `gh` | the cross-repo **PRs & Issues** view and one-click PR creation — it uses your `gh` login, so no token is stored | [cli.github.com](https://cli.github.com), then `gh auth login` |
 | Recommended | `tmux` | [session persistence](#session-persistence-tmux) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · `sudo dnf install tmux` · no native Windows build (falls back to plain PTYs) |
 | Optional | `codex` | [Codex sessions](#agents-claude--codex) in a cell, alongside Claude | `npm i -g @openai/codex` |
-| Optional | `docker` | the experimental [Docker sandbox](#docker-sandbox-experimental-single-view) | [docs.docker.com](https://docs.docker.com/get-started/get-docker/) |
 | Optional | `ffmpeg` | video rendering from the [mulmo-script panel](#wiki-collections--the-gui-panel) (its plugin ships enabled) | `brew install ffmpeg` · `sudo apt install ffmpeg` · `sudo dnf install ffmpeg` |
 | Optional | `ollama` | [`claude-ollama`](https://receptron.github.io/mulmoterminal/guide/en/claude-ollama.html) — Claude Code against a fully local model | [ollama.com/download](https://ollama.com/download) |
 
@@ -294,7 +292,6 @@ The launcher detects it and prints the exact, OS-appropriate removal command; ru
 - [Why a PTY?](#why-a-pty)
 - [Agents: Claude & Codex](#agents-claude--codex)
 - [Session persistence (tmux)](#session-persistence-tmux)
-- [Docker sandbox (experimental, single view)](#docker-sandbox-experimental-single-view)
 - [Tech stack](#tech-stack)
 - [Configuration](#configuration)
 - [Running](#running)
@@ -411,10 +408,6 @@ today — **Claude Code** (the default), **Codex**, and **Antigravity** (`agy`).
   per directory and shared by every session running there — and reaches the bridge through the agy
   process's own environment instead.
 
-  The Docker sandbox does NOT cover agy: it stays claude-only until `buildDockerRunArgs` is
-  generalized (see `plans/feat-multi-agent-support.md`, PR#5). `agy` also ships as a standalone
-  binary rather than an npm package, so the sandbox image has nothing to install.
-
 **Choosing an agent.** The single view has a **New Codex session** button; each grid
 cell's launch form carries a **Claude / Codex / Antigravity / Shell** toggle, and the
 Collections browser a **Claude / Codex / Antigravity** one (your choice is remembered).
@@ -431,7 +424,7 @@ serves. A directory sets its default in `.mulmoterminal.json` (`provider` / `mod
 each grid cell's launch form has a **MODEL** select that overrides it for one session,
 listing ~27 curated models with the measured pass rate of a real tool-using task beside
 each. A provider whose token can't be resolved **refuses to start** rather than falling
-back to Anthropic, and providers can't be combined with the Docker sandbox. Full walkthrough — setup, the measured model list, adding your own models, troubleshooting:
+back to Anthropic. Full walkthrough — setup, the measured model list, adding your own models, troubleshooting:
 [Using another model via OpenRouter](https://receptron.github.io/mulmoterminal/guide/en/providers.html).
 
 **Skills for Codex.** Codex has no `/<slug>` slash commands, so on session setup
@@ -470,46 +463,6 @@ detects `tmux` on `PATH` at startup and uses it automatically when present.
 
 ---
 
-## Docker sandbox (experimental, single view)
-
-Set **`MULMOTERMINAL_SANDBOX=1`** (and have Docker running) to run the **single-view**
-Claude session inside a container instead of on the host, while Claude still reaches the
-app's GUI MCP + activity hooks over `host.docker.internal`. The `mulmoterminal-sandbox`
-image is **built automatically** on first launch from the shipped `Dockerfile.sandbox`
-(~1 min, once; rebuilt only when that file changes). Override the name with
-`MULMOTERMINAL_SANDBOX_IMAGE`. If the image can't be built (e.g. Docker down), the session
-falls back to the host spawn — no cryptic failure.
-
-This **contains** Claude — it can't reach the host filesystem outside the mounts, host
-processes, or arbitrary host ports. It is **not full isolation**: the **workspace** and
-**`~/.claude`** are bind-mounted **read-write** by design (so Claude edits your project,
-and transcripts interoperate with host sessions), so those specific paths stay mutable
-from inside. The sandbox is **non-persistent** (the container is
-`--rm`, tied to the session), **opt-in and single-view only** — the grid keeps its host +
-tmux path, and with the flag unset (or Docker unavailable) everything runs on the host
-exactly as before. **macOS only** for now — on Linux (bind-mount uid ownership) and
-Windows (host paths aren't valid Linux container paths) it falls back to the host spawn;
-both are follow-ups. Adding arbitrary user MCP servers to the sandbox is in progress
-(see #202).
-
-**Authentication (macOS).** Claude's live login token lives in the macOS **Keychain**,
-which the container can't read (mounting `~/.claude` alone isn't enough — its
-`.credentials.json` is often absent or stale). On each sandbox spawn MulmoTerminal exports
-the current credential to a per-session `~/.mulmoterminal/sandbox/creds-<id>.json`
-(mode `0600`, removed when the session ends) and mounts it **read-only** over the
-container's `~/.claude/.credentials.json`; your host `~/.claude` is never modified. If
-you've never logged in on the host, run `claude` once first — otherwise the server logs a
-warning and the container shows "Not logged in".
-
-**Host credentials (opt-in).** By default the sandbox has no host credentials. To let the
-sandboxed Claude use `gh`/`git`, set **`SANDBOX_MOUNT_CONFIGS=gh,gitconfig`** — a **fixed
-allowlist** (you pick names, never arbitrary paths): `gh` mounts `~/.config/gh` read-only
-and passes a `GH_TOKEN` (from `gh auth token`, since macOS keeps it in the Keychain), and
-`gitconfig` mounts `~/.gitconfig` read-only. Set **`SANDBOX_SSH_AGENT_FORWARD=1`** to
-forward the SSH agent socket (the keys never enter the container). Both are read only when
-building the sandbox spawn, so they have no effect unless `MULMOTERMINAL_SANDBOX` is on.
-
----
 
 ## Tech stack
 
@@ -558,10 +511,8 @@ the `claude` / `codex` sessions themselves.
 | `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image-preview` | Model used for image generation (needs `GEMINI_API_KEY`). The default is a **preview** model Google schedules for retirement around mid-2026, so pin a stable one here (e.g. `gemini-2.5-flash-image`) rather than waiting for a code change. |
 | `WAIT_REAP_GRACE_MS` | `1800000` | How long a **waiting** background session is kept before it's auto-reaped (`0` or negative = never). |
 
-The Docker-sandbox variables (`MULMOTERMINAL_SANDBOX`, `MULMOTERMINAL_SANDBOX_IMAGE`,
-`SANDBOX_MOUNT_CONFIGS`, `SANDBOX_SSH_AGENT_FORWARD`) and the update-check opt-outs
-(`MULMOTERMINAL_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`) are covered in
-[Docker sandbox](#docker-sandbox-experimental-single-view) and [Install & run](#install--run).
+The update-check opt-outs (`MULMOTERMINAL_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`) are
+covered in [Install & run](#install--run).
 
 Example `.env` (gitignored):
 
@@ -588,7 +539,7 @@ The Settings modal (⚙) persists per-user UI choices to `~/.mulmoterminal/confi
 | `repoDirs`   | `{ "owner/repo": "/abs/path" }` — which local clone work on a repo starts in, when you keep several side by side. Only the *choice* is stored; which clones exist is re-derived from `cwdPresets` on every read, and an entry that no longer names a clone of that repo is ignored. |
 | `launchers`  | `{ label, command }` entries offered in a grid cell's launcher besides the agents — any interactive command. A plain shell needs no entry: the launch form's **Shell** toggle opens `$SHELL` unconfigured. |
 | `quickCommands` | `{ label, text, agents? }` phrases the **phone** offers as chips on a session's terminal view. Tapping one puts `text` in the input box; it is not sent until you press send. `agents` (`"claude"` / `"codex"` / `"shell"`) scopes a chip to session kinds — omit it to offer the chip everywhere. Empty by default. |
-| `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the **single-view** Claude session's `--mcp-config` (a `localhost` URL is reached over `host.docker.internal` in the Docker sandbox). Takes effect on the next session. |
+| `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the **single-view** Claude session's `--mcp-config`. Takes effect on the next session. |
 | `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
 | `chips`      | Header info chips (`dir` / `git` / `work` / `diff` / `ctx` / `usage` / `status` / `tools`, or custom text). Omit to keep the default set; `[]` hides all built-ins. `work` shows which PR / issue the cell is on (`#977 → #966`) and clears itself when the PR merges — see the [Configuration guide](https://receptron.github.io/mulmoterminal/guide/en/config.html#work-chip). |
 | `pushEnabled` | `true` to send a **Web Push** to your registered devices. Off by default; only sends while the **RemoteHost** channel is connected (see below). The master switch — `pushKinds` picks which moments. |
@@ -750,7 +701,7 @@ malformed file is ignored.
 | `sound`      | Attention sound for this directory's sessions, a path **relative to the directory** (served at `GET /api/dir-sound`). The fallback for every kind. |
 | `sounds`     | Per-kind override of `sound`: `{ "command-failed": "preset:gong" }`. Each value is a `preset:<id>` or a directory-relative path, under the same confinement. |
 | `appendSystemPrompt` | Whether this directory's Claude sessions are asked to end a reply with a **closing summary** (see [Closing summary](#closing-summary)). Omit to follow the global `appendSystemPrompt`, which is on; `true` / `false` here outranks it. Read per spawn, so a new session in this directory picks up an edit without a restart. |
-| `addDirs`    | Extra directories this project's Claude sessions may read and edit — the terminal-side equivalent of opening several folders in one VS Code workspace, via Claude Code's `--add-dir`. Relative entries resolve against **this file's directory** (`"../shared-lib"`), a path that doesn't exist is dropped, max 16. In the Docker sandbox each one is bind-mounted too, so the grant is real inside the container — which widens the sandbox on purpose. Claude only: codex has no equivalent flag and ignores the key. |
+| `addDirs`    | Extra directories this project's Claude sessions may read and edit — the terminal-side equivalent of opening several folders in one VS Code workspace, via Claude Code's `--add-dir`. Relative entries resolve against **this file's directory** (`"../shared-lib"`), a path that doesn't exist is dropped, max 16. Claude only: codex has no equivalent flag and ignores the key. |
 
 **Security.** `sound` and every `sounds` entry are directory-relative paths only — absolute
 paths and any `../` that escapes the directory are rejected, and the path is never taken from the
@@ -1056,8 +1007,7 @@ generated images, charts, HTML, and collection cards. Each result is drawn by it
 own Vue view inside a Shadow-DOM `PluginFrame` (so a plugin's bundled CSS can't leak),
 mirrors the active session, and replays history on re-select. Plugins reach the agent over
 an **in-process MCP server** served per session at `POST /api/mcp/:sessionId` (server name
-`mulmoterminal-gui`) — which works from the host *or* the Docker sandbox (over
-`host.docker.internal`). Which plugins load is gated by `plugins/plugins.json`; the shipped
+`mulmoterminal-gui`). Which plugins load is gated by `plugins/plugins.json`; the shipped
 set includes markdown, form, image generation (needs `GEMINI_API_KEY`), chart, HTML,
 collection, and mulmoscript (MulmoCast video/slides/PDF playback) views. You can also merge
 your **own HTTP MCP servers** into the single-view session via Settings → `userMcpServers`.
@@ -1602,9 +1552,6 @@ Which sections `--append-system-prompt` ends up carrying is decided in
 `server/agents/appended-prompt.ts`: this one and the `prWorkdirFooter` clone line are separate
 settings on the same flag, and with both off the flag is not passed at all.
 
-Passed inline rather than as `--append-system-prompt-file` for the same reason `--settings`
-is: the sandbox spawn runs in a container that cannot read a host path.
-
 Codex sessions are unaffected — the CLI has no equivalent flag.
 
 ---
@@ -1683,7 +1630,7 @@ server/
                   gh.ts, prs.ts, issues.ts, pr-for-branch.ts, worktrees.ts, worktree-*.ts
   files/          files-browse.ts (contained tree read/write), pick-file.ts,
                   open-dir.ts, scripts.ts (Run-menu script.json loader)
-  infra/          process/transport/misc: tmux.ts, tmux-routes.ts, sandbox.ts,
+  infra/          process/transport/misc: tmux.ts, tmux-routes.ts,
                   pubsub.ts (socket.io /ws/pubsub), spa-fallback.ts, host-tools.ts,
                   plugins-registry.ts, web-push.ts, install-bundled-skills.ts, accounting-tool.ts
   mcp/            per-session MCP broker

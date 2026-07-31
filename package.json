@@ -31,8 +31,7 @@
     "common/",
     "dist/",
     "server/",
-    "plugins/",
-    "Dockerfile.sandbox"
+    "plugins/"
   ],
   "engines": {
     "node": ">=22.9"

@@ -1,29 +1,16 @@
 // The low-level ways this server starts a terminal: a bare pty, a tmux-backed one that
-// survives the server dying, and the Docker sandbox. Split from index.ts (#548) ahead of
+// survives the server dying. Split from index.ts (#548) ahead of
 // the spawn functions that build on them — these four depend only on infra, so they move
 // without carrying any of index.ts's session state along.
 import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "node:path";
-import type { WebSocket } from "ws";
 import { sanitizePtyEnv } from "../infra/pty-env.js";
 import { resolvePtyLaunchForEnv } from "../infra/resolve-bin.js";
 import { binaryProblemMessage, diagnoseBinary, type BinaryDiagnosis } from "../infra/has-binary.js";
 import { cwdProblemMessage, diagnoseSpawnCwd, type CwdDiagnosis } from "../infra/spawn-cwd.js";
-import { ptyStartLine } from "./pty-exit-log.js";
 import { withoutUnset } from "./provider-env.js";
 import { tmuxAvailable, tmuxHasSession, tmuxNewSessionArgs, tmuxScrubEnvNames } from "../infra/tmux.js";
-import {
-  sandboxEnabled,
-  sandboxPlatformSupported,
-  dockerAvailable,
-  sandboxImageExists,
-  buildDockerRunArgs,
-  writeSandboxClaudeConfig,
-  writeSandboxCredentials,
-  cleanupSandbox,
-} from "../infra/sandbox.js";
-import type { PtyEntry } from "./types.js";
 
 const PTY_COLS = 120;
 const PTY_ROWS = 30;
@@ -51,13 +38,6 @@ export function spawnPty(bin: string, args: string[], cwd: string, unset: readon
   // shim has to be run through cmd.exe (#798). See infra/resolve-bin.ts.
   const launch = resolvePtyLaunchForEnv(bin, args, env);
   return pty.spawn(launch.file, launch.args, { name: "xterm-256color", cols: PTY_COLS, rows: PTY_ROWS, cwd, env });
-}
-
-// Would this session run in the Docker sandbox? Single-view interactive only (the caller
-// adds `ws !== null`). Shared by the spawn gate and the connection handler so the
-// pre-spawn credential refresh fires exactly when a sandbox spawn will.
-export function sandboxWouldRun(attachGuiMcp: boolean): boolean {
-  return sandboxEnabled() && sandboxPlatformSupported() && attachGuiMcp && dockerAvailable() && sandboxImageExists();
 }
 
 /** How a spawn's environment differs from ours. One object so ptySpawn keeps a readable arity. */
@@ -182,18 +162,4 @@ export function ptySpawn(
     return { term: spawnPty("tmux", tmuxNewSessionArgs(sessionId, file, args, cwd, env), cwd, unset), tmux: true, reattached };
   }
   return { term: spawnPty(file, args, cwd, unset, env), tmux: false, reattached };
-}
-
-// Spawn the single-view session inside a Docker container (the sandbox path). Exports the
-// host's live Keychain credential so the containerized claude is authenticated — without
-// it the container reads a stale/absent ~/.claude/.credentials.json and shows "Not logged in".
-export function spawnSandboxEntry(sessionId: string, claudeArgs: string[], cwd: string, ws: WebSocket | null, addDirs: string[] | null = null): PtyEntry {
-  cleanupSandbox(sessionId); // clear any stale container/config/credential with this name
-  const claudeConfig = writeSandboxClaudeConfig(sessionId, cwd);
-  const credentials = writeSandboxCredentials(sessionId);
-  if (credentials === null)
-    console.warn("[sandbox] no Claude credential found in the macOS Keychain — the container may be unauthenticated. Run `claude` on the host to log in.");
-  const term = spawnPty("docker", buildDockerRunArgs(sessionId, claudeArgs, cwd, claudeConfig, credentials, addDirs), cwd);
-  console.log(ptyStartLine({ agent: "claude", pid: term.pid, cwd, tmux: false, reattached: false, sessionId, note: "docker sandbox" }));
-  return { term, ws, buffer: "", cwd, sandbox: true, active: false, agent: "claude" };
 }

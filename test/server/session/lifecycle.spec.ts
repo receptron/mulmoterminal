@@ -12,7 +12,6 @@ import { activity, aiTitles, hiddenSessions, knownSessions, lastPrompts, lastRes
 import { clearedTranscripts } from "../../../server/session/cleared-transcripts.js";
 
 vi.mock("../../../server/infra/tmux.js", () => ({ tmuxKillSession: vi.fn() }));
-vi.mock("../../../server/infra/sandbox.js", () => ({ cleanupSandbox: vi.fn() }));
 vi.mock("../../../server/session/session-settings.js", () => ({ cleanupSessionSettings: vi.fn() }));
 // The reply the roster shows is re-read from the transcript at the end of a turn; the tests
 // stand in for that file so the refresh can be observed without writing one.

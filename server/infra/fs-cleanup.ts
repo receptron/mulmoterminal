@@ -1,5 +1,4 @@
-// Removing something we are done with — a session's settings file, a stale skill tree, a
-// sandbox's credential.
+// Removing something we are done with — a session's settings file, a stale skill tree.
 //
 // `rmSync(..., { force: true })` swallows "it was not there" and nothing else, which is fine
 // until Windows: a file another process still holds open, or a directory something is
