@@ -54,6 +54,7 @@ import { becameCiFailing, EMPTY_SESSION_META, isPrPhase, mergeSessionMeta, type 
 import { notifySound } from "../composables/notifySound";
 import { useGridActivity } from "../composables/useGridActivity";
 import { registerNewTerminalHandler, type NewTerminalRequest } from "../composables/useNewTerminal";
+import { registerSpawnedChatHandler, type SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { usePendingScript } from "../composables/usePendingScript";
 import { reportActiveTerminals } from "../composables/useUnloadGuard";
 import { useAppConfig } from "../composables/useAppConfig";
@@ -489,24 +490,46 @@ useCaptureKeydown(onShortcutKey);
 // app losing your place — you came back to a different screen than the one you left.
 //
 // Spawned first, then adopted: the spawn route is the only way to seed a first turn (a plain claude
-// cell has no channel to be handed a prompt), and `hidden` is what stops useChatLauncher selecting
-// it in the single view — the switch being avoided. The cell attaches to the session it is given,
-// which is the same path a reload takes to reattach.
-async function launchSkill(skill: BundledSkillName) {
+// cell has no channel to be handed a prompt). The cell attaches to the session it is given, which
+// is the same path a reload takes to reattach.
+//
+// No `hidden` here any more: it used to mean "don't let useChatLauncher select this in the single
+// view", which was a workaround for the switch this now avoids by default. `hidden` keeps its own
+// meaning on the server (a real background worker, background-chat.ts) and must not be reused for
+// placement.
+function launchSkill(skill: BundledSkillName) {
   closeSettings();
-  const spawned = await startCollectionChat(skillSeed(skill, "claude"), { hidden: true });
-  if (!spawned) return;
+  void startCollectionChat(skillSeed(skill, "claude"));
+}
+
+// Place an already-spawned chat as a cell. Every programmatically started chat arrives here —
+// the collection UI's actions and template cards, custom views, the Settings skill buttons —
+// via useChatLauncher's one choke point.
+const placeChat = ({ id, agent }: SpawnedChatRequest) => {
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
-  const placed = insertCellAfter(state.value, NO_ORIGIN_UID, sessionCell(spawned.id, defaultCwd.value, spawned.agent));
+  const placed = insertCellAfter(state.value, NO_ORIGIN_UID, sessionCell(id, defaultCwd.value, agent));
   // A full grid (MAX_TERMINALS) drops the cell and insertCellAfter hands the state straight back,
   // which would leave a live agent with nowhere here to appear — show it in the single view instead
   // of losing it. Judged by identity AFTER the spawn, not by counting before it: the count can
   // cross the cap while the spawn is in flight, and then the answer taken earlier is wrong.
-  if (placed === state.value) showSpawnedSession(spawned);
+  // (This fallback is what has to be replaced when the single view goes: see
+  // plans/feat-remove-single-view.md.)
+  if (placed === state.value) showSpawnedSession({ id, agent });
   else state.value = placed;
-}
+};
+// Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same
+// reason: <KeepAlive> keeps this grid alive while the user is in the single view, and a chat
+// started there must queue + navigate rather than silently mutate a hidden grid.
+let offSpawnedChat: (() => void) | null = null;
+const detachSpawnedChat = () => {
+  offSpawnedChat?.();
+  offSpawnedChat = null;
+};
+onActivated(() => (offSpawnedChat = registerSpawnedChatHandler(placeChat)));
+onDeactivated(detachSpawnedChat);
+onBeforeUnmount(detachSpawnedChat);
 </script>
 
 <template>

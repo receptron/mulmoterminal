@@ -1,19 +1,26 @@
 // Bridges the collection plugin's chat capabilities to MulmoTerminal's terminal.
 // The plugin calls startChat(prompt, role) / startNewChatDraft(prompt) from contexts
 // with no active chat (the collections index "create" button, a collection/record
-// action like Repair, the new-collection template cards). We spawn a fresh terminal
-// session via the server's spawnBackgroundChat, and — unless `hidden` — select it so
-// the user SEES it in the terminal (App.vue registers the opener, which also closes
-// the browse overlay).
+// action like Repair, the new-collection template cards, a custom view's chat button).
+// We spawn a fresh terminal session via the server's spawnBackgroundChat, and — unless
+// `hidden` — place it as a GRID CELL (useSpawnedChat), switching to the grid if that is
+// not where the user is.
+//
+// This function is the ONE choke point for every programmatically started chat, which is
+// why the grid/single-view decision is made here rather than at each call site: the
+// collection UI reaches it through the plugin's two capabilities (collectionUi.ts), and a
+// custom view reaches those through the plugin from inside its iframe.
 //
 // `hidden` defaults to false: a collection action's chat is something the user should
-// watch, so we surface it. A future hidden=true caller would leave it in the sidebar.
+// watch, so we surface it. A hidden=true caller is placing the session itself (or is a
+// real background worker) and gets only the id back.
 // `draft` (startNewChatDraft) prefills the prompt in claude's input box WITHOUT
 // submitting, so the user can review / edit before pressing Enter; without it the
 // prompt is auto-sent as claude's first turn (startChat / actions).
 
 import { ref, watch } from "vue";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
+import { placeSpawnedChat } from "./useSpawnedChat";
 
 export type Agent = TerminalAgent;
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
@@ -26,7 +33,10 @@ const saved = localStorage.getItem(LAUNCH_AGENT_KEY);
 export const launchAgent = ref<Agent>(asTerminalAgent(saved));
 watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 
-/** App.vue registers how to make a session visible (close the overlay + select it).
+/** App.vue registers how to make a session visible in the SINGLE VIEW (close the overlay +
+ *  select it). No longer the normal path — a spawn now goes to the grid — but it is still what
+ *  the grid falls back to when it is full (MAX_TERMINALS), so a live agent is never left with
+ *  nowhere to appear. Goes away with the single view itself.
  *  `opts.draft` lets it show a "preparing draft…" hint while claude boots + the text
  *  is typed into the input box. */
 export function registerChatOpener(fn: OpenSessionFn): void {
@@ -77,8 +87,10 @@ export async function startCollectionChat(prompt: string, opts: { hidden?: boole
     console.error("[startChat] spawn failed", err);
     return null;
   }
-  // hidden=false → bring the new terminal session into view for the user (as the right agent).
-  if (chatId && !opts.hidden) openSessionFn?.(chatId, { draft, agent });
+  // hidden=false → place the new session as a grid cell (as the right agent), navigating there
+  // if the user is somewhere else. `draft` travels along: the cell must show a prompt waiting in
+  // the input box rather than treat it as a turn already running.
+  if (chatId && !opts.hidden) placeSpawnedChat({ id: chatId, agent, draft });
   // `agent` is what the route was ASKED for, and the route echoes it back in jsonData — so this is
   // the agent the PTY actually runs, not a second reading of the toggle.
   return chatId ? { id: chatId, agent } : null;

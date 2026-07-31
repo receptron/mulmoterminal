@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
+import { h, KeepAlive, type Component } from "vue";
+
+// App.vue renders GridView inside <KeepAlive>, and the grid registers its openers (new terminal,
+// spawned-chat placement) on ACTIVATE so a cached-but-hidden grid is never mutated behind the
+// user's back. onActivated does not fire for a bare mount, so a test that skips the KeepAlive
+// silently exercises a grid that registered nothing — which is not the component the app runs.
+const mountActivated = (component: Component, options: Parameters<typeof mount>[1]) => mount({ render: () => h(KeepAlive, null, [h(component)]) }, options);
 
 // The grid subscribes to the pub/sub socket on mount — stub it so no real socket opens.
 vi.mock("../../../src/composables/usePubSub", () => ({
@@ -389,7 +396,7 @@ describe("GridView skill launch (#1111)", () => {
       }
       return realFetch(url, init);
     }) as typeof fetch;
-    const w = mount((await import("../../../src/components/GridView.vue")).default, {
+    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
       global: { stubs: { TerminalGrid: CellsStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
     });
     await flushPromises();
@@ -466,7 +473,7 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
       if (String(url).includes("spawnBackgroundChat")) return { ok: true, json: async () => ({ jsonData: { chatId: SPAWNED } }) } as Response;
       return realFetch(url, init);
     }) as typeof fetch;
-    const w = mount((await import("../../../src/components/GridView.vue")).default, {
+    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
       global: { stubs: { TerminalGrid: CellsStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
     });
     await flushPromises();
