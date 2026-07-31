@@ -528,6 +528,63 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     w.unmount();
   });
 
+  // What the seeded collection is FOR: the Canvas pane exists only beside an enlarged cell, so a
+  // card placed into a tiled one is two gestures away and invisible until both are made. Reported
+  // live — the card was landing correctly and looked like a feature that did nothing.
+  it("enlarges the placed cell and opens its Canvas when a collection was seeded", async () => {
+    const { placeSpawnedChat } = await import("../../../src/composables/useSpawnedChat");
+    const opened: number[] = [];
+    const CanvasGridStub = {
+      name: "TerminalGrid",
+      props: ["cells", "expandedUid"],
+      template: '<div class="canvas-stub" />',
+      setup: (_: unknown, { expose }: { expose: (api: Record<string, unknown>) => void }) => {
+        expose({ openCanvasFor: (uid: number) => opened.push(uid) });
+        return () => {};
+      },
+    };
+    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: CanvasGridStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
+    });
+    await flushPromises();
+
+    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: false, canvas: true });
+    await flushPromises();
+
+    // The uid of the cell just placed for THIS session — not a guess at the counter.
+    const cells = w.findComponent(CanvasGridStub).props("cells") as Array<{ uid: number; session: string | null }>;
+    const placedUid = cells.find((c) => c.session === SPAWNED)?.uid;
+    expect(placedUid).toBeDefined();
+    expect(opened).toEqual([placedUid]);
+    w.unmount();
+  });
+
+  it("leaves the grid alone when nothing was seeded", async () => {
+    // Every other spawn — a skill button, a template card, cron. Taking over the screen to show an
+    // empty pane is worse than leaving the grid as the user arranged it.
+    const { placeSpawnedChat } = await import("../../../src/composables/useSpawnedChat");
+    const opened: number[] = [];
+    const CanvasGridStub = {
+      name: "TerminalGrid",
+      props: ["cells", "expandedUid"],
+      template: '<div class="canvas-stub" />',
+      setup: (_: unknown, { expose }: { expose: (api: Record<string, unknown>) => void }) => {
+        expose({ openCanvasFor: (uid: number) => opened.push(uid) });
+        return () => {};
+      },
+    };
+    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
+      global: { stubs: { TerminalGrid: CanvasGridStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
+    });
+    await flushPromises();
+
+    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: false, canvas: false });
+    await flushPromises();
+
+    expect(opened).toEqual([]);
+    w.unmount();
+  });
+
   // The full-grid fallback is the ONE path where `draft` still has to reach the single view, and
   // it is the easiest to drop: the cell it would otherwise have made needs no such flag (the
   // server types the draft into the PTY), so nothing else here carries one. Without it a
@@ -545,7 +602,7 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
 
     // Straight through the placement seam: a draft spawn is startNewChatDraft's, and going via a
     // skill button would only ever produce draft:false.
-    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: true });
+    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: true, canvas: false });
     await flushPromises();
 
     expect(openSession).toHaveBeenCalledWith(SPAWNED, expect.objectContaining({ agent: "claude", draft: true }));

@@ -21,6 +21,7 @@
 import { ref, watch } from "vue";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { placeSpawnedChat } from "./useSpawnedChat";
+import { seedCollectionCanvas } from "./seedCollectionCanvas";
 
 export type Agent = TerminalAgent;
 type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
@@ -93,7 +94,14 @@ export async function startCollectionChat(prompt: string, opts: { hidden?: boole
   // hidden=false → place the new session as a grid cell (as the right agent), navigating there
   // if the user is somewhere else. `draft` travels along: the cell must show a prompt waiting in
   // the input box rather than treat it as a turn already running.
-  if (chatId && !opts.hidden) placeSpawnedChat({ id: chatId, agent, draft });
+  if (chatId && !opts.hidden) {
+    // Seeded BEFORE placing, and awaited, so the cell can arrive with its Canvas already open
+    // rather than rearranging itself under the user a moment later. Both are local requests
+    // against a session that already exists. Seeded here for the SAME reason placement is —
+    // every collection entry point passes through this one function.
+    const canvas = await seedCollectionCanvas(chatId, message);
+    placeSpawnedChat({ id: chatId, agent, draft, canvas });
+  }
   // `agent` is what the route was ASKED for, and the route echoes it back in jsonData — so this is
   // the agent the PTY actually runs, not a second reading of the toggle.
   return chatId ? { id: chatId, agent } : null;

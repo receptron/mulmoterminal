@@ -505,10 +505,14 @@ function launchSkill(skill: BundledSkillName) {
   void startCollectionChat(skillSeed(skill, "claude"));
 }
 
+// The grid component itself, for the one thing GridView drives that is not cell state: revealing
+// a placed chat's Canvas (see placeChat).
+const gridRef = ref<InstanceType<typeof TerminalGrid> | null>(null);
+
 // Place an already-spawned chat as a cell. Every programmatically started chat arrives here —
 // the collection UI's actions and template cards, custom views, the Settings skill buttons —
 // via useChatLauncher's one choke point.
-const placeChat = ({ id, agent, draft }: SpawnedChatRequest) => {
+const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest) => {
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
@@ -523,8 +527,21 @@ const placeChat = ({ id, agent, draft }: SpawnedChatRequest) => {
   // dropping the flag here would make a full grid the one case where startNewChatDraft looks like
   // a turn already running. The CELL needs no such flag — the server types the draft into the PTY,
   // so the terminal shows it either way; the hint is a single-view affordance.
-  if (placed === state.value) showSpawnedSession({ id, agent, draft });
-  else state.value = placed;
+  if (placed === state.value) {
+    showSpawnedSession({ id, agent, draft });
+    return;
+  }
+  state.value = placed;
+  // A collection is already waiting in this session's Canvas. The pane exists only beside an
+  // ENLARGED cell, so a card in a tiled one is two gestures away and invisible until both are
+  // made — which is how a seeded collection reads as a feature that does nothing. Reuses the
+  // grid's own reveal (files-buffer flush included) rather than setting the two pieces of state
+  // from here. Deliberately NOT done for an unseeded spawn: taking the screen to show an empty
+  // pane is worse than leaving the grid as the user arranged it.
+  if (!canvas) return;
+  const uid = placed.cells.find((cell) => cell.session === id)?.uid;
+  // After the state renders: the grid has to be showing the cell before it can enlarge it.
+  if (uid !== undefined) void nextTick(() => gridRef.value?.openCanvasFor(uid));
 };
 // Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same
 // reason: <KeepAlive> keeps this grid alive while the user is in the single view, and a chat
@@ -568,6 +585,7 @@ onBeforeUnmount(detachSpawnedChat);
       </button>
     </nav>
     <TerminalGrid
+      ref="gridRef"
       class="flex-1 min-h-0 min-w-0"
       :cells="displayCells"
       :expanded-uid="expandedUid"

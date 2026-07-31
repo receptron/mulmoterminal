@@ -10,7 +10,7 @@ vi.mock("../../../src/router", () => ({ router: { push } }));
 
 import { placeSpawnedChat, registerSpawnedChatHandler, resetSpawnedChatQueue, type SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
-const chat = (id: string, over: Partial<SpawnedChatRequest> = {}): SpawnedChatRequest => ({ id, agent: "claude", draft: false, ...over });
+const chat = (id: string, over: Partial<SpawnedChatRequest> = {}): SpawnedChatRequest => ({ id, agent: "claude", draft: false, canvas: false, ...over });
 
 describe("placeSpawnedChat", () => {
   beforeEach(() => {

@@ -225,11 +225,21 @@ async function toggleFiles(): Promise<void> {
 // The unread-canvas chip on a tiled cell: enlarge that cell AND put the pane beside it, in one
 // click. Two steps because the pane only exists while a cell is enlarged — asking the user to
 // expand first and then find the button is the gesture this chip exists to remove.
+//
+// Also exposed (below) for a chat placed with a collection already seeded into its Canvas: same
+// two steps, same reason, just nobody clicking. It stays ONE function because "reveal this cell's
+// canvas" has to mean the same thing however it is reached — including the files-buffer flush,
+// which a second implementation would be the natural place to forget.
 async function openCanvasFor(uid: number): Promise<void> {
   if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
   if (props.expandedUid !== uid) emit("toggle-expand", uid);
   setRightPane("canvas");
 }
+
+// GridView drives this one from OUTSIDE a user gesture (placing a spawned chat whose Canvas is
+// already seeded). The pane is TerminalGrid's own state — GridView owns the cells, not what sits
+// beside them — so this is the seam rather than another prop to watch.
+defineExpose({ openCanvasFor });
 
 // A pane button: opens its pane, or closes it when it is already the one showing.
 async function toggleRightPane(pane: RightPane): Promise<void> {

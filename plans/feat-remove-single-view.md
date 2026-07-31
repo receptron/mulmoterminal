@@ -231,16 +231,56 @@ result)` (`tool-store.ts:160`) is host-callable, deduped by uuid, disk-backed an
 the panel — the same store the broker writes through. Placing a cell can append a synthetic
 `presentCollection` result for the new session, and the panel replays it like any other.
 
-**Proposed rule — seed with what the chat was started FROM** (confirm before building):
+**The rule — parse the subject out of the SEED PROMPT, not the route.** This replaces an earlier
+proposal here to read `browseRouteSlug()` / `browseRouteSelectedId()` at spawn time. That would
+have worked, but MulmoClaude already ships this exact feature (its #1768) and takes the subject
+from the prompt, which is better on three counts:
 
-| Started from | Canvas seed |
-|---|---|
-| a collection record view | that record |
-| a collection | that collection |
-| the collections index / a template card | nothing — there is no subject yet |
-| a Settings skill button, cron, feeds, the phone | nothing |
+- **It survives navigation.** `placeSpawnedChat` pushes to `/terminals` when no grid is mounted,
+  and the route watcher in `useCollectionBrowse.ts:34` clears the open record on any path change.
+  Route-derived state is gone by the time the spawn resolves; the prompt travels with it.
+- **It covers every entry point with one rule**, including the ones that have no route to read —
+  a custom view's iframe button, a template card.
+- **It cannot disagree with what the agent does.** The seed prompt is what the agent acts on, so
+  parsing the same string is the same subject by construction.
 
-**Two blockers, both real:**
+It works because a collection IS a skill: the shared `CollectionView.buildChatSeed` builds
+`/<slug> <message>` (and `/<slug> id=<itemId> …` for a record). A **feed** gets prose with no
+slash command, and the collections index / template cards / skill buttons / cron send no slash
+command either — so "no subject yet" falls out of the parse rather than needing a case.
+
+| Started from | Seed prompt | Canvas seed |
+|---|---|---|
+| a collection record | `/<slug> id=<itemId> …` | that record |
+| a collection | `/<slug> …` | that collection |
+| a feed | prose naming the data path | nothing |
+| the index / a template card / a skill button / cron | no slash command | nothing |
+
+**Follow `../mulmoclaude/src/utils/collections/presentSeed.ts`.** Per the reference-host rule, that
+file is the authority, and three of its decisions are behaviour rather than style:
+
+- **The payload is tiny** — `{ collectionSlug, itemId? }`. The card SELF-FETCHES from the slug, so
+  seeding needs no collection data at all. `PresentCollectionData` and the tool name both come from
+  `@mulmoclaude/core/collection`, which we already depend on: **no upstream change is needed.**
+- **Validate the slug against the real collection list before seeding.** Otherwise a non-collection
+  slash command flashes a "not found" canvas.
+- **The placeholder is superseded, not stacked.** When the agent's real `presentCollection` lands,
+  the synthetic one for that slug is dropped.
+
+**Where MulmoTerminal must diverge, and it is not optional.** MulmoClaude holds tool results in an
+in-memory `ActiveSession` and reconciles in `eventDispatch`. MulmoTerminal's live server-side in
+`toolResultsStore`, deduped **by uuid** (`tool-store.ts:160`). So:
+
+- seeding is a POST to `/api/agent/toolResult` for the new `chatId`, not a client-side array push;
+- the real result carries its own uuid, so uuid-dedupe will NOT collapse the pair — the reconcile
+  has to be written, in `storeToolResult`, dropping a synthetic entry with the same
+  `collectionSlug` when a real `presentCollection` arrives. Skipping it stacks two cards.
+
+Mark the synthetic entry so it is identifiable (MulmoClaude uses a `syntheticCollection: true`
+flag). Unlike there, ours is persisted to disk, so the flag has to survive a round trip through the
+store — it is not client-only here.
+
+**Blockers — both now resolved:**
 
 1. ~~**`presentCollection` is in the `data` group, not `canvas`**~~ — **RESOLVED, and it was not
    the gate that was wrong.** Reported live: a chat started from the collections UI landed in the
@@ -256,11 +296,18 @@ the panel — the same store the broker writes through. Placing a cell can appen
    out. `data` therefore comes along with the rest and needs no per-cell widening, and
    `hasCanvasGroup` is untouched. Normal grid cells never reach that URL, so the invariant holds
    by construction rather than by a conditional.
-2. **The renderer has to be mounted on the grid path.** `collectionUi.ts:3` / `main.ts:5` mount
-   the collection engine "once, before any presentCollection card mounts", and that has only ever
-   been exercised from the single view's `GuiPanel`. **Verify this before committing to the
-   seed** — if the grid's Canvas cannot render a `presentCollection` result today, that is its own
-   piece of work and should be established first, not discovered mid-PR.
+2. ~~**The renderer has to be mounted on the grid path.**~~ — **RESOLVED: it already is, and there
+   is no grid-specific path to mount.** Checked rather than assumed, as this section demanded:
+
+   - the grid's Canvas renders the **same component** as the single view — `TerminalGrid.vue:849`
+     mounts `<GuiPanel>`, the one `App.vue:398` mounts;
+   - `GuiPanel` takes only `sessionId` and reads the shared plugin registry — it has no notion of
+     which view it is in;
+   - the collection engine is configured **globally at app boot** by `main.ts:6` importing
+     `./composables/collectionUi` for its side effect, not per view or per panel.
+
+   So a `presentCollection` result renders in a grid cell exactly as it does in the single view.
+   Nothing to build here; the seeding work is all that is left.
 
 #### PR3b — the durable half
 

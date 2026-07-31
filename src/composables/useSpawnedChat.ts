@@ -27,6 +27,11 @@ export interface SpawnedChatRequest {
   /** The prompt was typed into the input box without an Enter (spawnBackgroundChat draft:true)
    *  and is waiting for the user to review it — not a turn already running. */
   draft: boolean;
+  /** A collection card is ALREADY waiting in this session's Canvas, so the cell should arrive
+   *  enlarged with the pane open — otherwise the card sits behind two gestures nobody knows to
+   *  make. False for every other spawn: taking over the screen to show an EMPTY pane is worse
+   *  than leaving the grid alone. */
+  canvas: boolean;
 }
 type Handler = (req: SpawnedChatRequest) => void;
 
