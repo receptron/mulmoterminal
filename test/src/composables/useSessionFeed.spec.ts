@@ -162,6 +162,57 @@ describe("useSessionFeed — reconcile", () => {
     expect(items.value.map((i) => i.id)).toEqual(["agent"]);
   });
 
+  // Codex, on PR #1186. The buffer of live arrivals is replayed by IDENTITY once the history
+  // lands, and the pair `reconcile` relates has two different identities — so a placeholder the
+  // live path already superseded came back with the snapshot, and the cell showed two cards.
+  it("does not resurrect a superseded item when the history lands", async () => {
+    let release!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
+    const { items } = mountFeed(() => new Promise((resolve) => (release = resolve)), supersede);
+    await nextTick();
+
+    // Both arrive while the history request is in flight — the normal case here: the panel opens
+    // as the cell is placed, and the seed and the agent land moments apart.
+    deliver("feed:s1", { id: "seed:1", text: "invoices" });
+    deliver("feed:s1", { id: "agent", text: "invoices" });
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+
+    release({ ok: true, json: async () => ({ items: [] }) });
+    // Flushed rather than polled: waitFor would pass on the state BEFORE the merge ran, so the
+    // resurrection this guards against would never be observed (same trap as above).
+    await flushPromises();
+    await flushPromises();
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+  });
+
+  it("drops a placeholder the SNAPSHOT still holds when the real one arrived live", async () => {
+    // The mirror case: the history was read before the real card was stored, so the SNAPSHOT is
+    // the stale one. Merging by identity keeps both; the rule has to run over the merge.
+    let release!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
+    const { items } = mountFeed(() => new Promise((resolve) => (release = resolve)), supersede);
+    await nextTick();
+
+    deliver("feed:s1", { id: "agent", text: "invoices" });
+    release({ ok: true, json: async () => ({ items: [{ id: "seed:1", text: "invoices" }] }) });
+    await flushPromises();
+    await flushPromises();
+
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+  });
+
+  it("keeps a skipped item out of the replay too", async () => {
+    let release!: (value: { ok: boolean; json: () => Promise<unknown> }) => void;
+    const { items } = mountFeed(() => new Promise((resolve) => (release = resolve)), supersede);
+    await nextTick();
+
+    deliver("feed:s1", { id: "agent", text: "invoices" });
+    deliver("feed:s1", { id: "seed:1", text: "invoices" }); // skipped: the real card is already up
+    release({ ok: true, json: async () => ({ items: [] }) });
+    await flushPromises();
+    await flushPromises();
+
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+  });
+
   it("leaves unrelated items alone", async () => {
     const { items } = mountFeed(async () => ({ ok: true, json: async () => ({ items: [{ id: "seed:1", text: "invoices" }] }) }), supersede);
     await vi.waitFor(() => expect(items.value).toHaveLength(1));
