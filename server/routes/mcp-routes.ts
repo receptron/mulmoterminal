@@ -14,7 +14,7 @@ import { PORT, SESSION_ID_RE } from "../config/env.js";
 import { buildGuiMcpServer } from "../mcp/broker.js";
 import type { GuiCallRecorder } from "../mcp/gui-call-history.js";
 import { translationWorkerIds, markSessionToolGroup, sessionToolGroups } from "../session/registry.js";
-import { isToolGroup, type ToolGroup } from "../../common/toolGroups.js";
+import { isToolGroup, TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { submitTranslation } from "../session/translation-worker.js";
 import { translationSubmitOutcome } from "../session/translation-submit.js";
 
@@ -68,6 +68,21 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     deps.publish(TOOL_GROUPS_CHANNEL, { sessionId });
   }
 
+  /**
+   * Record what reaching us on this URL proves the session can call, and tell the panel — once,
+   * on the transition, so the per-request MCP servers don't republish on every tool call.
+   *
+   * Shared by both routes because the evidence is the same kind: the URL a client connected to.
+   * One group for the group URL; every group for the all-tools one.
+   */
+  function learnToolGroups(sessionId: string, groups: readonly ToolGroup[]): void {
+    if (!SESSION_ID_RE.test(sessionId)) return;
+    const known = sessionToolGroups(sessionId);
+    if (groups.every((group) => known.includes(group))) return;
+    for (const group of groups) markSessionToolGroup(sessionId, group);
+    deps.publish(TOOL_GROUPS_CHANNEL, { sessionId, groups: sessionToolGroups(sessionId) });
+  }
+
   // We run in STATELESS mode (sessionIdGenerator: undefined): one fresh Server+transport per
   // request, no session header and no initialize handshake required across requests. The SDK
   // forbids reusing a stateless transport, so it is never cached.
@@ -111,7 +126,22 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     }
   }
 
-  app.post("/api/mcp/:sessionId", (req, res) => handleMcpRequest(req, res, req.params.sessionId, null));
+  // The ALL-TOOLS surface: a session gets this URL from --mcp-config (spawnClaudePty's
+  // attachGuiMcp), never from a user's per-folder config, so connecting here is proof it carries
+  // the whole GUI MCP — every group, not none.
+  //
+  // Recorded rather than left implicit because the answer is read from a place that cannot see
+  // how the session was spawned: a chat started programmatically (the collections UI) is spawned
+  // with the full MCP and then ADOPTED as a grid cell, so the cell attaches with `?gui=0` and is
+  // marked a grid session — at which point "no groups learned" is read as "cannot draw" and the
+  // Canvas button is withheld from a session that has every drawing tool there is.
+  //
+  // Grid cells proper are untouched: without --mcp-config they never reach this URL, and what
+  // they can call still comes only from what their directory registered.
+  app.post("/api/mcp/:sessionId", (req, res) => {
+    learnToolGroups(req.params.sessionId, TOOL_GROUPS);
+    return handleMcpRequest(req, res, req.params.sessionId, null);
+  });
   app.get("/api/mcp/:sessionId", rejectNonPost);
   app.delete("/api/mcp/:sessionId", rejectNonPost);
 
@@ -126,12 +156,7 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
     // Reaching us here IS the evidence that this session has the group — nothing else tells
     // us, since the registration lives in the user's own MCP config. Marked before the request
     // is served so a panel asking right after the first ListTools already sees it.
-    if (SESSION_ID_RE.test(sessionId) && !sessionToolGroups(sessionId).includes(group)) {
-      markSessionToolGroup(sessionId, group);
-      // Announced only on the transition, so the panel is told once per handshake rather than
-      // on every tool call for the life of the session.
-      deps.publish(TOOL_GROUPS_CHANNEL, { sessionId, groups: sessionToolGroups(sessionId) });
-    }
+    learnToolGroups(sessionId, [group]);
     return handleMcpRequest(req, res, sessionId, group);
   });
   app.get("/api/mcp/:group/:sessionId", rejectNonPost);

@@ -1,10 +1,10 @@
 // @vitest-environment node
-// The announcement every MCP session makes on first contact, and the one thing it must NOT say.
+// What an MCP session's URL tells us about it, and when that is announced.
 //
 // The tools pane asks what a session has while the agent is still being spawned, so its first
-// answer is empty; this is what tells it to ask again. The GROUP route announced already, which is
-// why the grid was fixed and the single view was not — an all-tools session learns no group, so it
-// announced nothing and its pane stayed on the too-early answer for the whole session.
+// answer is empty; the first-contact announcement is what tells it to ask again. Which groups the
+// session has is the separate question, and both URLs answer it now: one group for a group URL,
+// every group for the all-tools one it can only have been given by --mcp-config.
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
 import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -32,6 +32,7 @@ afterAll(() => {
 });
 
 const { mountMcpRoutes, TOOL_GROUPS_CHANNEL } = await import("../../../server/routes/mcp-routes.js");
+const { TOOL_GROUPS } = await import("../../../common/toolGroups.js");
 
 const published: { channel: string; data: Record<string, unknown> }[] = [];
 const app = express();
@@ -53,14 +54,27 @@ beforeEach(() => {
 });
 
 describe("MCP first-contact announcement", () => {
-  it("announces a single-view (all-tools) session, which has no group to announce with", async () => {
+  it("announces first contact with no `groups` key at all", async () => {
     const id = randomUUID();
     await call(`/api/mcp/${id}`);
-    expect(announcementsFor(id)).toHaveLength(1);
-    // No `groups` key at all. The grid reads that field to decide whether a cell has the Canvas
-    // MCP, and an all-tools session genuinely has none to report — sending `[]` would tell a cell
-    // that can draw that it cannot.
-    expect("groups" in announcementsFor(id)[0].data).toBe(false);
+    const bare = announcementsFor(id).filter((p) => !("groups" in p.data));
+    expect(bare).toHaveLength(1);
+    // Undefined and `[]` are different answers downstream: a consumer reading a missing field as
+    // an empty list would tell a cell that can draw that it cannot. Only a message that actually
+    // carries groups says anything about them.
+    expect(bare[0].data).toEqual({ sessionId: id });
+  });
+
+  it("reports EVERY group for an all-tools session", async () => {
+    // This URL comes from --mcp-config and nowhere else, so reaching it is proof the session
+    // carries the whole GUI MCP. Announcing no groups was right while only the single view used
+    // it; a programmatically started chat is spawned the same way and then adopted as a grid
+    // cell, where "no groups" is read as "no Canvas" — for a session holding every drawing tool.
+    const id = randomUUID();
+    await call(`/api/mcp/${id}`);
+    const withGroups = announcementsFor(id).filter((p) => Array.isArray(p.data.groups));
+    expect(withGroups).toHaveLength(1);
+    expect([...(withGroups[0].data.groups as string[])].sort()).toEqual([...TOOL_GROUPS].sort());
   });
 
   it("announces once per session, not once per tool call", async () => {
@@ -68,7 +82,9 @@ describe("MCP first-contact announcement", () => {
     await call(`/api/mcp/${id}`);
     await call(`/api/mcp/${id}`);
     await call(`/api/mcp/${id}`);
-    expect(announcementsFor(id)).toHaveLength(1);
+    // One first-contact and one groups message, from the first call only: a server is built per
+    // request, so anything not guarded on the transition would republish on every tool call.
+    expect(announcementsFor(id)).toHaveLength(2);
   });
 
   it("still announces the learned groups for a grid cell's group url", async () => {
