@@ -33,6 +33,7 @@ afterAll(() => {
 
 const { mountMcpRoutes, TOOL_GROUPS_CHANNEL } = await import("../../../server/routes/mcp-routes.js");
 const { TOOL_GROUPS } = await import("../../../common/toolGroups.js");
+const { hasAllGuiTools } = await import("../../../server/session/registry.js");
 
 const published: { channel: string; data: Record<string, unknown> }[] = [];
 const app = express();
@@ -91,6 +92,24 @@ describe("MCP first-contact announcement", () => {
     const id = randomUUID();
     await call(`/api/mcp/render/${id}`);
     expect(announcementsFor(id).some((p) => Array.isArray(p.data.groups) && (p.data.groups as string[]).includes("render"))).toBe(true);
+  });
+
+  // The other fact this url proves, and it is NOT the group list. Only a session handed the url
+  // by --mcp-config can reach it, so it carries the tools that belong to no group and are
+  // therefore reachable through no group url — spawnBackgroundChat. A directory that registered
+  // all four group urls has every group and none of those.
+  it("records that the session carries the WHOLE GUI MCP, not just four groups", async () => {
+    const id = randomUUID();
+    expect(hasAllGuiTools(id)).toBe(false);
+    await call(`/api/mcp/${id}`);
+    expect(hasAllGuiTools(id)).toBe(true);
+  });
+
+  it("does NOT record it for a group url", async () => {
+    const id = randomUUID();
+    await call(`/api/mcp/render/${id}`);
+    await call(`/api/mcp/data/${id}`);
+    expect(hasAllGuiTools(id)).toBe(false);
   });
 
   it("says nothing for a malformed session id", async () => {

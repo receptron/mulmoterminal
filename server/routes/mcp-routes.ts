@@ -13,7 +13,7 @@ import type { Express, Request, Response } from "express";
 import { PORT, SESSION_ID_RE } from "../config/env.js";
 import { buildGuiMcpServer } from "../mcp/broker.js";
 import type { GuiCallRecorder } from "../mcp/gui-call-history.js";
-import { translationWorkerIds, markSessionToolGroup, sessionToolGroups } from "../session/registry.js";
+import { translationWorkerIds, markSessionToolGroup, sessionToolGroups, markAllToolsSession } from "../session/registry.js";
 import { isToolGroup, TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { submitTranslation } from "../session/translation-worker.js";
 import { translationSubmitOutcome } from "../session/translation-submit.js";
@@ -139,6 +139,12 @@ export function mountMcpRoutes(app: Express, deps: McpRouteDeps): void {
   // Grid cells proper are untouched: without --mcp-config they never reach this URL, and what
   // they can call still comes only from what their directory registered.
   app.post("/api/mcp/:sessionId", (req, res) => {
+    // Two facts, and they are NOT the same one. The groups say which drawing/data/media/external
+    // tools the session can call — that is what the Canvas gate reads. This says it carries the
+    // WHOLE MCP, which additionally includes the tools belonging to no group at all
+    // (spawnBackgroundChat); a directory that registered all four group urls has the first and
+    // not the second.
+    markAllToolsSession(req.params.sessionId);
     learnToolGroups(req.params.sessionId, TOOL_GROUPS);
     return handleMcpRequest(req, res, req.params.sessionId, null);
   });

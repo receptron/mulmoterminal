@@ -201,6 +201,63 @@ export function isBackgroundSession(id: string): boolean {
   return hiddenSessions.has(id) || backgroundSessions.has(id);
 }
 
+// Sessions that connected on the ALL-TOOLS MCP url (`/api/mcp/:sessionId`). That url is handed
+// out by --mcp-config and by nothing else, so reaching it is proof the session carries the whole
+// GUI MCP — including the tools that belong to no group and are therefore unreachable through a
+// group url (spawnBackgroundChat).
+//
+// Recorded as its own fact rather than inferred from "has all four groups", which is a different
+// statement: a directory that registered every group url really does have all four groups and
+// really does NOT have the ungrouped tools.
+//
+// Persisted for the same reason the tool-group log is: the learning happens in memory, and a
+// server restart would forget it while the claude process keeps running in tmux, already past
+// the ListTools that would teach us again.
+const allToolsSessions = new Set<string>();
+const ALL_TOOLS_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "all-tools-sessions.json");
+export const allToolsSessionsHydrated = hydrateIdLog(ALL_TOOLS_SESSIONS_FILE, allToolsSessions);
+const appendAllToolsSession = idLogAppender(ALL_TOOLS_SESSIONS_FILE, "all-tools-sessions");
+
+/** Note that a session reached us on the all-tools url. A no-op once known — one server is built
+ *  per MCP request, so this is asked on every tool call. */
+export function markAllToolsSession(id: string): void {
+  if (!isValidSessionId(id) || allToolsSessions.has(id)) return;
+  allToolsSessions.add(id);
+  appendAllToolsSession(id);
+}
+
+/** Does this session carry the whole GUI MCP, rather than the subset its directory registered? */
+export function hasAllGuiTools(id: string): boolean {
+  return allToolsSessions.has(id);
+}
+
+// Background workers whose run ENDED BADLY: reached teardown without ever reporting a finished
+// turn. A worker is invisible on purpose, so a failed one is the single case where that design
+// works against the user — nothing pulls their attention and nothing is waiting to be clicked, so
+// without a record the failure is simply never learned.
+//
+// Persisted for the same reason the set above is, and more so: the whole value of this is being
+// able to find out LATER. A live-only flag would be cleared by the very reap that discovers the
+// failure.
+const failedWorkers = new Set<string>();
+const FAILED_WORKERS_FILE = path.join(MULMOTERMINAL_HOME, "failed-workers.json");
+export const failedWorkersHydrated = hydrateIdLog(FAILED_WORKERS_FILE, failedWorkers);
+const appendFailedWorker = idLogAppender(FAILED_WORKERS_FILE, "failed-workers");
+
+/** Record that a background worker ended without succeeding. Only ever called for a session that
+ *  is already a background one — a watched session's failure is visible in its own terminal. */
+export function markFailedWorker(id: string): void {
+  if (!isValidSessionId(id) || failedWorkers.has(id)) return;
+  failedWorkers.add(id);
+  appendFailedWorker(id);
+}
+
+/** Did this background worker end badly? Read per row by the session list, so a launcher can say
+ *  so next to the worker rather than making the user open each one to find out. */
+export function isFailedWorker(id: string): boolean {
+  return failedWorkers.has(id);
+}
+
 /** What a hidden spawn marks itself with (see runWithHiddenMarker). Both halves of "hidden"
  *  are set from ONE place because there are two spawn sites, and a site that remembered the
  *  live flag but not the log would produce a worker that is background until it finishes and

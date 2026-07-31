@@ -44,7 +44,16 @@ import { mountNotificationRoutes } from "../backends/notifier.js";
 import { mountWhisperRoutes } from "../backends/whisper.js";
 import { mountSchedulerRoutes } from "../backends/scheduler.js";
 import { mountFilesRoutes } from "../backends/files.js";
-import { hookedSessions, ptys, sessionToolGroups, sessionToolGroupsHydrated, devTerminalSessions, devTerminalSessionsHydrated } from "../session/registry.js";
+import {
+  hookedSessions,
+  ptys,
+  sessionToolGroups,
+  sessionToolGroupsHydrated,
+  devTerminalSessions,
+  devTerminalSessionsHydrated,
+  hasAllGuiTools,
+  allToolsSessionsHydrated,
+} from "../session/registry.js";
 import { mountShortcutsRoutes } from "../backends/shortcuts.js";
 import { mountDecisionRoutes } from "./decision-routes.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
@@ -121,6 +130,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     spawnCodexPty: deps.spawnCodexPty,
     spawnAntigravityPty: deps.spawnAntigravityPty,
     registerBackgroundSession: deps.registerBackgroundSession,
+    publish: (c, d) => deps.publish(c, d),
   });
 
   // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
@@ -263,6 +273,8 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
     toolSummaries: deps.toolSummaries,
     sessionToolGroups,
     sessionToolGroupsHydrated,
+    hasAllGuiTools,
+    allToolsSessionsHydrated,
     isGridSession: (id) => devTerminalSessions.has(id),
     devTerminalSessionsHydrated,
     // Built from the same two signals as the broker's recorder, but with the stricter rule the

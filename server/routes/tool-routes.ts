@@ -21,6 +21,11 @@ export interface ToolRouteDeps {
   /** Which tool groups a session actually reached us on — see session/session-tool-groups.ts. */
   sessionToolGroups: (sessionId: string) => ToolGroup[];
   sessionToolGroupsHydrated: Promise<void>;
+  /** Does this session carry the WHOLE GUI MCP (it connected on the all-tools url), rather than
+   *  the per-group subset its directory registered? Separate from the group list because the
+   *  ungrouped tools are reachable only that way — see narrowedTools. */
+  hasAllGuiTools: (sessionId: string) => boolean;
+  allToolsSessionsHydrated: Promise<void>;
   /**
    * Is this a GRID cell? The two kinds of session get their GUI tools by different routes, and
    * "no groups learned" means the opposite thing for each — see narrowedTools.
@@ -45,17 +50,20 @@ const hasGroup = (group: ToolGroup | null, groups: readonly ToolGroup[]): boolea
 /**
  * The tools a session actually has.
  *
- * The rule that matters: an EMPTY group list means opposite things for the two kinds of session,
- * and conflating them is what let a grid cell with no MCP registered report every tool — and so
- * offer a Canvas button that opened a panel nothing could ever fill.
+ * Narrowing is decided by where the session's tools CAME FROM, which is not the same question as
+ * whether it is a grid cell — and reading it as though it were is what hid spawnBackgroundChat
+ * from a workspace cell that genuinely had it:
  *
- *   single view — carries the whole GUI MCP on --mcp-config and never connects to a group URL,
- *                 so it learns no groups and nonetheless has everything.
- *   grid cell   — has exactly what its directory registered with Claude Code. Nothing
- *                 registered, nothing learned, nothing available.
+ *   carries the whole GUI MCP (--mcp-config) — has everything, including the tools that belong to
+ *       no group and so can be reached through no group url. The single view, a chat spawned with
+ *       no cell of its own, and (since the workspace-cell rule) a grid cell in the workspace.
+ *   anything else, in the grid — has exactly what its DIRECTORY registered with Claude Code, one
+ *       group url at a time. Nothing registered, nothing learned, nothing available: the empty
+ *       list here means "has nothing", the opposite of what it means above, and conflating the
+ *       two once had a grid cell reporting every tool and offering a Canvas nothing could fill.
  */
-export function narrowedTools(tools: readonly ToolSummary[], groups: readonly ToolGroup[], isGrid: boolean): ToolSummary[] {
-  if (!isGrid) return [...tools];
+export function narrowedTools(tools: readonly ToolSummary[], groups: readonly ToolGroup[], isGrid: boolean, hasAllTools = false): ToolSummary[] {
+  if (!isGrid || hasAllTools) return [...tools];
   return tools.filter((tool) => hasGroup(groupOfTool(tool.toolName), groups));
 }
 
@@ -107,10 +115,11 @@ export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
     if (sessionId === null || !SESSION_ID_RE.test(sessionId)) return res.json({ tools: deps.toolSummaries, guiOnlyHistory: false });
     // Both sets are persisted and hydrated at boot; asked before either resolves, a grid cell
     // would read as having nothing and a resumed one as having lost its groups.
-    await Promise.all([deps.sessionToolGroupsHydrated, deps.devTerminalSessionsHydrated]);
+    await Promise.all([deps.sessionToolGroupsHydrated, deps.devTerminalSessionsHydrated, deps.allToolsSessionsHydrated]);
     const groups = deps.sessionToolGroups(sessionId);
     const isGrid = deps.isGridSession(sessionId);
-    res.json({ tools: narrowedTools(deps.toolSummaries, groups, isGrid), groups, guiOnlyHistory: deps.guiOnlyHistory(sessionId) });
+    const hasAllTools = deps.hasAllGuiTools(sessionId);
+    res.json({ tools: narrowedTools(deps.toolSummaries, groups, isGrid, hasAllTools), groups, guiOnlyHistory: deps.guiOnlyHistory(sessionId) });
   });
 
   // Replay a session's tool-call history — every tool for claude (its Pre/PostToolUse hooks),
