@@ -24,7 +24,7 @@ interface Item {
 }
 
 // Mount the composable with a history fetch we control the timing of.
-function mountFeed(respond: () => Promise<{ ok: boolean; json?: () => Promise<unknown> }>) {
+function mountFeed(respond: () => Promise<{ ok: boolean; json?: () => Promise<unknown> }>, reconcile?: (items: Item[], incoming: Item) => "store" | "skip") {
   const items = ref<Item[]>([]);
   const sessionId = ref<string | null>("s1");
   vi.stubGlobal("fetch", vi.fn().mockImplementation(respond));
@@ -37,6 +37,7 @@ function mountFeed(respond: () => Promise<{ ok: boolean; json?: () => Promise<un
           historyKey: "items",
           channel: (id) => `feed:${id}`,
           identify: (item) => item.id,
+          ...(reconcile ? { reconcile } : {}),
         });
         return () => h("div");
       },
@@ -128,5 +129,44 @@ describe("useSessionFeed — overlapping loads for the same session", () => {
     gates[0]?.(); // the stale one, arriving last
     await flushPromises();
     expect(items.value.map((item) => item.id)).toEqual(["new"]);
+  });
+});
+
+// The `reconcile` seam, added for the collection placeholder: a pair the identity cannot
+// relate — the card the browser seeds at spawn and the agent's own card for the same
+// collection — where the second must REPLACE the first rather than sit beside it.
+describe("useSessionFeed — reconcile", () => {
+  // Stand-in for reconcileCollectionCard, spelled in this spec's own Item shape: text is the
+  // subject, and a "seed:" id marks the placeholder.
+  const supersede = (items: Item[], incoming: Item): "store" | "skip" => {
+    const same = (candidate: Item) => candidate.text === incoming.text;
+    if (incoming.id.startsWith("seed:")) return items.some((candidate) => same(candidate) && !candidate.id.startsWith("seed:")) ? "skip" : "store";
+    const index = items.findIndex((candidate) => same(candidate) && candidate.id.startsWith("seed:"));
+    if (index >= 0) items.splice(index, 1);
+    return "store";
+  };
+
+  it("removes what an arriving item supersedes, instead of showing both", async () => {
+    const { items } = mountFeed(async () => ({ ok: true, json: async () => ({ items: [{ id: "seed:1", text: "invoices" }] }) }), supersede);
+    await vi.waitFor(() => expect(items.value.map((i) => i.id)).toEqual(["seed:1"]));
+
+    deliver("feed:s1", { id: "agent", text: "invoices" });
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+  });
+
+  it("drops an item the callback skips, without disturbing the list", async () => {
+    const { items } = mountFeed(async () => ({ ok: true, json: async () => ({ items: [{ id: "agent", text: "invoices" }] }) }), supersede);
+    await vi.waitFor(() => expect(items.value).toHaveLength(1));
+
+    deliver("feed:s1", { id: "seed:1", text: "invoices" });
+    expect(items.value.map((i) => i.id)).toEqual(["agent"]);
+  });
+
+  it("leaves unrelated items alone", async () => {
+    const { items } = mountFeed(async () => ({ ok: true, json: async () => ({ items: [{ id: "seed:1", text: "invoices" }] }) }), supersede);
+    await vi.waitFor(() => expect(items.value).toHaveLength(1));
+
+    deliver("feed:s1", { id: "agent", text: "clients" });
+    expect(items.value.map((i) => i.id)).toEqual(["seed:1", "agent"]);
   });
 });

@@ -72,9 +72,11 @@ export function mountToolRoutes(app: Express, deps: ToolRouteDeps): void {
     if (!plan.ok) {
       return res.status(400).json({ error: plan.error });
     }
-    await deps.stores.storeToolResult(plan.sessionId, plan.stored);
+    // A dropped result (a collection placeholder the agent's real card has already beaten) must
+    // not publish either: the panel would render a card that no reload would bring back.
+    const stored = await deps.stores.storeToolResult(plan.sessionId, plan.stored);
 
-    if (plan.publish) {
+    if (stored && plan.publish) {
       deps.publish(deps.sessionChannel(plan.sessionId), plan.stored);
       console.log(`[gui] toolResult ${plan.toolName} for ${plan.sessionId}`);
     }

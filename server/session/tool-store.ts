@@ -12,6 +12,7 @@ import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import { messageOf } from "../errors.js";
 import type { ToolCall, ToolResult } from "./types.js";
+import { reconcileCollectionCard } from "../../common/collectionSeed.js";
 
 export interface ToolStoreDeps {
   /** Fan a change out to the panel; a no-op before pub/sub exists. */
@@ -157,8 +158,18 @@ export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolSto
   // Upsert a toolResult into a session's list, deduped by uuid — a re-emitted result
   // (e.g. a form whose viewState changed after the user submitted) updates in place.
   // Mirrors MulmoClaude's applyToolResultToSession.
-  async function storeToolResult(sessionId: string, result: ToolResult) {
+  //
+  // Returns whether it was stored. A browser-seeded collection placeholder is DROPPED when the
+  // agent's real card for that collection is already here (see reconcileCollectionCard) — uuid
+  // dedupe cannot catch that pair, because the two arrive with different uuids from different
+  // writers. The caller needs the answer so a result that was not stored is not published either.
+  async function storeToolResult(sessionId: string, result: ToolResult): Promise<boolean> {
     const list = await toolResultsStore.get(sessionId);
+    if (reconcileCollectionCard(list, result) === "skip") {
+      // The list may still have changed above; save so a supersede is not lost on restart.
+      toolResultsStore.save(sessionId);
+      return false;
+    }
     const idx = list.findIndex((r) => r.uuid === result.uuid);
     if (idx >= 0) {
       list[idx] = result;
@@ -167,6 +178,7 @@ export function createToolStores({ publish, root = MULMOTERMINAL_HOME }: ToolSto
       if (list.length > GUI_HISTORY_LIMIT) list.splice(0, list.length - GUI_HISTORY_LIMIT);
     }
     toolResultsStore.save(sessionId);
+    return true;
   }
 
   // Per-session tool-call history, published on a per-session channel the tools pane

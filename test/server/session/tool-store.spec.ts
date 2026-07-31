@@ -164,6 +164,42 @@ describe("createToolStores", () => {
     expect(await s.toolResultsStore.get(SESSION)).toEqual([{ uuid: "a", value: 2 }]);
   });
 
+  // The collection placeholder the browser seeds when a chat is started from a collection view, and
+  // the agent's own presentCollection card for it. Different writers, so different uuids — the
+  // dedupe above cannot relate them, and without this the cell shows the same collection twice.
+  // Settled HERE rather than in the browser because this is the list both writers append to: any
+  // client-side check has a gap between asking and posting that the agent can arrive in.
+  const seeded = (uuid: string, collectionSlug: string) => ({
+    uuid,
+    toolName: "presentCollection",
+    data: { collectionSlug },
+    syntheticCollection: true,
+  });
+  const agentCard = (uuid: string, collectionSlug: string) => ({ uuid, toolName: "presentCollection", data: { collectionSlug } });
+
+  it("replaces a seeded collection placeholder with the agent's real card", async () => {
+    const s = stores();
+    expect(await s.storeToolResult(SESSION, seeded("seed", "invoices"))).toBe(true);
+    expect(await s.storeToolResult(SESSION, agentCard("agent", "invoices"))).toBe(true);
+    expect(await s.toolResultsStore.get(SESSION)).toEqual([agentCard("agent", "invoices")]);
+  });
+
+  // The other order, which is the race: our validation fetch resolves after the agent has already
+  // presented. Storing the placeholder now would leave a duplicate that nothing later removes.
+  it("drops a placeholder the agent's real card has already beaten, and says it did not store it", async () => {
+    const s = stores();
+    await s.storeToolResult(SESSION, agentCard("agent", "invoices"));
+    expect(await s.storeToolResult(SESSION, seeded("seed", "invoices"))).toBe(false);
+    expect(await s.toolResultsStore.get(SESSION)).toEqual([agentCard("agent", "invoices")]);
+  });
+
+  it("leaves a placeholder for a different collection alone", async () => {
+    const s = stores();
+    await s.storeToolResult(SESSION, seeded("seed", "invoices"));
+    await s.storeToolResult(SESSION, agentCard("agent", "clients"));
+    expect((await s.toolResultsStore.get(SESSION)).map((r) => r.uuid)).toEqual(["seed", "agent"]);
+  });
+
   it("caps the result history at 50, keeping the newest", async () => {
     const s = stores();
     for (let i = 0; i < 55; i++) await s.storeToolResult(SESSION, { uuid: `u${i}` });

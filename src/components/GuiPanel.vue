@@ -5,6 +5,7 @@ import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { getPlugin } from "../plugins-registry";
 import PluginFrame from "./PluginFrame.vue";
 import { TOOL_GROUPS, groupOfTool, toolsInGroup } from "../../common/toolGroups";
+import { reconcileCollectionCard } from "../../common/collectionSeed";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -43,6 +44,11 @@ const { upsert } = useSessionFeed(results, {
   historyKey: "toolResults",
   channel: (id) => `session:${id}`,
   identify: (result) => result.uuid,
+  // The one pair uuid dedupe cannot relate: a collection placeholder seeded by the browser at
+  // spawn, and the agent's own presentCollection card for the same collection. Different writers,
+  // different uuids, one thing on screen — the real card wins. The server applies the same rule to
+  // what it stores, so a reload agrees with what is here now.
+  reconcile: (list, incoming) => reconcileCollectionCard(list, incoming),
   // Drop the previous session's views the moment the session changes, rather than when its
   // replacement's history arrives: until then the panel would still be showing another cell's
   // drawings under this cell's name.

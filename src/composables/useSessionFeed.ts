@@ -12,10 +12,20 @@ interface SessionFeedOptions<T> {
   channel: (id: string) => string;
   identify: (item: T) => string | undefined;
   onSessionChange?: () => void;
+  /**
+   * Fold an arriving item into the list by something OTHER than its identity, before the dedupe
+   * below runs. Return "skip" to drop it; mutate `items` to remove what it supersedes.
+   *
+   * Exists for a pair the identity cannot relate: a browser-seeded collection placeholder and the
+   * agent's real card for the same collection are one thing rendered twice, but they are written
+   * by different sources and so never share a uuid. The server applies the same rule to what it
+   * stores; this is the live half, for the panel already on screen.
+   */
+  reconcile?: (items: T[], incoming: T) => "store" | "skip";
 }
 
 export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T>) {
-  const { sessionId, historyUrl, historyKey, channel, identify, onSessionChange } = options;
+  const { sessionId, historyUrl, historyKey, channel, identify, onSessionChange, reconcile } = options;
 
   // What the live channel delivered while a history request was in flight. The response is
   // authoritative as of when it was SENT, so these have to survive it (#620 F1).
@@ -28,6 +38,14 @@ export function useSessionFeed<T>(items: Ref<T[]>, options: SessionFeedOptions<T
 
   function upsert(item: T) {
     if (loadingSession !== null) arrivedDuringLoad.push(item);
+    if (reconcile) {
+      // Over a copy, assigned back: the callback removes what `item` supersedes, and a splice on
+      // the ref's own array would leave the list mutated whether or not the item is then stored.
+      const next = [...items.value];
+      const verdict = reconcile(next, item);
+      items.value = next;
+      if (verdict === "skip") return;
+    }
     const id = identify(item);
     const index = id === undefined ? -1 : items.value.findIndex((existing) => identify(existing) === id);
     if (index >= 0) items.value[index] = item;
