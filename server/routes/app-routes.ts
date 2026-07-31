@@ -130,7 +130,6 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     spawnCodexPty: deps.spawnCodexPty,
     spawnAntigravityPty: deps.spawnAntigravityPty,
     registerBackgroundSession: deps.registerBackgroundSession,
-    publish: (c, d) => deps.publish(c, d),
   });
 
   // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on

@@ -15,6 +15,7 @@ import {
   activityStateHydrated,
   aiTitles,
   backgroundSessionsHydrated,
+  failedWorkersHydrated,
   devTerminalSessions,
   devTerminalSessionsHydrated,
   isBackgroundSession,
@@ -166,10 +167,15 @@ async function sessionList(req: Request, res: Response) {
     const includePending = !req.query.cwd;
     // Wait for the persisted grid-session set before filtering (below), so a chat
     // request racing server boot can't leak previously-hidden grid transcripts. The
-    // background set is awaited for BOTH queries — it decides a flag on the row rather
-    // than whether the row is listed, and that flag is answered either way.
+    // background and failed sets are awaited for BOTH queries — they decide a flag on the row
+    // rather than whether the row is listed, and those flags are answered either way.
+    //
+    // `failed` especially: the whole value of persisting it is finding out LATER, and the most
+    // likely "later" is the first list after a restart. Serving it as false while its log is
+    // still being read would lose exactly the case the record exists for (Codex, PR #1188).
     if (includePending) await devTerminalSessionsHydrated;
     await backgroundSessionsHydrated;
+    await failedWorkersHydrated;
     await sessionMemosHydrated; // the memo is the row's TITLE when there is one — a race shows the agent's words instead
     const dir = projectSessionsDir(cwd);
     let files: string[] = [];

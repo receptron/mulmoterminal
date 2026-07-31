@@ -16,6 +16,10 @@ export interface ActivityMsg {
   event?: string | null;
   // The session's working dir, so a beep can use that directory's own sound.
   cwd?: string | null;
+  // On a teardown ("closed"): this was a hidden background worker that never completed a turn.
+  // Carried on the same message rather than sent as its own, so the generic teardown
+  // notification cannot arrive first — see notifyKindOf.
+  failed?: boolean;
 }
 
 export interface ActivityState {
@@ -51,17 +55,19 @@ function rawKind(was: ActivityState, now: ActivityState, event: string | null): 
  * blocked one, and counted a background Stop's two rows as two separate beeps.
  */
 export function notifyKindOf(prev: Map<string, ActivityState>, msg: ActivityMsg): NotifyKind | null {
-  // A hidden worker ended badly. Checked BEFORE "closed", which the same teardown also raises:
-  // this is the specific answer and that is the generic one. It does not depend on `prev` — a
-  // worker has no cell, so nothing here ever saw it working, and requiring a baseline would drop
-  // the one notification that exists because nobody was watching.
-  if (msg.event === "worker-failed") {
-    prev.delete(msg.id);
-    return "worker-failed";
-  }
   // The PTY was reaped: forget the session, so an id that comes back is a baseline again and
   // not compared against a state from its previous life.
-  if (msg.event === "closed") return prev.delete(msg.id) ? "session-exited" : null;
+  //
+  // ONE teardown message carries both facts. `failed` marks a hidden worker that never completed
+  // a turn, and it wins: it is the specific answer where session-exited is the generic one, and
+  // two messages would let the generic beat it (Codex, #1188). It deliberately does NOT depend on
+  // `prev` — a worker has no cell, so nothing here ever saw it working, and requiring a baseline
+  // would drop the one notification that exists precisely because nobody was watching.
+  if (msg.event === "closed") {
+    const seen = prev.delete(msg.id);
+    if (msg.failed) return "worker-failed";
+    return seen ? "session-exited" : null;
+  }
   const event = msg.event ?? null;
   const was = prev.get(msg.id);
   // A row carrying a different event starts a new moment, so it may be announced again. The

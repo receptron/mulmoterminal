@@ -5,7 +5,7 @@
 // prove the pieces are CONNECTED. This drives the real route and the real completion hook, which
 // is the only place the decision "a hidden worker that never finished a turn has failed" actually
 // happens.
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import express from "express";
 import request from "supertest";
 
@@ -26,9 +26,7 @@ vi.mock("node:fs", () => {
 const { mountPluginRoutes } = await import("../../../server/routes/plugin-routes.js");
 const { runCompletionHook } = await import("../../../server/session/completion-hooks.js");
 const { isFailedWorker } = await import("../../../server/session/registry.js");
-const { SESSIONS_CHANNEL } = await import("../../../server/session/lifecycle.js");
 
-let published: { channel: string; data: Record<string, unknown> }[] = [];
 const app = express();
 app.use(express.json());
 mountPluginRoutes(app, {
@@ -36,11 +34,6 @@ mountPluginRoutes(app, {
   spawnCodexPty: (() => ({})) as never,
   spawnAntigravityPty: (() => ({})) as never,
   registerBackgroundSession: () => {},
-  publish: (channel, data) => void published.push({ channel, data: data as Record<string, unknown> }),
-});
-
-beforeEach(() => {
-  published = [];
 });
 
 /** Spawn through the real route and hand back the id it minted. */
@@ -49,10 +42,8 @@ async function spawn(hidden: boolean): Promise<string> {
   return String((res.body as { jsonData?: { chatId?: string } }).jsonData?.chatId);
 }
 
-const failureEvents = (id: string) => published.filter((p) => p.channel === SESSIONS_CHANNEL && p.data.id === id && p.data.event === "worker-failed");
-
 describe("a hidden worker that ends badly", () => {
-  it("is recorded and announced when its run reaches teardown unfinished", async () => {
+  it("is recorded when its run reaches teardown unfinished", async () => {
     const id = await spawn(true);
     expect(isFailedWorker(id)).toBe(false); // nothing decided while it runs
 
@@ -60,7 +51,18 @@ describe("a hidden worker that ends badly", () => {
     await runCompletionHook(id, { didError: true });
 
     expect(isFailedWorker(id)).toBe(true);
-    expect(failureEvents(id)).toHaveLength(1);
+  });
+
+  // The contract reap depends on. It fires the hook and then reads the flag on the very next
+  // line, so it can put the outcome on the SAME teardown message — which is what stops the
+  // generic notification racing ahead of the specific one. If this recorder ever became async,
+  // reap would publish `failed: false` and the failure would go unannounced, silently.
+  it("records SYNCHRONOUSLY, so reap can read the flag on the next line", async () => {
+    const id = await spawn(true);
+
+    void runCompletionHook(id, { didError: true }); // deliberately NOT awaited, as reap calls it
+
+    expect(isFailedWorker(id)).toBe(true);
   });
 
   it("is NOT recorded when its turn finished first", async () => {
@@ -72,7 +74,6 @@ describe("a hidden worker that ends badly", () => {
     await runCompletionHook(id, { didError: true }); // reap, moments later
 
     expect(isFailedWorker(id)).toBe(false);
-    expect(failureEvents(id)).toEqual([]);
   });
 
   it("says nothing for a WATCHED session that dies", async () => {
@@ -82,15 +83,5 @@ describe("a hidden worker that ends badly", () => {
     await runCompletionHook(id, { didError: true });
 
     expect(isFailedWorker(id)).toBe(false);
-    expect(failureEvents(id)).toEqual([]);
-  });
-
-  it("announces on the sessions channel with the shape the browser reads", async () => {
-    // notifyKindOf keys on `event`; the id is what the row is matched by. Pinned because the two
-    // sides of this message are in different files and nothing else compares them.
-    const id = await spawn(true);
-    await runCompletionHook(id, { didError: true });
-
-    expect(failureEvents(id)[0].data).toEqual({ id, working: false, event: "worker-failed" });
   });
 });

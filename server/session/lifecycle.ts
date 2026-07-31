@@ -29,6 +29,7 @@ import {
   ptys,
   sessionMemos,
   titleInFlight,
+  isFailedWorker,
 } from "./registry.js";
 import { clearedTranscripts, forgetClearedTranscript } from "./cleared-transcripts.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
@@ -175,12 +176,20 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   cleanupSessionSettings(id);
   // Files dropped into this session were copied to tmp for it alone; nothing else refers to them.
   cleanupSessionDrops(id);
-  deps.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed" });
   // The session is gone, so this is its last chance to report an outcome (#1070). Failure is
   // the right answer HERE because the hook is one-shot and a finished turn already claimed it
   // on the way past: reaching teardown with the hook still unfired means no Stop ever came —
   // a worker blocked on a dialog nobody can answer, or one that died before its first turn.
+  //
+  // BEFORE the announcement below, so that announcement can carry the outcome. The recorder this
+  // fires is synchronous (it sets a flag), so the mark is in place by the time it is read — a
+  // contract pinned in test/server/routes/worker-failure-wiring.spec.ts rather than left implied.
   void runCompletionHook(id, { didError: true }).catch((err) => console.error(`[completion-hook] ${messageOf(err)}`));
+  // ONE message, not two. `event` stays "closed" because that is what every consumer of this
+  // channel keys on to drop a reaped session (sessionActivity.ts); the outcome rides along as a
+  // field. Publishing a second "worker-failed" message instead let the generic teardown
+  // notification race ahead of the specific one, and beeped twice for one event (Codex, #1188).
+  deps.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed", failed: isFailedWorker(id) });
 }
 
 // Publish a session's current activity (working + waiting) to subscribers.

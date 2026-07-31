@@ -13,7 +13,6 @@ import { isRecord } from "../../common/isRecord.js";
 import { backgroundMarkers, markFailedWorker } from "../session/registry.js";
 import { runWithHiddenMarker } from "../session/hiddenMarker.js";
 import { registerCompletionHook } from "../session/completion-hooks.js";
-import { SESSIONS_CHANNEL } from "../session/lifecycle.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor } from "../session/background-chat.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
 import { TOOL_GROUPS } from "../../common/toolGroups.js";
@@ -31,9 +30,6 @@ export interface PluginRouteDeps {
    *  is the only thing that would ever end it — and a worker blocked on a permission prompt
    *  never fires the hook that starts it. */
   registerBackgroundSession: (id: string) => void;
-  /** Announce a session event on the sessions channel. Used for the one thing a hidden worker
-   *  cannot announce for itself: that it ended badly. */
-  publish: (channel: string, data: unknown) => void;
 }
 
 export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
@@ -79,13 +75,13 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
         // Registered AFTER the spawn: a launch that threw has no session to report on, and would
         // leave a hook nothing will ever fire or clear. Safe against the feeds engine's own hook
         // (last writer wins) because that dispatches through its own spawner, never this route.
+        //
+        // RECORDS ONLY, and synchronously. Announcing is reap's job: it publishes one teardown
+        // message carrying this outcome, which is what keeps the generic notification from
+        // racing ahead of the specific one. Staying synchronous is therefore a contract, not an
+        // implementation detail — reap reads the flag immediately after firing this.
         registerCompletionHook(sessionId, ({ didError }) => {
-          if (!didError) return;
-          markFailedWorker(sessionId);
-          // Published as well as recorded: the record is what makes the failure FINDABLE later,
-          // this is what lets the user be told now. Its own event rather than reusing "closed",
-          // which every session raises and which is therefore useless as a failure signal.
-          deps.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "worker-failed" });
+          if (didError) markFailedWorker(sessionId);
         });
       }
     } catch (err) {

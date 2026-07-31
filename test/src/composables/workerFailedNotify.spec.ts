@@ -14,16 +14,22 @@ describe("notifyKindOf — worker-failed", () => {
     // produces one — no cell ever subscribed to it working. Requiring a baseline here would drop
     // exactly the notification that exists because nothing was watching.
     const prev = seen();
-    expect(notifyKindOf(prev, { id: "w", event: "worker-failed" })).toBe("worker-failed");
+    expect(notifyKindOf(prev, { id: "w", event: "closed", failed: true })).toBe("worker-failed");
   });
 
-  it("wins over the `closed` that the same teardown also raises", () => {
-    // Reap publishes "closed" for every session and this for the failed worker; the specific
-    // answer must not be swallowed by the generic one, whichever order they arrive in.
+  it("wins over session-exited on the SAME teardown message", () => {
+    // The specific answer beats the generic one. Carried on one message precisely so the two
+    // cannot race: a separate "worker-failed" push let session-exited land first and beep twice
+    // for a single event (Codex, #1188).
     const prev = seen();
     notifyKindOf(prev, { id: "w", working: true, event: null });
-    expect(notifyKindOf(prev, { id: "w", event: "worker-failed" })).toBe("worker-failed");
-    // The session is forgotten either way, so a later "closed" is a baseline, not a second beep.
+    expect(notifyKindOf(prev, { id: "w", event: "closed", failed: true })).toBe("worker-failed");
+  });
+
+  it("forgets the session either way, so an id that comes back is a baseline", () => {
+    const prev = seen();
+    notifyKindOf(prev, { id: "w", working: true, event: null });
+    notifyKindOf(prev, { id: "w", event: "closed", failed: true });
     expect(notifyKindOf(prev, { id: "w", event: "closed" })).toBeNull();
   });
 
@@ -32,5 +38,8 @@ describe("notifyKindOf — worker-failed", () => {
     const prev = seen();
     notifyKindOf(prev, { id: "s", working: true, event: null });
     expect(notifyKindOf(prev, { id: "s", event: "closed" })).toBe("session-exited");
+    // ...and an explicit `failed: false` is just an ordinary teardown, not a silent one.
+    notifyKindOf(prev, { id: "t", working: true, event: null });
+    expect(notifyKindOf(prev, { id: "t", event: "closed", failed: false })).toBe("session-exited");
   });
 });
