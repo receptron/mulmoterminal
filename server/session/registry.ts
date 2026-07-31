@@ -261,8 +261,14 @@ export function markUnplacedSession(id: string, agent: TerminalAgent = "claude")
  *  for a home, and must not be adopted again on the next load. */
 export function markSessionPlaced(id: string): void {
   if (!isValidSessionId(id)) return;
-  placedSessions.add(id);
   unplacedSessions.delete(id);
+  // A no-op once known, like every other mark in this file — and here it is not just tidiness.
+  // This runs at ALL FOUR ws attach points, so a long-lived session reconnecting (a reload, a
+  // network blip, a page switch in the grid) would otherwise append a line every time: the log
+  // would grow with ATTACH count rather than session count, and /api/sessions/unplaced waits on
+  // hydrating it (Codex, PR #1189).
+  if (placedSessions.has(id)) return;
+  placedSessions.add(id);
   appendPlacedSession(id);
 }
 const PLACED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "placed-sessions.json");

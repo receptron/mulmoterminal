@@ -34,9 +34,12 @@ async function freshRegistry() {
   return import("../../../server/session/registry.js");
 }
 
+// Matched on the exact BASENAME, not endsWith: "unplaced-sessions.json" ends with
+// "placed-sessions.json", so a suffix match reads both logs as one and every assertion about the
+// placed log silently counts the unplaced one too.
 const loggedTo = (name: string) =>
   appended
-    .filter((a) => a.file.endsWith(name))
+    .filter((a) => a.file.split("/").pop() === name)
     .map((a) => a.data)
     .join("");
 
@@ -112,6 +115,20 @@ describe("unplaced sessions", () => {
       { id: A, agent: "antigravity" },
       { id: B, agent: "claude" },
     ]);
+  });
+
+  // Codex, on this PR. markSessionPlaced runs at ALL FOUR ws attach points, so a long-lived
+  // session reconnecting — a reload, a network blip, a page switch in the grid — would append a
+  // line every time. The log would then grow with ATTACH count rather than session count, and
+  // /api/sessions/unplaced waits on hydrating it. Every other mark in the registry is already a
+  // no-op once known; this one was not.
+  it("appends the placed mark once, however many times a session reattaches", async () => {
+    const registry = await freshRegistry();
+    registry.markUnplacedSession(A);
+    for (let i = 0; i < 20; i++) registry.markSessionPlaced(A);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(loggedTo("placed-sessions.json").split(A).length - 1).toBe(1);
+    expect(registry.unplacedSessionRows()).toEqual([]);
   });
 
   it("ignores an id that is not a session id", async () => {
