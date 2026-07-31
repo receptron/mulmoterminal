@@ -91,6 +91,18 @@ describe("removeLegacySandboxCredentials", () => {
     expect(removeLegacySandboxCredentials(home)).toBe(true);
   });
 
+  // The premise of this whole file: cleanup must not throw. readdirSync does — EACCES on an
+  // unreadable directory, ENOTDIR when the path is a file, ENOENT if it vanishes after the check —
+  // and this runs at boot with nobody catching, so an escaping throw is a server that will not
+  // start, over litter from a feature that no longer exists (Codex, PR #1195).
+  it("does not throw when the path cannot be read, and still reports it was there", () => {
+    const home = tmp();
+    writeFileSync(sandboxDir(home), "not a directory"); // readdirSync answers ENOTDIR
+
+    expect(() => removeLegacySandboxCredentials(home)).not.toThrow();
+    expect(removeLegacySandboxCredentials(home)).toBe(true);
+  });
+
   it("answers FALSE when the directory was never there", () => {
     // Not a detail: the answer is what gates the docker call at boot. Reporting true for a machine
     // that never ran the sandbox — nearly every machine, since it was opt-in and macOS-only —

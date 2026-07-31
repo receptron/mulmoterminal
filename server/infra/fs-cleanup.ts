@@ -52,7 +52,19 @@ export function removeLegacySandboxCredentials(home: string): boolean {
   // the empty directory is what remembers that a sweep is still owed. Removing both here made the
   // migration one-shot — a first boot with Docker not yet up would lose the sweep forever, and any
   // orphan container would outlive every later start (Codex, PR #1195).
-  for (const entry of readdirSync(dir)) removeQuietly(path.join(dir, entry));
+  // readdirSync THROWS — EACCES on an unreadable directory, ENOTDIR if the path is a file, ENOENT
+  // if it goes away between the check above and here. This function runs at boot with no caller
+  // catching, so an escaping throw is a server that will not start, over litter from a feature
+  // that no longer exists — exactly the trade this whole file exists to refuse (Codex, PR #1195).
+  //
+  // Still `true` when it fails: the directory is there, which is the only question the caller is
+  // asking. Nothing is lost by trying again — the sweep leaves the directory alone unless docker
+  // answers, and an unreadable one resists removal anyway, so the next boot retries both halves.
+  try {
+    for (const entry of readdirSync(dir)) removeQuietly(path.join(dir, entry));
+  } catch {
+    // unreadable or gone — the retry above is the answer
+  }
   return true;
 }
 
