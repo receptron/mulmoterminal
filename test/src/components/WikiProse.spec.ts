@@ -27,7 +27,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await router.replace({ name: "chat" });
+  await router.replace("/terminals");
   await flushPromises();
 });
 

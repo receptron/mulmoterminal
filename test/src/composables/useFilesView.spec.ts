@@ -4,12 +4,12 @@ import { router } from "../../../src/router/index";
 import { filesGotoIndex, filesClose, useFilesView } from "../../../src/composables/useFilesView";
 
 // Drives the real singleton router (jsdom web-history) — the composables are bound to
-// it. Each test starts from chat, then navigates to the origin under test.
+// it. Each test starts from the grid, which is the only view there is.
 const settle = () => flushPromises();
 
 describe("useFilesView return-to-origin", () => {
   beforeEach(async () => {
-    await router.push({ name: "chat" });
+    await router.push("/terminals");
     await settle();
   });
 
@@ -24,16 +24,6 @@ describe("useFilesView return-to-origin", () => {
     filesClose();
     await settle();
     expect(router.currentRoute.value.name).toBe("terminals");
-  });
-
-  it("returns to chat when Files was opened from the single view", async () => {
-    filesGotoIndex("/proj");
-    await settle();
-    expect(router.currentRoute.value.name).toBe("files");
-
-    filesClose();
-    await settle();
-    expect(router.currentRoute.value.name).toBe("chat");
   });
 
   it("keeps the grid origin when the root dir changes while already in Files", async () => {
@@ -62,19 +52,21 @@ describe("useFilesView return-to-origin", () => {
   // reached WITHOUT filesGotoIndex (browser back/forward, direct load) must fall back to the
   // default view — never a stale origin captured by an earlier open.
   //
-  // The earlier open captures CHAT and the fallback is the grid (#1190), deliberately opposite
-  // values. Written the other way round the two answers coincide, and the test passes whether the
-  // stale origin was ignored or reused — which is the whole thing it exists to catch.
+  // What this can still discriminate, now that there is only one view: the fresh entry carries NO
+  // captured origin of its own. It used to capture chat and expect the grid — deliberately
+  // opposite values — and that version died with the second view, since every origin is now the
+  // grid and the two answers coincide. So the claim is made about the history STATE, which is
+  // where the staleness would live, rather than about the landing route.
   it("falls back to the default view for a history-driven /files, ignoring an earlier open's origin", async () => {
-    await router.push({ name: "chat" });
-    await settle();
-    filesGotoIndex("/proj"); // captures /chat into that entry's state
-    await settle();
-
     await router.push("/terminals");
     await settle();
+    filesGotoIndex("/proj"); // captures /terminals into THAT entry's state
+    await settle();
+    expect(router.options.history.state.returnPath).toBe("/terminals");
+
     await router.push("/files"); // fresh /files entry, no captured origin
     await settle();
+    expect(router.options.history.state.returnPath).toBeUndefined();
 
     filesClose();
     await settle();

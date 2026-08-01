@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { nextTick } from "vue";
-import { registerChatOpener, startCollectionChat, launchAgent } from "../../../src/composables/useChatLauncher";
+import { startCollectionChat, launchAgent } from "../../../src/composables/useChatLauncher";
 import { registerSpawnedChatHandler, resetSpawnedChatQueue, type SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
@@ -13,13 +13,12 @@ function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; jso
 }
 
 describe("startCollectionChat", () => {
-  // Every non-hidden spawn is PLACED AS A GRID CELL, not selected in the single view. The
-  // real placement seam is used rather than a mock of it, so these pin the actual wiring the
-  // collection UI depends on. A registered handler also keeps the no-grid path (queue +
-  // router.push) out of these cases — it has its own spec.
+  // Every non-hidden spawn is PLACED AS A GRID CELL. The real placement seam is used rather than a
+  // mock of it, so these pin the actual wiring the collection UI depends on. A registered handler
+  // also keeps the not-yet-mounted path (queue + navigate) out of these cases — it has its own
+  // spec.
   let placed: SpawnedChatRequest[];
   beforeEach(() => {
-    registerChatOpener(vi.fn());
     resetSpawnedChatQueue();
     placed = [];
     registerSpawnedChatHandler((req) => (placed.push(req), true));
@@ -93,13 +92,9 @@ describe("startCollectionChat", () => {
 
   it("does NOT place when hidden=true (a real background worker)", async () => {
     mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-2" } }) }));
-    const opener = vi.fn();
-    registerChatOpener(opener);
-
     await startCollectionChat("background work", { hidden: true });
 
     expect(placed).toEqual([]);
-    expect(opener).not.toHaveBeenCalled();
   });
 
   it("ignores an empty prompt (no spawn)", async () => {
@@ -110,14 +105,10 @@ describe("startCollectionChat", () => {
 
   it("does not place a cell when the spawn fails", async () => {
     mockFetch(() => ({ ok: false, json: () => ({}) }));
-    const opener = vi.fn();
-    registerChatOpener(opener);
-
     await startCollectionChat("oops");
 
     // An empty cell attached to nothing is worse than no cell: there is no session to adopt.
     expect(placed).toEqual([]);
-    expect(opener).not.toHaveBeenCalled();
   });
 
   it("persists the launch agent to localStorage", async () => {

@@ -19,7 +19,6 @@ export const routes: RouteRecordRaw[] = [
   // the moment it moves, which is exactly what this change had to undo in six call sites.
   { path: "/", redirect: { name: "terminals" } },
   { path: "/terminals", name: "terminals", component: Stub },
-  { path: "/chat", name: "chat", component: Stub },
   { path: "/collections", name: "collections", component: Stub },
   { path: "/collections/:slug", name: "collectionDetail", component: Stub },
   { path: "/feeds", name: "feeds", component: Stub },

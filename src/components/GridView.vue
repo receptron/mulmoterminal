@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onActivated, onDeactivated, nextTick } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from "vue";
 import TerminalGrid, { type CockpitRow } from "./TerminalGrid.vue";
 import AppSettingsModal from "./AppSettingsModal.vue";
 import AppToolbar from "./AppToolbar.vue";
 import GuideLinks from "./GuideLinks.vue";
-import { showSpawnedSession, startCollectionChat } from "../composables/useChatLauncher";
+import { startCollectionChat } from "../composables/useChatLauncher";
 import { skillSeed } from "./skillSeed";
 import type { BundledSkillName } from "../../common/bundledSkills";
 import {
@@ -297,10 +297,11 @@ const toggleListMode = () => {
   listModeOn.value = !listModeOn.value;
   syncPoll();
 };
-// Under <KeepAlive>, leaving /terminals deactivates (doesn't unmount) this view — pause the
-// poll so it doesn't keep fetching in the background, and resume it on return.
-onActivated(startPoll);
-onDeactivated(stopPoll);
+// Follows the ROUTE, not the lifecycle. The grid is the only view now, so it is mounted for the
+// life of the page and never deactivates — but it still goes off screen under a full-screen
+// overlay, and polling the roster nobody can see is the same waste the deactivate hook used to
+// avoid.
+watch(onTerminalsRoute, (onGrid) => (onGrid ? startPoll() : stopPoll()), { immediate: true });
 onBeforeUnmount(stopPoll);
 
 // A cell with no session/prompt yet still gets a human label from what it IS running.
@@ -393,9 +394,9 @@ onMounted(() => {
 });
 
 // The header "new terminal" button ($SHELL) opens a cell next to the one that triggered it.
-// GridView is cached by <KeepAlive>, so register the opener only while ACTIVE and drop it on
-// deactivate — otherwise a button press from the single view would silently mutate this hidden
-// grid instead of routing here. openTerminalAt then queues + navigates while we're deactivated.
+// Registered for the life of the component: with the single view gone there is no other grid to
+// mutate by mistake, and openTerminalAt brings this one on screen itself when an overlay is over
+// it (#1193). The queue in useNewTerminal still covers the window before this mounts.
 const SLOT_UID_RE = /^cell-(\d+)$/;
 let offNewTerminal: (() => void) | null = null;
 // Each kind is already expressible as a cell: a shell is a shell launcher, a non-Claude agent is
@@ -422,8 +423,7 @@ const detachNewTerminal = () => {
   offNewTerminal?.();
   offNewTerminal = null;
 };
-onActivated(() => (offNewTerminal = registerNewTerminalHandler(openNewTerminal)));
-onDeactivated(detachNewTerminal);
+onMounted(() => (offNewTerminal = registerNewTerminalHandler(openNewTerminal)));
 onBeforeUnmount(detachNewTerminal);
 
 // Server config: the default workspace dir + the auto-recorded dir presets + sound.
@@ -527,7 +527,7 @@ const gridRef = ref<InstanceType<typeof TerminalGrid> | null>(null);
 // Place an already-spawned chat as a cell. Every programmatically started chat arrives here —
 // the collection UI's actions and template cards, custom views, the Settings skill buttons —
 // via useChatLauncher's one choke point.
-const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest): boolean => {
+const placeChat = ({ id, agent, canvas }: SpawnedChatRequest): boolean => {
   // Already adopted — by the unplaced sweep below, or by an earlier request for the same session.
   // Two cells for one session fight over its socket: the server supersedes the prior one, so the
   // older cell goes dead while still looking live.
@@ -536,19 +536,17 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest): boolean =>
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
   // matters because a spawn follows the Claude/Codex/Antigravity toggle.
   const placed = insertCellAfter(state.value, NO_ORIGIN_UID, sessionCell(id, defaultCwd.value, agent));
-  // A full grid (MAX_TERMINALS) drops the cell and insertCellAfter hands the state straight back,
-  // which would leave a live agent with nowhere here to appear — show it in the single view instead
-  // of losing it. Judged by identity AFTER the spawn, not by counting before it: the count can
-  // cross the cap while the spawn is in flight, and then the answer taken earlier is wrong.
-  // (This fallback is what has to be replaced when the single view goes: see
-  // plans/feat-remove-single-view.md.)
-  // `draft` goes with it: the single view shows a "preparing your draft…" hint on one, and
-  // dropping the flag here would make a full grid the one case where startNewChatDraft looks like
-  // a turn already running. The CELL needs no such flag — the server types the draft into the PTY,
-  // so the terminal shows it either way; the hint is a single-view affordance.
+  // A full grid (MAX_TERMINALS) drops the cell and insertCellAfter hands the state straight back.
+  // Judged by identity AFTER the spawn, not by counting before it: the count can cross the cap
+  // while the spawn is in flight, and then the answer taken earlier is wrong.
+  //
+  // It used to fall back to the single view; with that gone the session simply WAITS. Nothing is lost: the server
+  // clears its unplaced mark only when a cell attaches, so the next load with room adopts it, and
+  // the launcher's resume list shows it meanwhile. Reaching the cap at all now takes 81 terminals
+  // opened by hand — hidden workers and scheduled tasks never take a cell.
   if (placed === state.value) {
-    showSpawnedSession({ id, agent, draft });
-    return false; // the single view has it; do not drag the user to the grid
+    console.warn(`[grid] full (${MAX_TERMINALS} cells) — session ${id} is left waiting for room`);
+    return false;
   }
   state.value = placed;
   // A collection is already waiting in this session's Canvas. The pane exists only beside an
@@ -572,10 +570,10 @@ const placeChat = ({ id, agent, draft, canvas }: SpawnedChatRequest): boolean =>
 // once per page load and would miss everything spawned while the user was elsewhere in the app.
 let adoptingUnplaced = false;
 async function adoptUnplacedSessions(): Promise<void> {
-  // One sweep at a time. onActivated can fire again before the fetch resolves — leave the grid and
-  // come straight back — and both runs would read `cells` before either inserted, so both would
-  // adopt the same session and give it two cells fighting over one socket. The per-row guard below
-  // cannot catch that: it reads state neither call has written yet.
+  // One sweep at a time. The route watcher can fire again before the fetch resolves — leave the
+  // grid for an overlay and come straight back — and both runs would read `cells` before either
+  // inserted, so both would adopt the same session and give it two cells fighting over one socket.
+  // The per-row guard below cannot catch that: it reads state neither call has written yet.
   if (adoptingUnplaced) return;
   adoptingUnplaced = true;
   try {
@@ -615,16 +613,14 @@ watch(
   { immediate: true },
 );
 
-// Registered on the same activate/deactivate cycle as the new-terminal opener, and for the same
-// reason: <KeepAlive> keeps this grid alive while the user is in the single view, and a chat
-// started there must queue + navigate rather than silently mutate a hidden grid.
+// Registered for the life of the component, like the new-terminal opener above and for the same
+// reason: this is the only grid there is.
 let offSpawnedChat: (() => void) | null = null;
 const detachSpawnedChat = () => {
   offSpawnedChat?.();
   offSpawnedChat = null;
 };
-onActivated(() => (offSpawnedChat = registerSpawnedChatHandler(placeChat)));
-onDeactivated(detachSpawnedChat);
+onMounted(() => (offSpawnedChat = registerSpawnedChatHandler(placeChat)));
 onBeforeUnmount(detachSpawnedChat);
 </script>
 

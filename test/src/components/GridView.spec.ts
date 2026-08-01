@@ -476,16 +476,6 @@ describe("GridView skill launch (#1111)", () => {
       launchAgent.value = "claude"; // a module singleton — leaving it set would follow later tests
     }
   });
-
-  // The regression itself: handing the session to the single-view opener is what yanked the user
-  // out of the grid. The grid must adopt it instead, so that opener stays untouched.
-  it("does not hand the session to the single view's opener", async () => {
-    const openSession = vi.fn();
-    (await import("../../../src/composables/useChatLauncher")).registerChatOpener(openSession);
-    const { w } = await mountWithSpawn();
-    expect(openSession).not.toHaveBeenCalled();
-    w.unmount();
-  });
 });
 
 // Two conditions the launch depends on, varied — neither is exercised by the happy path above, and
@@ -527,13 +517,14 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     w.unmount();
   });
 
-  // At the cap insertCellAfter drops the cell, so adopting it here would spawn a live agent with
-  // nowhere in the grid to appear. It falls back to the single view's opener instead of vanishing.
-  it("falls back to the single view rather than losing the session when the grid is full", async () => {
-    const openSession = vi.fn();
-    (await import("../../../src/composables/useChatLauncher")).registerChatOpener(openSession);
+  // At the cap insertCellAfter drops the cell. It used to fall back to the single view; with that
+  // gone the session WAITS — the server clears its unplaced mark only when a cell attaches, so the
+  // next load with room adopts it. What must not happen is a cell appearing anyway, which would
+  // put two sessions on one slot.
+  it("adds no cell when the grid is full, leaving the session to wait", async () => {
     const w = await launchFrom(filledGrid(81)); // MAX_TERMINALS
-    expect(openSession).toHaveBeenCalledWith(SPAWNED, expect.objectContaining({ agent: "claude" }));
+    const cells = w.findComponent(CellsStub).props("cells") as Array<{ session: string | null }>;
+    expect(cells.filter((c) => c.session === SPAWNED)).toEqual([]);
     w.unmount();
   });
 
@@ -677,30 +668,6 @@ describe("GridView skill launch — capacity and placement (#1111)", () => {
     await flushPromises();
 
     expect(opened).toEqual([]);
-    w.unmount();
-  });
-
-  // The full-grid fallback is the ONE path where `draft` still has to reach the single view, and
-  // it is the easiest to drop: the cell it would otherwise have made needs no such flag (the
-  // server types the draft into the PTY), so nothing else here carries one. Without it a
-  // startNewChatDraft at MAX_TERMINALS silently loses the "preparing your draft…" hint and reads
-  // as a turn already running.
-  it("carries `draft` into the single-view fallback when the grid is full", async () => {
-    const openSession = vi.fn();
-    (await import("../../../src/composables/useChatLauncher")).registerChatOpener(openSession);
-    const { placeSpawnedChat } = await import("../../../src/composables/useSpawnedChat");
-    localStorage.setItem("grid_v2", filledGrid(81)); // MAX_TERMINALS
-    const w = mountActivated((await import("../../../src/components/GridView.vue")).default, {
-      global: { stubs: { TerminalGrid: CellsStub, AppToolbar: ToolbarStub, SettingsModal: SkillSettingsStub } },
-    });
-    await flushPromises();
-
-    // Straight through the placement seam: a draft spawn is startNewChatDraft's, and going via a
-    // skill button would only ever produce draft:false.
-    placeSpawnedChat({ id: SPAWNED, agent: "claude", draft: true, canvas: false });
-    await flushPromises();
-
-    expect(openSession).toHaveBeenCalledWith(SPAWNED, expect.objectContaining({ agent: "claude", draft: true }));
     w.unmount();
   });
 });

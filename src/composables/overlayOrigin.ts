@@ -5,7 +5,6 @@
 // browser back/forward restores that entry's own origin instead of a stale one, and a fresh
 // or direct load has none and falls back. Navigating INSIDE an overlay carries the same
 // origin forward.
-import { computed } from "vue";
 import { router } from "../router";
 
 // The routes that render as a full-screen panel ON TOP of a view. Every one of them starts
@@ -55,14 +54,3 @@ export function overlayOriginState(): { returnPath: string } {
   const here = router.currentRoute.value;
   return { returnPath: OVERLAY_ROUTES.has(String(here.name)) ? overlayReturnPath() : here.fullPath };
 }
-
-/** Is the view UNDER the current screen the grid? An open overlay answers with the view it
- *  was opened from, not with itself: the header stays on screen above it, so switching the
- *  toolbar (and the shell behind it) would take away the very button that was just clicked
- *  — and would mount the single view's terminal behind an overlay opened from the grid. */
-export const viewIsGrid = computed(() => {
-  const name = String(router.currentRoute.value.name);
-  if (name === "terminals") return true;
-  if (!OVERLAY_ROUTES.has(name)) return false;
-  return String(router.resolve(overlayReturnPath()).name) === "terminals";
-});

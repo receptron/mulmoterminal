@@ -435,6 +435,26 @@ Everything the single view currently owns has to exist in the grid *before* PR4.
   beyond the cockpit roster. Confirm the roster covers it (it does show every cell) — and note
   it does NOT show off-grid sessions (`GridView.vue:102`).
 
+### PR5 — delete the single view — **DONE**
+
+The 81-cell question that had been deferred through four PRs answered itself: with hidden workers
+and scheduled tasks both excluded from placement (#1196), nothing fills the grid on its own, so
+reaching the cap takes 81 terminals opened BY HAND. A full grid therefore parks the session — it
+stays marked unplaced, so the next load with room adopts it — rather than needing a policy.
+
+One thing the plan never recorded, and it was the real blocker: the toolbar's Collections,
+Accounting and Wiki buttons were gated `v-if="!inGrid"` by design (#886), so deleting the view
+would have left those surfaces with **no way in at all**. This section listed the overlays and not
+the buttons that open them. Answered first, in #1201, by the Collections door.
+
+Two lifecycle consequences that were not obvious:
+
+- **GridView's `onActivated` stops firing.** With the grid mounted for the life of the page there
+  is no activate/deactivate cycle, so the new-terminal opener and the spawned-chat placer moved to
+  `onMounted`, and the roster poll follows the ROUTE (it still goes off screen under an overlay).
+- **`viewIsGrid` became a constant** and was deleted. Every route is either the grid or an overlay
+  whose origin resolves to it, so every `inGrid` gate in the toolbar was dead.
+
 ### PR5 — delete the single view
 
 Only after PR3 and PR4 land and the grid has been used for a few days.

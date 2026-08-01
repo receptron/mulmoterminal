@@ -6,7 +6,7 @@ import NotificationBell from "./NotificationBell.vue";
 import RateLimitGauge from "./RateLimitGauge.vue";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
-import { viewIsGrid, CONTENT_ROUTES } from "../composables/overlayOrigin";
+import { CONTENT_ROUTES } from "../composables/overlayOrigin";
 import { useCollectionBrowse, browseGotoIndex } from "../composables/useCollectionBrowse";
 import { filesGotoIndex } from "../composables/useFilesView";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
@@ -84,10 +84,7 @@ async function copyUpdateCommand(): Promise<void> {
 //     grid keeps the grid's buttons instead of hiding the one just clicked
 //   - which button is HIGHLIGHTED, and whether the grid is the screen: the route itself,
 //     because an open overlay is not the grid even when the grid is underneath
-const inGrid = viewIsGrid;
 const onGridRoute = computed(() => route.name === "terminals");
-const inSingle = computed(() => !onGridRoute.value);
-const chatActive = computed(() => inSingle.value && browseView.value.mode === "closed" && !accountingOpen.value && !wikiOpen.value && !prsOpen.value);
 const collectionsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "collection");
 const feedsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "feed");
 const filesActive = computed(() => route.name === "files");
@@ -98,9 +95,6 @@ const inContent = computed(() => CONTENT_ROUTES.has(String(route.name)));
 const accountingActive = computed(() => accountingOpen.value);
 const wikiActive = computed(() => wikiOpen.value);
 const prsActive = computed(() => prsOpen.value);
-function showChat(): void {
-  router.push({ name: "chat" });
-}
 function showGrid(): void {
   router.push("/terminals");
 }
@@ -142,7 +136,6 @@ function showPrs(): void {
            within the current one, and a flat row of equal buttons hid that (#941). Same rule
            treatment as the status tally at the other end of the nav. -->
       <span class="mr-1.5 inline-flex flex-none items-center gap-[3px] border-r border-border pr-2.5" role="group" aria-label="Switch view">
-        <LauncherButton icon="chat" title="Chat" label="Chat" :active="chatActive" @click="showChat" />
         <LauncherButton icon="grid_view" title="Grid (multiple terminals)" label="Grid view" :active="onGridRoute" @click="showGrid" />
         <!-- The way IN to the workspace's own data, beside the views it is a peer of — the content
              surfaces used to be reachable only from the single view (#886), which left them with
@@ -158,10 +151,10 @@ function showPrs(): void {
         <LauncherButton icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
         <LauncherButton icon="folder_open" title="Files" label="Files" :active="filesActive" @click="showFiles" />
       </template>
-      <!-- Grid only (#886): branches under supervision are a grid concern. -->
-      <LauncherButton v-if="inGrid" icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
+      <!-- Work under supervision: PRs and the worklog sit with the terminals, not behind the
+           Collections door, which is why they are not in CONTENT_ROUTES. -->
+      <LauncherButton icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
       <LauncherButton
-        v-if="inGrid"
         icon="history_edu"
         title="Worklog — the dev work log in the wiki (#worklog)"
         label="Worklog"
@@ -169,23 +162,15 @@ function showPrs(): void {
         @click="showWorklog"
       />
       <LauncherButton
-        v-if="inGrid"
         icon="add"
         :title="addTerminalActive ? 'Cancel adding a terminal' : 'New terminal (overflows to a new tab when full)'"
         label="New terminal"
         :active="addTerminalActive"
         @click="emit('add-terminal')"
       />
-      <LauncherButton
-        v-if="inGrid"
-        :icon="sortButton.icon"
-        :title="sortButton.title"
-        :label="sortButton.label"
-        :active="sortButton.active"
-        @click="emit('toggle-sort')"
-      />
+      <LauncherButton :icon="sortButton.icon" :title="sortButton.title" :label="sortButton.label" :active="sortButton.active" @click="emit('toggle-sort')" />
       <span
-        v-if="inGrid && hasSummary && statusCounts"
+        v-if="hasSummary && statusCounts"
         class="ml-1.5 inline-flex flex-none items-center gap-2 border-l border-border pl-2.5"
         role="img"
         :aria-label="`Grid status — ${summaryTitle}`"
@@ -201,7 +186,7 @@ function showPrs(): void {
           <span class="h-2 w-2 rounded-full bg-current" />{{ statusCounts.working }}
         </span>
       </span>
-      <RateLimitGauge v-if="inGrid" />
+      <RateLimitGauge />
     </nav>
     <NotificationBell class="ml-auto" />
     <RemoteHostControl />
@@ -240,7 +225,7 @@ function showPrs(): void {
     </div>
     <!-- Grid only: star this project on GitHub. It retires itself once starred (or once the
          user has opened the repo page), so it is a one-time ask rather than a fixture. -->
-    <LauncherButton v-if="inGrid && starVisible" icon="star" :title="starTitle" :label="starTitle" :active="starConfirming" @click="activateStar" />
+    <LauncherButton v-if="starVisible" icon="star" :title="starTitle" :label="starTitle" :active="starConfirming" @click="activateStar" />
     <LauncherButton
       :icon="soundButton.icon"
       :title="soundButton.label"

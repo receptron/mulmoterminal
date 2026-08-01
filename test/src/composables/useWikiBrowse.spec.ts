@@ -11,7 +11,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await router.replace({ name: "chat" });
+  await router.replace("/terminals");
   await flushPromises();
 });
 
@@ -74,12 +74,12 @@ describe("useWikiBrowse over the router", () => {
     expect(useWikiBrowse().view.value).toEqual({ mode: "index" });
   });
 
-  it("close returns to chat", async () => {
+  it("close returns to the grid", async () => {
     wikiGotoPage("alpha");
     await flushPromises();
     wikiClose();
     await flushPromises();
-    expect(router.currentRoute.value.path).toBe("/chat");
+    expect(router.currentRoute.value.path).toBe("/terminals");
     expect(useWikiBrowse().view.value).toEqual({ mode: "closed" });
   });
 });

@@ -3,7 +3,6 @@ import { mount, flushPromises } from "@vue/test-utils";
 import AppToolbar from "../../../src/components/AppToolbar.vue";
 import { router } from "../../../src/router/index";
 import { prsGotoIndex } from "../../../src/composables/usePrsView";
-import { browseGotoIndex } from "../../../src/composables/useCollectionBrowse";
 
 // The toolbar is ONE component rendered by both views (GridView and App), so which buttons
 // it offers is decided by the route, not by a prop (#886).
@@ -25,21 +24,21 @@ const mountAt = async (path: string) => {
 
 describe("AppToolbar per-view buttons", () => {
   beforeEach(async () => {
-    await router.push({ name: "chat" });
+    await router.push("/terminals");
     await settle();
   });
 
   // Collections is the DOOR to the workspace's own data, and it stands beside the views it is a
   // peer of. It used to be single-view only (#886), which left the content surfaces with no way in
   // at all once that view goes.
-  it.each(["/chat", "/terminals"])("offers Collections from %s", async (path) => {
-    expect(labelsOf(await mountAt(path))).toEqual(expect.arrayContaining(["Chat", "Grid view", "Collections"]));
+  it("offers Collections from the grid", async () => {
+    expect(labelsOf(await mountAt("/terminals"))).toEqual(expect.arrayContaining(["Grid view", "Collections"]));
   });
 
   // Its siblings are NOT always present: one door, not five. A terminal user's row does not grow
   // by four buttons for surfaces they are not in.
-  it.each(["/chat", "/terminals"])("does not offer the other content surfaces from %s", async (path) => {
-    const labels = labelsOf(await mountAt(path));
+  it("does not offer the other content surfaces from the grid", async () => {
+    const labels = labelsOf(await mountAt("/terminals"));
     expect(labels).not.toContain("Feeds");
     expect(labels).not.toContain("Wiki");
     expect(labels).not.toContain("Accounting");
@@ -57,31 +56,20 @@ describe("AppToolbar per-view buttons", () => {
     expect(labelsOf(await mountAt(path))).toEqual(expect.arrayContaining(["Feeds", "Wiki", "Accounting", "Files"]));
   });
 
-  // Both views keep the pair that switches between them — hiding either would strand a user
-  // in whichever view they were in.
-  it("keeps the view switch in both views", async () => {
-    expect(labelsOf(await mountAt("/chat"))).toEqual(expect.arrayContaining(["Chat", "Grid view"]));
-    expect(labelsOf(await mountAt("/terminals"))).toEqual(expect.arrayContaining(["Chat", "Grid view"]));
-  });
-
-  // The two reference surfaces you consult WHILE supervising, so they sit in the grid's own
-  // nav rather than the single view's content cluster.
-  it.each(["Pull requests", "Worklog"])("offers %s only in the grid", async (label) => {
+  // Work under supervision sits with the terminals rather than behind the Collections door, which
+  // is why these are not in CONTENT_ROUTES — the distinction survives even though "only in the
+  // grid" no longer does.
+  it.each(["Pull requests", "Worklog"])("offers %s", async (label) => {
     expect(labelsOf(await mountAt("/terminals"))).toContain(label);
-    expect(labelsOf(await mountAt("/chat"))).not.toContain(label);
   });
 
-  it("offers the grid-running controls only in the grid", async () => {
+  it("offers the grid-running controls", async () => {
     // The ordering control's accessible name carries the CURRENT mode ("Grid cell ordering:
     // manual (click for auto)"), because with three modes there is no binary aria-pressed to
     // read it from — so match the stable prefix rather than a fixed string (#876).
-    const hasOrdering = (labels: string[]) => labels.some((label) => label.startsWith("Grid cell ordering:"));
-    const grid = labelsOf(await mountAt("/terminals"));
-    expect(grid).toContain("New terminal");
-    expect(hasOrdering(grid)).toBe(true);
-    const single = labelsOf(await mountAt("/chat"));
-    expect(single).not.toContain("New terminal");
-    expect(hasOrdering(single)).toBe(false);
+    const labels = labelsOf(await mountAt("/terminals"));
+    expect(labels).toContain("New terminal");
+    expect(labels.some((label) => label.startsWith("Grid cell ordering:"))).toBe(true);
   });
 
   // The overlays render BELOW the header (`top-10`), so the header stays on screen while one
@@ -100,17 +88,6 @@ describe("AppToolbar per-view buttons", () => {
     // with the grid — so opening it does not reveal the content siblings.
     expect(labels).not.toContain("Feeds");
     expect(labels).not.toContain("Accounting");
-  });
-
-  it("keeps the single-view buttons while an overlay opened from the single view is on screen", async () => {
-    await router.push({ name: "chat" });
-    await settle();
-    browseGotoIndex("collection");
-    await settle();
-
-    const labels = labelsOf(mount(AppToolbar, { global: { plugins: [router], stubs: { NotificationBell: true, RemoteHostControl: true } } }));
-    expect(labels).toContain("Collections");
-    expect(labels).not.toContain("Pull requests");
   });
 
   // Regression: the button SET follows the view underneath, but the HIGHLIGHT follows the
@@ -146,16 +123,16 @@ describe("AppToolbar view-switch grouping", () => {
   // reachable only from one of them. It belongs INSIDE for the reason the group exists: it changes
   // which view fills the screen, where everything to the right of the rule acts within the view
   // you are already in.
-  it.each(["/chat", "/terminals"])("groups exactly the three view switches (%s)", async (path) => {
-    const group = switchGroup(await mountAt(path));
+  it("groups the two view switches that remain", async () => {
+    const group = switchGroup(await mountAt("/terminals"));
     expect(group.exists()).toBe(true);
-    expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Chat", "Grid view", "Collections"]);
+    expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Grid view", "Collections"]);
   });
 
   // The rule is the separator. Losing it turns the nav back into one undifferentiated row,
   // which is the whole bug — and a class change is exactly the edit that would do it silently.
   it("carries the separating rule", async () => {
-    expect(switchGroup(await mountAt("/chat")).classes()).toContain("border-r");
+    expect(switchGroup(await mountAt("/terminals")).classes()).toContain("border-r");
   });
 
   // Everything else stays OUTSIDE the group — a button that acts WITHIN the current view, swept
@@ -173,6 +150,6 @@ describe("AppToolbar view-switch grouping", () => {
   // section, so they belong beyond the rule even though the door to that section is inside it.
   it("leaves the revealed siblings out of the group", async () => {
     const group = switchGroup(await mountAt("/collections"));
-    expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Chat", "Grid view", "Collections"]);
+    expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Grid view", "Collections"]);
   });
 });

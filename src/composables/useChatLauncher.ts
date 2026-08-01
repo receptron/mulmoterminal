@@ -3,8 +3,8 @@
 // with no active chat (the collections index "create" button, a collection/record
 // action like Repair, the new-collection template cards, a custom view's chat button).
 // We spawn a fresh terminal session via the server's spawnBackgroundChat, and — unless
-// `hidden` — place it as a GRID CELL (useSpawnedChat), switching to the grid if that is
-// not where the user is.
+// `hidden` — place it as a GRID CELL (useSpawnedChat), bringing the grid on screen if an overlay
+// is over it.
 //
 // This function is the ONE choke point for every programmatically started chat, which is
 // why the grid/single-view decision is made here rather than at each call site: the
@@ -24,8 +24,6 @@ import { placeSpawnedChat } from "./useSpawnedChat";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
 
 export type Agent = TerminalAgent;
-type OpenSessionFn = (sessionId: string, opts?: { draft?: boolean; agent?: Agent }) => void;
-let openSessionFn: OpenSessionFn | null = null;
 
 // Which agent a collection action / chat spawns. Bound to the Claude/Codex/Antigravity toggle in the collection
 // browser (CollectionsBrowseOverlay); persisted in localStorage so the choice survives reloads.
@@ -34,16 +32,6 @@ const saved = localStorage.getItem(LAUNCH_AGENT_KEY);
 export const launchAgent = ref<Agent>(asTerminalAgent(saved));
 watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 
-/** App.vue registers how to make a session visible in the SINGLE VIEW (close the overlay +
- *  select it). No longer the normal path — a spawn now goes to the grid — but it is still what
- *  the grid falls back to when it is full (MAX_TERMINALS), so a live agent is never left with
- *  nowhere to appear. Goes away with the single view itself.
- *  `opts.draft` lets it show a "preparing draft…" hint while claude boots + the text
- *  is typed into the input box. */
-export function registerChatOpener(fn: OpenSessionFn): void {
-  openSessionFn = fn;
-}
-
 /** A session this module started. The agent travels WITH the id because a spawn is not always
  *  Claude — `launchAgent` decides, and a caller that reads that toggle again to find out has two
  *  sources for one fact. Anything attaching to the session needs both: the wrong agent reconnects
@@ -51,17 +39,6 @@ export function registerChatOpener(fn: OpenSessionFn): void {
 export interface SpawnedChat {
   id: string;
   agent: Agent;
-}
-
-/** Show an ALREADY-spawned session in the SINGLE VIEW. The one caller left is the grid's
- *  full-capacity fallback, which can only find out that it has no room at the end — without this
- *  it would have to commit to where the session goes before spawning, and be wrong by the time it
- *  knew.
- *
- *  `draft` is carried rather than defaulted: it is what shows the "preparing your draft…" hint
- *  (App.vue), so a draft spawn arriving here without it looks like a turn already running. */
-export function showSpawnedSession(spawned: SpawnedChat & { draft?: boolean }): void {
-  openSessionFn?.(spawned.id, { agent: spawned.agent, draft: spawned.draft === true });
 }
 
 /** Spawn a new chat seeded with `prompt`; when not hidden, make it visible. With
