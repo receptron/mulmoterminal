@@ -160,26 +160,37 @@ function setCardEl(uuid: string, el: Element | ComponentPublicInstance | null) {
   if (node instanceof HTMLElement) cardEls.set(uuid, node);
 }
 
-/** Where the newest card's top edge sits in the scroll container's own coordinate space (i.e. the
- *  `scrollTop` that would put it flush with the top of the pane). Null before anything is laid out. */
-function newestCardTop(): number | null {
+/**
+ * The `scrollTop` that puts the newest card's top edge flush with the top of the pane — CLAMPED to
+ * the furthest the pane can actually scroll. Null before anything is laid out.
+ *
+ * The clamp is the whole reason this is one function instead of two. A newest card shorter than
+ * the pane, under tall earlier content, has a top edge BEYOND the maximum legal scrollTop: the
+ * assignment lands short of it, which is exactly right (the short card ends up fully visible), but
+ * it means the reachable position is not `top`. The gate below has to compare against the same
+ * reachable position, or the pane's own jump reads as the reader having scrolled up and switches
+ * following off — for a reader who never touched anything. Caught by Codex on PR #1224.
+ */
+function followAnchor(): number | null {
   const container = scrollRef.value;
   const newest = cards.value[cards.value.length - 1];
   const card = newest ? cardEls.get(newest.uuid) : undefined;
   if (!container || !card) return null;
-  return card.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  const top = card.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+  const furthest = Math.max(0, container.scrollHeight - container.clientHeight);
+  return Math.min(top, furthest);
 }
 
 function onScroll() {
   const container = scrollRef.value;
-  const top = newestCardTop();
+  const anchor = followAnchor();
   // Nothing to follow away from yet.
-  if (!container || top === null) return;
-  // "Still on the newest card" — at its top, or anywhere further down inside it. Scrolling UP past
-  // its top edge is the deliberate act of going back to something earlier, and only that closes
-  // the gate. Note this also re-AFFIRMS the gate after the jump below (which lands exactly on
-  // `top`), so no suppression flag is needed around a programmatic scroll.
-  followNewest.value = container.scrollTop >= top - FOLLOW_THRESHOLD_PX;
+  if (!container || anchor === null) return;
+  // "Still on the newest card" — at the anchor, or anywhere further down inside the card. Scrolling
+  // UP past it is the deliberate act of going back to something earlier, and only that closes the
+  // gate. Since the jump below lands exactly on this same anchor, a programmatic scroll re-AFFIRMS
+  // the gate rather than cancelling it, so no suppression flag is needed.
+  followNewest.value = container.scrollTop >= anchor - FOLLOW_THRESHOLD_PX;
 }
 
 // Changes when a card is added, or when a DIFFERENT result takes the last slot (a re-presented
@@ -197,9 +208,9 @@ watch(latestCardKey, () => {
   // After the new card is in the DOM, so it has a position to measure.
   nextTick(() => {
     const container = scrollRef.value;
-    const top = newestCardTop();
-    // The browser clamps this to the maximum scroll, which is what makes a SHORT newest card come
-    // out fully visible rather than pinned to the top with empty space under it.
+    const top = followAnchor();
+    // Already clamped to the furthest the pane can scroll, which is what makes a SHORT newest card
+    // come out fully visible rather than pinned to the top with empty space under it.
     if (container && top !== null) container.scrollTop = top;
   });
 });

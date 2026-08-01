@@ -84,44 +84,73 @@ const rendered = (wrapper: ReturnType<typeof mountPanel>) => wrapper.findAll(".s
 // jsdom lays nothing out — every element reports zero height and a zero rect — so the follow logic
 // has no geometry to read. Rather than stamping rects onto elements (which are rebuilt on every
 // push, so the stamps would have to be re-applied before each one, including inside the watcher's
-// own nextTick), the layout is COMPUTED at call time from the container's current children: card
-// `i` occupies `[i*CARD_PX, (i+1)*CARD_PX)`, and the container is a fixed viewport onto it.
+// own nextTick), the layout is COMPUTED at call time from the container's current children: cards
+// stack in order, and the pane is a fixed viewport onto them.
 //
-// Cards are deliberately TALLER than the pane, which is the case that matters: it is the shape of
-// a long presentDocument, where "scroll to the bottom" lands the reader at the last line of
-// something they have not started reading.
+// Cards default to TALLER than the pane, which is the case that matters: it is the shape of a long
+// presentDocument, where "scroll to the bottom" lands the reader at the last line of something they
+// have not started reading. `setCardHeights` overrides that for the short-card cases.
 const CARD_PX = 500;
 const PANE_PX = 400;
 
+let cardHeights: number[] = [];
+const heightOfCard = (index: number) => cardHeights[index] ?? CARD_PX;
+/** The `scrollTop` at which card `index` sits flush with the top of the pane. */
+const topOfCard = (index: number) => {
+  let top = 0;
+  for (let i = 0; i < index; i += 1) top += heightOfCard(i);
+  return top;
+};
+/** Per-card heights, in order. Any card past the end keeps the default. */
+const setCardHeights = (heights: number[]) => {
+  cardHeights = heights;
+};
+
 function installLayout() {
-  const rectAt = (top: number) => ({ top, bottom: top + CARD_PX, height: CARD_PX, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  const rectAt = (top: number, height: number) =>
+    ({ top, bottom: top + height, height, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
   Element.prototype.getBoundingClientRect = function (this: Element) {
     // Reached through the PARENT, not a document lookup: @vue/test-utils mounts outside
     // `document`, so `document.querySelector` finds nothing and every rect silently comes back at
     // zero — which reads exactly like "the panel never scrolled" and passes a bottom-anchored
     // assertion by accident.
     const parent = this.parentElement;
-    if (!parent || parent.dataset.testid !== "canvas-scroll") return rectAt(0);
+    if (!parent || parent.dataset.testid !== "canvas-scroll") return rectAt(0, 0);
     // Viewport coordinates: a card's document-space top, minus how far the pane is scrolled.
     const index = Array.prototype.indexOf.call(parent.children, this);
-    return rectAt(index * CARD_PX - parent.scrollTop);
+    if (index < 0) return rectAt(0, 0);
+    return rectAt(topOfCard(index) - parent.scrollTop, heightOfCard(index));
   };
 }
 
+/** The furthest the pane can actually scroll, which is where a clamped jump lands. */
+const furthestScroll = (element: Element) => Math.max(0, element.scrollHeight - PANE_PX);
+
 /** Size the pane itself. Called once per mount — the container element survives every push. */
 function stubPane(element: Element) {
-  Object.defineProperty(element, "scrollHeight", { get: () => element.children.length * CARD_PX, configurable: true });
+  Object.defineProperty(element, "scrollHeight", { get: () => topOfCard(element.children.length), configurable: true });
   Object.defineProperty(element, "clientHeight", { value: PANE_PX, configurable: true });
+  // scrollTop CLAMPS, as a browser's does. jsdom implements no scrolling, so it stores whatever it
+  // is assigned — and an out-of-range assignment reading back verbatim is precisely what hid the
+  // clamp bug this harness now covers: the panel appeared to reach a position no real browser
+  // would let it reach. Assignments in these tests are therefore bounded by the layout, same as a
+  // user's scrolling would be.
+  let scrollTop = 0;
+  Object.defineProperty(element, "scrollTop", {
+    get: () => scrollTop,
+    set: (next: number) => {
+      scrollTop = Math.max(0, Math.min(next, furthestScroll(element)));
+    },
+    configurable: true,
+  });
 }
-
-/** The `scrollTop` at which card `index` sits flush with the top of the pane. */
-const topOfCard = (index: number) => index * CARD_PX;
 
 const realGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 beforeEach(() => {
   handlers.clear();
   viewMounts = 0;
+  setCardHeights([]);
   installLayout();
 });
 
@@ -247,7 +276,7 @@ describe("GuiPanel — following the newest card", () => {
     await push(plain("p1"));
     await push(plain("p2"));
     await nextTick();
-    pane.element.scrollTop = topOfCard(1) + 300; // mid-way through card 2
+    pane.element.scrollTop = topOfCard(1) + 100; // further down inside card 2, and reachable
     await pane.trigger("scroll");
     await push(plain("p3"));
     await nextTick();
@@ -270,6 +299,43 @@ describe("GuiPanel — following the newest card", () => {
     expect(pane.element.scrollTop).toBe(topOfCard(2));
   });
 
+  // A newest card SHORTER than the pane, sitting under tall earlier content, has a top edge beyond
+  // the furthest the pane can scroll. Cards of 800 then 100 in a 400 pane: total 900, so the
+  // furthest scroll is 500, while the newest card's top is at 800.
+  const SHORT_NEWEST = [800, 100];
+
+  it("clamps the jump to the furthest the pane can scroll, so a short newest card is fully visible", async () => {
+    setCardHeights(SHORT_NEWEST);
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(furthestScroll(pane.element));
+    expect(pane.element.scrollTop).toBeLessThan(topOfCard(1));
+  });
+
+  it("keeps following after a clamped jump, which the reader never asked for", async () => {
+    // The gate has to compare against the REACHABLE position, not the card's top edge. Comparing
+    // against the top edge makes the pane's own jump (which lands short of it) read as the reader
+    // having scrolled up, and following switches off for someone who never touched anything —
+    // so the NEXT card is silently not followed. Caught by Codex on PR #1224.
+    setCardHeights(SHORT_NEWEST);
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await nextTick();
+    // jsdom does not emit `scroll` for a programmatic scrollTop, so stand in for the browser: this
+    // is the event the jump above would really have produced, and the one that used to close the gate.
+    await pane.trigger("scroll");
+    await push(plain("p3"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(topOfCard(2));
+  });
+
   it("does not chase a view persisting its own state", async () => {
     // onUpdateResult replaces the result object but keeps its uuid; following that would fight
     // someone typing in a form.
@@ -277,11 +343,12 @@ describe("GuiPanel — following the newest card", () => {
     await flushPromises();
     const pane = paneOf(wrapper);
     await push(plain("p1"));
+    await push(plain("p2"));
     await nextTick();
-    pane.element.scrollTop = 250;
+    pane.element.scrollTop = topOfCard(1) + 50; // reading inside the newest card
     await pane.trigger("scroll");
-    await push({ uuid: "p1", toolName: "plain", data: {}, viewState: { typed: "x" } });
+    await push({ uuid: "p2", toolName: "plain", data: {}, viewState: { typed: "x" } });
     await nextTick();
-    expect(pane.element.scrollTop).toBe(250);
+    expect(pane.element.scrollTop).toBe(topOfCard(1) + 50);
   });
 });
