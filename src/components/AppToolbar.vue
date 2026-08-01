@@ -85,8 +85,13 @@ async function copyUpdateCommand(): Promise<void> {
 //   - which button is HIGHLIGHTED, and whether the grid is the screen: the route itself,
 //     because an open overlay is not the grid even when the grid is underneath
 const onGridRoute = computed(() => route.name === "terminals");
-const collectionsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "collection");
-const feedsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "feed");
+// Lit on the DETAIL pages too, not just the index. A door that goes dark the moment you open one
+// of the things behind it leaves the toolbar with nothing selected while you are plainly still
+// inside that section — and since the grid's own controls hide under an overlay, nothing else
+// would be lit either (Codex, PR #1201). The index/detail distinction belongs to the view, not to
+// which section you are in.
+const collectionsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "collection");
+const feedsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "feed");
 const filesActive = computed(() => route.name === "files");
 // Inside the content section — which is what reveals the siblings below. Answered from the ROUTE
 // rather than from "is some overlay open", so moving between them (collections → wiki → files)

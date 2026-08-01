@@ -114,6 +114,32 @@ describe("AppToolbar per-view buttons", () => {
       .filter((b) => b.classes().includes("bg-accent-bg"))
       .map((b) => b.attributes("aria-label") ?? b.attributes("title") ?? "");
 
+  // Codex, on this PR. The door has to stay lit on the DETAIL pages, not just the index — opening
+  // one of the things behind it does not take you out of the section. With the grid's own controls
+  // hidden under an overlay, nothing else would be lit either, so the toolbar would show no
+  // selected destination at all while you are plainly inside collections.
+  it.each([
+    ["/collections/todos", "Collections"],
+    ["/feeds/news", "Feeds"],
+  ])("keeps the door lit on %s", async (path, label) => {
+    const wrapper = await mountAt(path);
+    const lit = wrapper
+      .findAll("nav[aria-label='Views'] button")
+      .filter((b) => b.classes().includes("bg-accent-bg"))
+      .map((b) => b.attributes("aria-label"));
+    expect(lit).toEqual([label]);
+  });
+
+  it("lights the collections door for a collection and not for a feed, on their detail pages", async () => {
+    // The two doors must not both light: they are different sections that share a component.
+    const wrapper = await mountAt("/collections/todos");
+    const labels = wrapper
+      .findAll("nav[aria-label='Views'] button")
+      .filter((b) => b.classes().includes("bg-accent-bg"))
+      .map((b) => b.attributes("aria-label"));
+    expect(labels).not.toContain("Feeds");
+  });
+
   it("highlights at most one view, and the grid only while it is showing", async () => {
     await router.push("/terminals");
     await settle();
