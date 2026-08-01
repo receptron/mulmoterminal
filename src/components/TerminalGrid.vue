@@ -37,6 +37,9 @@ import {
 import { setFilesPaneOpener } from "../composables/filesPaneOpener";
 import { paneCanShowClick } from "./paneClickTarget";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
+import { usePubSub } from "../composables/usePubSub";
+import { getPlugin } from "../plugins-registry";
+import { isRecord } from "../../common/isRecord";
 import { hasCanvasGroup } from "../../common/toolGroups";
 import type { RightPane } from "./gridCell";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
@@ -257,6 +260,48 @@ const expandedCwd = computed(() => props.cells.find((c) => c.uid === props.expan
 // The enlarged cell's session — what Canvas and Tools read. Null for a cell with no session
 // yet (a launcher, a command cell), which both panes already render as empty.
 const expandedSessionId = computed(() => props.cells.find((c) => c.uid === props.expandedUid)?.session ?? null);
+
+// A drawing that lands on the cell you are already looking at opens the Canvas by itself. The
+// agent calling presentDocument IS its answer to what was asked; with the pane closed that answer
+// left no trace but a count on a chip, which reads as a notification rather than as the reply, and
+// the user had to know that a pane exists and which button opens it.
+//
+// Scoped to the ENLARGED cell, deliberately. A background cell drawing must NOT seize the screen
+// away from whatever is being done in another one, so that case keeps exactly what it has today:
+// TerminalCell's unseen-canvas chip, which enlarges and opens on click. Owner's call.
+//
+// It re-opens every time, including after the user closed the pane by hand: closing is how you
+// dismiss the drawing in front of you, not a standing preference against the next one.
+const { subscribe: subscribeSession } = usePubSub();
+let unsubscribeDrawn: (() => void) | undefined;
+
+// Only a result that will actually RENDER counts. Every GUI tool result publishes on this channel,
+// including ones with no view of their own (manageCollection, google) — taking over the pane for
+// those would be a switch with nothing behind it to explain itself. Same question the panel asks
+// before rendering a card, so the two cannot disagree about what "drew something" means.
+function isDrawnResult(data: unknown): boolean {
+  if (!isRecord(data)) return false;
+  return typeof data.toolName === "string" && Boolean(getPlugin(data.toolName));
+}
+
+watch(
+  expandedSessionId,
+  (sessionId) => {
+    unsubscribeDrawn?.();
+    unsubscribeDrawn = undefined;
+    if (!sessionId) return;
+    unsubscribeDrawn = subscribeSession(`session:${sessionId}`, (data) => {
+      if (rightPane.value === "canvas" || props.expandedUid === null) return;
+      if (!isDrawnResult(data)) return;
+      // Through openCanvasFor rather than setRightPane: the files pane has a buffer to flush on
+      // the way out and may refuse to go, and "reveal this cell's canvas" stays one function
+      // however it is reached.
+      void openCanvasFor(props.expandedUid);
+    });
+  },
+  { immediate: true },
+);
+onBeforeUnmount(() => unsubscribeDrawn?.());
 
 // GUI -> LLM for the enlarged cell (a submitted form's answer). App.vue routes this through the
 // single view's Terminal ref; here the slot key is derivable from the uid, so the connection
