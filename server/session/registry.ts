@@ -353,6 +353,22 @@ export function isUserScheduledSession(id: string): boolean {
   return userScheduledSessions.has(id);
 }
 
+/**
+ * The two durable answers the Web Push gate needs, read TOGETHER and only once both logs have
+ * hydrated.
+ *
+ * One function rather than two calls, because the HAZARD IS THE COMBINATION. Read separately
+ * during startup, `background` can hydrate before `userScheduled` — and `(background: true,
+ * userScheduled: false)` is precisely "a background session that is not the user's task", so the
+ * push is suppressed for the one run that most needs it. A scheduled session survives a restart in
+ * tmux, so its turn finishing moments after boot is the ordinary case here, not a corner (Codex,
+ * PR #1196).
+ */
+export async function pushClassification(id: string): Promise<{ background: boolean; userScheduled: boolean }> {
+  await Promise.all([backgroundSessionsHydrated, userScheduledSessionsHydrated]);
+  return { background: isBackgroundSession(id), userScheduled: isUserScheduledSession(id) };
+}
+
 // Background workers whose run ENDED BADLY: reached teardown without ever reporting a finished
 // turn. A worker is invisible on purpose, so a failed one is the single case where that design
 // works against the user — nothing pulls their attention and nothing is waiting to be clicked, so
