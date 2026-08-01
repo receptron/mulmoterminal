@@ -128,16 +128,31 @@ describe("GuiPanel — collapsing repeated cards", () => {
     expect(rendered(wrapper)).toEqual(["p1", "p2"]);
   });
 
-  it("reuses the view instance across a re-presentation instead of remounting it", async () => {
-    // Keyed on identity, not uuid: a remount would throw away whatever the view holds — the
-    // table's scroll position, its expanded rows — on every single edit.
+  it("remounts the view on a re-presentation, so the card refetches", async () => {
+    // The v-for key is the UUID, not the identity, and this is why. A re-presented card exists to
+    // show state that CHANGED, and the views have no other way to learn that: the collection View
+    // reloads from a `watch(activeSlug, …)` that a same-slug re-present never fires, and
+    // MulmoTerminal does not configure the package's optional `subscribeChanges` hook. Keying on
+    // the identity keeps the instance — and its STALE contents — which is a card that collapsed to
+    // "the newest" while rendering the oldest. Reported live and caught by Codex on PR #1223.
     const wrapper = mountPanel();
     await flushPromises();
     await push(collapsing("c1", "books"));
     expect(viewMounts).toBe(1);
     await push(collapsing("c2", "books"));
-    expect(viewMounts).toBe(1);
+    expect(viewMounts).toBe(2);
     expect(rendered(wrapper)).toEqual(["c2"]);
+  });
+
+  it("does NOT remount a card just because a view persisted its own state", async () => {
+    // The other half of the rule above: onUpdateResult replaces the result object but keeps its
+    // uuid, so the key is stable and a form does not lose what is being typed into it.
+    mountPanel();
+    await flushPromises();
+    await push(plain("p1"));
+    expect(viewMounts).toBe(1);
+    await push({ uuid: "p1", toolName: "plain", data: {}, viewState: { typed: "x" } });
+    expect(viewMounts).toBe(1);
   });
 });
 

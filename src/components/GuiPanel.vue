@@ -113,11 +113,23 @@ function cardIdentity(result: ToolResult): string | null {
 // canvasCollapse.ts for why the superseded ones are dropped rather than kept as members.
 const cards = computed(() => collapseByIdentity(results.value, cardIdentity));
 
-// v-for key. Keying on the IDENTITY where there is one is not just uniqueness: re-presenting a
-// collection replaces the result object, and a uuid key would make Vue tear down the view and
-// build a new one — losing the table's scroll position, its expanded rows, everything the view
-// holds internally — on every edit. Same key, same component instance, props updated.
-const cardKey = (result: ToolResult) => cardIdentity(result) ?? result.uuid;
+// v-for key. The UUID, deliberately — NOT the identity, which would look like the tidier choice
+// (same subject, same key, one instance kept across edits) and is the wrong one.
+//
+// The remount IS the refresh. A re-presented card is meant to show state that CHANGED, and the
+// views have no other way to learn that. The collection View reloads from a
+// `watch(activeSlug, …)`: re-presenting the same collection leaves that slug identical, so the
+// watch never fires, and MulmoTerminal does not configure the package's optional
+// `subscribeChanges` hook (see src/composables/collectionUi.ts) that would otherwise push the
+// change in. Keeping the instance therefore keeps its STALE contents — a card that collapsed to
+// "the newest" while rendering the oldest, which is worse than the stacking this replaces.
+// presentHtml's iframe and presentDocument's rendered body are the same story.
+//
+// What is lost is what the view held internally — the table's scroll position, expanded rows —
+// and that is exactly what today's behaviour already loses, since today every edit draws a whole
+// new card. Correct-and-unchanged beats stale-but-smooth. Caught by Codex on PR #1223; pinned by
+// "remounts the view … so it refetches" in GuiPanelCollapse.spec.ts.
+const cardKey = (result: ToolResult) => result.uuid;
 
 // Auto-follow. The pane never scrolled itself, so each new card landed below the fold and the
 // user had to go find it; collapsing above removes most of that, but a card can still arrive
@@ -137,7 +149,7 @@ function onScroll() {
 const latestCardKey = computed(() => {
   const list = cards.value;
   const last = list[list.length - 1];
-  return `${list.length}:${last ? cardKey(last) : ""}:${last?.uuid ?? ""}`;
+  return `${list.length}:${last?.uuid ?? ""}`;
 });
 
 watch(latestCardKey, () => {
