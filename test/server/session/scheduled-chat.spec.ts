@@ -48,6 +48,16 @@ describe("a scheduled task's chat", () => {
     expect(registry.unplacedSessionRows()).toEqual([]);
   });
 
+  // The one thing it does NOT inherit from being a background session. Suppressing this would
+  // silence exactly the case the setting exists for: a task running while the user is away.
+  it("stays reachable by Web Push", async () => {
+    const { registry, spawnScheduledWorker } = await fresh();
+    spawnScheduledWorker(ID, noop);
+    expect(registry.isUserScheduledSession(ID)).toBe(true);
+    // Both facts together are what the push rule reads — background, and yet the user's own task.
+    expect(registry.isBackgroundSession(ID)).toBe(true);
+  });
+
   it("still says so when it fails", async () => {
     // The other half of being quiet: nothing pulls the user's attention, so without the hook a
     // failed task is never learned. This is what reap does for a session that never reported a

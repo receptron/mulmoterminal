@@ -9,7 +9,7 @@ import { HOST_ID as REMOTE_HOST_ID } from "../backends/remoteHost/index.js";
 import { buildPushText } from "./activity-hook.js";
 import type { PushKind } from "../../common/pushKinds.js";
 import { asTerminalAgent } from "../../common/sessionAgent.js";
-import { aiTitles, isBackgroundSession, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
+import { aiTitles, isBackgroundSession, isUserScheduledSession, lastPrompts, lastResponses, ptys, translationWorkerIds } from "./registry.js";
 import { clearedTranscripts } from "./cleared-transcripts.js";
 import { sessionLastTurn, LAST_RESPONSE_MAX } from "./session-reads.js";
 import { buildPushDetail, pushWhere, shouldSuppressPush, wantsPushKind } from "./taskPushRules.js";
@@ -41,7 +41,7 @@ export async function notifyTaskFinished(sessionId: string, kind: PushKind, mess
   // of the DURABLE predicate, not the live set: tmux keeps a worker's agent running across a
   // server restart, and the live set does not survive one — so the gate would open for exactly
   // the long-running scheduled refresh it exists to silence.
-  if (shouldSuppressPush(isBackgroundSession(sessionId), translationWorkerIds.has(sessionId))) return;
+  if (shouldSuppressPush(isBackgroundSession(sessionId), translationWorkerIds.has(sessionId), isUserScheduledSession(sessionId))) return;
   const cwd = ptys.get(sessionId)?.cwd ?? null;
   const where = pushWhere(cwd);
   // Not after a `/clear`: our transcript is frozen on the conversation the user just ended, so

@@ -25,9 +25,14 @@ scheduled task that ends without completing a turn is recorded and shows as `●
 launcher's session list — the same signal a hidden `spawnBackgroundChat` gets. Turn the sound on
 under Settings → Notifications if you want to hear it.
 
-**What you lose:** a scheduled task's session no longer goes bold/unread when it finishes. If you
-were watching for that, look under the Background filter, or in the launcher's list for the
-workspace.
+**Web Push still fires for it.** Being quiet means out of the chat list and off the grid, not
+unreachable: a background session's finished turn normally never reaches the phone, on the
+reasoning that it is not a real user task — and a task you configured to run while you are away is
+exactly that. If you have push on, a scheduled task notifies as before.
+
+**What you lose:** a scheduled task's session no longer goes bold/unread in the chat list when it
+finishes. If you were watching for that, look under the Background filter, in the launcher's list
+for the workspace — or turn push on.
 
 ### The Docker sandbox is removed (#1194)
 

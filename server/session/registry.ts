@@ -326,6 +326,33 @@ export function hasAllGuiTools(id: string): boolean {
   return allToolsSessions.has(id);
 }
 
+// Sessions the SCHEDULER started — a user's own configured task, as opposed to a collection
+// refresh or an internal helper.
+//
+// They are background sessions in every other respect (out of the chat list, never bold, no grid
+// cell), and this exists because ONE of those respects is wrong for them: a turn ending on a
+// background session never reaches the phone, on the reasoning that it "isn't a real user task".
+// A task the user configured to run while they are away is exactly a real user task, and push is
+// the only way they would ever hear about it (Codex, PR #1196).
+//
+// Persisted like its siblings: a tmux session outlives a server restart, so the turn that raises
+// the push can happen long after the process that spawned it is gone.
+const userScheduledSessions = new Set<string>();
+const USER_SCHEDULED_SESSIONS_FILE = path.join(MULMOTERMINAL_HOME, "user-scheduled-sessions.json");
+export const userScheduledSessionsHydrated = hydrateIdLog(USER_SCHEDULED_SESSIONS_FILE, userScheduledSessions);
+const appendUserScheduledSession = idLogAppender(USER_SCHEDULED_SESSIONS_FILE, "user-scheduled-sessions");
+
+export function markUserScheduledSession(id: string): void {
+  if (!isValidSessionId(id) || userScheduledSessions.has(id)) return;
+  userScheduledSessions.add(id);
+  appendUserScheduledSession(id);
+}
+
+/** Did the scheduler start this? Asked by the push rules, which suppress background sessions. */
+export function isUserScheduledSession(id: string): boolean {
+  return userScheduledSessions.has(id);
+}
+
 // Background workers whose run ENDED BADLY: reached teardown without ever reporting a finished
 // turn. A worker is invisible on purpose, so a failed one is the single case where that design
 // works against the user — nothing pulls their attention and nothing is waiting to be clicked, so

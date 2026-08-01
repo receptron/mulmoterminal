@@ -630,10 +630,11 @@ disconnected, or with no device registered, the toggle is a no-op.
 **Dev worklog (cross-clone).** Set `worklogEnabled: true` in
 `~/.mulmoterminal/config.json` (and **restart** — the scheduler reads its tasks at boot)
 to register a built-in scheduled task. Every `worklogIntervalHours` (default 6) it spawns
-a Claude session — as a **background worker**: behind the Background filter, never bold,
-and it takes no grid cell, so an hourly task cannot fill the grid — that reviews the work
-you did across **all your saved working dirs**
+a Claude session that reviews the work you did across **all your saved working dirs**
 (`cwdPresets`) since it last ran, and writes it up as a short manager-style report.
+It runs as a **background worker**: behind the Background filter, never bold, and it takes
+no grid cell, so an hourly task cannot fill the grid. Web **Push** still fires for it —
+being quiet means out of the way, not unreachable, and it runs while you are away.
 Multiple clones/worktrees of the same repo (e.g. `myapp`, `myapp2`) are **merged into one
 per-repository section**, each covering what problem was addressed, what got solved, what's
 still in progress, and — mined from the transcripts — decisions that were only *discussed
