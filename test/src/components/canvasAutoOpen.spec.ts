@@ -194,6 +194,32 @@ describe("the canvas opening itself when the agent draws", () => {
     expect(canvasOpen(w)).toBe(true);
   });
 
+  // The flush is ASYNC, and the user can walk the zoom while a dirty buffer is being saved. On the
+  // way back the drawing cell is no longer the enlarged one — enlarging it back would take the
+  // screen from the cell they just moved to, which is the takeover this whole feature refuses.
+  // Caught by Codex on PR #1227.
+  it("gives up rather than pulling the zoom back when the user moved it during the flush", async () => {
+    const w = mountGrid([cell(1, "s1"), cell(2, "s2")], 1);
+    await flushPromises();
+    w.findComponent({ name: "TerminalCell" }).vm.$emit("toggle-files");
+    await flushPromises();
+
+    // A save still in flight when the drawing lands.
+    let finishFlush: () => void = () => {};
+    filesStub.flush.mockReturnValue(new Promise<undefined>((resolve) => (finishFlush = () => resolve(undefined))));
+    publish("session:s1", drew);
+
+    // The user zooms to cell 2 before the buffer is down.
+    await w.setProps({ expandedUid: 2 });
+    await flushPromises();
+    finishFlush();
+    await flushPromises();
+
+    expect(canvasOpen(w)).toBe(false);
+    // And above all: no attempt to drag cell 1 back into the zoom.
+    expect(w.emitted("toggle-expand")).toBeUndefined();
+  });
+
   // The subscription follows the enlarged cell, so walking the zoom must not leave the old
   // session able to open the pane.
   it("follows the zoom to another cell", async () => {

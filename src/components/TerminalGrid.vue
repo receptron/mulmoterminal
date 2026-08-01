@@ -233,9 +233,19 @@ async function toggleFiles(): Promise<void> {
 // two steps, same reason, just nobody clicking. It stays ONE function because "reveal this cell's
 // canvas" has to mean the same thing however it is reached — including the files-buffer flush,
 // which a second implementation would be the natural place to forget.
-async function openCanvasFor(uid: number): Promise<void> {
+//
+// `enlarge` is the one thing the callers disagree about, and it matters only because the flush
+// above is ASYNC. A click on the chip means "bring that cell here", so a zoom that moved while the
+// buffer was being saved must still end on the cell that was asked for. The agent drawing on the
+// cell you are looking at means "put it beside what is already there" — if the user has walked the
+// zoom away in the meantime, enlarging the drawing cell back would be exactly the takeover that
+// case refuses to do, so it gives up instead. Caught by Codex on PR #1227.
+async function openCanvasFor(uid: number, enlarge = true): Promise<void> {
   if (filesOpen.value && (await filesPane.value?.flush()) === false) return;
-  if (props.expandedUid !== uid) emit("toggle-expand", uid);
+  if (props.expandedUid !== uid) {
+    if (!enlarge) return;
+    emit("toggle-expand", uid);
+  }
   setRightPane("canvas");
 }
 
@@ -295,8 +305,9 @@ watch(
       if (!isDrawnResult(data)) return;
       // Through openCanvasFor rather than setRightPane: the files pane has a buffer to flush on
       // the way out and may refuse to go, and "reveal this cell's canvas" stays one function
-      // however it is reached.
-      void openCanvasFor(props.expandedUid);
+      // however it is reached. Never enlarging (see there): a zoom the user moved while that
+      // flush was running is theirs to keep.
+      void openCanvasFor(props.expandedUid, false);
     });
   },
   { immediate: true },
