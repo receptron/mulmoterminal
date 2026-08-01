@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from "vue";
+import { ref, computed, watch, nextTick, type ComponentPublicInstance } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { getPlugin } from "../plugins-registry";
@@ -42,10 +42,13 @@ const results = ref<ToolResult[]>([]);
 // the onSessionChange below runs during that call — a declaration further down would still be in
 // its temporal dead zone when it fires.
 const scrollRef = ref<HTMLElement | null>(null);
-// True while the reader is parked at the end. Ported from MulmoClaude's StackView (#2179): a
-// reader who scrolled UP to look at an earlier card must not be yanked back down.
-const stickToBottom = ref(true);
-const NEAR_BOTTOM_THRESHOLD_PX = 80;
+// True while the reader is still on the newest card — see followNewestCard() for what that means
+// and why it is not "parked at the bottom". A reader who scrolled UP to an earlier card must not
+// be yanked away from it (MulmoClaude's StackView #2179).
+const followNewest = ref(true);
+// How far above the newest card's top edge still counts as being on it, so the gate survives the
+// small drift of reading and does not flip on a one-pixel overshoot.
+const FOLLOW_THRESHOLD_PX = 80;
 
 // Deduping by uuid mirrors applyToolResultToSession.
 const { upsert } = useSessionFeed(results, {
@@ -68,7 +71,7 @@ const { upsert } = useSessionFeed(results, {
   // newest card is the point of the follow.
   onSessionChange: () => {
     results.value = [];
-    stickToBottom.value = true;
+    followNewest.value = true;
   },
 });
 
@@ -132,20 +135,57 @@ const cards = computed(() => collapseByIdentity(results.value, cardIdentity));
 const cardKey = (result: ToolResult) => result.uuid;
 
 // Auto-follow. The pane never scrolled itself, so each new card landed below the fold and the
-// user had to go find it; collapsing above removes most of that, but a card can still arrive
-// under an earlier one that is still on screen. State is declared above useSessionFeed.
+// user had to go find it. State is declared above useSessionFeed.
+//
+// It follows the newest card's TOP edge, not the bottom of the pane. Scrolling to the bottom is
+// the obvious reading of "show me the newest" and it is wrong for anything you READ: a long
+// presentDocument flows at its natural height, so the end of the pane is the end of the DOCUMENT
+// — the reader is dropped at the last line of something they have not started. Anchoring on the
+// card's top shows every card from its beginning, whatever its height.
+//
+// It is also the more robust anchor. A card's rendered height settles after we scroll (markdown
+// layout, images, an iframe reporting its height), and a bottom anchor computed before that lands
+// somewhere arbitrary once the content grows. The top edge of the LAST card does not move when
+// that card grows.
+
+// Each rendered card's root element, so the newest one's position can be measured.
+const cardEls = new Map<string, HTMLElement>();
+function setCardEl(uuid: string, el: Element | ComponentPublicInstance | null) {
+  if (!el) {
+    cardEls.delete(uuid);
+    return;
+  }
+  // A function ref on a component receives the instance; PluginFrame has a single root element.
+  const node = el instanceof Element ? el : (el.$el as unknown);
+  if (node instanceof HTMLElement) cardEls.set(uuid, node);
+}
+
+/** Where the newest card's top edge sits in the scroll container's own coordinate space (i.e. the
+ *  `scrollTop` that would put it flush with the top of the pane). Null before anything is laid out. */
+function newestCardTop(): number | null {
+  const container = scrollRef.value;
+  const newest = cards.value[cards.value.length - 1];
+  const card = newest ? cardEls.get(newest.uuid) : undefined;
+  if (!container || !card) return null;
+  return card.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
+}
+
 function onScroll() {
-  const element = scrollRef.value;
-  if (!element) return;
-  // A programmatic jump lands AT the bottom, so it re-affirms the gate rather than cancelling it
-  // — which is why this needs no suppression flag around the scroll below.
-  stickToBottom.value = element.scrollHeight - element.scrollTop - element.clientHeight <= NEAR_BOTTOM_THRESHOLD_PX;
+  const container = scrollRef.value;
+  const top = newestCardTop();
+  // Nothing to follow away from yet.
+  if (!container || top === null) return;
+  // "Still on the newest card" — at its top, or anywhere further down inside it. Scrolling UP past
+  // its top edge is the deliberate act of going back to something earlier, and only that closes
+  // the gate. Note this also re-AFFIRMS the gate after the jump below (which lands exactly on
+  // `top`), so no suppression flag is needed around a programmatic scroll.
+  followNewest.value = container.scrollTop >= top - FOLLOW_THRESHOLD_PX;
 }
 
 // Changes when a card is added, or when a DIFFERENT result takes the last slot (a re-presented
 // collection moving down from above). Deliberately NOT sensitive to a view persisting its own
-// state: onUpdateResult replaces the object but keeps its uuid, and following a form's every
-// keystroke back to the bottom would fight the person typing in it.
+// state: onUpdateResult replaces the object but keeps its uuid, and chasing a form's every
+// keystroke would fight the person typing into it.
 const latestCardKey = computed(() => {
   const list = cards.value;
   const last = list[list.length - 1];
@@ -153,11 +193,14 @@ const latestCardKey = computed(() => {
 });
 
 watch(latestCardKey, () => {
-  if (!stickToBottom.value) return;
-  // After the new card has been laid out — its height is what we are scrolling past.
+  if (!followNewest.value) return;
+  // After the new card is in the DOM, so it has a position to measure.
   nextTick(() => {
-    const element = scrollRef.value;
-    if (element) element.scrollTop = element.scrollHeight;
+    const container = scrollRef.value;
+    const top = newestCardTop();
+    // The browser clamps this to the maximum scroll, which is what makes a SHORT newest card come
+    // out fully visible rather than pinned to the top with empty space under it.
+    if (container && top !== null) container.scrollTop = top;
   });
 });
 
@@ -293,6 +336,7 @@ const hasTools = computed(() => toolSections.value.some((section) => section.too
       <template v-for="r in unavailable ? [] : cards" :key="cardKey(r)">
         <PluginFrame
           v-if="getPlugin(r.toolName)"
+          :ref="(el) => setCardEl(r.uuid, el as Element | ComponentPublicInstance | null)"
           class="[&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4"
           :css="getPlugin(r.toolName)!.css"
           :height="getPlugin(r.toolName)!.height"

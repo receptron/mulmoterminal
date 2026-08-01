@@ -5,7 +5,7 @@
 // canvasCollapse.spec.ts pins the rule and canvasIdentity.spec.ts pins the keys; this drives the
 // panel itself, because neither proves GuiPanel actually applies them — or that a re-presented card
 // keeps its component instance rather than being torn down and rebuilt on every edit.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { defineComponent, h, nextTick } from "vue";
 import { flushPromises, mount } from "@vue/test-utils";
 
@@ -81,16 +81,52 @@ const collapsing = (uuid: string, key: string) => ({ uuid, toolName: "collapsing
 const plain = (uuid: string) => ({ uuid, toolName: "plain", data: {} });
 const rendered = (wrapper: ReturnType<typeof mountPanel>) => wrapper.findAll(".stub-view").map((v) => v.attributes("data-uuid"));
 
-// jsdom gives every element zero height, so the auto-follow gate can't be exercised without
-// saying how tall the container is.
-function stubScrollMetrics(element: Element, { scrollHeight = 1000, clientHeight = 400 } = {}) {
-  Object.defineProperty(element, "scrollHeight", { value: scrollHeight, configurable: true });
-  Object.defineProperty(element, "clientHeight", { value: clientHeight, configurable: true });
+// jsdom lays nothing out — every element reports zero height and a zero rect — so the follow logic
+// has no geometry to read. Rather than stamping rects onto elements (which are rebuilt on every
+// push, so the stamps would have to be re-applied before each one, including inside the watcher's
+// own nextTick), the layout is COMPUTED at call time from the container's current children: card
+// `i` occupies `[i*CARD_PX, (i+1)*CARD_PX)`, and the container is a fixed viewport onto it.
+//
+// Cards are deliberately TALLER than the pane, which is the case that matters: it is the shape of
+// a long presentDocument, where "scroll to the bottom" lands the reader at the last line of
+// something they have not started reading.
+const CARD_PX = 500;
+const PANE_PX = 400;
+
+function installLayout() {
+  const rectAt = (top: number) => ({ top, bottom: top + CARD_PX, height: CARD_PX, left: 0, right: 0, width: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect;
+  Element.prototype.getBoundingClientRect = function (this: Element) {
+    // Reached through the PARENT, not a document lookup: @vue/test-utils mounts outside
+    // `document`, so `document.querySelector` finds nothing and every rect silently comes back at
+    // zero — which reads exactly like "the panel never scrolled" and passes a bottom-anchored
+    // assertion by accident.
+    const parent = this.parentElement;
+    if (!parent || parent.dataset.testid !== "canvas-scroll") return rectAt(0);
+    // Viewport coordinates: a card's document-space top, minus how far the pane is scrolled.
+    const index = Array.prototype.indexOf.call(parent.children, this);
+    return rectAt(index * CARD_PX - parent.scrollTop);
+  };
 }
+
+/** Size the pane itself. Called once per mount — the container element survives every push. */
+function stubPane(element: Element) {
+  Object.defineProperty(element, "scrollHeight", { get: () => element.children.length * CARD_PX, configurable: true });
+  Object.defineProperty(element, "clientHeight", { value: PANE_PX, configurable: true });
+}
+
+/** The `scrollTop` at which card `index` sits flush with the top of the pane. */
+const topOfCard = (index: number) => index * CARD_PX;
+
+const realGetBoundingClientRect = Element.prototype.getBoundingClientRect;
 
 beforeEach(() => {
   handlers.clear();
   viewMounts = 0;
+  installLayout();
+});
+
+afterEach(() => {
+  Element.prototype.getBoundingClientRect = realGetBoundingClientRect;
 });
 
 describe("GuiPanel — collapsing repeated cards", () => {
@@ -111,7 +147,7 @@ describe("GuiPanel — collapsing repeated cards", () => {
   });
 
   it("moves a re-presented card to the bottom, past what arrived while it sat above", async () => {
-    // The owner's decision, and the reason the auto-follow below can just go to the bottom.
+    // The owner's decision, and what makes the newest card the one the follow below anchors on.
     const wrapper = mountPanel();
     await flushPromises();
     await push(collapsing("c1", "books"));
@@ -157,40 +193,81 @@ describe("GuiPanel — collapsing repeated cards", () => {
 });
 
 describe("GuiPanel — following the newest card", () => {
-  it("scrolls to the bottom when a card arrives", async () => {
+  const paneOf = (wrapper: ReturnType<typeof mountPanel>) => {
+    const pane = wrapper.get('[data-testid="canvas-scroll"]');
+    stubPane(pane.element);
+    return pane;
+  };
+
+  it("lands on the newest card's TOP, not the bottom of the pane", async () => {
+    // The whole point. A long presentDocument flows at its natural height, so the bottom of the
+    // pane is the END of the document — the reader dropped at the last line of something they
+    // have not started. Two 500px cards in a 400px pane: the bottom would be 600
+    // (scrollHeight - clientHeight); the top of card 2 is 500.
     const wrapper = mountPanel();
     await flushPromises();
-    const scroller = wrapper.get('[data-testid="canvas-scroll"]').element;
-    stubScrollMetrics(scroller);
+    const pane = paneOf(wrapper);
     await push(plain("p1"));
+    await push(plain("p2"));
     await nextTick();
-    expect(scroller.scrollTop).toBe(1000);
+    expect(pane.element.scrollTop).toBe(topOfCard(1));
+    expect(pane.element.scrollTop).not.toBe(pane.element.scrollHeight - PANE_PX);
   });
 
-  it("stays put when the reader has scrolled up to look at an earlier card", async () => {
+  it("shows the first card from its beginning", async () => {
+    // A card taller than the pane must still open at line one, not at its end.
     const wrapper = mountPanel();
     await flushPromises();
-    const scroller = wrapper.get('[data-testid="canvas-scroll"]');
-    stubScrollMetrics(scroller.element);
-    scroller.element.scrollTop = 0;
-    await scroller.trigger("scroll");
+    const pane = paneOf(wrapper);
     await push(plain("p1"));
     await nextTick();
-    expect(scroller.element.scrollTop).toBe(0);
+    expect(pane.element.scrollTop).toBe(topOfCard(0));
   });
 
-  it("resumes following once the reader scrolls back to the bottom", async () => {
+  it("stays put when the reader has scrolled up to an earlier card", async () => {
     const wrapper = mountPanel();
     await flushPromises();
-    const scroller = wrapper.get('[data-testid="canvas-scroll"]');
-    stubScrollMetrics(scroller.element);
-    scroller.element.scrollTop = 0;
-    await scroller.trigger("scroll");
-    scroller.element.scrollTop = 600; // 1000 - 600 - 400 = 0, within the tolerance band
-    await scroller.trigger("scroll");
+    const pane = paneOf(wrapper);
     await push(plain("p1"));
+    await push(plain("p2"));
     await nextTick();
-    expect(scroller.element.scrollTop).toBe(1000);
+    pane.element.scrollTop = 0; // back up into card 1
+    await pane.trigger("scroll");
+    await push(plain("p3"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(0);
+  });
+
+  it("keeps following while the reader is reading DOWN inside the newest card", async () => {
+    // Being partway through the newest card is not "I have scrolled away" — a bottom-relative
+    // gate would have read it as exactly that and stopped following.
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await nextTick();
+    pane.element.scrollTop = topOfCard(1) + 300; // mid-way through card 2
+    await pane.trigger("scroll");
+    await push(plain("p3"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(topOfCard(2));
+  });
+
+  it("resumes following once the reader comes back down to the newest card", async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await nextTick();
+    pane.element.scrollTop = 0;
+    await pane.trigger("scroll");
+    pane.element.scrollTop = topOfCard(1);
+    await pane.trigger("scroll");
+    await push(plain("p3"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(topOfCard(2));
   });
 
   it("does not chase a view persisting its own state", async () => {
@@ -198,17 +275,13 @@ describe("GuiPanel — following the newest card", () => {
     // someone typing in a form.
     const wrapper = mountPanel();
     await flushPromises();
+    const pane = paneOf(wrapper);
     await push(plain("p1"));
-    const scroller = wrapper.get('[data-testid="canvas-scroll"]');
-    stubScrollMetrics(scroller.element);
-    scroller.element.scrollTop = 0;
-    await scroller.trigger("scroll");
-    scroller.element.scrollTop = 600;
-    await scroller.trigger("scroll");
-    scroller.element.scrollTop = 250; // reader moved inside the card, gate now closed
-    await scroller.trigger("scroll");
+    await nextTick();
+    pane.element.scrollTop = 250;
+    await pane.trigger("scroll");
     await push({ uuid: "p1", toolName: "plain", data: {}, viewState: { typed: "x" } });
     await nextTick();
-    expect(scroller.element.scrollTop).toBe(250);
+    expect(pane.element.scrollTop).toBe(250);
   });
 });
