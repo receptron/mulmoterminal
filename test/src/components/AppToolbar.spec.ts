@@ -57,13 +57,12 @@ describe("AppToolbar per-view buttons", () => {
   });
 
   // Work under supervision sits with the terminals rather than behind the Collections door, which
-  // is why these are not in CONTENT_ROUTES — the distinction survives even though "only in the
-  // grid" no longer does.
-  it.each(["Pull requests", "Worklog"])("offers %s", async (label) => {
+  // is why these are not in CONTENT_ROUTES.
+  it.each(["Pull requests", "Worklog"])("offers %s on the grid", async (label) => {
     expect(labelsOf(await mountAt("/terminals"))).toContain(label);
   });
 
-  it("offers the grid-running controls", async () => {
+  it("offers the grid-running controls on the grid", async () => {
     // The ordering control's accessible name carries the CURRENT mode ("Grid cell ordering:
     // manual (click for auto)"), because with three modes there is no binary aria-pressed to
     // read it from — so match the stable prefix rather than a fixed string (#876).
@@ -72,22 +71,37 @@ describe("AppToolbar per-view buttons", () => {
     expect(labels.some((label) => label.startsWith("Grid cell ordering:"))).toBe(true);
   });
 
-  // The overlays render BELOW the header (`top-10`), so the header stays on screen while one
-  // is open. Switching to the other view's buttons there would take away the very button the
-  // user just clicked — and would swap the shell behind the panel (#892).
-  it("keeps the grid buttons while an overlay opened FROM the grid is on screen", async () => {
+  // ...and NOT while a full-screen overlay covers it. They act on cells nobody can see — a new
+  // terminal appearing behind the wiki, an ordering change nobody watches — and the rate gauge is
+  // status for a view that is not showing.
+  it.each(["/collections", "/wiki", "/files", "/accounting", "/prs"])("hides the grid's own controls on %s", async (path) => {
+    const labels = labelsOf(await mountAt(path));
+    expect(labels).not.toContain("Pull requests");
+    expect(labels).not.toContain("Worklog");
+    expect(labels).not.toContain("New terminal");
+    expect(labels.some((label) => label.startsWith("Grid cell ordering:"))).toBe(false);
+  });
+
+  // Nobody is stranded by that: the switch group never hides, so Grid view brings the terminals
+  // back and their controls with them.
+  it.each(["/collections", "/prs"])("keeps the way back to the grid from %s", async (path) => {
+    expect(labelsOf(await mountAt(path))).toContain("Grid view");
+  });
+
+  // PRs is the one overlay that is NOT content — it is work under supervision, which belongs with
+  // the terminals — so opening it does not reveal the content siblings. The grid's own controls go
+  // with the grid, including the PRs button itself: the overlay covers the cells they act on.
+  it("shows neither the content siblings nor the grid controls while PRs is open", async () => {
     await router.push("/terminals");
     await settle();
     prsGotoIndex();
     await settle();
 
     const labels = labelsOf(mount(AppToolbar, { global: { plugins: [router], stubs: { NotificationBell: true, RemoteHostControl: true } } }));
-    expect(labels).toContain("Pull requests");
-    expect(labels).toContain("Worklog");
-    // PRs is the one overlay that is NOT content — it is work under supervision, which belongs
-    // with the grid — so opening it does not reveal the content siblings.
     expect(labels).not.toContain("Feeds");
     expect(labels).not.toContain("Accounting");
+    expect(labels).not.toContain("New terminal");
+    expect(labels).toContain("Grid view"); // ...and the way back is always there
   });
 
   // Regression: the button SET follows the view underneath, but the HIGHLIGHT follows the
@@ -100,16 +114,25 @@ describe("AppToolbar per-view buttons", () => {
       .filter((b) => b.classes().includes("bg-accent-bg"))
       .map((b) => b.attributes("aria-label") ?? b.attributes("title") ?? "");
 
-  it("highlights exactly one view, even with a grid-opened overlay on screen", async () => {
+  it("highlights at most one view, and the grid only while it is showing", async () => {
     await router.push("/terminals");
     await settle();
     const onGrid = mount(AppToolbar, { global: { plugins: [router], stubs: { NotificationBell: true, RemoteHostControl: true } } });
     expect(activeLabels(onGrid)).toEqual(["Grid view"]);
 
+    // Inside the content section the door stays lit, so there is always something saying where
+    // you are.
+    await router.push("/collections");
+    await settle();
+    const onCollections = mount(AppToolbar, { global: { plugins: [router], stubs: { NotificationBell: true, RemoteHostControl: true } } });
+    expect(activeLabels(onCollections)).toEqual(["Collections"]);
+
+    // PRs is the one place with NO highlight: its own button hides with the grid controls, so
+    // nothing in the nav is lit. A consequence of hiding them, recorded rather than discovered.
     prsGotoIndex();
     await settle();
     const onPrs = mount(AppToolbar, { global: { plugins: [router], stubs: { NotificationBell: true, RemoteHostControl: true } } });
-    expect(activeLabels(onPrs)).toEqual(["Pull requests"]);
+    expect(activeLabels(onPrs)).toEqual([]);
   });
 });
 

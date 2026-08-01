@@ -151,24 +151,31 @@ function showPrs(): void {
         <LauncherButton icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
         <LauncherButton icon="folder_open" title="Files" label="Files" :active="filesActive" @click="showFiles" />
       </template>
-      <!-- Work under supervision: PRs and the worklog sit with the terminals, not behind the
+      <!-- The grid's OWN controls, and only while the grid is on screen. They act on cells the user
+           cannot see once a full-screen overlay covers them — a new terminal appearing behind the
+           wiki, an ordering change nobody watches — and the rate gauge below is status for a view
+           that is not showing. The switch group above never hides, so this never strands anyone:
+           Grid view brings the terminals back and these with them.
+           Work under supervision: PRs and the worklog sit with the terminals rather than behind the
            Collections door, which is why they are not in CONTENT_ROUTES. -->
-      <LauncherButton icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
-      <LauncherButton
-        icon="history_edu"
-        title="Worklog — the dev work log in the wiki (#worklog)"
-        label="Worklog"
-        :active="worklogActive"
-        @click="showWorklog"
-      />
-      <LauncherButton
-        icon="add"
-        :title="addTerminalActive ? 'Cancel adding a terminal' : 'New terminal (overflows to a new tab when full)'"
-        label="New terminal"
-        :active="addTerminalActive"
-        @click="emit('add-terminal')"
-      />
-      <LauncherButton :icon="sortButton.icon" :title="sortButton.title" :label="sortButton.label" :active="sortButton.active" @click="emit('toggle-sort')" />
+      <template v-if="onGridRoute">
+        <LauncherButton icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
+        <LauncherButton
+          icon="history_edu"
+          title="Worklog — the dev work log in the wiki (#worklog)"
+          label="Worklog"
+          :active="worklogActive"
+          @click="showWorklog"
+        />
+        <LauncherButton
+          icon="add"
+          :title="addTerminalActive ? 'Cancel adding a terminal' : 'New terminal (overflows to a new tab when full)'"
+          label="New terminal"
+          :active="addTerminalActive"
+          @click="emit('add-terminal')"
+        />
+        <LauncherButton :icon="sortButton.icon" :title="sortButton.title" :label="sortButton.label" :active="sortButton.active" @click="emit('toggle-sort')" />
+      </template>
       <span
         v-if="hasSummary && statusCounts"
         class="ml-1.5 inline-flex flex-none items-center gap-2 border-l border-border pl-2.5"
@@ -186,7 +193,7 @@ function showPrs(): void {
           <span class="h-2 w-2 rounded-full bg-current" />{{ statusCounts.working }}
         </span>
       </span>
-      <RateLimitGauge />
+      <RateLimitGauge v-if="onGridRoute" />
     </nav>
     <NotificationBell class="ml-auto" />
     <RemoteHostControl />
