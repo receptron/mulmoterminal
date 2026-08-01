@@ -1,6 +1,6 @@
 {
   "name": "mulmoterminal",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "description": "Run multiple Claude Code and Codex sessions in parallel — a browser terminal grid that shows which agent needs you. Local, tmux-backed.",
   "type": "module",
   "license": "MIT",

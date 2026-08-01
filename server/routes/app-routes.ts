@@ -58,6 +58,7 @@ import { mountShortcutsRoutes } from "../backends/shortcuts.js";
 import { mountDecisionRoutes } from "./decision-routes.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/html.js";
+import { mountSessionRelativePathRewrite } from "../backends/sessionRelativePath.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/mulmoscript.js";
 import { CLAUDE_CWD, MULMOTERMINAL_HOME, PORT, SESSION_ID_RE } from "../config/env.js";
 import { FILE_WRITE_CHANNEL, type FileWriteEvent } from "../../common/fileWriteChannel.js";
@@ -121,6 +122,12 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountDropRoutes(app);
 
   app.use(express.json({ limit: "25mb" }));
+
+  // presentDocument / presentHtml only: a RELATIVE `path` sent by a session running in another
+  // directory means THAT session's cwd, not CLAUDE_CWD. Rewritten here — after the body parser,
+  // before every /api/plugin handler — so the dispatch routes below and the catch-all all see
+  // the same resolved value. See backends/sessionRelativePath.ts.
+  mountSessionRelativePathRewrite(app);
 
   // The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
   // manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede
