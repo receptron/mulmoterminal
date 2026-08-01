@@ -63,18 +63,21 @@ useEscapeToClose(isOpen, close);
     <div v-if="shortcuts.length" class="flex flex-none items-center gap-2.5 border-b border-border px-3 py-1.5 font-sans" role="navigation" aria-label="Pinned">
       <span class="text-[11px] uppercase tracking-[0.05em] text-dim">Pinned</span>
       <div class="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+        <!-- ICON ONLY. The name still reaches a screen reader through aria-label, and the pointer
+             through title — dropping the visible text is a density decision, not a decision to
+             ship an unlabelled control. -->
         <button
           v-for="s in shortcuts"
           :key="`${s.kind}:${s.slug}`"
           type="button"
-          class="flex flex-none cursor-pointer items-center gap-1 rounded-[5px] border-0 px-2.5 py-[3px] font-sans text-[12px] font-medium"
+          class="flex flex-none cursor-pointer items-center justify-center rounded-[5px] border-0 px-1.5 py-[3px] text-[15px] leading-none"
           :class="favActive(s) ? 'bg-elevated text-fg' : 'bg-transparent text-dim hover:text-fg'"
           :aria-current="favActive(s) ? 'page' : undefined"
+          :aria-label="s.title"
           :title="s.title"
           @click="browseGotoDetail(s.kind, s.slug)"
         >
-          <span class="material-symbols-outlined text-[15px]">{{ s.icon || "bookmark" }}</span>
-          <span class="truncate">{{ s.title }}</span>
+          <span class="material-symbols-outlined" aria-hidden="true">{{ s.icon || "bookmark" }}</span>
         </button>
       </div>
     </div>
