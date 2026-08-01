@@ -612,6 +612,30 @@ watch(
   },
   { immediate: true },
 );
+// ...and the same sweep on the PUSH, for a session spawned while the grid is already on screen:
+// the phone's remote chat (index.ts remoteHostSpawnChat), a scheduled task, an agent spawning one
+// from another session. The route watcher above only fires when the route CHANGES, so a user
+// sitting on the grid — which is where they normally are — saw a live agent nowhere at all until
+// they happened to open an overlay and come back, or reloaded.
+//
+// Only "created". The same channel carries every working/waiting/closed push, so sweeping on all
+// of them would refetch many times a turn to learn nothing; the spawn is the one moment a session
+// can become unplaced. A create that arrives while the user is elsewhere in the app needs nothing
+// extra — the watcher adopts it on the way back.
+const isSessionCreated = (data: unknown): boolean => typeof data === "object" && data !== null && (data as { event?: unknown }).event === "created";
+const { subscribe: subscribeSessions, onReconnect } = usePubSub();
+const unsubscribeSessions = subscribeSessions("sessions", (data) => {
+  if (isSessionCreated(data) && onTerminalsRoute()) void adoptUnplacedSessions();
+});
+// pub/sub replays room membership on reconnect but not the events missed while disconnected, so a
+// spawn during a dropped socket would never be swept — the same re-sync useSessions does.
+const offReconnect = onReconnect(() => {
+  if (onTerminalsRoute()) void adoptUnplacedSessions();
+});
+onBeforeUnmount(() => {
+  unsubscribeSessions();
+  offReconnect();
+});
 
 // Registered for the life of the component, like the new-terminal opener above and for the same
 // reason: this is the only grid there is.
