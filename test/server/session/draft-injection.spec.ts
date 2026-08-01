@@ -205,15 +205,32 @@ describe("attachDraftInjection", () => {
       expect(t.writes).toEqual([`${PASTE_START}edit me${PASTE_END}`]);
     });
 
-    it("types once the dialog is answered and the screen settles, with no marker at all", () => {
+    it("types once the dialog is answered and the input box paints", () => {
       const t = target();
       const scan = attachDraftInjection(t.entry, undefined, "edit me", () => ESC_CR);
       scan(TRUST);
       vi.advanceTimersByTime(FALLBACK_MS * 5);
-      // Answering repaints. v2.1.220's manual mode never prints the marker, so quiet is all
-      // there is to go on.
+      // Answering repaints, and the repaint carries the status line — so the draft goes in on the
+      // marker rather than on a further quiet window.
       scan("manual mode on · ? for shortcuts");
-      vi.advanceTimersByTime(FALLBACK_MS);
+      vi.advanceTimersByTime(SETTLE_MS);
+      expect(t.writes).toEqual([`${PASTE_START}edit me${PASTE_END}`]);
+    });
+
+    // The bytes above, as a terminal actually sends them. Both markers reach the scanner with
+    // cursor moves BETWEEN their words, which is what made the spaced regexes match nothing:
+    // readiness was never seen (every spawn paid the full quiet window) and the dialog was held
+    // through only because its screen happens to be quiet too.
+    it("recognizes both markers through the cursor moves a redraw puts between the words", () => {
+      const t = target();
+      const scan = attachDraftInjection(t.entry, undefined, "edit me", () => ESC_CR);
+      scan(
+        `\u001b[2GQuick\u001b[8Gsafety\u001b[15Gcheck:\u001b[22GIs\u001b[25Gthis\u001b[30Ga\u001b[32Gproject\u001b[40Gyou\u001b[44Gcreated\u001b[52Gor\u001b[55Gone\u001b[59Gyou\u001b[63Gtrust?`,
+      );
+      vi.advanceTimersByTime(FALLBACK_MS * 5);
+      expect(t.writes).toEqual([]);
+      scan(`\u001b[3G⏸\u001b[5Gmanual\u001b[12Gmode\u001b[17Gon\u001b[20G·\u001b[22G?\u001b[24Gfor\u001b[28Gshortcuts`);
+      vi.advanceTimersByTime(SETTLE_MS);
       expect(t.writes).toEqual([`${PASTE_START}edit me${PASTE_END}`]);
     });
 
