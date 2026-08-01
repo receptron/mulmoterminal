@@ -16,6 +16,7 @@ import { plugin as mulmoScriptPlugin, MULMOSCRIPT_HOST_ADAPTER_KEY, type MulmoSc
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
+import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -68,6 +69,16 @@ interface Registration {
   toolName: string;
   viewComponent: Component;
   css?: string;
+  /**
+   * What makes two results of this tool the SAME THING, so the Canvas shows only the newest —
+   * see src/utils/canvasCollapse.ts. Return null for a result that must stand alone (inline
+   * content with no backing file, an unrecognised shape); a tool that omits this never collapses,
+   * which is what every tool did before this existed.
+   *
+   * The value is namespaced by toolName at the call site, so two plugins may return the same
+   * string without colliding.
+   */
+  identityOf?: (result: unknown) => string | null;
   // Optional fixed frame height for views that rely on an internal h-full layout
   // (vs flowing at natural content height). See PluginFrame's `height` prop.
   height?: string;
@@ -84,6 +95,9 @@ const PACKAGES: Record<string, Registration> = {
     // file-change forward channel; dispatch targets the presentDocument route.
     viewComponent: wrapWithPluginRuntime("markdown", markdownPlugin.toolDefinition.name, markdownPlugin.viewComponent as unknown as Component),
     css: markdownCss,
+    // Re-presenting one document supersedes the card showing its older state; inline markdown has
+    // no path and stands alone. See canvasIdentity.ts.
+    identityOf: documentIdentity,
   },
   "@mulmoclaude/form-plugin": {
     toolName: formPlugin.toolDefinition.name,
@@ -101,6 +115,8 @@ const PACKAGES: Record<string, Registration> = {
     // The View renders an h-full iframe; give it a definite frame height (like the
     // collection card) so the page renders, with internal scroll.
     height: "80vh",
+    // The page on disk, so only re-presenting the SAME page collapses. See canvasIdentity.ts.
+    identityOf: filePathIdentity,
   },
   "@mulmochat-plugin/generate-image": {
     toolName: GenerateImagePlugin.plugin.toolDefinition.name,
@@ -131,6 +147,9 @@ const PACKAGES: Record<string, Registration> = {
     // Full storyboard editor with an internal h-full layout — give it a definite
     // frame height (like the collection/html cards) so that chain resolves.
     height: "80vh",
+    // The story on disk (`stories/<name>.json`), so this collapses re-opens of ONE story rather
+    // than distinct stories. See canvasIdentity.ts.
+    identityOf: filePathIdentity,
   },
   // Keyed by the plugins.json `packages` entry (the cfg.packages loop below looks up
   // PACKAGES[name]). The collection engine + presentCollection tool moved to
@@ -151,6 +170,9 @@ const PACKAGES: Record<string, Registration> = {
     // fixed frame so that chain resolves — matches MulmoClaude's StackView
     // DEFAULT_PLUGIN_HEIGHT.
     height: "80vh",
+    // The collection, by slug alone — NOT slug+itemId, and the same key reconcileCollectionCard
+    // uses. See canvasIdentity.ts for both decisions.
+    identityOf: collectionIdentity,
   },
 };
 
