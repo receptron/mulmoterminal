@@ -7,8 +7,9 @@ import RateLimitGauge from "./RateLimitGauge.vue";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
 import { useShortcuts } from "../composables/useShortcuts";
-import { viewIsGrid } from "../composables/overlayOrigin";
+import { viewIsGrid, CONTENT_ROUTES } from "../composables/overlayOrigin";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
+import { filesGotoIndex } from "../composables/useFilesView";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
 import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
 import { usePrsView, prsGotoIndex } from "../composables/usePrsView";
@@ -91,6 +92,12 @@ const onGridRoute = computed(() => route.name === "terminals");
 const inSingle = computed(() => !onGridRoute.value);
 const chatActive = computed(() => inSingle.value && browseView.value.mode === "closed" && !accountingOpen.value && !wikiOpen.value && !prsOpen.value);
 const collectionsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "collection");
+const feedsActive = computed(() => browseView.value.mode === "index" && browseView.value.kind === "feed");
+const filesActive = computed(() => route.name === "files");
+// Inside the content section — which is what reveals the siblings below. Answered from the ROUTE
+// rather than from "is some overlay open", so moving between them (collections → wiki → files)
+// never blinks the row that got you there.
+const inContent = computed(() => CONTENT_ROUTES.has(String(route.name)));
 const accountingActive = computed(() => accountingOpen.value);
 const wikiActive = computed(() => wikiOpen.value);
 const prsActive = computed(() => prsOpen.value);
@@ -112,6 +119,14 @@ function showFavorite(s: Shortcut): void {
 }
 function showAccounting(): void {
   accountingViewOpen();
+}
+function showFeeds(): void {
+  browseGotoIndex("feed");
+}
+// No cwd: from here the Files view opens on the workspace, where a terminal header's Files button
+// opens on that terminal's own directory. The route carries the difference (`?cwd=`).
+function showFiles(): void {
+  filesGotoIndex(null);
 }
 function showWiki(): void {
   wikiGotoIndex();
@@ -139,12 +154,20 @@ function showPrs(): void {
       <span class="mr-1.5 inline-flex flex-none items-center gap-[3px] border-r border-border pr-2.5" role="group" aria-label="Switch view">
         <LauncherButton icon="chat" title="Chat" label="Chat" :active="chatActive" @click="showChat" />
         <LauncherButton icon="grid_view" title="Grid (multiple terminals)" label="Grid view" :active="onGridRoute" @click="showGrid" />
+        <!-- The way IN to the workspace's own data, beside the views it is a peer of — the content
+             surfaces used to be reachable only from the single view (#886), which left them with
+             no door at all once that view goes. One button here rather than four: the rest appear
+             below once you are inside, so the row a terminal user sees does not grow by four. -->
+        <LauncherButton icon="apps" title="Collections" label="Collections" :active="collectionsActive" @click="showCollections" />
       </span>
-      <!-- Single view only (#886): the content surfaces. The grid is for supervising agents,
-           and every one of these replaces the whole screen anyway. -->
-      <LauncherButton v-if="!inGrid" icon="apps" title="Collections" label="Collections" :active="collectionsActive" @click="showCollections" />
-      <LauncherButton v-if="!inGrid" icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
-      <LauncherButton v-if="!inGrid" icon="menu_book" title="Wiki" label="Wiki" :active="wikiActive" @click="showWiki" />
+      <!-- The other content surfaces, revealed by being IN the section rather than always present.
+           Same reasoning as the fence above: everything here acts within the view you are in. -->
+      <template v-if="inContent">
+        <LauncherButton icon="rss_feed" title="Feeds" label="Feeds" :active="feedsActive" @click="showFeeds" />
+        <LauncherButton icon="menu_book" title="Wiki" label="Wiki" :active="wikiActive" @click="showWiki" />
+        <LauncherButton icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
+        <LauncherButton icon="folder_open" title="Files" label="Files" :active="filesActive" @click="showFiles" />
+      </template>
       <!-- `template` wrapper rather than v-if on the v-for: the two directives on one element
            is a Vue anti-pattern (v-if wins and is evaluated per item). -->
       <template v-if="!inGrid">

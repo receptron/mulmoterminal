@@ -11,8 +11,11 @@ import { router } from "../router";
 // The routes that render as a full-screen panel ON TOP of a view. Every one of them starts
 // below the header (`top-10`), so the header stays visible while they are open — which means
 // the view underneath must not change when one opens.
-const OVERLAY_ROUTES = new Set([
-  "prs",
+// The CONTENT surfaces: the workspace's own data, as opposed to the terminals. Entered through the
+// Collections button, which then reveals its siblings — so this set is what "am I in there?"
+// means, and it lives beside OVERLAY_ROUTES because the two lists must not drift. PRs is the one
+// overlay that is NOT content: it is about work under supervision, and belongs with the grid.
+export const CONTENT_ROUTES = new Set([
   "accounting",
   "files",
   "wiki",
@@ -24,6 +27,8 @@ const OVERLAY_ROUTES = new Set([
   "feeds",
   "feedDetail",
 ]);
+
+const OVERLAY_ROUTES = new Set([...CONTENT_ROUTES, "prs"]);
 
 /** The route an open overlay should return to. */
 export function overlayReturnPath(): string {
