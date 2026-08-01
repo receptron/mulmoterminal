@@ -569,12 +569,22 @@ const placeChat = ({ id, agent, canvas }: SpawnedChatRequest): boolean => {
 // Asked on ACTIVATE rather than mount: the grid is kept alive across route changes, so mount fires
 // once per page load and would miss everything spawned while the user was elsewhere in the app.
 let adoptingUnplaced = false;
+// A trigger that arrived mid-sweep and has to be answered once this one lands. Deferred, not
+// DROPPED: the in-flight response was generated when the fetch was sent, so a session marked after
+// that is not in it, and simply refusing the overlapping trigger would leave that session with no
+// cell until a later route change or reload — the exact bug this whole path exists to fix (Codex,
+// this PR). One flag rather than a count: every sweep asks for the whole list, so N deferred
+// triggers and one are the same question.
+let sweepAgain = false;
 async function adoptUnplacedSessions(): Promise<void> {
   // One sweep at a time. The route watcher can fire again before the fetch resolves — leave the
   // grid for an overlay and come straight back — and both runs would read `cells` before either
   // inserted, so both would adopt the same session and give it two cells fighting over one socket.
   // The per-row guard below cannot catch that: it reads state neither call has written yet.
-  if (adoptingUnplaced) return;
+  if (adoptingUnplaced) {
+    sweepAgain = true;
+    return;
+  }
   adoptingUnplaced = true;
   try {
     const res = await fetch("/api/sessions/unplaced");
@@ -598,6 +608,13 @@ async function adoptUnplacedSessions(): Promise<void> {
     // Best effort: a grid that cannot ask still works, and the sessions stay marked for next time.
   } finally {
     adoptingUnplaced = false;
+    // Whatever came in while this was in flight, asked now that the state it would have raced is
+    // written. Not route-guarded again: the trigger passed that check when it ARRIVED, and the
+    // grid stays mounted under an overlay anyway — the cell is simply there when the user returns.
+    if (sweepAgain) {
+      sweepAgain = false;
+      void adoptUnplacedSessions();
+    }
   }
 }
 // Driven by the ACTUAL route, not by activation. Since #1193 the grid stays mounted underneath a
