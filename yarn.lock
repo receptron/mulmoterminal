@@ -2036,15 +2036,15 @@
     "@mulmoclaude/common" "^1.1.1"
     "@mulmoclaude/core" "^1.8.0"
 
-"@mulmoclaude/markdown-plugin@^1.3.0":
-  version "1.3.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-1.3.0.tgz#c004c6c97bd0f1377403018642ab1f4cacf7de4d"
-  integrity sha512-y0FU6Ju4r4nMHLMN4TXfyQzqzGsAQS65MMikIKM5QHZ2bP1swBGTEMsImq1R0I0oeDTo0tstZMWDneOXFBSXPQ==
+"@mulmoclaude/markdown-plugin@^1.4.0":
+  version "1.4.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-plugin/-/markdown-plugin-1.4.0.tgz#3de6e7d1c76b6b5d44085907c298038e723d7c42"
+  integrity sha512-ZzmZxXJaMrL749klEUqD6nevUsBSoi4h4xL0wZqBTaRVQW0o/d7pbXN2SWlL+K4x0BZSzcpNkAeOJMVL6rVT7A==
   dependencies:
     "@marp-team/marp-core" "^4.4.0"
     "@mulmoclaude/common" "^1.1.1"
-    "@mulmoclaude/core" "^1.8.0"
-    "@mulmoclaude/markdown-utils" "^1.3.1"
+    "@mulmoclaude/core" "^1.12.0"
+    "@mulmoclaude/markdown-utils" "^1.3.2"
     js-yaml "^5.2.2"
     marked "^18.0.7"
     mermaid "^11.16.0"
