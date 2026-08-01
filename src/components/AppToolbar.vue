@@ -6,9 +6,8 @@ import NotificationBell from "./NotificationBell.vue";
 import RateLimitGauge from "./RateLimitGauge.vue";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
-import { useShortcuts } from "../composables/useShortcuts";
 import { viewIsGrid, CONTENT_ROUTES } from "../composables/overlayOrigin";
-import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
+import { useCollectionBrowse, browseGotoIndex } from "../composables/useCollectionBrowse";
 import { filesGotoIndex } from "../composables/useFilesView";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
 import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
@@ -20,7 +19,6 @@ import { useUpdateStatus } from "../composables/useUpdateStatus";
 import { useGithubStar } from "../composables/useGithubStar";
 import { useDropdownMenu } from "../composables/useDropdownMenu";
 import { parseTagQuery } from "./wikiTagFilter";
-import type { Shortcut } from "../../common/shortcuts";
 import type { SortMode, StatusCounts } from "./gridTabs";
 import { gridStatusSummary } from "./gridTabs";
 import { sortModeButton } from "./sortModeButton";
@@ -49,7 +47,6 @@ const route = useRoute();
 const summary = computed(() => gridStatusSummary(props.statusCounts));
 const summaryTitle = computed(() => summary.value.title);
 const hasSummary = computed(() => summary.value.show);
-const { shortcuts } = useShortcuts();
 const { view: browseView } = useCollectionBrowse();
 const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
@@ -101,10 +98,6 @@ const inContent = computed(() => CONTENT_ROUTES.has(String(route.name)));
 const accountingActive = computed(() => accountingOpen.value);
 const wikiActive = computed(() => wikiOpen.value);
 const prsActive = computed(() => prsOpen.value);
-function favActive(s: Shortcut): boolean {
-  return browseView.value.mode === "detail" && browseView.value.kind === s.kind && browseView.value.slug === s.slug;
-}
-
 function showChat(): void {
   router.push({ name: "chat" });
 }
@@ -113,9 +106,6 @@ function showGrid(): void {
 }
 function showCollections(): void {
   browseGotoIndex("collection");
-}
-function showFavorite(s: Shortcut): void {
-  browseGotoDetail(s.kind, s.slug);
 }
 function showAccounting(): void {
   accountingViewOpen();
@@ -167,19 +157,6 @@ function showPrs(): void {
         <LauncherButton icon="menu_book" title="Wiki" label="Wiki" :active="wikiActive" @click="showWiki" />
         <LauncherButton icon="account_balance" title="Accounting" label="Accounting" :active="accountingActive" @click="showAccounting" />
         <LauncherButton icon="folder_open" title="Files" label="Files" :active="filesActive" @click="showFiles" />
-      </template>
-      <!-- `template` wrapper rather than v-if on the v-for: the two directives on one element
-           is a Vue anti-pattern (v-if wins and is evaluated per item). -->
-      <template v-if="!inGrid">
-        <LauncherButton
-          v-for="s in shortcuts"
-          :key="`${s.kind}:${s.slug}`"
-          :icon="s.icon || 'bookmark'"
-          :title="s.title"
-          :label="s.title"
-          :active="favActive(s)"
-          @click="showFavorite(s)"
-        />
       </template>
       <!-- Grid only (#886): branches under supervision are a grid concern. -->
       <LauncherButton v-if="inGrid" icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
