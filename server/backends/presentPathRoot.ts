@@ -19,8 +19,10 @@ import path from "node:path";
 import type { Express, Request, Response, NextFunction } from "express";
 import { classifyFilePath } from "@mulmoclaude/core/artifacts";
 import { MARKDOWN_EXTENSIONS, HTML_EXTENSIONS } from "@mulmoclaude/core/files";
+import { isPresentableHtmlPath } from "@mulmoclaude/html-plugin";
 import { isRecord } from "../../common/isRecord.js";
 import { SESSION_ID_RE } from "../config/env.js";
+import { isSamePath } from "../infra/path-within.js";
 
 /** Request header carrying the chat session a tool call belongs to. Set by the MCP
  *  broker (server/mcp/broker.ts), which is the only caller that knows it. */
@@ -68,19 +70,54 @@ export function absolutizePresentPath(args: unknown, cwd: string, extensions: re
   return { ...args, path: path.resolve(cwd, value) };
 }
 
+/** Why a page under a dot-prefixed directory cannot be presented, for the agent that
+ *  asked for one. `isPresentableHtmlPath` refuses a dotfile SEGMENT, and it is right to:
+ *  the `/htmlfile` mount that hands the page to the iframe refuses them too, so a call
+ *  accepted here would report success for a page that can never render. Once the path is
+ *  absolute, the session's own directory contributes segments — and MulmoTerminal's
+ *  managed worktrees live under `~/.mulmoterminal/worktrees/…`, so this is a place real
+ *  sessions run. Said plainly, because "invalid path: /Users/…/report.html" reads like a
+ *  typo in an argument that was in fact correct. */
+function undisplayableHtmlPath(absPath: string): string {
+  return (
+    `Cannot display ${absPath}: the /htmlfile mount refuses paths with a dot-prefixed segment, ` +
+    `so this page cannot be served to the view. This session's directory has one. Present a page ` +
+    `outside that directory, or use presentDocument for a markdown file (which does not go through that mount).`
+  );
+}
+
 /** Rewrite the body of a presentDocument / presentHtml tool call before any route sees
  *  it. MUST be registered after `express.json` and BEFORE every /api/plugin handler —
  *  the html and mulmoscript dispatch routes included, so one rule covers whichever of
- *  them ends up taking the request. Any other tool, and any request without a session
- *  header, passes through untouched. */
-export function mountPresentPathRoot(app: Express, deps: { cwdForSession: (id: string | null) => string }): void {
-  app.post("/api/plugin/:toolName", (req: Request, _res: Response, next: NextFunction) => {
+ *  them ends up taking the request. Any other tool passes through untouched.
+ *
+ *  A session whose directory IS the workspace is left alone rather than rewritten to the
+ *  same file's absolute path, and that is not just an optimisation: the markdown View
+ *  resolves a document's relative image refs (`![](images/x.png)`) against the document's
+ *  own directory and serves them workspace-relative through /api/files/raw, which an
+ *  absolute document path breaks. Keeping the workspace case byte-identical means nothing
+ *  that works today stops working — including every caller that names no session, which
+ *  resolves to the workspace anyway. (A document in ANOTHER project still loses its
+ *  relative images; there is no way to say "this cwd" in that URL, and today those refs
+ *  resolve against the wrong project entirely.) */
+export function mountPresentPathRoot(app: Express, deps: { cwdForSession: (id: string | null) => string; workspace: string }): void {
+  app.post("/api/plugin/:toolName", (req: Request, res: Response, next: NextFunction) => {
     const toolName = req.params.toolName;
     const extensions = typeof toolName === "string" ? PRESENT_PATH_EXTENSIONS.get(toolName) : undefined;
     if (!extensions) return next();
     const header = req.get(SESSION_HEADER);
     const sessionId = header && SESSION_ID_RE.test(header) ? header : null;
-    req.body = absolutizePresentPath(req.body, deps.cwdForSession(sessionId), extensions);
+    const cwd = deps.cwdForSession(sessionId);
+    if (isSamePath(cwd, deps.workspace)) return next();
+
+    const rewritten = absolutizePresentPath(req.body, cwd, extensions);
+    if (rewritten !== req.body && toolName === "presentHtml") {
+      const absPath = (rewritten as { path: string }).path;
+      // The plugin's own gate, asked here rather than re-implemented — a path it will
+      // refuse deserves the reason, not `invalid path`.
+      if (!isPresentableHtmlPath(absPath)) return res.status(400).json({ error: undisplayableHtmlPath(absPath) });
+    }
+    req.body = rewritten;
     next();
   });
 }

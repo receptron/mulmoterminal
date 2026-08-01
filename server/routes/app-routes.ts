@@ -129,7 +129,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // session's own directory (backends/presentPathRoot.ts). Registered here rather than
   // next to one of the dispatch routes because more than one of them can take that path,
   // and all of them must see the same, already-absolute value.
-  mountPresentPathRoot(app, { cwdForSession });
+  mountPresentPathRoot(app, { cwdForSession, workspace: CLAUDE_CWD });
 
   // The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
   // manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede

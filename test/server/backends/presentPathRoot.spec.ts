@@ -61,10 +61,17 @@ describe("the /api/plugin middleware", () => {
   let base: string;
   const SESSION = "11111111-2222-3333-4444-555555555555";
 
+  const DOT_SESSION = "99999999-8888-7777-6666-555555555555";
+  const DOT_CWD = "/home/u/.mulmoterminal/worktrees/repo-ab12/task";
+
   beforeAll(async () => {
     const app = express();
     app.use(express.json());
-    mountPresentPathRoot(app, { cwdForSession: (id) => (id === SESSION ? CWD : WORKSPACE) });
+    const cwds = new Map([
+      [SESSION, CWD],
+      [DOT_SESSION, DOT_CWD],
+    ]);
+    mountPresentPathRoot(app, { workspace: WORKSPACE, cwdForSession: (id) => cwds.get(id ?? "") ?? WORKSPACE });
     // Stand-in for the real dispatch route: echo whatever body the middleware left.
     app.post("/api/plugin/:toolName", (req, res) => res.json(req.body));
     await new Promise<void>((resolve) => {
@@ -76,13 +83,15 @@ describe("the /api/plugin middleware", () => {
 
   afterAll(() => server?.close());
 
-  const call = async (tool: string, body: unknown, sessionId?: string) => {
-    const res = await fetch(`${base}/api/plugin/${tool}`, {
+  const post = (tool: string, body: unknown, sessionId?: string) =>
+    fetch(`${base}/api/plugin/${tool}`, {
       method: "POST",
       headers: { "content-type": "application/json", ...(sessionId ? { [SESSION_HEADER]: sessionId } : {}) },
       body: JSON.stringify(body),
     });
-    return (await res.json()) as { path?: string };
+
+  const call = async (tool: string, body: unknown, sessionId?: string) => {
+    return (await (await post(tool, body, sessionId)).json()) as { path?: string };
   };
 
   it("resolves against the calling session's directory", async () => {
@@ -90,12 +99,24 @@ describe("the /api/plugin middleware", () => {
     expect((await call("presentHtml", { path: "docs/report.html" }, SESSION)).path).toBe(path.resolve(CWD, "docs/report.html"));
   });
 
-  it("falls back to the workspace when no session is named", async () => {
-    expect((await call("presentDocument", { path: "README.md" })).path).toBe(path.resolve(WORKSPACE, "README.md"));
+  // Byte-identical, NOT "resolved to the same file": an absolute document path breaks the
+  // View's relative image refs, which resolve workspace-relative through /api/files/raw.
+  it("leaves a workspace-rooted session's path exactly as it was", async () => {
+    expect((await call("presentDocument", { path: "notes/a.md" })).path).toBe("notes/a.md");
+    expect((await call("presentDocument", { path: "notes/a.md" }, "not-a-session")).path).toBe("notes/a.md");
   });
 
-  it("ignores a header that is not a session id", async () => {
-    expect((await call("presentDocument", { path: "README.md" }, "not-a-session")).path).toBe(path.resolve(WORKSPACE, "README.md"));
+  it("refuses an HTML page under a dot-prefixed session directory, with the reason", async () => {
+    const res = await post("presentHtml", { path: "report.html" }, DOT_SESSION);
+    expect(res.status).toBe(400);
+    const { error } = (await res.json()) as { error: string };
+    expect(error).toContain(path.resolve(DOT_CWD, "report.html"));
+    expect(error).toContain("dot-prefixed segment");
+  });
+
+  // Markdown does not go through the /htmlfile mount, so the same directory is fine.
+  it("still presents a markdown document from a dot-prefixed session directory", async () => {
+    expect((await call("presentDocument", { path: "notes.md" }, DOT_SESSION)).path).toBe(path.resolve(DOT_CWD, "notes.md"));
   });
 
   it("does not touch another tool's `path`", async () => {
