@@ -18,7 +18,7 @@ describe("toCollectionPushResult", () => {
   it("carries a successful push's counts through", () => {
     const outcome: CalendarPushOutcome = {
       kind: "pushed",
-      result: { slug: "meetings", created: 3, updated: 2, conflicts: 1, localDeletes: 4, skipped: ["r7: no start time"], errors: [], unpushedIds: ["r4"] },
+      result: { slug: "meetings", created: 3, updated: 2, conflicts: 1, localDeletes: 4, skipped: ["r7: no start time"], errors: [] },
     };
     expect(toCollectionPushResult(outcome)).toEqual({
       pushed: true,
@@ -45,7 +45,6 @@ describe("toCollectionPushResult", () => {
         localDeletes: 0,
         skipped: ["r2: end before start"],
         errors: ["r9: 403"],
-        unpushedIds: ["r9"],
       },
     });
     expect(result.skipped).toEqual(["r2: end before start"]);

@@ -16,7 +16,7 @@ import { PUSH_NOT_DECLARED_ERROR, PUSH_NOT_LINKED_ERROR } from "../../../server/
 
 const PUSHED: CalendarPushOutcome = {
   kind: "pushed",
-  result: { slug: "meetings", created: 2, updated: 1, conflicts: 0, localDeletes: 0, skipped: [], errors: [], unpushedIds: [] },
+  result: { slug: "meetings", created: 2, updated: 1, conflicts: 0, localDeletes: 0, skipped: [], errors: [] },
 };
 
 const stubDeps = (over: Partial<CalendarPushRouteDeps> = {}): CalendarPushRouteDeps => ({
