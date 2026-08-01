@@ -12,6 +12,7 @@ import { resetFileChangePublisher } from "@mulmoclaude/core/file-change";
 import { initFileChangePublisher } from "../../../server/backends/fileChange.js";
 import { initMarkdownBackend, markdownHostApp } from "../../../server/backends/markdown.js";
 import { initOpenPathBackend, resetOpenPathBackend } from "../../../server/backends/openPath.js";
+import { absolutizePresentPath } from "../../../server/backends/presentPathRoot.js";
 
 let ws: string;
 let published: { channel: string; data: unknown }[] = [];
@@ -79,6 +80,22 @@ describe("markdownHostApp over by-path files", () => {
 
   it("refuses a traversal segment", async () => {
     await expect(markdownHostApp.loadDoc("../outside.md")).rejects.toThrow();
+  });
+
+  // The point of the whole boundary rewrite: `README.md` from a cell running in another
+  // project must reach THAT project's file, and the user's edit must go back to it —
+  // not to the same-named file sitting in the workspace.
+  it("opens the SESSION's README, not the workspace's, once the path is absolutized", async () => {
+    seed("README.md", "# workspace");
+    const project = mkdtempSync(path.join(tmpdir(), "mt-project-"));
+    tempDirs.push(project);
+    writeFileSync(path.join(project, "README.md"), "# project");
+
+    const args = absolutizePresentPath({ title: "R", path: "README.md" }, project, [".md"]) as { path: string };
+    expect((await markdownHostApp.loadDoc(args.path)).content).toBe("# project");
+    await markdownHostApp.saveDoc(args.path, "# edited");
+    expect(readFileSync(path.join(project, "README.md"), "utf8")).toBe("# edited");
+    expect(readFileSync(path.join(ws, "README.md"), "utf8")).toBe("# workspace");
   });
 
   it("still writes NEW documents under artifacts/documents", async () => {

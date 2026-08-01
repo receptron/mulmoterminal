@@ -58,6 +58,8 @@ import { mountShortcutsRoutes } from "../backends/shortcuts.js";
 import { mountDecisionRoutes } from "./decision-routes.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/html.js";
+import { mountPresentPathRoot } from "../backends/presentPathRoot.js";
+import { cwdForSession } from "../session/session-cwd.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/mulmoscript.js";
 import { CLAUDE_CWD, MULMOTERMINAL_HOME, PORT, SESSION_ID_RE } from "../config/env.js";
 import { FILE_WRITE_CHANNEL, type FileWriteEvent } from "../../common/fileWriteChannel.js";
@@ -121,6 +123,13 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   mountDropRoutes(app);
 
   app.use(express.json({ limit: "25mb" }));
+
+  // Straight after the body parser and BEFORE every /api/plugin handler: rewrite
+  // presentDocument / presentHtml's relative `path` to an absolute one under the calling
+  // session's own directory (backends/presentPathRoot.ts). Registered here rather than
+  // next to one of the dispatch routes because more than one of them can take that path,
+  // and all of them must see the same, already-absolute value.
+  mountPresentPathRoot(app, { cwdForSession });
 
   // The GUI-plugin tool routes this server answers itself: spawnBackgroundChat,
   // manageAccounting, manageCollection (routes/plugin-routes.ts). ALL of them must precede

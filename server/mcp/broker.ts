@@ -31,16 +31,17 @@ import { offeredTools, routeToolCall, SUBMIT_TRANSLATION_TOOL_NAME } from "./too
 import { toolGroupServerId, type ToolGroup } from "../../common/toolGroups.js";
 import { interpretToolEnvelope } from "./tool-envelope.js";
 import { isRecord } from "../../common/isRecord.js";
+import { SESSION_HEADER } from "../backends/presentPathRoot.js";
 import type { GuiCallRecorder } from "./gui-call-history.js";
 import { messageOf } from "../errors.js";
 
 // Shape of the dispatch route's response (POST /api/plugin/<tool>). `data` gates
 // whether a toolResult is published to the GUI; the rest is narration/metadata.
 
-async function postJson(url: string, body: unknown) {
+async function postJson(url: string, body: unknown, headers: Record<string, string> = {}) {
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`${url} responded ${res.status}`);
@@ -133,7 +134,11 @@ export function buildGuiMcpServer(
     started();
     try {
       // Dispatch to the plugin's server-side handler, then interpret its envelope (tool-envelope.ts).
-      const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {})).json();
+      // The session id travels as a header, not in the body: the args are the tool's own
+      // schema and every plugin sees them. It is what lets a relative `path` be read as
+      // "relative to the directory THIS cell runs in" (backends/presentPathRoot.ts);
+      // plugins that don't care never look at it.
+      const parsed = await (await postJson(`${baseUrl}/api/plugin/${name}`, args ?? {}, { [SESSION_HEADER]: sessionId })).json();
       const { publish, narration } = interpretToolEnvelope(isRecord(parsed) ? parsed : {});
 
       // A GUI toolResult, only when there is data to render.

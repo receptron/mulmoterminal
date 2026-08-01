@@ -12,6 +12,13 @@
 // NOT `backends/fileOps.ts`. That one exists to CONFINE a plugin to one directory;
 // this one deliberately does not confine. Opposite purposes — don't reach for the
 // wrong one.
+//
+// The root below is the WORKSPACE, and it stays that way: a tool call's relative `path`
+// has already been made absolute at the dispatch route, against the calling session's
+// own directory (backends/presentPathRoot.ts). Don't reinvent that as a per-request root
+// here — the View's dispatch and the /htmlfile iframe request come from the browser and
+// can name no session, so they would fall back to the workspace and disagree with the
+// tool call that opened them.
 import { realpath } from "node:fs/promises";
 import { createByPathFileOps, resolveHtmlFileRequestPath, HTML_EXTENSIONS, MARKDOWN_EXTENSIONS } from "@mulmoclaude/core/files";
 import type { FileOps } from "gui-chat-protocol";
