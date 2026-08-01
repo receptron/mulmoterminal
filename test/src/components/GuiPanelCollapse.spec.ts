@@ -336,6 +336,40 @@ describe("GuiPanel — following the newest card", () => {
     expect(pane.element.scrollTop).toBe(topOfCard(2));
   });
 
+  // A result whose tool has no registered viewComponent stays in the feed forever while drawing
+  // nothing. It must not count as "the newest card" — it has no position to anchor on, so the
+  // follow would have nothing to measure. Flagged by CodeRabbit on PR #1224.
+  const unrenderable = (uuid: string) => ({ uuid, toolName: "no-such-plugin", data: {} });
+
+  it("follows past a result no plugin can render", async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await push(unrenderable("u1"));
+    await push(plain("p3"));
+    await nextTick();
+    expect(rendered(wrapper)).toEqual(["p1", "p2", "p3"]);
+    expect(pane.element.scrollTop).toBe(topOfCard(2));
+  });
+
+  it("still lets the reader disengage while an unrenderable result is the newest", async () => {
+    // The gate has to keep updating. Anchored on a card with no element it would bail out of
+    // onScroll entirely, freezing following ON, and the next card would yank the reader away.
+    const wrapper = mountPanel();
+    await flushPromises();
+    const pane = paneOf(wrapper);
+    await push(plain("p1"));
+    await push(plain("p2"));
+    await push(unrenderable("u1"));
+    pane.element.scrollTop = 0; // back up into card 1
+    await pane.trigger("scroll");
+    await push(plain("p3"));
+    await nextTick();
+    expect(pane.element.scrollTop).toBe(0);
+  });
+
   it("does not chase a view persisting its own state", async () => {
     // onUpdateResult replaces the result object but keeps its uuid; following that would fight
     // someone typing in a form.

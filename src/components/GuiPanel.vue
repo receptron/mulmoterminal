@@ -112,9 +112,17 @@ function cardIdentity(result: ToolResult): string | null {
   return identity === null ? null : `${result.toolName}:${identity}`;
 }
 
-// The cards actually rendered: one per identity, newest at that identity's newest position. See
-// canvasCollapse.ts for why the superseded ones are dropped rather than kept as members.
-const cards = computed(() => collapseByIdentity(results.value, cardIdentity));
+// The cards actually rendered: one per identity, newest at that identity's newest position (see
+// canvasCollapse.ts for why the superseded ones are dropped rather than kept as members), and only
+// the ones this browser HAS a renderer for.
+//
+// That filter is not cosmetic. A result whose tool has no registered viewComponent — the panel
+// names several such tools in TOOL_HINTS — stays in the feed forever while drawing nothing, so
+// leaving it here would make it the "newest card" with no position on screen: the follow below
+// would have nothing to measure, stop scrolling, and freeze its gate on whatever it last was. It
+// is also simpler, since the template no longer needs a `v-if` to skip what it cannot draw.
+// Flagged by CodeRabbit on PR #1224.
+const cards = computed(() => collapseByIdentity(results.value, cardIdentity).filter((result) => getPlugin(result.toolName)));
 
 // v-for key. The UUID, deliberately — NOT the identity, which would look like the tidier choice
 // (same subject, same key, one instance kept across edits) and is the wrong one.
@@ -346,7 +354,6 @@ const hasTools = computed(() => toolSections.value.some((section) => section.too
            "unavailable" heading would contradict it. -->
       <template v-for="r in unavailable ? [] : cards" :key="cardKey(r)">
         <PluginFrame
-          v-if="getPlugin(r.toolName)"
           :ref="(el) => setCardEl(r.uuid, el as Element | ComponentPublicInstance | null)"
           class="[&+&]:mt-4 [&+&]:border-t [&+&]:border-border [&+&]:pt-4"
           :css="getPlugin(r.toolName)!.css"
