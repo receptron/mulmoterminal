@@ -31,6 +31,12 @@ export const MAX_TITLE_CHARS = 80;
 
 const clip = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max)}…` : s);
 
+// Clipping a turn lands mid-sentence, and a bare "…" reads like the human's own message
+// broke off — the summarizer then replies about it ("your message seems cut off …") instead
+// of titling. An explicit marker says the cut is ours.
+const CLIP_MARK = "…[clipped by mulmoterminal]";
+const clipTurn = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max)}${CLIP_MARK}` : s);
+
 // Regenerate the title when there's none yet, when the newest prompt was a
 // trivial/context-dependent ack (the raw last-prompt would be stale or meaningless), or
 // every `maxTurns` turns to keep a long session's title fresh.
@@ -64,7 +70,7 @@ export function titleWindow(turns: ConversationTurn[]): ConversationTurn[] {
 // A labelled transcript the model reads on stdin, assistant turns clipped shorter.
 export function renderTurns(turns: ConversationTurn[]): string {
   return turns
-    .map((t) => `${t.role === "user" ? "User" : "Assistant"}: ${clip(t.text, t.role === "user" ? USER_TURN_CHARS : ASSISTANT_TURN_CHARS)}`)
+    .map((t) => `${t.role === "user" ? "User" : "Assistant"}: ${clipTurn(t.text, t.role === "user" ? USER_TURN_CHARS : ASSISTANT_TURN_CHARS)}`)
     .join("\n");
 }
 
@@ -74,6 +80,8 @@ export function buildTitlePrompt(): string {
     "Summarize what the USER is trying to accomplish as a short, concise title: a phrase, NOT a full",
     "sentence — no trailing punctuation. Base it on the User's intent, not the Assistant's wording.",
     "Match the User's language.",
+    `Turns are machine-clipped and can stop mid-sentence (marked "${CLIP_MARK}"). That is normal —`,
+    "never remark on it and never ask for the missing part; title what is there.",
     "Output ONLY the title: no quotes, no labels, no explanation.",
   ].join("\n");
 }
@@ -91,14 +99,27 @@ function stripQuotes(text: string): string {
   return chars.slice(start, end).join("").trim();
 }
 
-// Take the first non-empty line, strip surrounding quotes, and cap the length.
+// Sentence punctuation and a line far past the cap are prose, not a title. A title long
+// enough to need clipping is still a title, so the reject line sits well above MAX.
+const PROSE_MARKS = ["。", "．", "！", "？", ". ", "! ", "? "];
+const MAX_TITLE_LINE_CHARS = MAX_TITLE_CHARS * 2;
+
+// Does this look like a title rather than a reply? The summarizer occasionally answers the
+// transcript instead of titling it (asking about a clipped turn, narrating its reasoning),
+// and a title is always a single short clause: one line, no sentence punctuation.
+export function looksLikeTitle(lines: string[]): boolean {
+  return lines.length === 1 && lines[0].length <= MAX_TITLE_LINE_CHARS && !PROSE_MARKS.some((m) => lines[0].includes(m));
+}
+
+// Take the single non-empty line, strip surrounding quotes, and cap the length. Prose (a
+// reply, not a title) is rejected as "" so generateHeaderTitle returns null and the header
+// keeps falling back to the last prompt — a stale header beats a paragraph in the header.
 export function parseTitleOutput(stdout: string): string {
-  const firstLine =
-    stdout
-      .split("\n")
-      .map((l) => l.trim())
-      .find(Boolean) ?? "";
-  return clip(stripQuotes(firstLine), MAX_TITLE_CHARS);
+  const lines = stdout
+    .split("\n")
+    .map((l) => stripQuotes(l.trim()))
+    .filter(Boolean);
+  return looksLikeTitle(lines) ? clip(lines[0], MAX_TITLE_CHARS) : "";
 }
 
 export interface GenerateTitleDeps {

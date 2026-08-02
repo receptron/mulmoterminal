@@ -84,9 +84,8 @@ export type RunClaude = (params: { bin: string; prompt: string; input: string; t
 // timeout kills a hung CLI so the request can't wait forever. Injected into
 // summarizeLog so tests mock it — no `claude` binary needed. `model` (when given) picks
 // a cheaper/faster model via `--model` — used by the header-title generator.
-export const runClaudeHeadless: RunClaude = ({ bin, prompt, input, timeoutMs, model }) =>
+const spawnClaude = (bin: string, args: string[], input: string, timeoutMs: number): Promise<ClaudeRunResult> =>
   new Promise((resolve, reject) => {
-    const args = model ? ["-p", prompt, "--model", model] : ["-p", prompt];
     const child = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
     const out: Buffer[] = [];
     const err: Buffer[] = [];
@@ -106,6 +105,20 @@ export const runClaudeHeadless: RunClaude = ({ bin, prompt, input, timeoutMs, mo
     });
     child.stdin.end(input);
   });
+
+// These one-shot runs are throwaway: the title generator fires every few user turns, and
+// each persisted transcript buries the user's real sessions in the resume list (measured:
+// 1738 of 1739 recorded sessions for this repo were title runs). `--no-session-persistence`
+// (print mode only) stops the recording. A CLI too old to know the flag rejects it before
+// doing any work, so that one case retries plainly rather than losing the summary.
+const NO_PERSIST = "--no-session-persistence";
+const rejectedNoPersist = (r: ClaudeRunResult): boolean => r.code !== 0 && r.stderr.includes(NO_PERSIST) && /unknown|unrecognized|unsupported/i.test(r.stderr);
+
+export const runClaudeHeadless: RunClaude = async ({ bin, prompt, input, timeoutMs, model }) => {
+  const args = model ? ["-p", prompt, "--model", model] : ["-p", prompt];
+  const run = await spawnClaude(bin, [...args, NO_PERSIST], input, timeoutMs);
+  return rejectedNoPersist(run) ? spawnClaude(bin, args, input, timeoutMs) : run;
+};
 
 export interface SummaryResult {
   summary: string;

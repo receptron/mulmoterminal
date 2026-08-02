@@ -86,6 +86,21 @@ describe("parseTitleOutput", () => {
   it("returns an empty string for blank output", () => {
     expect(parseTitleOutput("   \n  ")).toBe("");
   });
+
+  // Observed in the wild: a clipped turn read like an unfinished message, so the summarizer
+  // answered it and its first line was pasted into the header instead of a title.
+  it("rejects a reply instead of putting prose in the header", () => {
+    expect(parseTitleOutput("ユーザーのメッセージが途中で切れているようです。次に何をすべきか教えてください。\n\nいまの状況:\n- S4a-2 完了")).toBe("");
+    expect(parseTitleOutput("The user's message appears to be cut off. Could you resend it?")).toBe("");
+  });
+
+  it("rejects multi-line output even when the first line is short", () => {
+    expect(parseTitleOutput("了解しました\n\nタイトル: パーサー修正")).toBe("");
+  });
+
+  it("still accepts a plain title", () => {
+    expect(parseTitleOutput("Prisma include の scalar 混入で 500 になる不具合を調査")).toBe("Prisma include の scalar 混入で 500 になる不具合を調査");
+  });
 });
 
 describe("renderTurns", () => {
@@ -95,6 +110,12 @@ describe("renderTurns", () => {
       { role: "assistant", text: "hello" },
     ];
     expect(renderTurns(turns)).toBe("User: hi\nAssistant: hello");
+  });
+
+  it("marks a clipped turn as clipped by us, not left dangling on an ellipsis", () => {
+    const rendered = renderTurns([{ role: "assistant", text: "x".repeat(400) }]);
+    expect(rendered).toContain("[clipped by mulmoterminal]");
+    expect(buildTitlePrompt()).toContain("[clipped by mulmoterminal]");
   });
 });
 
