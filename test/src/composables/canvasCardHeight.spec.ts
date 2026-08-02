@@ -21,18 +21,22 @@ describe("canvasCardHeightPx", () => {
   });
 
   it("refuses a measurement of zero", () => {
-    // A closed pane, or a grid cell parked off-screen in roster mode, measures ~0. Publishing
+    // A closed pane, or a grid cell parked off-screen in roster mode, measures 0. Publishing
     // it would collapse every card to nothing until something else resized the box, so the
     // caller keeps the last good value instead.
     expect(canvasCardHeightPx(0, 24)).toBeNull();
   });
 
-  it("refuses a measurement too small to hold a card", () => {
-    expect(canvasCardHeightPx(150, 24)).toBeNull();
+  it("refuses a measurement swallowed entirely by padding", () => {
+    expect(canvasCardHeightPx(20, 24)).toBeNull();
   });
 
-  it("accepts the smallest usable measurement", () => {
-    expect(canvasCardHeightPx(184, 24)).toBe(160);
+  it("publishes a small but legitimate measurement", () => {
+    // A low window or a small grid cell genuinely IS this short. A floor above zero was tried
+    // and rejected in review on #1266: refusing these leaves the cards on the 80vh fallback or
+    // on a stale larger value, which overflows the panel — the very thing this replaces.
+    expect(canvasCardHeightPx(100, 24)).toBe(76);
+    expect(canvasCardHeightPx(25, 24)).toBe(1);
   });
 
   it("refuses a non-finite measurement", () => {

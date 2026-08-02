@@ -16,26 +16,32 @@ import { onBeforeUnmount, watch, type Ref } from "vue";
 // not from what is inside it, so writing the variable cannot change the observed box —
 // which is what keeps this out of a "ResizeObserver loop completed with undelivered
 // notifications" cycle.
+//
+// A hidden pane (measuring 0) is the one measurement not published; see canvasCardHeightPx.
 export const CANVAS_CARD_HEIGHT_VAR = "--canvas-card-h";
-
-// Below this, the panel is not being looked at rather than being tiny: a closed pane, or a
-// grid cell parked off-screen in roster mode, both measure ~0. Writing that would collapse
-// every card to nothing and leave them there until something else resized the box, so a
-// too-small measurement is IGNORED and the last good value stands.
-const MIN_CARD_HEIGHT_PX = 160;
 
 /**
  * The height to publish for a panel of `clientHeight` with `paddingYPx` of vertical padding,
- * or null when the measurement is not usable (see MIN_CARD_HEIGHT_PX).
+ * or null when the measurement is not usable.
  *
  * `clientHeight` INCLUDES padding, and the cards are laid out inside it, so the padding is
  * subtracted — otherwise a card sized to the full clientHeight always overflows by exactly
  * the padding and every card shows a scrollbar it does not need.
+ *
+ * Only a NON-POSITIVE result is refused, and that is the whole test for "not being looked
+ * at": a closed pane, or a grid cell parked off-screen in roster mode, measures 0, and
+ * publishing that would collapse every card to nothing until something else resized the box.
+ * ResizeObserver publishes the real size the moment such a pane becomes visible.
+ *
+ * A floor above zero was tried and is wrong (caught in review on #1266): a genuinely short
+ * panel — a low window, a small grid cell — produces a small-but-legitimate measurement, and
+ * refusing it leaves the cards on the `80vh` fallback or on a stale larger value, i.e. the
+ * exact overflow this whole change removes. Small is still contained; unpublished is not.
  */
 export function canvasCardHeightPx(clientHeight: number, paddingYPx: number): number | null {
   if (!Number.isFinite(clientHeight) || !Number.isFinite(paddingYPx)) return null;
   const usable = Math.round(clientHeight - paddingYPx);
-  return usable >= MIN_CARD_HEIGHT_PX ? usable : null;
+  return usable > 0 ? usable : null;
 }
 
 function paddingYOf(element: HTMLElement): number {
