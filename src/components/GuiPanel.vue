@@ -7,6 +7,7 @@ import PluginFrame from "./PluginFrame.vue";
 import { TOOL_GROUPS, groupOfTool, toolsInGroup } from "../../common/toolGroups";
 import { reconcileCollectionCard } from "../../common/collectionSeed";
 import { collapseByIdentity } from "../utils/canvasCollapse";
+import { useCanvasCardHeight } from "../composables/useCanvasCardHeight";
 
 // The GUI panel renders the toolResults produced by GUI-protocol plugins. It
 // mirrors the terminal's active session: live results arrive on that session's
@@ -165,14 +166,23 @@ const latestCardKey = computed(() => {
   return `${list.length}:${last?.uuid ?? ""}`;
 });
 
-watch(latestCardKey, () => {
+// After the pending layout — the new/resized card's height is what we are scrolling past.
+function followToEnd() {
   if (!stickToBottom.value) return;
-  // After the new card has been laid out — its height is what we are scrolling past.
   nextTick(() => {
     const element = scrollRef.value;
     if (element) element.scrollTop = element.scrollHeight;
   });
-});
+}
+
+watch(latestCardKey, followToEnd);
+
+// Fixed-height cards are sized from THIS box rather than from the viewport — see
+// useCanvasCardHeight for why `vh` was the wrong unit for a panel that sits under the app
+// chrome. Re-pinning on resize is part of it: every card changes height at once, which moves
+// scrollHeight while the browser holds scrollTop in pixels, so a reader parked at the end
+// would otherwise be left mid-card by a window resize.
+useCanvasCardHeight(scrollRef, followToEnd);
 
 // What each tool produces, so the empty state says what asking for one would get rather than
 // only naming it. A Map for the same reason common/toolGroups.ts uses one, and consulted with a

@@ -17,6 +17,7 @@ import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
+import { CANVAS_CARD_HEIGHT_VAR } from "./composables/useCanvasCardHeight";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
 // which encapsulates the plugin's Tailwind preflight so it can't clobber
@@ -81,6 +82,14 @@ function viewOf(packageName: string, viewComponent: Component | undefined): Comp
   return viewComponent;
 }
 
+// The frame height for cards whose View relies on an internal h-full (100%) layout rather
+// than flowing at natural content height. Resolves against the panel's MEASURED height:
+// useCanvasCardHeight publishes it on the Canvas scroll container, and custom properties
+// inherit through the plugin Shadow DOM, so the View's own h-full chain lands on the same
+// number. The 80vh fallback is what these cards used before the measurement existed — it
+// applies only if a card is rendered outside that container.
+const CANVAS_CARD_HEIGHT = `var(${CANVAS_CARD_HEIGHT_VAR}, 80vh)`;
+
 interface Registration {
   toolName: string;
   viewComponent: Component;
@@ -111,6 +120,11 @@ const PACKAGES: Record<string, Registration> = {
     // file-change forward channel; dispatch targets the presentDocument route.
     viewComponent: wrapWithPluginRuntime("markdown", markdownPlugin.toolDefinition.name, viewOf("@mulmoclaude/markdown-plugin", markdownPlugin.viewComponent)),
     css: markdownCss,
+    // Fixed frame height instead of flowing at natural content height, so a long
+    // document scrolls inside its card rather than pushing the rest of the Canvas
+    // down. DIVERGES from MulmoClaude, where presentDocument is in StackView's
+    // STACK_NATURAL_TOOLS allowlist and flows.
+    height: CANVAS_CARD_HEIGHT,
     // Re-presenting one document supersedes the card showing its older state; inline markdown has
     // no path and stands alone. See canvasIdentity.ts.
     identityOf: documentIdentity,
@@ -130,7 +144,7 @@ const PACKAGES: Record<string, Registration> = {
     css: htmlCss,
     // The View renders an h-full iframe; give it a definite frame height (like the
     // collection card) so the page renders, with internal scroll.
-    height: "80vh",
+    height: CANVAS_CARD_HEIGHT,
     // The page on disk, so only re-presenting the SAME page collapses. See canvasIdentity.ts.
     identityOf: filePathIdentity,
   },
@@ -162,7 +176,7 @@ const PACKAGES: Record<string, Registration> = {
     css: mulmoScriptCss,
     // Full storyboard editor with an internal h-full layout — give it a definite
     // frame height (like the collection/html cards) so that chain resolves.
-    height: "80vh",
+    height: CANVAS_CARD_HEIGHT,
     // The story on disk (`stories/<name>.json`), so this collapses re-opens of ONE story rather
     // than distinct stories. See canvasIdentity.ts.
     identityOf: filePathIdentity,
@@ -183,9 +197,10 @@ const PACKAGES: Record<string, Registration> = {
     css: collectionShadowCss,
     // The collection View uses an internal h-full layout (table/kanban scroll
     // areas, and the custom-view iframe has no intrinsic content height). Give it a
-    // fixed frame so that chain resolves — matches MulmoClaude's StackView
-    // DEFAULT_PLUGIN_HEIGHT.
-    height: "80vh",
+    // fixed frame so that chain resolves. MulmoClaude frames this card too, but at its
+    // own DEFAULT_PLUGIN_HEIGHT of min(60vh, 560px) — ours is the panel's measured
+    // height, chosen here (#50) so the card fills the pane rather than a fraction of it.
+    height: CANVAS_CARD_HEIGHT,
     // The collection, by slug alone — NOT slug+itemId, and the same key reconcileCollectionCard
     // uses. See canvasIdentity.ts for both decisions.
     identityOf: collectionIdentity,
@@ -225,7 +240,7 @@ registry["manageAccounting"] = {
   css: accountingCss,
   // Full canvas app with an internal h-full layout — give it a fixed frame height
   // (like the collection/html cards) so that chain resolves.
-  height: "80vh",
+  height: CANVAS_CARD_HEIGHT,
 };
 
 export function getPlugin(toolName: string): Registration | undefined {
