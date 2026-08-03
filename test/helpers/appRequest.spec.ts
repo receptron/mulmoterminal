@@ -11,10 +11,10 @@ describe("appRequest", () => {
   app.use(express.json());
   app.get("/echo", (req, res) => res.json({ method: req.method, query: req.query, agent: req.get("user-agent") ?? null }));
   app.post("/echo", (req, res) => res.status(201).json(req.body));
-  app.get("/empty", (req, res) => res.status(204).end());
-  app.get("/unchanged", (req, res) => res.status(304).end());
-  app.get("/bytes", (req, res) => res.type("image/png").send(Buffer.from([0x89, 0x50, 0x4e, 0x47])));
-  app.get("/two-cookies", (req, res) => {
+  app.get("/empty", (_req, res) => res.status(204).end());
+  app.get("/unchanged", (_req, res) => res.status(304).end());
+  app.get("/bytes", (_req, res) => res.type("image/png").send(Buffer.from([0x89, 0x50, 0x4e, 0x47])));
+  app.get("/two-cookies", (_req, res) => {
     res.append("set-cookie", "a=1");
     res.append("set-cookie", "b=2");
     res.end("ok");
