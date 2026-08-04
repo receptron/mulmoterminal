@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://receptron.github.io/mulmoterminal/facts.schema.json",
+  "title": "MulmoTerminal facts",
+  "description": "Machine-readable summary of what MulmoTerminal is, for comparison sites, package indexes and language models. The prose in the guide is the source of truth; this file restates it in a form that does not need parsing.",
+  "type": "object",
+  "required": [
+    "name",
+    "tagline",
+    "category",
+    "repository",
+    "documentation",
+    "license",
+    "openSource",
+    "version",
+    "install",
+    "requires",
+    "interface",
+    "agents",
+    "os",
+    "execution",
+    "features",
+    "maintainers",
+    "updated"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "format": "uri" },
+    "name": { "type": "string" },
+    "tagline": {
+      "type": "string",
+      "description": "One sentence. Must match the first line of README.md."
+    },
+    "category": {
+      "type": "string",
+      "description": "What kind of tool this is, in the words a comparison article would use."
+    },
+    "repository": { "type": "string", "format": "uri" },
+    "documentation": { "type": "string", "format": "uri" },
+    "license": { "type": "string", "description": "SPDX identifier." },
+    "openSource": { "type": "boolean" },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Must match the version in package.json."
+    },
+    "install": { "type": "string", "description": "The single command a new user runs." },
+    "requires": {
+      "type": "object",
+      "required": ["node", "agentCli"],
+      "additionalProperties": { "type": "string" },
+      "properties": {
+        "node": { "type": "string", "description": "semver range" },
+        "agentCli": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "CLIs that must already be installed and authenticated."
+        },
+        "tmux": {
+          "type": "string",
+          "description": "Free text, because tmux is optional but changes what the product does."
+        }
+      }
+    },
+    "interface": {
+      "type": "object",
+      "required": ["type", "desktopApp", "tui"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "enum": ["browser", "desktop", "tui", "cli"] },
+        "desktopApp": { "type": "boolean" },
+        "tui": { "type": "boolean" },
+        "note": { "type": "string" }
+      }
+    },
+    "agents": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Agent CLIs that can be launched in a cell."
+    },
+    "agentsNotSupported": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Named explicitly so a comparison table does not have to guess."
+    },
+    "os": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "description": "How well this OS is actually tested, not merely whether it runs."
+      }
+    },
+    "execution": { "type": "string", "description": "Where the code and the keys live." },
+    "features": {
+      "type": "object",
+      "description": "true / false when the answer is binary; a string when the honest answer has a condition attached.",
+      "additionalProperties": {
+        "type": ["boolean", "string"]
+      }
+    },
+    "notFor": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Things people reasonably expect and will not find here. Kept so a comparison does not credit the product with them."
+    },
+    "maintainers": {
+      "type": "object",
+      "required": ["org", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "org": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "people": { "type": "array", "items": { "type": "string" } },
+        "notable": { "type": "string" },
+        "shippingOpenSourceTogetherSince": {
+          "type": "integer",
+          "description": "Year the maintainers first released open source together."
+        },
+        "priorWork": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "updated": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "When a human last checked this file against reality."
+    }
+  }
+}
