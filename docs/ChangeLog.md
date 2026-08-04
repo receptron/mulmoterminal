@@ -118,7 +118,9 @@ most expected and least available.
   items, and the same three sit below the separator in the path menu, with the same destinations and
   the same `githubUrl` gate: **Repository**, **Issues**, **Pull requests**. Worth stating outright,
   because the first person to go looking for that icon and conclude the feature had been deleted was
-  the maintainer. Nothing about it is configurable and nothing needs restoring — the
+  the maintainer. **The path menu itself is fixed** — its contents are not configurable, and nothing
+  needs restoring to get those three back. A `gh` button in your own `buttons` list still works
+  exactly as before if you want one as a permanent icon; you then have it in both places. The
   [setup guide](https://receptron.github.io/mulmoterminal/guide/en/v4.4.0.html#header-icons) now
   shows the open menu ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v4.4.0.html#header-icons)).
 
