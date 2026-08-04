@@ -1045,7 +1045,7 @@ Each grid cell's header shows two badges for its session, refreshed when a turn 
 
 ![A live Claude cell — the header shows the model·context and token badges this section describes](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-cell-live.png)
 
-*Both badges, live on a real Claude session: **`Opus · ctx 5%`** (model family + how full its context window is) and **`⇡427k ⇣1.8k`** (cumulative input / output tokens for the session). They sit in the header's first row alongside the **status dot**, directory, and **git chip** (`⎇ main ●2`), with what the agent is doing to the right; the icon buttons and the **timeline** (🕘) of tool calls are on the second row.*
+*Both badges, live on a real Claude session: **`Sonnet · ctx 8%`** (model family + how full its context window is) and **`⇡1.3M ⇣5.9k`** (cumulative input / output tokens for the session). They sit in the header's first row alongside the **status dot** and the **git chip** (`⎇ main ●2`), with what the agent is doing to the right; the working directory, the icon buttons and the **timeline** (🕘) of tool calls are on the second row.*
 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
