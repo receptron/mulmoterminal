@@ -15,17 +15,13 @@
 //                accounting at all (the only `token` fields in one are `first_token` timings and a
 //                WebFetch tool parameter), so the usage badge stays hidden — it hides itself when
 //                the totals are zero.
-//   antigravity  the NAME only, and a constant one. agy's transcript records neither tokens nor a
-//                model id; the single mention of a model is prose inside the user turn ("The user
-//                changed setting `Model Selection` … to Gemini 3.6 Flash (High)"), written only
-//                when the setting CHANGED, and `settings.json` holds the current global pick which
-//                an old conversation was not run under. Reading either would put a specific,
-//                confident, sometimes-wrong model name on the cell. "antigravity" is what we can
-//                stand behind.
+//   antigravity  the model name from the user turn's setting block (`<USER_SETTINGS_CHANGE>`), falling
+//                back to "antigravity" if unrecorded; agy records no token usage.
 //
 // A wrong number here is worse than no number: this badge is what a user reads before deciding to
 // /compact, so every field is either what the agent stated or absent.
 import { promises as fs } from "node:fs";
+import path from "node:path";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
 import type { SessionContextInfo } from "../../common/sessionContext.js";
 import { codexBadgesFromRolloutDocs, codexModelFromDocs, EMPTY_CODEX_BADGES, type CodexBadges } from "../agents/codex-usage.js";
@@ -34,8 +30,10 @@ import { codexSessionsRoot } from "../agents/codex-session.js";
 import { codexRolloutPath } from "../agents/codex-sessions.js";
 import { grokModelFromSummary, grokSummaryPath } from "../agents/grok-sessions.js";
 import { grokSessionsRoot } from "../agents/grok-session.js";
+import { antigravityBrainRoot, antigravityConversationExists, antigravityHome } from "../agents/antigravity-session.js";
+import { antigravityTranscriptPath } from "../agents/antigravity-sessions.js";
 import { readTailRecords } from "../infra/jsonl-file.js";
-import { codexRollouts, codexRolloutsHydrated } from "./registry.js";
+import { antigravityConversations, antigravityConversationsHydrated, codexRollouts, codexRolloutsHydrated } from "./registry.js";
 import type { SessionUsage } from "./transcript.js";
 
 export interface SessionBadges {
@@ -45,10 +43,35 @@ export interface SessionBadges {
 
 const EMPTY_USAGE: SessionUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 };
 
-/** What the badge calls an agy session. A constant, for the reason in the header comment. */
+/** What the badge calls an agy session as a fallback when unrecorded. */
 export const ANTIGRAVITY_MODEL_LABEL = "antigravity";
 
 const modelOnly = (model: string | null): SessionBadges => ({ usage: EMPTY_USAGE, context: { model, contextTokens: 0 } });
+
+const ANTIGRAVITY_MODEL_RE = /Model Selection` from .+? to (.+?)\.(?:\s+(?:No need|If reporting)|$|\n)/;
+
+/** The model name mentioned in an Antigravity transcript step, or null if unrecorded. */
+export function antigravityModelFromDocs(docs: Iterable<Record<string, unknown>>): string | null {
+  let model: string | null = null;
+  for (const d of docs) {
+    if (d.type === "USER_INPUT" && typeof d.content === "string") {
+      const m = ANTIGRAVITY_MODEL_RE.exec(d.content);
+      if (m?.[1]) model = m[1];
+    }
+  }
+  return model;
+}
+
+async function lastConversationForCwd(cwd: string): Promise<string | null> {
+  try {
+    const file = path.join(antigravityHome(), "cache", "last_conversations.json");
+    const content = await fs.readFile(file, "utf8");
+    const json = JSON.parse(content) as Record<string, unknown>;
+    return typeof json[cwd] === "string" ? json[cwd] : null;
+  } catch {
+    return null;
+  }
+}
 
 /** Where each agent keeps its sessions. Defaulted from the agent's own module and overridden only
  *  by the specs, which write a rollout and a conversation into a temp directory — the alternative
@@ -56,6 +79,7 @@ const modelOnly = (model: string | null): SessionBadges => ({ usage: EMPTY_USAGE
 export interface BadgeRoots {
   codexSessions?: string;
   grokSessions?: string;
+  antigravityBrain?: string;
 }
 
 async function codexBadges(sessionKey: string, root: string): Promise<CodexBadges> {
@@ -111,6 +135,35 @@ async function grokBadges(cwd: string, id: string, root: string): Promise<Sessio
   }
 }
 
+async function antigravityBadges(cwd: string, sessionKey: string, root: string): Promise<SessionBadges> {
+  await antigravityConversationsHydrated;
+  let conversationId = antigravityConversations.get(sessionKey)?.conversationId ?? sessionKey;
+  if (!antigravityConversationExists(root, conversationId)) {
+    const lastId = await lastConversationForCwd(cwd);
+    if (lastId && antigravityConversationExists(root, lastId)) {
+      conversationId = lastId;
+    }
+  }
+  const file = antigravityTranscriptPath(root, conversationId);
+  try {
+    // Check tail first for recent model setting changes in long sessions, fallback to head
+    let model = antigravityModelFromDocs(readTailRecords(file));
+    if (!model) {
+      const read = await readTranscriptHead(file, ROLLOUT_HEAD_BYTES);
+      if (read) {
+        const docs = read.head
+          .split("\n")
+          .map(parseJsonRecord)
+          .filter((d): d is Record<string, unknown> => d !== null);
+        model = antigravityModelFromDocs(docs);
+      }
+    }
+    return modelOnly(model ?? ANTIGRAVITY_MODEL_LABEL);
+  } catch {
+    return modelOnly(ANTIGRAVITY_MODEL_LABEL);
+  }
+}
+
 /**
  * The badges for a session, from whichever log its agent keeps.
  *
@@ -121,5 +174,5 @@ async function grokBadges(cwd: string, id: string, root: string): Promise<Sessio
 export async function agentBadges(cwd: string, id: string, agent: Exclude<TerminalAgent, "claude">, roots: BadgeRoots = {}): Promise<SessionBadges> {
   if (agent === "codex") return codexBadges(id, roots.codexSessions ?? codexSessionsRoot());
   if (agent === "grok") return grokBadges(cwd, id, roots.grokSessions ?? grokSessionsRoot());
-  return modelOnly(ANTIGRAVITY_MODEL_LABEL);
+  return antigravityBadges(cwd, id, roots.antigravityBrain ?? antigravityBrainRoot());
 }

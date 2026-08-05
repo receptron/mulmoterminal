@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { agentBadges, ANTIGRAVITY_MODEL_LABEL, type BadgeRoots } from "../../../server/session/agent-badges.js";
+import { rememberAntigravityConversation } from "../../../server/session/registry.js";
 
 // The header badges for a session that is not Claude (#1465). Each agent is asked the question the
 // same way and answers as much of it as its own log can: codex both badges, grok the model, agy a
@@ -36,7 +37,11 @@ describe("agentBadges", () => {
 
   beforeEach(() => {
     home = fs.mkdtempSync(path.join(os.tmpdir(), "mt-agent-badges-"));
-    roots = { codexSessions: path.join(home, "codex", "sessions"), grokSessions: path.join(home, "grok", "sessions") };
+    roots = {
+      codexSessions: path.join(home, "codex", "sessions"),
+      grokSessions: path.join(home, "grok", "sessions"),
+      antigravityBrain: path.join(home, "antigravity", "brain"),
+    };
   });
 
   afterEach(() => fs.rmSync(home, { recursive: true, force: true }));
@@ -51,6 +56,12 @@ describe("agentBadges", () => {
     const dir = path.join(home, "grok", "sessions", encodeURIComponent(CWD), GROK_ID);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, "summary.json"), JSON.stringify(summary));
+  };
+
+  const writeAntigravityTranscript = (id: string, lines: string[]) => {
+    const dir = path.join(home, "antigravity", "brain", id, ".system_generated", "logs");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "transcript.jsonl"), `${lines.join("\n")}\n`);
   };
 
   it("reads a codex session's totals, context and window out of its rollout", async () => {
@@ -95,10 +106,35 @@ describe("agentBadges", () => {
     expect((await agentBadges("/Users/x/elsewhere", GROK_ID, "grok", roots)).context.model).toBeNull();
   });
 
-  // agy records neither a model nor a token count. The constant is deliberate: the only model name
-  // in its transcript is prose in a settings block that is written only when the setting changed.
-  it("labels an antigravity session with the agent's own name", async () => {
-    const badges = await agentBadges(CWD, "any-id", "antigravity", roots);
+  it("reads an antigravity session model from its user turn settings metadata", async () => {
+    const userInput = JSON.stringify({
+      type: "USER_INPUT",
+      content:
+        "<USER_REQUEST>\nhello\n</USER_REQUEST>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.6 Flash (High). No need to comment on this change if the user doesn't ask about it.\n</USER_SETTINGS_CHANGE>",
+    });
+    writeAntigravityTranscript("agy-123", [userInput]);
+    const badges = await agentBadges(CWD, "agy-123", "antigravity", roots);
+    expect(badges.context).toEqual({ model: "Gemini 3.6 Flash (High)", contextTokens: 0 });
+    expect(badges.usage.inputTokens).toBe(0);
+  });
+
+  it("reads an antigravity session model when session key is mapped to a conversationId", async () => {
+    const userInput = JSON.stringify({
+      type: "USER_INPUT",
+      content:
+        "<USER_REQUEST>\nhello\n</USER_REQUEST>\n<USER_SETTINGS_CHANGE>\nThe user changed setting `Model Selection` from None to Gemini 3.6 Flash (High). No need to comment on this change if the user doesn't ask about it.\n</USER_SETTINGS_CHANGE>",
+    });
+    const sessionKey = "a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6";
+    const conversationId = "f6e5d4c3-b2a1-4098-8765-43210fedcba9";
+    rememberAntigravityConversation(sessionKey, conversationId, CWD);
+    writeAntigravityTranscript(conversationId, [userInput]);
+
+    const badges = await agentBadges(CWD, sessionKey, "antigravity", roots);
+    expect(badges.context).toEqual({ model: "Gemini 3.6 Flash (High)", contextTokens: 0 });
+  });
+
+  it("falls back to default label for an antigravity session without model recorded or missing file", async () => {
+    const badges = await agentBadges(CWD, "non-existent-id", "antigravity", roots);
     expect(badges.context).toEqual({ model: ANTIGRAVITY_MODEL_LABEL, contextTokens: 0 });
     expect(badges.usage.inputTokens).toBe(0);
   });
