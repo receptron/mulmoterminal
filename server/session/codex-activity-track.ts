@@ -7,6 +7,7 @@ import { promises as fs } from "node:fs";
 import { HOOK_EVENT_FOR, boundaryOutcome, type CodexTurnBoundary } from "../agents/codex-activity.js";
 import { notifyTaskFinished } from "./task-push.js";
 import { watchCodexActivity } from "./codex-activity-watch.js";
+import { noteLiveCwd } from "./live-cwd.js";
 
 export interface CodexActivityTrackDeps {
   setWorking: (id: string, working: boolean, event?: string) => void;
@@ -62,6 +63,9 @@ export function trackCodexActivity(sessionId: string, file: string, startAtEnd: 
     fileSize: sizeOf(file),
     readSlice: readSliceOf(file),
     onBoundary: (boundary) => applyBoundary(sessionId, boundary, deps),
+    onCwd: (cwd) => {
+      void noteLiveCwd(sessionId, cwd).catch(() => undefined);
+    },
     isAlive: deps.isAlive,
     startAtEnd,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

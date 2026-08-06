@@ -65,6 +65,19 @@ export function turnBoundaries(lines: string[]): CodexTurnBoundary[] {
   });
 }
 
+/** A Codex turn_context row may announce the agent's current working directory. */
+export function turnContextCwds(lines: string[]): string[] {
+  return lines.flatMap((line) => {
+    try {
+      const doc: unknown = JSON.parse(line);
+      if (!isRecord(doc) || doc.type !== "turn_context" || !isRecord(doc.payload)) return [];
+      return typeof doc.payload.cwd === "string" && doc.payload.cwd ? [doc.payload.cwd] : [];
+    } catch {
+      return [];
+    }
+  });
+}
+
 // What a boundary does: the flag changes, and whether the phone should hear about it.
 // Both come from claude's tables so the two agents cannot drift apart — a codex turn that
 // finishes has to notify exactly as a claude Stop does, or half the grid stays silent.

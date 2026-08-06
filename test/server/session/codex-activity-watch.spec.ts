@@ -47,6 +47,36 @@ describe("watchCodexActivity", () => {
     expect(h.boundaries).toEqual(["started", "completed"]);
   });
 
+  it("reports cwd from appended turn_context rows", async () => {
+    const h = harness("", false);
+    const cwds: string[] = [];
+    h.deps.onCwd = (cwd) => cwds.push(cwd);
+    h.appendAt(1, line({ type: "turn_context", payload: { cwd: "/work" } }) + "\n");
+    await h.run();
+    expect(cwds).toEqual(["/work"]);
+  });
+
+  it("joins a turn_context record split across polls", async () => {
+    const h = harness("", false);
+    const cwds: string[] = [];
+    h.deps.onCwd = (cwd) => cwds.push(cwd);
+    const whole = line({ type: "turn_context", payload: { cwd: "/split" } }) + "\n";
+    h.appendAt(1, whole.slice(0, 18));
+    h.appendAt(2, whole.slice(18));
+    await h.run();
+    expect(cwds).toEqual(["/split"]);
+  });
+
+  it("does not replay resumed cwd history, but reports new cwd rows", async () => {
+    const old = line({ type: "turn_context", payload: { cwd: "/old" } }) + "\n";
+    const h = harness(old, true);
+    const cwds: string[] = [];
+    h.deps.onCwd = (cwd) => cwds.push(cwd);
+    h.appendAt(2, line({ type: "turn_context", payload: { cwd: "/new" } }) + "\n");
+    await h.run();
+    expect(cwds).toEqual(["/new"]);
+  });
+
   it("reads a fresh session's existing content, so its first turn isn't missed", async () => {
     const h = harness(started(), false);
     await h.run();

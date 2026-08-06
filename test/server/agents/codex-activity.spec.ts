@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { nextReadRange, takeCompleteLines, turnBoundaries, boundaryOutcome, HOOK_EVENT_FOR } from "../../../server/agents/codex-activity.js";
+import { nextReadRange, takeCompleteLines, turnBoundaries, turnContextCwds, boundaryOutcome, HOOK_EVENT_FOR } from "../../../server/agents/codex-activity.js";
 
 const line = (o: unknown) => JSON.stringify(o);
 const started = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_started", turn_id: turnId } });
@@ -99,6 +99,20 @@ describe("turnBoundaries", () => {
 
   it("is empty for no lines", () => {
     expect(turnBoundaries([])).toEqual([]);
+  });
+});
+
+describe("turnContextCwds", () => {
+  it("extracts only non-empty cwd strings from turn_context rows", () => {
+    expect(
+      turnContextCwds([
+        turnContext("a"),
+        line({ type: "turn_context", payload: { cwd: "" } }),
+        line({ type: "turn_context", payload: { cwd: 42 } }),
+        line({ type: "event_msg", payload: { type: "turn_context", cwd: "/no" } }),
+        "{malformed",
+      ]),
+    ).toEqual(["/w"]);
   });
 });
 
