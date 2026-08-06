@@ -10,7 +10,7 @@ import { codexGuiMcpServers } from "./mcp-config.js";
 import { codexSessionsRoot, snapshotSessions, watchForCodexSession } from "../agents/codex-session.js";
 import { codexRolloutPath } from "../agents/codex-sessions.js";
 import { trackCodexActivity } from "./codex-activity-track.js";
-import { claimedCodexRollouts, claimFullGuiMcp, ptys, rememberCodexRollout } from "./registry.js";
+import { claimedCodexRollouts, claimFullGuiMcp, codexRollouts, ptys, rememberCodexRollout } from "./registry.js";
 import { ptySpawn, ptyWouldReattach } from "./pty-spawn.js";
 import { ptyStartLine } from "./pty-exit-log.js";
 import { wireAgentPtyRelay } from "./pty-relay.js";
@@ -27,6 +27,13 @@ const activityDepsFor = (sessionId: string, entry: PtyEntry, deps: SpawnDeps) =>
   uiPort: deps.uiPort,
   isAlive: () => ptys.get(sessionId) === entry,
 });
+
+/** Resolve the rollout to watch when tmux survives but the browser request carries no resume id. */
+export function codexActivityRolloutId(resumeRolloutId: string | null, reattached: boolean, mappedConversationId: string | null): string | null {
+  if (resumeRolloutId) return resumeRolloutId;
+  if (reattached) return mappedConversationId;
+  return null;
+}
 
 export function createCodexSpawner(deps: SpawnDeps) {
   // codex persists its rollout only after the first user turn, so watch a FRESH session's lifetime
@@ -96,13 +103,14 @@ export function createCodexSpawner(deps: SpawnDeps) {
     console.log(ptyStartLine({ agent: "codex", pid: term.pid, cwd, tmux, reattached, sessionId, note }));
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
     ptys.set(sessionId, entry);
-    if (resumeRolloutId) {
+    const activityRolloutId = codexActivityRolloutId(resumeRolloutId, reattached, codexRollouts.get(sessionId)?.conversationId ?? null);
+    if (activityRolloutId) {
       // Recorded on resume too, not just on the spawn that discovered it: a session resumed by the
       // rollout id itself carries no mapping yet, and one whose cell moved needs the new cwd.
-      rememberCodexRollout(sessionId, resumeRolloutId, cwd);
-      const file = codexRolloutPath(root, resumeRolloutId);
+      rememberCodexRollout(sessionId, activityRolloutId, cwd);
+      const file = codexRolloutPath(root, activityRolloutId);
       if (file) trackCodexActivity(sessionId, file, true, activityDepsFor(sessionId, entry, deps));
-    } else {
+    } else if (!reattached) {
       // Discover the id only for a FRESH session. On resume we already know it; running the watcher
       // could overwrite the known id with a mis-attributed concurrent rollout.
       captureCodexRollout(sessionId, entry, root, before, cwd);

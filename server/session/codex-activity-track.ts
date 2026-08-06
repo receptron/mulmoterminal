@@ -43,7 +43,7 @@ const sizeOf = (file: string) => async (): Promise<number | null> => {
   }
 };
 
-function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: CodexActivityTrackDeps): void {
+function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: CodexActivityTrackDeps, notify = true): void {
   const event = HOOK_EVENT_FOR[boundary];
   const { effects, push } = boundaryOutcome(boundary, deps.isActive());
   for (const eff of effects) {
@@ -52,7 +52,7 @@ function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, deps: Cod
   }
   // `message` is empty: codex has no Notification equivalent, and a finished turn's body
   // comes from its reply, not from a hook payload.
-  if (push) void notifyTaskFinished(sessionId, push, "", deps.uiPort);
+  if (notify && push) void notifyTaskFinished(sessionId, push, "", deps.uiPort);
 }
 
 // Start tailing; it stops on its own once the session is gone. `startAtEnd` skips a
@@ -63,6 +63,7 @@ export function trackCodexActivity(sessionId: string, file: string, startAtEnd: 
     fileSize: sizeOf(file),
     readSlice: readSliceOf(file),
     onBoundary: (boundary) => applyBoundary(sessionId, boundary, deps),
+    onInitialBoundary: (boundary) => applyBoundary(sessionId, boundary, deps, false),
     onCwd: (cwd) => {
       void noteLiveCwd(sessionId, cwd).catch(() => undefined);
     },

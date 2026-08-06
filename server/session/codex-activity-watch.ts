@@ -20,6 +20,7 @@ export interface CodexActivityDeps {
   /** The rollout's bytes in [from, to). */
   readSlice: (from: number, to: number) => Promise<string>;
   onBoundary: (boundary: CodexTurnBoundary) => void;
+  onInitialBoundary?: (boundary: CodexTurnBoundary) => void;
   onCwd?: (cwd: string) => void;
   /** False once the session's pty is gone — the loop stops on the next tick. */
   isAlive: () => boolean;
@@ -59,7 +60,10 @@ const startingOffset = async (deps: CodexActivityDeps): Promise<number> => {
   const taken = takeCompleteLines("", tail);
   const lines = (from > 0 ? taken.lines.slice(1) : taken.lines).concat(taken.pending ? [taken.pending] : []);
   const cwds = explicitWorkdirs(lines);
-  const latest = cwds.at(-1);
-  if (latest) deps.onCwd?.(latest);
+  const latestCwd = cwds.at(-1);
+  if (latestCwd) deps.onCwd?.(latestCwd);
+  const boundaries = turnBoundaries(lines);
+  const latestBoundary = boundaries.at(-1);
+  if (latestBoundary) deps.onInitialBoundary?.(latestBoundary);
   return size;
 };

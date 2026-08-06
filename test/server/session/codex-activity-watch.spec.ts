@@ -16,6 +16,7 @@ function harness(initial: string, startAtEnd: boolean) {
   let ticks = 0;
   const maxTicks = 12;
   const boundaries: CodexTurnBoundary[] = [];
+  const initialBoundaries: CodexTurnBoundary[] = [];
   const appendAtTick: Map<number, string> = new Map();
   let missing = false;
 
@@ -23,6 +24,7 @@ function harness(initial: string, startAtEnd: boolean) {
     fileSize: async () => (missing ? null : Buffer.byteLength(content)),
     readSlice: async (from, to) => Buffer.from(content).subarray(from, to).toString(),
     onBoundary: (b) => boundaries.push(b),
+    onInitialBoundary: (b) => initialBoundaries.push(b),
     isAlive: () => ticks < maxTicks,
     startAtEnd,
     sleep: async () => {
@@ -34,6 +36,7 @@ function harness(initial: string, startAtEnd: boolean) {
   return {
     deps,
     boundaries,
+    initialBoundaries,
     appendAt: (tick: number, text: string) => appendAtTick.set(tick, text),
     setMissing: (v: boolean) => (missing = v),
     run: () => watchCodexActivity(deps),
@@ -91,6 +94,14 @@ describe("watchCodexActivity", () => {
     const h = harness(started("old") + complete("old"), true);
     await h.run();
     expect(h.boundaries).toEqual([]);
+    expect(h.initialBoundaries).toEqual(["completed"]);
+  });
+
+  it("reports only the latest resumed started boundary as initial state", async () => {
+    const h = harness(started("old") + complete("old") + started("new"), true);
+    await h.run();
+    expect(h.boundaries).toEqual([]);
+    expect(h.initialBoundaries).toEqual(["started"]);
   });
 
   it("still reports a resumed session's NEW turns", async () => {
