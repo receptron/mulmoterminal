@@ -15,6 +15,8 @@ import { ptySpawn, ptyWouldReattach } from "./pty-spawn.js";
 import { ptyStartLine } from "./pty-exit-log.js";
 import { wireAgentPtyRelay } from "./pty-relay.js";
 import { attachCodexAutoRun } from "./draft-injection.js";
+import { mulmoterminalHome } from "../infra/mulmoterminal-home.js";
+import { readLegacyCodexRolloutId } from "./codex-legacy-rollout.js";
 import type { PtyEntry } from "./types.js";
 import type { SpawnDeps } from "./spawn-deps.js";
 
@@ -103,7 +105,10 @@ export function createCodexSpawner(deps: SpawnDeps) {
     console.log(ptyStartLine({ agent: "codex", pid: term.pid, cwd, tmux, reattached, sessionId, note }));
     const entry: PtyEntry = { term, ws, buffer: "", cwd, tmux, active: false, agent: "codex" };
     ptys.set(sessionId, entry);
-    const activityRolloutId = codexActivityRolloutId(resumeRolloutId, reattached, codexRollouts.get(sessionId)?.conversationId ?? null);
+    const mapped = codexRollouts.get(sessionId)?.conversationId ?? null;
+    const legacy = reattached ? readLegacyCodexRolloutId(mulmoterminalHome(), sessionId) : null;
+    const legacyExisting = legacy && codexRolloutPath(root, legacy) ? legacy : null;
+    const activityRolloutId = codexActivityRolloutId(resumeRolloutId, reattached, legacyExisting ?? mapped);
     if (activityRolloutId) {
       // Recorded on resume too, not just on the spawn that discovered it: a session resumed by the
       // rollout id itself carries no mapping yet, and one whose cell moved needs the new cwd.
