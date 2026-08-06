@@ -5,6 +5,8 @@ import type { CodexTurnBoundary } from "../../../server/agents/codex-activity.js
 
 const line = (o: unknown) => JSON.stringify(o);
 const started = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_started", turn_id: turnId } }) + "\n";
+const execCwd = (cwd: string) =>
+  line({ type: "response_item", payload: { type: "custom_tool_call", name: "exec", input: `tools.exec_command({cmd:"pwd",workdir:"${cwd}"})` } }) + "\n";
 const complete = (turnId = "t1") => line({ type: "event_msg", payload: { type: "task_complete", turn_id: turnId, last_agent_message: "done" } }) + "\n";
 
 // A fake rollout the test appends to, driving the loop one tick at a time. `sleep`
@@ -51,7 +53,7 @@ describe("watchCodexActivity", () => {
     const h = harness("", false);
     const cwds: string[] = [];
     h.deps.onCwd = (cwd) => cwds.push(cwd);
-    h.appendAt(1, line({ type: "turn_context", payload: { cwd: "/work" } }) + "\n");
+    h.appendAt(1, execCwd("/work"));
     await h.run();
     expect(cwds).toEqual(["/work"]);
   });
@@ -60,7 +62,7 @@ describe("watchCodexActivity", () => {
     const h = harness("", false);
     const cwds: string[] = [];
     h.deps.onCwd = (cwd) => cwds.push(cwd);
-    const whole = line({ type: "turn_context", payload: { cwd: "/split" } }) + "\n";
+    const whole = execCwd("/split");
     h.appendAt(1, whole.slice(0, 18));
     h.appendAt(2, whole.slice(18));
     await h.run();
@@ -68,13 +70,13 @@ describe("watchCodexActivity", () => {
   });
 
   it("does not replay resumed cwd history, but reports new cwd rows", async () => {
-    const old = line({ type: "turn_context", payload: { cwd: "/old" } }) + "\n";
+    const old = execCwd("/old");
     const h = harness(old, true);
     const cwds: string[] = [];
     h.deps.onCwd = (cwd) => cwds.push(cwd);
-    h.appendAt(2, line({ type: "turn_context", payload: { cwd: "/new" } }) + "\n");
+    h.appendAt(2, execCwd("/new"));
     await h.run();
-    expect(cwds).toEqual(["/new"]);
+    expect(cwds).toEqual(["/old", "/new"]);
   });
 
   it("reads a fresh session's existing content, so its first turn isn't missed", async () => {

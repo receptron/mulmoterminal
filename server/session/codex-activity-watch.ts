@@ -9,9 +9,10 @@
 // Every dependency is injected so the loop can be driven with fakes: the real one reads
 // the filesystem and mutates session flags, neither of which a test should need.
 
-import { nextReadRange, takeCompleteLines, turnBoundaries, turnContextCwds, type CodexTurnBoundary } from "../agents/codex-activity.js";
+import { nextReadRange, takeCompleteLines, turnBoundaries, explicitWorkdirs, type CodexTurnBoundary } from "../agents/codex-activity.js";
 
 export const CODEX_ACTIVITY_POLL_MS = 1000;
+const RESUME_TAIL_BYTES = 4 * 1024 * 1024;
 
 export interface CodexActivityDeps {
   /** Byte length of the rollout, or null while it doesn't exist yet. */
@@ -43,11 +44,22 @@ export async function watchCodexActivity(deps: CodexActivityDeps): Promise<void>
     const taken = takeCompleteLines(pending, await deps.readSlice(range.from, range.to));
     pending = taken.pending;
     offset = range.to;
-    turnContextCwds(taken.lines).forEach((cwd) => deps.onCwd?.(cwd));
+    explicitWorkdirs(taken.lines).forEach((cwd) => deps.onCwd?.(cwd));
     turnBoundaries(taken.lines).forEach(deps.onBoundary);
   }
 }
 
 // A rollout that doesn't exist yet has no history to skip, so a resume that beat codex to
 // the file still starts from 0 and sees its first turn.
-const startingOffset = async (deps: CodexActivityDeps): Promise<number> => (await deps.fileSize()) ?? 0;
+const startingOffset = async (deps: CodexActivityDeps): Promise<number> => {
+  const size = await deps.fileSize();
+  if (size === null) return 0;
+  const from = Math.max(0, size - RESUME_TAIL_BYTES);
+  const tail = await deps.readSlice(from, size);
+  const taken = takeCompleteLines("", tail);
+  const lines = (from > 0 ? taken.lines.slice(1) : taken.lines).concat(taken.pending ? [taken.pending] : []);
+  const cwds = explicitWorkdirs(lines);
+  const latest = cwds.at(-1);
+  if (latest) deps.onCwd?.(latest);
+  return size;
+};
