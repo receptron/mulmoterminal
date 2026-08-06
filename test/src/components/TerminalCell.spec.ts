@@ -792,18 +792,18 @@ describe("TerminalCell", () => {
 
   // #620, on the badge path: two turns end back-to-back, so two /api/session reads for the
   // same session are in flight at once. The older one resolving last must not put the
-  // previous turn's context reading back on the badge.
+  // previous turn's model back on the badge.
   it("does not let a stale badge refresh clobber a newer one (out-of-order)", async () => {
     const id = "66666666-6666-6666-6666-666666666666";
     const gates = [deferred<boolean>(), deferred<boolean>()];
     let sessionCall = 0;
-    const badge = (contextTokens: number) => ({
+    const badge = (model: string, contextTokens: number) => ({
       usage: { inputTokens: contextTokens, outputTokens: contextTokens, cacheReadTokens: 0, cacheCreationTokens: 0 },
-      context: { model: "claude-opus-4-8", contextTokens, contextWindow: 10_000 },
+      context: { model, contextTokens, contextWindow: 10_000 },
     });
-    const INITIAL = badge(100);
-    const OLD = badge(1000);
-    const NEW = badge(5000);
+    const INITIAL = badge("claude-opus-4-8", 100);
+    const OLD = badge("claude-haiku-4", 1000);
+    const NEW = badge("claude-sonnet-4-6", 5000);
     globalThis.fetch = vi.fn(async (url: string) => {
       const u = String(url);
       if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
@@ -820,7 +820,7 @@ describe("TerminalCell", () => {
 
     const w = mountCell(id);
     await flushPromises();
-    expect(w.find('[data-testid="model-badge"]').text()).toContain("ctx 1%"); // initial seed
+    expect(w.find('[data-testid="model-badge"]').text()).toBe("Opus"); // initial seed
 
     // First turn ends → refresh #1 (older), held on gates[0].
     captured?.({ id, working: true, waiting: false });
@@ -840,8 +840,8 @@ describe("TerminalCell", () => {
     await nextTick();
 
     const modelBadge = w.find('[data-testid="model-badge"]').text();
-    expect(modelBadge).toContain("ctx 50%"); // NEW context
-    expect(modelBadge).not.toContain("ctx 10%"); // not OLD context
+    expect(modelBadge).toBe("Sonnet"); // NEW model
+    expect(modelBadge).not.toBe("Haiku"); // not OLD model
   });
 
   it("shows the model/context badge from /api/session/:id context", async () => {
@@ -859,7 +859,7 @@ describe("TerminalCell", () => {
     await flushPromises();
     const badge = w.find('[data-testid="model-badge"]');
     expect(badge.exists()).toBe(true);
-    expect(badge.text()).toBe("Opus · ctx 35%"); // 70k / 200k
+    expect(badge.text()).toBe("Opus");
   });
 
   // An agy cell is the case that has no other way back: agy mints its conversation id after the
