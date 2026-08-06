@@ -717,7 +717,7 @@ describe("TerminalCell", () => {
     expect(dotClass(w)).toContain("is-idle"); // the newest seed wins, not the first to resolve
   });
 
-  it("shows a token-usage badge from /api/session/:id", async () => {
+  it("shows a token-usage badge for agents that keep it in the pane header", async () => {
     const id = "55555555-5555-5555-5555-555555555555";
     globalThis.fetch = vi.fn(async (url: string) => {
       const u = String(url);
@@ -733,12 +733,34 @@ describe("TerminalCell", () => {
         }),
       };
     }) as unknown as typeof fetch;
-    const w = mountCell(id);
+    const w = mountCell(id, { initialAgent: "antigravity" });
     await flushPromises();
     const badge = w.find('[data-testid="cell-usage"]');
     expect(badge.exists()).toBe(true);
     expect(badge.text()).toContain("2.0k"); // input 1200 + cacheRead 800 = 2000
     expect(badge.text()).toContain("3.4k"); // output 3400
+  });
+
+  it.each(["claude", "codex"] as const)("hides the token-usage badge for %s", async (initialAgent) => {
+    const id = "55555555-5555-5555-5555-555555555555";
+    globalThis.fetch = vi.fn(async (url: string) => {
+      const u = String(url);
+      if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
+      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+      return {
+        ok: true,
+        json: async () => ({
+          working: false,
+          waiting: false,
+          lastPrompt: null,
+          usage: { inputTokens: 1200, outputTokens: 3400, cacheReadTokens: 800, cacheCreationTokens: 0 },
+        }),
+      };
+    }) as unknown as typeof fetch;
+
+    const w = mountCell(id, { initialAgent });
+    await flushPromises();
+    expect(w.find('[data-testid="cell-usage"]').exists()).toBe(false);
   });
 
   // Codex on #642: a guard that only skips an unrenderable payload leaves the badge showing
@@ -754,7 +776,7 @@ describe("TerminalCell", () => {
       if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
       return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage }) };
     }) as unknown as typeof fetch;
-    const w = mountCell(id);
+    const w = mountCell(id, { initialAgent: "antigravity" });
     await flushPromises();
     expect(w.find('[data-testid="cell-usage"]').exists()).toBe(true);
 
@@ -770,31 +792,35 @@ describe("TerminalCell", () => {
 
   // #620, on the badge path: two turns end back-to-back, so two /api/session reads for the
   // same session are in flight at once. The older one resolving last must not put the
-  // previous turn's token numbers back on the badge.
-  it("does not let a stale usage refresh clobber a newer one (out-of-order)", async () => {
+  // previous turn's context reading back on the badge.
+  it("does not let a stale badge refresh clobber a newer one (out-of-order)", async () => {
     const id = "66666666-6666-6666-6666-666666666666";
     const gates = [deferred<boolean>(), deferred<boolean>()];
     let sessionCall = 0;
-    const INITIAL = { inputTokens: 100, outputTokens: 100, cacheReadTokens: 0, cacheCreationTokens: 0 };
-    const OLD = { inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 0, cacheCreationTokens: 0 };
-    const NEW = { inputTokens: 5000, outputTokens: 9000, cacheReadTokens: 0, cacheCreationTokens: 0 };
+    const badge = (contextTokens: number) => ({
+      usage: { inputTokens: contextTokens, outputTokens: contextTokens, cacheReadTokens: 0, cacheCreationTokens: 0 },
+      context: { model: "claude-opus-4-8", contextTokens, contextWindow: 10_000 },
+    });
+    const INITIAL = badge(100);
+    const OLD = badge(1000);
+    const NEW = badge(5000);
     globalThis.fetch = vi.fn(async (url: string) => {
       const u = String(url);
       if (u.includes("/api/scripts")) return { ok: true, json: async () => ({ cwd: "/p", scripts: [] }) };
       if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
       if (u.includes(`/api/session/${id}`)) {
         const n = sessionCall++;
-        if (n === 0) return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage: INITIAL }) }; // mount seed
-        const usage = n === 1 ? OLD : NEW; // refresh #1 = older turn, refresh #2 = newer turn
+        if (n === 0) return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, ...INITIAL }) }; // mount seed
+        const badges = n === 1 ? OLD : NEW; // refresh #1 = older turn, refresh #2 = newer turn
         await gates[n - 1].promise;
-        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, usage }) };
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, ...badges }) };
       }
       return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
     }) as unknown as typeof fetch;
 
     const w = mountCell(id);
     await flushPromises();
-    expect(w.find('[data-testid="cell-usage"]').text()).toContain("100"); // initial seed
+    expect(w.find('[data-testid="model-badge"]').text()).toContain("ctx 1%"); // initial seed
 
     // First turn ends → refresh #1 (older), held on gates[0].
     captured?.({ id, working: true, waiting: false });
@@ -813,10 +839,9 @@ describe("TerminalCell", () => {
     await flushPromises();
     await nextTick();
 
-    const badge = w.find('[data-testid="cell-usage"]').text();
-    expect(badge).toContain("5.0k"); // NEW input
-    expect(badge).toContain("9.0k"); // NEW output
-    expect(badge).not.toContain("1.0k"); // not OLD input
+    const modelBadge = w.find('[data-testid="model-badge"]').text();
+    expect(modelBadge).toContain("ctx 50%"); // NEW context
+    expect(modelBadge).not.toContain("ctx 10%"); // not OLD context
   });
 
   it("shows the model/context badge from /api/session/:id context", async () => {
@@ -970,7 +995,7 @@ describe("TerminalCell", () => {
         }),
       };
     }) as unknown as typeof fetch;
-    const w = mountCell(id, { initialCwd: "/home/me/proj" });
+    const w = mountCell(id, { initialCwd: "/home/me/proj", initialAgent: "antigravity" });
     await flushPromises();
     expect(w.find('[data-testid="cell-hdr-chip"]').text()).toBe("prod"); // custom chip renders its substituted text
     expect(w.find('[data-testid="cell-usage"]').exists()).toBe(true); // usage is listed
@@ -1005,7 +1030,7 @@ describe("TerminalCell", () => {
         }),
       };
     }) as unknown as typeof fetch;
-    const w = mountCell(id, { initialCwd: "/home/me/proj" });
+    const w = mountCell(id, { initialCwd: "/home/me/proj", initialAgent: "antigravity" });
     await flushPromises();
     expect(w.findAll('[data-testid="cell-usage"]')).toHaveLength(2); // both duplicates render, unique keys → no collision
   });

@@ -992,7 +992,7 @@ async function saveMemo() {
 
 // Per-cell token usage badge: ⇡ total input (fresh + cache) · ⇣ output generated.
 const usageView = computed(() => usageBadge(usage.value));
-const showUsage = computed(() => usageView.value.show);
+const showUsage = computed(() => agent.value !== "claude" && agent.value !== "codex" && usageView.value.show);
 const usageLabel = computed(() => usageView.value.label);
 const usageTitle = computed(() =>
   usage.value
