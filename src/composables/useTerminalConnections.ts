@@ -257,7 +257,7 @@ function fitAndSyncSize(c: Conn): void {
 
 // The reactive projection the view binds to (status pill, RunMenu cwd). Keyed by
 // the same slot key; a slot that hasn't connected yet (or was released) is absent.
-export const connView = reactive(new Map<string, { status: ConnStatus; serverCwd: string | null; liveCwd: string | null }>());
+export const connView = reactive(new Map<string, { status: ConnStatus; serverCwd: string | null }>());
 
 function setStatus(c: Conn, s: ConnStatus) {
   const v = connView.get(c.key);
@@ -576,7 +576,7 @@ function ensure(key: string, target: ConnTarget, font: TerminalFont): Conn {
     lastDroppedInputNoticeMs: Number.NEGATIVE_INFINITY,
   };
   conns.set(key, c);
-  connView.set(key, { status: "connecting", serverCwd: target.cwd, liveCwd: null });
+  connView.set(key, { status: "connecting", serverCwd: target.cwd });
   wireTerminalToConn(term, c);
   return c;
 }
@@ -647,7 +647,7 @@ function connect(c: Conn) {
   // Drop the previous session's resolved cwd so the Run menu can't list/launch the
   // prior project's scripts before the new `session` message arrives.
   const v = connView.get(c.key);
-  if (v) { v.serverCwd = c.target.cwd; v.liveCwd = null; }
+  if (v) v.serverCwd = c.target.cwd;
   c.liveCwd = null;
 
   // Resume the known id (server-learned, or the prop) so a reconnect re-attaches the
@@ -724,7 +724,10 @@ function handleMessage(c: Conn, event: MessageEvent) {
   } else if (msg.type === "session") {
     applySessionFrame(c, msg);
   } else if (msg.type === "cwd") {
-    if (typeof msg.cwd === "string") { c.liveCwd = msg.cwd; const v = connView.get(c.key); if (v) v.liveCwd = msg.cwd; c.handlers.onLiveCwd?.(msg.cwd); }
+    if (typeof msg.cwd === "string") {
+      c.liveCwd = msg.cwd;
+      c.handlers.onLiveCwd?.(msg.cwd);
+    }
   } else {
     applyTerminalFrame(c, msg);
   }

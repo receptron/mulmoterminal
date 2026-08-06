@@ -254,7 +254,7 @@ async function admitAgentSession(
   markAttachedSessionPlaced(sessionId, requested);
   // The EFFECTIVE cwd, not this request's: on a reattach the live PTY's own directory is where the
   // agent really runs, and the request's `?cwd=` is ignored by everything downstream.
-  return announceSession(ws, sessionId, live?.cwd ?? cwd, !!live);
+  return announceSession(ws, sessionId, live?.cwd ?? cwd);
 }
 
 async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
@@ -581,7 +581,7 @@ export function startAndWire(
 // Tell the browser which session this is, and from that moment collect what it sends: its first
 // frame is the terminal's real geometry, and it arrives while the caller is still reading config
 // files, so without this it lands on the floor (see early-frames.ts).
-function announceSession(ws: WebSocket, sessionId: string, cwd: string, _reattached = false): EarlyFrames {
+function announceSession(ws: WebSocket, sessionId: string, cwd: string): EarlyFrames {
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd }));
   replayLiveCwd(ws, sessionId, cwd);
   return bufferEarlyFrames(ws);

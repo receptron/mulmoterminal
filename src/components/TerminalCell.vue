@@ -547,7 +547,10 @@ function onServerCwd(c: string) {
   }
   emit("cwd", c);
 }
-function onLiveCwd(c: string) { cwd.value = c; emit("live-cwd", c); }
+function onLiveCwd(c: string) {
+  cwd.value = c;
+  emit("live-cwd", c);
+}
 
 // "Open on GitHub": when this cell's dir is a GitHub repo, the server returns its
 // repository URL (null otherwise) and the header shows a popover linking to the
