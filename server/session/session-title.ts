@@ -8,13 +8,12 @@
 // generating one from that same pre-clear file, an in-flight set so a Stop hook and a roster
 // view do not both summarize, and a retry floor so a viewed-but-failing session is not
 // re-summarized on every poll.
-import path from "node:path";
 import { conversationTurnsFromParsed, isTrivialPrompt, type ConversationTurn } from "./transcript.js";
 import { forEachJsonlRecord } from "../infra/jsonl-file.js";
 import { shouldFreshenViewedTitle, shouldRegenerateTitle, TITLE_REGEN_EVERY_TURNS, VIEW_TITLE_REGEN_TURNS } from "../config/header-title.js";
 import { aiTitles, lastTitleAttemptMs, lastTitledUserTurns, titleEpoch, titleInFlight, titlePending, titleTurnCounts } from "./registry.js";
 import { clearedTranscripts } from "./cleared-transcripts.js";
-import { projectSessionsDir } from "./project-dir.js";
+import { transcriptFile } from "./transcript-locate.js";
 
 // How long a viewed session that failed to summarize waits before being tried again, so a
 // roster poll cannot spawn a summarizer per request.
@@ -76,7 +75,7 @@ export function createTitleManager(deps: TitleDeps) {
       // needs (how many user turns there were), so the transcript is never held as a string.
       const turns: ConversationTurn[] = [];
       let read = true;
-      await forEachJsonlRecord(path.join(projectSessionsDir(cwd), `${sessionId}.jsonl`), (record) => {
+      await forEachJsonlRecord(transcriptFile(sessionId, cwd), (record) => {
         turns.push(...conversationTurnsFromParsed([record]));
       }).catch(() => (read = false));
       const title = read && turns.length ? await deps.generateTitle(turns) : null;

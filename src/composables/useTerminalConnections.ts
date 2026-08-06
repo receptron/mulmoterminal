@@ -151,6 +151,7 @@ const submittableFor = (c: Conn, text: string): string => (isClaudeTarget(c.targ
 export interface ConnHandlers {
   onSession?: (id: string) => void;
   onCwd?: (cwd: string) => void;
+  onLiveCwd?: (cwd: string) => void;
   // `exitCode` is the command's status when the server reported one, else null (a start
   // failure, or an agent session that ended without one). A Run cell reads it to tell a
   // clean finish from a broken build.
@@ -190,6 +191,7 @@ interface Conn {
   ws: WebSocket | null;
   knownSessionId: string | null;
   knownCwd: string | null; // server-resolved cwd, replayed on (re)attach
+  liveCwd: string | null;
   target: ConnTarget;
   handlers: ConnHandlers;
   sawExit: boolean; // an intentional end (exit/superseded/error) — suppress reconnect
@@ -255,7 +257,7 @@ function fitAndSyncSize(c: Conn): void {
 
 // The reactive projection the view binds to (status pill, RunMenu cwd). Keyed by
 // the same slot key; a slot that hasn't connected yet (or was released) is absent.
-export const connView = reactive(new Map<string, { status: ConnStatus; serverCwd: string | null }>());
+export const connView = reactive(new Map<string, { status: ConnStatus; serverCwd: string | null; liveCwd: string | null }>());
 
 function setStatus(c: Conn, s: ConnStatus) {
   const v = connView.get(c.key);
@@ -558,6 +560,7 @@ function ensure(key: string, target: ConnTarget, font: TerminalFont): Conn {
     ws: null,
     knownSessionId: target.sessionId,
     knownCwd: null,
+    liveCwd: null,
     target,
     handlers: {},
     sawExit: false,
@@ -573,7 +576,7 @@ function ensure(key: string, target: ConnTarget, font: TerminalFont): Conn {
     lastDroppedInputNoticeMs: Number.NEGATIVE_INFINITY,
   };
   conns.set(key, c);
-  connView.set(key, { status: "connecting", serverCwd: target.cwd });
+  connView.set(key, { status: "connecting", serverCwd: target.cwd, liveCwd: null });
   wireTerminalToConn(term, c);
   return c;
 }
@@ -644,7 +647,8 @@ function connect(c: Conn) {
   // Drop the previous session's resolved cwd so the Run menu can't list/launch the
   // prior project's scripts before the new `session` message arrives.
   const v = connView.get(c.key);
-  if (v) v.serverCwd = c.target.cwd;
+  if (v) { v.serverCwd = c.target.cwd; v.liveCwd = null; }
+  c.liveCwd = null;
 
   // Resume the known id (server-learned, or the prop) so a reconnect re-attaches the
   // same session instead of spawning a fresh one each retry.
@@ -719,6 +723,8 @@ function handleMessage(c: Conn, event: MessageEvent) {
     if (typeof msg.data === "string") c.term.write(msg.data);
   } else if (msg.type === "session") {
     applySessionFrame(c, msg);
+  } else if (msg.type === "cwd") {
+    if (typeof msg.cwd === "string") { c.liveCwd = msg.cwd; const v = connView.get(c.key); if (v) v.liveCwd = msg.cwd; c.handlers.onLiveCwd?.(msg.cwd); }
   } else {
     applyTerminalFrame(c, msg);
   }
@@ -740,6 +746,7 @@ export function attach(key: string, target: ConnTarget, handlers: ConnHandlers, 
   // useful update; the parent's setters are idempotent for already-known values.
   if (c.knownSessionId) handlers.onSession?.(c.knownSessionId);
   if (c.knownCwd) handlers.onCwd?.(c.knownCwd);
+  if (c.liveCwd) handlers.onLiveCwd?.(c.liveCwd);
   el.appendChild(c.host);
   if (theme) {
     c.theme = theme;

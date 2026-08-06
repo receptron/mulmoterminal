@@ -364,6 +364,7 @@ function onAddTerminal() {
 }
 const onSession = (uid: number, id: string) => (state.value = setSession(state.value, uid, id));
 const onCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, uid, cwd));
+const onLiveCwd = (uid: number, cwd: string) => (state.value = setCwd(state.value, uid, cwd));
 const onAgent = (uid: number, agent: TerminalAgent) => (state.value = setCellAgent(state.value, uid, agent));
 const onPark = (uid: number, parked: boolean) => (state.value = setCellParked(state.value, uid, parked));
 // Pass the on-screen order so closing the zoomed cell stays zoomed on its filmstrip
@@ -790,6 +791,7 @@ onBeforeUnmount(detachSpawnedChat);
       @agent="onAgent"
       @park="onPark"
       @cwd="onCwd"
+      @live-cwd="onLiveCwd"
       @record-cwd="recordPreset"
       @remove-preset="removePreset"
       @close="onClose"

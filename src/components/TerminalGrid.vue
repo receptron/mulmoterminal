@@ -98,7 +98,7 @@ const props = defineProps<{
   listMode: boolean;
 }>();
 const emit = defineEmits<{
-  (e: "session" | "cwd", uid: number, value: string): void;
+  (e: "session" | "cwd" | "live-cwd", uid: number, value: string): void;
   (e: "close" | "toggle-expand" | "focus-cell", uid: number): void;
   (e: "run" | "runSpare", uid: number, command: RunCommand): void;
   (e: "launch", uid: number, pick: LaunchPick): void;
@@ -1207,6 +1207,7 @@ watch(
           @session="(id) => emit('session', cell.uid, id)"
           @agent="(a) => emit('agent', cell.uid, a)"
           @cwd="(c) => emit('cwd', cell.uid, c)"
+          @live-cwd="(c) => emit('live-cwd', cell.uid, c)"
           @record-cwd="(c) => emit('record-cwd', c)"
           @remove-preset="(path) => emit('remove-preset', path)"
           @run="(cmd) => emit('run', cell.uid, cmd)"

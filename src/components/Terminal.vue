@@ -88,7 +88,7 @@ const props = defineProps<{
   // text, and the icon buttons. Hex #rrggbb or null for the theme default.
 }>();
 const emit = defineEmits<{
-  (e: "session" | "cwd", value: string): void;
+  (e: "session" | "cwd" | "live-cwd", value: string): void;
   (e: "exit", exitCode: number | null): void;
   (e: "run", command: RunCommand): void;
   // The user typed (or pasted) into this terminal. Output the server writes back never fires it.
@@ -265,6 +265,7 @@ onMounted(() => {
     {
       onSession: (id) => emit("session", id),
       onCwd: (c) => emit("cwd", c),
+      onLiveCwd: (c) => emit("live-cwd", c),
       onExit: (exitCode) => emit("exit", exitCode),
       onInput: () => emit("input"),
       onInputDropped: (willReconnect) => void showHint(willReconnect ? INPUT_DROPPED_EN : INPUT_DROPPED_ENDED_EN, "cloud_off"),

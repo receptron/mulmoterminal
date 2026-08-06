@@ -23,7 +23,7 @@ import path from "node:path";
 import { MULMOTERMINAL_HOME, SESSION_ID_RE } from "../config/env.js";
 import { isRecord } from "../../common/isRecord.js";
 import { messageOf } from "../errors.js";
-import { projectSessionsDir } from "./project-dir.js";
+import { transcriptFile } from "./transcript-locate.js";
 
 const CLEARED_DIR = path.join(MULMOTERMINAL_HOME, "cleared-transcripts");
 
@@ -55,7 +55,7 @@ const markerFile = (dir: string, id: string) => path.join(dir, `${id}.json`);
 
 async function transcriptSize(cwd: string, id: string): Promise<number> {
   try {
-    return (await fs.stat(path.join(projectSessionsDir(cwd), `${id}.jsonl`))).size;
+    return (await fs.stat(transcriptFile(id, cwd))).size;
   } catch {
     return 0; // no transcript on disk (a session cleared before its first turn was written)
   }

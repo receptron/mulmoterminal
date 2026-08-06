@@ -39,6 +39,7 @@ import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { parseTerminalSize, type TerminalSize } from "../../common/terminalSize.js";
 import { handleCommandFrame } from "../session/pty-connection.js";
 import { closeWithError } from "../session/ws-frames.js";
+import { replayLiveCwd } from "../session/live-cwd.js";
 import { ProviderRefusedError } from "../session/provider-env.js";
 import { sessionExistsOnDisk } from "../session/session-reads.js";
 import { canStartLauncher, isContinuingSession, resolveReattachableId, resolveSession, type SessionResolution } from "../session/session-resolve.js";
@@ -253,7 +254,7 @@ async function admitAgentSession(
   markAttachedSessionPlaced(sessionId, requested);
   // The EFFECTIVE cwd, not this request's: on a reattach the live PTY's own directory is where the
   // agent really runs, and the request's `?cwd=` is ignored by everything downstream.
-  return announceSession(ws, sessionId, live?.cwd ?? cwd);
+  return announceSession(ws, sessionId, live?.cwd ?? cwd, !!live);
 }
 
 async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
@@ -580,8 +581,9 @@ export function startAndWire(
 // Tell the browser which session this is, and from that moment collect what it sends: its first
 // frame is the terminal's real geometry, and it arrives while the caller is still reading config
 // files, so without this it lands on the floor (see early-frames.ts).
-function announceSession(ws: WebSocket, sessionId: string, cwd: string): EarlyFrames {
+function announceSession(ws: WebSocket, sessionId: string, cwd: string, _reattached = false): EarlyFrames {
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd }));
+  replayLiveCwd(ws, sessionId, cwd);
   return bufferEarlyFrames(ws);
 }
 

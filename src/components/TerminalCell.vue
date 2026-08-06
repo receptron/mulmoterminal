@@ -121,7 +121,7 @@ const emit = defineEmits<
   GridCellEmits & {
     // `record-cwd`: auto-record a fresh launch's server-confirmed cwd as a preset.
     // `remove-preset`: drop a preset (its close button) from the shared list — value is the path.
-    (e: "session" | "cwd" | "record-cwd" | "remove-preset", value: string): void;
+    (e: "session" | "cwd" | "live-cwd" | "record-cwd" | "remove-preset", value: string): void;
     // `run` launches in THIS (empty) cell from the launcher; `runSpare` is the running
     // terminal's header menu, which must NOT replace the session — it runs in a new cell.
     (e: "run" | "runSpare", value: RunCommand): void;
@@ -547,6 +547,7 @@ function onServerCwd(c: string) {
   }
   emit("cwd", c);
 }
+function onLiveCwd(c: string) { cwd.value = c; emit("live-cwd", c); }
 
 // "Open on GitHub": when this cell's dir is a GitHub repo, the server returns its
 // repository URL (null otherwise) and the header shows a popover linking to the
@@ -1354,6 +1355,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           @session="onSession"
           @input="onTerminalInput"
           @cwd="onServerCwd"
+          @live-cwd="onLiveCwd"
           @run="(cmd) => emit('runSpare', cmd)"
         >
           <!-- Row 2 — actions on the SESSION, gathered onto the terminal's header row beside the

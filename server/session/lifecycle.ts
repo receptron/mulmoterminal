@@ -32,6 +32,8 @@ import {
   isFailedWorker,
 } from "./registry.js";
 import { clearedTranscripts, forgetClearedTranscript } from "./cleared-transcripts.js";
+import { forgetLiveCwd } from "./live-cwd.js";
+import { forgetTranscriptLocation } from "./transcript-locate.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
 import { sessionRow, shouldRefreshReply } from "./activity-transition.js";
 import { flagEffect, type ActivityFlag } from "./activity-flag.js";
@@ -151,6 +153,8 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // The transcript stops being frozen here: the next claude on this id (`--resume`, or a restart
   // after `/exit` — which reaches reap through term.onExit) appends to that file again.
   forgetClearedTranscript(id);
+  forgetLiveCwd(id);
+  forgetTranscriptLocation(id);
   deps.forgetTitle(id);
   deps.sessionActivityPublisher.forget(id); // drop the phone's copy so its picker has no ghosts
   deps.forgetWorkPhase(id); // the live turn dies with the session

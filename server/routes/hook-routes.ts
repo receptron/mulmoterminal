@@ -11,6 +11,7 @@ import { activityHookEffects, pushKindFor, resolveHookCwd, resolveHookSessionId 
 import { runCompletionHook } from "../session/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/header-hook.js";
+import { noteLiveCwd } from "../session/live-cwd.js";
 import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import { clearedTranscripts, markTranscriptCleared } from "../session/cleared-transcripts.js";
 import { latestUserPrompt } from "../session/session-reads.js";
@@ -175,6 +176,7 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     const entry = ptys.get(sessionId);
     const active = !!(entry && entry.active);
     const cwd = resolveHookCwd(body.cwd, entry?.cwd);
+    void noteLiveCwd(sessionId, body.cwd).catch(() => undefined);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
     // Before the activity publish below, so the row it mirrors to the phone already carries this
     // hook's phase (a turn's first Edit must read as "editing" in the same push, not the next one).

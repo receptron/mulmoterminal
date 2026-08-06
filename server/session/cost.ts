@@ -7,6 +7,7 @@ import fs from "node:fs/promises";
 import type { Express, Response } from "express";
 import { parseJsonl } from "./transcript.js";
 import { createTranscriptFold } from "./transcript-fold.js";
+import { transcriptFile } from "./transcript-locate.js";
 import type { FileStamp } from "./file-cache.js";
 import { isRecord } from "../../common/isRecord.js";
 import { projectSessionsDir } from "./project-dir.js";
@@ -193,7 +194,8 @@ async function readFileCost(dir: string, file: string, stamp?: FileStamp): Promi
 /** One session's cost. Exported so the route does not build the transcript path itself — and so the
  *  fold underneath it can be tested without an HTTP request. */
 export async function sessionCost(cwd: string, id: string): Promise<JsonlCost> {
-  return readFileCost(projectSessionsDir(cwd), `${id}.jsonl`);
+  const full = transcriptFile(id, cwd);
+  return readFileCost(path.dirname(full), path.basename(full));
 }
 
 async function fileStamp(full: string): Promise<FileStamp> {

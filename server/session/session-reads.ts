@@ -27,7 +27,7 @@ import { createTranscriptFold, type FoldedAt } from "./transcript-fold.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
 import { sessionListTitle } from "./sessionListTitle.js";
 import { activity, aiTitles, codexRollouts, codexRolloutsHydrated, isBackgroundSession, isFailedWorker, knownSessions, sessionMemos } from "./registry.js";
-import { projectSessionsDir } from "./project-dir.js";
+import { transcriptFile } from "./transcript-locate.js";
 import { lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./last-turn.js";
 import { forEachJsonlRecordIn, readTailRecords } from "../infra/jsonl-file.js";
 import { copySummaryState, emptySummaryState, foldSummary, summaryPartsOf, type SummaryState } from "./summary-scan.js";
@@ -49,7 +49,7 @@ export function readLatestResponse(id: string, cwd: string): string | null {
   try {
     // The tail, not the file: a transcript reaches 585 MB, which readFile cannot hold at all —
     // and the newest reply is in the last few lines either way (#998).
-    const text = latestAssistantTextFromParsed(readTailRecords(path.join(projectSessionsDir(cwd), `${id}.jsonl`)));
+    const text = latestAssistantTextFromParsed(readTailRecords(transcriptFile(id, cwd)));
     return text ? text.slice(0, LAST_RESPONSE_MAX) : null;
   } catch {
     return null; // no transcript yet / unreadable
@@ -59,7 +59,7 @@ export function readLatestResponse(id: string, cwd: string): string | null {
 // Whether a session has an on-disk transcript (claude only writes it after the
 // first prompt) in the given workspace. Determines whether `--resume` will work.
 export function sessionExistsOnDisk(id: string, cwd: string): boolean {
-  return existsSync(path.join(projectSessionsDir(cwd), `${id}.jsonl`));
+  return existsSync(transcriptFile(id, cwd));
 }
 
 // readdirSync that yields [] instead of throwing on a missing / unreadable dir.
@@ -91,7 +91,7 @@ export function claudeOnDiskSessionIds(): Set<string> {
 // there's no transcript yet (a never-prompted session) or it can't be read.
 export async function latestUserPrompt(cwd: string, id: string): Promise<string | null> {
   try {
-    return latestMeaningfulUserPromptFromParsed(readTailRecords(path.join(projectSessionsDir(cwd), `${id}.jsonl`)));
+    return latestMeaningfulUserPromptFromParsed(readTailRecords(transcriptFile(id, cwd)));
   } catch {
     return null;
   }
@@ -157,7 +157,7 @@ const summaryFold = createTranscriptFold<SummaryState>({
 });
 
 export async function readSessionSummary(cwd: string, id: string): Promise<SessionSummary> {
-  const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
+  const file = transcriptFile(id, cwd);
   try {
     const st = await fs.stat(file);
     const parts = summaryPartsOf(await summaryFold.read(file, { mtimeMs: st.mtimeMs, size: st.size }), LAST_RESPONSE_MAX);
@@ -216,7 +216,7 @@ const timelineFold = createTranscriptFold<TimelineScan>({
 });
 
 export async function sessionTimeline(cwd: string, id: string): Promise<{ events: TimelineEvent[]; truncated: boolean }> {
-  const file = path.join(projectSessionsDir(cwd), `${id}.jsonl`);
+  const file = transcriptFile(id, cwd);
   try {
     const st = await fs.stat(file);
     const scan = await timelineFold.read(file, { mtimeMs: st.mtimeMs, size: st.size });
@@ -266,7 +266,7 @@ export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAg
   // the format would be worse than silence.
   if (agent === "antigravity" || agent === "grok") return EMPTY_TURN;
   try {
-    return lastTurnFromClaudeParsed(readTailRecords(path.join(projectSessionsDir(cwd), `${id}.jsonl`)));
+    return lastTurnFromClaudeParsed(readTailRecords(transcriptFile(id, cwd)));
   } catch {
     return EMPTY_TURN; // no transcript on disk yet
   }
