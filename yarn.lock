@@ -1869,13 +1869,13 @@
   resolved "https://registry.yarnpkg.com/@mulmochat-plugin/ui-image/-/ui-image-0.4.1.tgz#8fd3b1c4ffe21e6bc22761ff48eac03306e0d345"
   integrity sha512-I3AqTIuQPsSMNxDON9UTxT2KO57HV6uUVotCIFskV0UqBMQrQ3FUu8J+qXRWDdjPyYaHoC8AJsi91TbNrOMwng==
 
-"@mulmoclaude/accounting-plugin@^2.1.0":
-  version "2.1.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/accounting-plugin/-/accounting-plugin-2.1.0.tgz#836f3d0499fb5f5caff8744aca11bc052d4d207d"
-  integrity sha512-zXUbuNncve4zLaORm/WjuhqoIEApBshvPxvGTdo5/oxPjbhpK6TOIrNrTNDtILWEoVnps4QeFnTdxO7TyhRWxQ==
+"@mulmoclaude/accounting-plugin@^2.2.0":
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/accounting-plugin/-/accounting-plugin-2.2.0.tgz#1405a466cab68d1e886348b1b15a80687ee41c0e"
+  integrity sha512-Tmn3cP71w2k7j7+Q8UoTFxZ3erifpl9TIw7BBiGpNEAfRRu9m3Kx0Q2mhfkAPspuE/zwVI4QQdsDkZVxUW2FQg==
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
-    "@mulmoclaude/core" "^3.0.0"
+    "@mulmoclaude/core" "^3.1.0"
 
 "@mulmoclaude/chart-plugin@^2.1.0":
   version "2.1.0"
