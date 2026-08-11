@@ -96,16 +96,20 @@ export function selfContainmentFindings(facts: SelfContainmentFacts): SelfContai
   }
 
   // A warning rather than a blocker, and the distinction is the whole point: the records are
-  // SHARED, so the clone reads the same ones this machine writes — provided it can reach
-  // Firestore. What does not travel is the reaching: credentials and app config are per machine
-  // and deliberately not in the repo. Nothing here is git-ignorable, so the data-ignored rule
-  // has nothing to say about this collection and this is the only warning it gets.
+  // SHARED, so a clone reads the same ones this machine writes. What does not travel is the
+  // reaching — the signed-in remote-host session, and membership of the app's roster, which
+  // the app owner grants rather than the cloner. Blocking on that would paint every shared
+  // collection permanently red for the people it was shared WITH, and a blocker nobody can act
+  // on is how a check stops being read (the same lesson the feeds rule above records).
+  //
+  // Nothing here is git-ignorable, so the data-ignored rule has nothing to say about this
+  // collection, and this is the only finding it gets.
   if (facts.storageKind === "firestore") {
     findings.push({
       code: "firestore-store",
       severity: "warning",
       message:
-        "Records are Firestore documents, not files in the project. A clone that can reach the same Firestore sees the same records; one without credentials for it opens an empty collection, and nothing in the repo supplies them.",
+        "Records are Firestore documents, not files in the project. A clone sees the same records — but only with a signed-in remote-host session and a place on the app's member roster, and neither travels in the repo. Without them the collection reports that it cannot connect rather than showing rows, so nothing is lost, only unreachable.",
     });
   }
 

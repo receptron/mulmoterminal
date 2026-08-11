@@ -106,11 +106,20 @@ describe("selfContainmentFindings", () => {
     expect(verdict({ storageKind: "csv" })).toBe(true);
   });
 
-  // The clone reads the SAME records, so this is not a blocker — what it can lack is the
-  // credentials to reach them, and those are per machine rather than in the repo.
-  it("warns about a firestore store without blocking it — the records are shared, the credentials are not", () => {
+  // The clone reads the SAME records, so this is not a blocker — what it can lack is the way in
+  // (a signed-in session, a place on the app roster), which is per machine and per person.
+  it("warns about a firestore store without blocking it — the records are shared, the way in is not", () => {
     expect(codes({ storageKind: "firestore" })).toContain("firestore-store");
     expect(verdict({ storageKind: "firestore" })).toBe(true);
+  });
+
+  // Core's firestore store fails each method with an actionable message rather than answering
+  // an empty list, precisely so "no records" and "not connected" stay distinguishable. A
+  // message promising an empty collection would send the reader looking for lost data.
+  it("does not tell the reader an unreachable collection looks empty", () => {
+    const message = selfContainmentFindings({ ...PORTABLE, storageKind: "firestore" }).find((f) => f.code === "firestore-store")?.message ?? "";
+    expect(message).toMatch(/cannot connect/);
+    expect(message).not.toMatch(/empty/);
   });
 
   // A storage kind core adds must not fall through every branch and report the collection
