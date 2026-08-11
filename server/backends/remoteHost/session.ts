@@ -81,6 +81,11 @@ const requireHandles = (): RemoteHostSessionHandles => {
 };
 
 export const currentUid = (): string | null => handles?.auth.currentUser?.uid ?? null;
+// The signed-in address. Shared collections are keyed by EMAIL — the roster in
+// `app.json` lists addresses and the Firestore rules match
+// `request.auth.token.email` against it — so a session without one cannot act
+// on them at all (null, not a guess).
+export const currentEmail = (): string | null => handles?.auth.currentUser?.email ?? null;
 export const currentFirestore = (): Firestore => requireHandles().firestore;
 export const currentStorage = (): FirebaseStorage => requireHandles().storage;
 

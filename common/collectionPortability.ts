@@ -22,7 +22,10 @@ export type SelfContainmentCode =
   /** No `primaryKey`, so ids are 4 random bytes and two machines can mint the same one. */
   | "no-primary-key"
   /** The project is not a git repo, so there is nothing to clone and most checks do not apply. */
-  | "not-a-repo";
+  | "not-a-repo"
+  /** Records live in the app's Firestore, not in the repository — by design for a SHARED
+   *  collection, and the reason it clones differently from every other kind. */
+  | "shared-store";
 
 /** `blocker` stops the clone working; `warning` costs something on the other machine; `info` is
  *  context. Only a blocker makes `portable` false. */

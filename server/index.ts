@@ -111,6 +111,7 @@ import { repoForDir } from "./git/forge-support.js";
 import { resolveGithubUrl } from "./git/gitRemote.js";
 import { canClearInputBox } from "./backends/remoteHost/terminalInput.js";
 import { initCollectionsBackend } from "./backends/collections.js";
+import { initSharedCollections } from "./backends/sharedCollections.js";
 import { initGoogleBackend } from "./backends/google.js";
 import { initPluginRuntime } from "./infra/pluginRuntime.js";
 import { initAccountingBackend } from "./backends/accounting.js";
@@ -555,6 +556,14 @@ initMulmoScriptBackend({ workspace: CLAUDE_CWD, pubsub });
 // Configure the collection engine against the shared workspace (CLAUDE_CWD). The
 // path layout matches MulmoClaude's so discovery sees the same collection skills.
 initCollectionsBackend({ workspace: CLAUDE_CWD });
+
+// Shared (firestore-backed) collections. MulmoTerminal is their host — its roots
+// are project repositories, which is what one `app.json` per roster requires —
+// and MulmoClaude unbound its own accessor for that reason (mulmoclaude#2870).
+// Wired HERE rather than inside initCollectionsBackend because that file is at
+// its line budget, and because the Firebase session this reads is a boot-level
+// concern of this file's, not of the collection engine's configuration.
+initSharedCollections();
 
 // Give factory-style gui-chat-protocol plugins their scoped runtime (per-package
 // data/config under <workspace>, namespaced pub/sub, prefixed log) — see
