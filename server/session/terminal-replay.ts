@@ -4,20 +4,55 @@
 // output, xterm re-answers the queries baked into it and the stale replies are sent back as
 // INPUT, surfacing as junk like "0;276;0c" in the app's prompt (codex writes several at startup).
 // Strip them from the replay only: they render nothing, so the visual restore is unchanged, and
-// the app re-queries live if it still needs to.
+// the app re-queries live if it still needs to. The same definitions also identify queries in the
+// live output path, where they bypass frame batching so the emulator can answer promptly.
 //
 // Built via new RegExp so the ESC/BEL control chars stay out of the regex source (satisfies
 // no-control-regex without a disable).
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
+const OSC_QUERY_CODES = ["10", "11", "12"] as const;
+const OSC_QUERY_TERMINATORS = [BEL, `${ESC}\\`] as const;
+const OSC_QUERY_SEQUENCES = OSC_QUERY_CODES.flatMap((code) => OSC_QUERY_TERMINATORS.map((terminator) => `${ESC}]${code};?${terminator}`));
 
-const QUERY_PATTERNS: RegExp[] = [
-  new RegExp(ESC + "\\[[>=]?\\d*c", "g"), // Device Attributes (DA1/DA2/DA3) — the "…c" symptom
-  new RegExp(ESC + "\\[\\??\\d*n", "g"), // device / cursor status report (DSR / CPR)
-  new RegExp(ESC + "\\[\\?u", "g"), // kitty keyboard flags query
-  new RegExp(ESC + "\\[>\\d*q", "g"), // XTVERSION
-  new RegExp(ESC + "\\]1[012];\\?(?:" + BEL + "|" + ESC + "\\\\)", "g"), // OSC 10/11/12 fg/bg/cursor color query
+const QUERY_SOURCES: string[] = [
+  ESC + "\\[[>=]?\\d*c", // Device Attributes (DA1/DA2/DA3) — the "…c" symptom
+  ESC + "\\[(?:[56]|\\?\\d+)n", // standard or DEC-private device / cursor status query
+  ESC + "\\[\\?u", // kitty keyboard flags query
+  ESC + "\\[>\\d*q", // XTVERSION
+  ESC + "\\](?:" + OSC_QUERY_CODES.join("|") + ");\\?(?:" + BEL + "|" + ESC + "\\\\)", // OSC fg/bg/cursor color query
 ];
+const QUERY_PATTERNS = QUERY_SOURCES.map((source) => new RegExp(source, "g"));
+const ANY_QUERY_PATTERN = new RegExp(QUERY_SOURCES.map((source) => `(?:${source})`).join("|"));
+
+/** Whether a live output fragment contains a terminal query that the browser will answer through
+ *  the PTY input channel. A caller may include a short tail from the preceding fragment so a
+ *  sequence split across node-pty reads is still recognised. */
+export function containsTerminalQuery(data: string): boolean {
+  return ANY_QUERY_PATTERN.test(data);
+}
+
+/** Return a trailing fragment that can still become a recognised terminal query. Completed or
+ *  unrelated escape sequences return an empty string, keeping ordinary live output off the scan
+ *  path after its next chunk. */
+export function terminalQueryPrefixTail(data: string, limit: number): string {
+  let candidate = "";
+  for (let escapeAt = data.lastIndexOf(ESC); escapeAt >= 0;) {
+    const suffix = data.slice(escapeAt);
+    if (suffix.length > limit) break;
+    if (suffix === ESC || OSC_QUERY_SEQUENCES.some((query) => query.length > suffix.length && query.startsWith(suffix))) {
+      candidate = suffix;
+    } else if (suffix.startsWith(`${ESC}[`)) {
+      const parameters = suffix.slice(2);
+      // DA and XTVERSION accept an optional marker followed by digits; private DSR and kitty share
+      // the '?' prefix. A final c/n/q/u makes the sequence complete and therefore fails these tests.
+      if (/^[>=]?\d*$/.test(parameters) || /^\?\d*$/.test(parameters)) candidate = suffix;
+    }
+    if (escapeAt === 0) break;
+    escapeAt = data.lastIndexOf(ESC, escapeAt - 1);
+  }
+  return candidate;
+}
 
 export function stripTerminalQueries(data: string): string {
   return QUERY_PATTERNS.reduce((out, re) => out.replace(re, ""), data);
