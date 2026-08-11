@@ -17,6 +17,8 @@ export type SelfContainmentCode =
   | "sqlite-store"
   /** Records are rows of a CSV read through DuckDB — a runtime the clone must also have. */
   | "csv-runtime"
+  /** Records are Firestore documents: shared with the clone, but only if it has credentials. */
+  | "firestore-store"
   /** Something the records need is git-ignored: the schema travels, they do not. */
   | "data-ignored"
   /** No `primaryKey`, so ids are 4 random bytes and two machines can mint the same one. */

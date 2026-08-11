@@ -16,7 +16,7 @@
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { storageKindFor } from "@mulmoclaude/core/collection";
+import { storageKindFor, type CollectionStorageKind } from "@mulmoclaude/core/collection";
 import { loadCollection } from "@mulmoclaude/core/collection/server";
 import type { Express, Request, Response } from "express";
 import { errorStatus, resolveProjectRoot, type ProjectScope } from "../infra/project-root.js";
@@ -31,7 +31,10 @@ const run = promisify(execFile);
  *  exercised without a git repo and a workspace on disk, and so each rule reads as one line. */
 export interface SelfContainmentFacts {
   source: "user" | "project" | "feed";
-  storageKind: "file" | "csv" | "sqlite";
+  /** Core's union rather than a copy of its members: a backend added there (firestore, in
+   *  3.6.0) must reach these rules as a compile error, not as a kind that silently falls
+   *  through every branch and reports the collection clean. */
+  storageKind: CollectionStorageKind;
   hasPrimaryKey: boolean;
   inGitRepo: boolean;
   /** Whether git ignores anything the RECORDS need in order to travel — the external
@@ -89,6 +92,20 @@ export function selfContainmentFindings(facts: SelfContainmentFacts): SelfContai
       code: "csv-runtime",
       severity: "warning",
       message: "Records are rows of a CSV, queried through DuckDB. The file itself travels with the project, but the clone needs that runtime too.",
+    });
+  }
+
+  // A warning rather than a blocker, and the distinction is the whole point: the records are
+  // SHARED, so the clone reads the same ones this machine writes — provided it can reach
+  // Firestore. What does not travel is the reaching: credentials and app config are per machine
+  // and deliberately not in the repo. Nothing here is git-ignorable, so the data-ignored rule
+  // has nothing to say about this collection and this is the only warning it gets.
+  if (facts.storageKind === "firestore") {
+    findings.push({
+      code: "firestore-store",
+      severity: "warning",
+      message:
+        "Records are Firestore documents, not files in the project. A clone that can reach the same Firestore sees the same records; one without credentials for it opens an empty collection, and nothing in the repo supplies them.",
     });
   }
 
@@ -223,14 +240,21 @@ export async function selfContainmentFactsFor(slug: string, scope: ProjectScope)
   const collection = await loadCollection(slug, scope);
   if (!collection) return null;
   const git = await inGitRepo(scope.workspaceRoot);
+  const storageKind = storageKindFor(collection.schema);
   return {
     source: collection.source,
-    storageKind: storageKindFor(collection.schema),
+    storageKind,
     hasPrimaryKey: typeof collection.schema.primaryKey === "string" && collection.schema.primaryKey.length > 0,
     inGitRepo: git,
     // Only meaningful inside a repo; outside one, `check-ignore` answers about a repo that is
     // not the one this collection would be cloned from.
-    dataDirIgnored: git ? await ignoreVerdict(scope.workspaceRoot, collection) : null,
+    //
+    // And not asked at all for firestore: its records are not on this machine, so the schema
+    // declares no path and `directIgnoreTargets` would fall back to the conventional per-slug
+    // dataDir — a folder the records were never in. Its ignore state answers a different
+    // question, and both answers mislead (an ignored one reads as a blocker nobody can act on,
+    // a tracked one as records that travel).
+    dataDirIgnored: git && storageKind !== "firestore" ? await ignoreVerdict(scope.workspaceRoot, collection) : null,
   };
 }
 

@@ -29,7 +29,15 @@ const codes = (facts: Partial<SelfContainmentFacts>): string[] => selfContainmen
 // The wire type widens `code` to a plain string so a newer server's finding is not dropped by an
 // older client. That widening must not become licence for THIS server to invent one: every code
 // it can produce is pinned to the documented union here.
-const KNOWN_CODES: readonly SelfContainmentCode[] = ["user-scope", "sqlite-store", "csv-runtime", "data-ignored", "no-primary-key", "not-a-repo"];
+const KNOWN_CODES: readonly SelfContainmentCode[] = [
+  "user-scope",
+  "sqlite-store",
+  "csv-runtime",
+  "firestore-store",
+  "data-ignored",
+  "no-primary-key",
+  "not-a-repo",
+];
 
 const verdict = (facts: Partial<SelfContainmentFacts>): boolean => isPortable(selfContainmentFindings({ ...PORTABLE, ...facts }));
 
@@ -96,6 +104,21 @@ describe("selfContainmentFindings", () => {
   it("warns about a csv/DuckDB collection without blocking it — the file itself travels", () => {
     expect(codes({ storageKind: "csv" })).toContain("csv-runtime");
     expect(verdict({ storageKind: "csv" })).toBe(true);
+  });
+
+  // The clone reads the SAME records, so this is not a blocker — what it can lack is the
+  // credentials to reach them, and those are per machine rather than in the repo.
+  it("warns about a firestore store without blocking it — the records are shared, the credentials are not", () => {
+    expect(codes({ storageKind: "firestore" })).toContain("firestore-store");
+    expect(verdict({ storageKind: "firestore" })).toBe(true);
+  });
+
+  // A storage kind core adds must not fall through every branch and report the collection
+  // clean, which is what a locally-copied union allowed until 3.6.0 added firestore.
+  it("says something about every storage kind except the default one", () => {
+    const nonDefault = (["csv", "sqlite", "firestore"] as const).map((storageKind) => codes({ storageKind }));
+    expect(nonDefault.map((findings) => findings.length > 0)).toEqual([true, true, true]);
+    expect(codes({ storageKind: "file" })).toEqual([]);
   });
 
   it("warns about a missing primaryKey in a repo — two machines can mint one id", () => {
