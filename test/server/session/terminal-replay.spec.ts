@@ -1,9 +1,33 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { appendBoundedOutput, boundedTail, growOutputTail, stripTerminalQueries, terminalModePrefix } from "../../../server/session/terminal-replay.js";
+import {
+  appendBoundedOutput,
+  boundedTail,
+  containsTerminalQuery,
+  growOutputTail,
+  stripTerminalQueries,
+  terminalQueryPrefixTail,
+  terminalModePrefix,
+} from "../../../server/session/terminal-replay.js";
 
 const ESC = String.fromCharCode(0x1b);
 const BEL = String.fromCharCode(0x07);
+const TERMINAL_QUERIES = [
+  `${ESC}[c`,
+  `${ESC}[>0c`,
+  `${ESC}[6n`,
+  `${ESC}[?6n`,
+  `${ESC}[?25n`,
+  `${ESC}[?996n`,
+  `${ESC}[?u`,
+  `${ESC}[>0q`,
+  `${ESC}]10;?${BEL}`,
+  `${ESC}]10;?${ESC}\\`,
+  `${ESC}]11;?${BEL}`,
+  `${ESC}]11;?${ESC}\\`,
+  `${ESC}]12;?${BEL}`,
+  `${ESC}]12;?${ESC}\\`,
+];
 
 describe("stripTerminalQueries", () => {
   it("removes a Device Attributes query embedded in output (the 0;276;0c symptom source)", () => {
@@ -16,6 +40,8 @@ describe("stripTerminalQueries", () => {
     expect(stripTerminalQueries(`${ESC}[6n`)).toBe("");
     expect(stripTerminalQueries(`x${ESC}[5ny`)).toBe("xy");
     expect(stripTerminalQueries(`${ESC}[?6n`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}[?25n`)).toBe("");
+    expect(stripTerminalQueries(`${ESC}[?996n`)).toBe("");
   });
 
   it("removes kitty-keyboard and XTVERSION queries", () => {
@@ -34,10 +60,52 @@ describe("stripTerminalQueries", () => {
     expect(stripTerminalQueries(response)).toBe(response);
   });
 
+  it("does NOT strip terminal status or cursor-position responses", () => {
+    expect(stripTerminalQueries(`${ESC}[0n`)).toBe(`${ESC}[0n`);
+    expect(stripTerminalQueries(`${ESC}[12;34R`)).toBe(`${ESC}[12;34R`);
+  });
+
   it("leaves visible text and SGR colour sequences untouched", () => {
     const styled = `${ESC}[31mhello${ESC}[0m world`;
     expect(stripTerminalQueries(styled)).toBe(styled);
     expect(stripTerminalQueries("plain text")).toBe("plain text");
+  });
+});
+
+describe("containsTerminalQuery", () => {
+  it("recognises the terminal queries that xterm answers through onData", () => {
+    for (const query of TERMINAL_QUERIES) {
+      expect(containsTerminalQuery(`before${query}after`)).toBe(true);
+    }
+  });
+
+  it("does not mistake terminal replies, styling or ordinary text for queries", () => {
+    for (const output of [`${ESC}[?1;2c`, `${ESC}[0n`, `${ESC}[12;34R`, `${ESC}[31mred${ESC}[0m`, "plain text"])
+      expect(containsTerminalQuery(output)).toBe(false);
+  });
+});
+
+describe("terminalQueryPrefixTail", () => {
+  it("keeps only a trailing fragment that can become a query", () => {
+    expect(terminalQueryPrefixTail(`text${ESC}[`, 64)).toBe(`${ESC}[`);
+    expect(terminalQueryPrefixTail(`text${ESC}[?99`, 64)).toBe(`${ESC}[?99`);
+    expect(terminalQueryPrefixTail(`text${ESC}]10;?${ESC}`, 64)).toBe(`${ESC}]10;?${ESC}`);
+  });
+
+  it("drops completed and unrelated escape sequences", () => {
+    expect(terminalQueryPrefixTail(`${ESC}[31m`, 64)).toBe("");
+    expect(terminalQueryPrefixTail(`${ESC}[6n`, 64)).toBe("");
+    expect(terminalQueryPrefixTail(`${ESC}[6n${ESC}[`, 64)).toBe(`${ESC}[`);
+  });
+
+  it("retains every possible split of every recognised query", () => {
+    for (const query of TERMINAL_QUERIES) {
+      for (let splitAt = 1; splitAt < query.length; splitAt++) {
+        const prefix = query.slice(0, splitAt);
+        expect(terminalQueryPrefixTail(prefix, 64), `${JSON.stringify(query)} at ${splitAt}`).toBe(prefix);
+        expect(containsTerminalQuery(prefix + query.slice(splitAt))).toBe(true);
+      }
+    }
   });
 });
 

@@ -141,6 +141,48 @@ describe("createOutputRelay", () => {
     for (let i = 0; i < 100; i++) relay.push("0123456789");
     expect(entry.buffer.length).toBeLessThanOrEqual(12); // 10 * TAIL_SLACK
   });
+
+  it("sends a terminal query immediately instead of delaying its reply round trip", () => {
+    const s = fakeSocket();
+    const relay = createOutputRelay(fakeEntry(s.socket), LIMIT);
+    relay.push("first");
+    vi.advanceTimersByTime(1);
+    relay.push(`${String.fromCharCode(0x1b)}[c`);
+    expect(outputs(s.sent)).toEqual(["first", `${String.fromCharCode(0x1b)}[c`]);
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    expect(outputs(s.sent)).toHaveLength(2);
+  });
+
+  it("recognises a terminal query split after its first half was already sent", () => {
+    const s = fakeSocket();
+    const relay = createOutputRelay(fakeEntry(s.socket), LIMIT);
+    relay.push(String.fromCharCode(0x1b) + "[");
+    vi.advanceTimersByTime(1);
+    relay.push("c");
+    expect(outputs(s.sent)).toEqual([String.fromCharCode(0x1b) + "[", "c"]);
+  });
+
+  it("forgets a partial query when a reattach discards the old relay state", () => {
+    const s = fakeSocket();
+    const relay = createOutputRelay(fakeEntry(s.socket), LIMIT);
+    relay.push(String.fromCharCode(0x1b) + "[");
+    relay.discard();
+    vi.advanceTimersByTime(1);
+    relay.push("c");
+    expect(outputs(s.sent)).toEqual([String.fromCharCode(0x1b) + "["]);
+    vi.advanceTimersByTime(FLUSH_INTERVAL_MS);
+    expect(outputs(s.sent)).toEqual([String.fromCharCode(0x1b) + "[", "c"]);
+  });
+
+  it("keeps a second partial query after immediately sending a completed one", () => {
+    const s = fakeSocket();
+    const relay = createOutputRelay(fakeEntry(s.socket), LIMIT);
+    const escape = String.fromCharCode(0x1b);
+    relay.push(`first${escape}[6n${escape}[`);
+    vi.advanceTimersByTime(1);
+    relay.push("c");
+    expect(outputs(s.sent)).toEqual([`first${escape}[6n${escape}[`, "c"]);
+  });
 });
 
 describe("wireBufferedOutput", () => {
