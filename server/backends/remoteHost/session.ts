@@ -81,11 +81,24 @@ const requireHandles = (): RemoteHostSessionHandles => {
 };
 
 export const currentUid = (): string | null => handles?.auth.currentUser?.uid ?? null;
-// The signed-in address. Shared collections are keyed by EMAIL — the roster in
-// `app.json` lists addresses and the Firestore rules match
-// `request.auth.token.email` against it — so a session without one cannot act
-// on them at all (null, not a guess).
-export const currentEmail = (): string | null => handles?.auth.currentUser?.email ?? null;
+
+/** The address a shared collection may be authorized on, or null.
+ *
+ *  Shared collections are keyed by EMAIL — the roster in `app.json` lists addresses — and the
+ *  deployed rules match it as `request.auth.token.email` through `listedIn()`, which is guarded
+ *  by `verified()`: `email_verified == true`. So an UNVERIFIED address is not a weaker identity
+ *  there, it is no identity at all; every read and write it attempts is denied.
+ *
+ *  Answering null for one is therefore not an extra restriction, it is agreeing with the rules.
+ *  The alternative reads worse rather than allowing more: the collection lists, the pane opens,
+ *  and every row fails permission-denied with nothing naming the reason.
+ *
+ *  Pure and exported so this is pinned without standing up a Firebase session — the module's
+ *  handles are private and only replaced by a real connect. */
+export const verifiedEmailOf = (user: { email: string | null; emailVerified: boolean } | null | undefined): string | null =>
+  user?.emailVerified === true && user.email ? user.email : null;
+
+export const currentEmail = (): string | null => verifiedEmailOf(handles?.auth.currentUser);
 export const currentFirestore = (): Firestore => requireHandles().firestore;
 export const currentStorage = (): FirebaseStorage => requireHandles().storage;
 

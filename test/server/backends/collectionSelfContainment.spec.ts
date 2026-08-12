@@ -117,6 +117,18 @@ describe("selfContainmentFindings", () => {
     expect(finding?.severity).toBe("info");
   });
 
+  it("does not call a shared collection unclonable for an ignored local data directory", () => {
+    // The one case where the two rules meet: a shared collection's records are in
+    // Firestore, so the conventional per-slug directory holds nothing and whether git
+    // ignores it says nothing about what a clone gets. The managed workspace really
+    // does ignore `data/`, so this is the ordinary case, not a corner — and a blocker
+    // here would report the records as lost when they are precisely what travels.
+    expect(codes({ storageKind: "firestore", dataDirIgnored: true })).toEqual(["shared-store"]);
+    expect(verdict({ storageKind: "firestore", dataDirIgnored: true })).toBe(true);
+    // Still a blocker for every kind whose records ARE on disk.
+    expect(codes({ dataDirIgnored: true })).toContain("data-ignored");
+  });
+
   it("warns about a missing primaryKey in a repo — two machines can mint one id", () => {
     expect(codes({ hasPrimaryKey: false })).toContain("no-primary-key");
     expect(verdict({ hasPrimaryKey: false })).toBe(true);

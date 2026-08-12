@@ -59,7 +59,12 @@ export function selfContainmentFindings(facts: SelfContainmentFacts): SelfContai
     });
   }
 
-  if (facts.dataDirIgnored === true) {
+  // A SHARED collection has no records on disk to be ignored: they live in the app's Firestore,
+  // and `dataDir` is then only the conventional per-slug directory nothing was ever written to.
+  // Asking git about it answers about the wrong place, so a workspace that ignores `data/` would
+  // call every shared collection unclonable and every record lost — the one verdict this file
+  // exists to keep trustworthy, spent on a collection whose records are exactly what DOES travel.
+  if (facts.dataDirIgnored === true && facts.storageKind !== "firestore") {
     // A FEED's records are a CACHE, and that changes the verdict rather than the fact. They are
     // re-fetched from the source the clone can reach too, so "the records do not travel" costs a
     // refresh, not the data — while for a collection the records ARE the data and nothing brings
