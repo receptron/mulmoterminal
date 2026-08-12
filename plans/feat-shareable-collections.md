@@ -2992,18 +2992,16 @@ firebase firestore:delete "apps/<aid>" --recursive --project <project>
 6. **onSnapshot watcher** — `CollectionStore.watch` に載せる。
    `hostRunner.ts:154-184` の実装から `docChanges()` の扱いを持ち込む
 7. **worktreeEnv による aid の分岐** — D6
-   - **7a. MulmoClaude を触る変更（2 本で打ち止め）** — **7b 以降はこの 2 本の
-     マージと publish を待つ**:
+   - **7a. MulmoClaude を触る変更（2 本で打ち止め）— 完了**（2026-08-12、
+     `@mulmoclaude/core` **3.10.0** が npm に公開済み）:
      - **mulmoclaude #2870**（マージ済み）— 能力の宣言と受け入れゲート、MC の
        Firestore バインド解除
-     - **mulmoclaude #2871**（レビュー中）— ホストが deploy / publish を自前で回すのに
+     - **mulmoclaude #2871**（マージ済み）— ホストが deploy / publish を自前で回すのに
        要る投影（`projectDeploy` / `projectPublish` / `promoteSchema`）、`staging` と
        `appSlugs` の置き場所、そして **`manageCollection.publishApp` の削除**。
        削除は必須で、任意ではない（下記）。ホストが依存する export は
        `test_sharedHostSurface.ts` で固定した
-     以下は当初の 7a の記述（#2870 のみを指していた）— **PR 済み・未マージ**
-     （mulmoclaude #2870、`@mulmoclaude/core` 3.9.0 はそのブランチにしか無く、npm にも
-     出ていない）。**7b 以降はこれのマージと publish を待つ**:
+     以下は当初の 7a の記述（#2870 のみを指していた）:
      1. `setSharedCollectionsSupport()` と `acceptStorageSchema` のゲート
      2. MC の Firestore バインド解除（`initFirestoreCollectionBinding` を落とす）
 
@@ -3012,15 +3010,14 @@ firebase firestore:delete "apps/<aid>" --recursive --project <project>
      `server/backends/collections.ts` が現に import している
    - **7b. MT の Firestore 接続** — `setFirestoreAccessor` を MT で呼び、
      **`setSharedCollectionsSupport(true)` を別に呼ぶ**（`configureCollectionHost` の
-     フィールドではない。理由は D5)
+     フィールドではない。理由は D5)。**PR 済み・未マージ**（mulmoterminal #1632）
    - **7c. MT 独自ツール `manageSharedApp`** — `deploy` / `publish` / `unpublish` の 3 つ。
-     **#2871 のマージと npm 公開を待ってから着手する** — それまで core の `publishApp` は
-     生きており、MT は `manageCollection` をホストツールとして登録しているので、
-     書き込み経路が 2 本ある状態が続く（「残すが呼ばない」では MT で普通に動いてしまう。
-     D5 の移行）。1 本になるのは #2871 が入ってから。
+     書き込み経路が 2 本ある状態（core の `publishApp`）は #2871 のマージで解消済み。
      門番と射影は core の純粋関数を呼び、**順序（fail closed）と書き分けは MT が持つ**（D10）。
-     `appSlugs` のルール（`published` フラグ）と **`match /staging/{cid}`** を
-     mulmoserver に足すのはここ（1 回のデプロイにまとめる）
+     ルール側は先行して済んでいる — `appSlugs`（`published` フラグ）と
+     **`match /staging/{cid}`** は **mulmoserver #157 でマージし、2026-08-12 に本番へ
+     deploy 済み**（mulmoserver に CI は無く、デプロイ状態はどのリポジトリにも記録されない
+     ので、ここが唯一の記録）
    - **7d. `aid` の UUID 自動生成**（決定 2）— `app.json` を書くのは MT なので MT 側
 
 **共有**
