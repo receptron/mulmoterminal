@@ -35,9 +35,26 @@ closing.
 The tests came with the code, as `test/server/backends/appViewProjection.spec.ts`. They are not
 duplicated in core.
 
+### The wire contract is now a document, and both sides check it (#1672)
+
+Nothing proved that what this repository WRITES to `{tier}/config` is what mulmoserver READS
+back. Its reader takes `unknown` and drops what it cannot parse — correctly, since it has to
+tolerate whatever an app published months ago happens to carry — so a renamed field does not
+fail anywhere. It produces a capability of `false`, and a receptionist whose approve button is
+missing with no error.
+
+`test/fixtures/sharedAppGolden/` holds one declaration and the two documents it projects to.
+`test/server/backends/appViewGolden.spec.ts` regenerates and diffs them; mulmoserver holds the
+same three files and feeds them to its own `writeOf` / `capabilitiesFor`, asserting which
+capabilities come back for which address. Regenerate with `UPDATE_GOLDEN=1`.
+
+Documents rather than a shared type, because the type would say nothing about the part that
+has actually broken: whether absence means "no opinion" or "refuse", and which tier answers
+which way. Keeping the two copies in step is
+[#1673](https://github.com/receptron/mulmoterminal/issues/1673) — today it is a hand copy, and
+a stale one is a diff somebody has to look at.
+
 Design: [`plans/refactor-shared-app-wire-contract.md`](https://github.com/receptron/mulmoterminal/blob/main/plans/refactor-shared-app-wire-contract.md).
-Its remaining half — a shared wire contract with golden documents, so a rename here fails in
-mulmoserver's suite rather than in a live app — is not done.
 
 ### The staff page can approve, and the people on the roster have an entrance of their own (#1671)
 

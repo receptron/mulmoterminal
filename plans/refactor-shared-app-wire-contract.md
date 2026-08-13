@@ -3,8 +3,9 @@
 **状態**: **決定 1 は実装済み**（2026-08-13）。射影の書き込み側は MulmoTerminal
 `server/backends/sharedApp/appViewProjection.ts` に移り、core からは消えた
 （mulmoclaude PR / `@mulmoclaude/core@4.0.0`、MT PR）。
-**決定 2〜4（ワイヤ契約のリポジトリ）は未着手** — 置き場所と名前が未決のため。
-下の「リポジトリ横断と依存順」の 1 と 2 が済み、3 と 4 が残っている。
+**決定 2・3（ワイヤ契約 = ゴールデン文書）も入った**が、**独立リポジトリにはしていない**
+（決定 4 は保留）。同じ 3 ファイルを両リポジトリに置き、それぞれのテストが生成側 /
+消費側から突く形にした。複製の同期の仕方は **#1673** で決める。
 [`feat-shared-app-member-write.md`](./feat-shared-app-member-write.md) を出した直後の
 振り返りから出た。前提は [`docs/shared-app-principles.md`](../docs/shared-app-principles.md)、
 決定は [`feat-shareable-collections.md`](./feat-shareable-collections.md) の D1–D10。
@@ -165,11 +166,39 @@ disable した。
 2. **[済]** **core**: 移した分を削る。`test_sharedHostSurface.ts` の一覧から該当分を外す
    （あのファイルは「ホストが戻ってこなくて済むか」を測る装置なので、**減るのが正しい**）。
    `projectApp` 側は無変更。
-3. **[未]** **契約リポジトリ**: 形 + 定数 + ゴールデンを置く。
-4. **[未]** **MT / MS**: 契約を git ref で参照し、それぞれ生成側 / 消費側のテストを足す。
+3. **[変更して実施]** **ゴールデン文書を両リポジトリに置く**。独立リポジトリは作らず、
+   `test/fixtures/sharedAppGolden/` を MT と mulmoserver の両方に同じ内容で置いた。
+   形と定数は共有していない（下記）。
+4. **[済]** **MT / MS**: それぞれ生成側 / 消費側のテストを足した。
+   MT `test/server/backends/appViewGolden.spec.ts` は再生成して diff、
+   mulmoserver `test/composables/test_appViewGolden.ts` は `writeOf` →
+   `capabilitiesFor` に食わせて能力を assert する。
+5. **[未]** **複製の同期**。手コピーで、更新の合図が無い（**#1673**）。
 
 1 と 2 は 1 回の core リリースを使う（**削るための最後の publish**）。以後、
 `{tier}/config` の変更に core リリースは要らなくなる。
+
+## 決定 2・3 を出すときに形を変えたところ
+
+**独立リポジトリを作らず、両方に置いた。** 名前と「どちらの CI が知らせるか」が
+未決のまま repo を増やすより、**穴の大きい方から塞ぐ**ことを優先した。
+今まで「射影の出力が読み手と一致する」ことを証明するものは**どこにも無かった**。
+片方の複製が古くなる問題（#1673）は残るが、それは**塞いだ穴の中の小さい穴**で、
+以前は穴そのものが空いていた。
+
+**形（interface）と定数は共有していない。** 決定 2 の 3 点のうち 1 と 2 を落とした。
+理由は決定 2 自身が書いていること — mulmoserver の読み手は `writeOf(value: unknown)` で
+**入口が `unknown`**、境界では何も型検査されない。共有 interface が効くのは
+「MT が改名したのに MS が読み続けている」ケースだけで、それは**ゴールデンの diff で
+落ちる**。定数も同様。ファイル 3 本で足りるものに repo を 1 つ足す理由が無かった。
+
+**ゴールデンは両方の repo で prettier 無視にした。** 2 つの repo の formatter 設定が
+違うと、同一の文書が違って見える。生成は `JSON.stringify(_, null, 2)` が正典。
+
+**mulmoserver の `test_appViewRoundTrip.ts` はゴールデン版に置き換えた**
+（`test_appViewGolden.ts`）。あれは core の `projectAppViews` を直接呼んでいたので、
+決定 1 で消える。呼び出しをゴールデンの読み込みに替えただけで、能力の assertion は
+そのまま残した — **mulmoserver は core の射影に依存しなくなった**。
 
 ## やらないこと
 

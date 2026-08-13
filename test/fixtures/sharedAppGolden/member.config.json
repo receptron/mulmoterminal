@@ -1,0 +1,75 @@
+{
+  "write": [
+    {
+      "cid": "bookings",
+      "statusField": "status",
+      "transitions": {
+        "initial": [
+          "pending"
+        ],
+        "pending": [
+          "approved",
+          "rejected"
+        ],
+        "approved": [
+          "done"
+        ]
+      },
+      "mail": {
+        "toField": "email",
+        "on": {
+          "booking-approved": {
+            "from": [
+              "pending"
+            ],
+            "to": "approved"
+          }
+        }
+      },
+      "assigneeField": "stylistEmail",
+      "rowWriters": [
+        "stylist@salon.example"
+      ],
+      "writers": [
+        "owner@salon.example",
+        "reception@salon.example"
+      ]
+    }
+  ],
+  "views": [
+    {
+      "id": "desk",
+      "collections": [
+        {
+          "cid": "bookings",
+          "scope": "all"
+        },
+        {
+          "cid": "notices",
+          "scope": "all"
+        }
+      ]
+    }
+  ],
+  "submit": {
+    "bookings": {
+      "auth": "verifiedEmail",
+      "emailField": "email",
+      "createFields": [
+        "email",
+        "startAt"
+      ],
+      "selfTransitions": {
+        "pending": [
+          "cancelled"
+        ]
+      },
+      "window": {
+        "fromMs": 1767225600000,
+        "untilMs": 1798761599000
+      }
+    }
+  },
+  "publishedAt": 1700000000000,
+  "name": "Salon"
+}

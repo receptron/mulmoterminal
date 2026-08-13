@@ -1,0 +1,42 @@
+{
+  "aid": "11111111-2222-3333-4444-555555555555",
+  "name": "Salon",
+  "members": {
+    "owner@salon.example": { "*": "owner" },
+    "reception@salon.example": { "bookings": "editor" },
+    "stylist@salon.example": { "bookings": "assignee" },
+    "observer@salon.example": { "bookings": "viewer" },
+    "customer@example.jp": { "*": "participant" }
+  },
+  "participantRead": ["notices"],
+  "collections": {
+    "bookings": {
+      "statusField": "status",
+      "transitions": {
+        "initial": ["pending"],
+        "pending": ["approved", "rejected"],
+        "approved": ["done"]
+      },
+      "assigneeField": "stylistEmail",
+      "mail": {
+        "toField": "email",
+        "on": { "booking-approved": { "from": ["pending"], "to": "approved" } }
+      }
+    }
+  },
+  "public": {
+    "submit": {
+      "bookings": {
+        "auth": "verifiedEmail",
+        "emailField": "email",
+        "createFields": ["email", "startAt"],
+        "selfTransitions": { "pending": ["cancelled"] },
+        "window": { "from": "2026-01-01T00:00:00.000Z", "until": "2026-12-31T23:59:59.000Z" }
+      }
+    }
+  },
+  "views": [
+    { "id": "desk", "audience": "member", "path": "views/desk.html", "collections": ["bookings", "notices"] },
+    { "id": "mine", "audience": "participant", "path": "views/mine.html", "collections": ["bookings", "notices"] }
+  ]
+}

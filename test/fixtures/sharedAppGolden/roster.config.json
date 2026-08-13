@@ -1,0 +1,50 @@
+{
+  "write": [
+    {
+      "cid": "bookings",
+      "statusField": "status",
+      "transitions": {
+        "pending": [
+          "cancelled"
+        ]
+      }
+    }
+  ],
+  "views": [
+    {
+      "id": "mine",
+      "collections": [
+        {
+          "cid": "bookings",
+          "scope": "own",
+          "emailField": "email"
+        },
+        {
+          "cid": "notices",
+          "scope": "all"
+        }
+      ]
+    }
+  ],
+  "submit": {
+    "bookings": {
+      "auth": "verifiedEmail",
+      "emailField": "email",
+      "createFields": [
+        "email",
+        "startAt"
+      ],
+      "selfTransitions": {
+        "pending": [
+          "cancelled"
+        ]
+      },
+      "window": {
+        "fromMs": 1767225600000,
+        "untilMs": 1798761599000
+      }
+    }
+  },
+  "publishedAt": 1700000000000,
+  "name": "Salon"
+}
