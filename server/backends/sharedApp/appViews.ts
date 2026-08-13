@@ -28,20 +28,12 @@
 //   "try the staff page before the customers see it" possible at all, and it is
 //   the same road the schemas already travel (`staging/{cid}` then
 //   `collections/{cid}`).
-import {
-  appViewTierPath,
-  participantScope,
-  projectAppViews,
-  viewConfigDocId,
-  viewDocId,
-  type AppViewTier,
-  type AuthoredApp,
-  type PublishStamp,
-} from "@mulmoclaude/core/collection/server";
+import { appViewTierPath, participantScope, viewConfigDocId, viewDocId, type AuthoredApp, type PublishStamp } from "@mulmoclaude/core/collection/server";
 
 import { randomUUID } from "node:crypto";
 
 import { isRecord } from "../../../common/isRecord.js";
+import { projectAppViews, type AppViewTier } from "./appViewProjection.js";
 import type { SharedAppFailure, SharedAppHandle } from "./context.js";
 import { readAppViewFile } from "./publicView.js";
 import type { WriteStep } from "./writes.js";

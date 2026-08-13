@@ -3,12 +3,13 @@
 // What MulmoTerminal actually writes to `apps/{aid}/{tier}/staged:config` —
 // specifically the half that says what each audience may CHANGE.
 //
-// The projection itself belongs to `@mulmoclaude/core` and is tested there.
-// What is pinned HERE is the join: this repository is the only caller of
-// `projectAppViews` anywhere, it decides which core it is pinned to, and the
-// document it produces is read by a mulmoserver that hand-declares its own
-// parser. So a core bump that renames a field, or drops the per-tier split,
-// has nothing between it and a live app except this file.
+// The projection itself is `appViewProjection.spec.ts` beside this file — pure,
+// and no longer in `@mulmoclaude/core` (see
+// plans/refactor-shared-app-wire-contract.md). What is pinned HERE is the JOIN:
+// the pages read off disk, the tier they land in, and the config document that
+// names them. The document is read by a mulmoserver that hand-declares its own
+// parser, so a rename here has nothing between it and a live app except these
+// two files.
 //
 // The failure it guards against is the one that is invisible on both sides: a
 // participant handed the STAFF transition table draws an approve button, the

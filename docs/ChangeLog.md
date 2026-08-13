@@ -8,6 +8,37 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### The per-tier projection moves here from `@mulmoclaude/core` (#PR)
+
+> **Takes `@mulmoclaude/core@4.0.0`.** Nothing an author writes changes, and no published document
+> changes shape — this is where the code that produces `{tier}/config` lives.
+
+Adding one field to a shared app's `{tier}/config` used to cost three repositories and a human npm
+publish: change `@mulmoclaude/core`, wait for the release, bump here, then teach mulmoserver to read
+it. That is now a change to one file, `server/backends/sharedApp/appViewProjection.ts`.
+
+The reason it can move is that the document has exactly one writer and one reader, and MulmoClaude
+is neither. It does not write a shared collection — `projectAppViews` had no caller outside core
+except this repository's deploy — and it does not read one either:
+`setSharedCollectionsSupport(true)` is called in production only here, and core's own discovery
+*refuses* rather than skips without it.
+
+What stayed in core is the cut line rather than a leftover. `normalizeViews` and `participantScope`
+are what the publish gate refuses a declaration through, and `projectApp` / `projectDeploy` /
+`projectPublish` are what mulmoserver's `test/rules/rules_publish.ts` feeds to the Firestore rules
+emulator — the only test in either repository that proves a projection and `firestore.rules` agree.
+Moving those would have left it with nothing to check. `projectSubmit` is newly exported and shared
+rather than copied: the same `public.submit` declaration is lowered into `config/public`, which the
+rules read, and a second ISO-to-millis conversion is invisible until a submit window silently stops
+closing.
+
+The tests came with the code, as `test/server/backends/appViewProjection.spec.ts`. They are not
+duplicated in core.
+
+Design: [`plans/refactor-shared-app-wire-contract.md`](https://github.com/receptron/mulmoterminal/blob/main/plans/refactor-shared-app-wire-contract.md).
+Its remaining half — a shared wire contract with golden documents, so a rename here fails in
+mulmoserver's suite rather than in a live app — is not done.
+
 ### The staff page can approve, and the people on the roster have an entrance of their own (#1671)
 
 > **Needs a mulmoserver deploy, and every app published again.** `@mulmoclaude/core` 3.15.0
