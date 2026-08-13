@@ -8,7 +8,7 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
-### The per-tier projection moves here from `@mulmoclaude/core` (#PR)
+### The per-tier projection moves here from `@mulmoclaude/core` (#1672)
 
 > **Takes `@mulmoclaude/core@4.0.0`.** Nothing an author writes changes, and no published document
 > changes shape — this is where the code that produces `{tier}/config` lives.
