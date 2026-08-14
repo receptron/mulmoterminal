@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { isLauncherEnvVar, isPathVar, pathFromEnv, sanitizePathEntries, sanitizePtyEnv } from "../../../server/infra/pty-env";
+import { isLauncherEnvVar, isPathVar, pathFromEnv, sanitizePathEntries, sanitizePtyEnv, withFallbackLocale } from "../../../server/infra/pty-env";
 
 describe("isLauncherEnvVar", () => {
   it("flags the vars package-manager launchers inject", () => {
@@ -119,6 +119,44 @@ describe("sanitizePtyEnv", () => {
   it("cleans a windows-cased Path key", () => {
     const out = sanitizePtyEnv({ Path: "C:\\repo\\node_modules\\.bin;C:\\Windows" }, ";");
     expect(out.Path).toBe("C:\\Windows");
+  });
+});
+
+describe("withFallbackLocale", () => {
+  // The bug this exists for: an embedder launched from the macOS GUI (a .app, a LaunchAgent)
+  // inherits launchd's environment, which names NO locale at all. Our tmux client then runs
+  // under C/POSIX, where tmux writes ONE UNDERSCORE PER CELL for any character it cannot map —
+  // so Claude Code's block-element banner logo (▐▛███▜▌) arrived as _______.
+  it("names a UTF-8 locale when the environment names none", () => {
+    expect(withFallbackLocale({ HOME: "/Users/u" }, "darwin").LANG).toBe("en_US.UTF-8");
+  });
+
+  it("treats an empty value as naming no locale (a login shell can export a bare LANG=)", () => {
+    expect(withFallbackLocale({ LANG: "" }, "darwin").LANG).toBe("en_US.UTF-8");
+    expect(withFallbackLocale({ LC_ALL: "", LC_CTYPE: "", LANG: "" }, "darwin").LANG).toBe("en_US.UTF-8");
+  });
+
+  // LC_ALL and LC_CTYPE both outrank LANG, so writing one could not override them anyway.
+  it.each([
+    ["LC_ALL", { LC_ALL: "en_US.UTF-8", LANG: "" }],
+    ["LC_CTYPE", { LC_CTYPE: "en_US.UTF-8" }],
+    ["LANG", { LANG: "ja_JP.UTF-8" }],
+  ])("leaves the environment alone when %s already names a locale", (_case, env) => {
+    expect(withFallbackLocale(env, "darwin")).toEqual(env);
+  });
+
+  // Windows has no such convention and no tmux; introducing a variable it never had is its
+  // own bug waiting to be reported (git-bash reads LANG).
+  it("adds nothing on Windows", () => {
+    expect(withFallbackLocale({ HOME: "C:\\Users\\u" }, "win32")).toEqual({ HOME: "C:\\Users\\u" });
+  });
+
+  it("returns a copy without mutating the input", () => {
+    const env: NodeJS.ProcessEnv = { HOME: "/Users/u" };
+    const out = withFallbackLocale(env, "linux");
+    expect(env.LANG).toBeUndefined();
+    expect(out).not.toBe(env);
+    expect(out.HOME).toBe("/Users/u");
   });
 });
 

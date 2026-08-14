@@ -5,7 +5,7 @@
 import pty from "node-pty";
 import type { IPty } from "node-pty";
 import path from "node:path";
-import { sanitizePtyEnv } from "../infra/pty-env.js";
+import { sanitizePtyEnv, withFallbackLocale } from "../infra/pty-env.js";
 import { resolvePtyLaunchForEnv } from "../infra/resolve-bin.js";
 import { binaryProblemMessage, diagnoseBinary, type BinaryDiagnosis } from "../infra/has-binary.js";
 import { cwdProblemMessage, diagnoseSpawnCwd, type CwdDiagnosis } from "../infra/spawn-cwd.js";
@@ -27,8 +27,18 @@ const PTY_ROWS = 30;
 // the settings `env` block, which can set a variable but not remove one.
 // `extra` is set on the spawned process ON TOP of the sanitized inherited environment —
 // per-session values the child needs and our own process cannot carry (a session id).
+//
+// withFallbackLocale runs INSIDE `unset`, so an explicit unset still wins: it supplies a UTF-8
+// LANG only when our own environment names no locale, which is what an embedder launched from
+// the macOS GUI hands us — and what made the tmux client we spawn below render Claude Code's
+// block-element banner as rows of underscores. See infra/pty-env.ts for the mechanism.
+//
+// This reaches the tmux CLIENT, which is what decides that rendering, and any direct pty. A tmux
+// PANE takes its environment from the tmux SERVER instead, and the server inherits from whichever
+// client first started it — so panes are covered too from the next server start onward, but a
+// server already running under no locale keeps handing panes the old one until it is restarted.
 export function ptyEnv(unset: readonly string[] = [], extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  return { ...withoutUnset(sanitizePtyEnv(process.env, path.delimiter), unset), ...extra };
+  return { ...withoutUnset(withFallbackLocale(sanitizePtyEnv(process.env, path.delimiter), process.platform), unset), ...extra };
 }
 
 /** What a terminal opened in `cwd` is given on top of the inherited environment: the per-tree

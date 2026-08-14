@@ -73,6 +73,37 @@ export function sanitizePathEntries(pathValue: string, delimiter: string): strin
     .join(delimiter);
 }
 
+// The locale variables, in the precedence the C library resolves them by.
+const LOCALE_NAMES = ["LC_ALL", "LC_CTYPE", "LANG"] as const;
+
+// The one we write. Only the CODESET half of it matters here — every consumer below asks
+// "is this UTF-8", not "what language" — but a locale has to be spelled in full to be one.
+const FALLBACK_LOCALE = "en_US.UTF-8";
+
+/** A copy of `env` with a UTF-8 `LANG` when — and only when — it names no locale at all.
+ *
+ *  Not cosmetic. An embedder launched from the macOS GUI (a .app, a LaunchAgent) inherits
+ *  launchd's environment, which carries no locale whatsoever, and nothing between there and here
+ *  puts one back. Our terminals then run under C/POSIX, and the tmux client we spawn switches to
+ *  its non-UTF-8 output path: it writes ONE UNDERSCORE PER CELL for any character it has no DEC
+ *  ACS equivalent for. Claude Code's banner logo is block elements (U+2588 and friends), which
+ *  have none, so it reached the browser as `_______` — while the box drawing around it, which
+ *  tmux DOES have ACS for (─ -> `q`), looked perfectly fine and sent the first investigation
+ *  chasing a WebKit canvas-renderer bug that was never there. Same story for anything else that
+ *  reads the locale before choosing an output encoding (Python's stdout, ncurses TUIs).
+ *
+ *  Only when nothing is set. LC_ALL and LC_CTYPE both outrank LANG, so writing LANG could not
+ *  override them anyway, and a user who exported `LANG=ja_JP.UTF-8` keeps their own. An empty
+ *  value does not count — a login shell can export a bare `LANG=` alongside a real LC_ALL.
+ *
+ *  Windows is left alone: it has no such convention and no tmux, and git-bash reads LANG, so
+ *  introducing a variable that platform never had is its own bug waiting to be filed. */
+export function withFallbackLocale(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): NodeJS.ProcessEnv {
+  if (platform === "win32") return { ...env };
+  const named = LOCALE_NAMES.some((name) => (envValue(env, name) ?? "") !== "");
+  return named ? { ...env } : { ...env, LANG: FALLBACK_LOCALE };
+}
+
 // A copy of `env` safe to hand to a spawned PTY: launcher vars dropped, PATH
 // (any casing — Windows uses "Path") cleaned. Never mutates the input.
 export function sanitizePtyEnv(env: NodeJS.ProcessEnv, delimiter: string): NodeJS.ProcessEnv {
