@@ -406,13 +406,21 @@ async function openDriver(browser: Browser, origin: string): Promise<Driver> {
    *  declares no DOM (`types: ["node"]`), so a closure mentioning `window` would not compile. */
   let stalled = false;
   const evaluate = async (script: string, target?: Frame): Promise<unknown> => {
-    // A script that THREW is not a page that stopped answering: it answered, with a failure, and
-    // every reader here already treats `undefined` as "nothing observed". Only the deadline moves
-    // this flag.
-    const answered = await withDeadline(
-      (target ?? page).evaluate(script).catch(() => undefined),
-      LIMITS.evaluateMs,
-    );
+    // A rejection is NOT a page that stopped answering, and it is not nothing either. It is a
+    // question that could not be put: a getter of the page's own that throws, or a frame that
+    // navigated itself out from under the handle we were holding. Every reader here treats
+    // `undefined` as "nothing observed", so left alone it becomes a page with no controls and no
+    // text — reported as calmly as an empty page, which is the shape of a false green.
+    //
+    // So it goes where the browser's own complaints already go, and travels the path they travel:
+    // per mount into `errors`, per press into that press's `errors`. Said as OUR question failing,
+    // because the reader of that list is the author and the list is otherwise their page's words.
+    const asked = (target ?? page).evaluate(script).catch((err: unknown) => {
+      noise.push(`the preview could not put a question to this page: ${messageOf(err)}`);
+      return undefined;
+    });
+    // Only the deadline moves this flag.
+    const answered = await withDeadline(asked, LIMITS.evaluateMs);
     if (answered === TIMED_OUT) {
       stalled = true;
       return undefined;
