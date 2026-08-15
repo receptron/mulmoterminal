@@ -182,6 +182,11 @@ describe.skipIf(!chromeReady)("a headless run, in a real browser", () => {
     const works = pages[0];
     expect(works?.readied).toBe(true);
     expect(works?.stateDelivered).toBe(true);
+    // AND it was not called unresponsive. The flag is what the report leads with, and it says
+    // nothing below it describes the page — so a flag stuck on true does not add a wrong line, it
+    // disowns every right one. It was stuck on true: the deadline answered `undefined`, which is
+    // also what a healthy `FILL_INPUTS` and a healthy `decline()` return, on every page.
+    expect(works?.unresponsive).toBe(false);
     expect(works?.text).toContain("Curry, Ramen");
     expect(works?.liveForms).toBe(0);
     // The press reached the parent as a submission for the declared collection — and was declined,
@@ -195,6 +200,9 @@ describe.skipIf(!chromeReady)("a headless run, in a real browser", () => {
     const shipped = pages[1];
     expect(shipped?.readied).toBe(false);
     expect(shipped?.stateDelivered).toBe(false);
+    // Deadlocked is not unresponsive. This page answers everything put to it; what it never does
+    // is send `ready`, and the report has a different sentence for that.
+    expect(shipped?.unresponsive).toBe(false);
     expect(shipped?.text).toContain("loading");
     // And the Submit button does nothing at all: the browser blocks the submission BEFORE the
     // `submit` event fires, so the handler that would have called `view.submit` never runs.

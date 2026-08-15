@@ -334,6 +334,18 @@ interface Driver {
   stalled: () => boolean;
 }
 
+/** The deadline expiring, told apart from every answer a script can give.
+ *
+ *  It was `undefined`, and `undefined` is what a perfectly healthy script returns: `FILL_INPUTS`
+ *  is an IIFE with no `return` and `decline()` answers nothing, and both run on every page, on
+ *  every mount. So EVERY page was reported unresponsive — and that verdict is the first line of
+ *  the report, saying the page never got going and that nothing below it describes its behaviour,
+ *  directly above an accurate account of the page drawing and its button reaching the parent. A
+ *  false red costs more than the missing flag would: the author is told to go fix a page that
+ *  works, and the one real thing this flag catches — a script that keeps the frame's thread — is
+ *  now indistinguishable from every other run. */
+const TIMED_OUT = Symbol("the deadline expired");
+
 /** Wait for `work`, but not for ever.
  *
  *  Everything crossing into the browser is a question put to code the author wrote, and an author's
@@ -341,10 +353,10 @@ interface Driver {
  *  fires and an `evaluate` on it never settles. Unbounded, that is not a slow preview — it is a
  *  tool call that never answers, holding the per-repository lock behind it. On the deadline the
  *  answer is `undefined`, which every reader here already treats as "nothing observed". */
-async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | undefined> {
+async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), ms);
+  const deadline = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
   });
   try {
     return await Promise.race([work, deadline]);
@@ -394,11 +406,17 @@ async function openDriver(browser: Browser, origin: string): Promise<Driver> {
    *  declares no DOM (`types: ["node"]`), so a closure mentioning `window` would not compile. */
   let stalled = false;
   const evaluate = async (script: string, target?: Frame): Promise<unknown> => {
+    // A script that THREW is not a page that stopped answering: it answered, with a failure, and
+    // every reader here already treats `undefined` as "nothing observed". Only the deadline moves
+    // this flag.
     const answered = await withDeadline(
       (target ?? page).evaluate(script).catch(() => undefined),
       LIMITS.evaluateMs,
     );
-    if (answered === undefined) stalled = true;
+    if (answered === TIMED_OUT) {
+      stalled = true;
+      return undefined;
+    }
     return answered;
   };
   return {
