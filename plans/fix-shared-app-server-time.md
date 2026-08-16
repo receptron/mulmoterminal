@@ -51,11 +51,11 @@
 2. **mulmoserver#188 のマージと deploy**。**ルール変更は無い**。
    2026-08-16 時点で CI が赤いが、内容ではなく GitHub Actions の課金でジョブが
    起動していない。
-3. **MulmoTerminal のフォームは直っていない。** `@mulmoclaude/collection-plugin` を
-   `^3.1.0` で持っているので、刻まれた `datetime` を編集させない修正（4.2.0）が入って
-   いない。つまりペインの詳細ビューでは、その欄が**空の `datetime-local` として描かれ**、
-   そのまま保存するとルールに拒否される。プラグインの major を跨ぐ更新は別の作業で、
-   それまでは**共有コレクションの stamp 欄をペインから編集しないこと**。
+3. **MulmoTerminal のフォーム**は、`@mulmoclaude/collection-plugin` を `^3.1.0` で
+   持っていたので直っていなかった——ペインの詳細ビューでその欄が**空の
+   `datetime-local` として描かれ**、そのまま保存するとルールに拒否される。
+   `^4.2.0` への更新を [mulmoterminal#1754](https://github.com/receptron/mulmoterminal/pull/1754)
+   で出した。マージするまでは**共有コレクションの stamp 欄をペインから編集しないこと**。
 
 ## 1. 実地で出た形（2026-08-15、アンケートアプリ）
 
