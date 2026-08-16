@@ -18,15 +18,19 @@ import type { HeadlessPageReport, HeadlessPress, HeadlessRun } from "./headlessP
 /** What this run does NOT do to a page written for the roster.
  *
  *  Said on every such page, because the omission is invisible: the page loads, draws and looks
- *  exercised. The parent carrying `viewer` capabilities and answering the three intents lives in
- *  mulmoserver (`AppViewFrame.vue`) and is NOT shared code yet — `@receptron/sharedapp/view`'s
- *  bridge is the public one. Until that is lifted, the limit belongs to the Collections pane too,
- *  which is why it is STATED rather than worked around: a second parent written here would make
- *  the preview disagree with production, which is the one thing it must never do. */
+ *  exercised. It used to be far larger — the parent was the PUBLIC one, so the page got no
+ *  `viewer` at all and drew none of its buttons. That parent now comes from
+ *  `@receptron/sharedapp/view`, the same one mulmoserver puts in front of `/m/` and `/p/`, and it
+ *  carries the capabilities this author resolves to.
+ *
+ *  What is left is the writes. An intent is REFUSED here by name rather than performed, because a
+ *  headless run never writes — so a button is proven to exist, to be reachable and to ask for the
+ *  right thing, and not to succeed. The refusal is reported like any other, which is the
+ *  difference from before: an untested control now says so in its own line. */
 const MEMBER_PAGE_LIMIT =
-  "This page is written for the roster, and only PART of it is exercised here. It loads, it answers the handshake and it gets its records — but the parent running it " +
-  "is the public one, so it carries no `viewer` capabilities and it does not answer `transition`, `assign` or `withdraw`. Controls that depend on those are untested, " +
-  "here and in the Collections pane alike.";
+  "This page is written for the roster. It gets the same `viewer` capabilities the live page would, from the same parent — but a headless run never writes, so " +
+  "`transition`, `assign` and `withdraw` are REFUSED rather than performed. A control that asks for one is reported below as refused, which says it is wired; whether " +
+  "the rules would accept the write is not tested here.";
 
 const quoted = quoteForReport;
 

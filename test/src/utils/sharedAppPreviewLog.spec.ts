@@ -56,12 +56,12 @@ describe("the pane's log", () => {
     expect(block).toContain("`createFields`");
   });
 
-  it("does not blame a roster page for an intent the preview's parent cannot answer", () => {
-    // `transition`, `assign` and `withdraw` come back `not-a-submission` here because the parent
-    // that answers them is mulmoserver's, and the public translation would read as a fault in a
-    // page that did the right thing.
-    const block = render((log) => log.add({ kind: "refused", reason: "not-a-submission", audience: "member" }));
-    expect(block).toContain("expected for `transition`");
+  it("reads a roster page's declined write as the control working, not as a fault", () => {
+    // The member parent judges `transition`, `assign` and `withdraw` and would perform them on the
+    // live page. Here it has nowhere to write, so it answers `read-only` — and the public
+    // translation of a refusal would read as a fault in a page that did the right thing.
+    const block = render((log) => log.add({ kind: "refused", reason: "read-only", audience: "member" }));
+    expect(block).toContain("the control is wired, not that anything is wrong");
   });
 
   it("keeps the deployed rules' refusal, which the screen keeps only until the next attempt", () => {

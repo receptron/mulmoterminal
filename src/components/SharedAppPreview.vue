@@ -20,7 +20,7 @@
 // a role may WRITE is not tested; nobody else exists, so nothing here is concurrent; and it cannot
 // tell whether the Firestore rules a new declaration needs have been deployed at all.
 import { computed, onBeforeUnmount, ref, shallowRef, toRaw, watch } from "vue";
-import { portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE, type PendingSubmit } from "@receptron/sharedapp/view";
+import { memberBridge, portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE, type PendingSubmit } from "@receptron/sharedapp/view";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isRecord } from "../../common/isRecord";
 import { createPreviewLog, renderPreviewLog, type PreviewLogEvent } from "../utils/sharedAppPreviewLog";
@@ -28,9 +28,7 @@ import { useUpdateStatus } from "../composables/useUpdateStatus";
 import {
   previewPageKey,
   type PreviewAudience,
-  type PreviewDataset,
   type PreviewForm,
-  type PreviewFormField,
   type PreviewPage,
   type PreviewUncertainWrite,
   type PreviewWrittenRecord,
@@ -39,76 +37,7 @@ import {
 
 const props = defineProps<{ cwd: string | null }>();
 
-/** The payload, narrowed rather than asserted. Every field has a floor, because a pane that threw
- *  on an unexpected shape would report a server it could not read as an app that will not publish —
- *  two very different things to be told while you are trying to fix a page. */
-function asPayload(value: unknown): SharedAppPreview | null {
-  if (!isRecord(value)) return null;
-  return {
-    aid: typeof value.aid === "string" ? value.aid : "",
-    submit: asSubmit(value.submit),
-    pages: Array.isArray(value.pages) ? value.pages.flatMap(asPage) : [],
-    publicOpen: value.publicOpen === true,
-    fromLiveApp: value.fromLiveApp === true,
-    generatedForm: value.generatedForm === true,
-    formInputs: asFormInputs(value.formInputs),
-    datasets: isRecord(value.datasets) ? Object.fromEntries(Object.entries(value.datasets).map(([key, rows]) => [key, asDatasets(rows)])) : {},
-    unreadable: strings(value.unreadable),
-    warnings: strings(value.warnings),
-  };
-}
-
-/** What a public create may carry, per collection. Narrowed with a floor of `[]` rather than
- *  dropped: an unreadable declaration must make the parent refuse a FIELD, not refuse the whole
- *  collection — the two refusals name different repositories to whoever reads them. */
-const asSubmit = (value: unknown): Record<string, { createFields: string[] }> => {
-  if (!isRecord(value)) return {};
-  return Object.fromEntries(Object.entries(value).map(([cid, spec]) => [cid, { createFields: isRecord(spec) ? strings(spec.createFields) : [] }]));
-};
-
-/** The generated form's inputs. A collection whose inputs cannot be read is DROPPED rather than
- *  drawn empty: an empty form is a Send button that submits nothing, and the author would read the
- *  refusal that follows as a fault in their declaration. */
-const asFormInputs = (value: unknown): PreviewForm => {
-  if (!isRecord(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).flatMap(([cid, fields]) => {
-      const drawn = Array.isArray(fields) ? fields.flatMap(asFormField) : [];
-      return drawn.length === 0 ? [] : [[cid, drawn] as const];
-    }),
-  );
-};
-
-const asFormField = (value: unknown): PreviewFormField[] => {
-  if (!isRecord(value) || typeof value.name !== "string" || value.name === "") return [];
-  const values = strings(value.values);
-  return [
-    {
-      name: value.name,
-      label: typeof value.label === "string" && value.label !== "" ? value.label : value.name,
-      required: value.required === true,
-      type: typeof value.type === "string" ? value.type : "string",
-      ...(values.length === 0 ? {} : { values }),
-    },
-  ];
-};
-
-const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
-
-const AUDIENCES: PreviewAudience[] = ["public", "member", "roster"];
-
-const asPage = (value: unknown): PreviewPage[] => {
-  if (!isRecord(value) || typeof value.id !== "string" || typeof value.html !== "string") return [];
-  const audience = AUDIENCES.find((candidate) => candidate === value.audience);
-  return audience === undefined ? [] : [{ id: value.id, html: value.html, audience }];
-};
-
-const asDatasets = (value: unknown): Record<string, PreviewDataset> => {
-  if (!isRecord(value)) return {};
-  return Object.fromEntries(
-    Object.entries(value).map(([cid, rows]) => [cid, Array.isArray(rows) ? rows.filter((row): row is Record<string, unknown> => isRecord(row)) : []]),
-  );
-};
+import { asPayload } from "../utils/sharedAppPreviewPayload";
 
 const loading = ref(true);
 const declared = ref(false);
@@ -295,15 +224,59 @@ const unwrap = (value: unknown): unknown => {
   return raw;
 };
 
+/** The parent a MEMBER's page gets: the roster and participant pages, which is what `/m/` and
+ *  `/p/` put in front of the same HTML.
+ *
+ *  A second bridge rather than a flag, because a member's ask is not a submission — see
+ *  `memberBridge` in the package. What matters here is that it is the package's and not this
+ *  pane's: while there was only the public one to reach for, a member page previewed here was sent
+ *  a state message with no `viewer` key at all, the injected runtime read `data.viewer || {}`, and
+ *  the page drew none of its buttons. That is indistinguishable from an author who got the
+ *  capability names wrong, and it was diagnosed as exactly that.
+ *
+ *  It performs NOTHING. A transition, an assignment or a withdrawal is a real write against the
+ *  live rules and the pane has no route for one, so every intent is refused — by name, on the
+ *  channel, which the strip below reports. That is the honest answer and it is not silence. */
+const member = memberBridge(
+  {
+    channel: () => {
+      const channel = portChannel(frame.value, (message) => structuredCloneable(message));
+      return {
+        post: (message) => {
+          noteOutbound(message);
+          channel.post(message);
+        },
+        onMessage: channel.onMessage,
+        close: channel.close,
+      };
+    },
+    state: () => datasets.value,
+    // Never a floor. A page whose payload carried no viewer is a page this pane could not resolve
+    // one for, and inventing an empty one here is the bug being fixed.
+    viewer: () => page.value?.viewer ?? { me: null, can: {} },
+  },
+  () => nonce.value,
+);
+
+/** Which parent is talking to the document on screen. The audience decides, exactly as the address
+ *  decides it in production: `/a/` is the public one, `/m/` and `/p/` are the member's. */
+const memberPage = computed(() => page.value !== null && page.value.audience !== "public");
+
 /** Only messages from OUR frame. The sandbox's origin is opaque, so `event.origin` cannot draw
  *  this boundary and `event.source` is what does. */
 const onMessage = (event: MessageEvent) => {
-  if (frame.value !== null && event.source === frame.value.contentWindow) bridge.receive(event.data);
+  if (frame.value === null || event.source !== frame.value.contentWindow) return;
+  if (memberPage.value) {
+    member.receive(event.data);
+    return;
+  }
+  bridge.receive(event.data);
 };
 window.addEventListener("message", onMessage);
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
   bridge.restart();
+  member.forget();
 });
 
 // A new document means a new conversation: the old channel belongs to a document we are no longer
@@ -331,7 +304,10 @@ watch(
   // for the same reason the datasets are.
   () => (page.value === null ? null : keyOf(page.value)),
   () => {
+    // BOTH, always. The page that is going may have been the other audience's, and a channel left
+    // open belongs to a document nobody is looking at any more.
     bridge.restart();
+    member.forget();
     nonce.value = viewNonce();
     // NOT a reset of the log. Switching pages is part of what the author was doing, and the page
     // they came from is often where the fault is — a member page that never readied looks identical
@@ -340,8 +316,16 @@ watch(
   },
 );
 
-// New data, same document — the view asked once and cannot ask again.
-watch(datasets, () => bridge.sendState(), { deep: true });
+// New data, same document — the view asked once and cannot ask again. Sent to whichever parent
+// holds the conversation; the other one has no open channel and its call is a no-op.
+watch(
+  datasets,
+  () => {
+    bridge.sendState();
+    member.sendState();
+  },
+  { deep: true },
+);
 
 /** Every record this preview session wrote, newest first.
  *

@@ -6,6 +6,7 @@
 // exists to remove. The server's own result type extends this with what only it uses.
 //
 // Design: `plans/feat-shared-app-preview.md`.
+import type { Viewer } from "@receptron/sharedapp/view";
 
 /** Who a page was written for. Three audiences, three DOCUMENTS with three sets of rules — never
  *  one page shown three ways. Reading them as interchangeable is how a page written for the front
@@ -17,6 +18,19 @@ export interface PreviewPage {
   id: string;
   html: string;
   audience: PreviewAudience;
+  /** WHO the author is to this page, and what they may change — the same
+   *  `{ me, can }` mulmoserver posts to the live `/m/` and `/p/`, computed from
+   *  the same projection by the same function.
+   *
+   *  Absent on a public page, which has no reader and no roles: `public.submit`
+   *  is judged from the declaration alone, and a `viewer` there would be an
+   *  answer to a question that page never asks.
+   *
+   *  It comes from the SERVER because the client has neither the projection nor
+   *  the author's verified address. Sending the projection instead and letting
+   *  the pane resolve it would be the second implementation this whole change
+   *  exists to remove. */
+  viewer?: Viewer;
 }
 
 export type PreviewDataset = Record<string, unknown>[];

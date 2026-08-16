@@ -102,17 +102,19 @@ describe("narrateHeadlessRun", () => {
     expect(said).toContain("confirmation was already open");
   });
 
-  it("says what a member page's run did NOT cover, and does not blame the page for an intent", () => {
-    // `transition` / `assign` / `withdraw` are answered by a parent that is not shared code yet
-    // (mulmoserver's `AppViewFrame.vue`), so the public parent judging them `not-a-submission` is
-    // expected — reading it back as "you sent a value that is not a string" would send an author
-    // to rewrite a page that is correct.
-    const said = narrate({ audience: "member", presses: [press({ refused: ["not-a-submission"] })] });
-    expect(said).toContain("only PART of it is exercised here");
-    expect(said).toContain("no `viewer` capabilities");
-    expect(said).toContain("expected for `transition`");
+  it("reads a member page's declined write as the control WORKING, not as a fault", () => {
+    // The member parent judges `transition` / `assign` / `withdraw` and would perform them on the
+    // live page; here it has nowhere to write, so it answers `read-only`. Said as a fault, this
+    // would send an author to rewrite a page that is correct — and it is the shape the old report
+    // had, back when the public parent judged an intent `not-a-submission`.
+    const said = narrate({ audience: "member", presses: [press({ refused: ["read-only"] })] });
+    expect(said).toContain("the control is wired, not that anything is wrong");
     expect(said).not.toContain("most often a value that is not a string");
-    // And a PUBLIC page still gets the ordinary translation.
+    // The remaining limit is the WRITE, and it is still stated on every member page.
+    expect(said).toContain("REFUSED rather than performed");
+    // What is no longer claimed: the page DOES get its capabilities now.
+    expect(said).not.toContain("no `viewer` capabilities");
+    // And a PUBLIC page still gets the ordinary translation of a real refusal.
     expect(narrate({ presses: [press({ refused: ["not-a-submission"] })] })).toContain("most often a value that is not a string");
   });
 

@@ -52,12 +52,16 @@ export const HARNESS_HTML = `<!doctype html>
 <body>
 <div id="host"></div>
 <script type="module">
-import { portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE } from "${VIEW_MOUNT}/index.js";
+import { memberBridge, portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE } from "${VIEW_MOUNT}/index.js";
 
 const host = document.getElementById("host");
 let frame = null;
 let datasets = {};
 let config = null;
+// The \`{ me, can }\` this page's audience resolves to, or null for a public one. A member page run
+// without it is the bug this harness reported for months as an author's mistake: the page is handed
+// \`{}\`, draws none of its buttons, and the report says the controls were not there.
+let viewer = null;
 let nonce = viewNonce();
 let outbound = [];
 let submitted = [];
@@ -80,22 +84,36 @@ const cells = {
   readied: { value: false },
 };
 
+const recording = (make) => () => {
+  const channel = make();
+  return {
+    post: (message) => {
+      outbound.push(message);
+      channel.post(message);
+    },
+    onMessage: channel.onMessage,
+    close: channel.close,
+  };
+};
+
+/** The member's parent, for a roster or participant page. It performs nothing — a headless run
+ *  never writes — so every intent is refused BY NAME on the channel, which the report reads back
+ *  out of \`outbound\`. */
+const member = memberBridge(
+  {
+    channel: recording(() => portChannel(frame)),
+    state: () => datasets,
+    viewer: () => viewer ?? { me: null, can: {} },
+  },
+  () => nonce,
+);
+
 const bridge = viewBridge(
   {
-    // Wrapped so every message the parent sends is recorded on its way out. The refusals are only
-    // visible here: they are answered on the port and never drawn, which is exactly why an author
-    // watching the screen cannot see them.
-    channel: () => {
-      const channel = portChannel(frame);
-      return {
-        post: (message) => {
-          outbound.push(message);
-          channel.post(message);
-        },
-        onMessage: channel.onMessage,
-        close: channel.close,
-      };
-    },
+    // Recorded on its way out, like the member parent's above. The refusals are only visible here:
+    // they are answered on the port and never drawn, which is exactly why an author watching the
+    // screen cannot see them.
+    channel: recording(() => portChannel(frame)),
     // Never reached: every confirmation is declined. Here so that a change which starts accepting
     // has to delete this sentence first.
     submit: async () => ({ ok: false, error: "a headless preview never writes" }),
@@ -108,7 +126,13 @@ const bridge = viewBridge(
 
 // Only our frame. The sandbox's origin is opaque, so \`event.origin\` cannot draw this line.
 window.addEventListener("message", (event) => {
-  if (frame !== null && event.source === frame.contentWindow) bridge.receive(event.data);
+  if (frame === null || event.source !== frame.contentWindow) return;
+  // The audience decides which parent answers, exactly as the address does in production.
+  if (viewer !== null) {
+    member.receive(event.data);
+    return;
+  }
+  bridge.receive(event.data);
 });
 
 const refusals = () => outbound.filter((message) => message.type === VIEW_MESSAGE.result && message.ok === false).map((message) => String(message.error));
@@ -118,9 +142,11 @@ window.__preview = {
    *  page in its starting state rather than against whatever the previous press left behind. */
   render(page) {
     bridge.restart();
+    member.forget();
     outbound = [];
     submitted = [];
     datasets = page.datasets;
+    viewer = page.viewer ?? null;
     config = page.submit === null ? null : { submit: page.submit };
     nonce = viewNonce();
     if (frame !== null) frame.remove();

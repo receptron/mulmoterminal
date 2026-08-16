@@ -29,6 +29,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isRecord } from "../../../common/isRecord.js";
 import type { PreviewAudience, PreviewDataset } from "../../../common/sharedAppPreview.js";
+import type { Viewer } from "@receptron/sharedapp/view";
 import { previewPageKey } from "../../../common/sharedAppPreview.js";
 import { previewSharedApp } from "./preview.js";
 import { VIEW_MOUNT, HARNESS_HTML, type HarnessObservation } from "./headlessHarness.js";
@@ -46,6 +47,13 @@ export interface HeadlessPageInput {
    *  which does not switch the parent's check off but makes it refuse everything with
    *  `unknown-collection`, blaming a declaration that is correct. */
   submit: Record<string, { createFields: string[] }> | null;
+  /** WHO the author is to this page and what they may change, for a member or participant page.
+   *
+   *  `undefined` for a public one, and that is what SELECTS the parent in the harness — the same
+   *  decision the address makes in production. A member page run without it gets the public parent,
+   *  which sends no `viewer` at all: the page draws none of its buttons and the report says its
+   *  controls were not there, which is a false account of a page that is fine. */
+  viewer?: Viewer | undefined;
 }
 
 /** What one press produced. */
@@ -462,7 +470,9 @@ async function openDriver(browser: Browser, origin: string): Promise<Driver> {
       stalled = false;
       // The render is awaited on ITS OWN deadline (`evaluate`'s), because what it waits for is the
       // frame's `load` — which a script that never returns never reaches.
-      await evaluate(`window.__preview.render(${JSON.stringify({ html: input.html, datasets: input.datasets, submit: input.submit })})`);
+      await evaluate(
+        `window.__preview.render(${JSON.stringify({ html: input.html, datasets: input.datasets, submit: input.submit, viewer: input.viewer ?? null })})`,
+      );
       await page.waitForFunction("window.__preview.observe().readied", { timeout: LIMITS.readyMs }).catch(() => undefined);
       await new Promise((resolve) => setTimeout(resolve, LIMITS.settleMs));
     },
@@ -663,6 +673,7 @@ export async function headlessPreview(root: string): Promise<HeadlessRun> {
     audience: page.audience,
     html: page.html,
     datasets: preview.datasets[previewPageKey(page.audience, page.id)] ?? {},
+    ...(page.viewer === undefined ? {} : { viewer: page.viewer }),
     submit: Object.keys(preview.submit).length > 0 ? preview.submit : null,
   }));
   return runPagesHeadless(inputs);

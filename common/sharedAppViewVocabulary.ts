@@ -30,18 +30,22 @@ export const REFUSALS: Record<string, string> = {
   cancelled: "the confirmation was declined",
 };
 
-/** The same refusal, read on a page whose actions are not submissions.
+/** What a member or participant page is told when it asks for a write.
  *
- *  `transition`, `assign` and `withdraw` are what a member or participant page sends, and the
- *  parent that runs in a preview judges submissions only — so it answers them `not-a-submission`,
- *  and the ordinary translation above would blame the page for something it did correctly. */
-export const NOT_A_SUBMISSION_ON_A_MEMBER_PAGE =
-  "the message was not a submission. On this page that is expected for `transition`, `assign` and `withdraw`: the parent that answers those is not the one running here " +
-  "(see the note above). It is a real fault only if the page called `submit`.";
+ *  `transition`, `assign` and `withdraw` reach the member parent, which judges them and would
+ *  perform them on the live page — here it has nowhere to write, so it answers `read-only`. That
+ *  is a GOOD outcome and has to read like one: the ask arrived, in the right shape, and was
+ *  declined for the reason every preview declines a write.
+ *
+ *  It replaced a longer note saying the parent answering intents "is not the one running here",
+ *  which was true while the preview had only the public bridge and is not any more. */
+export const READ_ONLY_ON_A_MEMBER_PAGE =
+  "the preview does not write, so it declined. The ask itself was well formed and reached the parent — this line means the control is wired, not that anything is wrong. " +
+  "Whether the deployed rules would accept the write is a different question and is not answered here.";
 
 /** One refusal, in the words that fit the page it happened on. */
 export const explainRefusal = (reason: string, audience: PreviewAudience): string => {
-  if (reason === "not-a-submission" && audience !== "public") return NOT_A_SUBMISSION_ON_A_MEMBER_PAGE;
+  if (reason === "read-only" && audience !== "public") return READ_ONLY_ON_A_MEMBER_PAGE;
   return REFUSALS[reason] ?? reason;
 };
 
