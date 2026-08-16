@@ -283,6 +283,11 @@ describe("SharedAppPreview", () => {
     vi.stubGlobal("fetch", answering(memberPayload()));
     const wrapper = await mountPreview();
     const { answers } = await connect(wrapper);
+    // A port's delivery is a MACROTASK, so `flushPromises` alone does not guarantee it has
+    // arrived. It happened to on Linux and macOS and did not on Windows — a test that passes by
+    // being fast enough is a test that reports a working feature as broken on somebody else's
+    // machine.
+    await settle();
     const state = answers.find((message) => message.type === "mc-public-view:state");
     expect(state).toBeDefined();
     expect(state?.viewer).toEqual({ me: "owner@gym.jp", can: { bookings: MEMBER_CAPABILITY } });
@@ -295,6 +300,11 @@ describe("SharedAppPreview", () => {
   it("sends no viewer to a public page", async () => {
     const wrapper = await mountPreview();
     const { answers } = await connect(wrapper);
+    // A port's delivery is a MACROTASK, so `flushPromises` alone does not guarantee it has
+    // arrived. It happened to on Linux and macOS and did not on Windows — a test that passes by
+    // being fast enough is a test that reports a working feature as broken on somebody else's
+    // machine.
+    await settle();
     const state = answers.find((message) => message.type === "mc-public-view:state");
     expect(state).toBeDefined();
     expect(state).not.toHaveProperty("viewer");
@@ -328,6 +338,35 @@ describe("SharedAppPreview", () => {
     const wrapper = await mountPreview();
     await speakFromFrame(wrapper, { type: "mc-public-view:notice", nonce: nonceOf(wrapper), code: "error", detail: "boom" });
     expect(await copyBlock(wrapper)).toContain("the page raised an error nothing caught");
+    wrapper.unmount();
+  });
+
+  // A member page that arrives WITHOUT capabilities. The pane must not hand it an invented empty
+  // viewer — that is the no-controls page this whole change removes — and it must not fall back to
+  // the public parent quietly either, which puts the author in front of the same blank page with
+  // nothing to read. The cause is not in their page: it is a host too old to resolve them, or an
+  // answer in a shape this pane could not narrow.
+  it("says so when a member page arrives with no capabilities, rather than drawing a blank one", async () => {
+    vi.stubGlobal("fetch", answering(payload({ pages: [{ id: "desk", html: PAGE, audience: "member" }], datasets: { "member:desk": { bookings: [] } } })));
+    const wrapper = await mountPreview();
+    const block = await copyBlock(wrapper);
+    expect(block).toContain("arrived with no capabilities");
+    expect(block).toContain("The page is not at fault");
+    // And it is COUNTED, so the pane's own indicator lights: a line nobody is pointed at is a line
+    // nobody reads.
+    expect(block).toContain("1 problem");
+    wrapper.unmount();
+  });
+
+  // Whichever parent answered it. The handshake is the line above which nothing else can be
+  // trusted, and the pane watches ONE cell for it — wired to the public parent alone, a member page
+  // that readied perfectly showed no handshake at all.
+  it("logs the handshake for a member page too", async () => {
+    vi.stubGlobal("fetch", answering(memberPayload()));
+    const wrapper = await mountPreview();
+    await connect(wrapper);
+    await settle();
+    expect(await copyBlock(wrapper)).toContain("the page answered the handshake");
     wrapper.unmount();
   });
 

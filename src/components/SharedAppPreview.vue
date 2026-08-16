@@ -20,7 +20,7 @@
 // a role may WRITE is not tested; nobody else exists, so nothing here is concurrent; and it cannot
 // tell whether the Firestore rules a new declaration needs have been deployed at all.
 import { computed, onBeforeUnmount, ref, shallowRef, toRaw, watch } from "vue";
-import { memberBridge, portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE, type PendingSubmit } from "@receptron/sharedapp/view";
+import { memberBridge, portChannel, publicViewSrcdoc, viewBridge, viewNonce, VIEW_MESSAGE, type PendingSubmit, type Viewer } from "@receptron/sharedapp/view";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 import { isRecord } from "../../common/isRecord";
 import { createPreviewLog, renderPreviewLog, type PreviewLogEvent } from "../utils/sharedAppPreviewLog";
@@ -251,9 +251,14 @@ const member = memberBridge(
       };
     },
     state: () => datasets.value,
-    // Never a floor. A page whose payload carried no viewer is a page this pane could not resolve
-    // one for, and inventing an empty one here is the bug being fixed.
-    viewer: () => page.value?.viewer ?? { me: null, can: {} },
+    // NO FLOOR. This parent is chosen only for a page that HAS a viewer (see `memberPage`), so
+    // there is nothing to fall back to — and inventing `{ me: null, can: {} }` here is the exact
+    // bug this whole change removes: a page drawing no controls, with nothing anywhere saying why.
+    viewer: () => page.value?.viewer ?? UNRESOLVED_VIEWER,
+    // The SAME cell the public parent writes, so the handshake is logged whichever parent answered
+    // it. Watched below rather than recorded here: the cell is what the bridge actually writes, so
+    // nothing can move without the log seeing it.
+    readied: cells.readied,
     // The same log the public parent writes to. A member page can throw before it ever readies —
     // the page that sits on its loading state — and without this the pane would report that page
     // as silent, which is the one thing it exists not to do.
@@ -262,9 +267,24 @@ const member = memberBridge(
   () => nonce.value,
 );
 
-/** Which parent is talking to the document on screen. The audience decides, exactly as the address
- *  decides it in production: `/a/` is the public one, `/m/` and `/p/` are the member's. */
-const memberPage = computed(() => page.value !== null && page.value.audience !== "public");
+/** Answering a `viewer` question for a page that has none. Unreachable — `memberPage` is what
+ *  selects this parent and it requires one — and here so that a future change which loses that
+ *  guarantee produces an empty-capability page WITH a line in the log above, rather than the silent
+ *  no-controls page this whole change removes. */
+const UNRESOLVED_VIEWER: Viewer = { me: null, can: {} };
+
+/** Which parent is talking to the document on screen.
+ *
+ *  The audience decides WHICH parent a page should have — `/a/` is the public one, `/m/` and `/p/`
+ *  are the member's, exactly as the address decides it in production. But the member parent needs
+ *  capabilities to be worth choosing, so the test is that the payload actually carried them: a
+ *  member page without a `viewer` would otherwise be handed an empty one and draw no controls,
+ *  which is the failure being fixed rather than a smaller version of the fix.
+ *
+ *  That case is REPORTED. Falling back to the public parent quietly would put an author back in
+ *  front of the same blank page with nothing to read — and the cause is not in their page at all,
+ *  it is a host too old to resolve capabilities, or a payload this pane could not narrow. */
+const memberPage = computed(() => page.value !== null && page.value.audience !== "public" && page.value.viewer !== undefined);
 
 /** Only messages from OUR frame. The sandbox's origin is opaque, so `event.origin` cannot draw
  *  this boundary and `event.source` is what does. */
@@ -317,6 +337,14 @@ watch(
     // they came from is often where the fault is — a member page that never readied looks identical
     // to one nobody opened.
     if (page.value !== null) remember({ kind: "page", id: page.value.id, audience: page.value.audience });
+    // Said once per page, and counted as a problem: everything below it is a report about a page
+    // running under the wrong parent.
+    if (page.value !== null && page.value.audience !== "public" && page.value.viewer === undefined) {
+      remember({
+        kind: "host",
+        note: "this page is written for the roster but arrived with no capabilities, so it is being run under the PUBLIC parent — it will be sent no `viewer` and its member controls cannot work. The page is not at fault: either this server could not resolve them, or its answer was in a shape this pane could not read.",
+      });
+    }
   },
 );
 

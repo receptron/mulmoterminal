@@ -104,6 +104,11 @@ const member = memberBridge(
     channel: recording(() => portChannel(frame)),
     state: () => datasets,
     viewer: () => viewer ?? { me: null, can: {} },
+    // THE SAME CELL the public parent writes, because \`observe()\` reads one and the report puts
+    // "It NEVER answered the handshake" at the top of a page whose value is false — over a
+    // paragraph saying nothing below describes the page's behaviour. Wired to the public bridge
+    // alone, every healthy member page was reported that way.
+    readied: cells.readied,
   },
   () => nonce,
 );
