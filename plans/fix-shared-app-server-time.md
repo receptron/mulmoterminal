@@ -25,7 +25,7 @@
 | P0c | **core が住所**。sharedapp は既に core を peer に持ち、両ホストも core に依存していた — 新しい辺も新しいパッケージも要らない。依存関係が決めた | — |
 | P0d | **codec**。計画の 2 択（merge にする／書く直前に戻す）はどちらも不要だった。読み書きが同じ継ぎ目を通っていたので、読みで文字列に落とし書きで戻せば、全置換のまま穴が閉じる | — |
 | P1 / P1b / P3 | `collection/core/serverTime.ts` と store の読み書き、記録の lint、カレンダーの配置。フォームの読み取り専用化も | [mulmoclaude#2918](https://github.com/receptron/mulmoclaude/pull/2918)（core 4.2.0 / collection-plugin 4.2.0） |
-| P2 | 自分の Firestore の読みで同じ復号（core の store を通らないため） | [mulmoserver#188](https://github.com/receptron/mulmoserver/pull/188) |
+| P2 | 自分の Firestore の読みで同じ復号（core の store を通らないため） | receptron/mulmoserver#188（**private**。リンクは外部からは 404 に見える） |
 | P0b / P5 | 順位の回帰テスト、テンプレとスキルの文言 | [mulmoterminal#1747](https://github.com/receptron/mulmoterminal/pull/1747) |
 
 **正規形**: `2026-08-15T23:05:54.605987654Z`（UTC・小数 9 桁・`Z`）。辞書順＝時刻順なので、
@@ -54,7 +54,7 @@
 
 1. **P0-live** — gym テンプレのアプリで、順番を空けた 2 件の順位が申込順どおりか。
    3b で測ったのはメカニズムで、本番の経路は通していない。
-2. **mulmoserver#188 のマージと deploy**。**ルール変更は無い**。
+2. **receptron/mulmoserver#188 のマージと deploy**。**ルール変更は無い**。
    2026-08-16 時点で CI が赤いが、内容ではなく GitHub Actions の課金でジョブが
    起動していない。
 3. **MulmoTerminal のフォーム**は、`@mulmoclaude/collection-plugin` を `^3.1.0` で
