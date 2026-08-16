@@ -41,8 +41,9 @@ import { planAppViewTiers, type TierPlan } from "./appViews.js";
 import { publicFormOf, type PublicForm } from "./publicForm.js";
 import { declaredView, readAppViewFile } from "./publicView.js";
 import { isRecord } from "../../../common/isRecord.js";
-import { viewerFor, writableFields } from "@receptron/sharedapp/view";
-import { projectedWritesOf } from "@receptron/sharedapp";
+// Both from `/view`, which is where the PARENT's vocabulary lives — and where the read-back has to
+// be: the root entry reaches the compiler, and the compiler imports core's server half at runtime.
+import { projectedWritesOf, viewerFor, writableFields } from "@receptron/sharedapp/view";
 import {
   previewPageKey,
   type PreviewDataset,
