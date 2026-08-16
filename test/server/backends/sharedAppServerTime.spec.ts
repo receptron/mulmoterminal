@@ -83,15 +83,25 @@ describe("a server-stamped field, as a page receives it", () => {
     expect(structuredClone(row).createdAt).toBe(SAME_MS);
   });
 
-  it("is decoded from every shape a stored stamp arrives in", () => {
+  it("is decoded only where the schema declares a datetime", () => {
     // core owns this, and it is asserted here because this repository depends on it happening
     // before a record reaches a projection: a fake `FirestoreDocs` in another spec bypasses the
-    // real adapter, so nothing else in this repository would notice it stopping.
+    // real store, so nothing else here would notice it stopping.
+    const schema = {
+      fields: {
+        id: { type: "string" },
+        createdAt: { type: "datetime" },
+        note: { type: "string" },
+      },
+    };
     const parts = { seconds: 1786835154, nanoseconds: 605000000 };
-    expect(decodeRecordTimes({ id: "b1", createdAt: parts })).toEqual({ id: "b1", createdAt: EARLY });
-    expect(decodeRecordTimes({ id: "b1", createdAt: structuredClone(parts) })).toEqual({ id: "b1", createdAt: EARLY });
-    expect(decodeRecordTimes({ id: "b1", createdAt: { type: "firestore/timestamp/1.0", ...parts } })).toEqual({ id: "b1", createdAt: EARLY });
+    expect(decodeRecordTimes({ id: "b1", createdAt: parts }, schema)).toEqual({ id: "b1", createdAt: EARLY });
+    // A value with the same SHAPE in a field the schema calls a string — or in a key it never
+    // mentions — is left alone. Records may carry both, and re-typing them would be corrupting
+    // live data on a guess.
+    const lookalike = { id: "b1", note: { seconds: 30, nanoseconds: 0 }, duration: { seconds: 30, nanoseconds: 0 } };
+    expect(decodeRecordTimes(lookalike, schema)).toEqual(lookalike);
     // A civil datetime an author typed is left exactly as it is.
-    expect(decodeRecordTimes({ id: "b1", startsAt: "2026-08-15T10:00" })).toEqual({ id: "b1", startsAt: "2026-08-15T10:00" });
+    expect(decodeRecordTimes({ id: "b1", createdAt: "2026-08-15T10:00" }, schema)).toEqual({ id: "b1", createdAt: "2026-08-15T10:00" });
   });
 });
