@@ -36,19 +36,17 @@ const manifestAt = (dir: string): Manifest => JSON.parse(readFileSync(join(dir, 
 
 const pluginDir = (pkg: string): string => join(root, "node_modules", pkg);
 
-/** Every bundled plugin, listed rather than discovered: a plugin that stops declaring core, or
- *  stops nesting its own, must still be READ — a discovered list would simply not find it. */
-const PLUGINS = [
-  "@mulmoclaude/accounting-plugin",
-  "@mulmoclaude/chart-plugin",
-  "@mulmoclaude/collection-plugin",
-  "@mulmoclaude/form-plugin",
-  "@mulmoclaude/google-plugin",
-  "@mulmoclaude/html-plugin",
-  "@mulmoclaude/markdown-plugin",
-  "@mulmoclaude/mulmoscript-plugin",
-  "@mulmoclaude/x-plugin",
-] as const;
+/** Every bundled plugin, taken from OUR OWN manifest rather than typed out here.
+ *
+ *  A hand-kept list is the failure this file would otherwise have: a plugin added to
+ *  `package.json` and not to the list is bundled, ships, and is never checked — the guard passes
+ *  by not looking. `package.json` is where "bundled" is actually decided, so it is what is read.
+ *
+ *  It is the DEPENDENCIES that are read, not the directory: a plugin pulled in transitively by
+ *  another package is not one of ours to keep compatible. */
+const PLUGINS: string[] = Object.keys(manifestAt(root).dependencies ?? {})
+  .filter((name) => /^@mulmoclaude\/.*-plugin$/u.test(name))
+  .sort();
 
 /** Plugins that name no core at all, in either list.
  *
@@ -91,6 +89,13 @@ function satisfiesCaret(version: string, range: string): boolean {
 }
 
 describe("the core each bundled plugin runs against", () => {
+  it("has plugins to check, and reads them from what we actually bundle", () => {
+    // Guards the reading itself: a manifest key that changed shape, or a filter that stopped
+    // matching, would empty this list and every check below would pass on nothing.
+    expect(PLUGINS.length).toBeGreaterThan(5);
+    expect(PLUGINS).toContain("@mulmoclaude/collection-plugin");
+  });
+
   it("every plugin either names a core or is recorded as naming none", () => {
     const silent = PLUGINS.filter((pkg) => declaredCoreOf(pkg) === undefined);
     // Both directions: a plugin that newly drops its declaration has to be looked at, and a
