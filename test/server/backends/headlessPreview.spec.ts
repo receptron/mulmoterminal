@@ -19,7 +19,7 @@
 // browser is an optional dependency of this server (see `browserOrProblem`), and a machine without
 // one gets a headless preview that says so rather than a suite that goes red.
 import { beforeAll, describe, expect, it } from "vitest";
-import { runPagesHeadless, type HeadlessPageInput, type HeadlessPageReport } from "../../../server/backends/sharedApp/headlessPreview.js";
+import { LIMITS, runPagesHeadless, type HeadlessPageInput, type HeadlessPageReport } from "../../../server/backends/sharedApp/headlessPreview.js";
 
 /** Whether Chrome is on this machine, asked by STARTING one and closing it again.
  *
@@ -173,6 +173,24 @@ const POISONED = `
   window.__MC_APP_VIEW.ready();
 </script>`;
 
+/** A page that answers everything EXCEPT the question about its screen text.
+ *
+ *  The hang is aimed by the BUDGET the query asks for (`LIMITS.textChars`), so only that one
+ *  question is left outstanding: hang them all and the page has no controls either, and there is
+ *  no press left to prove anything about. */
+const hangsOnText = (body: string, wires: boolean): string => {
+  const close = "</scr" + "ipt>";
+  return `${body}<script>
+    const slice = String.prototype.slice;
+    String.prototype.slice = function (from, to) {
+      return to === ${LIMITS.textChars} ? new Promise(() => {}) : slice.call(this, from, to);
+    };
+    const view = window.__MC_APP_VIEW;
+    view.onState(() => {});
+    ${wires ? `document.getElementById("go").addEventListener("click", () => view.submit("orders", { name: "x" }));` : ""}
+    view.ready();${close}`;
+};
+
 const page = (id: string, html: string): HeadlessPageInput => ({ id, audience: "public", html, datasets, submit });
 
 describe.skipIf(!chromeReady)("a headless run, in a real browser", () => {
@@ -287,6 +305,34 @@ describe.skipIf(!chromeReady)("a document that breaks the questions put to it", 
     // it says something else.
     expect(poisoned?.unresponsive).toBe(false);
   }, 240_000);
+
+  it("says the survey was refused, rather than reporting a control that went away", async () => {
+    // The press is taken on a mount of its own, and the control is named FROM THAT MOUNT — so a
+    // survey that REJECTS there comes back empty, which is indistinguishable from a page that
+    // dropped the control while its inputs were filled. Both arrive at the same "control 1, not
+    // clickable" line; only one of them means the run never got to look.
+    //
+    // The refusal is aimed at the second survey by what runs before it: the screen text is read
+    // once per PAGE, not once per press, so a page can tell the two mounts apart by whether it has
+    // been asked for its text yet.
+    const close = "</scr" + "ipt>";
+    const refuses = `<button type="button" id="go">Order</button><script>
+      let asked = false;
+      const slice = String.prototype.slice;
+      String.prototype.slice = function (from, to) {
+        if (to === ${LIMITS.textChars}) asked = true;
+        if (to === 60 && !asked) throw new Error("this page will not be surveyed twice");
+        return slice.call(this, from, to);
+      };
+      window.__MC_APP_VIEW.onState(() => {});
+      window.__MC_APP_VIEW.ready();${close}`;
+    const run = await runPagesHeadless([page("refuses", refuses)]);
+    expect(run.ok).toBe(true);
+    if (!run.ok) return;
+    const press = run.pages[0]?.presses[0];
+    expect(press?.notClickable).toBe(true);
+    expect(press?.errors.some((line) => line.includes("could not put a question"))).toBe(true);
+  }, 240_000);
 });
 
 describe.skipIf(!chromeReady)("a document that stops answering", () => {
@@ -303,6 +349,36 @@ describe.skipIf(!chromeReady)("a document that stops answering", () => {
     expect(run.ok).toBe(true);
     if (!run.ok) return;
     expect(run.pages[0]?.unresponsive).toBe(true);
+  }, 240_000);
+
+  it("still says a question ran out of time after the presses have mounted over it", async () => {
+    // ONE question hangs here — the screen text — and everything else about the page answers
+    // normally: its button is found, pressed, and reaches the parent. The flag is cleared by every
+    // mount, and every press mounts again, so read at the end it answers for the last press alone:
+    // this page came back with an empty screen, no reason given, and a clean bill.
+    const run = await runPagesHeadless([page("hangs", hangsOnText(`<button type="button" id="go">Order</button>`, true))]);
+    expect(run.ok).toBe(true);
+    if (!run.ok) return;
+    const hung = run.pages[0];
+    expect(hung?.text).toBe("");
+    expect(hung?.presses[0]?.submitted).toEqual({ cid: "orders", fields: ["name"] });
+    expect(hung?.unresponsive).toBe(true);
+  }, 240_000);
+
+  it("does not read the abandoned question's failure onto the next page", async () => {
+    // Giving up on a question does not cancel it. The browser still holds it, and it rejects when
+    // the frame it was asked of goes away — which, for a page with nothing to press, is the mount
+    // of the NEXT page. Recorded against whatever is current at that moment, the hung page's
+    // failure is filed under the healthy one, and the author is sent to fix a page nothing is
+    // wrong with.
+    const run = await runPagesHeadless([page("hangs", hangsOnText("<div>nothing to press</div>", false)), page("works", WORKS)]);
+    expect(run.ok).toBe(true);
+    if (!run.ok) return;
+    expect(run.pages[0]?.unresponsive).toBe(true);
+    const works = run.pages[1];
+    expect(works?.errors.some((line) => line.includes("could not put a question"))).toBe(false);
+    expect(works?.unresponsive).toBe(false);
+    expect(works?.presses[0]?.submitted).toEqual({ cid: "orders", fields: ["name"] });
   }, 240_000);
 });
 
