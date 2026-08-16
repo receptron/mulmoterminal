@@ -36,7 +36,10 @@ const props = defineProps<{
   parked?: boolean | undefined;
 }>();
 const emit = defineEmits<{
-  (e: "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "toggle-park"): void;
+  (
+    e:
+      "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "toggle-prompts" | "toggle-park",
+  ): void;
 }>();
 
 // The unavailable case names the fix, not just the state: the registration is per directory and
@@ -55,6 +58,10 @@ const filesClass = computed(() => (props.filesOpen ? CELL_BTN_ACTIVE : CELL_BTN)
 // A disabled Canvas cannot be the open pane, so the pressed style never has to survive `disabled:`.
 const canvasClass = computed(() => (props.rightPane === "canvas" ? CELL_BTN_ACTIVE : CELL_BTN_DISABLEABLE));
 const toolsClass = computed(() => (props.rightPane === "tools" ? CELL_BTN_ACTIVE : CELL_BTN));
+// "Prompts" names whose text it is, which is the whole distinction from the Activity timeline in
+// the same header: that one is what the agent RAN, this one is what it was asked for.
+const promptsClass = computed(() => (props.rightPane === "prompts" ? CELL_BTN_ACTIVE : CELL_BTN));
+const promptsTitle = computed(() => (props.rightPane === "prompts" ? "Hide prompts" : "Show the prompts you sent this session"));
 const collectionsClass = computed(() => (props.rightPane === "collections" ? CELL_BTN_ACTIVE : CELL_BTN));
 // Names the DIRECTORY as the scope, because that is the part with no other affordance: nothing
 // else in the header says the pane is this cell's collections rather than the workspace's.
@@ -122,6 +129,21 @@ const parkTitle = computed(() => (props.parked ? "Wake this terminal" : "Set asi
     @click="emit('toggle-tools')"
   >
     <span class="material-symbols-outlined" aria-hidden="true">build</span>
+  </button>
+  <!-- Shown on every cell type while enlarged, like tools: a cell with no agent has no prompts,
+       and a pane that SAYS so is better than a button that is missing for a reason nobody can
+       see. -->
+  <button
+    v-if="expanded"
+    data-testid="cell-prompts-btn"
+    class="cell-btn"
+    :class="promptsClass"
+    :aria-pressed="rightPane === 'prompts'"
+    :title="promptsTitle"
+    :aria-label="promptsTitle"
+    @click="emit('toggle-prompts')"
+  >
+    <span class="material-symbols-outlined" aria-hidden="true">forum</span>
   </button>
   <!-- Scoped to THIS cell's directory — a Project is a directory, so the cell is the picker.
        Only where the directory HAS the collection tools — OR where the pane is already open,

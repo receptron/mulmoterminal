@@ -137,6 +137,7 @@ import { feedWorkerSpawnOptions } from "./backends/feed-worker-options.js";
 import { listProjectRoots } from "./infra/project-root.js";
 import { initMulmoScriptBackend } from "./backends/mulmoscript.js";
 import { createSessionLifecycle, SESSIONS_CHANNEL } from "./session/lifecycle.js";
+import { PROMPT_SUBMITTED_CHANNEL, type PromptSubmittedEvent } from "../common/promptChannel.js";
 import { mountAppRoutes } from "./routes/app-routes.js";
 import { allowedToolNames, autoAllowedToolNames } from "./infra/plugins-registry.js";
 import { GUI_SERVER_ID } from "../common/toolGroups.js";
@@ -338,6 +339,7 @@ const spawnDeps: SpawnDeps = {
   uiPort: String(process.env.CLIENT_PORT || PORT),
   publishSessionCreated: (sessionId) => pubsub?.publish(SESSIONS_CHANNEL, { id: sessionId, working: false, event: "created" }),
   publishActivity: (sessionId) => publishActivity(sessionId),
+  publishPromptSubmitted: (sessionId) => pubsub?.publish(PROMPT_SUBMITTED_CHANNEL, { sessionId } satisfies PromptSubmittedEvent),
 };
 const { spawnClaudePty } = createClaudeSpawner(spawnDeps);
 const { spawnCodexPty } = createCodexSpawner(spawnDeps);
@@ -938,6 +940,19 @@ server.on("error", (err) => {
 // takes a number — the (port, cb) form we used before accepted either.
 server.listen(Number(PORT), BIND_HOST, () => {
   console.log(`mulmoterminal running at http://localhost:${PORT}`);
+  // The dev supervisor (scripts/dev-server.mjs) resets its crash count on THIS, not on how long
+  // the process lived. Everything above runs before the bind and can take any amount of time, so
+  // elapsed time never proved the port was reached — which is how a slow crash loop stayed
+  // invisible (#1735).
+  //
+  // Three guards, and none is decoration. `process.send` is undefined unless a parent opened an
+  // IPC channel, so this is a no-op under `npx mulmoterminal`. `process.connected` is the one
+  // that matters: after the parent disconnects, `send` STAYS a function, and calling it raises
+  // ERR_IPC_CHANNEL_CLOSED **asynchronously** — measured, it lands as an uncaughtException and
+  // kills the process, so neither `?.` nor a try/catch stops it. That is reachable: Ctrl+C on the
+  // supervisor while this server is still in its ~3s of setup. The callback catches the same
+  // error for a channel that closes between the check and the write.
+  if (process.connected) process.send?.({ type: "listening", port: Number(PORT) }, undefined, undefined, () => {});
   if (!isLoopbackBinding(server.address())) {
     console.warn(bindSecurityWarning(BIND_HOST, PORT, browserHostnames));
   }

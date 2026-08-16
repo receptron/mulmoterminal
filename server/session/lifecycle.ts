@@ -17,6 +17,7 @@
 import {
   activity,
   aiTitles,
+  claudeSessionIds,
   hiddenSessions,
   knownSessions,
   lastPrompts,
@@ -158,6 +159,10 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // different model). Persisted for the same reason — see custom-agent-log.ts.
   lastPrompts.delete(id); // don't leak prompt text for torn-down sessions
   lastResponses.delete(id); // ditto, and keep this map from growing across closed sessions
+  // Claude's own id is only true of the claude that was running: a `--resume` on this id starts a
+  // process that reissues it, and a kept mapping would read the NEXT conversation's prompts under
+  // the last one's id.
+  claudeSessionIds.delete(id);
   // The transcript stops being frozen here: the next claude on this id (`--resume`, or a restart
   // after `/exit` — which reaches reap through term.onExit) appends to that file again.
   forgetClearedTranscript(id);

@@ -26,10 +26,32 @@ import {
 import { createTranscriptFold, type FoldedAt } from "./transcript-fold.js";
 import { classifyWorkPhase, type WorkPhase } from "./workPhase.js";
 import { sessionListTitle } from "./sessionListTitle.js";
-import { activity, aiTitles, codexRollouts, codexRolloutsHydrated, isBackgroundSession, isFailedWorker, knownSessions, sessionMemos } from "./registry.js";
-import { projectSessionsDir } from "./project-dir.js";
+import {
+  activity,
+  aiTitles,
+  claudeSessionIds,
+  codexRollouts,
+  codexRolloutsHydrated,
+  isBackgroundSession,
+  isFailedWorker,
+  knownSessions,
+  sessionMemos,
+} from "./registry.js";
+import { claudeHistoryFile, projectSessionsDir } from "./project-dir.js";
+import {
+  claudePromptScan,
+  codexPromptScan,
+  foldClaudePrompt,
+  foldCodexPrompt,
+  historyIdsFor,
+  promptWindow,
+  transcriptPrompts,
+  PROMPT_SCAN_LIMIT,
+} from "./prompt-history.js";
+import type { PromptWindow } from "../../common/promptHistory.js";
+import { clearedAtOf, clearedClaudeIdOf, clearedTranscripts } from "./cleared-transcripts.js";
 import { currentTurnReplyFromClaudeParsed, lastTurnFromClaudeParsed, lastTurnFromCodexRolloutDocs, EMPTY_TURN, type LastTurn } from "./last-turn.js";
-import { forEachJsonlRecordIn, readTailRecords } from "../infra/jsonl-file.js";
+import { forEachJsonlRecord, forEachJsonlRecordIn, readTailRecords } from "../infra/jsonl-file.js";
 import { copySummaryState, emptySummaryState, foldSummary, summaryPartsOf, type SummaryState } from "./summary-scan.js";
 import { partitionPending } from "./partitionPending.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
@@ -271,6 +293,88 @@ export async function sessionLastTurn(cwd: string, id: string, agent: TerminalAg
   } catch {
     return EMPTY_TURN; // no transcript on disk yet
   }
+}
+
+// The prompts the USER gave a session, newest last — the pane beside the enlarged cell (#1748).
+// Agent-branched exactly like sessionLastTurn above, and reading the same bounded tail: claude's
+// history file is 8 MB on this machine and only ever appended to, so the default 4 MB window
+// reaches ~15,000 recent submissions whatever it grows to.
+//
+// Each reader collects at PROMPT_SCAN_LIMIT and hands the result to promptWindow, which is where
+// the cap and the "there are older ones" answer are decided together.
+export type SessionPrompts = PromptWindow;
+
+const NO_PROMPTS: SessionPrompts = { prompts: [], truncated: false };
+
+// The transcript is the fallback rather than the source: it drops a prompt sent mid-turn and keeps
+// text a skill injected (#1748), so it answers only when the history file had nothing to say —
+// upstream changed the format, or the session predates it.
+//
+// Not for a CLEARED session. `${id}.jsonl` then holds the conversation the user ended, and every
+// reader of that file asks this set first (#1085) — a fallback is not a reason to be the one that
+// puts the ended conversation back on screen.
+function claudeTranscriptPrompts(cwd: string, id: string): SessionPrompts {
+  if (clearedTranscripts.has(id)) return NO_PROMPTS;
+  try {
+    return promptWindow(transcriptPrompts(readTailRecords(path.join(projectSessionsDir(cwd), `${id}.jsonl`)), PROMPT_SCAN_LIMIT));
+  } catch {
+    return NO_PROMPTS;
+  }
+}
+
+// Under whichever id claude currently calls itself as well as ours — history.jsonl keys on
+// claude's, and a `/clear` re-mints it (historyIdsFor).
+//
+// STREAMED, not a tail read, and the difference is the whole feature. The tail is right for a
+// transcript, which is one file per session — its last 4 MB really are that session's recent turns.
+// This file is one per USER: its last 4 MB are EVERYONE's recent prompts, so a session whose
+// activity is a few days old falls outside the window entirely and reads as empty. Measured on this
+// machine before the fix: 254 sessions had prompts on disk that the pane showed as 0, the worst of
+// them 848 prompts (reported by the owner, who opened the pane and saw nothing).
+//
+// The cost is the file's LENGTH, not its content: forEachJsonlRecord never materialises it and the
+// scan keeps a sliding window of PROMPT_SCAN_LIMIT entries. 7.8 MB here, read only while a pane is
+// open and at most once per 400ms debounce.
+async function claudePrompts(cwd: string, id: string): Promise<SessionPrompts> {
+  // The live mapping first — any hook re-learns it, so it is the fresher of the two. The durable
+  // one is what a RESTART leaves standing: without it the pane would know where the boundary is and
+  // not which id the conversation past it is filed under, which shows nothing at all (#1749).
+  const ids = historyIdsFor(id, claudeSessionIds.get(id) ?? clearedClaudeIdOf(id));
+  const scan = claudePromptScan(ids, PROMPT_SCAN_LIMIT, clearedAtOf(id));
+  try {
+    await forEachJsonlRecord(claudeHistoryFile(), (record) => foldClaudePrompt(scan, record));
+    if (scan.found.length > 0) return promptWindow(scan.found);
+  } catch {
+    // No history file, or one this could not read — the transcript still knows something.
+  }
+  return claudeTranscriptPrompts(cwd, id);
+}
+
+async function codexSessionPrompts(sessionKey: string): Promise<SessionPrompts> {
+  // Same hydration wait and same key→rollout resolution as codexLastTurn: a request served during
+  // startup would otherwise read the mulmoterminal id as a rollout name and find nothing.
+  await codexRolloutsHydrated;
+  const rolloutId = codexRollouts.get(sessionKey)?.conversationId ?? sessionKey;
+  const file = codexRolloutPath(codexSessionsRoot(), rolloutId);
+  if (!file) return NO_PROMPTS;
+  // Streamed for the same reason claude's history is: a rollout is one file per conversation, so a
+  // tail read at least stays inside the right session — but a long one still loses its early
+  // prompts, and three rollouts on this machine are already past the window (#1749).
+  const scan = codexPromptScan(PROMPT_SCAN_LIMIT);
+  try {
+    await forEachJsonlRecord(file, (record) => foldCodexPrompt(scan, record));
+    return promptWindow(scan.found);
+  } catch {
+    return NO_PROMPTS;
+  }
+}
+
+export async function sessionPrompts(cwd: string, id: string, agent: TerminalAgent): Promise<SessionPrompts> {
+  if (agent === "codex") return codexSessionPrompts(id);
+  // The three agents sessionLastTurn cannot read either: their logs are real files in formats
+  // nothing here parses, and an empty list is the honest answer until one of them is.
+  if (agent === "antigravity" || agent === "grok" || agent === "muse") return NO_PROMPTS;
+  return claudePrompts(cwd, id);
 }
 
 // The reply to the turn that just ENDED, for the phone push — null when that turn produced none,

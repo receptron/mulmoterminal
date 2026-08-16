@@ -38,6 +38,7 @@ import {
   readSessionMeta,
   readSessionSummary,
   sessionLastTurn,
+  sessionPrompts,
   sessionTimeline,
 } from "../session/session-reads.js";
 import { formatHandoff, type HandoffShape } from "../session/handoff-text.js";
@@ -178,6 +179,17 @@ async function toolTimeline(req: Request, res: Response) {
   const cwd = workspaceForRoute(req.query.cwd, res);
   if (cwd === null) return;
   res.json(await sessionTimeline(cwd, session));
+}
+
+// What the USER asked this session for, newest last (#1748) — the mirror of the timeline above,
+// which answers what the agent then did. Under /api/transcript for the same reason last-turn is:
+// /api/session/:id would read "prompts" as a session id.
+async function userPrompts(req: Request, res: Response) {
+  const { session } = req.query;
+  if (typeof session !== "string" || !SESSION_ID_RE.test(session)) return res.status(400).json({ error: "invalid session id" });
+  const cwd = workspaceForRoute(req.query.cwd, res);
+  if (cwd === null) return;
+  res.json(await sessionPrompts(cwd, session, normalizeAgent(req.query.agent)));
 }
 
 // A session's last completed exchange, already rendered as the text to paste into ANOTHER
@@ -420,6 +432,7 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   app.post("/api/session/:id/memo", (req, res) => setMemo(req, res, deps.publishActivity));
   app.get("/api/activity", activitySnapshot);
   app.get("/api/transcript/timeline", toolTimeline);
+  app.get("/api/transcript/prompts", userPrompts);
   app.get("/api/transcript/last-turn", lastTurn);
   // The sessions a loading grid should adopt: spawned VISIBLE by the server and never taken by a
   // cell (a scheduled task's chat, one the phone started, one an agent started from another

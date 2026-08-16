@@ -27,6 +27,7 @@ const deps = {
   recordToolCallEnd: vi.fn(async () => {}),
   publishDirConfig: vi.fn(),
   publishFileWrite: vi.fn(),
+  publishPromptSubmitted: vi.fn(),
   publishQuestion: vi.fn(),
   uiPort: "34567",
 };

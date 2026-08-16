@@ -83,6 +83,7 @@ const deps = {
   uiPort: "3000",
   publishSessionCreated: vi.fn(),
   publishActivity: vi.fn(),
+  publishPromptSubmitted: vi.fn(),
 };
 
 // A per-test session id where the test is not ABOUT the memory: the spawn remembers which

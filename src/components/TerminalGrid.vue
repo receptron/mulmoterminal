@@ -25,6 +25,7 @@ import GuiPanel from "./GuiPanel.vue";
 import CollectionsPane from "./CollectionsPane.vue";
 import GithubPane from "./GithubPane.vue";
 import ToolsPane from "./ToolsPane.vue";
+import PromptsPane from "./PromptsPane.vue";
 import {
   clampPaneWidth,
   clampSecondary,
@@ -43,7 +44,7 @@ import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { usePubSub } from "../composables/usePubSub";
 import { isDrawnResult } from "../utils/drawnResult";
 import { hasCanvasGroup, hasCollectionsGroup } from "../../common/toolGroups";
-import type { RightPane } from "./gridCell";
+import { isRightPane, type RightPane } from "./gridCell";
 import QuestionPane from "./QuestionPane.vue";
 import { ASK_QUESTION_CHANNEL, isAskQuestionDone, isAskQuestionEvent } from "../../common/askQuestion";
 import { fetchOpenQuestion, postAnswer, postWords } from "../composables/openQuestion";
@@ -51,7 +52,7 @@ import type { AnswerFailure } from "../../common/askQuestion";
 import { createQuestionBox } from "../composables/questionBox";
 import { parsePaneStore, rememberPane, recallPane } from "./filesPaneStore";
 import { isRecord } from "../../common/isRecord";
-import type { SessionAgent, TerminalAgent } from "../../common/sessionAgent";
+import { asTerminalAgent, type SessionAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { buildCanvasCard, seedCanvasCard, hasStoredCard, absoluteUnder } from "../composables/canvasOpenFile";
 import { jsonBody } from "../jsonBody";
 import { isUnknownArray } from "../../common/isUnknownArray";
@@ -196,11 +197,14 @@ const remember = (key: string, value: string): void => {
   }
 };
 // Which pane holds the one slot beside the enlarged terminal (see gridCell.ts):
-//   files  — the file tree/editor (the original occupant).
-//   canvas — what the agent DREW: the GUI plugin views for this cell's session.
-//   tools  — which GUI tools this session actually has, read-only.
-const isRightPane = (value: unknown): value is RightPane =>
-  value === "files" || value === "canvas" || value === "tools" || value === "collections" || value === "github" || value === "question";
+//   files   — the file tree/editor (the original occupant).
+//   canvas  — what the agent DREW: the GUI plugin views for this cell's session.
+//   tools   — which GUI tools this session actually has, read-only.
+//   prompts — what you ASKED this session for, read-only.
+//
+// The guard comes from gridCell.ts's own list rather than being re-spelled here: this one is what
+// a persisted pane is read back through, and a member missing from it is a pane that silently
+// never reopens.
 
 // Which cell the pane is on — the identity everything else hangs off. The UID rather than the
 // directory: two terminals in the same repository is the ordinary case here, and keying on the
@@ -437,6 +441,11 @@ const expandedCwd = computed(() => props.cells.find((c) => c.uid === props.expan
 // The enlarged cell's session — what Canvas and Tools read. Null for a cell with no session
 // yet (a launcher, a command cell), which both panes already render as empty.
 const expandedSessionId = computed(() => props.cells.find((c) => c.uid === props.expandedUid)?.session ?? null);
+
+// Which log the Prompts pane reads: claude keeps what a person typed in its own history file,
+// codex only in its rollout, and the server needs to be told which (#1748). Absent means Claude —
+// the same default `Cell.agent` encodes by omission.
+const expandedAgent = computed(() => asTerminalAgent(props.cells.find((c) => c.uid === props.expandedUid)?.agent));
 
 // A drawing that lands on the cell you are already looking at opens the Canvas by itself. The
 // agent calling presentDocument IS its answer to what was asked; with the pane closed that answer
@@ -711,6 +720,7 @@ const gridCellEvents = (cell: Cell) => ({
   "toggle-canvas": () => toggleRightPane("canvas", cell.uid),
   "open-canvas": () => openCanvasFor(cell.uid),
   "toggle-tools": () => toggleRightPane("tools", cell.uid),
+  "toggle-prompts": () => toggleRightPane("prompts", cell.uid),
   "toggle-collections": () => toggleRightPane("collections", cell.uid),
   "toggle-github": () => toggleRightPane("github", cell.uid),
   close: () => emit("close", cell.uid),
@@ -1305,6 +1315,21 @@ watch(
         <ToolsPane
           v-else-if="rightPane === 'tools'"
           :session-id="expandedSessionId"
+          :expanded="paneFull"
+          :style="paneFull ? { flex: '1 1 0%', width: 'auto' } : { flex: `0 0 ${paneWidth}px` }"
+          class="border-l border-border"
+          @toggle-expand="togglePaneExpanded"
+          @close="setRightPane(null, paneUid)"
+        />
+        <!-- What this session was ASKED for, against the tools pane's what it then ran. Follows
+             the enlarged cell's session like those two, and needs its AGENT as well: the prompts
+             live in claude's own history file or in codex's rollout, and only the cell knows
+             which (#1748). -->
+        <PromptsPane
+          v-else-if="rightPane === 'prompts'"
+          :session-id="expandedSessionId"
+          :cwd="expandedCwd"
+          :agent="expandedAgent"
           :expanded="paneFull"
           :style="paneFull ? { flex: '1 1 0%', width: 'auto' } : { flex: `0 0 ${paneWidth}px` }"
           class="border-l border-border"

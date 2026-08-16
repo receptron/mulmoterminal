@@ -13,7 +13,17 @@ import type { AttentionStatus } from "./attentionStatus";
 // once — the row is already `roster | terminal | pane`, and a fourth column leaves the terminal
 // unreadable on a laptop. Declared with the rest of the grid's contract because every cell type
 // renders the toggles and none of them owns the state.
-export type RightPane = "files" | "canvas" | "tools" | "collections" | "github" | "question";
+//
+// A LIST the type is derived from, not a union spelled out on its own (the shape
+// common/sessionAgent.ts uses): the grid also validates a pane read back from localStorage, and
+// while that guard was its own hand-written list, a pane could be added to the union, wired end to
+// end, and still fail to reopen after a reload — with nothing failing to say so (CodeRabbit,
+// #1749). Adding a member here now reaches the guard by construction.
+export const RIGHT_PANES = ["files", "canvas", "tools", "collections", "github", "question", "prompts"] as const;
+
+export type RightPane = (typeof RIGHT_PANES)[number];
+
+export const isRightPane = (value: unknown): value is RightPane => RIGHT_PANES.some((pane) => pane === value);
 
 export interface GridCellProps {
   expanded: boolean;
@@ -51,7 +61,10 @@ export interface GridCellEmits {
   // `open-canvas` is the unread-canvas chip on an UN-expanded cell: enlarge me AND open the
   // pane, in one gesture. Distinct from `toggle-canvas`, which toggles the pane on the cell
   // that is already enlarged.
-  (e: "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "open-canvas"): void;
+  (
+    e:
+      "toggle-expand" | "close" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "toggle-prompts" | "open-canvas",
+  ): void;
   // Swap this cell left (-1) or right (+1) in manual sort mode.
   (e: "move", dir: -1 | 1): void;
   // Report activity up so the grid can attention-sort in auto mode.

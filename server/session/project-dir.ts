@@ -35,3 +35,11 @@ export function encodeProjectDirName(absolutePath: string): string {
 export function projectSessionsDir(cwd: string): string {
   return path.join(os.homedir(), ".claude", "projects", encodeProjectDirName(path.resolve(cwd)));
 }
+
+/** Claude's own log of what a PERSON typed at the prompt — one line per submission, carrying
+ *  `display`, `timestamp`, `project` and `sessionId`. Also upstream's file and not ours, so it is
+ *  read the same way the directory above is: tolerantly, and with a fallback for the day the
+ *  format changes (server/session/prompt-history.ts). */
+export function claudeHistoryFile(): string {
+  return path.join(os.homedir(), ".claude", "history.jsonl");
+}

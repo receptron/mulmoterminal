@@ -127,8 +127,13 @@ export function buildPushText(kind: PushKind, where: string, detail: string, mes
 
 // Which session a hook belongs to, or null when neither source names one usably.
 //
-// The `x-mt-session` header wins: Claude reissues its own session_id on /clear and
-// /compact, while the mulmoterminal id is the one hooks must stay attributed to.
+// The `x-mt-session` header wins: Claude reissues its own session_id on /clear, while the
+// mulmoterminal id is the one hooks must stay attributed to.
+//
+// This used to say "/clear and /compact". The compact half is not true of the claude here, and a
+// feature was built on it before anyone checked: across the 95 compacted transcripts on this
+// machine, the 61 that had prompts after the compaction ALL kept the same session id — auto-
+// compact and manual `/compact` alike (#1749). Measure before relying on the pair again.
 //
 // BOTH sources are validated against the same UUID shape. The id does not stay inside
 // this process — it becomes a Firestore document id (backends/remoteHost/sessionActivity)
@@ -140,6 +145,13 @@ export function resolveHookSessionId(header: unknown, bodyValue: unknown, isVali
   const usable = (value: unknown): string | null => (typeof value === "string" && isValidId(value) ? value : null);
   return usable(header) ?? usable(bodyValue);
 }
+
+/** The id CLAUDE currently calls itself, off the same body — the other half of the sentence above.
+ *  It is the key into anything claude wrote under its own id (its prompt history, #1749), and it
+ *  stops matching ours the moment a `/clear` or `/compact` reissues it. Same UUID precondition,
+ *  for the same reason: an id that fails it is not one to remember under. */
+export const claudeOwnSessionId = (bodyValue: unknown, isValidId: (id: string) => boolean): string | null =>
+  typeof bodyValue === "string" && isValidId(bodyValue) ? bodyValue : null;
 
 // Which directory a hook's relative paths resolve against. The CLI reports its live cwd in
 // the payload, but the PTY table only holds the dir the session was SPAWNED in — that value

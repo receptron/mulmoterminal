@@ -336,6 +336,12 @@ Two more keys, and one thing the rules cannot do. Read
   afterwards. Without it the order is whatever each submitter typed, and the queue is decoration.
   It goes in `createFields` (the rules refuse any key outside that list) and is NOT drawn as an
   input — the page fills it in.
+  **A page receives it as `2026-08-15T23:05:54.605987654Z`** — UTC, nine fractional digits, `Z`.
+  Stored it is a Firestore timestamp, but both hosts normalise at their read boundary, so a page
+  never sees one. Lexicographic order IS chronological order, so **sort it with a plain string
+  compare and do not put it through `new Date()`** — that keeps only milliseconds, and two
+  submissions in the same millisecond then tie and fall back to the order they were read in. Ties
+  at full precision break by document id, which every host reads in.
 - **`window.fromField`** is an opening time that lives on ANOTHER record:
   `{ "ref": "classId", "collection": "classes", "field": "opensAt" }`. `opensAt` is a **number**,
   epoch millis, computed by whoever schedules the class — "three days before, at 08:00" is business

@@ -73,6 +73,7 @@ import { cwdForSession } from "../session/session-cwd.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/mulmoscript.js";
 import { CLAUDE_CWD, MULMOTERMINAL_HOME, PORT, SESSION_ID_RE } from "../config/env.js";
 import { FILE_WRITE_CHANNEL, type FileWriteEvent } from "../../common/fileWriteChannel.js";
+import { PROMPT_SUBMITTED_CHANNEL, type PromptSubmittedEvent } from "../../common/promptChannel.js";
 import { ASK_QUESTION_CHANNEL, shouldPublishQuestion, type AskQuestionDone, type AskQuestionEvent } from "../../common/askQuestion.js";
 import type { createToolStores } from "../session/tool-store.js";
 import type { createClaudeSpawner } from "../session/spawn-claude.js";
@@ -327,6 +328,7 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
     recordToolCallEnd: deps.toolStores.recordToolCallEnd,
     publishDirConfig: (cwd) => deps.publish(DIR_CONFIG_CHANNEL, { cwd }),
     publishFileWrite: (file) => deps.publish(FILE_WRITE_CHANNEL, { file } satisfies FileWriteEvent),
+    publishPromptSubmitted: (sessionId) => deps.publish(PROMPT_SUBMITTED_CHANNEL, { sessionId } satisfies PromptSubmittedEvent),
     publishQuestion: (event) => publishQuestion(deps.publish, event),
     // Express serves the built SPA on PORT; under `yarn dev` the UI is Vite's own server,
     // whose port the backend only knows when CLIENT_PORT is set in its environment.

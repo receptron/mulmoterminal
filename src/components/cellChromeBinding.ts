@@ -29,7 +29,8 @@ export interface CellChromeProps {
 // handler waits for something nothing ever sends it. That is what happened to the collections
 // button, which shipped in #1573 and never once opened the pane. `cellChromeEventsAreComplete`
 // in the spec pins the two lists together so the next button cannot repeat it.
-export type CellChromeEvent = "toggle-expand" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "close";
+export type CellChromeEvent =
+  "toggle-expand" | "toggle-files" | "toggle-canvas" | "toggle-tools" | "toggle-collections" | "toggle-github" | "toggle-prompts" | "close";
 
 // Every event that is a PLAIN forward, which is all of them but `close` — the one a cell may want
 // to intercept. Spelling them once means a new button reaches both bindings together; when each
@@ -43,6 +44,7 @@ const toggleForwards = (emit: (event: CellChromeToggle) => void): Record<CellChr
   "toggle-tools": () => emit("toggle-tools"),
   "toggle-collections": () => emit("toggle-collections"),
   "toggle-github": () => emit("toggle-github"),
+  "toggle-prompts": () => emit("toggle-prompts"),
 });
 
 // Bound as two objects rather than spelled out in each template.

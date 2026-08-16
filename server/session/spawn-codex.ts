@@ -25,6 +25,7 @@ const activityDepsFor = (sessionId: string, entry: PtyEntry, deps: SpawnDeps) =>
   setWorking: deps.setWorking,
   setWaiting: deps.setWaiting,
   isActive: () => ptys.get(sessionId)?.active ?? false,
+  publishPromptSubmitted: deps.publishPromptSubmitted,
   uiPort: deps.uiPort,
   isAlive: () => ptys.get(sessionId) === entry,
 });

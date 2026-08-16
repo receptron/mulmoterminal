@@ -29,7 +29,7 @@ vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
     props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home", "openSessionIds", "cancellable", "reorderable", "canvasAvailable"],
-    emits: ["toggle-expand", "toggle-files", "session", "cwd", "run", "close", "move", "status"],
+    emits: ["toggle-expand", "toggle-files", "toggle-prompts", "session", "cwd", "run", "close", "move", "status"],
     template: '<div class="stub-cell" />',
   },
 }));
@@ -39,6 +39,14 @@ vi.mock("../../../src/components/GuiPanel.vue", () => ({
     props: ["sessionId", "sendTextMessage", "unavailable", "expanded"],
     emits: ["toggle-expand", "close"],
     template: '<div class="stub-gui-panel" />',
+  },
+}));
+vi.mock("../../../src/components/PromptsPane.vue", () => ({
+  default: {
+    name: "PromptsPane",
+    props: ["sessionId", "cwd", "agent", "expanded"],
+    emits: ["toggle-expand", "close"],
+    template: '<div class="stub-prompts-pane" />',
   },
 }));
 vi.mock("../../../src/components/CommandCell.vue", () => ({
@@ -973,5 +981,53 @@ describe("open-in-canvas", () => {
     const enlarged = w.findAllComponents({ name: "TerminalCell" }).find((c) => c.props("expanded"));
     expect(enlarged?.props("initialSessionId")).toBe("s-two");
     expect(enlarged?.props("canvasAvailable")).toBe(false);
+  });
+});
+
+// The prompts pane's own behaviour has its own spec; what the GRID owes it is the wiring — the
+// header button's event has to reach `toggleRightPane`, and the pane has to land in the row beside
+// the enlarged terminal in both zoomed modes. A button whose event the grid does not map is dead
+// and typechecks (#1573), which is why this is asserted rather than read. (CodeRabbit, #1749.)
+describe("prompts pane beside the enlarged cell", () => {
+  const paneOf = (w: ReturnType<typeof mount>) => w.findComponent({ name: "PromptsPane" });
+  const togglePrompts = async (w: ReturnType<typeof mount>) => {
+    await w.findComponent({ name: "TerminalCell" }).vm.$emit("toggle-prompts");
+    await nextTick();
+  };
+
+  beforeEach(() => localStorage.clear());
+
+  it.each([
+    ["list", true],
+    ["strip", false],
+  ])("opens beside the enlarged terminal in %s mode", async (_name, listMode) => {
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, [], false, listMode);
+    expect(paneOf(w).exists()).toBe(false);
+    await togglePrompts(w);
+    expect(paneOf(w).exists()).toBe(true);
+    expect(w.find(".zoom-main").element.parentElement?.contains(paneOf(w).element)).toBe(true);
+  });
+
+  it("closes on the same button — it is the pane's only other close", async () => {
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
+    await togglePrompts(w);
+    await togglePrompts(w);
+    expect(paneOf(w).exists()).toBe(false);
+  });
+
+  // Which log to read is decided from the CELL, so the pane cannot ask for the right one on its own.
+  it("hands it the enlarged cell's session, directory and agent", async () => {
+    const w = mountCockpit([{ uid: 1, session: "s1", cwd: "/proj", agent: "codex" }, cell(2)], 1, []);
+    await togglePrompts(w);
+    expect(paneOf(w).props("sessionId")).toBe("s1");
+    expect(paneOf(w).props("cwd")).toBe("/proj");
+    expect(paneOf(w).props("agent")).toBe("codex");
+  });
+
+  // Absent means Claude, the way a persisted cell encodes the default.
+  it("reads a cell with no agent as claude", async () => {
+    const w = mountCockpit([cell(1, "s1", "/proj"), cell(2)], 1, []);
+    await togglePrompts(w);
+    expect(paneOf(w).props("agent")).toBe("claude");
   });
 });

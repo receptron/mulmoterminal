@@ -9,11 +9,11 @@ import { ASK_QUESTION_TOOL, parseAskQuestions, type AskQuestionDone, type AskQue
 import { watchOtherWrites } from "../session/write-to-session.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
 import { writtenFilePath } from "../files/tool-writes.js";
-import { activityHookEffects, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../session/activity-hook.js";
+import { activityHookEffects, claudeOwnSessionId, pushKindFor, resolveHookCwd, resolveHookSessionId } from "../session/activity-hook.js";
 import { runCompletionHook } from "../session/completion-hooks.js";
 import { messageOf } from "../errors.js";
 import { headerHookEffect } from "../session/header-hook.js";
-import { lastPrompts, lastResponses, ptys } from "../session/registry.js";
+import { claudeSessionIds, lastPrompts, lastResponses, ptys } from "../session/registry.js";
 import { clearedTranscripts, markTranscriptCleared } from "../session/cleared-transcripts.js";
 import { latestUserPrompt } from "../session/session-reads.js";
 import { notifyTaskFinished } from "../session/task-push.js";
@@ -30,6 +30,9 @@ export interface HookDeps extends SessionActivityDeps {
   /** Tell clients watching that directory to re-read its .mulmoterminal.json. */
   publishDirConfig: (cwd: string) => void;
   publishFileWrite: (file: string) => void;
+  /** Tell an open prompts pane that this session's list just grew. Its own channel because the
+   *  activity row cannot carry it — see common/promptChannel.ts. */
+  publishPromptSubmitted: (sessionId: string) => void;
   /** Offer a live AskUserQuestion dialog's choices to the pane. No-op while the switch is off. */
   publishQuestion: (event: AskQuestionEvent | AskQuestionDone) => void;
   /** Which port this host's UI answers on, so a receiver can open it instead of guessing. */
@@ -144,6 +147,13 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
   lastPrompts.set(sessionId, preferredHeaderPrompt(lastPrompts.get(sessionId) ?? null, prompt));
 }
 
+/** Remember the id claude reports for ITSELF, when the body names a usable one. It is what lets
+ *  the prompts pane keep reading a session whose id claude has re-minted — see registry.ts. */
+function rememberClaudeSessionId(sessionId: string, bodyValue: unknown): void {
+  const claudeId = claudeOwnSessionId(bodyValue, (id) => SESSION_ID_RE.test(id));
+  if (claudeId) claudeSessionIds.set(sessionId, claudeId);
+}
+
 // `/clear` restarts the conversation, so the header must stop showing the pre-clear prompt. Blank it
 // (empty string beats the `?? transcriptPrompt` fallback in /api/session, so the old transcript can't
 // resurface) and publish; the next UserPromptSubmit sets the new query. `forgetTitle` drops the AI title
@@ -157,10 +167,14 @@ async function trackPromptForHeader(sessionId: string, prompt: string, cwd: stri
 //
 // Publish LAST, and after the mark is durable: the publish itself re-reads the reply for a session
 // that is `waiting`, which is the very read the mark exists to stop.
-async function clearHeaderPrompt(deps: HookDeps, sessionId: string, cwd: string | undefined): Promise<void> {
+async function clearHeaderPrompt(deps: HookDeps, sessionId: string, claudeId: string | null, cwd: string | undefined): Promise<void> {
   lastPrompts.set(sessionId, "");
   lastResponses.set(sessionId, "");
-  await markTranscriptCleared(sessionId, cwd);
+  // The mark carries claude's NEW id as well as the moment, because the prompts pane needs both to
+  // find the new conversation in claude's seamless prompt history — and a restart that remembers
+  // only the boundary leaves that pane empty until the next hook (#1749). This hook is where the id
+  // is announced, so it is passed rather than read back from the live mapping.
+  await markTranscriptCleared(sessionId, cwd, claudeId ?? undefined);
   deps.forgetTitle(sessionId);
   deps.publishActivity(sessionId);
 }
@@ -176,9 +190,20 @@ async function applyHeaderHooks(deps: HookDeps, sessionId: string, event: string
   if (effect.kind === "prompt") {
     await trackPromptForHeader(sessionId, effect.text, cwd);
     deps.noteTitleTurn(sessionId, effect.text);
+    // Here rather than off the activity publish below: that one is suppressed when the working
+    // flag does not MOVE, so a prompt sent into a turn that is already running announces nothing —
+    // and interrupting a running turn is the case the prompts pane exists for (#1748). This is the
+    // one place that knows a REAL prompt arrived, injected text having been filtered out already.
+    deps.publishPromptSubmitted(sessionId);
     return;
   }
-  if (effect.kind === "clear") return clearHeaderPrompt(deps, sessionId, cwd);
+  if (effect.kind === "clear")
+    return clearHeaderPrompt(
+      deps,
+      sessionId,
+      claudeOwnSessionId(body.session_id, (id) => SESSION_ID_RE.test(id)),
+      cwd,
+    );
   void deps.maybeGenerateTitle(sessionId, cwd);
 }
 
@@ -221,6 +246,12 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     const active = !!(entry && entry.active);
     const cwd = resolveHookCwd(body.cwd, entry?.cwd);
     await applyHeaderHooks(deps, sessionId, event, body, cwd);
+    // AFTER the header hooks, so a `/clear` empties the chain first and the id this very hook
+    // carries — claude's new one — is the first of the new conversation rather than the last of
+    // the ended one. Off EVERY hook, not just a prompt: the chain lives in memory, so the sooner
+    // after a restart it is re-learned the shorter the window in which a reissued id reads as
+    // ours (#1749).
+    rememberClaudeSessionId(sessionId, body.session_id);
     // Before the activity publish below, so the row it mirrors to the phone already carries this
     // hook's phase (a turn's first Edit must read as "editing" in the same push, not the next one).
     // Live sessions only: a tracked turn is reclaimed by reap, which itself does nothing without a

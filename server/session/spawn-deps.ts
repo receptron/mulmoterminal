@@ -34,4 +34,8 @@ export interface SpawnDeps {
    *  an agent that mints its conversation id asynchronously answers its model badge only once that
    *  id is known (spawn-antigravity.ts). */
   publishActivity: (sessionId: string) => void;
+  /** Tell an open prompts pane that this session's list just grew. Distinct from publishActivity
+   *  because that one is suppressed when the flag does not move, and the prompt that interrupts a
+   *  running turn moves nothing (common/promptChannel.ts). */
+  publishPromptSubmitted: (sessionId: string) => void;
 }

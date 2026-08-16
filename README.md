@@ -1365,6 +1365,14 @@ Favorited collections get their own toolbar buttons.
   isn't available yet (Codex writes its rollout only once the turn ends).
 - **Tools pane** — the available GUI tools plus a live tool-call history for the active
   session.
+- **Prompts pane** — the prompts *you* sent the enlarged cell's session, newest first, from
+  `GET /api/transcript/prompts`. The mirror of the Timeline above: that one is what the agent
+  ran, this one is what you asked it for — for when several cells are running and you can no
+  longer remember which one you told what. Read-only; click a long prompt to open it in place.
+  Left open, it keeps up by itself. Claude and Codex; it reads what you TYPED (claude's own
+  prompt history, codex's rollout), so a prompt sent mid-turn is there and text a skill
+  injected is not. A `/clear` draws a line: the pane shows what you have asked *since*, the
+  same way the header, the title and the last reply all stop describing the ended conversation.
 - **Notifications** (🔔) — a toolbar bell with an unread badge and a dropdown of active
   notifications; click a row to jump to its session.
 - **Star MulmoTerminal** — a star button in the grid toolbar that stars the project on GitHub
