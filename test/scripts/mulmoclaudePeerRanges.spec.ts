@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Which `@mulmoclaude/core` each bundled plugin actually runs against.
 //
 // It is not one answer. `collection-plugin` declares core as a PEER only, so it runs on the core
