@@ -1,6 +1,6 @@
 # サーバ時刻のフィールドが、書かれた瞬間に自分のスキーマに適合しなくなる
 
-**状態**: 実装済み（2026-08-16）。残りは P0-live と、下の「まだ残っているもの」2 つ
+**状態**: 実装済み（2026-08-16）。**まだ効いていない経路がある** — 下の「まだ残っているもの」を先に読むこと
 **日付**: 2026-08-15
 **前提**: [`docs/shared-app-principles.md`](../docs/shared-app-principles.md)、
 [`plans/feat-shared-app-preview.md`](./feat-shared-app-preview.md)（手元のプレビューは本番と同じ親を動かす）、
@@ -29,7 +29,13 @@
 | P0b / P5 | 順位の回帰テスト、テンプレとスキルの文言 | [mulmoterminal#1747](https://github.com/receptron/mulmoterminal/pull/1747) |
 
 **正規形**: `2026-08-15T23:05:54.605987654Z`（UTC・小数 9 桁・`Z`）。辞書順＝時刻順なので、
-テンプレの `localeCompare` は 1 文字も直さずに正しくなった。
+テンプレの `localeCompare` は 1 文字も直さずに正しくなる。
+
+**ただし「なった」のはページを配っている側が復号してからで、そこは本番でまだ動いていない。**
+公開ページに記録を渡すのは mulmoserver で、その読みに復号を入れるのが P2（#188）——
+マージも deploy もまだなので、**本番の `createdAt` は今もオブジェクトのまま**である。
+`localeCompare` はそれを全部等しいと見るので、キューはドキュメント ID 順に並んだままになる。
+直っているのは今のところ MulmoTerminal のペイン側だけで、公開ページ側は #188 の deploy 待ち。
 
 **書き側は provenance で決める。** レビューで 4 度指摘されて最終的に採った形で、当初の
 「形が正規形なら戻す」は間違いだった: 復号した stamp は戻ってくる時点でただの文字列で、
@@ -54,8 +60,14 @@
 3. **MulmoTerminal のフォーム**は、`@mulmoclaude/collection-plugin` を `^3.1.0` で
    持っていたので直っていなかった——ペインの詳細ビューでその欄が**空の
    `datetime-local` として描かれ**、そのまま保存するとルールに拒否される。
-   `^4.2.0` への更新を [mulmoterminal#1754](https://github.com/receptron/mulmoterminal/pull/1754)
-   で出した。マージするまでは**共有コレクションの stamp 欄をペインから編集しないこと**。
+   `^4.2.0` への更新は [mulmoterminal#1754](https://github.com/receptron/mulmoterminal/pull/1754)
+   でマージ済み。**ただし配信されるのは `dist/` なので、`yarn build` と再起動までは
+   古いままである。** それまでは共有コレクションの stamp 欄をペインから編集しないこと。
+
+   1754 で分かったこと: **core を peer だけで名乗るのは `collection-plugin` だけ**で、
+   残りの同梱プラグインは `dependencies` で名乗って自分の copy を nested で持つ。つまり
+   **ホストが core を固定して壊せるのはこの 1 本だけ**——今回の不具合がここにだけ出たのは
+   偶然ではない。`test/scripts/mulmoclaudePeerRanges.spec.ts` がその形を押さえている。
 
 ## 1. 実地で出た形（2026-08-15、アンケートアプリ）
 
