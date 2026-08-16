@@ -20,9 +20,14 @@ import { decodeRecordTimes, serverTimeOf } from "@mulmoclaude/core/collection";
 
 /** The instant observed in a real app, and one 987654ns later inside the SAME millisecond — the
  *  pair a millisecond-precision value collapses, and a burst is what a first-come app is for. */
-const EARLY = serverTimeOf({ seconds: 1786835154, nanoseconds: 605000000 }) ?? "";
-const SAME_MS = serverTimeOf({ seconds: 1786835154, nanoseconds: 605987654 }) ?? "";
-const LATER = serverTimeOf({ seconds: 1786835160, nanoseconds: 0 }) ?? "";
+//
+// WRITTEN OUT rather than derived from the helper: this file is the regression test for what a
+// page receives, and a value computed by the same code it checks would follow that code wherever
+// it went. The form is pinned against the helper once, below.
+const EARLY = "2026-08-15T23:05:54.605000000Z";
+const SAME_MS = "2026-08-15T23:05:54.605987654Z";
+const LATER = "2026-08-15T23:06:00.000000000Z";
+const EARLY_PARTS = { seconds: 1786835154, nanoseconds: 605000000 };
 
 const TEMPLATE = path.join(process.cwd(), "server/skills/mulmoterminal-shared-app/templates/gym.md");
 
@@ -48,10 +53,13 @@ describe("a server-stamped field, as a page receives it", () => {
   it("ranks a burst by time, not by the order it was read in", () => {
     // Read order is document id order (`orderBy("__name__")`), which is what a stable sort falls
     // back to — so the rows are given here in the WRONG order on purpose.
+    // The two SAME-MILLISECOND rows are handed over in reverse order on purpose. The other way
+    // round, a value truncated to milliseconds would compare equal, the stable sort would keep the
+    // input order, and this test would pass while the precision it exists to protect was gone.
     const rows = [
       { id: "a-latest", createdAt: LATER },
-      { id: "b-earliest", createdAt: EARLY },
       { id: "c-same-ms", createdAt: SAME_MS },
+      { id: "b-earliest", createdAt: EARLY },
     ];
     expect(rankedByTemplate(rows)).toEqual(["b-earliest", "c-same-ms", "a-latest"]);
   });
@@ -94,8 +102,9 @@ describe("a server-stamped field, as a page receives it", () => {
         note: { type: "string" },
       },
     };
-    const parts = { seconds: 1786835154, nanoseconds: 605000000 };
-    expect(decodeRecordTimes({ id: "b1", createdAt: parts }, schema)).toEqual({ id: "b1", createdAt: EARLY });
+    // The form itself, once: the constants above are literals, and this is what keeps them true.
+    expect(serverTimeOf(EARLY_PARTS)).toBe(EARLY);
+    expect(decodeRecordTimes({ id: "b1", createdAt: EARLY_PARTS }, schema)).toEqual({ id: "b1", createdAt: EARLY });
     // A value with the same SHAPE in a field the schema calls a string — or in a key it never
     // mentions — is left alone. Records may carry both, and re-typing them would be corrupting
     // live data on a guess.
