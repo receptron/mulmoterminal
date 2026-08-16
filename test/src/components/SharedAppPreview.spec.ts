@@ -319,6 +319,18 @@ describe("SharedAppPreview", () => {
     wrapper.unmount();
   });
 
+  // A member page that throws while its script is being parsed never reaches `ready()`. It sits on
+  // its loading state with the reason sealed inside the frame, and it is the page an author cannot
+  // otherwise diagnose — so the pane must hear it through the member parent too, not only the
+  // public one.
+  it("hears a member page report itself before the handshake", async () => {
+    vi.stubGlobal("fetch", answering(memberPayload()));
+    const wrapper = await mountPreview();
+    await speakFromFrame(wrapper, { type: "mc-public-view:notice", nonce: nonceOf(wrapper), code: "error", detail: "boom" });
+    expect(await copyBlock(wrapper)).toContain("the page raised an error nothing caught");
+    wrapper.unmount();
+  });
+
   it("renders the page in a frame no looser than the published one", async () => {
     const wrapper = await mountPreview();
     const frame = wrapper.find("iframe");

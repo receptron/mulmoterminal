@@ -42,7 +42,7 @@ import { publicFormOf, type PublicForm } from "./publicForm.js";
 import { declaredView, readAppViewFile } from "./publicView.js";
 import { isRecord } from "../../../common/isRecord.js";
 import { viewerFor, writableFields } from "@receptron/sharedapp/view";
-import type { ProjectedViewWrite } from "@receptron/sharedapp";
+import { projectedWritesOf } from "@receptron/sharedapp";
 import {
   previewPageKey,
   type PreviewDataset,
@@ -140,19 +140,6 @@ async function readDatasets(
   // ids in, so a projection sorted one way against a listing sorted another does not read as a
   // change.
   return { datasets, unreadable: [...unreadable].sort((left, right) => (left < right ? -1 : 1)) };
-}
-
-/** The `write` half of a tier's projection, narrowed rather than asserted.
- *
- *  The document is built by the compiler in this same process, so this is not
- *  defence against a stranger — it is the floor that keeps a shape change in
- *  `@receptron/sharedapp` from reaching the pane as a page that draws nothing.
- *  An entry that is not a record with a `cid` is dropped, exactly as
- *  mulmoserver's `writeOf` drops one it reads back off Firestore. */
-function projectedWrites(config: Record<string, unknown> | null): ProjectedViewWrite[] {
-  const write: unknown = config?.write;
-  if (!Array.isArray(write)) return [];
-  return write.filter((entry): entry is ProjectedViewWrite => isRecord(entry) && typeof entry.cid === "string" && entry.cid !== "");
 }
 
 /** What one tier's projection says each of its pages may query for. */
@@ -262,7 +249,10 @@ export async function previewSharedApp(root: string, opts: SharedAppOptions = {}
     // package's, and mulmoserver calls the same one with the same projection —
     // which is the whole point: while the pane had only the PUBLIC bridge, every
     // roster page previewed here was handed `{}` and drew no buttons at all.
-    const viewer = viewerFor(projectedWrites(plan.config), handle.email, plan.tier);
+    // Read back through the PACKAGE's reader, which is the one mulmoserver uses on the document it
+    // gets off Firestore. A looser read here would let the preview draw a control production drops
+    // — the preview being looser than production, the one thing it must never be.
+    const viewer = viewerFor(projectedWritesOf(plan.config), handle.email, plan.tier);
     return plan.pages.map((tierPage): PreviewPage => ({ id: tierPage.id, html: tierPage.html, audience: plan.tier, viewer }));
   });
   const pages = [...publicPages, ...tierPages];

@@ -254,6 +254,10 @@ const member = memberBridge(
     // Never a floor. A page whose payload carried no viewer is a page this pane could not resolve
     // one for, and inventing an empty one here is the bug being fixed.
     viewer: () => page.value?.viewer ?? { me: null, can: {} },
+    // The same log the public parent writes to. A member page can throw before it ever readies —
+    // the page that sits on its loading state — and without this the pane would report that page
+    // as silent, which is the one thing it exists not to do.
+    notice: (report) => remember({ kind: "notice", code: report.code, detail: report.detail }),
   },
   () => nonce.value,
 );
