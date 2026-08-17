@@ -37,8 +37,9 @@ Four shapes are written out in full — declaration, schemas, and the reasoning 
   rules.
 - **[templates/survey.md](./templates/survey.md)** — **collecting answers**, with nothing to run out
   of (a survey, a quiz, an application form, a sign-up with no cap). The shortest declaration of the
-  four, which is why it is the one that ships with no way to READ what it collected — so it is
-  written around the `member` page, and it spells out the three-way trade above.
+  four, and the shape most often written with a public page and nothing else — so this one is built
+  around its `member` page, which is where the answers are read. It also spells out the three-way
+  trade above, and what a tally may and may not claim about values a respondent typed.
 - **[templates/meeting-room.md](./templates/meeting-room.md)** — a bookable unit you can LIST IN
   ADVANCE, taken on the spot with no approval (a meeting room, a desk, equipment on loan, a parking
   space). This is what `idFrom: "field"` and `mirror` are for, and it is the one that spells out who
@@ -241,9 +242,10 @@ inherits that template's pages, while a form-shaped app is written from scratch 
 no member page were the ones nobody had a sample for. Every template now shows one, and
 `templates/survey.md` is the one for a form.
 
-**The participant page is a real question, and it is not "do you want one".** Ask
-**whether the people who answer need to see their own answer later**, and know what the answer
-costs before you offer it:
+**Whether an answerer can see their own answer back is a real question, and it is not "do you want
+a participant page".** Ask **whether the people who answer need to see their own answer later**,
+then pick the route from the three below — only the third one costs an invitation, and it is
+reached for only when a custom public page is also required:
 
 - `/p/{slug}` is readable only by people **on the roster**. A stranger who answers a public form is
   not on it, so a participant page renders for nobody unless the author invites them one by one.
@@ -252,8 +254,9 @@ costs before you offer it:
   replaces the generated form, and the data a public page may be handed is limited to
   `public.read`, which the submitted records can never be in.
 - So "anyone may answer" + "a public page I wrote myself" + "answerers can see their answer" is
-  three things, and **only two of them are available at once**. Say so while the shape is still
-  being chosen, not after the page is written.
+  three things, and **only two of them are available at once**. Drop the middle one and the
+  generated form serves everybody; drop the first and `/p/{slug}` serves a roster. Say so while the
+  shape is still being chosen, not after the page is written.
 
 The rules are not the obstacle here and do not need working around: a submitter may already read
 their own row (`emailField`, or `idFrom: "auth.uid"`). What is missing in that third case is a page
@@ -831,9 +834,12 @@ Three things are worth asking and the rest are not:
 - **whether people outside the roster should be able to answer** — it decides whether there is a
   `public` block at all. Ask it in those words: everyone who answers signs in with an email
   address either way, so "public" here means "anyone who signs in", not "anonymous";
-- **whether the people who answer need to see their own answer later** (step 2c) — it decides
-  whether the app is invite-only, so it cannot be settled afterwards. The AUTHOR'S own page is not
-  on this list: an app that collects records gets one, and asking makes it sound optional.
+- **whether the people who answer need to see their own answer later** (step 2c) — it decides what
+  the PUBLIC page may be, which is not a thing to discover after writing one. Answering yes does
+  not make the app invite-only: leaving the public page generated serves a respondent who is on no
+  roster. Invite-only is what the `/p/{slug}` route costs, and that route is the option to reach
+  for when a custom public page is also required. The AUTHOR'S own page is not on this list: an app
+  that collects records gets one, and asking makes it sound optional.
 
 Do not ask which storage to use, whether to make it "an app", or what to call the collection.
 

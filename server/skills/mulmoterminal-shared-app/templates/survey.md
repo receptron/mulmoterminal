@@ -322,19 +322,23 @@ publish なしでできるので、集計を「いま宣言されているもの
       }
     }
 
-    // 設問そのものが消されることもあります。いま宣言されている設問だけを描くと、消した設問
-    // への回答が全部見えなくなる — 選択肢のときと同じ消え方で、こちらは丸ごとです。保存
-    // されている側にしか無い設問 id を後ろに足します。
+    // 保存されている側にしか無い設問 id も後ろに足します。いま宣言されている設問だけを
+    // 描くと、消した設問への回答が丸ごと見えなくなるからです。
+    //
+    // ただし**それが何なのかは、このページには分かりません**。消したあとの名残かもしれない
+    // し、回答者が作った文字列かもしれない（answers は自由文で、ルールは中身を見ません —
+    // 下の「数えているのは、人が書いた文字列です」）。だから消さずに数え、宣言された設問と
+    // 同じ顔では出しません。
     const declaredQuestions = new Set(questions.map((question) => question.id));
-    const deletedQuestions = [...chosen.keys()]
+    const unknownQuestions = [...chosen.keys()]
       .filter((id) => !declaredQuestions.has(id))
-      .map((id) => ({ id, text: `${id}（削除された設問）`, choices: "" }));
+      .map((id) => ({ id, text: `${id}（宣言にない設問 ID）`, choices: "" }));
 
     tally.replaceChildren(
       ...questions
         .slice()
         .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
-        .concat(deletedQuestions)
+        .concat(unknownQuestions)
         .map((question) => {
           const box = document.createElement("div");
           const heading = document.createElement("p");
@@ -346,12 +350,14 @@ publish なしでできるので、集計を「いま宣言されているもの
           // なしで直せるので、選択肢の文言を変えたり消したりしたあとに現在の choices だけを
           // 見ると、それ以前の回答が集計から黙って消えます（0 件になるのではなく、行ごと
           // 出なくなる）。回ってこなくなった答えは、残しつつそれと分かるようにします。
-          const retired = [...perQuestion.keys()].filter((choice) => !declared.includes(choice));
-          for (const choice of [...declared, ...retired]) {
+          const unknown = [...perQuestion.keys()].filter((choice) => !declared.includes(choice));
+          for (const choice of [...declared, ...unknown]) {
             const n = perQuestion.get(choice) ?? 0;
             const row = document.createElement("div");
             const label = document.createElement("span");
-            label.textContent = retired.includes(choice) ? `${choice}（現在は選べません）: ${n} 件` : `${choice}: ${n} 件`;
+            // 宣言に無い値は、消された選択肢の名残とも、回答者が作った文字列とも区別が
+            // つきません。両方あり得ると分かる言い方にすること。
+            label.textContent = unknown.includes(choice) ? `${choice}（宣言にない値）: ${n} 件` : `${choice}: ${n} 件`;
             const bar = document.createElement("div");
             // 幅はスタイルで持たせること。棒を文字で描くと、数が増えたときに折り返します。
             bar.style.width = `${responses.length === 0 ? 0 : Math.round((n / responses.length) * 100)}%`;
@@ -384,6 +390,27 @@ publish なしでできるので、集計を「いま宣言されているもの
   view.ready();
 </script>
 ```
+
+### 数えているのは、人が書いた文字列です
+
+`answers` は自由文で、**ルールはその中身を見ません。** 公開の書き込みでルールが値そのものを
+確かめるのは 2 つだけ — `statusField` が `initialStatus` と一致すること、`emailField` が
+サインインした本人のアドレスであること。それ以外は `createFields` に**名前がある**かどうかだけ
+で、中身は送られたとおりに入ります。ページを開いた人が radio の `value` を書き換えることも、
+ブリッジを直接呼ぶこともできるので、**宣言にない設問 ID や選択肢の入った回答は作れます**。
+
+だから:
+
+- **上の集計は「宣言にない値」を消しません。** 消すと、正当に消された選択肢への過去の回答まで
+  一緒に消えるからです。**そして同じ理由で、それを「削除された設問」と断定もしません** —
+  ページにはその 2 つが区別できない。件数とともに、宣言に無いものとして出すのが正直な形です。
+- **本物の検証が要るなら、集計の側ではなく形の側で。** 1 設問 1 フィールドにして
+  `createFields` に並べれば、少なくとも**未知のキーは拒否されます**（`hasOnly`）。値そのものは
+  それでもルールを通り抜けるので、`enum` から外れた値は**受け取ったあとにコレクションのペインで
+  弾く**ことになります。
+- **公開の集計にそのまま出さないこと。** ここは `member` のページで、読むのは名簿の人です。
+  同じ数字を誰でも見えるところに出すなら、それは投票所を作っているのと同じで、この
+  テンプレートの形では守れません。
 
 ---
 
