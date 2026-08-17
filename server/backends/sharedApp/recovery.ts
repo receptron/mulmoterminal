@@ -8,21 +8,27 @@
 // are the damaging ones and neither can be undone.
 import { APPS_COLLECTION } from "@receptron/sharedapp";
 
-/** The repair that must not be attempted, said the same way wherever an aid is named.
+/** The two repairs that are not repairs, said the same way wherever an aid is named.
  *
- *  IT IS THE ONE OPERATION NOTHING CAN UNDO, and it is worth spelling out because the rules do not
- *  stop the author: `allow delete: if false` binds a CLIENT, and the host holds an Admin
- *  credential — so the person most likely to try it is the one the rule cannot reach. Firestore
- *  does not cascade, and every rule authorizing a child resolves the roster THROUGH the parent, so
- *  a deleted `apps/{aid}` leaves its records, config, member and roster documents behind with the
- *  expression that guards them failing: unreadable and undeletable, permanently, by anybody.
+ *  DELETING THE APP DOCUMENT is not reachable from here — the rules refuse it and this host is an
+ *  ordinary rules-bound client, writing as the signed-in user — but it IS reachable from the
+ *  console, `firebase firestore:delete --recursive` and any Admin-SDK script, which the owner of
+ *  an app has. What it costs is worth stating exactly, because "permanently lost" would be false
+ *  and "harmless" would be worse: Firestore does not cascade, and every child is authorized
+ *  THROUGH the parent, so while `apps/{aid}` is missing every rules-bound reader — the app's own
+ *  pages, the Collections pane, these tools — is denied on the whole subtree. The data is still
+ *  there; only the door is gone. Re-creating the document under the SAME aid opens it again, which
+ *  is what publishing does, and it is the only route that ends with a working app: an
+ *  administrative recursive delete reaches the records too, but it removes them.
  *
- *  The other half is the `aid` itself. A new one does not repair anything — it publishes a SECOND
- *  app beside the first, with a roster of one and none of the records, and nothing on disk says it
- *  happened. `requireAid` refuses that at publish; this is the same sentence for the author who is
- *  about to do it by hand. */
-const neverRemove = (aid: string): string[] => [
-  `**Do not delete ${APPS_COLLECTION}/${aid}, and do not change \`aid\` to start over.** Firestore does not cascade: everything under an app document — the records, config/*, member/* and roster/* — is authorized through it, so removing the parent leaves that subtree permanently unreadable and undeletable, by anybody. And a fresh aid does not reset an app; it creates a second one, leaving the first exactly where it is.`,
+ *  CHANGING THE AID is the other one, and it is the reason the first matters. A fresh id publishes
+ *  a SECOND app — a roster of one, none of the records — and leaves the first exactly where it is,
+ *  with the aid that would have re-opened it now gone from the file that recorded it.
+ *  `requireAid` refuses that at publish; this is the same sentence for the author about to do it
+ *  by hand. */
+export const neverRemove = (aid: string): string[] => [
+  `**Do not delete ${APPS_COLLECTION}/${aid}, and do not change \`aid\` to start over.** Nothing here can delete it (the rules refuse it, and this host is a rules-bound client) — but the Firebase console and \`firebase firestore:delete --recursive\` can, and that is the trap: Firestore does not cascade, and everything under an app document — the records, config/*, member/* and roster/* — is authorized THROUGH it, so while the parent is missing every rules-bound reader is denied on the whole subtree.`,
+  `The records are not gone with it: re-creating ${APPS_COLLECTION}/${aid} under the SAME aid — which is what publishing again does — makes them reachable once more. Losing the aid is what makes that irreversible, which is why a fresh one is never the way out: it publishes a second app and abandons the first.`,
   "To empty an app, delete its records. To stop serving it, `unpublish`.",
 ];
 
@@ -54,6 +60,6 @@ export const halfPublishedApp = (aid: string): string[] => [
  *  already holds as held — nothing is re-taken — so the repair is to change nothing and run it
  *  again. */
 export const heldSlug = (slug: string): string[] => [
-  `The URL name '${slug}' cannot be released once reserved (\`appSlugs\` refuses deletes, so a name already handed out can never come to mean a different app).`,
-  `That is not a loss: leave \`slug\` as it is in app.json and run the same operation again — a name this app already holds is recognised rather than replaced with a numbered one. Changing it now is what would strand '${slug}'.`,
+  `The URL name '${slug}' is this app's now, and a reservation cannot be released (\`appSlugs\` refuses deletes, so a name already handed out can never come to mean a different app).`,
+  `That is not a loss, and it does not call for a new name: the next run recognises a name this app already holds rather than replacing it with a numbered one. Changing \`slug\` in app.json is the one edit that would strand '${slug}' — held forever by an app that no longer claims it.`,
 ];

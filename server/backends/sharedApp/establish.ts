@@ -11,7 +11,7 @@
 // document exists is denied rather than mis-authorized.
 import { APPS_COLLECTION } from "@receptron/sharedapp";
 import type { SharedAppFailure, SharedAppHandle } from "./context.js";
-import { heldSlug, strandedApp } from "./recovery.js";
+import { heldSlug, neverRemove } from "./recovery.js";
 import { reserveSlug, retireSlug, type SlugResult } from "./slug.js";
 
 /** What a reservation needs to know. */
@@ -70,6 +70,10 @@ export async function reserveHeldSlug({ handle, aid, root, wanted, held, appDoc 
       problems: [
         `the URL name '${reservation.slug}' was reserved and written to app.json, but recording it on apps/${aid} failed: ${err instanceof Error ? err.message : String(err)}`,
         "Run it again — the reservation is this app's, and the next run recognises that rather than taking a numbered name.",
+        // Said HERE and not at the operation's edge, because here it is known that a name was
+        // actually taken: a failure that reserved nothing (every candidate belonged to somebody
+        // else) ends with the opposite advice, and appending this to both would contradict it.
+        ...heldSlug(reservation.slug),
       ],
     };
   }
@@ -128,13 +132,16 @@ export async function holdNewName(
       partial: true,
       problems: [
         ...held.problems,
-        `The app itself is fine: apps/${aid} exists, app.json is written, and this is the URL name and nothing else. Running the same operation again — or publishing — retries just this step.`,
-        // Named although this run may not have taken it: the failures above cover both "reserved
-        // and not recorded" and "never reserved", and the author cannot tell which from here (a
-        // reservation is unreadable until it is published). The advice is the same either way,
-        // and it is the advice that keeps the two cases from diverging: leave the name alone.
-        ...(wanted === undefined ? [] : heldSlug(wanted)),
-        ...strandedApp(aid),
+        // PUBLISH, and not "run it again". By the time this is reached the app document is live
+        // and `app.json` is written, which is exactly the state both entry points refuse: `init`
+        // will not touch a repository that already declares an app, and `fork` will not fork one
+        // the signed-in address now owns. Publish is the only operation that resumes the
+        // reservation, and telling the author otherwise sends them into a refusal that reads like
+        // a second failure.
+        `The app itself is fine: apps/${aid} exists and app.json is written — this is the URL name and nothing else. \`publish\` retries just this step; re-running \`init\` or \`fork\` will not, because the app they refuse to overwrite is now this one.`,
+        // `neverRemove` and not `strandedApp`: this app document is the repository's own and it is
+        // in use. What carries over is only the pair of repairs that are not repairs.
+        ...neverRemove(aid),
       ],
     };
   }

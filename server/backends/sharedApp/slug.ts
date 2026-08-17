@@ -15,6 +15,7 @@
 // the point (D2b) — a URL is a thing people have already sent to each other.
 import { APP_SLUGS_COLLECTION, appSlugDoc } from "@receptron/sharedapp";
 import { isRefusal, type SharedAppFailure, type SharedAppHandle } from "./context.js";
+import { heldSlug } from "./recovery.js";
 import { updateManifest } from "./manifestWrite.js";
 
 /** How many numbered alternatives to try before giving up. The number is small on purpose: past
@@ -139,6 +140,9 @@ async function recordSlug(root: string, slug: string): Promise<SharedAppFailure 
       `the URL name '${slug}' was reserved, but writing it back to app.json failed:`,
       ...updated.problems,
       "Publishing again is the repair: a run that finds the name taken now asks whether it is THIS app's before moving on, so the reservation is not stranded.",
+      // The name IS this app's here — it was claimed a moment ago — which is what makes "pick a
+      // different one" the wrong instinct: it is the one edit that would strand it.
+      ...heldSlug(slug),
     ],
   };
 }

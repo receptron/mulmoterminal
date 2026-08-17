@@ -309,7 +309,7 @@ describe("shared app publish / unpublish", () => {
     // exactly the state they are reached for.
     const said = result.ok === false ? result.problems.join("\n") : "";
     expect(said).toContain(`Do not delete apps/${AID}`);
-    expect(said).toContain("does not reset an app");
+    expect(said).toContain("The records are not gone with it");
   });
 
   it("refuses to publish a declaration whose aid was removed, rather than minting a second app", async () => {
