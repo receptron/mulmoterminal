@@ -90,7 +90,7 @@
     "id": { "type": "string", "label": "ID", "primary": true, "required": true },
     "name": { "type": "string", "label": "お名前" },
     "email": { "type": "email", "label": "メール", "required": true },
-    "answers": { "type": "text", "label": "回答（1 行 1 問）", "required": true },
+    "answers": { "type": "text", "label": "回答（JSON）", "required": true },
     "comment": { "type": "text", "label": "自由記述" },
     "answeredAt": { "type": "datetime", "label": "回答日時", "required": true },
     "status": { "type": "enum", "label": "状態", "values": ["submitted", "reviewed"] }
@@ -259,11 +259,14 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
     // 送るのは文字列だけ。数値や真偽値が 1 つでも混ざると、そのキーが落ちるのではなく
     // メッセージ全体が回答でなくなり、not-a-submission として拒否されます。
     // 答えは 1 つの text に詰めます — createFields は宣言なので、設問が増えるたびに
-    // app.json を書き換えて publish し直す形にしないためです。
+    // app.json を書き換えて publish し直す形にしないためです。詰め方は JSON（下）。
     const result = await view.submit("responses", {
       name: document.getElementById("who").value.trim(),
       comment: document.getElementById("comment").value.trim(),
-      answers: questions.map((question) => `${question.id}\t${answerOf(question)}`).join("\n"),
+      // JSON にします。区切り文字（タブでも改行でも）は、設問文にも選択肢にもそれが
+      // 入り得る以上いつか必ず壊れます — 「とても<TAB>良い」という選択肢 1 つで、
+      // 集計はそれを別の値として数え始めます。
+      answers: JSON.stringify(Object.fromEntries(questions.map((question) => [question.id, answerOf(question)]))),
     });
     // 失敗は「壊れた」ではありません。サインインしていないか、この人が既に答えたか
     // （idFrom: "auth.uid"）のどちらかです。
@@ -310,17 +313,33 @@ publish なしでできるので、集計を「いま宣言されているもの
   view.onState(({ questions = [], responses = [] }) => {
     count.textContent = `${responses.length} 件の回答`;
 
-    // 回答は "qid\tchoice" の行。設問ごとに、選択肢ごとの件数を数えるだけです。
+    // 回答は {設問 id: 選んだ文字列} の JSON。設問ごとに、選択肢ごとの件数を数えます。
+    //
+    // 読めないものは**黙って捨てず、数えて出します**。answers はページが組み立てた文字列で
+    // あって、ルールが形を見てくれるものではないので（下の「数えているのは、人が書いた
+    // 文字列です」）、壊れた回答が 0 件に見えるのと 1 件あるのとでは意味が違います。
     const chosen = new Map();
+    let unreadable = 0;
     for (const response of responses) {
-      for (const line of String(response.answers ?? "").split("\n")) {
-        const [question, choice] = line.split("\t");
-        if (!question || !choice) continue;
+      let answered = null;
+      try {
+        const parsed = JSON.parse(String(response.answers ?? ""));
+        if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) answered = parsed;
+      } catch {
+        answered = null;
+      }
+      if (answered === null) {
+        unreadable += 1;
+        continue;
+      }
+      for (const [question, choice] of Object.entries(answered)) {
+        if (typeof choice !== "string" || choice === "") continue;
         const perQuestion = chosen.get(question) ?? new Map();
         perQuestion.set(choice, (perQuestion.get(choice) ?? 0) + 1);
         chosen.set(question, perQuestion);
       }
     }
+    if (unreadable > 0) count.textContent = `${responses.length} 件の回答（うち ${unreadable} 件は読めない形式）`;
 
     // 保存されている側にしか無い設問 id も後ろに足します。いま宣言されている設問だけを
     // 描くと、消した設問への回答が丸ごと見えなくなるからです。
@@ -393,7 +412,8 @@ publish なしでできるので、集計を「いま宣言されているもの
 
 ### 数えているのは、人が書いた文字列です
 
-`answers` は自由文で、**ルールはその中身を見ません。** 公開の書き込みでルールが値そのものを
+`answers` は自由文で、**ルールはその中身を見ません。** 中身が JSON であることすら保証されない
+（読めなかった件数を上のページが出しているのはそのためです）。 公開の書き込みでルールが値そのものを
 確かめるのは 2 つだけ — `statusField` が `initialStatus` と一致すること、`emailField` が
 サインインした本人のアドレスであること。それ以外は `createFields` に**名前がある**かどうかだけ
 で、中身は送られたとおりに入ります。ページを開いた人が radio の `value` を書き換えることも、
