@@ -1,0 +1,358 @@
+# テンプレート: 答えを集める（アンケート・診断・応募フォーム）
+
+奪い合いが無い形です。定員も、解禁時刻も、順位もない。**答えを集めて、集めた答えを読む**、
+それだけ。だから宣言はこの 3 つの中で一番短く、書くのも一番早い。
+
+**落とし穴はそこ一つです。** 公開ページが動いた時点で完成したように見えるのに、その時点では
+**集めた答えを誰も見られません**。著者は自分の Mac のコレクションペインからなら読めるので、
+気づくのは人に配ったあと — 「回答は来ていますか」と訊かれて、母艦を開きに行くときです。
+
+このテンプレートが他の 2 つと違うのは、**`member` のページを最初から数に入れている**ことだけ
+です。予約ものは受付の画面を作る理由が最初から目に見えていますが、アンケートは見えない。
+
+## 中心にある考え方 — ページは「公開」だけではない
+
+入口は 3 つあり、`views` に書いたものだけが存在します。
+
+| 入口 | 誰が開けるか | このアプリでの意味 |
+|---|---|---|
+| `/a/{slug}` | 誰でも（サインインは宣言次第） | 答える画面 |
+| `/m/{slug}` | `members` にロールを持つ人 | **集まった答えを読む画面。これが要る** |
+| `/p/{slug}` | `members` に載っている人 | 自分の答えを見返す画面。**下記の分岐**を読むこと |
+
+`/m/` を書かないアプリは、著者の Mac が起きていないと結果が読めないアプリです。共有アプリに
+した意味の半分がそこで消えるので、**`member` のページは既定で作ってください**。要るかどうかを
+ユーザーに訊く必要はありません（訊くべきなのは `/p/` のほう、下記）。
+
+## app.json
+
+```json
+{
+  "aid": "(init が書きます)",
+  "name": "講演アンケート",
+  "slug": "talk-survey",
+  "members": {
+    "owner@example.jp": { "*": "owner" }
+  },
+  "collections": {
+    "responses": {
+      "submitOnly": true,
+      "statusField": "status"
+    }
+  },
+  "public": {
+    "enabled": true,
+    "read": ["questions"],
+    "submit": {
+      "responses": {
+        "auth": "verifiedEmail",
+        "emailField": "email",
+        "idFrom": "auth.uid",
+        "stampField": "answeredAt",
+        "initialStatus": "submitted",
+        "createFields": ["email", "name", "answers", "comment", "answeredAt", "status"]
+      }
+    }
+  },
+  "views": [
+    { "id": "public", "audience": "public", "path": "views/survey.html", "collections": ["questions"] },
+    { "id": "desk", "audience": "member", "path": "views/desk.html", "collections": ["questions", "responses"] }
+  ]
+}
+```
+
+## .claude/skills/questions/schema.json
+
+```json
+{
+  "title": "設問",
+  "icon": "quiz",
+  "primaryKey": "id",
+  "storage": { "type": "firestore" },
+  "fields": {
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "order": { "type": "number", "label": "順番", "required": true },
+    "text": { "type": "string", "label": "設問", "required": true },
+    "choices": { "type": "text", "label": "選択肢（1 行 1 つ）", "required": true }
+  }
+}
+```
+
+## .claude/skills/responses/schema.json
+
+```json
+{
+  "title": "回答",
+  "icon": "assignment_turned_in",
+  "primaryKey": "id",
+  "storage": { "type": "firestore" },
+  "fields": {
+    "id": { "type": "string", "label": "ID", "primary": true, "required": true },
+    "name": { "type": "string", "label": "お名前" },
+    "email": { "type": "email", "label": "メール", "required": true },
+    "answers": { "type": "text", "label": "回答（1 行 1 問）", "required": true },
+    "comment": { "type": "text", "label": "自由記述" },
+    "answeredAt": { "type": "datetime", "label": "回答日時", "required": true },
+    "status": { "type": "enum", "label": "状態", "values": ["submitted", "reviewed"] }
+  }
+}
+```
+
+---
+
+## 効いている宣言 4 つ
+
+### `idFrom: "auth.uid"` — 1 人 1 件、書き直しではなく拒否
+
+ドキュメントの id が回答者本人になります。二度目の送信は**既にあるドキュメントを作ろうとする
+create** なので、上書きではなく拒否されます。「1 回だけ答えられます」を本当に守るのはこれ
+だけで、**ページ側のフラグ（送信済みだからボタンを無効に）は守りません** — 再読込みで消える
+ので、宣言していなければ同じ人の行が何件でも増えます。
+
+`gym.md` の `auth.uid+field` は「1 人 1 クラス」。こちらは field を足さない形で、「1 人 1 件」。
+
+**回数を数えたい調査（毎月の定点観測）ならこれを外します。** そのときは 1 人が何件でも書ける
+ので、desk 側で最新だけを見るのか全部見るのかを決めてください。
+
+### `emailField: "email"` — ページは住所を送らない
+
+サインインした人の**確認済みアドレスを親が入れます**。ページから送ると、送った値が本人のもの
+かどうかをルールが確かめられないので拒否されます。`createFields` には**書きます**（親が入れる
+キーも、書き込まれるキーである以上ここに無いと拒否されます）。
+
+### `stampField: "answeredAt"` — 時刻はサーバのもの
+
+保存されるのはサーバの時刻、ページに渡るのは `…Z` で終わる文字列です。**辞書順がそのまま
+時刻順**なので、並べ替えは素の文字列比較でよく、`new Date()` に通す必要はありません。
+自分で `toISOString()` を書いて送ることはできません（publish が拒否します）。
+
+### `submitOnly: true` — 水増しを防ぐ
+
+公開の入口から入ってきた行を、あとから誰かがまとめて足せないようにします。集計を出す
+アプリでは、これが「その数字が本当に人から来た」の根拠です。
+
+---
+
+## 回答者に自分の答えを見せるには — **作る前にしか選べません**
+
+ここは訊く価値のある唯一の分岐です。**「答えた人が、あとで自分の回答を見返せる必要があるか」**
+を、その言葉で訊いてください。答えによって道が 3 つに分かれ、うち 1 つは行き止まりです。
+
+- **(a) 公開ページを自分で書かない。** `views` から `public` を落とすと、宣言から**生成される
+  フォーム**が使われます。これには「あなたの回答」を出す画面が最初から付いていて、名簿に
+  載っていない回答者にも見えます。そのときの `views` は `desk` の 1 枚だけ — それで完成して
+  いるアプリです。
+
+  ただし**生成されるフォームが描くのは `createFields` に並んだ欄**です。この形を取るなら、
+  設問はコレクションではなく**宣言のフィールドとして 1 問 1 つ並べます**
+  （`"createFields": ["email", "satisfaction", "wouldRecommend", "comment", …]`）。代償は
+  **設問を 1 つ変えるたびに publish し直すこと**、そして設問が回答の履歴に焼き付くことです。
+  設問が固まっていて数が知れているなら、これが一番安い形です。
+
+- **(b) 名簿に載せて `/p/{slug}`。** `audience: "participant"` のページを足します。ただし
+  **participant のページは名簿に載っている人しか開けません**。招待制のアンケートなら自然な形、
+  誰でも答えられるアンケートなら、答えた全員を招待する覚悟があるときだけ。
+
+- **(c) 自分で書いた公開ページ + 誰でも答えられる。→ 今は見せられません。** カスタムの公開
+  ページは生成フォームを**置き換える**ので、(a) の「あなたの回答」ごと消えます。そして公開
+  ページに渡せるデータは `public.read` にあるものだけで、`responses` はそこに入れられない
+  （入れたら全員の回答が世界中から読めます）。**回答者に見せられるのは、送る前にページが手元で
+  持っている値だけ**です。
+
+  下の `views/survey.html` はこの (c) の形で、**このテンプレートが (c) を選んでいる理由は
+  設問をコレクションに置いたから**です。設問が `questions` にあって答えが 1 つの `answers` に
+  詰まる以上、生成フォームが描けるのは「answers という名前の大きな入力欄」1 つで、それは
+  アンケートではありません。設問を publish なしで足したい、採点してその場で結果を返したい —
+  そういうときに (c) を選び、**そのときは回答者に見せ返すことを諦める**、という取引です。
+
+  そして、その画面が出すのは「いま答えた結果」であって「保存された回答」ではない、と
+  **ページの文言で言うこと** — 「保存しました。あとでここから見られます」は書けません。
+  嘘になります。
+
+---
+
+## ページは 2 枚書きます
+
+守る点は 3 つ。どれを破っても**例外は出ず、画面も変わりません**:
+
+- **`<form>` は使えない。** `sandbox="allow-scripts"` に `allow-forms` が無く、ブラウザは
+  `submit` イベントを**発火する前に**送信を止めます。`<div>` と `type="button"` のボタンにして
+  **click** で `submit()` を呼びます。入力欄での Enter と `required` も同じ理由で効きません。
+- **`prompt` / `alert` / `confirm` は無視されます**（`allow-modals` が無い）。訊くのはページの中の
+  `<input>`、報せるのはページの中の要素です。
+- **`onState` を張ったら最後に `ready()`。** 呼ばないとデータは永久に来ず、「読み込み中」の
+  ままです。
+
+### views/survey.html
+
+読めるのは `questions` だけ。`email` と `status` と `answeredAt` は親が入れるので送りません。
+
+```html
+<h1>講演アンケート</h1>
+<div id="list"></div>
+<label>お名前 <input id="who" maxlength="40" /></label>
+<label>ご意見 <textarea id="comment" maxlength="1000"></textarea></label>
+<button id="send" type="button">送信する</button>
+<p id="say" role="status"></p>
+<script>
+  const view = window.__MC_APP_VIEW;
+  const list = document.getElementById("list");
+  const say = document.getElementById("say");
+  const picked = new Map();
+  let questions = [];
+
+  view.onState(({ questions: rows = [] }) => {
+    questions = rows.slice().sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+    list.replaceChildren(
+      ...questions.map((question) => {
+        // textContent で組み立てること。設問も選択肢も人が入力するもので、文字列連結で
+        // innerHTML に入れると公開ページでそれが動きます。
+        const box = document.createElement("div");
+        const text = document.createElement("p");
+        text.textContent = question.text ?? question.id;
+        box.append(text);
+        for (const choice of String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "")) {
+          const pick = document.createElement("button");
+          // type を書くこと。省略した <button> は submit ボタンで、サンドボックスが
+          // 止める側の形です。
+          pick.type = "button";
+          pick.dataset.question = question.id;
+          pick.dataset.choice = choice;
+          pick.textContent = choice;
+          box.append(pick);
+        }
+        return box;
+      }),
+    );
+  });
+
+  list.addEventListener("click", (event) => {
+    const { question, choice } = event.target.dataset ?? {};
+    if (!question) return;
+    picked.set(question, choice);
+    for (const button of list.querySelectorAll(`[data-question="${question}"]`)) {
+      button.setAttribute("aria-pressed", String(button.dataset.choice === choice));
+    }
+  });
+
+  document.getElementById("send").addEventListener("click", async () => {
+    const missing = questions.filter((question) => !picked.has(question.id));
+    if (missing.length > 0) {
+      say.textContent = `${missing.length} 問、まだ選んでいません。`;
+      return;
+    }
+    // 送るのは文字列だけ。数値や真偽値が 1 つでも混ざると、そのキーが落ちるのではなく
+    // メッセージ全体が回答でなくなり、not-a-submission として拒否されます。
+    // 答えは 1 つの text に詰めます — createFields は宣言なので、設問が増えるたびに
+    // app.json を書き換えて publish し直す形にしないためです。
+    const result = await view.submit("responses", {
+      name: document.getElementById("who").value.trim(),
+      comment: document.getElementById("comment").value.trim(),
+      answers: questions.map((question) => `${question.id}\t${picked.get(question.id)}`).join("\n"),
+    });
+    // 失敗は「壊れた」ではありません。サインインしていないか、この人が既に答えたか
+    // （idFrom: "auth.uid"）のどちらかです。
+    say.textContent = result.ok ? "ありがとうございました。" : `送れませんでした: ${result.error ?? "unknown"}`;
+  });
+
+  view.ready();
+</script>
+```
+
+### views/desk.html
+
+`audience: "member"`、入口は `/m/{slug}`。**ロールを持つ人だけ**が読めるドキュメントに publish
+されます。**著者の Mac が閉じていても、スマホから結果が読める** — これがこのページの目的で、
+コレクションペインでは代わりになりません。
+
+契約は公開ページと同じ（`window.__MC_APP_VIEW` / `onState` / `ready`）。渡されるものだけが違い、
+`collections` に書いたものが**その人の資格情報で**読まれます。
+
+集計は**ここで数えるもの**で、どこにも保存しません。保存した集計は、行が 1 件増えるたびに嘘に
+なります。
+
+```html
+<p id="count" role="status"></p>
+<div id="tally"></div>
+<h2>自由記述</h2>
+<div id="comments"></div>
+<script>
+  const view = window.__MC_APP_VIEW;
+  const tally = document.getElementById("tally");
+  const comments = document.getElementById("comments");
+  const count = document.getElementById("count");
+
+  view.onState(({ questions = [], responses = [] }) => {
+    count.textContent = `${responses.length} 件の回答`;
+
+    // 回答は "qid\tchoice" の行。設問ごとに、選択肢ごとの件数を数えるだけです。
+    const chosen = new Map();
+    for (const response of responses) {
+      for (const line of String(response.answers ?? "").split("\n")) {
+        const [question, choice] = line.split("\t");
+        if (!question || !choice) continue;
+        const perQuestion = chosen.get(question) ?? new Map();
+        perQuestion.set(choice, (perQuestion.get(choice) ?? 0) + 1);
+        chosen.set(question, perQuestion);
+      }
+    }
+
+    tally.replaceChildren(
+      ...questions
+        .slice()
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+        .map((question) => {
+          const box = document.createElement("div");
+          const heading = document.createElement("p");
+          heading.textContent = question.text ?? question.id;
+          box.append(heading);
+          const perQuestion = chosen.get(question.id) ?? new Map();
+          for (const choice of String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "")) {
+            const n = perQuestion.get(choice) ?? 0;
+            const row = document.createElement("div");
+            const label = document.createElement("span");
+            label.textContent = `${choice}: ${n} 件`;
+            const bar = document.createElement("div");
+            // 幅はスタイルで持たせること。棒を文字で描くと、数が増えたときに折り返します。
+            bar.style.width = `${responses.length === 0 ? 0 : Math.round((n / responses.length) * 100)}%`;
+            bar.style.height = "8px";
+            bar.style.background = "#4f46e5";
+            row.append(label, bar);
+            box.append(row);
+          }
+          return box;
+        }),
+    );
+
+    // answeredAt はサーバが入れた "…Z" の文字列。辞書順が時刻順なので、そのまま比較します。
+    comments.replaceChildren(
+      ...responses
+        .filter((response) => String(response.comment ?? "").trim() !== "")
+        .sort((a, b) => String(b.answeredAt ?? "").localeCompare(String(a.answeredAt ?? "")))
+        .map((response) => {
+          const box = document.createElement("div");
+          const who = document.createElement("span");
+          who.textContent = `${response.name ?? ""}（${response.email ?? ""}）`;
+          const what = document.createElement("p");
+          what.textContent = response.comment ?? "";
+          box.append(who, what);
+          return box;
+        }),
+    );
+  });
+
+  view.ready();
+</script>
+```
+
+---
+
+## この形が向かないもの
+
+- **枠や定員があるもの** — 先着なら `gym.md`、1 つのものを取り合うなら `meeting-room.md`。
+  このテンプレートには排他が無く、`idFrom: "auth.uid"` が防ぐのは「同じ人の 2 件目」だけです。
+- **誰かが承認するもの** — 応募を受けて可否を返すなら `salon.md` の `assignee`。ここの
+  `status` は「読んだ」を記録するだけで、`transitions` を書いていないので誰も動かせません。
+- **匿名で集めたいもの** — `auth: "verifiedEmail"` は住所を記録します。`auth: "none"` にすると
+  誰でも書けるようになり、そのとき `idFrom: "auth.uid"` の 1 人 1 件も効きません。**匿名と
+  重複防止は同時に成り立ちません** — どちらが要るかをユーザーに決めてもらってください。

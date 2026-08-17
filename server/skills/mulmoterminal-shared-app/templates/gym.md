@@ -67,7 +67,8 @@
   },
   "views": [
     { "id": "public", "audience": "public", "path": "views/signup.html", "collections": ["classes"] },
-    { "id": "mine", "audience": "participant", "path": "views/mine.html", "collections": ["classes", "bookings"] }
+    { "id": "mine", "audience": "participant", "path": "views/mine.html", "collections": ["classes", "bookings"] },
+    { "id": "desk", "audience": "member", "path": "views/desk.html", "collections": ["classes", "bookings"] }
   ]
 }
 ```
@@ -193,10 +194,15 @@ opensAt = (クラスの開始日の 3 日前の 08:00 現地時間).getTime()
 
 ---
 
-## ページは 2 枚書きます
+## ページは 3 枚書きます
 
 **`signup.html`（公開）** は `classes` を並べて、申込みを 1 件 `submit()` するだけです。
 順位はここには出せません（読めないので）。
+
+**`desk.html`（member）** は受付の画面です。**申込みを受けるアプリには必ず要ります**
+（[SKILL.md](../SKILL.md) の「2c. Decide the ENTRANCES」）— 無いと、誰が来るのかを
+オーナーの Mac のコレクションペインでしか見られません。スタジオの受付が朝いちばんに
+開くのはこの画面です。
 
 **`mine.html`（participant）** が、読めた行から:
 
@@ -344,7 +350,7 @@ opensAt = (クラスの開始日の 3 日前の 08:00 現地時間).getTime()
 ```
 
 **そして publish の前に、プレビューで実際に押してもらってください**（[SKILL.md](../SKILL.md) の
-「3b. RUN THE PAGE」）。このページの不具合は読んでも見つかりません。とくにこの形は、申込み
+「3. RUN THE PAGE」）。このページの不具合は読んでも見つかりません。とくにこの形は、申込み
 ボタンを 1 回押して**確認ダイアログが出るところまで**見てもらう価値があります — 出なければ、
 メッセージは iframe から出ていません。
 
@@ -352,6 +358,101 @@ opensAt = (クラスの開始日の 3 日前の 08:00 現地時間).getTime()
 ルールは読みません。**これは表示上の定員です** — 9 番目の人が現場に来ることは
 止められません。順位方式ではデータが壊れないので、これは不整合ではなく運用の話です。
 法的・課金的に厳格な定員が要るアプリには、この形は向きません。
+
+### views/desk.html
+
+`audience: "member"`、入口は `/m/{slug}`。**ロールを持つ人だけ**が読めるドキュメントに
+publish されます。オーナーの Mac が閉じていても、受付がスマホでその朝のクラスの名簿を
+見られる — これがこのページの目的で、コレクションペインは代わりになりません。
+
+契約は他の 2 枚と同じ（`window.__MC_APP_VIEW` / `onState` / `ready`）。違うのは渡される
+ものだけで、`collections` に書いたものが**その人の資格情報で**読まれます。ここでは
+`peerVisibility` は関係ありません — 受付はロールで全行が読めるので、参加者どうしを
+見せ合わせるかどうかとは別の話です。
+
+順位の数え方は `mine.html` と**同じ**でなければいけません。どこにも保存されていない以上、
+2 枚が違う数え方をすれば、受付とお客さんが違う番号を見ることになります。
+
+```html
+<div id="classes"></div>
+<p id="say" role="status"></p>
+<script>
+  const view = window.__MC_APP_VIEW;
+  const classes = document.getElementById("classes");
+  const say = document.getElementById("say");
+
+  // mine.html と同じ 2 つ。cancelled を除いて createdAt の昇順、先頭 capacity 件が確定。
+  // createdAt はサーバが入れた "…Z" の文字列なので、素の文字列比較でよい。
+  const ranked = (bookings, classId) =>
+    bookings
+      .filter((row) => row.classId === classId && row.status !== "cancelled")
+      .sort((a, b) => String(a.createdAt ?? "").localeCompare(String(b.createdAt ?? "")));
+
+  const standing = (rank, klass) => (rank < Number(klass.capacity ?? 0) ? "確定" : `待機 ${rank - Number(klass.capacity ?? 0) + 1} 番`);
+
+  view.onState(({ classes: rows = [], bookings = [] }, viewer = {}) => {
+    // ロールを 1 つ持っていれば /m/ には入れます。入れることは権限ではないので、
+    // 代理キャンセルのボタンを出すかどうかは渡された能力で決めます。
+    const canCancel = (viewer.can?.bookings ?? {}).transitionAny === true;
+
+    classes.replaceChildren(
+      ...rows
+        .slice()
+        .sort((a, b) => String(a.startsAt ?? "").localeCompare(String(b.startsAt ?? "")))
+        .map((klass) => {
+          const queue = ranked(bookings, klass.id);
+          const box = document.createElement("div");
+          const head = document.createElement("p");
+          // textContent。クラス名も人の名前も入力されたもので、文字列連結で innerHTML に
+          // 入れると受付の画面でそれが動きます。
+          head.textContent = `${klass.startsAt ?? ""} ${klass.title ?? klass.id} — ${queue.length} 名`;
+          box.append(head);
+
+          for (const [rank, row] of queue.entries()) {
+            const line = document.createElement("div");
+            const who = document.createElement("span");
+            who.textContent = `${standing(rank, klass)}　${row.memberName ?? ""}（${row.memberEmail ?? ""}）`;
+            line.append(who);
+            if (canCancel) {
+              const off = document.createElement("button");
+              // type を書くこと。省略した <button> は submit ボタンです。
+              off.type = "button";
+              off.dataset.booking = row.id;
+              // 確認はページの中で。confirm() はサンドボックスに無視され、false が返るので
+              // 「押しても何も起きないボタン」になります。
+              off.textContent = "取り消す";
+              line.append(off);
+            }
+            box.append(line);
+          }
+          if (queue.length === 0) box.append(document.createTextNode("申込みなし"));
+          return box;
+        }),
+    );
+  });
+
+  classes.addEventListener("click", async (event) => {
+    const button = event.target;
+    const id = button.dataset?.booking;
+    if (!id) return;
+    if (button.dataset.armed !== "yes") {
+      button.dataset.armed = "yes";
+      button.textContent = "本当に取り消す？";
+      return;
+    }
+    // 受付が動かせるのは collections.bookings.transitions の表、つまり
+    // requested → cancelled。参加者に渡る selfTransitions とは別の表です。
+    const result = await view.transition("bookings", id, "cancelled");
+    // 取り消すと下の人が 1 つ繰り上がりますが、通知は飛びません（「繰り上げ」を見ること）。
+    say.textContent = result.ok ? "取り消しました。待機の順位は次に開いた人から詰まって見えます。" : `取り消せませんでした: ${result.error ?? "unknown"}`;
+  });
+
+  view.ready();
+</script>
+```
+
+**受付が取り消すと枠は本当に空きます。** 定員は順位で決まっていて、`cancelled` は数える
+対象から外れるだけだからです（id を握る `meeting-room.md` の形とはここが違います）。
 
 ## 繰り上げ
 
