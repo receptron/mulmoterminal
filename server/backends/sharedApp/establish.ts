@@ -11,6 +11,7 @@
 // document exists is denied rather than mis-authorized.
 import { APPS_COLLECTION } from "@receptron/sharedapp";
 import type { SharedAppFailure, SharedAppHandle } from "./context.js";
+import { heldSlug, strandedApp } from "./recovery.js";
 import { reserveSlug, retireSlug, type SlugResult } from "./slug.js";
 
 /** What a reservation needs to know. */
@@ -125,7 +126,16 @@ export async function holdNewName(
     return {
       ...held,
       partial: true,
-      problems: [...held.problems, `The app exists (apps/${aid}) and app.json is written. It holds no URL name yet — publish reserves it.`],
+      problems: [
+        ...held.problems,
+        `The app itself is fine: apps/${aid} exists, app.json is written, and this is the URL name and nothing else. Running the same operation again — or publishing — retries just this step.`,
+        // Named although this run may not have taken it: the failures above cover both "reserved
+        // and not recorded" and "never reserved", and the author cannot tell which from here (a
+        // reservation is unreadable until it is published). The advice is the same either way,
+        // and it is the advice that keeps the two cases from diverging: leave the name alone.
+        ...(wanted === undefined ? [] : heldSlug(wanted)),
+        ...strandedApp(aid),
+      ],
     };
   }
   return { ok: true, slug: held.slug };

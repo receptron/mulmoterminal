@@ -883,5 +883,12 @@ repair made things worse — an `aid` was deleted and a second app was created b
   yet"; it no longer does, and treating it that way publishes an app with the collection missing.)
 - **Anything about permissions on `apps/{aid}`.** The `aid` in `app.json` is the app's identity.
   Removing it does not reset anything: the next `init` mints a NEW one and the old app stays where
-  it is, owned by nobody who can reach it. If a publish is refused, read what it says and fix that;
-  never edit the `aid` by hand.
+  it is, owned by nobody who can reach it. `publish` now refuses outright rather than minting one,
+  and that refusal is the answer — put the original value back (it is a committed file:
+  `git show HEAD:app.json`), do not invent one. If a publish is refused, read what it says and fix
+  that; never edit the `aid` by hand.
+- **And never delete the app document.** `apps/{aid}` is the parent every record, config, member
+  and roster document is authorized THROUGH, and Firestore does not cascade: deleting it leaves
+  that whole subtree permanently unreadable and undeletable, by anybody — including you. The rules
+  refuse the delete for a client; the host's own credential is not bound by them, so this is a
+  thing you can actually do. To empty an app, delete its records. To stop serving it, `unpublish`.

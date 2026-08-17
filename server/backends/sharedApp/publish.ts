@@ -29,7 +29,8 @@
 // stale — worse for the person the app is for, and not what the design chose (see D10's ordering).
 import { type LoadedCollection } from "@mulmoclaude/core/collection/server";
 import { APPS_COLLECTION, PUBLIC_CONFIG_DOC, appConfigPath, appSchemasPath, projectPublish, type AuthoredApp, type PublishStamp } from "@receptron/sharedapp";
-import { ensureAid } from "./ensureAid.js";
+import { requireAid } from "./ensureAid.js";
+import { halfPublishedApp } from "./recovery.js";
 import {
   readCurrentApp,
   schemasOf,
@@ -301,16 +302,35 @@ async function prepare(root: string, aid: string, context: SharedAppContext, opt
   return { ok: true, existingApp, stamp, dirty, face, appDoc, held, established };
 }
 
+/** Publish, and — when it stopped with writes already landed — say what is standing and which
+ *  repairs are not repairs.
+ *
+ *  The wrapper exists because `partial` is reported from a dozen places inside the run and every
+ *  one of them is answered by the same next move. Without it the refusal names a problem and
+ *  nothing else, and the two things an operator then reaches for (delete the app, mint a new aid)
+ *  are the two that cannot be taken back. */
 export async function publishSharedApp(root: string, opts: SharedAppOptions = {}): Promise<PublishResult> {
-  // Before anything reads the declaration: a repository that has never been published has no
-  // `aid` yet, and it is generated here rather than invented by the agent (D2b).
-  const ensured = await ensureAid(root);
+  // The aid as the run itself resolved it — carried out rather than re-read, so the advice names
+  // the id the writes actually went to even if `app.json` changed underneath in the meantime.
+  const ran: { aid?: string } = {};
+  const result = await runPublish(root, opts, ran);
+  if (result.ok || !result.partial || ran.aid === undefined) return result;
+  return { ...result, problems: [...result.problems, ...halfPublishedApp(ran.aid)] };
+}
+
+async function runPublish(root: string, opts: SharedAppOptions, ran: { aid?: string }): Promise<PublishResult> {
+  // Before anything reads the declaration: the app has to HAVE an id, and publish refuses rather
+  // than minting one (`requireAid`). The id is written where the declaration is — `init`, and the
+  // collection tool's first schema — because there the blank means "no app yet". Here it means an
+  // app that lost its name, and generating one would publish a second app beside it.
+  const ensured = await requireAid(root);
   if (!ensured.ok) return { ok: false, partial: false, problems: ensured.problems };
 
   const context = await sharedAppContext(root);
   if (!context.ok) return context;
   const { authored, collections, handle } = context;
   const { aid } = authored;
+  ran.aid = aid;
 
   const ready = await prepare(root, aid, context, opts);
   if (!ready.ok) return ready;

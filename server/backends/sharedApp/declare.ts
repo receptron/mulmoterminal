@@ -20,6 +20,7 @@ import { isRecord } from "../../../common/isRecord.js";
 import { declarationProblems, sharedCollections, type SharedAppFailure } from "./context.js";
 import { createManifest, newAid, updateManifest } from "./manifestWrite.js";
 import { viewFilesReport } from "./publicView.js";
+import { strandedApp } from "./recovery.js";
 import { scanRecords, type RecordScan } from "./records.js";
 
 /** The roster key that means "every collection". A member's roles map is keyed by cid, with this
@@ -114,7 +115,8 @@ export async function initSharedApp(root: string, name: string | undefined, slug
       problems: [
         ...written.problems,
         `The app id was already reserved on the server (apps/${aid}) and is owned by this address, but it never reached app.json.`,
-        "Fix the write problem and run `init` again — it mints a new id, and the one above is simply left unused. Nothing else was written.",
+        "Fix the write problem and run `init` again — it mints a new id, and the one above is simply left unused. No URL name was reserved, and nothing else was written.",
+        ...strandedApp(aid),
       ],
     };
   }
@@ -276,7 +278,8 @@ export async function forkSharedApp(root: string, name: string | undefined, slug
       problems: [
         ...written.problems,
         `The app id was already reserved on the server (apps/${aid}) and is owned by this address, but it never reached app.json — which still declares the app this repository was cloned from.`,
-        "Fix the write problem and run `fork` again — it mints a new id, and the one above is simply left unused. Nothing else was written.",
+        "Fix the write problem and run `fork` again — it mints a new id, and the one above is simply left unused. No URL name was reserved, and nothing else was written.",
+        ...strandedApp(aid),
       ],
     };
   }
@@ -299,6 +302,7 @@ function racedFailure(conflict: string, aid: string): SharedAppFailure {
       `app.json changed while the new app id was being reserved: ${conflict}`,
       "Nothing was written to disk — the declaration that is there now is untouched, and it is not the one this fork was checked against.",
       `The app id ${aid} was reserved on the server and is owned by this address; it is simply left unused. Look at app.json, and run \`fork\` again if it is still somebody else's app.`,
+      ...strandedApp(aid),
     ],
   };
 }

@@ -305,6 +305,28 @@ describe("shared app publish / unpublish", () => {
     expect(result.ok === false && result.partial).toBe(true);
     expect(docs.app()).not.toHaveProperty("public");
     expect(result.ok === false && result.problems.join("\n")).toContain("Written by this publish, and live now");
+    // And the two repairs that cannot be taken back are named, because a half-written app is
+    // exactly the state they are reached for.
+    const said = result.ok === false ? result.problems.join("\n") : "";
+    expect(said).toContain(`Do not delete apps/${AID}`);
+    expect(said).toContain("does not reset an app");
+  });
+
+  it("refuses to publish a declaration whose aid was removed, rather than minting a second app", async () => {
+    // The recovery an agent reaches for — "it is stuck, clear the aid and publish again" — used to
+    // work: `ensureAid` minted one, and the app holding everybody's records was left behind with
+    // nothing pointing at it. Publish's question is not "is there an id?" but "is this the app?".
+    const noAid = declaration();
+    delete noAid.aid;
+    writeApp(root, noAid);
+
+    const result = await publishSharedApp(root, stamp);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.partial).toBe(false);
+    expect(result.ok === false && result.problems.join("\n")).toContain("publish will not generate one");
+    // Nothing was written, and app.json was not "helpfully" completed either.
+    expect(docs.writes).toEqual([]);
+    expect(JSON.parse(readFileSync(path.join(root, "app.json"), "utf-8"))).not.toHaveProperty("aid");
   });
 
   it("keeps a live app open when it is published again", async () => {

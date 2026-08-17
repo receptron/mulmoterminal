@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { chmodSync, lstatSync, readFileSync, readdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { ensureAid } from "../../../server/backends/sharedApp/ensureAid.js";
+import { ensureAid, requireAid } from "../../../server/backends/sharedApp/ensureAid.js";
 import { makeTempDir } from "../../support/tempDir";
 
 let root = "";
@@ -128,5 +128,42 @@ describe("ensureAid", () => {
   it("refuses a JSON file that is not an object", async () => {
     writeFileSync(appJson(), "[]");
     expect((await ensureAid(root)).ok).toBe(false);
+  });
+});
+
+describe("requireAid", () => {
+  beforeEach(() => {
+    root = makeTempDir("mt-require-aid-");
+  });
+
+  it("hands back the aid the declaration already has, and writes nothing", async () => {
+    writeFileSync(appJson(), JSON.stringify({ aid: "already-there", name: "Sakura" }, null, 2));
+    const before = readFileSync(appJson(), "utf-8");
+
+    const result = await requireAid(root);
+    expect(result.ok && result.aid).toBe("already-there");
+    expect(result.ok && result.created).toBe(false);
+    // Byte for byte: this is the read half of the pair, and a formatting rewrite of a committed
+    // file is a diff the author did not ask for.
+    expect(readFileSync(appJson(), "utf-8")).toBe(before);
+  });
+
+  it("refuses a declaration with no aid instead of minting one — that would publish a SECOND app", async () => {
+    // The failure this exists for: an agent clears the `aid` to "start over", publish mints a new
+    // one, and the app everybody's records are in is left behind with nothing pointing at it.
+    writeFileSync(appJson(), JSON.stringify({ name: "Sakura", members: { "owner@example.com": { "*": "owner" } } }));
+
+    const result = await requireAid(root);
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.problems.join(" ")).toMatch(/declares no `aid`/);
+    // And it stays refused: nothing was written, so a second run says the same thing rather than
+    // finding an id this one left.
+    expect(read()).not.toHaveProperty("aid");
+    expect((await requireAid(root)).ok).toBe(false);
+  });
+
+  it("refuses an empty aid the same way — a blank string is a lost id, not an app", async () => {
+    writeFileSync(appJson(), JSON.stringify({ aid: "", name: "Sakura" }));
+    expect((await requireAid(root)).ok).toBe(false);
   });
 });
