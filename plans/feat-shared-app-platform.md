@@ -34,13 +34,17 @@
 | 検証 | `validate.required`、`validate.keyFields`（**最大 2 キー**） |
 | 完全性 | `immutable` |
 | 副作用 | `mail`（`on[template].from`/`to`、`toField`、`dataFields`）— **遷移そのもの**に束縛 |
-| 入口 | `/a/{slug}`（公開）と `/staging/{aid}`（名簿）。予約は削除不可 |
+| 入口 | `/a/{slug}`（公開）、`/m/{slug}`（ロールを持つ人）、`/p/{slug}`（participant）。予約は削除不可 |
 
-ホスト側（MulmoTerminal）にあるのは **deploy / publish / unpublish / check / invite / init / fork**
-と、その門番（移行ゲート、フィールド名検査、公開入力検査）。門番は診断であって権限ではない（原則 2）。
+ホスト側（MulmoTerminal）にあるのは **init / fork / check / preview / invite / publish / unpublish**
+（`SHARED_APP_ACTIONS`、`server/infra/shared-app-tool.ts`）と、その門番（移行ゲート、フィールド名検査、
+公開入力検査）。門番は診断であって権限ではない（原則 2）。`deploy` は**無い** — staging と一緒に
+撤去され、その場所に立っているのが `preview` である（`plans/feat-shared-app-no-staging.md`）。
 
-**ビューは今のところ 2 つしかない**: 名簿向けの custom ビュー（`.claude/skills/<slug>/views/`）と、
-公開ページの生成フォーム（`config/public` への射影、`publicForm.ts`）。
+**ビューの宛先は 3 つある**（当初「2 つしかない」と書いていたが、member / roster が入った）:
+公開の `config/*`、ロールを持つ人の `apps/{aid}/member/*`、名簿の人の `apps/{aid}/roster/*`
+（`appViews.ts`）。中身は `.claude/skills/<slug>/views/` に書いた custom ビューか、公開だけは
+宣言から生成したフォーム（`config/public` への射影、`publicForm.ts`）。
 **ここが一番痩せている場所であり、真実が HTML へ漏れる圧力が全部かかる場所である。**
 
 ---

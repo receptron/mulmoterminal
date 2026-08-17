@@ -15,7 +15,9 @@
 //   IT WRITES NOTHING. It calls exactly what publish calls and keeps the answer. There used to be
 //   a step between: `projectDeploy(...).staging` was taken as a value and passed to
 //   `projectPublish` in place of a read, so the two-stage write survived untouched. There is one
-//   stage now (`plans/feat-shared-app-no-staging.md`) and the trick is simply the call.
+//   stage now (`plans/feat-shared-app-no-staging.md`) and the trick is simply the call. (That
+//   sentence is HISTORY, kept because it explains the shape — as of 2026-08-17 there is no
+//   `deploy` operation and no `staging` tree; do not go looking for either.)
 //
 //   IT REQUIRES NO SLUG. `appSlugs/{slug}` is one of the three writes that cannot be taken back,
 //   and it is the scarce one — the name comes out of a namespace everybody shares, and nothing can

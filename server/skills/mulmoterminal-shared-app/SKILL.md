@@ -845,9 +845,13 @@ Do not ask which storage to use, whether to make it "an app", or what to call th
 
 ## Where people actually look — say what is true today
 
-- **The roster's entrance exists.** `manageSharedApp` reports the address; hand that to the people
-  you invited. It works from `init` — the URL name is reserved there, and the roster can resolve it
-  before anything is public.
+- **The roster's entrance exists, but the roster you invited does not reach it until you publish
+  again.** The ADDRESS works from `init` — the URL name is reserved there, and it resolves before
+  anything is public. What `init` puts in Firestore is a roster of ONE: `members: { <your address>:
+  { "*": "owner" } }`, you and nobody else. `invite` edits `app.json` and touches Firestore not at
+  all, so an address you invited is refused at `/m/{slug}` and `/p/{slug}` until the NEXT PUBLISH
+  carries the roster over. Say that when you hand out the link — an invited person who tries it too
+  early sees a page that will not let them in, and reads it as broken.
 - **The public entrance exists too, and works end to end** — `/a/{slug}` renders the app's public
   view, or the form generated from the declaration when there is none, and a visitor signs in and
   submits there. It is a link you can promise. (This bullet once said the opposite, from when the

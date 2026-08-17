@@ -15,14 +15,13 @@
 //     the pages here, on the author's machine, before any of this is written;
 //   - it writes `apps/{aid}.public` LAST, as its own write, because that block — not the
 //     world-readable `config/public` projection — is what the rules read to authorize anonymous
-//     access. A run that stops part-way therefore leaves the app private.
+//     access. A FIRST publish that stops part-way therefore leaves the app private: nothing before
+//     the last write puts a `public` block there, so a half-finished new app is closed, not open.
 //
-// A re-publish passes through a moment with no `public` block. That is a brief denial for
-// visitors, not a brief exposure, and it is the trade the ordering is chosen for.
-//
-// The other half of that trade, stated because it is what an ordering review asks about: while a
-// LIVE app is being re-published, the OLD `public` block stays in force across the writes, so
-// a run that fails part-way leaves the app open on a mixed set of versions. That is accepted, and
+// A RE-publish is the other case, and it does NOT pass through a moment with no `public` block —
+// `stillOpen()` below carries the LIVE block onto every document written before the last one. So
+// while a LIVE app is being re-published, the OLD `public` block stays in force across the writes,
+// and a run that fails part-way leaves the app open on a mixed set of versions. That is accepted, and
 // it is not an access change — the old block is what authorizes those reads, so a collection that
 // only the NEW declaration would have opened stays closed (`publicRead` tests the cid against the
 // `public.read` list that is still live). Closing first would trade a mixed-version window for a

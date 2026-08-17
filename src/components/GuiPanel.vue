@@ -232,7 +232,7 @@ const TOOL_HINTS = new Map<string, string>([
   ["presentCollection", "a collection from this workspace, laid out to browse"],
   ["manageCollection", "reads and writes those collections and their schemas"],
   ["manageAccounting", "reads and writes the workspace's books"],
-  ["manageSharedApp", "deploys this repository's shared app to its roster, and publishes it"],
+  ["manageSharedApp", "starts, runs, publishes and takes down this repository's shared app"],
 
   ["generateImage", "an image generated from a prompt"],
   ["presentMulmoScript", "a MulmoScript presentation, built and played here"],
