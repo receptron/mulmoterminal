@@ -183,6 +183,18 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
 - **`onState` を張ったら最後に `ready()`。** 呼ばないとデータは永久に来ず、「読み込み中」の
   ままです。
 
+そしてもう 1 つ、**選ばせるものは `<input>` にすること。ボタンで選ばせてはいけません。**
+`action: "preview"` は**押すたびにページを新しく mount し直します**（1 回の押下の判定を、その前に
+何を押したかから切り離すため）。なので「クリックで選ぶ」形にすると、送信ボタンを押す頃には
+選択が全部消えていて、**送信は空のまま通り、プレビューは「送信ボタンは何も起こさない」と報告
+します**。押せるコントロールの上限も 6 個なので、選択肢がボタンだと送信ボタンまで順番が回って
+きません。ラジオ・チェックボックス・`<select>` はプレビューが**押す**のではなく**埋める**側なので、
+押される候補は送信ボタンだけになり、実際の書き込みまで通して試されます。
+
+ラジオにはもう 1 つ効用があります。`aria-pressed` を切り替えるだけのボタンは支援技術には
+状態が伝わりますが、**目で見て選択済みだと分かる見た目は付きません**（押している間の
+見た目はポインタを離すと戻ります）。ラジオはブラウザ自身が選択状態を描きます。
+
 ### views/survey.html
 
 読めるのは `questions` だけ。`email` と `status` と `answeredAt` は親が入れるので送りません。
@@ -198,7 +210,6 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
   const view = window.__MC_APP_VIEW;
   const list = document.getElementById("list");
   const say = document.getElementById("say");
-  const picked = new Map();
   let questions = [];
 
   view.onState(({ questions: rows = [] }) => {
@@ -212,31 +223,31 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
         text.textContent = question.text ?? question.id;
         box.append(text);
         for (const choice of String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "")) {
-          const pick = document.createElement("button");
-          // type を書くこと。省略した <button> は submit ボタンで、サンドボックスが
-          // 止める側の形です。
-          pick.type = "button";
-          pick.dataset.question = question.id;
-          pick.dataset.choice = choice;
-          pick.textContent = choice;
-          box.append(pick);
+          // ボタンではなくラジオ（理由は下）。同じ設問の選択肢は name で 1 つに束ねます。
+          // <form> は要りません — 束ねるのは name であって form ではないからです。
+          const line = document.createElement("label");
+          const radio = document.createElement("input");
+          radio.type = "radio";
+          radio.name = `q-${question.id}`;
+          radio.value = choice;
+          radio.dataset.question = question.id;
+          const caption = document.createElement("span");
+          caption.textContent = choice;
+          line.append(radio, caption);
+          box.append(line);
         }
         return box;
       }),
     );
   });
 
-  list.addEventListener("click", (event) => {
-    const { question, choice } = event.target.dataset ?? {};
-    if (!question) return;
-    picked.set(question, choice);
-    for (const button of list.querySelectorAll(`[data-question="${question}"]`)) {
-      button.setAttribute("aria-pressed", String(button.dataset.choice === choice));
-    }
-  });
+  // セレクタに id を差し込まず、属性で突き合わせます。設問 id は人が付けるもので、
+  // querySelector に入れる文字列を人が決める形にはしないこと。
+  const answerOf = (question) =>
+    [...list.querySelectorAll("input[type=radio]")].find((radio) => radio.dataset.question === question.id && radio.checked)?.value ?? "";
 
   document.getElementById("send").addEventListener("click", async () => {
-    const missing = questions.filter((question) => !picked.has(question.id));
+    const missing = questions.filter((question) => answerOf(question) === "");
     if (missing.length > 0) {
       say.textContent = `${missing.length} 問、まだ選んでいません。`;
       return;
@@ -248,7 +259,7 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
     const result = await view.submit("responses", {
       name: document.getElementById("who").value.trim(),
       comment: document.getElementById("comment").value.trim(),
-      answers: questions.map((question) => `${question.id}\t${picked.get(question.id)}`).join("\n"),
+      answers: questions.map((question) => `${question.id}\t${answerOf(question)}`).join("\n"),
     });
     // 失敗は「壊れた」ではありません。サインインしていないか、この人が既に答えたか
     // （idFrom: "auth.uid"）のどちらかです。
@@ -270,6 +281,13 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
 
 集計は**ここで数えるもの**で、どこにも保存しません。保存した集計は、行が 1 件増えるたびに嘘に
 なります。
+
+**設問を直せることの代償がここに出ます。** 選択肢の文言を変える・減らすのは publish なしでできる
+ので、集計を「いまの `choices`」だけで描くと、**それ以前の回答が黙って消えます** — 0 件と表示
+されるのではなく、その行自体が出なくなる。下のページは保存されている答えの側からも選択肢を
+集めて、回ってこなくなったものを「現在は選べません」として残します。回答が付いたあとに設問を
+直すときは、著者にこれを言ってください。**別物になった設問は、文言を書き換えるのではなく新しい
+`id` で足すほうが安全です。**
 
 ```html
 <p id="count" role="status"></p>
@@ -307,11 +325,17 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
           heading.textContent = question.text ?? question.id;
           box.append(heading);
           const perQuestion = chosen.get(question.id) ?? new Map();
-          for (const choice of String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "")) {
+          const declared = String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "");
+          // 宣言されている選択肢と、実際に保存されている答えの**和**を出します。設問は publish
+          // なしで直せるので、選択肢の文言を変えたり消したりしたあとに現在の choices だけを
+          // 見ると、それ以前の回答が集計から黙って消えます（0 件になるのではなく、行ごと
+          // 出なくなる）。回ってこなくなった答えは、残しつつそれと分かるようにします。
+          const retired = [...perQuestion.keys()].filter((choice) => !declared.includes(choice));
+          for (const choice of [...declared, ...retired]) {
             const n = perQuestion.get(choice) ?? 0;
             const row = document.createElement("div");
             const label = document.createElement("span");
-            label.textContent = `${choice}: ${n} 件`;
+            label.textContent = retired.includes(choice) ? `${choice}（現在は選べません）: ${n} 件` : `${choice}: ${n} 件`;
             const bar = document.createElement("div");
             // 幅はスタイルで持たせること。棒を文字で描くと、数が増えたときに折り返します。
             bar.style.width = `${responses.length === 0 ? 0 : Math.round((n / responses.length) * 100)}%`;

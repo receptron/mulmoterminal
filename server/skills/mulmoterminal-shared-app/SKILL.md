@@ -675,6 +675,16 @@ entry per page, each naming **who it is for**:
   block takes Enter-in-a-text-field with it, and `required` stops working — constraint validation
   is part of submitting a form. So: no `<form>` element at all, a `type="button"` whose **click**
   calls `submit(...)`, and every check the page needs written out in that handler.
+- **What the visitor CHOOSES belongs in an `<input>`, not in a variable a click sets.** A page that
+  collects answers by clicking (buttons that toggle, a `Map` filled on click) works in front of a
+  person and is **untestable by `preview`**: the harness mounts a FRESH document for every control
+  it presses, so anything an earlier press put in a variable is gone before the Submit button is
+  reached — the run then reports a submit that sent nothing, or never reaches Submit at all,
+  because the choice buttons exhaust its six-press budget first. Radios, checkboxes and `<select>`
+  are FILLED by the harness rather than pressed, which leaves Submit as the only control and gets
+  the write actually exercised. (Native inputs also draw their own selected state; a button
+  carrying only `aria-pressed` shows a sighted visitor nothing after the pointer lifts.) Buttons
+  are right for a control that ACTS — one that submits, cancels, filters.
 - The view asks for writes through `window.__MC_APP_VIEW` — see the next section.
   (`window.__MC_PUBLIC_VIEW` is the same object under its former name, kept for one release.)
 - **`public.view` is the older spelling** of the first row above. It still works and normalizes to
