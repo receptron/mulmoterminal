@@ -218,8 +218,12 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
       ...questions.map((question) => {
         // textContent で組み立てること。設問も選択肢も人が入力するもので、文字列連結で
         // innerHTML に入れると公開ページでそれが動きます。
-        const box = document.createElement("div");
-        const text = document.createElement("p");
+        //
+        // fieldset + legend で束ねます。設問文がただの <p> だと、読み上げで聞こえるのは
+        // 「良い、ラジオボタン」だけで、どの設問への答えなのかが分かりません。
+        // <fieldset> は <form> ではないので、サンドボックスの制約とは無関係です。
+        const box = document.createElement("fieldset");
+        const text = document.createElement("legend");
         text.textContent = question.text ?? question.id;
         box.append(text);
         for (const choice of String(question.choices ?? "").split("\n").filter((line) => line.trim() !== "")) {
@@ -282,12 +286,15 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
 集計は**ここで数えるもの**で、どこにも保存しません。保存した集計は、行が 1 件増えるたびに嘘に
 なります。
 
-**設問を直せることの代償がここに出ます。** 選択肢の文言を変える・減らすのは publish なしでできる
-ので、集計を「いまの `choices`」だけで描くと、**それ以前の回答が黙って消えます** — 0 件と表示
-されるのではなく、その行自体が出なくなる。下のページは保存されている答えの側からも選択肢を
-集めて、回ってこなくなったものを「現在は選べません」として残します。回答が付いたあとに設問を
-直すときは、著者にこれを言ってください。**別物になった設問は、文言を書き換えるのではなく新しい
-`id` で足すほうが安全です。**
+**設問を直せることの代償がここに出ます。** 選択肢の文言を変える・減らす、設問ごと消す — どれも
+publish なしでできるので、集計を「いま宣言されているもの」だけで描くと、**それ以前の回答が黙って
+消えます**。0 件と表示されるのではなく、その行（設問を消したなら、その設問の集計まるごと）が
+出なくなる。下のページは**保存されている答えの側からも**選択肢と設問 id を集め、回ってこなく
+なったものを「現在は選べません」「削除された設問」として残します。
+
+**集計を描くときは、常に宣言と保存の和を取ること。** 片方だけを信じたページは、壊れずに数字を
+減らします。そして回答が付いたあとに設問を直すときは、著者にこれを言ってください — **別物に
+なった設問は、文言を書き換えるのではなく新しい `id` で足すほうが安全です。**
 
 ```html
 <p id="count" role="status"></p>
@@ -315,10 +322,19 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
       }
     }
 
+    // 設問そのものが消されることもあります。いま宣言されている設問だけを描くと、消した設問
+    // への回答が全部見えなくなる — 選択肢のときと同じ消え方で、こちらは丸ごとです。保存
+    // されている側にしか無い設問 id を後ろに足します。
+    const declaredQuestions = new Set(questions.map((question) => question.id));
+    const deletedQuestions = [...chosen.keys()]
+      .filter((id) => !declaredQuestions.has(id))
+      .map((id) => ({ id, text: `${id}（削除された設問）`, choices: "" }));
+
     tally.replaceChildren(
       ...questions
         .slice()
         .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0))
+        .concat(deletedQuestions)
         .map((question) => {
           const box = document.createElement("div");
           const heading = document.createElement("p");
