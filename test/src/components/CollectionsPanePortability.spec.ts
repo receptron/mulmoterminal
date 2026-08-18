@@ -27,6 +27,10 @@ vi.mock("../../../src/composables/collectionProject", () => ({
 const CollectionsPane = (await import("../../../src/components/CollectionsPane.vue")).default;
 const { activeCollectionNavSurface } = await import("../../../src/composables/collectionSurface");
 
+/** The portability strip's own button. The toolbar above it carries the pane-slot expand and
+ *  close controls, so "the first button in the pane" stopped being this one. */
+const PORTABILITY = '[data-testid="collections-portability-btn"]';
+
 const REPORT = {
   slug: "newsletters",
   portable: false,
@@ -67,19 +71,22 @@ describe("CollectionsPane portability strip", () => {
   it("offers nothing while the pane is on the index — the question is per collection", async () => {
     const w = mount(CollectionsPane, { props: { cwd: "/srv/mag2" } });
     await flushPromises();
-    expect(w.find("button").exists()).toBe(false);
+    expect(w.find(PORTABILITY).exists()).toBe(false);
+    // The toolbar is not part of that: it is the pane's own chrome and is there in every state.
+    expect(w.find('[data-testid="collections-close-btn"]').exists()).toBe(true);
   });
 
   it("says so when the directory is not a project the server knows", async () => {
     const w = mount(CollectionsPane, { props: { cwd: "/srv/unknown" } });
     await flushPromises();
     expect(w.text()).toContain("This directory has no collections yet");
-    expect(w.find("button").exists()).toBe(false);
+    expect(w.find(PORTABILITY).exists()).toBe(false);
+    expect(w.find('[data-testid="collections-close-btn"]').exists()).toBe(true);
   });
 
   it("asks the server for THIS pane's project, and renders what breaks on the other machine", async () => {
     const { wrapper: w } = await mountOnCollection();
-    const button = w.find("button");
+    const button = w.find(PORTABILITY);
     expect(button.exists()).toBe(true);
     await button.trigger("click");
     await flushPromises();
@@ -94,7 +101,7 @@ describe("CollectionsPane portability strip", () => {
   it("reports a clean collection without inventing a finding row", async () => {
     mockFetch({ slug: "newsletters", portable: true, findings: [] });
     const { wrapper: w } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Nothing to fix");
     expect(w.findAll("li")).toHaveLength(0);
@@ -106,7 +113,7 @@ describe("CollectionsPane portability strip", () => {
   it("never says 'nothing to fix' about a report whose verdict is not portable", async () => {
     mockFetch({ slug: "newsletters", portable: false, findings: [] });
     const { wrapper: w } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Would not survive a clone");
     expect(w.text()).not.toContain("Nothing to fix");
@@ -122,7 +129,7 @@ describe("CollectionsPane portability strip", () => {
       findings: [{ code: "sqlite-store", severity: "blocker", message: "Records are one SQLite file; git cannot merge it." }],
     });
     const { wrapper: w } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Would not survive a clone");
     expect(w.text()).not.toContain("Travels, with caveats");
@@ -137,7 +144,7 @@ describe("CollectionsPane portability strip", () => {
       findings: [{ code: "no-primary-key", severity: "warning", message: "No primaryKey is declared." }],
     });
     const { wrapper: w } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Travels, with caveats");
     expect(w.text()).not.toContain("Would not survive");
@@ -153,7 +160,7 @@ describe("CollectionsPane portability strip", () => {
     expect(region.attributes("aria-live")).toBe("polite");
     expect(region.text()).toBe("");
 
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     // The findings are inside it too: the list IS the answer, not a decoration on it.
     expect(w.find('[role="status"]').text()).toContain("Would not survive a clone");
@@ -163,7 +170,7 @@ describe("CollectionsPane portability strip", () => {
   it("says the check failed rather than showing a verdict it does not have", async () => {
     mockFetch({}, false);
     const { wrapper: w } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Could not run the check");
     expect(w.text()).not.toContain("survive");
@@ -186,7 +193,7 @@ describe("CollectionsPane portability strip", () => {
     const navA = activeCollectionNavSurface();
     navA?.gotoDetail("collection", "notes");
     await flushPromises();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
 
     // The cell walks to another project, and the user opens ITS collection of the same name.
     await w.setProps({ cwd: "/srv/other" });
@@ -201,13 +208,13 @@ describe("CollectionsPane portability strip", () => {
     expect(w.text()).not.toContain("A's problem");
     expect(w.text()).not.toContain("Would not survive a clone");
     // And the superseded request must not have left the button spinning.
-    expect(w.find("button").text()).toBe("Survives a clone?");
+    expect(w.find(PORTABILITY).text()).toBe("Survives a clone?");
   });
 
   // A verdict that outlived the collection it was about would read as the new one's.
   it("drops the report when the pane moves to another collection", async () => {
     const { wrapper: w, nav } = await mountOnCollection();
-    await w.find("button").trigger("click");
+    await w.find(PORTABILITY).trigger("click");
     await flushPromises();
     expect(w.text()).toContain("Would not survive a clone");
 

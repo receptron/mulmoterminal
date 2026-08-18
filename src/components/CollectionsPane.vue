@@ -20,7 +20,11 @@ import type { ShortcutKind } from "../../common/shortcuts";
 import SharedAppPreview from "./SharedAppPreview.vue";
 import { isRecord } from "../../common/isRecord";
 
-const props = defineProps<{ cwd: string | null }>();
+const props = defineProps<{ cwd: string | null; expanded?: boolean }>();
+
+// The pane-slot contract, the same one Tools / Canvas / Prompts / GitHub answer: the grid owns
+// the width and which pane is open, so both controls report rather than act.
+const emit = defineEmits<{ close: []; toggleExpand: [] }>();
 
 // ── this pane's own view state (the router's job, done locally) ──
 type PaneView = { mode: "index"; kind: ShortcutKind } | { mode: "detail"; kind: ShortcutKind; slug: string };
@@ -203,42 +207,78 @@ useCollectionTeleportTarget(probe);
 
 <template>
   <div class="flex h-full min-h-0 flex-col bg-panel" role="region" aria-label="Collections">
+    <!-- The pane's TOOLBAR, and it is ALWAYS here — outside every state below it, because the
+         controls on its right are how the pane is resized and closed and those must not depend on
+         whether a directory resolved, declares an app, or is showing the preview. It used to render
+         only for a directory declaring a shared app, which meant the bar itself came and went as
+         you moved between cells and there was nowhere to put a control that is not about apps.
+
+         The controls on the LEFT are about what the pane is showing, so they do come and go:
+         "Back to collections" while the preview is up, and otherwise "Preview the shared app" —
+         a shared app is declared by an `app.json` in the cell's directory, and a button that
+         answers "there is no app here" on every other directory is a button nobody reads. It is
+         here rather than in the collection strip at the bottom because the question is about the
+         APP, every collection it publishes and the pages built over them, not about the one
+         collection on screen. -->
+    <div class="flex-none border-b border-border px-2.5 py-1.5 font-sans">
+      <div class="flex min-h-[21px] items-center justify-between gap-2">
+        <div class="flex items-center gap-2">
+          <button
+            v-if="previewing"
+            type="button"
+            class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
+            @click="previewing = false"
+          >
+            Back to collections
+          </button>
+          <button
+            v-else-if="declaresApp"
+            type="button"
+            class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
+            title="Draw the pages publishing this app would put on screen. Nothing is written."
+            @click="previewing = true"
+          >
+            Preview the shared app
+          </button>
+        </div>
+        <!-- Expand then close, in that order and with the same icons and classes as the Tools and
+             Canvas headers: the panes share one slot, so the same control must be in the same
+             place in each of them. -->
+        <div class="flex items-center gap-1">
+          <button
+            type="button"
+            data-testid="collections-expand-btn"
+            class="cursor-pointer rounded border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-dim hover:text-fg"
+            :title="expanded ? 'Restore the terminal beside the collections' : 'Expand the collections over the terminal'"
+            :aria-label="expanded ? 'Restore collections pane width' : 'Expand collections pane'"
+            :aria-pressed="expanded === true"
+            @click="emit('toggleExpand')"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">{{ expanded ? "close_fullscreen" : "open_in_full" }}</span>
+          </button>
+          <button
+            type="button"
+            data-testid="collections-close-btn"
+            class="cursor-pointer rounded border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-dim hover:text-fg"
+            title="Close collections pane"
+            aria-label="Close collections pane"
+            @click="emit('close')"
+          >
+            <span class="material-symbols-outlined" aria-hidden="true">close</span>
+          </button>
+        </div>
+      </div>
+    </div>
     <div v-if="resolving" class="p-3 font-sans text-[12px] text-dim">Loading collections…</div>
     <!-- Not an error, and deliberately not the workspace's collections under this cell's name:
          a directory the server does not know has no collections of its own to show. -->
     <div v-else-if="unknownDirectory" class="p-3 font-sans text-[12px] text-dim">
       This directory has no collections yet. Collections live in <code>.claude/skills</code> under the folder the cell is open in.
     </div>
-    <template v-else-if="previewing">
-      <div class="flex-none border-b border-border px-2.5 py-1.5 font-sans">
-        <button
-          type="button"
-          class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
-          @click="previewing = false"
-        >
-          Back to collections
-        </button>
-      </div>
-      <div class="min-h-0 flex-1">
-        <SharedAppPreview :cwd="cwd" />
-      </div>
-    </template>
+    <div v-else-if="previewing" class="min-h-0 flex-1">
+      <SharedAppPreview :cwd="cwd" />
+    </div>
     <template v-else>
-      <!-- The shared app this directory declares, if it declares one. ABOVE the collections rather
-           than below them: the pane's own surface fills the height, so a strip under it sat past
-           the fold and was not found at all. Its own control rather than part of the collection
-           strip at the bottom — the question is about the APP, every collection it publishes and
-           the pages built over them, not about the one collection on screen. -->
-      <div v-if="declaresApp" class="flex-none border-b border-border px-2.5 py-1.5 font-sans">
-        <button
-          type="button"
-          class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
-          title="Draw the pages publishing this app would put on screen. Nothing is written."
-          @click="previewing = true"
-        >
-          Preview the shared app
-        </button>
-      </div>
       <div class="min-h-0 flex-1">
         <PluginFrame :css="collectionShadowCss" height="100%">
           <div ref="probe" style="height: 100%">
@@ -255,6 +295,7 @@ useCollectionTeleportTarget(probe);
         <div class="flex items-center gap-2">
           <button
             type="button"
+            data-testid="collections-portability-btn"
             class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent disabled:cursor-default disabled:opacity-60"
             :disabled="checking"
             :aria-busy="checking"

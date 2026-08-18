@@ -1345,8 +1345,11 @@ watch(
         <CollectionsPane
           v-else-if="rightPane === 'collections'"
           :cwd="expandedCwd"
+          :expanded="paneFull"
           :style="paneFull ? { flex: '1 1 0%', width: 'auto' } : { flex: `0 0 ${paneWidth}px` }"
           class="border-l border-border"
+          @toggle-expand="togglePaneExpanded"
+          @close="setRightPane(null, paneUid)"
         />
         <!-- Every configured repo, whatever the cell is: what the cell's directory decides is
              which repo's section LEADS (common/githubPaneOrder.ts). A directory that names no
