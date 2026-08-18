@@ -107,11 +107,16 @@ describe("CollectionsPane default view", () => {
     await flushPromises();
     expect(w.text()).toContain("the preview");
 
-    activeCollectionNavSurface()?.navigateToRecord("notes", "r1");
+    const nav = activeCollectionNavSurface();
+    nav?.navigateToRecord("notes", "r1");
     await flushPromises();
     expect(w.text()).not.toContain("the preview");
     expect(w.text()).toContain("collection");
     expect((w.find(PREVIEWS).element as HTMLInputElement).checked).toBe(false);
+    // BOTH identifiers the hop carried, read back off the surface the plugin's views read: the
+    // rendered text alone would pass with some other collection, or with no record selected.
+    expect(nav?.routeSlug()).toBe("notes");
+    expect(nav?.routeSelectedId()).toBe("r1");
   });
 
   // The default is per DIRECTORY: walking the cell to another shared app is a fresh start, not a
