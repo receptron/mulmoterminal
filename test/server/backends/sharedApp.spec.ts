@@ -18,6 +18,7 @@ import path from "node:path";
 import { setFirestoreAccessor, setSharedCollectionsSupport, type FirestoreDocs, type FirestoreDoc } from "@mulmoclaude/core/collection/server";
 import { initCollectionsBackend } from "../../../server/backends/collections.js";
 import { publishSharedApp } from "../../../server/backends/sharedApp/publish.js";
+import { CAPABILITIES_DOC, DEPLOYMENT_COLLECTION, REQUIRED_RULES_VERSION } from "../../../server/backends/sharedApp/deployment.js";
 import { unpublishSharedApp } from "../../../server/backends/sharedApp/unpublish.js";
 import { makeTempDir } from "../../support/tempDir";
 
@@ -190,6 +191,38 @@ describe("shared app publish / unpublish", () => {
     expect(docs.doc(`apps/${AID}/collections`, "bookings")).toMatchObject({ publishedBy: OWNER.email, publishedCommit: "c0ffee" });
     expect(docs.app()?.public).toMatchObject({ enabled: true });
     expect(docs.app()?.memberEmails).toEqual([OWNER.email]);
+  });
+
+  // THE ORDER OF THE CAPABILITY GATE, which no unit test can hold: `capabilityRefusal` decides
+  // correctly wherever it is called from, so a gate moved back below `prepare` passes every test
+  // in `sharedAppDeployment.spec.ts` while `claimApp` writes `apps/{aid}` under rules this run is
+  // about to refuse — and the refusal then says "Nothing was written" over a document that stands.
+  it("refuses a deployment recorded as behind before anything can create the app document", async () => {
+    await docs.set(DEPLOYMENT_COLLECTION, CAPABILITIES_DOC, { rulesVersion: REQUIRED_RULES_VERSION - 1 });
+    docs.writes.length = 0;
+
+    // The app document is ABSENT — the case where `prepare` claims it, and the only one where the
+    // ordering can be observed from outside.
+    expect(docs.app()).toBeUndefined();
+    const result = await publishSharedApp(root, stamp);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false ? result.problems.join(" ") : "").toContain("Nothing was written");
+    // And the sentence is true: no write of any kind, and no parent document left behind for the
+    // orphaned records to become readable under.
+    expect(docs.writes).toEqual([]);
+    expect(docs.app()).toBeUndefined();
+    // Not partial, so the report offers no recovery for writes that were never made.
+    expect(result.ok === false && result.partial).toBe(false);
+  });
+
+  it("publishes normally against a deployment recorded at the version it needs", async () => {
+    await docs.set(DEPLOYMENT_COLLECTION, CAPABILITIES_DOC, { rulesVersion: REQUIRED_RULES_VERSION });
+    docs.writes.length = 0;
+
+    const result = await publishSharedApp(root, stamp);
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    expect(docs.app()).toBeDefined();
   });
 
   it("writes nothing public when the declaration opens nothing", async () => {
