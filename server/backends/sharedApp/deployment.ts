@@ -106,6 +106,13 @@ export type CapabilityReading = { state: "known"; capabilities: DeploymentCapabi
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const numberOf = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/** The rules version, or nothing. A VERSION rather than a number: `Infinity`, `1.5` and `NaN` are
+ *  not versions, and the first of those is the dangerous one — `Infinity >= REQUIRED_RULES_VERSION`
+ *  is true, so a malformed record would be read as a deployment ahead of everything and publish
+ *  would proceed having confirmed nothing. Anything else is treated as a document that does not
+ *  say, which is the reading that continues WITHOUT claiming the deployment answered. */
+const rulesVersionOf = (value: unknown): number | undefined => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined);
 const textOf = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 export async function readDeploymentCapabilities(handle: SharedAppHandle): Promise<CapabilityReading> {
@@ -116,9 +123,10 @@ export async function readDeploymentCapabilities(handle: SharedAppHandle): Promi
     return { state: "unreadable", reason: err instanceof Error ? err.message : String(err) };
   }
   if (!isRecord(raw)) return { state: "absent" };
-  const rulesVersion = numberOf(raw.rulesVersion);
-  // A document with no version is a document that answers nothing. Absent rather than unreadable:
-  // the read worked, and what came back simply does not say.
+  const rulesVersion = rulesVersionOf(raw.rulesVersion);
+  // A document with no version — or one whose version is not a version — is a document that
+  // answers nothing. Absent rather than unreadable: the read worked, and what came back does not
+  // say.
   if (rulesVersion === undefined) return { state: "absent" };
   return { state: "known", capabilities: { rulesVersion, runtime: textOf(raw.runtime), deployedAt: numberOf(raw.deployedAt), note: textOf(raw.note) } };
 }

@@ -5,7 +5,18 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 
-import { capabilityNotes, capabilityRefusal, REQUIRED_RULES_VERSION, sharedappRuntime } from "../../../server/backends/sharedApp/deployment.js";
+import {
+  capabilityNotes,
+  capabilityRefusal,
+  readDeploymentCapabilities,
+  REQUIRED_RULES_VERSION,
+  sharedappRuntime,
+} from "../../../server/backends/sharedApp/deployment.js";
+import type { SharedAppHandle } from "../../../server/backends/sharedApp/context.js";
+
+/** A deployment record, as the read sees it. Only `docs.get` is reached, so the rest of the handle
+ *  is not built — a Firestore is not what this asks about. */
+const handleReturning = (doc: unknown): SharedAppHandle => ({ docs: { get: async () => doc } }) as unknown as SharedAppHandle;
 
 // WHICH READINGS STOP A PUBLISH. The rules are deployed by hand with no CI in the path, so this is
 // the only place a publisher can learn that the deployment it writes to is behind what it writes —
@@ -71,7 +82,38 @@ describe("the sharedapp runtime version", () => {
     const manifest = join(dirname(require.resolve("@receptron/sharedapp")), "..", "package.json");
     const installed = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
     const version = installed.version;
-    expect(version).toMatch(/^\d+\.\d+\.\d+/u);
+    // End-anchored: `0.11.0.extra` is not a version, and a prefix match would take it for one.
+    // Plain `major.minor.patch` — what this dependency is released as, and a pre-release suffix
+    // arriving here would be a change worth failing on rather than accepting quietly.
+    expect(version).toMatch(/^\d+\.\d+\.\d+$/u);
     expect(sharedappRuntime()).toBe(version);
   });
+});
+
+// WHAT COUNTS AS AN ANSWER. `rulesVersion` decides whether publish may write at all, and the
+// dangerous malformed value is not a missing one: `Infinity >= REQUIRED_RULES_VERSION` is true, so
+// a record carrying it would be read as a deployment ahead of everything and publish would proceed
+// having confirmed nothing. Anything that is not a version reads as a document that does not say —
+// which continues, without claiming the deployment answered.
+describe("what the deployment record has to say to count as an answer", () => {
+  it("takes a whole non-negative number as the version it is", async () => {
+    const reading = await readDeploymentCapabilities(handleReturning({ rulesVersion: 2, runtime: "0.11.0" }));
+    expect(reading).toEqual({ state: "known", capabilities: { rulesVersion: 2, runtime: "0.11.0", deployedAt: undefined, note: undefined } });
+  });
+
+  for (const [name, value] of [
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["a fraction", 1.5],
+    ["NaN", Number.NaN],
+    ["a negative number", -1],
+    ["a string", "2"],
+  ] as const) {
+    it(`reads ${name} as a record that does not say, rather than as a version`, async () => {
+      const reading = await readDeploymentCapabilities(handleReturning({ rulesVersion: value }));
+      expect(reading).toEqual({ state: "absent" });
+      // And absent never refuses: the gate is a diagnostic, and a malformed record is not evidence
+      // that the deployment is behind.
+      expect(capabilityRefusal(reading)).toEqual([]);
+    });
+  }
 });
