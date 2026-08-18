@@ -349,7 +349,11 @@ describe("shared app preview writes", () => {
     const blank = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "   " });
     expect(blank.ok).toBe(false);
     expect(blank.ok === false && blank.error).toContain("no-id");
+    expect(blank.ok === false && blank.error).toContain("slot");
     expect(batched).toEqual([]);
+    // The WHOLE log, not the creates in it: a refusal that still managed a `set` or a `delete`
+    // would be a different bug wearing this one's clothes.
+    expect(docs.writes).toEqual([]);
   });
 
   it("refuses one-per-person-per-thing when the thing is missing, rather than colliding on one document", async () => {
@@ -373,16 +377,25 @@ describe("shared app preview writes", () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.error).toContain("no-id");
-    expect(docs.writes.filter((op) => op.startsWith("create"))).toEqual([]);
+    expect(result.ok === false && result.error).toContain("slot");
+    // Every write surface, not the creates among them. The refusal has to leave the database
+    // exactly as it found it, and a stray `set` or `delete` is as wrong as a create.
+    expect(docs.writes).toEqual([]);
+    expect(batched).toEqual([]);
     // A blank one collides in exactly the same way — `"<uid>_ "` is one document per person — and
     // is refused for the same reason.
     const blank = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: " " });
     expect(blank.ok === false && blank.error).toContain("no-id");
-    expect(docs.writes.filter((op) => op.startsWith("create"))).toEqual([]);
+    expect(blank.ok === false && blank.error).toContain("slot");
+    expect(docs.writes).toEqual([]);
+    expect(batched).toEqual([]);
     // And the id it DOES build from a value is unchanged — the acceptance half, since a refusal
     // this near the write is satisfied by refusing everything.
     const made = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000" });
     expect(made.ok && made.written.id).toBe(`${OWNER.uid}_roomA-1000`);
+    expect(docs.writes).toEqual([
+      `create apps/${AID}/collections/bookings/items/${OWNER.uid}_roomA-1000 {"requesterName":"客","slot":"roomA-1000","requesterEmail":"${OWNER.email}","status":"booked"}`,
+    ]);
   });
 
   it("gives the slot back when the write is taken away", async () => {
