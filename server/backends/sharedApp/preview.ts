@@ -178,7 +178,13 @@ function formInputsOf(config: PublishedConfigDoc, form: PublicForm): PreviewForm
       if (!isRecord(spec)) return [];
       const createFields = Array.isArray(spec.createFields) ? spec.createFields.filter((field): field is string => typeof field === "string") : [];
       const emailField = typeof spec.emailField === "string" ? spec.emailField : undefined;
-      const fields = writableFields({ fields: collection.fields, statusField: collection.statusField }, createFields, emailField).map((field) => {
+      // The stamp is passed for the same reason the address is: it is a field the visitor does not
+      // choose. `recordOf` overwrites it with the server's clock on every create, so a box for it
+      // is one nothing can usefully be typed into — and where the schema marks it required, the
+      // empty box stopped the submission at `missingRequired` over a value the server was about to
+      // supply. Read off the SUBMIT block, which is where the rules read it from.
+      const stampField = typeof spec.stampField === "string" ? spec.stampField : undefined;
+      const fields = writableFields({ fields: collection.fields, statusField: collection.statusField }, createFields, emailField, stampField).map((field) => {
         const drawn = collection.fields[field.name];
         return {
           ...field,

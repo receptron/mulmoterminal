@@ -28,6 +28,7 @@ import { randomUUID } from "node:crypto";
 import { appSchemasPath, type PublishedConfigDoc } from "@receptron/sharedapp";
 import {
   MIRROR_OPEN,
+  missingIdField,
   missingRequired,
   plannedWrite,
   recordId,
@@ -203,7 +204,7 @@ export async function writePreviewSubmission(root: string, cid: string, values: 
   // `sharedAppContext` has answered, the author is signed in. The check belongs to a host whose
   // reader may be anonymous, which is mulmoserver's public page and not this one.
 
-  const fields = writableFields(spec.drawn, spec.submit.createFields, spec.submit.emailField);
+  const fields = writableFields(spec.drawn, spec.submit.createFields, spec.submit.emailField, spec.submit.stampField);
   const missing = missingRequired(fields, values);
   if (missing.length > 0) return { ok: false, reason: "host", error: `missing: ${missing.join(" / ")}` };
 
@@ -212,8 +213,16 @@ export async function writePreviewSubmission(root: string, cid: string, values: 
   // and it is handed over whether or not the app declares a `stampField`, because that is the
   // declaration's answer rather than this module's.
   const record = recordOf(fields, spec.drawn, spec.submit, values, { uid: handle.uid, email: handle.email }, serverTimestamp);
+
+  // ASKED BEFORE THE ID IS BUILT, because both ways an absent id field went wrong were silent.
+  // `idFrom: "field"` produced `""`, which is not a document id and fails at the SDK with a message
+  // about paths that names no field; `idFrom: "auth.uid+field"` produced `"<uid>_"`, which IS a
+  // valid id — one per person with the thing they were claiming missing, so a second claim lands on
+  // the first one's document. `recordId` refuses both now; this asks first so the author is told
+  // WHICH field, which is the only part of it they can act on.
+  const noId = missingIdField(spec.submit, record);
+  if (noId !== undefined) return { ok: false, reason: "host", error: `no-id: the submission has no value for "${noId}", which its id is built from` };
   const id = recordId(spec.submit, handle.uid, record, randomUUID());
-  if (id === "") return { ok: false, reason: "host", error: "no-id" };
 
   const plan = plannedWrite(cid, spec.submit, id, record);
   const failed = await commit(handle, preview.aid, plan);

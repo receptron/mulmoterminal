@@ -307,6 +307,71 @@ describe("shared app preview writes", () => {
     expect(batched).toEqual([]);
   });
 
+  it("names a whitespace-only answer as missing, rather than booking under a name of one space", async () => {
+    const result = await writePreviewSubmission(root, "bookings", { requesterName: "   ", slot: "roomA-1000" });
+
+    // A required answer of spaces is not an answer. Accepted, it becomes a booking whose name
+    // nobody can read — and where such a field is the id, a document id made of a space.
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("missing:");
+    expect(batched).toEqual([]);
+    // What is refused is the JUDGEMENT, not the value: spaces INSIDE an answer are part of it.
+    const kept = await writePreviewSubmission(root, "bookings", { requesterName: " 客 ", slot: "roomA-1000" });
+    expect(kept.ok).toBe(true);
+    expect(batched[0]).toContain('"requesterName":" 客 "');
+  });
+
+  it("refuses a claim whose id field carries nothing, instead of claiming an empty id", async () => {
+    // The id field is OPTIONAL here on purpose: a required one is stopped by `missingRequired`
+    // first, and the case being pinned is the one that got past every check. `idFrom: "field"`
+    // built `""` — not a document id at all — and the failure surfaced from the SDK as a complaint
+    // about a path, naming no field the author could fix.
+    writeCollection("bookings", {
+      requesterName: { type: "string", label: "Name", required: true },
+      requesterEmail: { type: "email", label: "Email", required: true },
+      slot: { type: "string", label: "Slot" },
+      status: { type: "enum", label: "Status", values: ["booked"] },
+    });
+
+    const result = await writePreviewSubmission(root, "bookings", { requesterName: "客" });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toBe("host");
+    expect(result.ok === false && result.error).toContain("no-id");
+    // The field is NAMED. It is the only part of this an author can act on.
+    expect(result.ok === false && result.error).toContain("slot");
+    expect(batched).toEqual([]);
+    expect(docs.writes).toEqual([]);
+  });
+
+  it("refuses one-per-person-per-thing when the thing is missing, rather than colliding on one document", async () => {
+    // The worse half of the same bug, because `"<uid>_"` IS a valid document id: every claim by one
+    // person landed on it, so a second one looked like it took something while taking nothing.
+    writeCollection("bookings", {
+      requesterName: { type: "string", label: "Name", required: true },
+      requesterEmail: { type: "email", label: "Email", required: true },
+      slot: { type: "string", label: "Slot" },
+      status: { type: "enum", label: "Status", values: ["booked"] },
+    });
+    // No `idIn` and no mirror: the rules read `idIn` only for `idFrom: "field"`, and a declared
+    // `mirrorOf` needs its half back — both are refused by the gates before any of this is reached.
+    const base = bookingApp({ submit: { idFrom: "auth.uid+field", idIn: undefined, mirror: undefined } });
+    writeApp({
+      ...base,
+      collections: { bookings: { submitOnly: true, statusField: "status", transitions: { initial: ["booked"] } }, slots: {} },
+    });
+
+    const result = await writePreviewSubmission(root, "bookings", { requesterName: "客" });
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.error).toContain("no-id");
+    expect(docs.writes.filter((op) => op.startsWith("create"))).toEqual([]);
+    // And the id it DOES build from a value is unchanged — the acceptance half, since a refusal
+    // this near the write is satisfied by refusing everything.
+    const made = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000" });
+    expect(made.ok && made.written.id).toBe(`${OWNER.uid}_roomA-1000`);
+  });
+
   it("gives the slot back when the write is taken away", async () => {
     const made = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000" });
     expect(made.ok).toBe(true);
