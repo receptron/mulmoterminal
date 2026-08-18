@@ -114,7 +114,17 @@ async function probeForApp(cwd: string | null): Promise<void> {
   try {
     const res = await fetchWithTimeout(`/api/shared-app/declared?cwd=${encodeURIComponent(cwd)}`);
     const body: unknown = await res.json();
-    if (mine === probeGeneration) declaresApp.value = isRecord(body) && body.declared === true;
+    if (mine !== probeGeneration) return;
+    declaresApp.value = isRecord(body) && body.declared === true;
+    // In a directory that IS a shared app, the app is what the pane is for: the pages are the
+    // thing being worked on and the collections underneath them are its storage. So the preview
+    // is the DEFAULT view here, not a control you have to find — the collections stay one click
+    // away on the toolbar.
+    //
+    // Only while the pane is still on its own index, though. The probe is async, and a user who
+    // has already opened a collection in the meantime has said what they want to look at; taking
+    // the screen off them after the fact is worse than not defaulting at all.
+    if (declaresApp.value && view.value.mode === "index") previewing.value = true;
   } catch {
     // A directory whose app-ness could not be established simply shows no preview control. There
     // is nothing to tell the user here: they did not ask a question.
