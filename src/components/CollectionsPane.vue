@@ -229,34 +229,26 @@ useCollectionTeleportTarget(probe);
          only for a directory declaring a shared app, which meant the bar itself came and went as
          you moved between cells and there was nowhere to put a control that is not about apps.
 
-         The controls on the LEFT are about what the pane is showing, so they do come and go:
-         "Back to collections" while the preview is up, and otherwise "Preview the shared app" —
-         a shared app is declared by an `app.json` in the cell's directory, and a button that
-         answers "there is no app here" on every other directory is a button nobody reads. It is
-         here rather than in the collection strip at the bottom because the question is about the
-         APP, every collection it publishes and the pages built over them, not about the one
-         collection on screen. -->
+         The control on the LEFT switches what fills the pane: "Previews" ON is the app's pages,
+         OFF is the collections underneath them. A checkbox rather than a button because it is a
+         state you can see the value of without pressing it. It appears only where an `app.json`
+         declares a shared app — everywhere else there are no pages and nothing to switch — and it
+         sits here rather than in the collection strip at the bottom because it is about the APP,
+         every collection it publishes and the pages built over them, not about the one collection
+         on screen. It starts ON: in a directory that IS a shared app, the pages are the thing
+         being worked on and the collections are their storage. -->
     <div class="flex-none border-b border-border bg-panel px-4 py-2 font-sans text-[14px] text-fg">
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
           <span class="font-semibold">Collections</span>
-          <button
-            v-if="previewing"
-            type="button"
-            class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
-            @click="previewing = false"
-          >
-            Back to collections
-          </button>
-          <button
-            v-else-if="declaresApp"
-            type="button"
-            class="cursor-pointer rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg hover:border-accent"
+          <label
+            v-if="declaresApp"
+            class="flex cursor-pointer items-center gap-1.5 text-[11px] text-dim"
             title="Draw the pages publishing this app would put on screen. Nothing is written."
-            @click="previewing = true"
           >
-            Preview the shared app
-          </button>
+            <input v-model="previewing" data-testid="collections-preview-toggle" type="checkbox" class="h-3.5 w-3.5 cursor-pointer accent-accent" />
+            Previews
+          </label>
         </div>
         <!-- Expand then close, in that order and with the same icons and classes as the Tools and
              Canvas headers: the panes share one slot, so the same control must be in the same

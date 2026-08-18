@@ -35,14 +35,17 @@ function mockDeclared(declared: boolean, hold?: Promise<void>) {
   }) as unknown as typeof fetch;
 }
 
+/** The toolbar's "Previews" checkbox: ON is the app's pages, OFF the collections under them. */
+const PREVIEWS = '[data-testid="collections-preview-toggle"]';
+
 describe("CollectionsPane default view", () => {
   it("opens on the preview in a directory that declares a shared app", async () => {
     mockDeclared(true);
     const w = mount(CollectionsPane, { props: { cwd: "/srv/app" } });
     await flushPromises();
     expect(w.text()).toContain("the preview");
-    // And the way back is on the toolbar, not lost.
-    expect(w.text()).toContain("Back to collections");
+    // And the checkbox shows that state rather than merely offering it.
+    expect((w.find(PREVIEWS).element as HTMLInputElement).checked).toBe(true);
   });
 
   it("opens on the collections everywhere else", async () => {
@@ -51,16 +54,18 @@ describe("CollectionsPane default view", () => {
     await flushPromises();
     expect(w.text()).not.toContain("the preview");
     expect(w.text()).toContain("index");
+    // No app here: no pages, so nothing to switch to.
+    expect(w.find(PREVIEWS).exists()).toBe(false);
   });
 
-  it("leaves the preview once the user goes back, and does not re-open it", async () => {
+  it("shows the collections once the box is cleared, and does not re-check itself", async () => {
     mockDeclared(true);
     const w = mount(CollectionsPane, { props: { cwd: "/srv/app" } });
     await flushPromises();
-    await w.find("button").trigger("click"); // Back to collections
+    await w.find(PREVIEWS).setValue(false);
     await flushPromises();
     expect(w.text()).not.toContain("the preview");
-    expect(w.text()).toContain("Preview the shared app");
+    expect(w.text()).toContain("index");
   });
 
   // The probe is async. Someone who opened a collection while it was in flight has said what they
