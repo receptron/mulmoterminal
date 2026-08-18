@@ -30,7 +30,16 @@ export interface SlugReservation {
   reserved: boolean;
 }
 
-export type SlugResult = SlugReservation | SharedAppFailure;
+/** A reservation that failed, saying whether a NAME WAS ACTUALLY TAKEN before it did.
+ *
+ *  `partial` cannot answer that. It travels up meaning "the app itself is written; this is only
+ *  its public name", which is true of every failure here — including the one where every candidate
+ *  belonged to somebody else and nothing was written at all. The caller needs the finer question
+ *  for two reasons: an irreversible `appSlugs` document is the thing to tell the author about, and
+ *  advice about a name this app now holds is the opposite of the advice for a name it does not. */
+export type SlugFailure = SharedAppFailure & { claimed?: string };
+
+export type SlugResult = SlugReservation | SlugFailure;
 
 /** `sakura-hair`, `sakura-hair-2`, `sakura-hair-3`, … — the collision rule from D2b.
  *
@@ -130,12 +139,14 @@ function probeFailed(candidate: string): SharedAppFailure {
  *  Returns a failure only when the write failed, and that failure is REAL rather than cosmetic:
  *  the reservation is live and unreadable, so a lost write-back means the next run takes
  *  another name and the first one is held forever by an app that no longer claims it. */
-async function recordSlug(root: string, slug: string): Promise<SharedAppFailure | null> {
+async function recordSlug(root: string, slug: string): Promise<SlugFailure | null> {
   const updated = await updateManifest(root, (manifest) => (manifest.slug === slug ? null : { ...manifest, slug }));
   if (updated.ok) return null;
   return {
     ok: false,
     partial: true,
+    // The name IS taken — this failure is about the record of it, not the reservation.
+    claimed: slug,
     problems: [
       `the URL name '${slug}' was reserved, but writing it back to app.json failed:`,
       ...updated.problems,

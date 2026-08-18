@@ -54,6 +54,7 @@ export async function reserveHeldSlug({ handle, aid, root, wanted, held, appDoc 
       return {
         ok: false,
         partial: true,
+        claimed: reservation.slug,
         problems: [
           `the URL name '${reservation.slug}' was reserved, but the previous name '${held}' could not be retired: ${err instanceof Error ? err.message : String(err)}`,
           `Run it again — until '${held}' is closed it still resolves to this app, and later unpublishes would not touch it.`,
@@ -67,6 +68,7 @@ export async function reserveHeldSlug({ handle, aid, root, wanted, held, appDoc 
     return {
       ok: false,
       partial: true,
+      claimed: reservation.slug,
       problems: [
         `the URL name '${reservation.slug}' was reserved and written to app.json, but recording it on apps/${aid} failed: ${err instanceof Error ? err.message : String(err)}`,
         "Run it again — the reservation is this app's, and the next run recognises that rather than taking a numbered name.",

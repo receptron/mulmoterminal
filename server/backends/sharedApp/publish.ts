@@ -347,7 +347,16 @@ export async function publishSharedApp(root: string, opts: SharedAppOptions = {}
  *  on a mixed version, which is the opposite of the trade this ordering exists to make. */
 async function takeName(request: SlugRequest, established: boolean, ran: RunState): Promise<{ ok: true; slug: string | undefined } | SharedAppFailure> {
   const reserved = await reserveHeldSlug(request);
-  if (reserved !== undefined && !reserved.ok) return { ...reserved, partial: reserved.partial || established };
+  if (reserved !== undefined && !reserved.ok) {
+    // A reservation can fail AFTER taking the name — the previous name would not retire, or the
+    // new one would not record on the app document — and during a rename of an app that already
+    // existed there is no `established` to fall back on. `claimed` is the only thing that
+    // distinguishes that from the refusal where every candidate was somebody else's and nothing
+    // was written; without it, the run that took an IRREVERSIBLE reservation is the one that says
+    // least about it.
+    if (reserved.claimed !== undefined) ran.wrote = true;
+    return { ...reserved, partial: reserved.partial || established };
+  }
   // A reservation that TOOK a name wrote two documents (the name, and the app document recording
   // it). One that found the name already this app's wrote nothing, and neither did a refusal —
   // which is why this is asked of the success rather than assumed from `partial`.

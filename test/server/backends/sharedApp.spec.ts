@@ -552,6 +552,10 @@ describe("shared app publish / unpublish", () => {
     expect(failed.ok).toBe(false);
     expect(docs.doc("appSlugs", "sakura-salon")).toEqual({ aid: AID, published: false });
     expect(docs.doc("appSlugs", "sakura-hair")).toEqual({ aid: AID, published: false });
+    // A rename takes an IRREVERSIBLE reservation, and this app already existed — so there is no
+    // `established` to notice the write by. The failure has to say what is standing all the same,
+    // or the run that did the one thing that cannot be undone is the one that says least about it.
+    expect(failed.ok === false && failed.problems.join("\n")).toContain("writes already landed");
 
     // And publishing again repairs it: the reservation is reclaimed, recorded, and flipped.
     docs.failAt = null;
