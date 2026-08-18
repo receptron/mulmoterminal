@@ -207,7 +207,13 @@ useCollectionTeleportTarget(probe);
 
 <template>
   <div class="flex h-full min-h-0 flex-col bg-panel" role="region" aria-label="Collections">
-    <!-- The pane's TOOLBAR, and it is ALWAYS here — outside every state below it, because the
+    <!-- The header recipe is the shared one — `bg-panel px-4 py-2 text-[14px]` with a bold title at
+         the left, exactly as Tools, Prompts, Question and Canvas have it. The panes take turns in
+         one slot, so a header of its own height or padding makes the whole pane jump as you switch
+         between them. The `border-b` is this pane's only addition: the others separate header from
+         body by background (bg-panel over bg-deep) and this one's body is bg-panel too.
+
+         The TOOLBAR is ALWAYS here — outside every state below it, because the
          controls on its right are how the pane is resized and closed and those must not depend on
          whether a directory resolved, declares an app, or is showing the preview. It used to render
          only for a directory declaring a shared app, which meant the bar itself came and went as
@@ -220,9 +226,10 @@ useCollectionTeleportTarget(probe);
          here rather than in the collection strip at the bottom because the question is about the
          APP, every collection it publishes and the pages built over them, not about the one
          collection on screen. -->
-    <div class="flex-none border-b border-border px-2.5 py-1.5 font-sans">
-      <div class="flex min-h-[21px] items-center justify-between gap-2">
+    <div class="flex-none border-b border-border bg-panel px-4 py-2 font-sans text-[14px] text-fg">
+      <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-2">
+          <span class="font-semibold">Collections</span>
           <button
             v-if="previewing"
             type="button"
@@ -269,10 +276,10 @@ useCollectionTeleportTarget(probe);
         </div>
       </div>
     </div>
-    <div v-if="resolving" class="p-3 font-sans text-[12px] text-dim">Loading collections…</div>
+    <div v-if="resolving" class="px-4 py-3 font-sans text-[12px] text-dim">Loading collections…</div>
     <!-- Not an error, and deliberately not the workspace's collections under this cell's name:
          a directory the server does not know has no collections of its own to show. -->
-    <div v-else-if="unknownDirectory" class="p-3 font-sans text-[12px] text-dim">
+    <div v-else-if="unknownDirectory" class="px-4 py-3 font-sans text-[12px] text-dim">
       This directory has no collections yet. Collections live in <code>.claude/skills</code> under the folder the cell is open in.
     </div>
     <div v-else-if="previewing" class="min-h-0 flex-1">
@@ -291,7 +298,7 @@ useCollectionTeleportTarget(probe);
       <!-- The portability check, on a strip of its own below the plugin's own surface: it is the
            HOST's question about the collection (does it survive a clone), not part of the
            collection's data, and it must not be inside the shadow root the package styles. -->
-      <div v-if="openSlug" class="flex-none border-t border-border px-2.5 py-1.5 font-sans">
+      <div v-if="openSlug" class="flex-none border-t border-border px-4 py-2 font-sans">
         <div class="flex items-center gap-2">
           <button
             type="button"
