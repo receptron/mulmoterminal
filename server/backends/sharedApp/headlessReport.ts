@@ -309,6 +309,24 @@ const refusedSummary = (refused: number): string[] =>
         `${refused} submission${refused === 1 ? " was" : "s were"} attempted and NOT written — the press that made each one says who refused it and what that means.`,
       ];
 
+/** The one thing a run cannot exercise at all, and the reason it is fixed text.
+ *
+ *  A view that declares `live` is subscribed in production: `onState` arrives again every time the
+ *  collection moves, and the page is written to be re-entered. This run delivers state ONCE — so a
+ *  page that draws correctly here, and every press reported above, says nothing about the second
+ *  delivery. What breaks there is invisible in a single-shot run: a redraw that duplicates rows
+ *  instead of replacing them, a listener attached per state, and the one that costs a visitor
+ *  something — a selection or a half-typed field wiped when an update lands.
+ *
+ *  Unconditional, and not keyed on whether this app declares `live` today: the sentence is about
+ *  what the run does, the declaration is one line away in `app.json`, and a report that goes quiet
+ *  when the answer is "no" teaches a reader that silence means covered. It is the fourth entry in
+ *  the list `docs/shared-app-principles.md` keeps of what a green preview does NOT say. */
+const LIVE_UNVERIFIED =
+  "A page whose view declares `live` is written for `onState` to arrive MORE THAN ONCE — production subscribes it and re-delivers on every change. This run " +
+  "delivers state once. Whether such a page redraws correctly on a second state, and whether an update landing mid-edit wipes a selection or a half-typed field, " +
+  "is NOT tested here.";
+
 function closing(run: { wrote: boolean; writesSkipped: number; screenshotDir: string | null; pages: readonly HeadlessPageReport[] }): string[] {
   const skipped =
     run.writesSkipped === 0
@@ -326,10 +344,11 @@ function closing(run: { wrote: boolean; writesSkipped: number; screenshotDir: st
       ...pictures,
       "This does NOT prove the app is ready to publish. It says nothing about whether the deployed rules would accept a write, about other people's devices, " +
         "about two people submitting at once, or about whether the rules are deployed at all.",
+      LIVE_UNVERIFIED,
     ];
   }
   const wroteAnything = run.pages.some((page) => page.presses.some((press) => press.write !== null));
-  return ["", ...whatWasWritten(run.pages), ...skipped, ...pictures, stillUnknown(wroteAnything)];
+  return ["", ...whatWasWritten(run.pages), ...skipped, ...pictures, stillUnknown(wroteAnything), LIVE_UNVERIFIED];
 }
 
 export function narrateHeadlessRun(run: HeadlessRun): string {
