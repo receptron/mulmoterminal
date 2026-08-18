@@ -100,6 +100,18 @@ describe("narrateHeadlessRun", () => {
     expect(clean).toContain("two people submitting at once");
   });
 
+  it("says that a `live` page's second state was never delivered, on every run", () => {
+    // Fixed text, on a clean run and on a failed one alike: production subscribes a view that
+    // declares `live` and re-delivers on every change, while a run delivers state once. Said only
+    // when the app happens to declare `live`, silence would read as "covered" for the app that
+    // adds the line an hour later.
+    const clean = narrate({ presses: [press({ submitted: { cid: "orders", fields: [] }, write: written() })] });
+    expect(clean).toContain("`onState` to arrive MORE THAN ONCE");
+    expect(clean).toContain("delivers state once");
+    const noWriter = narrate({ presses: [press()] }, 0, { wrote: false });
+    expect(noWriter).toContain("`onState` to arrive MORE THAN ONCE");
+  });
+
   it("says a submission without a click mark was not written to, and why", () => {
     // The runtime is the only code that knows whether a click caused a submission. If it did not
     // mark the submission, we cannot write it — the cause is unknowable.

@@ -195,17 +195,7 @@ async function publishGate(
   collections: readonly LoadedCollection[],
   root: string,
   confirm: boolean | undefined,
-  handle: SharedAppHandle,
-): Promise<{ ok: true; scan: RecordScan; notes: string[] } | SharedAppFailure> {
-  // FIRST, and before anything is read off the declaration: whether the deployment we are about to
-  // write to understands what this publisher writes. The rules are deployed by hand and their
-  // version was recorded nowhere, so this used to be assumed — and a wrong assumption here is the
-  // failure the author never sees (`deployment.ts`). Only a deployment that HAS answered, and
-  // answered that it is behind, stops the run; absent and unreadable are reported and continue.
-  const reading = await readDeploymentCapabilities(handle);
-  const behind = capabilityRefusal(reading);
-  if (behind.length > 0) return { ok: false, partial: false, problems: behind };
-  const notes = capabilityNotes(reading, sharedappRuntime());
+): Promise<{ ok: true; scan: RecordScan } | SharedAppFailure> {
   const schemas = schemasOf(collections);
   const drifted = publicInputProblems(authored, schemas);
   if (drifted.length > 0) return { ok: false, partial: false, problems: drifted };
@@ -217,7 +207,26 @@ async function publishGate(
   if (scoped.length > 0) return { ok: false, partial: false, problems: scoped };
   const scan = await scanRecords(collections, root);
   const refusal = recordRefusal(scan, confirm);
-  return refusal ? { ok: false, partial: false, problems: refusal } : { ok: true, scan, notes };
+  return refusal ? { ok: false, partial: false, problems: refusal } : { ok: true, scan };
+}
+
+/** Whether the deployment we are about to write to understands what this publisher writes — asked
+ *  BEFORE anything is written, which is the whole point of it.
+ *
+ *  Its own step, and the FIRST one, rather than the opening clause of `publishGate` where it
+ *  started: `prepare` runs before that gate and can call `claimApp`, so an app whose parent
+ *  document is missing — a failed `init`, a deletion that left records behind — had `apps/{aid}`
+ *  written under rules this very check was about to refuse as too old. The refusal then said
+ *  "Nothing was written" while a document stood, and offered partial-publish recovery for a run
+ *  that was supposed to have made no writes at all.
+ *
+ *  Only a deployment that HAS answered, and answered that it is behind, stops the run; absent and
+ *  unreadable are reported and continue (`deployment.ts` says why). */
+async function deploymentGate(handle: SharedAppHandle): Promise<{ ok: true; notes: string[] } | SharedAppFailure> {
+  const reading = await readDeploymentCapabilities(handle);
+  const behind = capabilityRefusal(reading);
+  if (behind.length > 0) return { ok: false, partial: false, problems: behind };
+  return { ok: true, notes: capabilityNotes(reading, sharedappRuntime()) };
 }
 
 /** The two questions that are asked of the PAGE and of the live records before
@@ -389,6 +398,12 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): 
   const { aid } = authored;
   ran.aid = aid;
 
+  // BEFORE `prepare`, which can create the app document: a deployment recorded as too old must not
+  // receive a write of any kind, and nothing this run has done so far is a write.
+  const deployment = await deploymentGate(handle);
+  if (!deployment.ok) return deployment;
+  const deploymentNotes = deployment.notes;
+
   const ready = await prepare(root, aid, context, opts);
   if (!ready.ok) return ready;
   const { existingApp, stamp, dirty, face, appDoc, held, established } = ready;
@@ -396,10 +411,9 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): 
   // run, and the one every refusal after it is partial BECAUSE of.
   if (established) ran.wrote = true;
 
-  const gate = await publishGate(authored, collections, root, opts.confirm, handle);
+  const gate = await publishGate(authored, collections, root, opts.confirm);
   if (!gate.ok) return { ...gate, partial: gate.partial || established };
   const scan = gate.scan;
-  const deploymentNotes = gate.notes;
 
   const form = publicFormOf(authored, schemasOf(collections));
   // Before the first write: the config document is written in the middle of the run, so a database

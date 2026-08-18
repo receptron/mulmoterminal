@@ -25,9 +25,42 @@
 // projection here and renders it there, so a mismatch is worth naming — but the compiler does not
 // yet stamp a projection version (item 7-2, which needs a release of that package), so what we can
 // say is which two versions are in play, not whether they are compatible.
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { dirname, join, parse } from "node:path";
 
 import { type SharedAppHandle } from "./context.js";
+
+/** The package's own manifest, reached from the file it resolves to rather than by asking for it
+ *  by name.
+ *
+ *  `require("@receptron/sharedapp/package.json")` is the obvious spelling and it THROWS: the
+ *  package's `exports` map declares `.` and `./view` and nothing else, so the manifest is not a
+ *  reachable subpath (`ERR_PACKAGE_PATH_NOT_EXPORTED`). It failed silently into the `catch` below,
+ *  which is why every publish reported the runtime as `unknown` — and `capabilityNotes` then said
+ *  the deployment's runtime differed from ours on every deployment that records one at all, which
+ *  is a warning about a mismatch that was never measured.
+ *
+ *  So resolve the ENTRY, whose subpath is exported, and walk up from it to the first manifest that
+ *  names this package — `dist/index.js` is one level down today and the walk does not care if that
+ *  changes. Bounded by the filesystem root, and any failure is still just `unknown`. */
+function readSharedappManifest(): unknown {
+  const require = createRequire(import.meta.url);
+  let dir = dirname(require.resolve("@receptron/sharedapp"));
+  const { root } = parse(dir);
+  for (;;) {
+    try {
+      // READ rather than `require`d: the manifest is data here, and loading it as a module would
+      // put a path this function computed through the module loader for no gain.
+      const pkg: unknown = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+      if (isRecord(pkg) && pkg.name === "@receptron/sharedapp") return pkg;
+    } catch {
+      // No manifest at this level, or an unreadable one. Keep walking.
+    }
+    if (dir === root) return null;
+    dir = dirname(dir);
+  }
+}
 
 /** The `@receptron/sharedapp` version actually loaded, not the range `package.json` asks for: the
  *  range is what we would accept and the resolved version is what compiled this projection, and it
@@ -37,8 +70,7 @@ let runtimeVersion: string | undefined;
 export function sharedappRuntime(): string {
   if (runtimeVersion === undefined) {
     try {
-      const require = createRequire(import.meta.url);
-      const pkg: unknown = require("@receptron/sharedapp/package.json");
+      const pkg = readSharedappManifest();
       runtimeVersion = isRecord(pkg) && typeof pkg.version === "string" ? pkg.version : "unknown";
     } catch {
       runtimeVersion = "unknown";
@@ -74,6 +106,13 @@ export type CapabilityReading = { state: "known"; capabilities: DeploymentCapabi
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
 const numberOf = (value: unknown): number | undefined => (typeof value === "number" ? value : undefined);
+
+/** The rules version, or nothing. A VERSION rather than a number: `Infinity`, `1.5` and `NaN` are
+ *  not versions, and the first of those is the dangerous one — `Infinity >= REQUIRED_RULES_VERSION`
+ *  is true, so a malformed record would be read as a deployment ahead of everything and publish
+ *  would proceed having confirmed nothing. Anything else is treated as a document that does not
+ *  say, which is the reading that continues WITHOUT claiming the deployment answered. */
+const rulesVersionOf = (value: unknown): number | undefined => (typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined);
 const textOf = (value: unknown): string | undefined => (typeof value === "string" && value !== "" ? value : undefined);
 
 export async function readDeploymentCapabilities(handle: SharedAppHandle): Promise<CapabilityReading> {
@@ -84,9 +123,10 @@ export async function readDeploymentCapabilities(handle: SharedAppHandle): Promi
     return { state: "unreadable", reason: err instanceof Error ? err.message : String(err) };
   }
   if (!isRecord(raw)) return { state: "absent" };
-  const rulesVersion = numberOf(raw.rulesVersion);
-  // A document with no version is a document that answers nothing. Absent rather than unreadable:
-  // the read worked, and what came back simply does not say.
+  const rulesVersion = rulesVersionOf(raw.rulesVersion);
+  // A document with no version — or one whose version is not a version — is a document that
+  // answers nothing. Absent rather than unreadable: the read worked, and what came back does not
+  // say.
   if (rulesVersion === undefined) return { state: "absent" };
   return { state: "known", capabilities: { rulesVersion, runtime: textOf(raw.runtime), deployedAt: numberOf(raw.deployedAt), note: textOf(raw.note) } };
 }
