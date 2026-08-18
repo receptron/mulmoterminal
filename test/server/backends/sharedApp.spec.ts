@@ -513,6 +513,29 @@ describe("shared app publish / unpublish", () => {
     expect(docs.doc("appSlugs", "sakura-hair-2")).toBeUndefined();
   });
 
+  it("does not tell a name-only refusal that its writes are live", async () => {
+    // `partial` from the reservation means "the app is written, this is only its public name" —
+    // and on this path nothing was written at all. The half-published advice (publish again, it
+    // re-does every step) would contradict the line above it, which correctly says to take a
+    // different name, and would claim writes that never happened.
+    writeApp(root, declaration({ slug: "sakura-hair" }));
+    await publishSharedApp(root, stamp);
+    const app = docs.app();
+    if (app) delete app.slug;
+    // Every candidate belongs to somebody else: the app's own reclaim is refused too.
+    for (const name of ["sakura-hair", ...Array.from({ length: 7 }, (_, index) => `sakura-hair-${index + 2}`)]) {
+      docs.store.get("appSlugs")?.set(name, { aid: "somebody-else", published: false });
+    }
+    const before = docs.writes.length;
+
+    const result = await publishSharedApp(root, stamp);
+    expect(result.ok).toBe(false);
+    const said = result.ok === false ? result.problems.join("\n") : "";
+    expect(said).toContain("every candidate for the URL name is taken");
+    expect(said).not.toContain("writes already landed");
+    expect(docs.writes).toHaveLength(before);
+  });
+
   it("never leaves a resolving name the app document does not know about", async () => {
     // The rename that fails between the reservation and the record. The new name is reserved
     // UNPUBLISHED whatever the app's state, so this window is a name that opens nothing — not a

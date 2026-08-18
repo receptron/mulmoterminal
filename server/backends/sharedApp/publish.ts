@@ -47,7 +47,7 @@ import { allTierWrites, pageIdsOf, planTierWrites, type PlannedTier } from "./ap
 import { PUBLIC_VIEW_DOC, declaredView, readAppViewFile, type ViewFile } from "./publicView.js";
 import { frozenKeyProblems } from "./exclusivity.js";
 import { scopedFieldProblems } from "./scopedFields.js";
-import { claimApp, reserveHeldSlug } from "./establish.js";
+import { claimApp, reserveHeldSlug, type SlugRequest } from "./establish.js";
 import { setSlugPublished } from "./slug.js";
 import { runWrites, type WriteStep } from "./writes.js";
 
@@ -302,6 +302,19 @@ async function prepare(root: string, aid: string, context: SharedAppContext, opt
   return { ok: true, existingApp, stamp, dirty, face, appDoc, held, established };
 }
 
+/** What the run knows that its refusal does not carry: which app it was writing, and whether any
+ *  of its writes landed.
+ *
+ *  `partial` is NOT that second question. It travels up from the slug reservation as well, where
+ *  it means "the app is written and this is only its public name" — and the one refusal that comes
+ *  back with every candidate taken has made no write at all. Telling that author their writes are
+ *  live, and to publish again, would contradict the line above it, which correctly says to choose
+ *  a different name. */
+interface RunState {
+  aid?: string;
+  wrote?: boolean;
+}
+
 /** Publish, and — when it stopped with writes already landed — say what is standing and which
  *  repairs are not repairs.
  *
@@ -312,13 +325,37 @@ async function prepare(root: string, aid: string, context: SharedAppContext, opt
 export async function publishSharedApp(root: string, opts: SharedAppOptions = {}): Promise<PublishResult> {
   // The aid as the run itself resolved it — carried out rather than re-read, so the advice names
   // the id the writes actually went to even if `app.json` changed underneath in the meantime.
-  const ran: { aid?: string } = {};
+  const ran: RunState = {};
   const result = await runPublish(root, opts, ran);
-  if (result.ok || !result.partial || ran.aid === undefined) return result;
+  if (result.ok || !result.partial || ran.wrote !== true || ran.aid === undefined) return result;
   return { ...result, problems: [...result.problems, ...halfPublishedApp(ran.aid)] };
 }
 
-async function runPublish(root: string, opts: SharedAppOptions, ran: { aid?: string }): Promise<PublishResult> {
+/** THE NAME, BEFORE THE WRITES — and after the app document exists, because `appSlugs`' create
+ *  rule resolves the owner through `get(apps/{aid})`.
+ *
+ *  `init` reserves the declared name, so this is the app that gained a `slug` afterwards, or the
+ *  one whose init could not finish the reservation. It has to happen BEFORE the run rather than
+ *  after it: recording a new reservation writes the app document, and the app document written
+ *  last by a publish is the one carrying the `public` block. Reserving afterwards would write a
+ *  copy without it and silently close the app it had just opened.
+ *
+ *  The reservation write is a REPLACEMENT of the app document, and the `appDoc` handed in
+ *  deliberately carries no `public` — publish holds that back for its last write. So the LIVE
+ *  block is carried through by the caller (`stillOpen`): without it, renaming an open app closes
+ *  it for the length of the run, and a failure anywhere in between leaves it dark rather than open
+ *  on a mixed version, which is the opposite of the trade this ordering exists to make. */
+async function takeName(request: SlugRequest, established: boolean, ran: RunState): Promise<{ ok: true; slug: string | undefined } | SharedAppFailure> {
+  const reserved = await reserveHeldSlug(request);
+  if (reserved !== undefined && !reserved.ok) return { ...reserved, partial: reserved.partial || established };
+  // A reservation that TOOK a name wrote two documents (the name, and the app document recording
+  // it). One that found the name already this app's wrote nothing, and neither did a refusal —
+  // which is why this is asked of the success rather than assumed from `partial`.
+  if (reserved?.reserved === true) ran.wrote = true;
+  return { ok: true, slug: reserved?.slug ?? request.held };
+}
+
+async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): Promise<PublishResult> {
   // Before anything reads the declaration: the app has to HAVE an id, and publish refuses rather
   // than minting one (`requireAid`). The id is written where the declaration is — `init`, and the
   // collection tool's first schema — because there the blank means "no app yet". Here it means an
@@ -335,6 +372,9 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: { aid?: str
   const ready = await prepare(root, aid, context, opts);
   if (!ready.ok) return ready;
   const { existingApp, stamp, dirty, face, appDoc, held, established } = ready;
+  // `established` means `claimApp` wrote the app document a moment ago — the first write of this
+  // run, and the one every refusal after it is partial BECAUSE of.
+  if (established) ran.wrote = true;
 
   const gate = await publishGate(authored, collections, root, opts.confirm);
   if (!gate.ok) return { ...gate, partial: gate.partial || established };
@@ -357,30 +397,9 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: { aid?: str
   const pages = await planTierWrites(handle, aid, { root, authored, stamp });
   if (!pages.ok) return { ...pages, partial: established };
 
-  // THE NAME, BEFORE THE WRITES — and after the app document exists, because `appSlugs`' create
-  // rule resolves the owner through `get(apps/{aid})`.
-  //
-  // `init` reserves the declared name, so this is the app that gained a `slug` afterwards, or the
-  // one whose init could not finish the reservation. It has to happen BEFORE the run rather than
-  // after it: recording a new reservation writes the app document, and the app document written
-  // last by a publish is the one carrying the `public` block. Reserving afterwards would write a
-  // copy without it and silently close the app it had just opened.
-  //
-  // The reservation write is a REPLACEMENT of the app document, and `appDoc` deliberately carries
-  // no `public` — publish holds that back for its last write. So the LIVE block is carried through
-  // here explicitly: without it, renaming an open app closes it for the length of the run, and a
-  // failure anywhere in between leaves it dark rather than open on a mixed version, which is the
-  // opposite of the trade this ordering exists to make.
-  const reserved = await reserveHeldSlug({
-    handle,
-    aid,
-    root,
-    wanted: authored.slug,
-    held,
-    appDoc: stillOpen(appDoc, existingApp),
-  });
-  if (reserved !== undefined && !reserved.ok) return { ...reserved, partial: reserved.partial || established };
-  const slug = reserved?.slug ?? held;
+  const named = await takeName({ handle, aid, root, wanted: authored.slug, held, appDoc: stillOpen(appDoc, existingApp) }, established, ran);
+  if (!named.ok) return named;
+  const slug = named.slug;
   const withSlug = slug === undefined ? face.app : { ...face.app, slug };
 
   const steps = publishSteps({
@@ -397,7 +416,12 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: { aid?: str
     established,
   });
   const failure = await runWrites(steps, "publish");
-  if (failure) return failure;
+  // `runWrites` marks a failure partial exactly when a step before it landed, so its own answer is
+  // the reliable one here — a first-step failure wrote nothing, whatever came before it.
+  if (failure) {
+    if (failure.partial) ran.wrote = true;
+    return failure;
+  }
 
   return {
     ok: true,
