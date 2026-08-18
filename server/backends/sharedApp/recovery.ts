@@ -14,9 +14,12 @@ import { APPS_COLLECTION } from "@receptron/sharedapp";
  *  ordinary rules-bound client, writing as the signed-in user — but it IS reachable from the
  *  console, `firebase firestore:delete --recursive` and any Admin-SDK script, which the owner of
  *  an app has. What it costs is worth stating exactly, because "permanently lost" would be false
- *  and "harmless" would be worse: Firestore does not cascade, and every child is authorized
- *  THROUGH the parent, so while `apps/{aid}` is missing every rules-bound reader — the app's own
- *  pages, the Collections pane, these tools — is denied on the whole subtree. The data is still
+ *  and "harmless" would be worse: Firestore does not cascade, and the records, the schemas and the
+ *  two page tiers are authorized THROUGH the parent, so while `apps/{aid}` is missing every
+ *  rules-bound reader — the app's own pages, the Collections pane, these tools — is denied on
+ *  them. `config/*` is the exception and it cuts the wrong way: its read is `if true`, so the
+ *  public projection keeps being served to the world, while its write resolves through the parent
+ *  like everything else — so it can be neither corrected nor withdrawn. The data is still
  *  there; only the door is gone. Re-creating the document under the SAME aid opens it again, which
  *  is what publishing does, and it is the only route that ends with a working app: an
  *  administrative recursive delete reaches the records too, but it removes them.
@@ -27,7 +30,7 @@ import { APPS_COLLECTION } from "@receptron/sharedapp";
  *  `requireAid` refuses that at publish; this is the same sentence for the author about to do it
  *  by hand. */
 export const neverRemove = (aid: string): string[] => [
-  `**Do not delete ${APPS_COLLECTION}/${aid}, and do not change \`aid\` to start over.** Nothing here can delete it (the rules refuse it, and this host is a rules-bound client) — but the Firebase console and \`firebase firestore:delete --recursive\` can, and that is the trap: Firestore does not cascade, and everything under an app document — the records, config/*, member/* and roster/* — is authorized THROUGH it, so while the parent is missing every rules-bound reader is denied on the whole subtree.`,
+  `**Do not delete ${APPS_COLLECTION}/${aid}, and do not change \`aid\` to start over.** Nothing here can delete it (the rules refuse it, and this host is a rules-bound client) — but the Firebase console and \`firebase firestore:delete --recursive\` can, and that is the trap: Firestore does not cascade, and the records, the schemas, member/* and roster/* are all authorized THROUGH the app document, so while the parent is missing every rules-bound reader is denied on them. The exception is the one that makes it worse rather than better: config/* is \`allow read: if true\`, so the public projection goes on being served — and its WRITE resolves through the parent as well, so it cannot be corrected or taken down either.`,
   `The records are not gone with it: re-creating ${APPS_COLLECTION}/${aid} under the SAME aid — which is what publishing again does — makes them reachable once more. Losing the aid is what makes that irreversible, which is why a fresh one is never the way out: it publishes a second app and abandons the first.`,
   "To empty an app, delete its records. To stop serving it, `unpublish`.",
 ];

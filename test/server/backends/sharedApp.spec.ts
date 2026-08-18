@@ -566,6 +566,25 @@ describe("shared app publish / unpublish", () => {
     expect(docs.app()?.slug).toBe("sakura-salon");
   });
 
+  it("tells a rename that could not retire the old name to keep the new one", async () => {
+    // The new reservation is already taken AND already in app.json; only the old name is
+    // unfinished. So the edit this failure invites — "the name did not work, try another" — is
+    // exactly the one that strands an irreversible reservation.
+    writeApp(root, declaration({ slug: "sakura-hair", public: { enabled: true, read: ["bookings"] } }));
+    await publishSharedApp(root, stamp);
+
+    writeApp(root, declaration({ slug: "sakura-salon", public: { enabled: true, read: ["bookings"] } }));
+    docs.failAt = "appSlugs/sakura-hair";
+    const failed = await publishSharedApp(root, stamp);
+
+    expect(failed.ok).toBe(false);
+    const said = failed.ok === false ? failed.problems.join("\n") : "";
+    expect(said).toContain("could not be retired");
+    expect(said).toContain("Changing `slug` in app.json is the one edit that would strand 'sakura-salon'");
+    expect(said).toContain("writes already landed");
+    expect(docs.doc("appSlugs", "sakura-salon")).toEqual({ aid: AID, published: false });
+  });
+
   it("stops the previous name from resolving when the app is renamed", async () => {
     writeApp(root, declaration({ slug: "sakura-hair", public: { enabled: true, read: ["bookings"] } }));
     await publishSharedApp(root, stamp);

@@ -58,6 +58,10 @@ export async function reserveHeldSlug({ handle, aid, root, wanted, held, appDoc 
         problems: [
           `the URL name '${reservation.slug}' was reserved, but the previous name '${held}' could not be retired: ${err instanceof Error ? err.message : String(err)}`,
           `Run it again — until '${held}' is closed it still resolves to this app, and later unpublishes would not touch it.`,
+          // The NEW name is already taken and already in app.json — only the old one is unfinished
+          // — so the edit this failure invites (change `slug` and try a different name) is the one
+          // that strands it. Same guidance as the record failure below, for the same reason.
+          ...heldSlug(reservation.slug),
         ],
       };
     }
