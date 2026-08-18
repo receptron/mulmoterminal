@@ -267,6 +267,18 @@ const member = memberBridge(
     // the page that sits on its loading state — and without this the pane would report that page
     // as silent, which is the one thing it exists not to do.
     notice: (report) => remember({ kind: "notice", code: report.code, detail: report.detail }),
+    // A DEFECT OF OURS — the preview's own `perform` rejected, or threw before it could answer.
+    // The page has already been told `ok: false` with a fixed code and never sees this; what is
+    // left is whether the author does. It goes in the same log as everything else the pane
+    // collects, as a `host` line: the reader here is the author trying to fix the page, and a
+    // failure of the parent looks identical to a page that hung if nothing records it. Required by
+    // `@receptron/sharedapp` 0.10.0 rather than optional, for exactly that reason — a place that
+    // can be forgotten is the same as swallowing it.
+    defect: (error, requestId) =>
+      remember({
+        kind: "host",
+        note: `the preview could not answer intent ${requestId ?? "(none)"}: ${error instanceof Error ? error.message : String(error)}`,
+      }),
   },
   () => nonce.value,
 );

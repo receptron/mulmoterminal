@@ -30,6 +30,7 @@
 import { type LoadedCollection } from "@mulmoclaude/core/collection/server";
 import { APPS_COLLECTION, PUBLIC_CONFIG_DOC, appConfigPath, appSchemasPath, projectPublish, type AuthoredApp, type PublishStamp } from "@receptron/sharedapp";
 import { requireAid } from "./ensureAid.js";
+import { capabilityNotes, capabilityRefusal, readDeploymentCapabilities, sharedappRuntime } from "./deployment.js";
 import { halfPublishedApp } from "./recovery.js";
 import {
   readCurrentApp,
@@ -194,7 +195,17 @@ async function publishGate(
   collections: readonly LoadedCollection[],
   root: string,
   confirm: boolean | undefined,
-): Promise<{ ok: true; scan: RecordScan } | SharedAppFailure> {
+  handle: SharedAppHandle,
+): Promise<{ ok: true; scan: RecordScan; notes: string[] } | SharedAppFailure> {
+  // FIRST, and before anything is read off the declaration: whether the deployment we are about to
+  // write to understands what this publisher writes. The rules are deployed by hand and their
+  // version was recorded nowhere, so this used to be assumed — and a wrong assumption here is the
+  // failure the author never sees (`deployment.ts`). Only a deployment that HAS answered, and
+  // answered that it is behind, stops the run; absent and unreadable are reported and continue.
+  const reading = await readDeploymentCapabilities(handle);
+  const behind = capabilityRefusal(reading);
+  if (behind.length > 0) return { ok: false, partial: false, problems: behind };
+  const notes = capabilityNotes(reading, sharedappRuntime());
   const schemas = schemasOf(collections);
   const drifted = publicInputProblems(authored, schemas);
   if (drifted.length > 0) return { ok: false, partial: false, problems: drifted };
@@ -206,7 +217,7 @@ async function publishGate(
   if (scoped.length > 0) return { ok: false, partial: false, problems: scoped };
   const scan = await scanRecords(collections, root);
   const refusal = recordRefusal(scan, confirm);
-  return refusal ? { ok: false, partial: false, problems: refusal } : { ok: true, scan };
+  return refusal ? { ok: false, partial: false, problems: refusal } : { ok: true, scan, notes };
 }
 
 /** The two questions that are asked of the PAGE and of the live records before
@@ -385,9 +396,10 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): 
   // run, and the one every refusal after it is partial BECAUSE of.
   if (established) ran.wrote = true;
 
-  const gate = await publishGate(authored, collections, root, opts.confirm);
+  const gate = await publishGate(authored, collections, root, opts.confirm, handle);
   if (!gate.ok) return { ...gate, partial: gate.partial || established };
   const scan = gate.scan;
+  const deploymentNotes = gate.notes;
 
   const form = publicFormOf(authored, schemasOf(collections));
   // Before the first write: the config document is written in the middle of the run, so a database
@@ -447,6 +459,9 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): 
     dirty,
     recordIssues: scan.records,
     recordIssuesCapped: scan.capped,
-    warnings: [...pages.warnings, ...(page.view?.warnings ?? [])],
+    // The deployment notes ride with the page warnings on purpose: both are things a successful
+    // run has to SAY, and both are about whether what was written will actually be served the way
+    // the author expects. A separate field would be a second list nobody prints.
+    warnings: [...deploymentNotes, ...pages.warnings, ...(page.view?.warnings ?? [])],
   };
 }
