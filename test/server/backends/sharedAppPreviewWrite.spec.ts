@@ -342,6 +342,14 @@ describe("shared app preview writes", () => {
     expect(result.ok === false && result.error).toContain("slot");
     expect(batched).toEqual([]);
     expect(docs.writes).toEqual([]);
+
+    // And a lone space is nothing too. `missingRequired` never sees this field — it is optional —
+    // so a blank value used to travel all the way to a document named " ", which no page can show
+    // and no author can find.
+    const blank = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "   " });
+    expect(blank.ok).toBe(false);
+    expect(blank.ok === false && blank.error).toContain("no-id");
+    expect(batched).toEqual([]);
   });
 
   it("refuses one-per-person-per-thing when the thing is missing, rather than colliding on one document", async () => {
@@ -365,6 +373,11 @@ describe("shared app preview writes", () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.error).toContain("no-id");
+    expect(docs.writes.filter((op) => op.startsWith("create"))).toEqual([]);
+    // A blank one collides in exactly the same way — `"<uid>_ "` is one document per person — and
+    // is refused for the same reason.
+    const blank = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: " " });
+    expect(blank.ok === false && blank.error).toContain("no-id");
     expect(docs.writes.filter((op) => op.startsWith("create"))).toEqual([]);
     // And the id it DOES build from a value is unchanged — the acceptance half, since a refusal
     // this near the write is satisfied by refusing everything.
