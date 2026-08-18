@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 
-import { capabilityNotes, capabilityRefusal, REQUIRED_RULES_VERSION } from "../../../server/backends/sharedApp/deployment.js";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
+
+import { capabilityNotes, capabilityRefusal, REQUIRED_RULES_VERSION, sharedappRuntime } from "../../../server/backends/sharedApp/deployment.js";
 
 // WHICH READINGS STOP A PUBLISH. The rules are deployed by hand with no CI in the path, so this is
 // the only place a publisher can learn that the deployment it writes to is behind what it writes —
@@ -51,5 +55,23 @@ describe("the deployment capability gate", () => {
     expect(differ.join(" ")).toContain("0.10.0");
     expect(capabilityRefusal({ state: "known", capabilities: { rulesVersion: REQUIRED_RULES_VERSION, runtime: "0.8.0" } })).toEqual([]);
     expect(capabilityNotes({ state: "known", capabilities: { rulesVersion: REQUIRED_RULES_VERSION, runtime: "0.10.0" } }, "0.10.0")).toEqual([]);
+  });
+});
+
+// WHICH VERSION COMPILED THE PROJECTION. Its own test because the failure is silent in both
+// directions: reading it wrong costs nothing at the call site (the value is only reported) and
+// then makes `capabilityNotes` announce a runtime mismatch on every deployment that records one.
+// The package's `exports` map is what breaks this — it lists `.` and `./view`, so the manifest is
+// not requirable by name, and a future rearrangement of the package can break it again.
+describe("the sharedapp runtime version", () => {
+  it("is the version actually installed, not `unknown`", () => {
+    // Read the way a person would check by hand — straight off the installed file, not through the
+    // package's `exports`, which is the thing under test.
+    const require = createRequire(import.meta.url);
+    const manifest = join(dirname(require.resolve("@receptron/sharedapp")), "..", "package.json");
+    const installed = JSON.parse(readFileSync(manifest, "utf8")) as { version: string };
+    const version = installed.version;
+    expect(version).toMatch(/^\d+\.\d+\.\d+/u);
+    expect(sharedappRuntime()).toBe(version);
   });
 });
