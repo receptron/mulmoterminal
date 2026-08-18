@@ -35,7 +35,11 @@ import {
   type SharedAppPreview,
 } from "../../common/sharedAppPreview";
 
-const props = defineProps<{ cwd: string | null }>();
+// `pickerTarget` is where the PAGE PICKER goes. The pane that hosts this preview has a toolbar of
+// its own, and a strip of chrome directly under it was two toolbars saying different halves of one
+// thing — so the host hands us an element in its toolbar and the picker is teleported into it.
+// Left unset (a standalone mount, and the specs) the picker renders in place, as it used to.
+const props = defineProps<{ cwd: string | null; pickerTarget?: HTMLElement | null }>();
 
 import { asPayload } from "../utils/sharedAppPreviewPayload";
 
@@ -731,19 +735,25 @@ watch(
     <div v-else-if="pages.length === 0" class="p-3 text-[12px] text-dim">This app publishes no pages — only its schemas. There is nothing to draw.</div>
 
     <template v-else>
-      <div class="flex flex-none flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5">
-        <label class="text-[11px] text-dim" for="mt-preview-page">Page</label>
-        <select id="mt-preview-page" v-model="selectedId" class="rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg">
-          <option v-for="candidate in pages" :key="keyOf(candidate)" :value="keyOf(candidate)">
-            {{ candidate.id }} — {{ AUDIENCE_LABEL[candidate.audience] }}
-          </option>
-        </select>
-        <!-- Which face this is, said in the pane rather than only in the picker: the three tiers
-             are separate documents with separate rules, and reading the wrong one as "the app" is
-             how a page written for the front desk gets published to the world. -->
-        <span v-if="page" class="text-[11px] text-dim">{{ AUDIENCE_LABEL[page.audience] }}</span>
-        <span v-if="payload && !payload.publicOpen" class="text-[11px] text-dim">· Roster only</span>
-      </div>
+      <!-- `to` is only read while enabled; the body fallback keeps Vue from warning about a null
+           target on the in-place path, where nothing is teleported at all. -->
+      <Teleport :to="pickerTarget ?? 'body'" :disabled="!pickerTarget">
+        <div :class="pickerTarget ? 'flex flex-wrap items-center gap-2' : 'flex flex-none flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5'">
+          <!-- No visible label: on the host's toolbar the dropdown sits among controls that name
+               themselves, and every option already reads "<id> — <audience>". The name a screen
+               reader needs is still here. -->
+          <select
+            id="mt-preview-page"
+            v-model="selectedId"
+            aria-label="Which page of this app to draw"
+            class="rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg"
+          >
+            <option v-for="candidate in pages" :key="keyOf(candidate)" :value="keyOf(candidate)">
+              {{ candidate.id }} — {{ AUDIENCE_LABEL[candidate.audience] }}
+            </option>
+          </select>
+        </div>
+      </Teleport>
 
       <div class="min-h-0 flex-1">
         <!-- Byte for byte the document a visitor is served. No `allow-modals`, so `alert` /

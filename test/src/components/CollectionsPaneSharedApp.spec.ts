@@ -14,7 +14,7 @@ vi.mock("../../../src/components/PluginFrame.vue", () => ({
   default: { name: "PluginFrame", template: "<div><slot /></div>" },
 }));
 vi.mock("../../../src/components/SharedAppPreview.vue", () => ({
-  default: { name: "SharedAppPreview", template: "<div>the preview</div>" },
+  default: { name: "SharedAppPreview", props: ["cwd", "pickerTarget"], template: "<div>the preview</div>" },
 }));
 
 const PROJECT_OF: Record<string, string> = { "/srv/app": "p1", "/srv/plain": "p2" };
@@ -66,6 +66,19 @@ describe("CollectionsPane default view", () => {
     await flushPromises();
     expect(w.text()).not.toContain("the preview");
     expect(w.text()).toContain("index");
+  });
+
+  // The preview's page picker is teleported into the pane's toolbar, so the element the pane hands
+  // it has to BE in that toolbar by the time the preview is mounted — a template ref is set after
+  // its own render, which is exactly the kind of ordering that silently leaves a picker nowhere.
+  it("hands the preview a picker slot that is inside the toolbar", async () => {
+    mockDeclared(true);
+    const w = mount(CollectionsPane, { props: { cwd: "/srv/app" }, attachTo: document.body });
+    await flushPromises();
+    const slot = w.findComponent({ name: "SharedAppPreview" }).props("pickerTarget") as HTMLElement | null;
+    expect(slot).toBeInstanceOf(HTMLElement);
+    expect(w.find("header, div.border-b").element.contains(slot)).toBe(true);
+    w.unmount();
   });
 
   // The probe is async. Someone who opened a collection while it was in flight has said what they

@@ -211,6 +211,9 @@ const SEVERITY_CLASS: Record<SelfContainmentSeverity, string> = {
 
 // The probe sits inside the PluginFrame shadow, which is what lets the composable resolve
 // this pane's shadow root as the record modal's teleport target.
+// The toolbar element the preview teleports its page picker into (see the toolbar template).
+const pickerSlot = ref<HTMLElement | null>(null);
+
 const probe = ref<HTMLElement>();
 useCollectionTeleportTarget(probe);
 </script>
@@ -249,6 +252,11 @@ useCollectionTeleportTarget(probe);
             <input v-model="previewing" data-testid="collections-preview-toggle" type="checkbox" class="h-3.5 w-3.5 cursor-pointer accent-accent" />
             Previews
           </label>
+          <!-- Where the preview's PAGE PICKER lands. It is the preview's control and its state
+               lives there, so it is teleported in rather than lifted — but it belongs on this bar:
+               a second strip of chrome directly beneath this one was two toolbars saying different
+               halves of one thing. Empty, and so invisible, whenever the preview is not up. -->
+          <div ref="pickerSlot" class="flex items-center gap-2"></div>
         </div>
         <!-- Expand then close, in that order and with the same icons and classes as the Tools and
              Canvas headers: the panes share one slot, so the same control must be in the same
@@ -285,7 +293,7 @@ useCollectionTeleportTarget(probe);
       This directory has no collections yet. Collections live in <code>.claude/skills</code> under the folder the cell is open in.
     </div>
     <div v-else-if="previewing" class="min-h-0 flex-1">
-      <SharedAppPreview :cwd="cwd" />
+      <SharedAppPreview :cwd="cwd" :picker-target="pickerSlot" />
     </div>
     <template v-else>
       <div class="min-h-0 flex-1">

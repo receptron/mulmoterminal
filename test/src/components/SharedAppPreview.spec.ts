@@ -158,6 +158,29 @@ const mountPreview = async () => {
 };
 
 describe("SharedAppPreview", () => {
+  // The page picker is the HOST's chrome once a host offers a place for it: the collections pane
+  // has a toolbar of its own, and a strip directly under it was two toolbars saying different
+  // halves of one thing. Without a target it stays where it was, which is what a standalone mount
+  // (and every other test in this file) gets.
+  it("teleports the page picker into the host's toolbar when it is given one", async () => {
+    const slot = document.createElement("div");
+    document.body.appendChild(slot);
+    const wrapper = mount(SharedAppPreview, { props: { cwd: "/repo", pickerTarget: slot } });
+    await flushPromises();
+
+    expect(slot.querySelector("#mt-preview-page")).not.toBeNull();
+    expect(wrapper.element.querySelector("#mt-preview-page")).toBeNull();
+    wrapper.unmount();
+    // And it leaves nothing of its own behind in the host's toolbar.
+    expect(slot.querySelector("#mt-preview-page")).toBeNull();
+    slot.remove();
+  });
+
+  it("keeps the page picker in place when no target is given", async () => {
+    const wrapper = await mountPreview();
+    expect(wrapper.element.querySelector("#mt-preview-page")).not.toBeNull();
+  });
+
   // WHAT HAPPENED, carried out of the pane in one press.
   //
   // Every fact below already passed through this component and was then thrown away, and each was
