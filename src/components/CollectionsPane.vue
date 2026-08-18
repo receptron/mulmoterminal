@@ -31,6 +31,29 @@ type PaneView = { mode: "index"; kind: ShortcutKind } | { mode: "detail"; kind: 
 const view = ref<PaneView>({ mode: "index", kind: "collection" });
 const selectedId = ref<string | null>(null);
 
+// Which of the pane's two faces is up: the app's pages, or the collections under them. Declared
+// with the view state rather than beside its probe below, because `navigated` clears it — a
+// navigation is a request for a COLLECTION, and it must not run before this exists.
+const declaresApp = ref(false);
+const previewing = ref(false);
+
+// Whether anything has NAVIGATED since this directory was opened. The shared-app default below
+// only applies to a pane nobody has steered yet, and "still on the index" is not that test:
+// `gotoIndex("feed")` and a deliberate return to the collections index both leave `mode ===
+// "index"`, so a probe still in flight would land on top of the view the user just chose.
+let viewTouched = false;
+
+/** Every navigation the plugin's views drive. It goes through here so that the two things a
+ *  navigation implies are said once: the pane is no longer showing the app's pages (the request
+ *  is FOR a collection, and leaving the preview up makes the click look like it did nothing),
+ *  and the pane has been steered, so the default must not fire over it. */
+function navigated(next: PaneView, itemId: string | null): void {
+  viewTouched = true;
+  previewing.value = false;
+  selectedId.value = itemId;
+  view.value = next;
+}
+
 const nav: CollectionNavSurface = {
   routeSlug: () => (view.value.mode === "detail" ? view.value.slug : undefined),
   routeSelectedId: () => selectedId.value ?? undefined,
@@ -39,18 +62,15 @@ const nav: CollectionNavSurface = {
     selectedId.value = itemId;
   },
   gotoIndex: (kind) => {
-    selectedId.value = null;
-    view.value = { mode: "index", kind };
+    navigated({ mode: "index", kind }, null);
   },
   gotoDetail: (kind, slug) => {
-    selectedId.value = null;
-    view.value = { mode: "detail", kind, slug };
+    navigated({ mode: "detail", kind, slug }, null);
   },
   // A ref hop from one record to another: same pane, the target collection open with that record
   // selected. `recordId` is optional because a hop may target the collection itself.
   navigateToRecord: (targetSlug, recordId) => {
-    view.value = { mode: "detail", kind: "collection", slug: targetSlug };
-    selectedId.value = recordId ?? null;
+    navigated({ mode: "detail", kind: "collection", slug: targetSlug }, recordId ?? null);
   },
 };
 
@@ -86,8 +106,12 @@ watch(
     invalidateCheck();
     // The app is the DIRECTORY's, so a cwd change is a different app or none.
     void probeForApp(cwd ?? null);
-    // Reset the view: a slug open in one directory need not exist in the next.
-    nav.gotoIndex("collection");
+    // Reset the view: a slug open in one directory need not exist in the next. NOT through `nav`:
+    // this is the new directory's starting point, not a navigation within it, and routing it
+    // through there would mark the pane as steered and cancel its own default.
+    selectedId.value = null;
+    view.value = { mode: "index", kind: "collection" };
+    viewTouched = false;
   },
   { immediate: true },
 );
@@ -102,8 +126,6 @@ const unknownDirectory = computed(() => !resolving.value && projectId.value === 
 //
 // The probe is a separate, cheap route (one `stat`). Asking the preview route would compute a
 // whole publish projection, and open a Firestore session, to decide whether to draw a button.
-const declaresApp = ref(false);
-const previewing = ref(false);
 
 let probeGeneration = 0;
 async function probeForApp(cwd: string | null): Promise<void> {
@@ -121,10 +143,11 @@ async function probeForApp(cwd: string | null): Promise<void> {
     // is the DEFAULT view here, not a control you have to find — the collections stay one click
     // away on the toolbar.
     //
-    // Only while the pane is still on its own index, though. The probe is async, and a user who
-    // has already opened a collection in the meantime has said what they want to look at; taking
-    // the screen off them after the fact is worse than not defaulting at all.
-    if (declaresApp.value && view.value.mode === "index") previewing.value = true;
+    // Only for a pane nobody has steered yet, though. The probe is async, and a user who has
+    // navigated in the meantime — into a collection, to the feeds index, back to the collections
+    // index — has said what they want to look at; taking the screen off them after the fact is
+    // worse than not defaulting at all.
+    if (declaresApp.value && !viewTouched) previewing.value = true;
   } catch {
     // A directory whose app-ness could not be established simply shows no preview control. There
     // is nothing to tell the user here: they did not ask a question.
@@ -242,11 +265,15 @@ useCollectionTeleportTarget(probe);
          being worked on and the collections are their storage. -->
     <div class="flex-none border-b border-border bg-panel px-4 py-2 font-sans text-[14px] text-fg">
       <div class="flex items-center justify-between gap-2">
-        <div class="flex items-center gap-2">
+        <!-- `min-w-0` on the left group and `shrink-0` on the right: the preview teleports a page
+             picker in here, and a select is as wide as its longest option. Without these the pane's
+             own expand and close are pushed off its right edge by a descriptive page id — controls
+             that are meant to be reachable in every state. -->
+        <div class="flex min-w-0 items-center gap-2">
           <span class="font-semibold">Collections</span>
           <label
             v-if="declaresApp"
-            class="flex cursor-pointer items-center gap-1.5 text-[11px] text-dim"
+            class="flex shrink-0 cursor-pointer items-center gap-1.5 text-[11px] text-dim"
             title="Draw the pages publishing this app would put on screen. Nothing is written."
           >
             <input v-model="previewing" data-testid="collections-preview-toggle" type="checkbox" class="h-3.5 w-3.5 cursor-pointer accent-accent" />
@@ -256,12 +283,12 @@ useCollectionTeleportTarget(probe);
                lives there, so it is teleported in rather than lifted — but it belongs on this bar:
                a second strip of chrome directly beneath this one was two toolbars saying different
                halves of one thing. Empty, and so invisible, whenever the preview is not up. -->
-          <div ref="pickerSlot" class="flex items-center gap-2"></div>
+          <div ref="pickerSlot" class="flex min-w-0 items-center gap-2"></div>
         </div>
         <!-- Expand then close, in that order and with the same icons and classes as the Tools and
              Canvas headers: the panes share one slot, so the same control must be in the same
              place in each of them. -->
-        <div class="flex items-center gap-1">
+        <div class="flex shrink-0 items-center gap-1">
           <button
             type="button"
             data-testid="collections-expand-btn"

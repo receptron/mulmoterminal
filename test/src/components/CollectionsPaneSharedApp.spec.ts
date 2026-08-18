@@ -17,7 +17,7 @@ vi.mock("../../../src/components/SharedAppPreview.vue", () => ({
   default: { name: "SharedAppPreview", props: ["cwd", "pickerTarget"], template: "<div>the preview</div>" },
 }));
 
-const PROJECT_OF: Record<string, string> = { "/srv/app": "p1", "/srv/plain": "p2" };
+const PROJECT_OF: Record<string, string> = { "/srv/app": "p1", "/srv/app2": "p3", "/srv/plain": "p2" };
 vi.mock("../../../src/composables/collectionProject", () => ({
   projectIdForCwd: async (cwd: string | null) => (cwd === null ? null : (PROJECT_OF[cwd] ?? null)),
 }));
@@ -79,6 +79,54 @@ describe("CollectionsPane default view", () => {
     expect(slot).toBeInstanceOf(HTMLElement);
     expect(w.find("header, div.border-b").element.contains(slot)).toBe(true);
     w.unmount();
+  });
+
+  // Two reviewers landed on the same seam from different sides (#1784): "still on the index" is
+  // not the same question as "nobody has steered this pane". Both of these leave `mode ===
+  // "index"`, and both are a choice the arriving probe must not overrule.
+  it("does not overrule a feeds-index navigation made while the probe was in flight", async () => {
+    let release!: () => void;
+    mockDeclared(true, new Promise<void>((resolve) => (release = resolve)));
+    const w = mount(CollectionsPane, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    activeCollectionNavSurface()?.gotoIndex("feed");
+    await flushPromises();
+
+    release();
+    await flushPromises();
+    expect(w.text()).not.toContain("the preview");
+    expect(w.text()).toContain("feeds");
+  });
+
+  // A collection link activated from another mounted card is routed to this surface. With the
+  // preview up and nothing clearing it, the request would be honoured behind the preview and the
+  // click would look like it did nothing.
+  it("leaves the preview when a navigation asks for a collection", async () => {
+    mockDeclared(true);
+    const w = mount(CollectionsPane, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    expect(w.text()).toContain("the preview");
+
+    activeCollectionNavSurface()?.navigateToRecord("notes", "r1");
+    await flushPromises();
+    expect(w.text()).not.toContain("the preview");
+    expect(w.text()).toContain("collection");
+    expect((w.find(PREVIEWS).element as HTMLInputElement).checked).toBe(false);
+  });
+
+  // The default is per DIRECTORY: walking the cell to another shared app is a fresh start, not a
+  // pane the user has steered.
+  it("defaults again when the cell moves to another directory", async () => {
+    mockDeclared(true);
+    const w = mount(CollectionsPane, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    await w.find(PREVIEWS).setValue(false);
+    await flushPromises();
+    expect(w.text()).not.toContain("the preview");
+
+    await w.setProps({ cwd: "/srv/app2" });
+    await flushPromises();
+    expect(w.text()).toContain("the preview");
   });
 
   // The probe is async. Someone who opened a collection while it was in flight has said what they

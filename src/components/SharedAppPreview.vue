@@ -738,7 +738,7 @@ watch(
       <!-- `to` is only read while enabled; the body fallback keeps Vue from warning about a null
            target on the in-place path, where nothing is teleported at all. -->
       <Teleport :to="pickerTarget ?? 'body'" :disabled="!pickerTarget">
-        <div :class="pickerTarget ? 'flex flex-wrap items-center gap-2' : 'flex flex-none flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5'">
+        <div :class="pickerTarget ? 'flex min-w-0 items-center gap-2' : 'flex flex-none flex-wrap items-center gap-2 border-b border-border px-2.5 py-1.5'">
           <!-- No visible label: on the host's toolbar the dropdown sits among controls that name
                themselves, and every option already reads "<id> — <audience>". The name a screen
                reader needs is still here. -->
@@ -746,7 +746,13 @@ watch(
             id="mt-preview-page"
             v-model="selectedId"
             aria-label="Which page of this app to draw"
-            class="rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg"
+            :class="[
+              'rounded-[5px] border border-border bg-input px-1.5 py-[3px] text-[11px] text-fg',
+              // On a host toolbar the pane is 360-480px and shares the row with the pane's own
+              // controls, so the select must be allowed to shrink below its longest option rather
+              // than pushing them off the edge. Standing alone it keeps its intrinsic width.
+              pickerTarget ? 'min-w-0 max-w-[16rem] shrink truncate' : '',
+            ]"
           >
             <option v-for="candidate in pages" :key="keyOf(candidate)" :value="keyOf(candidate)">
               {{ candidate.id }} — {{ AUDIENCE_LABEL[candidate.audience] }}
