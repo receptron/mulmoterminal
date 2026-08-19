@@ -802,6 +802,14 @@ the cost in the text the reader can see.
   `transitions` (for a member) or `public.submit.<cid>.selfTransitions` (for a participant). Those
   are different tables, so a staff page and a participant page draw different buttons for the same
   collection. Ask for a move the record cannot make and the answer names it.
+- **`transitions` says nothing about the OTHER rows.** It judges one record's move, so "only one
+  question is open", "only one item is being served", "only one draft at a time" cannot be declared
+  — no rule keeps them and publish cannot refuse an app that breaks them. Where the app's meaning
+  depends on such a rule, the PAGE performs it: send the move that closes the current row, wait for
+  it to succeed, then send the one that opens the next, and disable the controls in between. A page
+  that only sends the second half is the worst kind of broken — every call succeeds, the rows say
+  what the operator expects, and the screen the audience is looking at does not move. (This is
+  exactly what the live-poll desk does; copy it rather than reinventing the pair.)
 - **`withdraw` takes the reader's own row away** and names no destination, because nothing moves.
   It exists only where `selfDelete` declares the statuses, it is offered on a participant's page
   and never on a staff one (owner and editor delete by role), and where the collection has a
