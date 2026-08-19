@@ -103,9 +103,11 @@ const question = (id: string, order: number, state: string): Question => ({
   state,
 });
 
-/** The handler awaits two writes; the clicks below are synchronous. */
+/** The clicks below are synchronous and the handler is not: it awaits a write per question it
+ *  closes, one for the target, and one per question it puts back. Generous on purpose — the count
+ *  is a property of the case being tested, and a loop too short reads as "the desk stopped early". */
 const settle = async (): Promise<void> => {
-  for (let turn = 0; turn < 8; turn += 1) {
+  for (let turn = 0; turn < 64; turn += 1) {
     await Promise.resolve();
   }
 };
@@ -188,7 +190,7 @@ describe("the live-poll desk template", () => {
     // just closed.
     expect(desk.moves).toEqual(["questions/q1 -> closed", "questions/q2 -> open", "questions/q1 -> open"]);
     expect(document.getElementById("say")?.textContent).toContain("permission-denied");
-    expect(document.getElementById("say")?.textContent).toContain("q1 is open again");
+    expect(document.getElementById("say")?.textContent).toContain("nothing was changed");
   });
 
   it("says so when the question cannot be put back either", async () => {
@@ -206,6 +208,45 @@ describe("the live-poll desk template", () => {
     const said = document.getElementById("say")?.textContent ?? "";
     expect(said).toContain("permission-denied");
     expect(said).toContain("still-denied");
+  });
+
+  it("closes EVERY open question, not only the one the audience is on", async () => {
+    const desk = loadDesk();
+    // Two open at once is reachable without anybody doing anything wrong: a second desk, or a press
+    // that half-happened. Closing only `q1` here would open `q3` under `q2`, and the audience — on
+    // the lowest `order` among the open ones — would sit on `q2`: the original stall, arrived at
+    // through the fix for it.
+    desk.tell([question("q1", 1, "open"), question("q2", 2, "open"), question("q3", 3, "draft")], []);
+
+    buttonFor("Ask this").click();
+    await settle();
+
+    expect(desk.moves).toEqual(["questions/q1 -> closed", "questions/q2 -> closed", "questions/q3 -> open"]);
+  });
+
+  it("puts back everything it closed when the open is refused", async () => {
+    const desk = loadDesk();
+    desk.tell([question("q1", 1, "open"), question("q2", 2, "open"), question("q3", 3, "draft")], []);
+    desk.refuse("questions/q3 -> open", "permission-denied");
+
+    buttonFor("Ask this").click();
+    await settle();
+
+    expect(desk.moves).toEqual(["questions/q1 -> closed", "questions/q2 -> closed", "questions/q3 -> open", "questions/q1 -> open", "questions/q2 -> open"]);
+    expect(document.getElementById("say")?.textContent).toContain("nothing was changed");
+  });
+
+  it("does not undo what it never did when the FIRST close is refused", async () => {
+    const desk = loadDesk();
+    desk.tell([question("q1", 1, "open"), question("q2", 2, "draft")], []);
+    desk.refuse("questions/q1 -> closed", "permission-denied");
+
+    buttonFor("Ask this").click();
+    await settle();
+
+    // One move and no rollback: nothing was closed, so the audience is still on `q1` and a reopen
+    // would be a write with nothing to correct.
+    expect(desk.moves).toEqual(["questions/q1 -> closed"]);
   });
 
   it("gives the buttons back after a refusal, mid-stream", async () => {

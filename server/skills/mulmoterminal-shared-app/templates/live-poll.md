@@ -262,9 +262,11 @@ ordering is the desk's to perform, not the rules' to keep — `transitions` judg
 and "at most one is open" is a statement about the other records, which no declaration here can
 make. `order` is what settles the moment between the two writes.
 
-If the second write is refused after the first landed, the desk puts the question it closed back —
-nothing open is the one state worse than not moving, because every audience page drops to "waiting"
-while the host is still talking.
+Asking a question closes EVERY open one, not only the one the audience is on: more than one can be
+open (a second desk, a press that half-happened), and leaving one below the target's `order` is the
+same stall. If a write is refused partway, the desk puts back what it closed — nothing open is the
+one state worse than not moving, because every audience page drops to "waiting" while the host is
+still talking.
 
 **A desk that only opened the next question would look broken.** The previous one stays open, the
 audience is on the lower `order`, and the screen everybody is watching does not move — while the
@@ -672,14 +674,14 @@ counts document — and nothing needs to, because the roster is the only audienc
    *  Two writes, IN ORDER, and not a batch: `view.transition` moves one record, and there is no
    *  operation here that moves two. So the pair can half-happen, and each half is handled:
    *
-   *    the CLOSE fails — the open is not attempted. Both halves undone is the audience still
-   *    answering the question they were on, which is the harmless end of this.
+   *    the CLOSE fails — the open is not attempted. Nothing moved is the audience still answering
+   *    the question they were on, which is the harmless end of this.
    *
-   *    the OPEN fails after the close landed — NOTHING is open, and that is the state to avoid:
+   *    the OPEN fails after a close landed — NOTHING is open, and that is the state to avoid:
    *    every audience page drops to "Waiting for a question…" while the host is still talking about
-   *    the one they just closed. So the close is put back, best effort, and what happened is said
-   *    either way. A rollback that is itself refused is reported rather than hidden — the list is
-   *    the truth, and the host can see two rows and press again.
+   *    the one they just closed. So everything closed on the way here is put back, best effort, and
+   *    what happened is said either way. A reopen that is itself refused is named rather than
+   *    hidden — the list is the truth, and the host can see it and press again.
    *
    *  Delegated from the container because the rows are redrawn under the pointer — a listener bound
    *  to a button would go with it. */
@@ -695,27 +697,41 @@ counts document — and nothing needs to, because the roster is the only audienc
     busy = true;
     render();
     say("Working…");
-    const current = openQuestion(latest.questions);
     const move = (id, state) => view.transition("questions", id, state).catch((err) => ({ ok: false, error: String(err) }));
-    // The question being taken off the screen, if this press is a switch rather than a plain
-    // open or close. Held because it is what a failed open has to be given back.
-    const leaving = to === "open" && current !== null && current.id !== qid ? current : null;
+    // EVERY open question that is not the target, not just the one the audience is on. More than
+    // one can be open — a second desk, or a press that half-happened — and closing only the lowest
+    // `order` would leave another one below the target, which is the stall this handler exists to
+    // prevent. Held because a failed open has to give them back.
+    const leaving = to === "open" ? byOrder(latest.questions).filter((question) => question.state === "open" && question.id !== qid) : [];
+    const closed = [];
     let problem = "";
-    if (leaving !== null) {
-      const closed = await move(leaving.id, "closed");
-      if (!closed?.ok) {
-        problem = closed?.error ?? "unknown error";
+    for (const question of leaving) {
+      const done = await move(question.id, "closed");
+      if (!done?.ok) {
+        problem = `${question.id}: ${done?.error ?? "unknown error"}`;
+        break;
       }
+      closed.push(question);
     }
     if (problem === "") {
       const moved = await move(qid, to);
       if (!moved?.ok) {
         problem = moved?.error ?? "unknown error";
-        if (leaving !== null) {
-          const back = await move(leaving.id, "open");
-          problem = back?.ok ? `${problem} — ${leaving.id} is open again` : `${problem}, and ${leaving.id} could not be reopened: ${back?.error ?? "unknown error"}`;
+      }
+    }
+    // Whatever was closed on the way here goes back, because the alternative is worse than not
+    // moving: with nothing open every audience page drops to "waiting" while the host is still
+    // talking about the question they just closed. Best effort, and a reopen that is refused too is
+    // NAMED rather than swallowed — the list is the truth and the host can press again.
+    if (problem !== "" && closed.length > 0) {
+      const stuck = [];
+      for (const question of closed) {
+        const back = await move(question.id, "open");
+        if (!back?.ok) {
+          stuck.push(`${question.id} (${back?.error ?? "unknown error"})`);
         }
       }
+      problem = stuck.length === 0 ? `${problem} — nothing was changed` : `${problem}, and could not be reopened: ${stuck.join(", ")}`;
     }
     // ALWAYS, and before the message. A refused call produces no state update, so `onState` never
     // redraws — the buttons would stay dead until the operator reloaded, mid-stream, on a page whose
