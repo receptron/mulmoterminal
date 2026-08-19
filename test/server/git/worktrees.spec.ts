@@ -289,7 +289,12 @@ describe("git worktree lifecycle", () => {
   // The bug this closes: several clones of one repo sit side by side and only the one being
   // worked in gets pulled, so forking from LOCAL main starts the work on however old that clone
   // is. Here the remote-tracking ref is ahead of local main, and the new worktree must be at the
-  // remote's commit — the old code produced the local one and nothing said so.
+  // remote's commit — the old code produced the local one and nothing said so. This is asserted
+  // for BOTH an issue-anchored worktree and a plain type-a-task-name one: they used to differ
+  // here (only the issue-started path paid for a fresh base), which was its own source of the
+  // same bug — a plus-button worktree forking from a stale local main, and its eventual PR
+  // conflicting with whatever had already landed. Both now always fork from the fresher of the
+  // two, local or remote.
   it.skipIf(!hasGit)(
     "forks from origin/<base> rather than the local branch when the two differ",
     async () => {
@@ -314,13 +319,9 @@ describe("git worktree lifecycle", () => {
       expect(execFileSync("git", ["-C", wt.path, "rev-parse", "HEAD"], { encoding: "utf8" }).trim()).toBe(remote);
       expect(existsSync(path.join(wt.path, "remote-only.txt"))).toBe(true);
 
-      // The deliberate asymmetry: only an issue-started worktree pays for a fresh base. The
-      // launcher's type-a-task-name path keeps forking from the local branch it always has, so
-      // the same repo state gives the two paths DIFFERENT answers — which is the decision, not
-      // an oversight, and is why it is asserted rather than left implied.
       const unanchored = await createWorktree(repo, "unanchored");
       if (!unanchored) throw new Error("expected a worktree");
-      expect(existsSync(path.join(unanchored.path, "remote-only.txt"))).toBe(false);
+      expect(existsSync(path.join(unanchored.path, "remote-only.txt"))).toBe(true);
     },
     GIT_TEST_TIMEOUT_MS,
   );

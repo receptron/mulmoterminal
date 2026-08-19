@@ -302,18 +302,19 @@ async function adoptParentDirConfig(repo: string, worktreeDir: string): Promise<
 }
 
 // Create a fresh worktree + branch for `task`, forked from the repo's base branch. Pass `issue`
-// to anchor the branch to a GitHub issue (`issue/<N>-<slug>`), which also forks from the base as
-// the REMOTE has it. Returns the worktree path + branch, or null if `repoDir` isn't a git repo /
-// the worktree add fails.
+// to anchor the branch to a GitHub issue (`issue/<N>-<slug>`). Either way the fork point is the
+// base AS THE REMOTE HAS IT (see freshStartPoint): several clones of one repo sit side by side
+// here and only the one you happen to be in gets pulled, so forking from local main starts the
+// work on however old that clone is — and a PR opened from it conflicts with whatever landed on
+// the mainline since. `fetchOrigin` is a best-effort 30s-capped round trip, silent and harmless
+// offline or with no remote (baseStartPoint then falls back to the local branch). Returns the
+// worktree path + branch, or null if `repoDir` isn't a git repo / the worktree add fails.
 export async function createWorktree(repoDir: string, task: string, issue?: number | undefined): Promise<{ path: string; branch: string } | null> {
   const repo = await repoRoot(repoDir);
   if (!repo) return null;
   const stem = branchStem(task, issue);
   const root = worktreesRoot(repo);
-  // Only an issue-started worktree pays for a fresh base. Refreshing the remote is a network
-  // round trip on every create, and the launcher's type-a-task-name path keeps the local base it
-  // has always forked from — a deliberate asymmetry, pinned by a test.
-  const start = issue ? await freshStartPoint(repo) : await defaultBaseBranch(repo);
+  const start = await freshStartPoint(repo);
   return serializeCreate(async () => {
     const branch = await uniqueBranch(repo, stem, root);
     const dir = path.join(root, worktreeDirName(branch));
