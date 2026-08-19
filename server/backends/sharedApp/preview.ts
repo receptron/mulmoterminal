@@ -206,7 +206,13 @@ function formInputsOf(config: PublishedConfigDoc, form: PublicForm): PreviewForm
           ...(drawn?.values === undefined ? {} : { values: [...drawn.values] }),
         };
       });
-      return fields.length === 0 ? [] : [[cid, fields] as const];
+      // An entry with NO fields is still an entry. `publicFormOf` keeps a collection whose whole
+      // submission is host-filled — a stamp, a uid, or both: "count me in" is a real declaration,
+      // and the button is the submission. Dropped here, the pane shows no collection and no
+      // "Send it", so the one shape whose page cannot be written by hand is the one the author
+      // cannot try. What must stay dropped is a collection publish did not describe at all, which
+      // never reaches this loop.
+      return [[cid, fields] as const];
     }),
   );
 }

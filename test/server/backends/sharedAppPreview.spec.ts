@@ -344,6 +344,89 @@ describe("shared app preview", () => {
     });
   });
 
+  it("hands an own-scope page the reader's own rows, found by uid — and nobody else's", async () => {
+    // The only host-side implementation of uid ownership. Reading as the owner would return every
+    // row for a page whose reader is only ever shown their own, which makes the preview show MORE
+    // than production — the one direction it must never fail in. The foreign row is the assertion:
+    // a filter that matched nothing and a filter that matched everything both leave a green test
+    // if only the author's own row is in the fixture.
+    mkdirSync(path.join(root, "views"), { recursive: true });
+    mkdirSync(path.join(root, ".claude", "skills", "claims"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".claude", "skills", "claims", "schema.json"),
+      JSON.stringify({
+        title: "claims",
+        icon: "task",
+        primaryKey: "id",
+        storage: { type: "firestore" },
+        fields: {
+          id: { type: "string", label: "ID", primary: true, required: true },
+          taskId: { type: "string", label: "作業", required: true },
+          uid: { type: "string", label: "uid" },
+        },
+      }),
+    );
+    writeFileSync(path.join(root, "views", "mine.html"), "<p>mine</p>");
+    writeApp(
+      root,
+      declaration({
+        protocol: "2.0.0",
+        collections: { claims: { submitOnly: true } },
+        views: [{ id: "mine", path: "views/mine.html", audience: "participant", collections: ["claims"] }],
+        public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["taskId", "uid"] } } },
+      }),
+    );
+    docs.store.set(
+      `apps/${AID}/collections/claims/items`,
+      new Map([
+        ["mine-1", { taskId: "mine-1", uid: OWNER.uid }],
+        ["theirs-1", { taskId: "theirs-1", uid: "uid-somebody-else" }],
+      ]),
+    );
+
+    const result = await previewSharedApp(root, stamp);
+
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    // Keyed by TIER, and the participant tier is called `roster` — the audience an author writes
+    // and the document the projection lands on are not the same word.
+    expect(result.ok && (result.datasets["roster:mine"]?.claims ?? []).map((row) => row.id)).toEqual(["mine-1"]);
+  });
+
+  it("keeps a collection whose whole submission is filled in by the host", async () => {
+    // "Count me in": with `uidField` the identity of whoever pressed the button IS the submission,
+    // so the generated form has no inputs — and it is still a form. Dropped for having no fields,
+    // the pane would show no collection and no "Send it", leaving the one shape whose page cannot
+    // be written by hand as the one an author cannot try.
+    mkdirSync(path.join(root, ".claude", "skills", "claims"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".claude", "skills", "claims", "schema.json"),
+      JSON.stringify({
+        title: "claims",
+        icon: "task",
+        primaryKey: "id",
+        storage: { type: "firestore" },
+        fields: {
+          id: { type: "string", label: "ID", primary: true, required: true },
+          uid: { type: "string", label: "uid" },
+        },
+      }),
+    );
+    writeApp(
+      root,
+      declaration({
+        protocol: "2.0.0",
+        collections: { claims: { submitOnly: true } },
+        public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["uid"] } } },
+      }),
+    );
+
+    const result = await previewSharedApp(root, stamp);
+
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    expect(result.ok && result.formInputs).toEqual({ claims: [] });
+    expect(result.ok && result.generatedForm).toBe(true);
+  });
+
   it("names the declaration a refused write fell foul of, rather than relaying a bare denial", async () => {
     const { writePreviewSubmission } = await import("../../../server/backends/sharedApp/previewWrite.js");
     const closed = 1_600_000_000_000;
