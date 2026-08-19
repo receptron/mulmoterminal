@@ -328,7 +328,6 @@ describe("shared app preview", () => {
     writeApp(
       root,
       declaration({
-        protocol: "2.0.0",
         collections: { claims: { submitOnly: true } },
         public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["taskId", "who", "uid"] } } },
       }),
@@ -370,7 +369,6 @@ describe("shared app preview", () => {
     writeApp(
       root,
       declaration({
-        protocol: "2.0.0",
         collections: { claims: { submitOnly: true } },
         views: [{ id: "mine", path: "views/mine.html", audience: "participant", collections: ["claims"] }],
         public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["taskId", "uid"] } } },
@@ -414,7 +412,6 @@ describe("shared app preview", () => {
     writeApp(
       root,
       declaration({
-        protocol: "2.0.0",
         collections: { claims: { submitOnly: true } },
         public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["uid"] } } },
       }),

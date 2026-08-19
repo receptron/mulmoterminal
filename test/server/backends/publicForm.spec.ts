@@ -187,6 +187,30 @@ describe("the field the page takes from the session rather than asks", () => {
     expect(Object.keys(publicFormOf(claimed, withUid).responses?.fields ?? {})).toEqual(["name"]);
   });
 
+  it("stays a shape a reader that never learnt uidField refuses outright", () => {
+    // THIS IS WHAT THE VERSION NUMBER IS NOT DOING. `uidField` ships under no version of its own —
+    // the contract stays 1.0.0 — so nothing in the document tells an older build to stand back. It
+    // stands back anyway, on the shape: since 1.0.0 the reader has refused a projection
+    // whose `createFields` names something the form does not draw and it cannot identify as
+    // host-filled (it knows three — the address, the status, the stamp). A uid is a fourth, so the
+    // whole projection is refused as "a shape this release does not read" rather than drawn with a
+    // box asking a visitor to type their uid.
+    //
+    // Which makes the two facts below load-bearing, and this test the only thing holding them
+    // together: the uid is IN createFields (the rules take no key outside it) and NEVER in the
+    // drawn fields (not drawing it is the feature). Break either and old builds start drawing uid
+    // apps, silently, with no version left to stop them. See U10 in
+    // `plans/feat-shared-app-uid-identity.md`.
+    const spec = claimed.public?.submit?.responses;
+    const drawn = publicFormOf(claimed, withUid).responses;
+    expect(spec?.createFields).toContain("uid");
+    expect(Object.keys(drawn?.fields ?? {})).not.toContain("uid");
+    // The reader's own judgement, as it stood before it learnt the key (mulmoserver's `agrees`).
+    const hostFilled = [spec?.emailField, drawn?.statusField, spec?.stampField];
+    const undrawn = (spec?.createFields ?? []).filter((name) => !hostFilled.includes(name)).filter((name) => !Object.hasOwn(drawn?.fields ?? {}, name));
+    expect(undrawn).toEqual(["uid"]);
+  });
+
   it("keeps a form whose only create field is the uid", () => {
     // The same "count me in" as the stamp's, for an app whose document id is spent on the thing
     // being claimed: the whole submission is who pressed the button.

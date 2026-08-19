@@ -256,7 +256,6 @@ describe("shared app preview writes", () => {
           createFields: ["requesterName", "requesterEmail", "slot", "status", "uid"],
         },
       }),
-      protocol: "2.0.0",
     });
 
     const result = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000", uid: "somebody-else" });

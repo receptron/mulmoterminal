@@ -46,7 +46,7 @@
   "aid": "(init が書きます。手で触らないこと)",
   "name": "今週の作業",
   "slug": "team-todo",
-  "protocol": "2.0.0",
+  "protocol": "1.0.0",
   "members": {
     "owner@example.com": { "*": "owner" }
   },
@@ -84,10 +84,12 @@
 }
 ```
 
-**`protocol: "2.0.0"` は省略できません。** `uidField` はページ側が理解していないと動かない
-キーで（uid はセッションから埋め、フォームには描かない）、宣言が無いと publish が拒否します。
-古いブラウザのタブは、このアプリを**描かずに「読めません」と言います** — それが正しい壊れ方で、
-「uid を入力してください」という箱を描いて全部拒否されるよりずっとよい。
+**`protocol` は他のテンプレートと同じ `"1.0.0"` のままです。** `uidField` に専用の版は
+ありません。古いビルドは、このキーを知らなければ宣言の検査で `Unrecognized key: "uidField"` と
+言って止まりますし、古いブラウザのタブは `submit` と `form` の整合検査で落ちて、このアプリを
+**描かずに「読めません」と言います**（uid は `createFields` にあってフォームには無いので、
+その組み合わせが拒否されます）。それが正しい壊れ方で、「uid を入力してください」という箱を
+描いて全部拒否されるよりずっとよい。
 
 **`uid` は `createFields` に入り、しかしフォームには絶対に描かれません。** 入っているのは
 ルールが「createFields の外のキーは拒否」するからで、埋めるのはページです。あなたが書く
@@ -318,9 +320,9 @@
 1. `manageSharedApp` の `init`（名前と slug）。
 2. `.claude/skills/tasks/` と `.claude/skills/claims/` に `SKILL.md` と `schema.json` を書く
    （`storage: {"type":"firestore"}`）。
-3. `app.json` に上の宣言を書く。**`protocol: "2.0.0"` を忘れないこと。**
+3. `app.json` に上の宣言を書く。
 4. `check` — `uidField` がスキーマに実在するか、`createFields` に入っているか、`selfUpdate` に
-   入っていないか、`protocol` の floor が足りているかを、ここが全部見ます。
+   入っていないかを、ここが全部見ます。
 5. `preview` — 実ブラウザでページを走らせる。既定では**何も書かない**ので、押下が
    ルールに通るかは `confirm: true` を渡したときだけ分かります（実レコードを書きます）。
 6. `publish`。板の URL は `/a/{slug}`、受付は `/m/{slug}`。

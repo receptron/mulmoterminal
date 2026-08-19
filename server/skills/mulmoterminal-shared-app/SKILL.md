@@ -553,10 +553,9 @@ Every line of that is load-bearing, and publish refuses the declaration without 
 - **`uidField` is the same binding without an address** — the field the rules compare with the
   submitter's own uid. Reach for it when the DOCUMENT ID is already spent on exclusivity (a claim
   whose id is the task's) AND the rows are shown to people: publishing a row publishes every field
-  in it, so an `emailField` board hands out addresses and a `uidField` board does not. It costs two
-  things — an app declaring it needs `"protocol": "2.0.0"` at the top of `app.json` (older readers
-  refuse to draw the app rather than drawing a form nobody can submit), and the uid is FROZEN after
-  create, so a row is given back and retaken rather than reassigned. Like the address, it goes in
+  in it, so an `emailField` board hands out addresses and a `uidField` board does not. It costs one
+  thing: the uid is FROZEN after create, so a row is given back and retaken rather than reassigned
+  (nobody, the owner included, can type somebody else's uid into it). Like the address, it goes in
   `createFields` and is never drawn: the page fills it from the session. See
   [templates/todo-board.md](./templates/todo-board.md).
 - **`submitOnly: true` is required** whenever the submission binds a record to its submitter. The

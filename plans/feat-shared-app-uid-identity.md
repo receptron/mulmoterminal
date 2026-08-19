@@ -174,6 +174,10 @@ deploy したらこの節に日付を書き足すこと。
 
 ## U8 — reader が知らないキーである、という別種の非互換（版は**アプリごと**に決まる）
 
+> **この節の結論（MAJOR = 2.0.0）は U10 で覆した。** 2.0.0 → 1.1.0 → **版を割り当てない**、
+> と 2 段階で降りている。宣言ごとに刻印を決める仕組み（`protocolFor`）も一緒に消えた。
+> ここは経緯として残す。結論は U10。
+
 sharedapp を書いていて出てきた、rules だけ見ていたときには無かった話。
 
 公開ページは `emailField` の欄を**セッションから埋め、フォームには描かない**。`uidField` も同じ
@@ -214,6 +218,84 @@ rules → sharedapp → **mulmoserver client** → MT になる理由でもあ�
   伸びていて、新しい引数は任意 = **更新していないホストは黙って箱を描き続ける**。
   更新していないホストは**コンパイルで落ちるべき**である。MT の 2 箇所（`previewWrite.ts` と
   `preview.ts`）はこの変更で直す必要がある。
+
+## U10 — 版そのものが要らなかった（`1.0.0` のまま）
+
+4 本すべてマージしたあとに出た問い —— この段階で major を使うのは重すぎないか。調べ直したら、
+**U8 の前提そのものが間違っていた**。「minor はどの reader も反応しない番号だから、古いタブは
+uid の箱を描いて全部拒否される」というのが根拠だったが、**古いタブはそもそもこのアプリを
+描かない**。
+
+実測した。todo-board テンプレートを実際に投影し（sharedapp 0.17.0 + MT の `publicFormOf`）、
+`protocol` を `"1.0.0"` に書き換えて mulmoserver #216 **以前**の `publicConfigFrom` に食わせた:
+
+```
+OLD READER REFUSED: UnsupportedProjection - this app was published in a shape this release does not read
+CONTROL（createFields から uid を抜いたもの）: drawn
+```
+
+偶然ではなく構造的で、三つが同時に成り立つから起きる:
+
+- ルールは `request.resource.data.keys().hasOnly(createFields)` しか受け付けない
+  → uid は **`createFields` に必ず入る**（入っていない宣言は publish が拒否する）
+- 描かないことが機能そのもの → uid は **`form.fields` に絶対に入らない**
+- `publicFormOf` は描く欄がゼロでもコレクションの form エントリを残す
+  → `consistent` の「form に無い cid は素通し」に**逃げない**
+
+古い `agrees` が「ホストが埋めるから描かれなくてよい」と数えるのは email / status / stamp の
+**3 つだけ**なので、`uid` が残って整合検査に落ちる。**major が買う画面を、major より 1 世代前の
+検査が既に出していた。**
+
+**major が余分に覆う面が 1 つだけある。** member / participant のティア設定は `submit` を運ぶが
+`form` を運ばないので、突き合わせる相手がいない（`memberViewChoice` は `protocolDrawable` でしか
+拒否しない）。古いビルドは uid アプリの `/m/{slug}` を描いてしまう。ただし書き込みは `uidOk` /
+`uidHeld` が拒否し、own スコープの読みは `where(uidField, "==", uid)` を付けられないので
+ルールが拒否する —— **押しても効かないボタンが名簿の人に見えるだけ**で、uid の偽装も漏れもない。
+見るのは owner が入れた既知の人だけで、見知らぬ人が来る公開ページは構造的に拒否される。
+全 uid アプリを全ての古いリーダーで永久に拒否させる対価としては高い、と判断した。
+
+### では minor は要るのか —— 要らなかった
+
+ここで一度 `1.1.0` に落とし、「番号が効いているのは**書く側**（古い publisher が `uidField` を
+黙って落として、uid が誰にも束縛されていない板を公開してしまうのを floor が止める）」と書いた。
+**これも間違いだった。** キー導入前のビルド（`cd37037^`）に uid の `app.json` を食わせて実測した:
+
+```
+--- floor 宣言なし:   REFUSED   public.submit.claims: Unrecognized key: "uidField"
+--- floor 1.1.0 あり: REFUSED   public.submit.claims: Unrecognized key: "uidField"
+```
+
+`SubmitZ` は `.strict()` である。**知らないキーはスキーマで落ちる**し、その検査は
+`protocolProblems` より**先**に走るので、floor を宣言してもしなくても結果もメッセージも同じ。
+floor は何も買っていなかった。
+
+版を読む相手を数え直すと、4 系統すべてが 1.0.0 と 1.1.0 を区別しない:
+
+| 見る相手 | 差 |
+|---|---|
+| 読む側の門 `protocolDrawable` | major しか見ない → 同じ |
+| 読む側の分岐 `protocolAtLeast` | 分岐が 1 つも無い → 同じ |
+| 著者の floor `protocolProblems` | 知らないキーには走らない（上） → 同じ |
+| 人・診断 | `submit.<cid>.uidField` が刻印の 3 行隣に載っている → 同じ |
+
+最後の 1 行が、この件のいちばん効く指摘だと思う。**刻印は宣言から導かれる値で、その宣言は同じ
+文書の中にある。** 導出元の隣に導出結果を書いても、情報は 1 ビットも増えない。
+
+**決定: `uidField` に版を割り当てない。** `APP_PROTOCOL = "1.0.0"` の 1 定数に戻し、
+`UID_FIELD_PROTOCOL` / `protocolFor` / `protocolFloorProblems` を削除する。著者に
+`protocol` を書かせるのもやめる（払い損の摩擦）。
+
+**版の仕組み自体は残す。** キーの**追加**は strict なスキーマが fail-closed にするが、
+**既存キーの意味が動く**変更は未知のキーが無いので、スキーマには見えない。そのときだけ
+`protocolProblems`（ceiling を超える floor の拒否）と major が要る。
+
+**出す順は U8 と逆**（リーダーが**最後**）: sharedapp 0.18.0 の publish → MulmoTerminal →
+mulmoserver。`2.0.0` で publish されたアプリは存在しない（uid アプリはまだ作られておらず、
+ホストも再ビルド前）ので、無傷で回収できた。
+
+**この判断が乗っている不変条件はテストで固定した**（`test/server/backends/publicForm.spec.ts`）。
+uid が `createFields` にあって投影フォームに無いことが崩れると、古いリーダーは黙って描き始める
+—— 番号は何も守っていないので、崩れたことに気づく手段が他に無い。
 
 ## やり残し
 
