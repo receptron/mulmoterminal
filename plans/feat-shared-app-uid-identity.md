@@ -229,7 +229,7 @@ uid の箱を描いて全部拒否される」というのが根拠だったが�
 実測した。todo-board テンプレートを実際に投影し（sharedapp 0.17.0 + MT の `publicFormOf`）、
 `protocol` を `"1.0.0"` に書き換えて mulmoserver #216 **以前**の `publicConfigFrom` に食わせた:
 
-```
+```text
 OLD READER REFUSED: UnsupportedProjection - this app was published in a shape this release does not read
 CONTROL（createFields から uid を抜いたもの）: drawn
 ```
@@ -260,7 +260,7 @@ CONTROL（createFields から uid を抜いたもの）: drawn
 黙って落として、uid が誰にも束縛されていない板を公開してしまうのを floor が止める）」と書いた。
 **これも間違いだった。** キー導入前のビルド（`cd37037^`）に uid の `app.json` を食わせて実測した:
 
-```
+```text
 --- floor 宣言なし:   REFUSED   public.submit.claims: Unrecognized key: "uidField"
 --- floor 1.1.0 あり: REFUSED   public.submit.claims: Unrecognized key: "uidField"
 ```
@@ -282,8 +282,13 @@ floor は何も買っていなかった。
 文書の中にある。** 導出元の隣に導出結果を書いても、情報は 1 ビットも増えない。
 
 **決定: `uidField` に版を割り当てない。** `APP_PROTOCOL = "1.0.0"` の 1 定数に戻し、
-`UID_FIELD_PROTOCOL` / `protocolFor` / `protocolFloorProblems` を削除する。著者に
-`protocol` を書かせるのもやめる（払い損の摩擦）。
+`UID_FIELD_PROTOCOL` / `protocolFor` / `protocolFloorProblems` を削除する。
+
+消えるのは **uid 専用の floor 要求**（`uidField` を使うなら `protocol` を上げて宣言しろ）
+だけである。**`app.json` の `protocol` そのものは残る** —— 全テンプレートが宣言している
+`"1.0.0"` は据え置きで、todo-board もそれに揃える（`skillTemplates.spec.ts` が全テンプレートを
+`APP_PROTOCOL` と突き合わせて固定する）。宣言をやめるのではなく、**機能ごとに違う番号を
+書かせるのをやめる**、が正確な言い方である。
 
 **版の仕組み自体は残す。** キーの**追加**は strict なスキーマが fail-closed にするが、
 **既存キーの意味が動く**変更は未知のキーが無いので、スキーマには見えない。そのときだけ
