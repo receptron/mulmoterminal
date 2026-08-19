@@ -74,6 +74,7 @@ interface RequestedCollection {
   cid: string;
   scope: "all" | "own";
   emailField?: string | undefined;
+  uidField?: string | undefined;
   ownDocId?: "auth.uid" | undefined;
 }
 
@@ -95,6 +96,10 @@ async function readCollection(handle: SharedAppHandle, aid: string, want: Reques
   const rows: PreviewDataset = docs.map((doc) => ({ ...(isRecord(doc.data) ? doc.data : {}), id: doc.id }));
   if (want.scope === "all") return rows;
   if (want.ownDocId === "auth.uid") return rows.filter((row) => row.id === handle.uid);
+  // The uid before the address, matching the reader (`ownLookup` in mulmoserver): a projection
+  // carries exactly one selector, and asking in a fixed order keeps the answer from depending on
+  // which branch happens to be written first.
+  if (want.uidField !== undefined) return rows.filter((row) => row[want.uidField ?? ""] === handle.uid);
   const field = want.emailField;
   if (field === undefined) return [];
   return rows.filter((row) => row[field] === handle.email);
@@ -117,7 +122,7 @@ async function readDatasets(
     for (const want of page.collections) {
       // Keyed on the SCOPE too: the same collection read `all` for the front desk and `own` for the
       // participant is two different answers, and sharing one would hand a page rows it may not see.
-      const key = `${want.cid}:${want.scope}:${want.emailField ?? ""}:${want.ownDocId ?? ""}`;
+      const key = `${want.cid}:${want.scope}:${want.emailField ?? ""}:${want.uidField ?? ""}:${want.ownDocId ?? ""}`;
       if (!cache.has(key)) {
         cache.set(key, await readCollection(handle, aid, want).catch(() => null));
       }
@@ -153,6 +158,7 @@ const asRequested = (value: unknown): RequestedCollection[] => {
       cid: value.cid,
       scope,
       ...(typeof value.emailField === "string" ? { emailField: value.emailField } : {}),
+      ...(typeof value.uidField === "string" ? { uidField: value.uidField } : {}),
       ...(value.ownDocId === "auth.uid" ? { ownDocId: "auth.uid" as const } : {}),
     },
   ];
@@ -186,14 +192,13 @@ function formInputsOf(config: PublishedConfigDoc, form: PublicForm): PreviewForm
       const spec = config.submit?.[cid];
       if (!isRecord(spec)) return [];
       const createFields = Array.isArray(spec.createFields) ? spec.createFields.filter((field): field is string => typeof field === "string") : [];
-      const emailField = typeof spec.emailField === "string" ? spec.emailField : undefined;
-      // The stamp is passed for the same reason the address is: it is a field the visitor does not
-      // choose. `recordOf` overwrites it with the server's clock on every create, so a box for it
-      // is one nothing can usefully be typed into — and where the schema marks it required, the
-      // empty box stopped the submission at `missingRequired` over a value the server was about to
-      // supply. Read off the SUBMIT block, which is where the rules read it from.
-      const stampField = typeof spec.stampField === "string" ? spec.stampField : undefined;
-      const fields = writableFields({ fields: collection.fields, statusField: collection.statusField }, createFields, emailField, stampField).map((field) => {
+      const text = (key: string): string | undefined => (typeof spec[key] === "string" ? spec[key] : undefined);
+      // The whole submit block, not a hand-picked three. Each of the fields the HOST fills in — the
+      // address, the uid, the status, the stamp — is one a visitor cannot usefully answer, and
+      // passing them one at a time is how a new one gets forgotten and drawn as a box. Read off the
+      // SUBMIT block, which is where the rules read them from.
+      const submit = { createFields, emailField: text("emailField"), uidField: text("uidField"), stampField: text("stampField") };
+      const fields = writableFields({ fields: collection.fields, statusField: collection.statusField }, submit).map((field) => {
         const drawn = collection.fields[field.name];
         return {
           ...field,

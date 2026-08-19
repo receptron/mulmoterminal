@@ -94,17 +94,18 @@ export function publicFormOf(authored: AuthoredApp, schemas: readonly { cid: str
     // `createFields` because the rules refuse any key outside that list, not
     // because a visitor answers it — drawing it would invite an answer the
     // rules then deny.
-    const fields = fieldsOf(schema, spec.createFields, spec.validate?.required ?? [], spec.stampField);
+    const fields = fieldsOf(schema, spec.createFields, spec.validate?.required ?? [], [spec.stampField, spec.uidField]);
     // A collection whose `createFields` name nothing the schema declares publishes no entry at
     // all: an empty object would read as a form that failed to load, where absence is a fact the
     // page can state.
     //
-    // A form with NO INPUTS is not that, though, once something is stamped. "Count me in" is a
-    // real declaration — `idFrom: "auth.uid"` with `createFields: ["createdAt"]` is a button, and
-    // the whole submission is the identity of whoever pressed it and the moment they did. Dropping
-    // it would leave the page with no submit target and no way to learn the field name the rules
-    // insist on, for a declaration core accepts.
-    if (Object.keys(fields).length === 0 && spec.stampField === undefined) return [];
+    // A form with NO INPUTS is not that, though, once something is stamped or the submitter is
+    // named. "Count me in" is a real declaration — `idFrom: "auth.uid"` with
+    // `createFields: ["createdAt"]` is a button, and the whole submission is the identity of
+    // whoever pressed it and the moment they did. A `uidField` is the same button for an app whose
+    // id is spent on the thing being claimed. Dropping it would leave the page with no submit
+    // target and no way to learn the field name the rules insist on, for a declaration core accepts.
+    if (Object.keys(fields).length === 0 && spec.stampField === undefined && spec.uidField === undefined) return [];
     // From the manifest, which is what publish writes to `apps/{aid}.collections[cid].statusField`
     // in the same operation as this form. It used to be read back from the STAGED rule
     // configuration, because publish promoted that rather than the manifest and the two could
@@ -170,13 +171,20 @@ function fieldsOf(
   schema: CollectionSchema,
   createFields: readonly string[],
   requiredBySubmit: readonly string[],
-  stampField: string | undefined,
+  hostFilled: readonly (string | undefined)[],
 ): Record<string, PublicField> {
   const declared = schema.fields;
+  const filled = new Set(hostFilled.filter((name): name is string => name !== undefined));
   const pairs = createFields.flatMap((name) => {
-    // The server-stamped field is carried on the form as `stampField`, not
-    // drawn as an input: the page fills it in, the person does not.
-    if (name === stampField) return [];
+    // The fields the HOST fills in are carried by the declaration, not drawn as inputs: the page
+    // supplies them and the person does not. The stamp is the server's clock; the uid is the
+    // session's, and it is the sharper of the two — a visitor can complete a box asking for a uid,
+    // and `uidOk` refuses every value they could put in it.
+    //
+    // The address is deliberately NOT in this set. It is drawn, because a visitor may legitimately
+    // read it back off their own row and because every reader already skips it at draw time; the
+    // two here are ones no reader can even render usefully.
+    if (filled.has(name)) return [];
     // Own-property guarded: a `createFields` entry of `toString` or `constructor` must miss here
     // rather than read an Object.prototype member and publish a "field" nobody declared.
     if (!Object.hasOwn(declared, name)) return [];

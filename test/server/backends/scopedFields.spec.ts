@@ -93,6 +93,38 @@ describe("stampField — when did this reach the queue", () => {
   });
 });
 
+describe("uidField — who submitted this", () => {
+  // The key an app declares when its document id is spent on exclusivity: identity has to live in
+  // a field, and this is the one that carries no address into a row the app may publish.
+  const submit = (extra: Record<string, unknown>) => ({
+    public: {
+      enabled: true,
+      submit: { bookings: { auth: "verifiedEmail", createFields: ["classId", "note"], ...extra } },
+    },
+  });
+
+  it("accepts a plain string", () => {
+    expect(problemsFor(submit({ uidField: "note" }))).toEqual([]);
+  });
+
+  it("refuses a name the collection does not declare", () => {
+    // Both halves are silent: the field is dropped from every projection that reads the schema, so
+    // the record goes out without it and `uidOk` refuses the create — and had it been written, the
+    // person could not have read their own rows back either.
+    const problems = problemsFor(submit({ uidField: "uid" }));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain("'uid'");
+    expect(problems[0]).toContain("unreachable to them afterwards");
+  });
+
+  it("refuses a field declared as something a uid is not", () => {
+    // `email` is the tempting one — it is the OTHER identity field, and the schema would then say
+    // "address" about a value the rules compare with a session id.
+    const problems = problemsFor(submit({ uidField: "stylistEmail" }));
+    expect(problems[0]).toContain("declare it as a plain string");
+  });
+});
+
 describe("window.fromField — when does this one open", () => {
   const withWindow = (fromField: Record<string, string>) => ({
     public: {

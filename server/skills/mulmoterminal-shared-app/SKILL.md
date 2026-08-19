@@ -26,7 +26,7 @@ the user turns this down.
 
 ## Start from a template when one fits
 
-Five shapes are written out in full — declaration, schemas, and the reasoning behind each key:
+Six shapes are written out in full — declaration, schemas, and the reasoning behind each key:
 
 - **[templates/salon.md](./templates/salon.md)** — a request that a NAMED PERSON approves, and only
   their own (a salon's bookings, interviews, repairs, review assignments). This is what `assignee`
@@ -37,7 +37,7 @@ Five shapes are written out in full — declaration, schemas, and the reasoning 
   rules.
 - **[templates/survey.md](./templates/survey.md)** — **collecting answers**, with nothing to run out
   of (a survey, a quiz, an application form, a sign-up with no cap). The shortest declaration of the
-  five, and the shape most often written with a public page and nothing else — so this one is built
+  six, and the shape most often written with a public page and nothing else — so this one is built
   around its `member` page, which is where the answers are read. It also spells out the three-way
   trade above, and what a tally may and may not claim about values a respondent typed.
 - **[templates/meeting-room.md](./templates/meeting-room.md)** — a bookable unit you can LIST IN
@@ -49,8 +49,13 @@ Five shapes are written out in full — declaration, schemas, and the reasoning 
   one whose declaration is decided by FAN-OUT: the audience may watch the questions, only the desk may
   watch the votes, and the shape that would let both is refused by publish. **In English**, because
   the strings in its pages are what a stranger reads.
+- **[templates/todo-board.md](./templates/todo-board.md)** — work anybody signed in can CLAIM, and
+  give back (a shared to-do list, a duty roster, jobs people pick up). This is what `uidField` is
+  for: the id is spent on exclusivity, so identity lives in a field — and the uid is the field that
+  lets the board show WHO is working on something without publishing their address. It is also the
+  one where a claim cannot be reassigned, only given back and retaken.
 
-Read the matching one before writing `app.json` by hand. All five are checked against the real
+Read the matching one before writing `app.json` by hand. All six are checked against the real
 publish gate by this repository's tests, so what they show is what publishes — and they spend most
 of their length on the traps, which is the part you cannot recover by guessing.
 
@@ -545,6 +550,15 @@ Every line of that is load-bearing, and publish refuses the declaration without 
   - **`none`** is refused: with no session there is no uid, so `idFrom` can only be `auto` and the
     same person can submit as often as they can press the button.
 - **`emailField` names the field their address lands in**, and it must be in `createFields`.
+- **`uidField` is the same binding without an address** — the field the rules compare with the
+  submitter's own uid. Reach for it when the DOCUMENT ID is already spent on exclusivity (a claim
+  whose id is the task's) AND the rows are shown to people: publishing a row publishes every field
+  in it, so an `emailField` board hands out addresses and a `uidField` board does not. It costs two
+  things — an app declaring it needs `"protocol": "2.0.0"` at the top of `app.json` (older readers
+  refuse to draw the app rather than drawing a form nobody can submit), and the uid is FROZEN after
+  create, so a row is given back and retaken rather than reassigned. Like the address, it goes in
+  `createFields` and is never drawn: the page fills it from the session. See
+  [templates/todo-board.md](./templates/todo-board.md).
 - **`submitOnly: true` is required** whenever the submission binds a record to its submitter. The
   record means "this person said this", and without it an owner or editor could write rows that
   carry that meaning without having earned it.

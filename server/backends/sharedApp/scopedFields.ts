@@ -4,6 +4,7 @@
 // three are read by the deployed rules at write time:
 //
 //   `collections.<cid>.assigneeField`     — whose row is this
+//   `public.submit.<cid>.uidField`        — who submitted this
 //   `public.submit.<cid>.stampField`      — when did this reach the queue
 //   `public.submit.<cid>.window.fromField` — when does this one open
 //
@@ -58,7 +59,37 @@ export function scopedFieldProblems(app: AuthoredApp, schemas: readonly { cid: s
 }
 
 function fieldProblems(app: AuthoredApp, sources: Sources): string[] {
-  return [...assigneeFieldProblems(sources), ...stampFieldProblems(app, sources), ...windowFieldProblems(app, sources)];
+  return [...assigneeFieldProblems(sources), ...uidFieldProblems(app, sources), ...stampFieldProblems(app, sources), ...windowFieldProblems(app, sources)];
+}
+
+/** The field carrying the submitter's uid.
+ *
+ *  A uid is an opaque string, so the type list is the same one an address is checked against minus
+ *  `email` — declaring it as `email` would draw an input the schema says is an address and the
+ *  rules compare with a session id. Nothing renders it either way: the page fills it in and keeps
+ *  it off the form, exactly as it does the stamp.
+ *
+ *  Missing from the schema, the field is dropped from every projection that reads the schema and
+ *  the record is written without it — so `uidOk` refuses the create, and `ownRow` would have
+ *  refused the read back. Both silent. */
+function uidFieldProblems(app: AuthoredApp, sources: Sources): string[] {
+  return Object.entries(app.public?.submit ?? {}).flatMap(([cid, submit]) => {
+    const name = submit.uidField;
+    const schema = sources.schemaOf(cid);
+    if (name === undefined || schema === undefined) return [];
+    const spec = fieldOf(schema, name);
+    if (spec === undefined) {
+      return [
+        `public.submit.${cid}.uidField names '${name}', which ${describe(cid)} does not declare. The rules compare that field with the submitter's own uid, ` +
+          `so every submission is refused — and the person's own rows are unreachable to them afterwards.`,
+      ];
+    }
+    if (spec.type === "string") return [];
+    return [
+      `public.submit.${cid}.uidField names '${name}', which is a '${spec.type}' field. A uid is an opaque string the page fills in from the session — ` +
+        `declare it as a plain string. (It is never drawn as an input, so nothing is lost by the schema calling it what it is.)`,
+    ];
+  });
 }
 
 /** The field that says whose row it is. */

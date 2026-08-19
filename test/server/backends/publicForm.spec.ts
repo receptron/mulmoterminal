@@ -174,6 +174,39 @@ describe("the field the page stamps rather than asks", () => {
   });
 });
 
+describe("the field the page takes from the session rather than asks", () => {
+  // `uidField` is the stamp's sharper twin. The stamp draws a box nothing can usefully be typed
+  // into; a uid draws one a visitor CAN complete, and `uidOk` refuses every value they could put
+  // in it — so the box is not merely useless, it is a way to be denied.
+  const withUid = [{ cid: "responses", schema: { ...schema, fields: { ...schema.fields, uid: { type: "string" as const, label: "uid" } } } }];
+  const claimed = authored({
+    responses: { auth: "verifiedEmail", uidField: "uid", createFields: ["name", "uid"] },
+  });
+
+  it("is not drawn as an input", () => {
+    expect(Object.keys(publicFormOf(claimed, withUid).responses?.fields ?? {})).toEqual(["name"]);
+  });
+
+  it("keeps a form whose only create field is the uid", () => {
+    // The same "count me in" as the stamp's, for an app whose document id is spent on the thing
+    // being claimed: the whole submission is who pressed the button.
+    const oneClick = authored({ responses: { auth: "verifiedEmail", uidField: "uid", createFields: ["uid"] } });
+    expect(publicFormOf(oneClick, withUid).responses).toEqual({ fields: {}, statusField: "status" });
+  });
+
+  it("leaves the address drawn, which is the other identity field", () => {
+    // Deliberately not the same treatment: every reader already skips the address at draw time,
+    // and a visitor can legitimately see it back on their own row. What is excluded above is what
+    // no reader can render usefully.
+    //
+    // The address is IN createFields here, which is the point of the case — asserted against a
+    // declaration that does not carry it, this would pass whatever the projection did.
+    const withEmail = [{ cid: "responses", schema: { ...schema, fields: { ...schema.fields, email: { type: "email" as const, label: "メール" } } } }];
+    const named = authored({ responses: { auth: "verifiedEmail", emailField: "email", createFields: ["name", "email"] } });
+    expect(Object.keys(publicFormOf(named, withEmail).responses?.fields ?? {})).toEqual(["name", "email"]);
+  });
+});
+
 describe("fields a stranger cannot be asked for", () => {
   // `createFields` is not only what the page draws from — it is the whitelist the deployed rules
   // judge a public create by. So a computed field left in it is a value from the internet landing

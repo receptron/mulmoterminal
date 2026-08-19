@@ -234,6 +234,39 @@ describe("shared app preview writes", () => {
     });
   });
 
+  it("carries the submitter's uid, and not the one the page sent", async () => {
+    // The other field the host fills in, and the one a page can most easily get wrong: a uid is
+    // not typeable, so `uidOk` refuses every value except the session's own. A pane that relayed
+    // what the frame sent would make the preview fail where production succeeds, or the reverse —
+    // both of which make the preview evidence of nothing.
+    writeCollection("bookings", {
+      requesterName: { type: "string", label: "Name", required: true },
+      requesterEmail: { type: "email", label: "Email", required: true },
+      slot: { type: "string", label: "Slot", required: true },
+      status: { type: "enum", label: "Status", values: ["booked"] },
+      uid: { type: "string", label: "Who" },
+    });
+    // `protocol` is not decoration here: an app declaring uidField must state the floor its readers
+    // need, and the preview runs the real gate — so a fixture without it is refused before the
+    // write, exactly as the author's app would be.
+    writeApp({
+      ...bookingApp({
+        submit: {
+          uidField: "uid",
+          createFields: ["requesterName", "requesterEmail", "slot", "status", "uid"],
+        },
+      }),
+      protocol: "2.0.0",
+    });
+
+    const result = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000", uid: "somebody-else" });
+
+    expect(result.ok === false ? result.error : "").toBe("");
+    const written = batched.find((op) => op.startsWith("set apps/"));
+    const record = JSON.parse(written?.slice(written.indexOf("{")) ?? "{}") as Record<string, unknown>;
+    expect(record.uid).toBe(OWNER.uid);
+  });
+
   it("makes the id the thing being claimed, and pairs the mirror in ONE batch", async () => {
     const result = await writePreviewSubmission(root, "bookings", { requesterName: "客", slot: "roomA-1000" });
 

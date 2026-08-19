@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { CollectionSchema } from "@mulmoclaude/core/collection";
 import { declarationProblems } from "../../../server/backends/sharedApp/context.js";
-import { parseAuthoredApp } from "@receptron/sharedapp";
+import { parseAuthoredApp, protocolFor } from "@receptron/sharedapp";
 import { modalCallIn } from "../../../server/backends/sharedApp/modalCall.js";
 import { formElementIn, readyNeverCalled } from "../../../server/backends/sharedApp/viewDefects.js";
 import { readdirSync } from "node:fs";
@@ -85,6 +85,10 @@ describe("the shared-app templates", () => {
     expect(problemsFor("live-poll.md", "host@example.com", [])).toEqual([]);
   });
 
+  it("todo-board.md deploys as written", () => {
+    expect(problemsFor("todo-board.md", "owner@example.com", [])).toEqual([]);
+  });
+
   it("shows no page the sandbox would silently break", () => {
     // The frame has no `allow-modals` and no `allow-forms`, and the parent sends nothing until the
     // view says `ready()`. All three fail the same way — nothing drawn, nothing thrown — and a
@@ -130,15 +134,20 @@ describe("the shared-app templates", () => {
     }
   });
 
-  it("each template states the publish contract it is written against", () => {
+  it("each template states the publish contract its own declaration needs", () => {
     // A template is copied VERBATIM, so the key is either in every one of them or it teaches that
     // declaring it is optional decoration. It is a FLOOR: an app relying on a newer publisher is
-    // refused instead of published as documents that do not keep the promise. `1.0.0` is what the
-    // apps published before the key existed are, so that is what these say until one of them needs
-    // more.
+    // refused instead of published as documents that do not keep the promise.
+    //
+    // Asked as `protocolFor(declaration)` rather than as one constant, because the answer is per
+    // APP now — a declaration using nothing new is stamped the first contract (which is what the
+    // apps published before the key existed are), and the board sample uses `uidField`, whose
+    // reader has to have learnt it. Pinned to a literal, this test would have been "fixed" by
+    // pasting the new number into the five samples that must NOT carry it: a template asking for a
+    // contract it does not use would teach every app to refuse older readers for nothing.
     for (const file of readdirSync(TEMPLATES).filter((name) => name.endsWith(".md"))) {
-      const manifest = blocksOf(file).get("app.json") as { protocol?: unknown } | undefined;
-      expect(`${file}: ${String(manifest?.protocol)}`).toBe(`${file}: 1.0.0`);
+      const manifest = blocksOf(file).get("app.json") as Record<string, unknown> | undefined;
+      expect(`${file}: ${String(manifest?.protocol)}`).toBe(`${file}: ${protocolFor(manifest as never)}`);
     }
   });
 
@@ -152,5 +161,6 @@ describe("the shared-app templates", () => {
     );
     expect([...blocksOf("survey.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/questions/schema.json", ".claude/skills/responses/schema.json"]));
     expect([...blocksOf("live-poll.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/questions/schema.json", ".claude/skills/votes/schema.json"]));
+    expect([...blocksOf("todo-board.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/tasks/schema.json", ".claude/skills/claims/schema.json"]));
   });
 });

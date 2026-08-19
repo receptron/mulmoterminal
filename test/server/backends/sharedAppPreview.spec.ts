@@ -304,6 +304,46 @@ describe("shared app preview", () => {
     expect(docs.writes).toEqual([]);
   });
 
+  it("keeps the uid out of the boxes too, and it is the one a visitor could have filled in", async () => {
+    // The stamp draws a box nothing can usefully be typed into; a uid draws one a visitor CAN
+    // complete, and every value they could put in it is refused by `uidOk`. The pane must not offer
+    // what the site does not — it is the same `writableFields` on both sides, which is what makes
+    // the preview evidence rather than a second opinion.
+    mkdirSync(path.join(root, ".claude", "skills", "claims"), { recursive: true });
+    writeFileSync(
+      path.join(root, ".claude", "skills", "claims", "schema.json"),
+      JSON.stringify({
+        title: "claims",
+        icon: "task",
+        primaryKey: "id",
+        storage: { type: "firestore" },
+        fields: {
+          id: { type: "string", label: "ID", primary: true, required: true },
+          taskId: { type: "string", label: "作業", required: true },
+          who: { type: "string", label: "名前" },
+          uid: { type: "string", label: "uid" },
+        },
+      }),
+    );
+    writeApp(
+      root,
+      declaration({
+        protocol: "2.0.0",
+        collections: { claims: { submitOnly: true } },
+        public: { submit: { claims: { auth: "verifiedEmail", uidField: "uid", createFields: ["taskId", "who", "uid"] } } },
+      }),
+    );
+
+    const result = await previewSharedApp(root, stamp);
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    expect(result.ok && result.formInputs).toEqual({
+      claims: [
+        { name: "taskId", label: "作業", required: true, type: "string" },
+        { name: "who", label: "名前", required: false, type: "string" },
+      ],
+    });
+  });
+
   it("names the declaration a refused write fell foul of, rather than relaying a bare denial", async () => {
     const { writePreviewSubmission } = await import("../../../server/backends/sharedApp/previewWrite.js");
     const closed = 1_600_000_000_000;

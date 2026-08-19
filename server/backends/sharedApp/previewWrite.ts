@@ -87,6 +87,9 @@ function specFor(config: PublishedConfigDoc, form: Record<string, DrawnForm>, ci
       createFields,
       auth: text("auth"),
       emailField: text("emailField"),
+      // Filled by `recordOf` from the handle below, exactly as the address is. Read off the
+      // published declaration for the reason the stamp is: `uidOk` tests the submit block.
+      uidField: text("uidField"),
       initialStatus: text("initialStatus"),
       idFrom: text("idFrom"),
       idField: text("idField"),
@@ -204,7 +207,7 @@ export async function writePreviewSubmission(root: string, cid: string, values: 
   // `sharedAppContext` has answered, the author is signed in. The check belongs to a host whose
   // reader may be anonymous, which is mulmoserver's public page and not this one.
 
-  const fields = writableFields(spec.drawn, spec.submit.createFields, spec.submit.emailField, spec.submit.stampField);
+  const fields = writableFields(spec.drawn, spec.submit);
   const missing = missingRequired(fields, values);
   if (missing.length > 0) return { ok: false, reason: "host", error: `missing: ${missing.join(" / ")}` };
 
