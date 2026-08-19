@@ -262,6 +262,10 @@ ordering is the desk's to perform, not the rules' to keep — `transitions` judg
 and "at most one is open" is a statement about the other records, which no declaration here can
 make. `order` is what settles the moment between the two writes.
 
+If the second write is refused after the first landed, the desk puts the question it closed back —
+nothing open is the one state worse than not moving, because every audience page drops to "waiting"
+while the host is still talking.
+
 **A desk that only opened the next question would look broken.** The previous one stays open, the
 audience is on the lower `order`, and the screen everybody is watching does not move — while the
 button reports success and the row says "open". Whether pressing a button moved the audience would
@@ -665,10 +669,20 @@ counts document — and nothing needs to, because the roster is the only audienc
    *  the desk performs it, and the public page's lowest-`order` rule stays as the tiebreak for the
    *  moment between the two writes (and for a second desk, which nothing prevents).
    *
-   *  Two writes, IN ORDER, and not a batch: `view.transition` moves one record. The close is sent
-   *  first and the open only if it succeeded, so a failure leaves the audience on the question they
-   *  were already answering rather than on nothing at all. Delegated from the container because the
-   *  rows are redrawn under the pointer — a listener bound to a button would go with it. */
+   *  Two writes, IN ORDER, and not a batch: `view.transition` moves one record, and there is no
+   *  operation here that moves two. So the pair can half-happen, and each half is handled:
+   *
+   *    the CLOSE fails — the open is not attempted. Both halves undone is the audience still
+   *    answering the question they were on, which is the harmless end of this.
+   *
+   *    the OPEN fails after the close landed — NOTHING is open, and that is the state to avoid:
+   *    every audience page drops to "Waiting for a question…" while the host is still talking about
+   *    the one they just closed. So the close is put back, best effort, and what happened is said
+   *    either way. A rollback that is itself refused is reported rather than hidden — the list is
+   *    the truth, and the host can see two rows and press again.
+   *
+   *  Delegated from the container because the rows are redrawn under the pointer — a listener bound
+   *  to a button would go with it. */
   document.getElementById("list").addEventListener("click", async (event) => {
     const button = event.target.closest("button");
     if (button === null || busy) {
@@ -682,17 +696,25 @@ counts document — and nothing needs to, because the roster is the only audienc
     render();
     say("Working…");
     const current = openQuestion(latest.questions);
+    const move = (id, state) => view.transition("questions", id, state).catch((err) => ({ ok: false, error: String(err) }));
+    // The question being taken off the screen, if this press is a switch rather than a plain
+    // open or close. Held because it is what a failed open has to be given back.
+    const leaving = to === "open" && current !== null && current.id !== qid ? current : null;
     let problem = "";
-    if (to === "open" && current !== null && current.id !== qid) {
-      const closed = await view.transition("questions", current.id, "closed").catch((err) => ({ ok: false, error: String(err) }));
+    if (leaving !== null) {
+      const closed = await move(leaving.id, "closed");
       if (!closed?.ok) {
         problem = closed?.error ?? "unknown error";
       }
     }
     if (problem === "") {
-      const moved = await view.transition("questions", qid, to).catch((err) => ({ ok: false, error: String(err) }));
+      const moved = await move(qid, to);
       if (!moved?.ok) {
         problem = moved?.error ?? "unknown error";
+        if (leaving !== null) {
+          const back = await move(leaving.id, "open");
+          problem = back?.ok ? `${problem} — ${leaving.id} is open again` : `${problem}, and ${leaving.id} could not be reopened: ${back?.error ?? "unknown error"}`;
+        }
       }
     }
     // ALWAYS, and before the message. A refused call produces no state update, so `onState` never

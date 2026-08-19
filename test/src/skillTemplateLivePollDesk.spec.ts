@@ -46,31 +46,32 @@ interface Question {
 }
 
 type Told = (questions: Question[], votes: Record<string, unknown>[]) => void;
+type Refuse = (move: string, error: string) => void;
 
 /** The desk, loaded into a document and holding a fake parent.
  *
  *  The script is run rather than inserted: markup assigned through `innerHTML` never executes its
  *  scripts, and a test that only rendered the HTML would assert about buttons nothing had wired. */
-function loadDesk(): { moves: string[]; tell: Told; failNext: (error: string) => void } {
+function loadDesk(): { moves: string[]; tell: Told; refuse: Refuse } {
   const html = pageOf("views/desk.html");
   const [, script] = html.match(/<script>\n([\s\S]*?)\n<\/script>/) ?? [];
   document.body.innerHTML = html.replace(/<script>[\s\S]*?<\/script>/, "");
 
   const moves: string[] = [];
-  let refuse: string | null = null;
+  // Refusals named by the MOVE rather than by call order: what is being pinned is which write the
+  // desk sends after a particular one was denied, and a counter would have to be rewritten every
+  // time the sequence changes.
+  const refusals = new Map<string, string>();
   let onState: ((state: unknown, viewer: unknown) => void) | null = null;
   (window as unknown as { __MC_APP_VIEW: unknown }).__MC_APP_VIEW = {
     onState: (handler: (state: unknown, viewer: unknown) => void) => {
       onState = handler;
     },
     transition: (cid: string, id: string, to: string) => {
-      moves.push(`${cid}/${id} -> ${to}`);
-      if (refuse !== null) {
-        const error = refuse;
-        refuse = null;
-        return Promise.resolve({ ok: false, error });
-      }
-      return Promise.resolve({ ok: true });
+      const move = `${cid}/${id} -> ${to}`;
+      moves.push(move);
+      const error = refusals.get(move);
+      return Promise.resolve(error === undefined ? { ok: true } : { ok: false, error });
     },
     ready: () => {},
   };
@@ -88,8 +89,8 @@ function loadDesk(): { moves: string[]; tell: Told; failNext: (error: string) =>
       // roster's own permission, and a viewer without it gets no buttons at all.
       onState?.({ questions, votes }, { can: { questions: { transitionAny: true } } });
     },
-    failNext: (error: string) => {
-      refuse = error;
+    refuse: (move: string, error: string) => {
+      refusals.set(move, error);
     },
   };
 }
@@ -163,7 +164,7 @@ describe("the live-poll desk template", () => {
   it("leaves the audience on the question they were answering when the close is refused", async () => {
     const desk = loadDesk();
     desk.tell([question("q1", 1, "open"), question("q2", 2, "draft")], []);
-    desk.failNext("permission-denied");
+    desk.refuse("questions/q1 -> closed", "permission-denied");
 
     buttonFor("Ask this").click();
     await settle();
@@ -174,10 +175,43 @@ describe("the live-poll desk template", () => {
     expect(document.getElementById("say")?.textContent).toContain("permission-denied");
   });
 
+  it("puts the question back when the OPEN fails after the close landed", async () => {
+    const desk = loadDesk();
+    desk.tell([question("q1", 1, "open"), question("q2", 2, "draft")], []);
+    desk.refuse("questions/q2 -> open", "permission-denied");
+
+    buttonFor("Ask this").click();
+    await settle();
+
+    // Left as it was, this is the one state worse than not moving: nothing is open, so every
+    // audience page drops to "waiting" while the host is still talking about the question they
+    // just closed.
+    expect(desk.moves).toEqual(["questions/q1 -> closed", "questions/q2 -> open", "questions/q1 -> open"]);
+    expect(document.getElementById("say")?.textContent).toContain("permission-denied");
+    expect(document.getElementById("say")?.textContent).toContain("q1 is open again");
+  });
+
+  it("says so when the question cannot be put back either", async () => {
+    const desk = loadDesk();
+    desk.tell([question("q1", 1, "open"), question("q2", 2, "draft")], []);
+    desk.refuse("questions/q2 -> open", "permission-denied");
+    desk.refuse("questions/q1 -> open", "still-denied");
+
+    buttonFor("Ask this").click();
+    await settle();
+
+    // Both refusals are reported. The rows are the truth and the host can press again — hiding the
+    // second one would leave them reading "could not open q2" on a screen showing no question.
+    expect(desk.moves).toEqual(["questions/q1 -> closed", "questions/q2 -> open", "questions/q1 -> open"]);
+    const said = document.getElementById("say")?.textContent ?? "";
+    expect(said).toContain("permission-denied");
+    expect(said).toContain("still-denied");
+  });
+
   it("gives the buttons back after a refusal, mid-stream", async () => {
     const desk = loadDesk();
     desk.tell([question("q1", 1, "open"), question("q2", 2, "draft")], []);
-    desk.failNext("permission-denied");
+    desk.refuse("questions/q1 -> closed", "permission-denied");
 
     buttonFor("Ask this").click();
     await settle();
