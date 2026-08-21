@@ -27,6 +27,23 @@ const TEMPLATE_FILES = readdirSync(TEMPLATES)
   .filter((name) => name.endsWith(".md") && name !== "design.md")
   .sort();
 
+/** And what that list must BE. Derived alone, the inventory can go quiet in both directions: an
+ *  empty directory makes every loop below iterate nothing and pass, and a file that reappears —
+ *  `todo-board.md` is the one that just left — would be picked up as though it had always been
+ *  here. Adding a template is a decision, so it is written down, the same way `BUNDLED_SKILL_NAMES`
+ *  is what ships a skill rather than the directory existing. */
+const EXPECTED_TEMPLATES = ["gym.md", "live-poll.md", "meeting-room.md", "project-board.md", "salon.md", "survey.md"];
+
+/** The hue as CSS reads it — a NUMBER, in which `25` and `25.0` are one colour and `0` and `360`
+ *  are one angle. Compared as the raw strings they are written in, each of those pairs is two
+ *  different templates' colours, which is precisely the duplicate the test below exists to catch
+ *  walking straight through it. */
+function hueOf(text: string): number | null {
+  const raw = /--hue:\s*(-?[0-9.]+)\s*;/.exec(text)?.[1];
+  const value = raw === undefined ? Number.NaN : Number(raw);
+  return Number.isFinite(value) ? ((value % 360) + 360) % 360 : null;
+}
+
 /** The JSON blocks of one template, keyed by the heading above them. The
  *  headings are the file paths an author writes, so the mapping is the
  *  template's own instruction rather than an ordering this test invented. */
@@ -210,30 +227,30 @@ describe("the shared-app templates", () => {
     //
     // The palette is derived from a single `--hue`, so this reads that one number: it is the only
     // decision a page has to make to look like somebody made it, and the one an author skips.
-    const hues = new Map<string, string>();
+    // The inventory first, so nothing below can pass over a list that quietly changed.
+    expect(TEMPLATE_FILES).toEqual(EXPECTED_TEMPLATES);
+
+    const hues = new Map<number, string>();
     for (const file of TEMPLATE_FILES) {
-      const text = readFileSync(path.join(TEMPLATES, file), "utf8");
-      const hue = /--hue:\s*([0-9.]+)\s*;/.exec(text)?.[1];
+      const hue = hueOf(readFileSync(path.join(TEMPLATES, file), "utf8"));
       // Declared at all: a template whose sheet lost its palette teaches the grey it fell back to.
-      expect(`${file}: declares --hue = ${hue !== undefined}`).toBe(`${file}: declares --hue = true`);
-      const already = hues.get(hue ?? "");
+      expect(`${file}: declares --hue = ${hue !== null}`).toBe(`${file}: declares --hue = true`);
+      const already = hues.get(hue ?? -1);
       const whose = already === undefined ? "its own" : "shared with " + already;
       expect(`${file}: --hue ${hue} is ${whose}`).toBe(`${file}: --hue ${hue} is its own`);
-      hues.set(hue ?? "", file);
+      hues.set(hue ?? -1, file);
     }
-    // And the guard on the guard, so this cannot pass over an empty list.
-    expect(hues.size).toBe(TEMPLATE_FILES.length);
+    expect(hues.size).toBe(EXPECTED_TEMPLATES.length);
   });
 
   it("keeps the design guide's worked palette out of the templates", () => {
     // `design.md` carries a fuller stylesheet than any template ships, and tells the reader not to
     // publish its colours. A document that only ASKS to be re-coloured gets copied anyway — this is
     // what makes the ask true, and it is also why the guide's hue is one no template uses.
-    const guide = readFileSync(path.join(TEMPLATES, "design.md"), "utf8");
-    const example = /--hue:\s*([0-9.]+)\s*;/.exec(guide)?.[1];
-    expect(`design.md: has a worked --hue = ${example !== undefined}`).toBe("design.md: has a worked --hue = true");
+    const example = hueOf(readFileSync(path.join(TEMPLATES, "design.md"), "utf8"));
+    expect(`design.md: has a worked --hue = ${example !== null}`).toBe("design.md: has a worked --hue = true");
     for (const file of TEMPLATE_FILES) {
-      const hue = /--hue:\s*([0-9.]+)\s*;/.exec(readFileSync(path.join(TEMPLATES, file), "utf8"))?.[1];
+      const hue = hueOf(readFileSync(path.join(TEMPLATES, file), "utf8"));
       expect(`${file}: copied the guide's hue = ${hue === example}`).toBe(`${file}: copied the guide's hue = false`);
     }
   });

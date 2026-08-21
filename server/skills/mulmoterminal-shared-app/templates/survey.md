@@ -443,7 +443,9 @@ publish なしでできるので、集計を「いま宣言されているもの
             // 幅はスタイルで持たせること。棒を文字で描くと、数が増えたときに折り返します。
             bar.style.width = `${responses.length === 0 ? 0 : Math.round((n / responses.length) * 100)}%`;
             bar.style.height = "8px";
-            bar.style.background = "#4f46e5";
+            // 色は 1 か所（`--hue`）から。ここに 16 進数を書くと、シートの色を変えた板で
+            // 棒だけが前の色のまま残ります。インラインスタイルでも var() は効きます。
+            bar.style.background = "var(--main)";
             row.append(label, bar);
             box.append(row);
           }
