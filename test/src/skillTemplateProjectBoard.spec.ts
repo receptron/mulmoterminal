@@ -809,4 +809,76 @@ describe("the project-board public board", () => {
     await settle();
     expect(board.sent).toEqual([{ kind: "withdraw", cid: "assignments", id: "fix-login" }]);
   });
+
+  /** The row a refused take was aimed at, if the page marked one. */
+  const wantedRow = (): HTMLElement | null => document.querySelector(".task.wanted");
+  const wantedNote = (): string => wantedRow()?.querySelector("p.ask")?.textContent ?? "";
+
+  it("carries the intent through the registration, instead of dropping it", async () => {
+    // The confusion this exists to stop, reported from a published board: somebody presses
+    // これをやります without a name, is carried to the name field, registers — and leaves believing
+    // they took the work. `#me` turns into "…として参加中です", which reads as success, while the
+    // half that matters is a line in `#say` at the foot of a page they were just scrolled away from.
+    //
+    // One press writes once (see `ensureRegistered`), so the second press cannot be removed. What
+    // is removed here is not KNOWING that a second press is owed.
+    const board = loadBoard();
+    board.tell({ tasks: TASKS, assignments: [], names: [] }, { names: [], assignments: [] });
+
+    board.press("これをやります");
+    await settle();
+    // Refused, nothing written, and the task is now marked — pointing FORWARD, because this person
+    // has not registered yet. Saying "登録できました" here would be the same lie in a new place.
+    expect(board.sent).toEqual([]);
+    expect(wantedRow()?.dataset.task).toBe("fix-login");
+    expect(wantedNote()).toContain("名前を登録したら");
+
+    (document.getElementById("who") as HTMLInputElement).value = "山田";
+    board.press("この名前で参加する");
+    await settle();
+
+    // The roster row was written and NOTHING else. `#say` names the thing that did not happen,
+    // rather than the thing that did, and the row now carries the one press still owed.
+    expect(board.sent.map((one) => one.cid)).toEqual(["names"]);
+    expect(board.said()).toContain("まだ引き受けていません");
+    expect(wantedNote()).toContain("もう一度");
+
+    board.press("これをやります");
+    await settle();
+    expect(board.sent.map((one) => one.cid)).toEqual(["names", "assignments"]);
+    // And the note goes with the press it was asking for. Left standing, it tells somebody who has
+    // already taken the work that they still have to take it.
+    expect(wantedRow()).toBeNull();
+  });
+
+  it("does not promise a second press for work somebody else took while the name was typed", async () => {
+    // A board with people on it loses the race often. Repeating "もう一度押すと引き受けます" over a
+    // task that is no longer free is pointing at a button that is not drawn.
+    const board = loadBoard();
+    board.tell({ tasks: TASKS, assignments: [], names: [] }, { names: [], assignments: [] });
+    board.press("これをやります");
+    await settle();
+
+    board.tell({ tasks: TASKS, assignments: DOING, names: [] }, { names: [{ id: "uid-9" }], assignments: [] });
+
+    expect(wantedNote()).toContain("ほかの人が取りました");
+    expect(board.buttons()).not.toContain("これをやります");
+  });
+
+  it("keeps a typed name when the board redraws under it", async () => {
+    // `render()` runs on presses now, not only on state, and `drawMe` used to rebuild the form every
+    // time — which took the focus `refuse()` had just placed AND whatever had been typed. The second
+    // one is the expensive half: the retry after a failed registration then goes out empty, so a
+    // host error turns into "先に名前を登録してください" for somebody who did type a name.
+    const board = loadBoard();
+    board.tell({ tasks: TASKS, assignments: [], names: [] }, { names: [], assignments: [] });
+    const field = document.getElementById("who") as HTMLInputElement;
+    field.value = "山田";
+    field.focus();
+
+    board.tell({ tasks: TASKS, assignments: [], names: [] }, { names: [], assignments: [] });
+
+    expect((document.getElementById("who") as HTMLInputElement).value).toBe("山田");
+    expect(document.activeElement?.id).toBe("who");
+  });
 });

@@ -284,6 +284,8 @@ fifteen lines, are in [design.md](./design.md).
   input, textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
   input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
   .task { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .task.wanted { padding: 11px 13px; border-radius: 12px; background: oklch(96% .04 55); }
+  .ask { flex: 1 1 100%; margin: 4px 0 0; color: oklch(40% .09 55); font-size: 13px; }
   .title { flex: 1 1 200px; font-weight: 780; }
   .title .note { margin-left: 8px; font-weight: 400; }
   .who { color: var(--muted); font-size: 13px; }
@@ -310,6 +312,21 @@ fifteen lines, are in [design.md](./design.md).
     /** 取り下げの確認だけは押した行を覚える必要がある。sandbox は confirm() を無視するので
      *  ページの中で訊くしかない。データではないので latest とは別に持つ。 */
     let arming = null;
+    /** 登録を挟んだせいで押下が 2 回に割れた作業。**意図はデータではない**ので `latest` とは
+     *  別に持ちます（`arming` と同じ）。1 押しでは書き込みは 1 回だけ（`ensureRegistered` の
+     *  上の注）なので、登録した人は必ずもう一度押すことになる — その「もう一度」を、文言では
+     *  なく押した行そのもので出すために覚えます。 */
+    let wanted = null;
+
+    /** 名前の欄まで巻き上げられた人を、押した作業まで戻します。**戻さないのが元の不具合です**：
+     *  登録して名簿の行ができると `#me` が「として参加中です」に変わり、それが成功に見える。
+     *  一方で「まだ引き受けていません」は `#say`（ページの末尾）に出るので画面の外にあり、
+     *  引き受けたつもりで板を離れた人が出ました。 */
+    const focusWanted = () => {
+      if (wanted === null) return;
+      const row = list.querySelector('[data-task="' + wanted + '"]');
+      if (row && row.scrollIntoView) row.scrollIntoView({ block: "center" });
+    };
 
     const el = (tag, text, cls) => {
       const node = document.createElement(tag);
@@ -501,14 +518,21 @@ fifteen lines, are in [design.md](./design.md).
         meBox.replaceChildren(el("div", "「" + String(reg.row.name || "") + "」として参加中です。"));
         return;
       }
+      const note = reg.known ? "登録すると作業を取れます。" : "登録済みかは確認できませんでした。登録済みなら、押しても新しくは作られません。";
+      // **出ているフォームは描き直さない。** `replaceChildren` は `#who` を作り直すので、焦点も
+      // 入力途中の名前も消えます — 断ったその瞬間に名前の欄へ運ぶのが台無しになり、書き込みが
+      // 失敗して訊き直させる枝では、打ってあった名前ごと消えて二度目が空で出ます。
+      // 文言だけは追いつかせること。三状態の答えは後から来るので、`known` は false から true に
+      // 変わります — 入力を作り直さずに、その一行だけ書き替えます。
+      const already = meBox.querySelector("p.note");
+      if (already) { already.textContent = note; return; }
       const label = el("label", "板に出る名前 ");
       const input = el("input");
       input.type = "text";
       input.id = "who";
       input.maxLength = 40;
       label.append(input);
-      meBox.replaceChildren(label, button("この名前で参加する", "register"),
-        el("p", reg.known ? "登録すると作業を取れます。" : "登録済みかは確認できませんでした。登録済みなら、押しても新しくは作られません。", "note"));
+      meBox.replaceChildren(label, button("この名前で参加する", "register"), el("p", note, "note"));
     };
 
     const holderName = (uid) => {
@@ -554,6 +578,7 @@ fifteen lines, are in [design.md](./design.md).
           const claim = held.get(task.id) || null;
           const isMine = mine.has(task.id);
           const row = el("div", null, "task");
+          row.dataset.task = task.id;
           const title = el("div", null, "title");
           title.append(el("b", String(task.title || task.id)));
           // 期限と内容を並べ替えにしか使わない，では足りません。オーナーが入れた指示が
@@ -564,6 +589,17 @@ fifteen lines, are in [design.md](./design.md).
           row.append(el("span", claim ? (isMine ? "あなた" : holderName(claim.uid)) + (claim.status === "done" ? " が完了" : " が作業中") : "空き",
             isMine ? "who mine" : "who"));
           row.append(actions(task, claim, isMine));
+          if (wanted === task.id) {
+            // 押した人が見ている場所で、次の一手を出します。**取られていたら言うこと** —
+            // 登録している間に空きでなくなるのは普通に起きるので、そこで「もう一度押せば
+            // 引き受けます」と言うと、押しても取れないボタンを案内することになります。
+            row.className = "task wanted";
+            row.append(el("p", claim
+              ? "登録している間に、この作業はほかの人が取りました。"
+              : registration().row
+                ? "登録できました。この「これをやります」をもう一度押すと、引き受けます。"
+                : "名前を登録したら、ここに戻ってきてもう一度押してください。", "ask"));
+          }
           return row;
         }));
     };
@@ -599,13 +635,20 @@ fifteen lines, are in [design.md](./design.md).
           // だと、`askHost` は `settled` を見て二度と訊かず、この人はリロードするまで取れません。
           // なので否定のキャッシュを捨てて、訊き直させます（取りはしません）。
           else if (res && res.error !== "cancelled") forget();
-          report(res, "登録しました。作業を取れます。", "登録できませんでした");
+          // **していないことを言います。** 「作業を取れます」は、作業を取りに来て名前を訊かれた
+          // 人には「取れました」と読めます。取れていないことのほうが、この人には報せるべき知らせです。
+          report(res, wanted === null ? "登録しました。作業を取れます。" : "登録しました。作業はまだ引き受けていません。", "登録できませんでした");
+          if (res && res.ok) { render(); focusWanted(); }
           return;
         }
         if (act === "take") {
-          if (!(await ensureRegistered())) return;
+          // 断られたら、その作業を覚えて描き直します。**押下はここで終わりです** — 続けて
+          // 取ろうとしても gesture の印が付かず、書き込みを門番するホストでは落ちます。
+          if (!(await ensureRegistered())) { wanted = taskId; render(); return; }
           // uid も status も送らない。ホストがセッションと宣言から埋めます。
-          report(await view.submit("assignments", { taskId }), "引き受けました。", "引き受けられませんでした。誰かが先に取ったかもしれません");
+          const took = await view.submit("assignments", { taskId });
+          if (took && took.ok) { wanted = null; render(); }
+          report(took, "引き受けました。", "引き受けられませんでした。誰かが先に取ったかもしれません");
           return;
         }
         if (act === "finish" || act === "reopen") {
@@ -627,6 +670,22 @@ fifteen lines, are in [design.md](./design.md).
   })();
 </script>
 ```
+
+**登録を挟むと、1 つの意図が 2 回の押下に割れます。その 2 回目を、文言ではなく行で出すこと。**
+これは実際に起きた勘違いです。名前を登録していない人が「これをやります」を押す → 断られて名前の
+欄まで画面が飛ぶ → 名前を入れて「この名前で参加する」を押す → **作業も引き受けたつもりで板を離れる**。
+無理もありません。押した結果として `#me` が「◯◯ として参加中です」に変わり、それが成功に見える
+一方で、「まだ引き受けていません」はページの末尾の `#say` にあって画面の外だからです。
+
+1 押しで書き込みを 2 回はできない（上の `ensureRegistered` の注）ので、2 回目の押下は無くせません。
+無くせるのは、2 回目が**必要だと分からないこと**のほうです。`wanted` に押された作業を覚え、登録が
+済んだら `focusWanted()` でその行まで画面を戻し、次の一手をその行の中に置く。そして `#say` では
+**していないことを名指しで言います** — 「作業を取れます」は、作業を取りに来て名前を訊かれた人には
+「取れました」と読めます。
+
+行の文言は 3 通りあり、3 つとも要ります。まだ登録していない（「登録したら、ここに戻ってきてもう一度」）、
+登録できた（「もう一度押すと引き受けます」）、そして**登録している間に取られた**。3 つ目を省いて 2 つ目を
+出すと、押しても取れないボタンを案内することになります。
 
 **`submit` に渡すのは `taskId` だけ**です。`uid` はホストがサインインしたセッションから、
 `status` は `initialStatus` から埋めます — 送ろうとすると、ルールが `createFields` の一致で
