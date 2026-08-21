@@ -68,6 +68,16 @@ Read the matching one before writing `app.json` by hand. All seven are checked a
 publish gate by this repository's tests, so what they show is what publishes — and they spend most
 of their length on the traps, which is the part you cannot recover by guessing.
 
+They also show what the page should LOOK like, and that is not decoration. The page is the only
+thing a visitor ever sees — nobody reads `app.json` — so one that arrives as unstyled boxes does
+not read as plain, it reads as unfinished, and an unfinished-looking booking form is one people
+close. **[templates/design.md](./templates/design.md)** is the rules: a palette derived from one
+hue you choose for this app, fluid type, a radius and a shadow that descend with the nesting, and
+what to do about the fact that you can load no stylesheet, no webfont and no image. Read it before
+you write the pages, and **change `--hue`** — every template ships a different one so that copying
+a template does not make every app the same colour, and a page left in the template's colours is a
+page nobody chose.
+
 ## The path
 
 Say what you are doing in the user's words ("作っています", "みんなが見えるようにしました"). The
@@ -741,7 +751,8 @@ entry per page, each naming **who it is for**:
   `html`**, because a background on the root is what stops the body's from reaching the canvas (a
   page that paints only `body` gets its colour on the body box and the runtime's white around it);
   and if the page is to be dark, **say both halves** — a `background` with no `color` leaves dark
-  text on it.
+  text on it. What to paint it BEYOND that floor — and every other decision that makes a page
+  look made rather than defaulted — is [templates/design.md](./templates/design.md).
 - **`alert`, `confirm` and `prompt` DO NOTHING.** (`check` and `publish` warn when a page looks
   like it calls one, and go through anyway — the check reads the page without parsing it, so it
   is a hint, not a verdict. A page it stays quiet about can still be wrong.) Every view — public, staff, participant — is

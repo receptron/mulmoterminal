@@ -191,9 +191,28 @@
 `preventDefault()` すら走りません）、`prompt` / `alert` / `confirm` は無視されます。
 `<div>` と `type="button"` にして、訊くのも報せるのもページの中の要素で。
 
+The colours below all come from one `--hue`, and **it is meant to be changed** — this one is
+this template's, not your app's. The rules behind the sheet, and how to go further than these
+fifteen lines, are in [design.md](./design.md).
+
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 155;                                    /* green - work taken and given back */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input:not([type="radio"]), textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  #list > div, #rows > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #say, #note { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
 </style>
 <label>お名前 <input id="who" maxlength="40" /></label>
 <p id="say" role="status"></p>
@@ -272,7 +291,22 @@
 
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 155;                                    /* green - work taken and given back */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input:not([type="radio"]), textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  #list > div, #rows > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #say, #note { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
 </style>
 <p id="note" role="status"></p>
 <div id="rows"></div>

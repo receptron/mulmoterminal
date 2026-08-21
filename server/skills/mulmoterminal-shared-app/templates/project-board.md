@@ -261,19 +261,36 @@ mulmoserver の 2026-08-19 で、それ以前は全員がこの枝に落ちて�
 「どの画面を出すか」は常に `onState` が届けたものから引く。そうしておくとリロードしても
 同じ画面が出ますし、別のタブで取られた作業も次の状態で消えます。
 
+The colours below all come from one `--hue`, and **it is meant to be changed** — this one is
+this template's, not your app's. The rules behind the sheet, and how to go further than these
+fifteen lines, are in [design.md](./design.md).
+
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
-  body { margin: 0; padding: 20px 16px 48px; font: 15px/1.6 system-ui, "Hiragino Sans", sans-serif; }
-  section { border: 1px solid #d7d7dc; border-radius: 10px; padding: 14px 16px; margin: 0 0 18px; }
-  h2 { font-size: 13px; color: #6b6b74; margin: 0 0 10px; }
-  .task { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; padding: 11px 0; border-top: 1px solid #d7d7dc; }
-  .title { flex: 1 1 200px; }
-  .who { font-size: 13px; color: #6b6b74; }
-  .who.mine { color: #1a6fd4; font-weight: 600; }
-  .say { min-height: 1.6em; font-size: 13px; }
-  .say.bad { color: #c0392b; }
-  .note, .empty { font-size: 12px; color: #6b6b74; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 295;                                    /* violet - a board that keeps a roster */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  section { margin: 0 0 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--fill); }
+  h2 { margin: 0 0 10px; color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .04em; }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input, textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  .task { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; padding: 11px 0; border-top: 1px solid var(--line); }
+  .title { flex: 1 1 200px; font-weight: 780; }
+  .title .note { margin-left: 8px; font-weight: 400; }
+  .who { color: var(--muted); font-size: 13px; }
+  .who.mine { color: var(--main); font-weight: 750; }
+  .say { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
+  .say.bad { color: oklch(48% .15 25); }
+  .note, .empty { color: var(--muted); font-size: 12px; }
 </style>
 
 <h1>今週の作業</h1>
@@ -624,18 +641,31 @@ mulmoserver の 2026-08-19 で、それ以前は全員がこの枝に落ちて�
 
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
-  body { margin: 0; padding: 20px 16px 48px; font: 15px/1.6 system-ui, "Hiragino Sans", sans-serif; }
-  section { border: 1px solid #d7d7dc; border-radius: 10px; padding: 14px 16px; margin: 0 0 18px; }
-  h2 { font-size: 13px; color: #6b6b74; margin: 0 0 10px; }
-  label { display: block; font-size: 13px; margin: 0 0 8px; }
-  input, textarea { width: 100%; max-width: 340px; font: inherit; padding: 6px 8px; }
-  .task { padding: 10px 0; border-top: 1px solid #d7d7dc; }
-  .who { font-size: 13px; color: #6b6b74; }
-  .ask { font-size: 13px; margin-top: 6px; }
-  .say { min-height: 1.6em; font-size: 13px; }
-  .say.bad { color: #c0392b; }
-  .note, .empty { font-size: 12px; color: #6b6b74; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 295;                                    /* violet - a board that keeps a roster */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  section { margin: 0 0 16px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--fill); }
+  h2 { margin: 0 0 10px; color: var(--muted); font-size: 13px; font-weight: 750; letter-spacing: .04em; }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input, textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  .task { padding: 11px 0; border-top: 1px solid var(--line); }
+  .ask { margin-top: 8px; padding: 10px 12px; border-radius: 10px; background: oklch(96% .04 55); color: oklch(40% .09 55); font-size: 13px; }
+  .title { flex: 1 1 200px; font-weight: 780; }
+  .title .note { margin-left: 8px; font-weight: 400; }
+  .who { color: var(--muted); font-size: 13px; }
+  .who.mine { color: var(--main); font-weight: 750; }
+  .say { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
+  .say.bad { color: oklch(48% .15 25); }
+  .note, .empty { color: var(--muted); font-size: 12px; }
 </style>
 
 <h1>オーナー画面</h1>

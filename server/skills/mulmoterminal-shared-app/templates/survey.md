@@ -205,9 +205,32 @@ create** なので、上書きではなく拒否されます。「1 回だけ答
 
 読めるのは `questions` だけ。`email` と `status` と `answeredAt` は親が入れるので送りません。
 
+The colours below all come from one `--hue`, and **it is meant to be changed** — this one is
+this template's, not your app's. The rules behind the sheet, and how to go further than these
+fifteen lines, are in [design.md](./design.md).
+
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 265;                                    /* indigo - answers, and nothing to run out of */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input:not([type="radio"]), textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  h2 { margin: 26px 0 10px; font-size: 17px; letter-spacing: -.02em; }
+  #list fieldset { margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #list legend { padding: 0 6px; font-weight: 780; }
+  #list label { display: flex; align-items: center; gap: 9px; margin: 8px 0 0; color: var(--ink); font-size: 15px; font-weight: 400; cursor: pointer; }
+  #tally > div, #comments > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #say, #count { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
 </style>
 <h1>講演アンケート</h1>
 <div id="list"></div>
@@ -316,7 +339,26 @@ publish なしでできるので、集計を「いま宣言されているもの
 
 ```html
 <style>
-  html { background: #ffffff; color: #1c1c20; color-scheme: light; }
+  /* Every colour is derived from ONE hue — the rules are in design.md. Change it for your app. */
+  :root {
+    --hue: 265;                                    /* indigo - answers, and nothing to run out of */
+    --main: oklch(47% .09 var(--hue));           --fill: oklch(96% .018 var(--hue));
+    --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
+    --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
+  }
+  html { background: var(--paper); color: var(--ink); color-scheme: light; }
+  body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
+  h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
+  label { display: block; margin: 0 0 14px; color: var(--muted); font-size: 13px; font-weight: 750; }
+  input:not([type="radio"]), textarea { display: block; width: min(22rem, 100%); margin-top: 6px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; }
+  input:focus, textarea:focus { border-color: var(--main); outline: 2px solid var(--line); }
+  button { min-height: 38px; margin: 4px 6px 0 0; padding: 8px 14px; border: 0; border-radius: 10px; background: var(--main); color: var(--paper); font: inherit; font-weight: 750; cursor: pointer; touch-action: manipulation; }
+  h2 { margin: 26px 0 10px; font-size: 17px; letter-spacing: -.02em; }
+  #list fieldset { margin: 0 0 14px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #list legend { padding: 0 6px; font-weight: 780; }
+  #list label { display: flex; align-items: center; gap: 9px; margin: 8px 0 0; color: var(--ink); font-size: 15px; font-weight: 400; cursor: pointer; }
+  #tally > div, #comments > div { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 8px; padding: 13px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--fill); }
+  #say, #count { min-height: 1.6em; margin: 14px 0 0; color: var(--main); font-size: 13px; font-weight: 700; }
 </style>
 <p id="count" role="status"></p>
 <div id="tally"></div>
