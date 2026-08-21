@@ -68,9 +68,13 @@ Every one clears WCAG AA, and the spread across seven completely different colou
 That is the property being bought: **pick any hue and the page is still readable**, with no
 per-colour tuning and no accessibility check to redo.
 
-**Two things are not derived, on purpose.** `--paper` is a warm near-white pinned at hue 85 —
-deriving it from `--hue` gives a cold blue-grey paper for cool apps, which looks worse in every
-one of them. And out-of-gamut combinations are gamut-mapped by the browser rather than failing,
+**Some things are not derived, on purpose, and the templates say which.** `--paper` is a warm
+near-white pinned at hue 85 — deriving it from `--hue` gives a cold blue-grey paper for cool apps,
+which looks worse in every one of them. A text input is painted plain `#fff`, a *brighter* paper
+rather than a tinted one, and it stays right at any hue for that reason. Everything an author adds
+that carries the page's identity — a fill, a border, a bar in a chart — goes through `--hue`; a
+hard-coded colour there is the one that stays behind when the hue changes, which is what makes it
+a bug rather than a preference. And out-of-gamut combinations are gamut-mapped by the browser rather than failing,
 but keep `--main` at `.09` chroma and it stays inside sRGB for every hue; cyan (roughly 190–220)
 is the region that cannot hold more.
 
