@@ -1,0 +1,43 @@
+WEBVTT
+
+NOTE Narration of the MulmoTerminal launch demo. Cue times come from the MulmoScript deck's render record (startAt + introPadding; end = start + audioDuration). See README.md in this directory.
+
+1
+00:00:01.000 --> 00:00:05.992
+When you ran one coding agent, the slowest thing in the room was the agent.
+
+2
+00:00:06.292 --> 00:00:11.716
+Now that you run five, the slowest thing in the room is probably you.
+
+3
+00:00:12.016 --> 00:00:21.856
+One of them is always stopped. A permission prompt. A question. Until you notice, it does nothing at all.
+
+4
+00:00:22.156 --> 00:00:32.020
+MulmoTerminal puts every session on one screen. Blue is working. Green is done. Amber is waiting on you.
+
+5
+00:00:32.320 --> 00:00:36.304
+You stop hunting. You go where the light is.
+
+6
+00:00:36.604 --> 00:00:48.316
+The other kind of slow is: what did I even ask this one? The roster keeps one line per session — what you asked, and what came back. Nothing left to remember.
+
+7
+00:00:48.616 --> 00:00:55.360
+When one is done, you don't go looking for its window. Click its row — the next order goes in right there.
+
+8
+00:01:02.420 --> 00:01:15.572
+Then you pick the next one from whatever is lit. Click, answer, move on. You never go looking — the roster tells you.
+
+9
+00:01:15.872 --> 00:01:23.336
+We built MulmoTerminal for exactly that: not to watch agents, but to triage them.
+
+10
+00:01:24.136 --> 00:01:26.968
+That is the whole install.

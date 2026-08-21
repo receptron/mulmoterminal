@@ -22,6 +22,37 @@ a shell or a `yarn dev` launcher can sit in the same worktree an agent is workin
   新バージョンや新機能のお知らせは X の
   [Singularity Society (@SingularitySoci)](https://x.com/SingularitySoci) で。
 
+## Demo
+
+https://github.com/user-attachments/assets/0b8dd582-6c0d-4be3-b0b4-3740ad0bdba6
+
+<details markdown="block">
+<summary>Transcript of the narration</summary>
+
+When you ran one coding agent, the slowest thing in the room was the agent.
+
+Now that you run five, the slowest thing in the room is probably you.
+
+One of them is always stopped. A permission prompt. A question. Until you notice, it does nothing at all.
+
+MulmoTerminal puts every session on one screen. Blue is working. Green is done. Amber is waiting on you.
+
+You stop hunting. You go where the light is.
+
+The other kind of slow is: what did I even ask this one? The roster keeps one line per session — what you asked, and what came back. Nothing left to remember.
+
+When one is done, you don't go looking for its window. Click its row — the next order goes in right there.
+
+Then you pick the next one from whatever is lit. Click, answer, move on. You never go looking — the roster tells you.
+
+We built MulmoTerminal for exactly that: not to watch agents, but to triage them.
+
+That is the whole install.
+
+</details>
+
+*90 seconds, with sound — one agent, then a grid of them, each cell coloured **working**, **done** or **needs you**. Zoom into one and the roster still holds what every other session asked, answered and did, so you go to whichever is lit and lose nothing catching up. Then the same grid, live:*
+
 ![MulmoTerminal — a grid of live Claude Code sessions, each color-coded by state, updating in real time](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/hero.gif)
 
 MulmoTerminal turns [Claude Code](https://claude.com/claude-code) (and OpenAI's **Codex**)
