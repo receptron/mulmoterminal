@@ -8,6 +8,46 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### The shared-app templates teach a look, not only a declaration
+
+Six of the seven templates carried one line of CSS, and that line was the canvas floor rather than
+a style — so the pages an agent produced from them arrived as grey boxes, and a grey booking form
+reads as unfinished rather than as plain. A template is copied VERBATIM (the reason its canvas rule
+is asserted in the tests), which cuts both ways: three colours from `project-board.md` turn up in
+generated apps as literal hex, unchanged.
+
+`templates/design.md` is the reasoning — a palette derived from one hue the author picks for the
+app, fluid type, a radius and a shadow that descend with the nesting, and what to do about a CSP
+that loads no stylesheet, no webfont and no image. Each template now ships a real sheet at a hue of
+its own, and two tests hold that: no two templates may share a hue, and the guide's worked palette
+may not reach one.
+
+The palette is `oklch()` rather than hex because hex cannot be parameterised — there is no
+`#var(--hue)`. Across the six hues, with one set of lightness and chroma values, every foreground
+pair clears WCAG AA with a spread under 0.5.
+
+### A registration could be mistaken for a claim on a project board (#1814)
+
+Reported from a published board. Somebody who had not registered pressed 「これをやります」, was
+carried to the name field, registered — and left believing they had taken the work. They had not:
+the press they made turned `#me` into 「◯◯ として参加中です」, which was the only change where
+they were looking, while the half that mattered sat in `#say` at the foot of a page they had just
+been scrolled away from.
+
+One gesture writes once, so the second press cannot be removed; what is removed is not KNOWING
+that one is owed. The board remembers the task a refused take was aimed at, carries the reader back
+to that row once the registration lands, and puts the next step in the row itself — in three
+wordings, because a task taken by somebody else during the typing must not be promised. `#say` now
+names the thing that did NOT happen.
+
+### `todo-board` is gone; use `project-board`
+
+The two boards differed only in whether a roster exists, and the lesson `todo-board` was pointed at
+for — `uidField` — is used by `project-board`'s `assignments` as well. It shipped as a demo of that
+feature; `project-board` was extracted from a board that actually ran, and the one app started from
+`todo-board` was hand-built into `project-board`'s shape before the template existed. Six templates
+remain.
+
 ## mulmoterminal@4.10.1 — 2026-08-20
 
 > **Setup guide:** [A scrollbar attached to nothing, and prompts you can copy](https://receptron.github.io/mulmoterminal/guide/en/v4.10.1.html) — written at release time. ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v4.10.1.html))

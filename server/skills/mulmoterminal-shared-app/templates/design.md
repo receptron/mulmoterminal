@@ -54,17 +54,17 @@ to keep in sync, which is exactly what breaks when six colours are picked one at
 lightness — so an `hsl()` palette that looks right in blue is washed out in yellow, and every
 hue has to be re-tuned by hand.
 
-`oklch()` is perceptually uniform, so the same numbers hold across hues. Measured over the seven
-template hues (25, 65, 155, 230, 265, 295, 330) with the values above, unchanged:
+`oklch()` is perceptually uniform, so the same numbers hold across hues. Measured over the six
+template hues (25, 65, 230, 265, 295, 330) and this file's own 95, with the values above unchanged:
 
 | pair | contrast across all seven |
 |---|---|
-| `--ink` on `--paper` | 16.5 – 16.7 |
-| `--muted` on `--paper` | 5.1 – 5.2 |
-| `--paper` on `--main` (button text) | 6.4 – 7.0 |
+| `--ink` on `--paper` | 16.6 – 16.7 |
+| `--muted` on `--paper` | 5.2 |
+| `--paper` on `--main` (button text) | 6.6 – 7.0 |
 | `--ink` on `--fill` | 15.0 – 15.1 |
 
-Every one clears WCAG AA, and the spread across seven completely different colours is under 0.6.
+Every one clears WCAG AA, and the spread across seven completely different colours is under 0.5.
 That is the property being bought: **pick any hue and the page is still readable**, with no
 per-colour tuning and no accessibility check to redo.
 
@@ -170,5 +170,5 @@ makes a column of identical bars with no primary.
 wrote, rule 1 did not happen — and a test in this repository fails on it, because a file that
 only *asks* to be re-coloured gets copied verbatim anyway.
 
-The same goes for the seven templates: each ships a different hue precisely so that copying one
-does not make every app in the world the same colour. Change it to yours.
+The same goes for the six templates: each ships a different hue precisely so that copying one does
+not make every app in the world the same colour. Change it to yours.

@@ -92,10 +92,6 @@ describe("the shared-app templates", () => {
     expect(problemsFor("live-poll.md", "host@example.com", [])).toEqual([]);
   });
 
-  it("todo-board.md deploys as written", () => {
-    expect(problemsFor("todo-board.md", "owner@example.com", [])).toEqual([]);
-  });
-
   it("project-board.md deploys as written", () => {
     expect(problemsFor("project-board.md", "owner@example.com", [])).toEqual([]);
   });
@@ -252,7 +248,6 @@ describe("the shared-app templates", () => {
     );
     expect([...blocksOf("survey.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/questions/schema.json", ".claude/skills/responses/schema.json"]));
     expect([...blocksOf("live-poll.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/questions/schema.json", ".claude/skills/votes/schema.json"]));
-    expect([...blocksOf("todo-board.md").keys()]).toEqual(expect.arrayContaining([".claude/skills/tasks/schema.json", ".claude/skills/claims/schema.json"]));
     expect([...blocksOf("project-board.md").keys()]).toEqual(
       expect.arrayContaining([".claude/skills/tasks/schema.json", ".claude/skills/names/schema.json", ".claude/skills/assignments/schema.json"]),
     );
