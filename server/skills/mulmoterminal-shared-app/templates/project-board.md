@@ -266,6 +266,7 @@ fifteen lines, are in [design.md](./design.md).
     --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
     --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
   }
+  * { box-sizing: border-box; }
   html { background: var(--paper); color: var(--ink); color-scheme: light; }
   body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
   h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }
@@ -703,6 +704,7 @@ fifteen lines, are in [design.md](./design.md).
     --line: oklch(47% .09 var(--hue) / .16);     --ink: oklch(23% .015 var(--hue));
     --muted: oklch(53% .02 var(--hue));          --paper: oklch(99.4% .007 85);
   }
+  * { box-sizing: border-box; }
   html { background: var(--paper); color: var(--ink); color-scheme: light; }
   body { margin: 0 auto; max-width: 44rem; padding: 28px 18px 56px; font: 15px/1.65 system-ui, "Hiragino Sans", sans-serif; }
   h1 { margin: 0 0 18px; font-size: clamp(23px, 5vw, 31px); line-height: 1.2; letter-spacing: -.03em; }

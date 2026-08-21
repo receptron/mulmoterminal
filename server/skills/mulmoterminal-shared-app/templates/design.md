@@ -164,6 +164,14 @@ because without it every tap waits 300ms for a possible double-tap, which reads 
 Full-width for the action that matters, `auto` for the secondary ones — all of them full-width
 makes a column of identical bars with no primary.
 
+**And start the sheet with `* { box-sizing: border-box; }`.** Every template does. A browser's own
+stylesheet already gives text inputs `border-box`, so the controls in these sheets do not overflow
+without it — measured, at 375px, 0px of overflow either way. The line is not for them. It is for the
+first padded `width: 100%` box you add yourself: the default is `content-box`, so the padding and
+the border are added OUTSIDE the width, and a card with `padding: 14px 16px` pushes 34px past the
+column it is in. Forcing `content-box` on the shipped controls reproduces exactly that — 6px of
+horizontal scroll on a phone — which is the failure the line removes for everything you write next.
+
 ## Do not ship this file's colours
 
 `--hue: 95` above is this document's, and no template uses it. If `95` survives into a page you
