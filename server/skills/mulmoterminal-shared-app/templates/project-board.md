@@ -316,7 +316,9 @@ fifteen lines, are in [design.md](./design.md).
      *  引き受けたつもりで板を離れた人が出ました。 */
     const focusWanted = () => {
       if (wanted === null) return;
-      const row = list.querySelector('[data-task="' + wanted + '"]');
+      // 行を数えて探す。属性セレクタを文字列で組むと、id に " が入った瞬間に壊れます — この板の
+      // 作業 id はホストが作るので今は入りませんが、テンプレートは書き換えられて配られます。
+      const row = [...list.children].find((node) => node.dataset && node.dataset.task === wanted);
       if (row && row.scrollIntoView) row.scrollIntoView({ block: "center" });
     };
 
