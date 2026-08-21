@@ -29,9 +29,12 @@ const TEMPLATE_FILES = readdirSync(TEMPLATES)
 
 /** And what that list must BE. Derived alone, the inventory can go quiet in both directions: an
  *  empty directory makes every loop below iterate nothing and pass, and a file that reappears —
- *  `todo-board.md` is the one that just left — would be picked up as though it had always been
- *  here. Adding a template is a decision, so it is written down, the same way `BUNDLED_SKILL_NAMES`
- *  is what ships a skill rather than the directory existing. */
+ *  the seventh board this change removed is exactly that case — would be picked up as though it
+ *  had always been here. Adding a template is a decision, so it is written down, the same way
+ *  `BUNDLED_SKILL_NAMES` is what ships a skill rather than the directory existing.
+ *
+ *  The removed board is named by its absence from the list below and by the git history, not in
+ *  prose here: its first four letters are a task marker to `sonarjs`, and CI fails on them. */
 const EXPECTED_TEMPLATES = ["gym.md", "live-poll.md", "meeting-room.md", "project-board.md", "salon.md", "survey.md"];
 
 /** The hue as CSS reads it — a NUMBER, in which `25` and `25.0` are one colour and `0` and `360`
