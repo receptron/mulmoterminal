@@ -26,7 +26,7 @@ the user turns this down.
 
 ## Start from a template when one fits
 
-Six shapes are written out in full — declaration, schemas, and the reasoning behind each key:
+Seven shapes are written out in full — declaration, schemas, and the reasoning behind each key:
 
 - **[templates/salon.md](./templates/salon.md)** — a request that a NAMED PERSON approves, and only
   their own (a salon's bookings, interviews, repairs, review assignments). This is what `assignee`
@@ -37,7 +37,7 @@ Six shapes are written out in full — declaration, schemas, and the reasoning b
   rules.
 - **[templates/survey.md](./templates/survey.md)** — **collecting answers**, with nothing to run out
   of (a survey, a quiz, an application form, a sign-up with no cap). The shortest declaration of the
-  six, and the shape most often written with a public page and nothing else — so this one is built
+  seven, and the shape most often written with a public page and nothing else — so this one is built
   around its `member` page, which is where the answers are read. It also spells out the three-way
   trade above, and what a tally may and may not claim about values a respondent typed.
 - **[templates/meeting-room.md](./templates/meeting-room.md)** — a bookable unit you can LIST IN
@@ -57,8 +57,16 @@ Six shapes are written out in full — declaration, schemas, and the reasoning b
   registration form to somebody who has already registered. It also shows the owner-only form: a
   `public.submit` declaration whose window is CLOSED, which is how a page gets a create form that
   only a writer may send.
+- **[templates/append-feed.md](./templates/append-feed.md)** — a record a CLOSED GROUP writes to and
+  nobody rewrites: rows are only ever added, and only their author may remove one (a shift handover
+  note, an incident timeline, a team log, a class's question board, a chat room). This is what
+  `views[].limit` is for — the one shape whose collection grows with the app's AGE rather than with
+  the thing being booked — and the one where `writerDelete` is deliberately ABSENT, which is
+  `project-board.md` turned over: an owner pressing delete on somebody else's row is refused by
+  Firestore. It is also the only sample showing `public.enabled: false` beside a populated
+  `public.submit`, which is the pair the naming makes look contradictory.
 
-Read the matching one before writing `app.json` by hand. All six are checked against the real
+Read the matching one before writing `app.json` by hand. All seven are checked against the real
 publish gate by this repository's tests, so what they show is what publishes — and they spend most
 of their length on the traps, which is the part you cannot recover by guessing.
 
