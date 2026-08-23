@@ -22,6 +22,10 @@
 //   the stamp; a page that slices again is a second, invisible cap that stops tracking the
 //   declaration the moment the author changes it.
 //
+//   A HISTORY ANNOUNCED AS NEWS. `role="log"` is polite by default, so a thread that is live from
+//   parse has assistive technology read out every row of the initial state — up to the whole cap —
+//   to somebody who has just opened the page.
+//
 //   A PAGE THAT CLAIMS TO KNOW WHAT IT WAS NOT SENT. The capped read carries no `hasMore`, so a
 //   full page is not evidence of a longer history — a room holding exactly the cap looks the same.
 //   The page may name its own window and nothing beyond it.
@@ -173,6 +177,9 @@ function loadRoom(): {
   };
 }
 
+/** A macrotask, which is where the page defers arming its live region. */
+const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
 /** The click handler is async — the write is awaited and the parent answers a microtask later. */
 const settle = async (): Promise<void> => {
   for (let turn = 0; turn < 32; turn += 1) await Promise.resolve();
@@ -261,6 +268,27 @@ describe("append-feed.md's room page", () => {
     room.send();
     await settle();
     expect((document.getElementById("body") as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("does not read the history out as though it had just arrived", async () => {
+    const room = loadRoom();
+    const thread = document.getElementById("thread") as HTMLElement;
+    // `role="log"` is polite by default, so this has to be an explicit override — and it has to
+    // survive the insert, not merely the load.
+    expect(thread.getAttribute("aria-live")).toBe("off");
+    room.tell(Array.from({ length: 200 }, (_, index) => row({ id: `m${index}`, body: `${index}`, postedAt: at(index % 60) })));
+    expect(thread.getAttribute("aria-live")).toBe("off");
+    // And from the next row onward it IS live — the point is to move the boundary, not to make the
+    // thread silent for somebody working by ear.
+    await tick();
+    expect(thread.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("arms the live region for an empty room too, so the first message is announced", async () => {
+    const room = loadRoom();
+    room.tell([]);
+    await tick();
+    expect(document.getElementById("thread")?.getAttribute("aria-live")).toBe("polite");
   });
 
   it("refuses to send an empty message without asking the host", async () => {

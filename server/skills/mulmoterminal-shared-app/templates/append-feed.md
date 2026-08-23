@@ -193,10 +193,14 @@ publisher に黙って通ることがありません。何も宣言しないア�
   <h1>team-log</h1>
   <span class="who" id="who"></span>
 </div>
-<!-- role="log" は、届いた行を「耳で読んでいる人」に届けるための宣言です。aria-live: polite と
-     aria-relevant: additions を含むので、新しい行だけが読み上げられ、既にある行は読み直されない。
-     含意に任せず書き下しているのは、そこがブラウザごとに違うからです。 -->
-<div class="thread" id="thread" role="log" aria-live="polite" aria-relevant="additions" aria-label="記録">
+<!-- role="log" は、届いた行を「耳で読んでいる人」に届けるための宣言です。aria-relevant: additions
+     を書き下しているのは、その含意がブラウザごとに違うからです。
+     ただし aria-live は **off で始めます**。role="log" の既定値は polite で、それに任せると
+     最初の onState で入る最大 200 行が「たった今届いた 200 件」として読み上げられる — 部屋を
+     開いただけの人が、履歴を全部聞かされることになります。属性で書いた aria-live は role の
+     既定値に勝つので、これがその上書き。polite に上げるのは最初の描画が終わってからで、
+     下の armLive がやります。 -->
+<div class="thread" id="thread" role="log" aria-live="off" aria-relevant="additions" aria-label="記録">
   <div class="empty">読み込んでいます…</div>
 </div>
 <div class="composer">
@@ -280,6 +284,17 @@ publisher に黙って通ることがありません。何も宣言しないア�
 
   const atBottom = () => thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;
 
+  /** 読み上げを有効にする。初回の描画が **終わってから** で、そこから先に入る行だけが
+   *  「新着」になります。次のタスクまで遅らせているのは、いま挿入したばかりの行と同じ
+   *  タイミングで polite に切り替えると、その挿入まで読み上げの対象に含める実装があるため。
+   *  1 度だけ。 */
+  let armed = false;
+  const armLive = () => {
+    if (armed) return;
+    armed = true;
+    setTimeout(() => thread.setAttribute("aria-live", "polite"), 0);
+  };
+
   // いま画面にあるもの: id → { html, node }。ページは onState のたびに描き直し、本番は
   // **変更のたびに** onState を送ってきます。だから innerHTML を書き直す作りだと、誰か 1 人の
   // 投稿で、全員の画面の全行が破棄されて作り直される。それがちらつきの正体で、変わっていない
@@ -329,6 +344,7 @@ publisher に黙って通ることがありません。何も宣言しないア�
     if (!rows.length) {
       painted = new Map();
       thread.innerHTML = `<div class="empty">#team-log はまだ空です。最初の 1 行をどうぞ。</div>`;
+      armLive();
       return;
     }
 
@@ -391,6 +407,7 @@ publisher に黙って通ることがありません。何も宣言しないア�
     // フォーカスを置きます（行は paint が作り直すので、開いた瞬間に 1 回では足りない）。
     if (menuFor !== null) focusMenu();
     if (stick) thread.scrollTop = thread.scrollHeight;
+    armLive();
   };
 
   const say = (text, bad) => {
