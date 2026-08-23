@@ -291,6 +291,29 @@ describe("append-feed.md's room page", () => {
     expect(document.getElementById("thread")?.getAttribute("aria-live")).toBe("polite");
   });
 
+  it("announces a row that arrives before the deferred arming has run", async () => {
+    const room = loadRoom();
+    const thread = document.getElementById("thread") as HTMLElement;
+    room.tell([row({ id: "a", body: "先にあった行", postedAt: at(1) })]);
+    // The live subscription delivers again in the same task the first render was scheduled from —
+    // before any timer could run. Without the second arming step, this row goes in while the log
+    // is still `aria-live="off"` and the attribute change afterwards cannot announce a node that
+    // is already there: a message arrives and is never read out.
+    const seen: string[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) seen.push(record.type === "attributes" ? `attr:${record.attributeName}` : record.type);
+    });
+    observer.observe(thread, { attributes: true, childList: true, subtree: true });
+    room.tell([row({ id: "a", body: "先にあった行", postedAt: at(1) }), row({ id: "b", body: "いま届いた行", postedAt: at(2) })]);
+    await tick();
+    observer.disconnect();
+    expect(thread.getAttribute("aria-live")).toBe("polite");
+    // ORDER, not merely both: the attribute has to move first, or the insertion it was meant to
+    // cover has already happened.
+    expect(seen[0]).toBe("attr:aria-live");
+    expect(seen).toContain("childList");
+  });
+
   it("refuses to send an empty message without asking the host", async () => {
     const room = loadRoom();
     room.tell([]);

@@ -284,15 +284,25 @@ publisher に黙って通ることがありません。何も宣言しないア�
 
   const atBottom = () => thread.scrollHeight - thread.scrollTop - thread.clientHeight < 60;
 
-  /** 読み上げを有効にする。初回の描画が **終わってから** で、そこから先に入る行だけが
-   *  「新着」になります。次のタスクまで遅らせているのは、いま挿入したばかりの行と同じ
-   *  タイミングで polite に切り替えると、その挿入まで読み上げの対象に含める実装があるため。
-   *  1 度だけ。 */
+  /** 読み上げを有効にするのは初回の描画が **終わってから** で、そこから先に入る行だけが
+   *  「新着」になります。段が 2 つあるのは、どちらか片方だと取りこぼすからです。
+   *  armLive: 初回の描画の直後に予約する。次のタスクまで遅らせているのは、いま挿入した
+   *  ばかりの行と同じタイミングで polite に切り替えると、その挿入まで読み上げの対象に
+   *  含める実装があるため。
+   *  goLive: 予約が発火する前に 2 通目が届いたときの保険。次の描画の **前に** 有効にする。
+   *  これが無いと、タイマーとタイマーの間に滑り込んだ行が off のまま挿入され、届いたのに
+   *  読み上げられない — 開いた直後に会話が続いている部屋ほど当たります。 */
   let armed = false;
+  let live = false;
+  const goLive = () => {
+    if (live) return;
+    live = true;
+    thread.setAttribute("aria-live", "polite");
+  };
   const armLive = () => {
     if (armed) return;
     armed = true;
-    setTimeout(() => thread.setAttribute("aria-live", "polite"), 0);
+    setTimeout(goLive, 0);
   };
 
   // いま画面にあるもの: id → { html, node }。ページは onState のたびに描き直し、本番は
@@ -329,6 +339,8 @@ publisher に黙って通ることがありません。何も宣言しないア�
 
   const render = () => {
     if (!latest) return;
+    // 初回の描画が済んでいるなら、**この描画が何かを挿入する前に** 読み上げを有効にする。
+    if (armed) goLive();
     const { data, viewer } = latest;
     const can = (viewer.can && viewer.can.messages) || {};
     const me = viewer.me || "";
