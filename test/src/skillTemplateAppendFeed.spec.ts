@@ -22,6 +22,10 @@
 //   the stamp; a page that slices again is a second, invisible cap that stops tracking the
 //   declaration the moment the author changes it.
 //
+//   A PAGE THAT CLAIMS TO KNOW WHAT IT WAS NOT SENT. The capped read carries no `hasMore`, so a
+//   full page is not evidence of a longer history — a room holding exactly the cap looks the same.
+//   The page may name its own window and nothing beyond it.
+//
 //   A COMPOSER THAT EATS WHAT YOU TYPED. A submission waits on a confirmation and a write, and
 //   somebody who keeps typing has written the NEXT message. Clearing the box unconditionally
 //   throws it away.
@@ -222,13 +226,15 @@ describe("append-feed.md's room page", () => {
     const rows = Array.from({ length: 200 }, (_, index) => row({ id: `m${index}`, body: `${index}`, postedAt: at(index % 60) }));
     room.tell(rows);
     expect(room.drawn()).toHaveLength(200);
-    // And it says there is more WITHOUT a number: the host sliced without counting, so the page
-    // does not know how many it is not showing.
-    expect(room.banner()).toBe("これより前の記録はここには出ません。");
-    expect(room.banner()).not.toMatch(/\d/);
+    // And it names the WINDOW rather than what is outside it. The capped read is `slice(0, rows)`
+    // with no `hasMore` beside it, so a room holding exactly 200 messages and a room holding three
+    // years of them arrive here identically — a banner saying earlier records exist would be false
+    // for the first one, and a count would be false for both.
+    expect(room.banner()).toBe("新しい順に最新 200 件までを表示しています。");
+    expect(room.banner()).not.toMatch(/これより前|earlier/);
   });
 
-  it("says nothing about older rows when the page was not filled", () => {
+  it("says nothing at all about the window until it is filled", () => {
     const room = loadRoom();
     room.tell(Array.from({ length: 199 }, (_, index) => row({ id: `m${index}`, body: `${index}`, postedAt: at(index % 60) })));
     expect(room.banner()).toBe("");
