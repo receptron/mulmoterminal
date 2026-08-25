@@ -12,19 +12,29 @@
 // no alternative. That is the shape of failure the shared-app skill warns leads an agent to start
 // editing `app.json` to get past it.
 //
-// WHY A HOST DECORATOR AND NOT A FIX. Making `putItems` itself stamp would mean injecting a
-// sentinel object into the record, and the record is validated and linted BY VALUE on the way
-// through (`validateRecordObject`, `lintOf` in `@mulmoclaude/core`). The sentinel would have to be
-// substituted below that, inside core's write layer — a change to the engine MulmoClaude binds
-// too, not to this host's wiring. Until that is wanted, refusing early with an explanation is
-// strictly better than the permission error, and it costs no behaviour: nothing that would have
-// been written stops being written.
+// WHY A HOST DECORATOR AND NOT A FIX. The store COULD stamp: MulmoTerminal supplies the Firestore
+// adapter itself (`setFirestoreAccessor` in `backends/sharedCollections.ts`), and core calls it
+// after validation — so a sentinel substituted there would reach `setDoc` intact, and MulmoClaude
+// is not affected either way (it declares no support for shared collections and unbound its
+// accessor, mulmoclaude#2870).
+//
+// What stops it is a boundary core states outright. `encodeRecordTimes` is the codec on that write
+// path, and its own comment says where the line is: the declaration that pins the field lives in
+// `app.json` under `public.submit.<cid>`, "which this package reads only for `aid`". It decides
+// provenance from the STORED value instead — was this field an instant before? — and records the
+// consequence in the same breath: `previous` is null on a create, "which is correct rather than a
+// gap: the rules require a created stamp to equal `request.time`, which no client can construct,
+// so a create through this store never carries a valid one."
+//
+// So a create through `putItems` failing is a DECIDED property of this store, not an oversight,
+// and teaching the adapter to stamp means teaching it to read `public.submit`, which is the scope
+// line core drew. This guard makes that decision legible where an agent meets it; it does not
+// relitigate it. If it should be relitigated, the place is core's codec, not a wrapper here.
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 
 import { parseAuthoredApp } from "@receptron/sharedapp";
 
-import { isRecord } from "../../common/isRecord.js";
 import { APP_MANIFEST_FILE } from "@mulmoclaude/core/collection/server";
 
 /** The stamped field this call's collection declares, or null when there is none to worry about. */
@@ -42,40 +52,31 @@ async function stampFieldFor(root: string, cid: string): Promise<string | null> 
   return parsed.app.public?.submit?.[cid]?.stampField ?? null;
 }
 
-/** Which rows this call carries, when it carries them inline.
- *
- *  `itemsFile` is deliberately NOT read. It exists for batches of thousands, and reading one to
- *  decide a diagnostic would double the largest read in the tool; the mode test below already
- *  catches the case that matters for a file (a generated batch is a `create`). */
-function inlineItems(args: Record<string, unknown>): Record<string, unknown>[] {
-  return Array.isArray(args.items) ? args.items.filter(isRecord) : [];
-}
-
 /**
  * The refusal, or null to let the call through.
  *
- * Two situations, and only the first is certain:
+ * ONE situation, and it is the certain one: **`mode: "create"`**. `encodeRecordTimes` is handed a
+ * null `previous` on a create, so nothing is converted and the literal the agent typed is what
+ * reaches Firestore — where `stampOk` compares it with `request.time` and refuses. No value the
+ * agent could have sent works.
  *
- *  - **`mode: "create"`** — every row is a create, and `stampOk` refuses every one of them. There
- *    is no value the agent could have sent that works.
- *  - **a row CARRYING the stamped field** — meaningless in any mode, because the server decides
- *    this value. On a create it is refused by `stampOk`; on an update by `stampHeld`, unless it
- *    happens to equal what is stored.
+ * AN UPDATE IS LEFT ALONE, INCLUDING ONE THAT CARRIES THE FIELD, and the earlier version of this
+ * guard was wrong to refuse those. On an update `previous` is the stored document, so the codec
+ * re-encodes a stamp that WAS an instant back into the identical Timestamp — `stampHeld` sees no
+ * change and the write goes through. That is not an accident; it is the case core's comment says
+ * the provenance check is FOR ("the frozen stamp goes back unchanged, so a whole-record write
+ * survives the rules"). Refusing it broke a `getItems` → edit → `putItems` round trip that works.
  *
- * An update that leaves the field alone is passed through untouched: `stampHeld` only asks that it
- * does not MOVE, so correcting a message's body after it was posted is a write that works and must
- * keep working.
+ * What that costs: an update carrying a DIFFERENT value is still refused by `stampHeld`, and this
+ * guard cannot tell it from the round trip without reading the stored record. Letting that one
+ * reach an opaque error is the lesser harm — breaking a supported write to catch it is not a trade
+ * worth making.
  */
 export function stampGuardProblem(args: Record<string, unknown>, stampField: string, cid: string): string | null {
   const mode = typeof args.mode === "string" ? args.mode : "upsert";
-  const carrying = inlineItems(args).filter((item) => stampField in item);
-  if (mode !== "create" && carrying.length === 0) return null;
-  const because =
-    mode === "create"
-      ? `every row here is a create, and the rules require '${stampField}' to hold the SERVER's clock on create`
-      : `${carrying.length} of these rows carry '${stampField}', which is the server's to write and not this call's`;
+  if (mode !== "create") return null;
   return [
-    `This write cannot succeed: ${because}.`,
+    `This write cannot succeed: every row here is a create, and the rules require '${stampField}' to hold the SERVER's clock on create.`,
     "",
     `\`public.submit.${cid}.stampField\` names '${stampField}', so the rules pin it to \`request.time\` (\`stampOk\`) and freeze it afterwards (\`stampHeld\`).`,
     "That is what makes the ORDER of these records trustworthy — it is the one field a writer cannot back-date, and it binds the owner too.",

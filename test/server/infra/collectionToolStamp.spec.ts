@@ -57,18 +57,18 @@ describe("the stamp guard", () => {
     expect(answer).toContain("useSharedApp");
   });
 
-  it("refuses a row that carries the stamped field in any mode", async () => {
-    // Meaningless whatever the mode: the server decides this value, so a caller sending one is
-    // either refused (`stampOk`, `stampHeld`) or ignored.
-    const answer = await guarded()(put({ items: [{ id: "m1", postedAt: "2026-08-25T09:00" }] }));
-    expect(answer).not.toBe(REACHED);
-    expect(answer).toContain("carry 'postedAt'");
+  it("lets an update CARRYING the stamped field through — the round trip core supports", async () => {
+    // The first version of this guard refused these, and it was wrong. On an update the codec
+    // (`encodeRecordTimes`) is handed the stored document, so a stamp that WAS an instant is
+    // re-encoded into the identical Timestamp and `stampHeld` sees no change. Core's own comment
+    // says that is what the provenance check is for: "the frozen stamp goes back unchanged, so a
+    // whole-record write survives the rules". Refusing it broke `getItems` → edit → `putItems`.
+    expect(await guarded()(put({ items: [{ id: "m1", postedAt: "2026-08-25T09:00:00.000000000Z", body: "言い直す" }] }))).toBe(REACHED);
   });
 
   it("lets an update that leaves the field alone through", async () => {
-    // The write that still WORKS, and the reason this guard is not simply "refuse putItems here":
-    // `stampHeld` only asks that the value does not move, so correcting a body after posting is
-    // allowed and must stay allowed.
+    // The other half of the same rule: `stampHeld` only asks that the value does not MOVE, so
+    // correcting a body after posting is allowed and must stay allowed.
     expect(await guarded()(put({ items: [{ id: "m1", body: "言い直す" }] }))).toBe(REACHED);
   });
 
@@ -88,12 +88,10 @@ describe("the stamp guard", () => {
     expect(await bare(put({ mode: "create", items: [{ id: "m1" }] }))).toBe(REACHED);
   });
 
-  it("does not read itemsFile, and still catches the batch that matters", async () => {
-    // A generated batch is a `create`, which the mode test already answers — so the largest read in
-    // the tool is not doubled to produce a diagnostic.
-    const answer = await guarded()(put({ mode: "create", itemsFile: "/tmp/nope.json" }));
-    expect(answer).toContain("cannot succeed");
-    // And an upsert from a file is passed through rather than guessed at.
+  it("never reads the rows at all, so itemsFile costs nothing", async () => {
+    // The decision is the MODE, so a batch of thousands is answered without opening the file — and
+    // an upsert from one is passed through rather than guessed at.
+    expect(await guarded()(put({ mode: "create", itemsFile: "/tmp/nope.json" }))).toContain("cannot succeed");
     expect(await guarded()(put({ itemsFile: "/tmp/nope.json" }))).toBe(REACHED);
   });
 });
@@ -104,9 +102,10 @@ describe("stampGuardProblem", () => {
     expect(stampGuardProblem({ items: [{ id: "m1" }] }, "postedAt", "messages")).toBeNull();
   });
 
-  it("counts the rows it is refusing, so a big batch says how many", () => {
-    const problem = stampGuardProblem({ items: [{ postedAt: "x" }, { body: "b" }, { postedAt: "y" }] }, "postedAt", "messages");
-    expect(problem).toContain("2 of these rows");
+  it("says nothing about an upsert, whatever the rows carry", () => {
+    // The narrowing that matters: an upsert is core's to decide from the stored record, and this
+    // guard has no business pre-empting it.
+    expect(stampGuardProblem({ items: [{ postedAt: "x" }, { postedAt: "y" }] }, "postedAt", "messages")).toBeNull();
   });
 });
 
