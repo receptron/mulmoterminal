@@ -214,6 +214,60 @@ describe("magazine.md — the desk", () => {
     expect(labels).not.toContain("URL name");
   });
 
+  it("names every field for a screen reader, in both forms", () => {
+    // Siblings are not a label relationship. Without `for`, all of these announce as "edit text,
+    // blank" — the form reads as five anonymous boxes, and the label is not a click target either.
+    const page = load("views/desk.html");
+    page.tell([MINE], viewerWhoOwns);
+    document.querySelectorAll<HTMLButtonElement>("#list .btn.ghost")[0].click();
+
+    const controls = [
+      ...document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("#compose input, #compose textarea, .editor input, .editor textarea"),
+    ];
+    expect(controls).toHaveLength(11);
+    for (const control of controls) {
+      expect(`${control.id || "(no id)"}: ${control.labels?.length ?? 0} label(s)`).toBe(`${control.id}: 1 label(s)`);
+      expect(control.labels?.[0]?.textContent ?? "").not.toBe("");
+    }
+    // And the ids are unique, since one page builds both forms from the same helper.
+    expect(new Set(controls.map((control) => control.id)).size).toBe(controls.length);
+  });
+
+  it("drops a correction that comes back after the writer moved to another article", async () => {
+    // Only the fields being saved are disabled; the rows stay live. Read against the module
+    // variable, this completion closes the NEW editor on success or reports the old refusal into
+    // it — either way it lands on an article the answer has nothing to do with.
+    const page = load("views/desk.html");
+    page.tell([MINE, THEIRS], { me: "ada@example.com", can: CAN, mine: { articles: [{ id: MINE.id }, { id: THEIRS.id }] } });
+    // By label rather than by position: an open row shows Close beside its Delete, so an index
+    // into the ghost buttons lands on a different control once the first editor is open.
+    const rewrite = (): HTMLButtonElement => {
+      const found = [...document.querySelectorAll<HTMLButtonElement>("#list button")].find((button) => button.textContent === "Rewrite");
+      if (found === undefined) throw new Error("no Rewrite button");
+      return found;
+    };
+    rewrite().click();
+    const first = document.querySelector<HTMLTextAreaElement>(".editor textarea.body");
+    if (first === null) throw new Error("no body field");
+    first.value = "the first one";
+    first.dispatchEvent(new Event("input"));
+    document.querySelector<HTMLButtonElement>(".editor .btn")?.click();
+
+    // The writer gives up waiting and opens the other article — the only Rewrite still showing.
+    rewrite().click();
+    const second = document.querySelector<HTMLTextAreaElement>(".editor textarea.body");
+    if (second === null) throw new Error("no second body field");
+    second.value = "the second one";
+    second.dispatchEvent(new Event("input"));
+
+    page.answer({ ok: false, error: "PERMISSION_DENIED" });
+    await settle();
+
+    // The second editor is untouched: still open, still holding what was typed, no error in it.
+    expect(document.querySelector<HTMLTextAreaElement>(".editor textarea.body")?.value).toBe("the second one");
+    expect(document.querySelector(".editor .msg")?.textContent).toBe("");
+  });
+
   it("keeps the caret in a half-written article when somebody else publishes", () => {
     const page = load("views/desk.html");
     page.tell([MINE], viewerWhoOwns);

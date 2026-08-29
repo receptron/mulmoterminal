@@ -94,13 +94,15 @@ the more surprising one to discover you do not have.
       "id": "desk",
       "audience": "member",
       "path": "views/desk.html",
-      "collections": ["articles"]
+      "collections": ["articles"],
+      "live": ["articles"]
     },
     {
       "id": "write",
       "audience": "participant",
       "path": "views/desk.html",
-      "collections": ["articles"]
+      "collections": ["articles"],
+      "live": ["articles"]
     }
   ],
   "public": {
@@ -174,6 +176,12 @@ frozen; that is not a policy in the page, it is the rules, and `viewer.can.<cid>
 page so.
 
 `limit.articles` — how many the index reads. Read the index-cost trap before raising it.
+
+**There is no `participantRead` here and there must not be.** A participant view is normally
+projected to the reader's OWN rows, and `participantRead` is what widens it — but a collection the
+app publishes to the world is already widened: `public.enabled` plus `cid` in `public.read` resolves
+the participant tier to every row. Adding the key would change nothing, while suggesting that the
+desk's view of the collection is narrower than the public page's, which it is not and cannot be.
 
 ## .claude/skills/articles/schema.json
 
@@ -475,6 +483,7 @@ is what draws the controls, so the page does not need to know which door it came
   .row.editing { border-radius: 14px 14px 0 0; margin-bottom: 0; }
   .row .t { font-weight: 780; font-size: 15px; letter-spacing: -.01em; }
   .row .m { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+  .row .m.bad { color: var(--bad); font-weight: 700; }
   .row .side { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
   .confirm { font-size: 12.5px; font-weight: 700; color: var(--bad); margin-right: 4px; }
 
@@ -539,6 +548,7 @@ is what draws the controls, so the page does not need to know which door it came
     var latest = null;
     var built = false;
     var arming = {};    // id -> its delete confirmation is showing
+    var failed = {};    // id -> why its deletion was refused, kept until the row is pressed again
     // The article being rewritten, and what has been typed into it. `list` is rebuilt whenever
     // state arrives, so anything held inside it is thrown away the moment somebody else publishes.
     var editing = null; // { id, values, saving, msg, bad, node, nodes, keys, record, can, fields }
@@ -548,6 +558,25 @@ is what draws the controls, so the page does not need to know which door it came
       if (cls) n.className = cls;
       if (text != null) n.textContent = text;
       return n;
+    };
+
+    /** A control and its label, ASSOCIATED — one `for`, one `id`, generated here because the
+     *  fields are built in script and have no ids of their own.
+     *
+     *  Putting a `<label>` next to a control is not a label relationship: without `for` (or the
+     *  control nested inside the label) a screen reader announces "edit text, blank" for every
+     *  one of these, so the whole form reads as five anonymous boxes. It also costs the click
+     *  target — pressing the word "Headline" should put the caret in the field. */
+    var seq = 0;
+    var field = function (labelText, node) {
+      seq += 1;
+      node.id = "field-" + seq;
+      var wrap = el("div", "field");
+      var label = el("label", null, labelText);
+      label.htmlFor = node.id;
+      wrap.appendChild(label);
+      wrap.appendChild(node);
+      return wrap;
     };
 
     // `publishedAt` is a server Timestamp, and it reaches the page as a `…Z` string.
@@ -620,12 +649,7 @@ is what draws the controls, so the page does not need to know which door it came
       compose.replaceChildren();
       compose.appendChild(el("h2", null, "New article"));
 
-      var mk = function (labelText, node) {
-        var f = el("div", "field");
-        f.appendChild(el("label", null, labelText));
-        f.appendChild(node);
-        return f;
-      };
+      var mk = field;
       var input = function (ph) {
         var n = document.createElement("input");
         n.type = "text";
@@ -850,8 +874,6 @@ is what draws the controls, so the page does not need to know which door it came
       editing.nodes = {};
       editing.keys = keys;
       fields.forEach(function (f) {
-        var wrap = el("div", "field");
-        wrap.appendChild(el("label", null, f.label));
         var node;
         if (f.kind === "text") {
           node = document.createElement("input");
@@ -864,8 +886,7 @@ is what draws the controls, so the page does not need to know which door it came
         node.value = editing.values[f.key] != null ? editing.values[f.key] : String(record[f.key] || "");
         node.oninput = function () { editing.values[f.key] = node.value; };
         editing.nodes[f.key] = node;
-        wrap.appendChild(node);
-        box.appendChild(wrap);
+        box.appendChild(field(f.label, node));
       });
 
       var actions = el("div", "actions");
@@ -905,8 +926,15 @@ is what draws the controls, so the page does not need to know which door it came
         editing.saving = true;
         editing.msg = "";
         syncEditor();
+        // WHICH EDITOR THIS ANSWER BELONGS TO. Only the fields being saved are disabled — the
+        // rows are still live, so pressing Rewrite on another article during the write replaces
+        // `editing` with a different one. A completion read against the module variable then
+        // closes somebody else's half-written editor on success, or reports this request's
+        // refusal into it. Captured here, and anything but this session is dropped: the editor
+        // it belonged to is gone, and there is nowhere for the answer to go.
+        var session = editing;
         view.correct("articles", record.id, changed).then(function (res) {
-          if (editing === null) return;
+          if (editing !== session) return;
           if (res && res.ok) { editing = null; renderList(); return; }
           editing.saving = false;
           if (res && res.error === "cancelled") { editing.msg = ""; syncEditor(); return; }
@@ -936,6 +964,7 @@ is what draws the controls, so the page does not need to know which door it came
       var living = {};
       all.forEach(function (r) { living[r.id] = true; });
       Object.keys(arming).forEach(function (id) { if (living[id] !== true) delete arming[id]; });
+      Object.keys(failed).forEach(function (id) { if (living[id] !== true) delete failed[id]; });
 
       if (!all.length) {
         list.appendChild(el("p", "note", "Nothing published yet."));
@@ -957,6 +986,7 @@ is what draws the controls, so the page does not need to know which door it came
         bits.push(r.id);
         if (r.tags) bits.push(r.tags);
         main.appendChild(el("div", "m", bits.join("  ·  ")));
+        if (failed[r.id]) main.appendChild(el("div", "m bad", failed[r.id]));
         row.appendChild(main);
 
         var side = el("div", "side");
@@ -984,10 +1014,13 @@ is what draws the controls, so the page does not need to know which door it came
               yes.disabled = true;
               view.withdraw("articles", r.id).then(function (res) {
                 delete arming[r.id];
+                // Into `failed` and then re-rendered, NOT appended to `main`. That node belongs
+                // to the render this click came from, and any state arriving in the meantime has
+                // already replaced it — appending to it puts the refusal in a detached element,
+                // so the deletion looks as though it silently worked.
                 if (!res || !res.ok) {
-                  yes.disabled = false;
-                  if (res && res.error === "cancelled") { renderList(); return; }
-                  main.appendChild(el("div", "m", "Could not delete: " + refusalNote(can, res && res.error)));
+                  if (!res || res.error !== "cancelled") failed[r.id] = "Could not delete: " + refusalNote(can, res && res.error);
+                  renderList();
                   return;
                 }
                 renderList();
@@ -1001,7 +1034,7 @@ is what draws the controls, so the page does not need to know which door it came
           } else {
             var del = el("button", "btn ghost small", "Delete");
             del.type = "button";
-            del.onclick = function () { arming[r.id] = true; renderList(); };
+            del.onclick = function () { delete failed[r.id]; arming[r.id] = true; renderList(); };
             side.appendChild(del);
           }
         }
@@ -1123,6 +1156,38 @@ straight back. Fill the field in from the signed-in address and let it be edited
 **Never let an email address reach this field.** Everything in this collection is drawn to the
 whole world, forever. That is also why the publisher is recorded as `byUid` rather than through
 `emailField`: a uid cannot be printed as a name, and an address must not be.
+
+### 8. The desks watch; the index must not
+
+`live: ["articles"]` is on both desk views and on neither public one, and that asymmetry is the
+only shape this key allows here.
+
+A subscription is a read **per document per change**, so its cost is (readers x writers). The desks
+are read by the roster and written by the roster — a handful either way — and the page needs it:
+without it, a writer's list of articles is whatever it was when they opened the tab, so a colleague
+publishing is invisible and the duplicate-name check upstream goes stale. It is also what makes the
+page's care with a half-written editor mean anything, since state arriving mid-sentence is exactly
+what `live` causes.
+
+The public index is the same declaration with an unbounded left-hand side: every visitor watching a
+collection the roster writes into. Publish refuses the fan-out that has an unbounded side on both,
+and the one here would be one press away from it. A reader who wants the newest article reloads.
+
+### 9. The desk has no `limit`, on purpose
+
+The index has one and the desk does not, and this is a decision rather than an omission — an
+unbounded read does grow with the archive, so it is worth saying what buys it.
+
+The desk does two things that need **every** article: it is where a writer reaches something they
+published a year ago to fix a typo, and it is where a URL name is checked against the ones already
+taken. A `limit` silently breaks both — an older article simply stops being reachable, and the
+duplicate check starts passing names that exist.
+
+What bounds the cost instead is **who reads it**: the roster, on a page nobody else can open. That
+is the opposite of the index, which is read by the world and therefore capped. If an archive does
+grow past what a desk should download, the answer is the same one the index has: a second
+collection carrying the slug and title alone. Adding `"limit": { "articles": 50 }` to the desk views
+is accepted by the gate — it is the *page* that stops being correct, not the declaration.
 
 ## Traps
 
