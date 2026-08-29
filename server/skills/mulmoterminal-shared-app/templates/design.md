@@ -54,8 +54,8 @@ to keep in sync, which is exactly what breaks when six colours are picked one at
 lightness — so an `hsl()` palette that looks right in blue is washed out in yellow, and every
 hue has to be re-tuned by hand.
 
-`oklch()` is perceptually uniform, so the same numbers hold across hues. Measured over the six
-template hues (25, 65, 230, 265, 295, 330) and this file's own 95, with the values above unchanged:
+`oklch()` is perceptually uniform, so the same numbers hold across hues. Measured over seven of
+them — 25, 65, 230, 265, 295, 330 and this file's own 95 — with the values above unchanged:
 
 | pair | contrast across all seven |
 |---|---|
@@ -182,5 +182,6 @@ horizontal scroll on a phone — which is the failure the line removes for every
 wrote, rule 1 did not happen — and a test in this repository fails on it, because a file that
 only *asks* to be re-coloured gets copied verbatim anyway.
 
-The same goes for the six templates: each ships a different hue precisely so that copying one does
-not make every app in the world the same colour. Change it to yours.
+The same goes for the templates: each one ships a different hue — a test in this repository fails
+if two of them share — precisely so that copying one does not make every app in the world the same
+colour. Change it to yours.

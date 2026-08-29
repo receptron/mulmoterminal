@@ -13,7 +13,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import type { CollectionSchema } from "@mulmoclaude/core/collection";
 import { declarationProblems } from "../../../server/backends/sharedApp/context.js";
-import { APP_PROTOCOL_BASE, parseAuthoredApp } from "@receptron/sharedapp";
+import { APP_PROTOCOL, APP_PROTOCOL_BASE, parseAuthoredApp } from "@receptron/sharedapp";
 import { modalCallIn } from "../../../server/backends/sharedApp/modalCall.js";
 import { formElementIn, readyNeverCalled } from "../../../server/backends/sharedApp/viewDefects.js";
 import { readdirSync } from "node:fs";
@@ -35,7 +35,17 @@ const TEMPLATE_FILES = readdirSync(TEMPLATES)
  *
  *  The removed board is named by its absence from the list below and by the git history, not in
  *  prose here: its first four letters are a task marker to `sonarjs`, and CI fails on them. */
-const EXPECTED_TEMPLATES = ["ai-council.md", "append-feed.md", "gym.md", "live-poll.md", "meeting-room.md", "project-board.md", "salon.md", "survey.md"];
+const EXPECTED_TEMPLATES = [
+  "ai-council.md",
+  "append-feed.md",
+  "gym.md",
+  "live-poll.md",
+  "magazine.md",
+  "meeting-room.md",
+  "project-board.md",
+  "salon.md",
+  "survey.md",
+];
 
 /** The hue as CSS reads it — a NUMBER, in which `25` and `25.0` are one colour and `0` and `360`
  *  are one angle. Compared as the raw strings they are written in, each of those pairs is two
@@ -122,6 +132,10 @@ describe("the shared-app templates", () => {
 
   it("ai-council.md deploys as written", () => {
     expect(problemsFor("ai-council.md", "host@example.com", [])).toEqual([]);
+  });
+
+  it("magazine.md deploys as written", () => {
+    expect(problemsFor("magazine.md", "editor@example.com", [])).toEqual([]);
   });
 
   it("shows no page the sandbox would silently break", () => {
@@ -234,8 +248,15 @@ describe("the shared-app templates", () => {
     // it refuse to draw on readers that could have drawn it perfectly well — the exact cost the
     // per-app stamp exists to avoid. A template that ships an article view will state its own.
     for (const file of TEMPLATE_FILES) {
-      const manifest = blocksOf(file).get("app.json") as Record<string, unknown> | undefined;
-      expect(`${file}: ${String(manifest?.protocol)}`).toBe(`${file}: ${APP_PROTOCOL_BASE}`);
+      const manifest = blocksOf(file).get("app.json") as { protocol?: unknown; views?: { article?: unknown }[] } | undefined;
+      // "A template that ships an article view will state its own" — the paragraph above, taken at
+      // its word. An `article` view is drawn by a reader that understands APP_PROTOCOL, so an app
+      // with one has to say so and an app without one must not: the floor is read off the FEATURES
+      // the declaration uses, never off which template it is. Derived here rather than listed,
+      // because a list of exceptions is the per-template number this test exists to refuse.
+      const drawsArticles = (manifest?.views ?? []).some((view) => view.article !== undefined);
+      const floor = drawsArticles ? APP_PROTOCOL : APP_PROTOCOL_BASE;
+      expect(`${file}: ${String(manifest?.protocol)}`).toBe(`${file}: ${floor}`);
     }
   });
 

@@ -7,7 +7,7 @@ person running it decides what is being asked, right now.
 This template is written in English because it is the one most often shown to an audience that is
 not yours: the strings in the pages below are what a stranger reads.
 
-**What is different from the other four templates** is the direction the data flows. Everything else
+**What is different from the other templates** is the direction the data flows. Everything else
 here is a request somebody answers later; this one has a screen that must be right within a second,
 in front of many people at once. Two things follow, and they are the whole template:
 
