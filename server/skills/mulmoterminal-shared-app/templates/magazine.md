@@ -727,8 +727,22 @@ is what draws the controls, so the page does not need to know which door it came
           post.disabled = false;
           if (res && res.ok) {
             say("Published. It is readable at /a/field-notes/" + name + ".");
-            title.value = ""; summary.value = ""; tags.value = ""; body.value = ""; slug.value = "";
-            slugTouched = false;
+            // FIELD BY FIELD, and only where the box still holds what was just published. Only
+            // the button is disabled while the write is in flight, so the writer may already
+            // have started the next article in these very boxes — and emptying them
+            // unconditionally destroys it with **nowhere to recover it from**, since this app
+            // has no drafts. A box somebody has moved on from is left exactly as they left it.
+            var clearIfSent = function (node, sent) {
+              if (String(node.value).trim() !== String(sent).trim()) return;
+              node.value = "";
+            };
+            clearIfSent(title, written.title);
+            clearIfSent(summary, written.summary);
+            clearIfSent(tags, written.tags);
+            clearIfSent(body, written.body);
+            // The URL name is compared through `slugify`, because the box holds what was typed
+            // and `name` is what that resolved to.
+            if (slugify(slug.value) === name) { slug.value = ""; slugTouched = false; }
             return;
           }
           if (res && res.error === "cancelled") { say(""); return; }
@@ -1064,7 +1078,7 @@ is what draws the controls, so the page does not need to know which door it came
 </script>
 ```
 
-## Why the shape is this way — the seven decisions
+## Why the shape is this way — the nine decisions
 
 ### 1. The owner has to demote themselves, and that is not a workaround
 

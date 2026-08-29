@@ -37,7 +37,7 @@ Nine shapes are written out in full — declaration, schemas, and the reasoning 
   rules.
 - **[templates/survey.md](./templates/survey.md)** — **collecting answers**, with nothing to run out
   of (a survey, a quiz, an application form, a sign-up with no cap). The shortest declaration of the
-  eight, and the shape most often written with a public page and nothing else — so this one is built
+  nine, and the shape most often written with a public page and nothing else — so this one is built
   around its `member` page, which is where the answers are read. It also spells out the three-way
   trade above, and what a tally may and may not claim about values a respondent typed.
 - **[templates/meeting-room.md](./templates/meeting-room.md)** — a bookable unit you can LIST IN

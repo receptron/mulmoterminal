@@ -214,6 +214,30 @@ describe("magazine.md — the desk", () => {
     expect(labels).not.toContain("URL name");
   });
 
+  it("does not empty a compose box the writer has already moved on to", async () => {
+    // Only the button is disabled while the write is in flight. Emptying every box on success
+    // throws away the next article — and this app has no drafts, so there is nowhere to get it
+    // back from.
+    const page = load("views/desk.html");
+    page.tell([], viewerWhoOwns);
+    const inputs = document.querySelectorAll<HTMLInputElement>("#compose input");
+    const areas = document.querySelectorAll<HTMLTextAreaElement>("#compose textarea");
+    inputs[0].value = "The first one";
+    areas[1].value = "the first body";
+    document.querySelector<HTMLButtonElement>("#compose .btn")?.click();
+
+    // The write is still in flight; the writer starts the next piece in the same boxes.
+    inputs[0].value = "The second one";
+    areas[1].value = "the second body";
+    await settle();
+
+    expect(inputs[0].value).toBe("The second one");
+    expect(areas[1].value).toBe("the second body");
+    // The tags box was empty and stayed empty, which is the other half: a box holding what was
+    // sent IS cleared, so the form does not keep the published article around.
+    expect(inputs[1].value).toBe("");
+  });
+
   it("names every field for a screen reader, in both forms", () => {
     // Siblings are not a label relationship. Without `for`, all of these announce as "edit text,
     // blank" — the form reads as five anonymous boxes, and the label is not a click target either.
