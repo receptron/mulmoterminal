@@ -111,14 +111,31 @@ function load(heading: string, open?: { opened: boolean }): Loaded {
   };
 }
 
+/** The submit declaration out of the template's OWN `app.json` block.
+ *
+ *  Read rather than restated, and that distinction had teeth: with the caps written out here, a
+ *  test for the `tags` bound passed while the declaration capped nothing — the page was being
+ *  handed a cap this file invented. What the host projects into `viewer.can` comes from the
+ *  declaration, so the test has to come from there too or it is checking itself. */
+const submitDecl = (): { maxBytes: Record<string, number>; selfUpdate: Record<string, string[]>; selfDelete: string[] } => {
+  const [, json] = /^## app\.json\n\n```json\n([\s\S]*?)\n```/m.exec(template) ?? [];
+  const app = JSON.parse(json ?? "{}") as { public?: { submit?: Record<string, never> } };
+  const submit = app.public?.submit?.articles as unknown as
+    { maxBytes: Record<string, number>; selfUpdate: Record<string, string[]>; selfDelete: string[] } | undefined;
+  if (submit === undefined) throw new Error("the template's app.json declares no public.submit.articles");
+  return submit;
+};
+
+const DECL = submitDecl();
+
 const CAN = {
   articles: {
-    correctFrom: { published: ["title", "summary", "body", "tags", "byline"] },
+    correctFrom: DECL.selfUpdate,
     correctAny: false,
-    withdrawFrom: ["published"],
+    withdrawFrom: DECL.selfDelete,
     withdrawAny: false,
     frozen: ["slug", "publishedAt", "byUid", "status"],
-    maxBytes: { title: 200, summary: 800, body: 60000, byline: 100 },
+    maxBytes: DECL.maxBytes,
   },
 };
 
@@ -275,6 +292,27 @@ describe("magazine.md — the desk", () => {
     expect(document.querySelector("#list .m.bad")).toBeNull();
     expect(document.querySelector("#list .confirm")).toBeNull();
     expect(buttons("#list button")).toEqual(["Rewrite", "Delete", "Rewrite", "Delete", "Rewrite", "Delete"]);
+  });
+
+  it("bounds every field the declaration caps, tags included", async () => {
+    // `overLong` only checks fields the cap map mentions, so a field left out of `maxBytes` is
+    // unbounded in a collection whose index downloads whole records.
+    // Every field the compose form sends, against the declaration itself.
+    expect(Object.keys(DECL.maxBytes).sort()).toEqual(["body", "byline", "summary", "tags", "title"]);
+
+    const cap = DECL.maxBytes.tags;
+    const page = load("views/desk.html");
+    page.tell([], viewerWhoOwns);
+    const inputs = document.querySelectorAll<HTMLInputElement>("#compose input");
+    const areas = document.querySelectorAll<HTMLTextAreaElement>("#compose textarea");
+    inputs[0].value = "A piece";
+    inputs[2].value = "x".repeat(cap + 1);
+    areas[1].value = "text";
+    document.querySelector<HTMLButtonElement>("#compose .btn")?.click();
+    await settle();
+
+    expect(page.calls.filter((call) => call.kind === "submit")).toEqual([]);
+    expect(document.querySelector("#compose .msg")?.textContent).toContain(`Tags is ${cap + 1} bytes, over the limit of ${cap}`);
   });
 
   it("names every field for a screen reader, in both forms", () => {

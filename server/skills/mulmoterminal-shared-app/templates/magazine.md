@@ -125,7 +125,8 @@ the more surprising one to discover you do not have.
           "title": 200,
           "summary": 800,
           "body": 60000,
-          "byline": 100
+          "byline": 100,
+          "tags": 200
         },
         "selfUpdate": {
           "published": ["title", "summary", "body", "tags", "byline"]
@@ -137,7 +138,7 @@ the more surprising one to discover you do not have.
   "agents": [
     {
       "id": "author",
-      "audience": "member",
+      "audience": "participant",
       "instruction": "You write for Field Notes. Publish with useSharedApp `action: \"submit\"` into the `articles` collection — `manageCollection`'s `putItems` cannot write here, and returns a PERMISSION_DENIED that names no field. `slug` is the article's URL name AND its document id: lowercase letters, digits and hyphens, starting with a letter or digit, 64 characters at most, and unique. The article is published at /a/field-notes/<slug> and the id is frozen, so choose a name a person could read aloud and never try to change it. `title` and `body` are required; `body` is Markdown and cannot carry images; `summary` is the two lines the index shows; `tags` is comma-separated; `status` is `published`. The caps are UTF-8 BYTES, not characters: title 200, summary 800, body 60000. Do not send `publishedAt` — the server stamps it and it is frozen. Do not send `byUid` — the host fills it in. DO fill in `byline` with the name you want printed: it is drawn under the title on the article page and at the foot of the card in the index, up to 100 bytes. It is a string you type, not an identity the rules check — who published is recorded in `byUid` — so NEVER put an email address in it; that field is drawn to the whole world. Publishing is instant and public: there is no draft in this app, so keep work in progress in drafts/*.md and submit when it is finished. Fix a typo with `action: \"update\"`, passing the article's `slug` as `id` and only the fields that change; never republish. You can only change articles this account published — everybody here is a peer and nobody can reach everybody's work. Withdrawing means deleting, and it cannot be undone. A person at this terminal does all of the same things from the desk at /m/field-notes."
     }
   ]
@@ -181,6 +182,13 @@ here would print every contributor's address beside their article forever.
 article, and may delete it. `slug` and `publishedAt` are absent from `selfUpdate` because they are
 frozen; that is not a policy in the page, it is the rules, and `viewer.can.<cid>.frozen` tells the
 page so.
+
+**Cap every field a writer can send, not only the ones the gate counts.** Publish computes the
+index cost from the fields the `article` block names — title, summary, body, byline — so `tags` is
+capped here for a reason the gate will never state: the desk sends it, the index draws it, and
+`overLong` in the page only checks fields the cap map mentions. Left out, it is the one field where
+a writer can put 900KB, and the index downloads whole records, so ten of those is a page load the
+611,000-byte calculation says nothing about.
 
 `limit.articles` — how many the index reads. Read the index-cost trap before raising it.
 
@@ -1228,7 +1236,10 @@ is accepted by the gate — it is the *page* that stops being correct, not the d
 
 - **`manageCollection`'s `putItems` cannot write here.** `stampField` and `idFrom` together are
   outside what it produces, and the refusal names no field. Creation is `useSharedApp`'s `submit`,
-  correction is `correct`, removal is `withdraw`.
+  correction is `update`, removal is `withdraw`. **The agent's action and the page's method are
+  not spelled the same**: `useSharedApp` exposes `submit` / `update` / `withdraw`, while the page
+  bridge has `submit` / `correct` / `withdraw`. `correct` is not a tool action, and an agent that
+  sends one is refused for naming an action that does not exist rather than for anything it asked.
 - **`viewer.mine` has three states, not two.** `null` means *nobody looked*, not *you have none* —
   read as "none" it takes the controls off the reader's own articles. Draw every row in that state,
   let the rules refuse, and say so on the page; the desk here does all three.
@@ -1246,6 +1257,13 @@ is accepted by the gate — it is the *page* that stops being correct, not the d
 - **`slug` must not be the schema's `primaryKey`.** Publish refuses it: the rules can pin a
   document id but not the value of a field. Keep `id` as the primary key and `slug` as an
   ordinary field that `idFrom` reads.
+- **A brief goes to the tier that WRITES.** `agents[]` entries are projected strictly by
+  `audience` (`agentsFor` filters on equality), and the writers here hold `articles: "participant"`
+  and nothing app-wide — so `audience: "member"` would publish the job to the owner alone and leave
+  every agent signed in as a writer with no standing instruction at all. `participant` publishes to
+  the roster, which is everyone the members list names, the owner included. It also matches what
+  the rules will allow: a member-audience brief on this collection describes a submission
+  `audience: "participant"` refuses.
 - **The index count is a page, not a total.** A public page is handed at most `limit` records and
   is never told how many exist, so "10 articles" in a footer is a claim the page cannot make.
 
