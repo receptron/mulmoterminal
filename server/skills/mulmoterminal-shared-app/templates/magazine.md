@@ -790,6 +790,17 @@ is what draws the controls, so the page does not need to know which door it came
     };
 
     // ---- Rewriting what has been published ----
+    /** The fields `public.submit.articles.validate.required` names.
+     *
+     *  Restated here because no capability carries it, and because the rule it mirrors is WEAKER
+     *  THAN IT SOUNDS: `required` is checked on the update as well as the create, but what it
+     *  checks is `keys().hasAll(required)` — that the field is PRESENT. An empty string is
+     *  present. So the rules will happily accept a published article whose headline is "", and
+     *  the compose form's own check is the only thing standing between a writer and that. It has
+     *  to stand on the rewrite path too, or the guarantee lasts exactly as long as the first
+     *  edit. */
+    var REQUIRED = ["title", "body"];
+
     var EDITABLE = [
       { key: "title", label: "Headline", kind: "text" },
       { key: "summary", label: "Standfirst", kind: "area" },
@@ -962,6 +973,18 @@ is what draws the controls, so the page does not need to know which door it came
           if (now !== was) { changed[f.key] = now; any = true; }
         });
         if (!any) { editing.msg = "Nothing has changed."; editing.bad = false; syncEditor(); return; }
+
+        var emptied = editing.fields
+          .filter(function (f) {
+            return REQUIRED.indexOf(f.key) !== -1 && Object.prototype.hasOwnProperty.call(changed, f.key) && String(changed[f.key]).trim() === "";
+          })
+          .map(function (f) { return labelOf(f.key); });
+        if (emptied.length > 0) {
+          editing.msg = emptied.join(" and ") + " cannot be left empty. Nothing was sent.";
+          editing.bad = true;
+          syncEditor();
+          return;
+        }
 
         var over = overLong(changed);
         if (over.length > 0) { editing.msg = overLongMessage(over); editing.bad = true; syncEditor(); return; }
@@ -1257,6 +1280,13 @@ is accepted by the gate — it is the *page* that stops being correct, not the d
 - **`slug` must not be the schema's `primaryKey`.** Publish refuses it: the rules can pin a
   document id but not the value of a field. Keep `id` as the primary key and `slug` as an
   ordinary field that `idFrom` reads.
+- **`validate.required` is a PRESENCE check, and it is weaker than its name.** The rules apply it
+  to a correction as well as a creation — `validateOk` is on both branches, deliberately, so that a
+  writer cannot drop a required field on the way past — but what it asks is
+  `keys().hasAll(required)`. An empty string is present. So nothing in the declaration stops a
+  published article's headline from being rewritten to `""`, and a page that checks the compose
+  form and not the rewrite form holds the guarantee for exactly one edit. Both forms here refuse a
+  value that is only whitespace.
 - **A brief goes to the tier that WRITES.** `agents[]` entries are projected strictly by
   `audience` (`agentsFor` filters on equality), and the writers here hold `articles: "participant"`
   and nothing app-wide — so `audience: "member"` would publish the job to the owner alone and leave

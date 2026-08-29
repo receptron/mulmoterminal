@@ -315,6 +315,23 @@ describe("magazine.md — the desk", () => {
     expect(document.querySelector("#compose .msg")?.textContent).toContain(`Tags is ${cap + 1} bytes, over the limit of ${cap}`);
   });
 
+  it("refuses to blank a required field on the rewrite path", async () => {
+    // `validate.required` is checked on the update too, but it asks `keys().hasAll(required)` —
+    // presence, not content. An empty string is present, so the rules accept a headline of "".
+    const page = load("views/desk.html");
+    page.tell([MINE], viewerWhoOwns);
+    document.querySelectorAll<HTMLButtonElement>("#list button")[0].click();
+    const headline = document.querySelector<HTMLInputElement>(".editor input");
+    if (headline === null) throw new Error("no headline field");
+    headline.value = "   ";
+    headline.dispatchEvent(new Event("input"));
+    document.querySelector<HTMLButtonElement>(".editor .btn")?.click();
+    await settle();
+
+    expect(page.calls.filter((call) => call.kind === "correct")).toEqual([]);
+    expect(document.querySelector(".editor .msg")?.textContent).toContain("Headline cannot be left empty");
+  });
+
   it("names every field for a screen reader, in both forms", () => {
     // Siblings are not a label relationship. Without `for`, all of these announce as "edit text,
     // blank" — the form reads as five anonymous boxes, and the label is not a click target either.
