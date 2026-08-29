@@ -1153,7 +1153,7 @@ is what draws the controls, so the page does not need to know which door it came
 </script>
 ```
 
-## Why the shape is this way — the nine decisions
+## Why the shape is this way — the ten decisions
 
 ### 1. The owner has to demote themselves, and that is not a workaround
 
@@ -1277,6 +1277,51 @@ is the opposite of the index, which is read by the world and therefore capped. I
 grow past what a desk should download, the answer is the same one the index has: a second
 collection carrying the slug and title alone. Adding `"limit": { "articles": 50 }` to the desk views
 is accepted by the gate — it is the *page* that stops being correct, not the declaration.
+
+### 10. When the writers' page should stop reading the archive
+
+Both desks here are handed every article, and for a magazine of a few writers that is the right
+shape: the page can tell a writer their URL name is taken before it sends anything, and the owner's
+desk is the one place the whole archive is visible to somebody who can act on it.
+
+It stops being right as the archive grows. A writers' page exists to correct what YOU published, and
+handing it every article — bodies included, because a rule cannot project a field away — is a read
+that grows with the app's age to draw a list that does not.
+
+`views[].ownRead` narrows one page's query to the reader's own rows:
+
+```jsonc
+{
+  "id": "write",
+  "audience": "participant",
+  "path": "views/write.html",
+  "collections": ["articles"],
+  "ownRead": ["articles"],
+  "live": ["articles"]
+}
+```
+
+**It is not a permission.** Every article stays as readable as it was — anybody can read the lot at
+`/a/{slug}`. What changes is one page's query, from the whole collection to
+`where(<uidField> == you)`. It is worth being exact about this in the page's own words too, because
+a writer who sees fewer rows will otherwise assume the others were hidden from them.
+
+Three things follow, and the third is why this is a decision rather than a default:
+
+- **The page gets simpler.** With every delivered row already the reader's, there is no `viewer.mine`
+  to consult, no third state to handle, and no per-row ownership test — the trap in this list about
+  `mine` being three-valued stops applying to that page entirely.
+- **`limit` becomes unavailable.** Publish refuses a cap on an own-scoped view: the query already
+  carries a `where`, so ordering it needs a composite index no deployment declares, and the read
+  would fail rather than return fewer rows. It is not needed either — a writer's own rows are
+  bounded by how much they wrote.
+- **The duplicate URL name can no longer be caught before sending.** The page cannot see the names
+  other writers took, so "not in my list" stops meaning "free". Keep the check for the reader's own
+  articles, where it is still true, and let the refusal carry the rest — which is why the message on
+  a failed publish names a taken slug first.
+
+The member desk keeps its whole-collection read: `ownRead` is per view, and the two audiences are
+now different pages rather than one file serving both.
 
 ## Traps
 

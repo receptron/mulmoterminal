@@ -89,7 +89,7 @@
     "@mulmoclaude/markdown-plugin": "^4.1.0",
     "@mulmoclaude/mulmoscript-plugin": "^4.4.0",
     "@mulmoclaude/x-plugin": "^1.0.3",
-    "@receptron/sharedapp": "^0.34.0",
+    "@receptron/sharedapp": "^0.35.0",
     "@receptron/task-scheduler": "^1.0.3",
     "@xterm/addon-canvas": "^0.7.0",
     "@xterm/addon-clipboard": "^0.2.0",
