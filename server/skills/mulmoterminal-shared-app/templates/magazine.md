@@ -536,9 +536,9 @@ is what draws the controls, so the page does not need to know which door it came
       <strong>only what you published</strong>, and that includes whoever set the magazine up.
       Nobody can reach everybody's work. The list below shows everyone's articles — they are public,
       so of course you can read them — but <strong>the controls appear only on your own</strong>.
-      While the host has not yet answered which ones are yours, they appear on every row; press one
-      on somebody else's article and <strong>the rules refuse it</strong>. The list says so when
-      that is the state you are in.</p>
+      While the host is still working out which ones are yours, they appear on <strong>no</strong>
+      row — a control that is offered and always refused is worse than one that arrives a moment
+      late. The list says so when that is the state you are in.</p>
     <p class="note"><strong>The byline is filled in for you</strong> — from the part of your address
       before the <code>@</code>. <strong>Only that name is published; your email address is
       not.</strong> It appears under the headline on the article and at the foot of the card in the
@@ -872,12 +872,21 @@ is what draws the controls, so the page does not need to know which door it came
       return can.correctAny === true || can.withdrawAny === true;
     };
 
-    /** Is this row within reach: by role, or because it is yours? On "nobody looked", true —
-     *  draw it, and let the rules refuse. */
+    /** Is this row within reach: by role, or because it is yours?
+     *
+     *  **On "nobody looked", FALSE.** This used to draw the control anyway and let the rules
+     *  refuse — the argument being that an answer which has not arrived yet should not take a
+     *  control off the reader's own article. In a real magazine it was the wrong way round: every
+     *  row got an enabled Rewrite, including other people's, and pressing one always failed.
+     *
+     *  Both directions are wrong for a moment; only one of them lies. No control until the answer
+     *  arrives is a brief absence that fixes itself — the host re-sends the state when `mine`
+     *  settles. A control that is offered and always refused is a promise the page cannot keep. */
     var reaches = function (id) {
       if (isDesk()) return true;
       var ids = mineIds();
-      return ids === null || ids[id] === true;
+      if (ids === null) return false;
+      return ids[id] === true;
     };
 
     // Deletable? In this app only `withdrawFrom` (your own, from that status): `writerDelete` is
@@ -1060,10 +1069,10 @@ is what draws the controls, so the page does not need to know which door it came
         return;
       }
 
-      // Say the third state out loud, not only in the code: while it holds, the controls are on
-      // every row, which contradicts what the panel above promises.
+      // Say the third state out loud, not only in the code: no controls at all reads as "you have
+      // published nothing", and that is a different statement from "nobody has looked yet".
       if (!isDesk() && mineIds() === null) {
-        list.appendChild(el("p", "note", "The host has not yet said which of these are yours. Until it does the controls appear on every row, but the rules will refuse anything that is not your article."));
+        list.appendChild(el("p", "note", "The host is still working out which of these are yours. Rewrite and Delete are hidden until it does — which does not mean you have none."));
       }
 
       all.forEach(function (r) {
@@ -1288,18 +1297,25 @@ It stops being right as the archive grows. A writers' page exists to correct wha
 handing it every article — bodies included, because a rule cannot project a field away — is a read
 that grows with the app's age to draw a list that does not.
 
-`views[].ownRead` narrows one page's query to the reader's own rows:
+`views[].ownRead` narrows one page's query to the reader's own rows. It is one line on the
+participant view above:
 
-```jsonc
-{
-  "id": "write",
-  "audience": "participant",
-  "path": "views/write.html",
-  "collections": ["articles"],
-  "ownRead": ["articles"],
-  "live": ["articles"]
-}
+```diff
+   {
+     "id": "write",
+     "audience": "participant",
+     "path": "views/desk.html",
+     "collections": ["articles"],
++    "ownRead": ["articles"],
+     "live": ["articles"]
+   }
 ```
+
+**Written as a diff because the rest of the change is a page this template does not ship.** Every
+`path` a declaration names is opened when you deploy, and the operation is refused if the file is
+not there — so a snippet pointing at a `views/write.html` you have not written yet is a deploy that
+fails rather than a shape to copy. Point the participant view at a second file once you have
+written it.
 
 **It is not a permission.** Every article stays as readable as it was — anybody can read the lot at
 `/a/{slug}`. What changes is one page's query, from the whole collection to
@@ -1320,8 +1336,14 @@ Three things follow, and the third is why this is a decision rather than a defau
   articles, where it is still true, and let the refusal carry the rest — which is why the message on
   a failed publish names a taken slug first.
 
-The member desk keeps its whole-collection read: `ownRead` is per view, and the two audiences are
-now different pages rather than one file serving both.
+**And it does need a second file.** The member desk keeps its whole-collection read — `ownRead` is
+per view — so the two audiences stop being able to share one page: `desk.html` above tells the
+reader that the list shows everyone's articles, which is exactly what stops being true on the
+narrowed one. Copy it and take out the three things the narrowed page no longer has a question to
+ask: `viewer.mine`, the third state, and the per-row ownership test. What stays is everything driven
+by `viewer.can` — which fields may be rewritten, and from which status — because "may I edit this"
+is a different question from "is this mine", and only the second one the query has already
+answered.
 
 ## Traps
 
@@ -1331,9 +1353,13 @@ now different pages rather than one file serving both.
   not spelled the same**: `useSharedApp` exposes `submit` / `update` / `withdraw`, while the page
   bridge has `submit` / `correct` / `withdraw`. `correct` is not a tool action, and an agent that
   sends one is refused for naming an action that does not exist rather than for anything it asked.
-- **`viewer.mine` has three states, not two.** `null` means *nobody looked*, not *you have none* —
-  read as "none" it takes the controls off the reader's own articles. Draw every row in that state,
-  let the rules refuse, and say so on the page; the desk here does all three.
+- **`viewer.mine` has three states, not two.** `null` means *nobody looked*, not *you have none*.
+  Keep them apart — but resolve the unknown by drawing NO control, not by drawing them all. Both
+  are wrong for a moment and only one lies: the missing control appears as soon as the host settles
+  `mine` and re-sends the state, whereas an enabled button on somebody else's article fails every
+  time it is pressed. A real magazine shipped it the other way round and that is exactly what it
+  did. Say on the page that the absence is temporary, so it does not read as "you have published
+  nothing".
 - **Do not rebuild an open editor.** State arrives whenever anybody publishes, which is
   indistinguishable from the middle of somebody's sentence. Keeping the typed text is not enough:
   `replaceChildren()` detaches the focused element, so the caret and the undo history go too.

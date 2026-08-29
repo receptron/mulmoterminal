@@ -187,12 +187,14 @@ describe("magazine.md — the desk", () => {
     expect(document.querySelector("#list .note")).toBeNull();
   });
 
-  it("draws them on every row while nobody has looked, and says so", () => {
-    // The third state. Read as "you have none", this takes the controls off the reader's OWN work.
+  it("draws them on NO row while nobody has looked, and says so", () => {
+    // The third state, resolved the safe way round. Drawing them all was shipped once and is what
+    // a writer actually met: an enabled Rewrite on somebody else's article that failed every time.
+    // A control that arrives a moment late is the other kind of wrong, and it does not lie.
     const page = load("views/desk.html");
     page.tell([MINE, THEIRS], viewerUnanswered);
-    expect(buttons("#list button")).toEqual(["Rewrite", "Delete", "Rewrite", "Delete"]);
-    expect(document.querySelector("#list .note")?.textContent).toContain("has not yet said which of these are yours");
+    expect(buttons("#list button")).toEqual([]);
+    expect(document.querySelector("#list .note")?.textContent).toContain("still working out which of these are yours");
   });
 
   it("refuses a URL name that is taken before anything is sent", () => {

@@ -228,6 +228,37 @@ describe("the shared-app templates", () => {
     }
   });
 
+  it("names no page in ANY snippet that the template does not ship", () => {
+    // The check below this one reads the `## app.json` block. What it cannot see is a `path` in a
+    // snippet somewhere in the PROSE — an alternative declaration, a diff showing one key being
+    // added — and those are copied exactly as readily as the main block is.
+    //
+    // A path is not decoration: `planAppViewTiers` OPENS every file a declaration names and refuses
+    // the whole deploy when one is missing. So a snippet pointing at a page the template does not
+    // ship is not a smaller example, it is a declaration whose first deploy fails with the author
+    // holding a file they were never given. That shipped in `magazine.md` (#1917): decision 10
+    // offered `views/write.html`, which exists in no template.
+    //
+    // EVERY fence, not just the json ones, because the snippet that caused this was `jsonc` and its
+    // replacement is a `diff`. The rule is about the string, wherever it is written.
+    for (const file of TEMPLATE_FILES) {
+      const text = readFileSync(path.join(TEMPLATES, file), "utf8");
+      // Only inside fenced blocks: prose may name a file the author is being told to WRITE, which
+      // is the honest way to describe a page the template does not hand over.
+      const fenced = [...text.matchAll(/^```[a-z]*\n([\s\S]*?)\n```/gm)].map(([, body]) => body ?? "").join("\n");
+      const named = [...new Set([...fenced.matchAll(/"path":\s*"([^"]+)"/g)].map(([, value]) => value))];
+      const sections = new Set(
+        text
+          .split("\n")
+          .map((line) => /^#{2,3} (\S+)/.exec(line)?.[1])
+          .filter((heading): heading is string => heading !== undefined),
+      );
+      for (const declared of named) {
+        expect(`${file}: ${declared} ${sections.has(declared) ? "is shown" : "is named but never shown"}`).toBe(`${file}: ${declared} is shown`);
+      }
+    }
+  });
+
   it("every template states the same publish contract, because no feature has one of its own", () => {
     // `protocol` is a FLOOR, and a template is copied VERBATIM — so the key is either in every one
     // of them or it teaches that declaring it is optional decoration.
