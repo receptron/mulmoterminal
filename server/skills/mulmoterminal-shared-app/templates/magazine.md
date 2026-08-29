@@ -554,6 +554,11 @@ is what draws the controls, so the page does not need to know which door it came
 
   <div class="panel">
     <h2>Articles</h2>
+    <!-- Why a refused deletion is reported HERE as well as on its row: a row is
+         rebuilt on every render, and an element inserted after the fact is not
+         announced. This node is always present and only its text changes, which is
+         what a live region needs. -->
+    <p class="msg bad" id="listStatus" role="status" aria-live="polite" hidden></p>
     <div id="list"><p class="note">Loading…</p></div>
   </div>
 </div>
@@ -564,6 +569,7 @@ is what draws the controls, so the page does not need to know which door it came
     var compose = document.getElementById("compose");
     var composeNote = document.getElementById("composeNote");
     var list = document.getElementById("list");
+    var listStatus = document.getElementById("listStatus");
     var latest = null;
     var built = false;
     // KEYED BY ARTICLE ID, WITH NO PROTOTYPE. A URL name is lowercase letters, digits and
@@ -591,6 +597,20 @@ is what draws the controls, so the page does not need to know which door it came
      *  control nested inside the label) a screen reader announces "edit text, blank" for every
      *  one of these, so the whole form reads as five anonymous boxes. It also costs the click
      *  target — pressing the word "Headline" should put the caret in the field. */
+    /** A line that says what happened. **It has to be a live region.**
+     *
+     *  Focus stays on the button that was pressed while only the text of a `<p>` changes, so
+     *  without one a screen reader says nothing at all — not the required-field refusal, not the
+     *  permission error, not that the article went out. A notice only sighted people receive is
+     *  not a notice. `polite` because none of them should interrupt typing.
+     */
+    var status = function (cls) {
+      var node = el("p", cls || "msg");
+      node.setAttribute("role", "status");
+      node.setAttribute("aria-live", "polite");
+      return node;
+    };
+
     var seq = 0;
     var field = function (labelText, node) {
       seq += 1;
@@ -713,7 +733,7 @@ is what draws the controls, so the page does not need to know which door it came
       actions.appendChild(post);
       compose.appendChild(actions);
 
-      var msg = el("p", "msg");
+      var msg = status();
       compose.appendChild(msg);
       var say = function (text, bad) {
         msg.textContent = text || "";
@@ -951,7 +971,7 @@ is what draws the controls, so the page does not need to know which door it came
       actions.appendChild(save);
       actions.appendChild(cancel);
       box.appendChild(actions);
-      var msg = el("p", "msg");
+      var msg = status();
       box.appendChild(msg);
 
       editing.node = box;
@@ -1031,6 +1051,9 @@ is what draws the controls, so the page does not need to know which door it came
       all.forEach(function (r) { living[r.id] = true; });
       Object.keys(arming).forEach(function (id) { if (living[id] !== true) delete arming[id]; });
       Object.keys(failed).forEach(function (id) { if (living[id] !== true) delete failed[id]; });
+      var notices = Object.keys(failed).map(function (id) { return failed[id]; });
+      listStatus.textContent = notices.join(" ");
+      listStatus.hidden = notices.length === 0;
 
       if (!all.length) {
         list.appendChild(el("p", "note", "Nothing published yet."));

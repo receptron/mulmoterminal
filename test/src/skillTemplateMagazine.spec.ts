@@ -332,6 +332,29 @@ describe("magazine.md — the desk", () => {
     expect(document.querySelector(".editor .msg")?.textContent).toContain("Headline cannot be left empty");
   });
 
+  it("announces what happened, rather than only showing it", async () => {
+    // Focus stays on the button that was pressed while the text of a <p> changes. Without a live
+    // region a screen reader says nothing — not the refusal, not that the article went out.
+    const page = load("views/desk.html");
+    page.tell([MINE], viewerWhoOwns);
+
+    const composeMsg = document.querySelector("#compose .msg");
+    expect(composeMsg?.getAttribute("role")).toBe("status");
+    expect(composeMsg?.getAttribute("aria-live")).toBe("polite");
+
+    document.querySelectorAll<HTMLButtonElement>("#list button")[0].click();
+    const editorMsg = document.querySelector(".editor .msg");
+    expect(editorMsg?.getAttribute("role")).toBe("status");
+    expect(editorMsg?.getAttribute("aria-live")).toBe("polite");
+
+    // The deletion refusal is the same problem with an extra turn: its row is REBUILT, and an
+    // element inserted after the fact is not announced. So it also lands in a node that persists.
+    const listStatus = document.getElementById("listStatus");
+    expect(listStatus?.getAttribute("role")).toBe("status");
+    expect(listStatus?.getAttribute("aria-live")).toBe("polite");
+    expect(listStatus?.hidden).toBe(true);
+  });
+
   it("names every field for a screen reader, in both forms", () => {
     // Siblings are not a label relationship. Without `for`, all of these announce as "edit text,
     // blank" — the form reads as five anonymous boxes, and the label is not a click target either.
