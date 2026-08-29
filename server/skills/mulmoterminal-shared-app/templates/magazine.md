@@ -163,8 +163,15 @@ rules can pin a document id but cannot pin the value of a field.
 `stampField: "publishedAt"` — the server's clock, written by the rules as `request.time`. It has
 to be listed in `createFields` (the rules refuse any key outside that list, and they require the
 record to carry the stamp), but **the page and the agent must never send a value**: the host fills
-it in. The index sorts on it, and the page receives it as a `…Z` string whose lexical order is
-chronological.
+it in. The page receives it as a `…Z` string whose lexical order is chronological.
+
+**It is also what makes `limit` mean "the latest".** The window is built in the query, as
+`orderBy(stampField, "desc")` followed by `limit(rows)` — a cap on its own would take the first N
+by document id, which for a collection of articles is N slugs in alphabetical order and never the
+new one. That is why the stamp cannot be a field the author picks: a record missing the ordered
+field is not sorted last by Firestore, it is dropped from the query entirely. The page sorts what
+it was handed as well, which is not the same job — delivery order is not guaranteed, least of all
+on a subscription.
 
 `uidField: "byUid"` — the publisher's uid, filled in by the host for the same reason. A uid and
 not an email, because every field of this collection is readable by the world, and `emailField`
@@ -301,6 +308,10 @@ a list of cards that open one article each.
       return when.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
     };
 
+    // The host already handed these over newest-first — the window is `orderBy(publishedAt,
+    // "desc")` in the query, which is what makes `limit` mean the LATEST ten rather than ten
+    // slugs in alphabetical order. This sorts them again because the ORDER THEY ARRIVE IN is not
+    // promised, which matters the moment anything watches rather than reads once.
     var newestFirst = function (rows) {
       return rows.slice().sort(function (left, right) {
         return String(right && right.publishedAt || "").localeCompare(String(left && left.publishedAt || ""));
