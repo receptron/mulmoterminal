@@ -79,7 +79,8 @@ Nine shapes are written out in full — declaration, schemas, and the reasoning 
   is for — the platform draws the article page, so the app declares which fields are the title, the
   body and the byline, and `idFrom: "slug"` makes the writer's chosen name the document id and
   freezes it. It is the only sample that states a `protocol` of its own, the only one whose `limit`
-  is a COST publish computes in bytes, and the one that explains why the owner has to hold
+  is a COST — publish works it out in bytes and refuses the declaration when it is too large — and
+  the one that explains why the owner has to hold
   `participant` on their own collection — `audience` forces `submitOnly`, `submitOnly` closes the
   writer branch, and an owner who skips it cannot publish at all. Read it before any app where a
   record is something a stranger is meant to sit and read.
