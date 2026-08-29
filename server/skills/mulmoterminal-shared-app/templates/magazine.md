@@ -100,8 +100,9 @@ the more surprising one to discover you do not have.
     {
       "id": "write",
       "audience": "participant",
-      "path": "views/desk.html",
+      "path": "views/write.html",
       "collections": ["articles"],
+      "ownRead": ["articles"],
       "live": ["articles"]
     }
   ],
@@ -425,12 +426,15 @@ a list of cards that open one article each.
 </script>
 ```
 
-## views/desk.html — where the writers work
+## views/desk.html — the whole archive, for whoever set the magazine up
 
-One file, declared twice: as the `member` view (the owner reaches it at `/m/field-notes`) and as
-the `participant` view (a writer reaches it at `/p/field-notes`). It is the same page because the
-two audiences can do the same things here — which is the point of this shape — and `viewer.can`
-is what draws the controls, so the page does not need to know which door it came through.
+The `member` view, at `/m/field-notes`. It is handed **every** article, which makes it the one page
+where the archive is visible to somebody who can act on it — and the reason it needs the ownership
+machinery below: what it is handed and what its reader may change are different sets.
+
+The writers' page is a second file (`views/write.html`), because `ownRead` narrows what that one is
+handed and this page's own words — "the list shows everyone's articles" — stop being true there.
+Both are driven by `viewer.can`, so neither needs to know which door it came through.
 
 ```html
 <style>
@@ -850,9 +854,10 @@ is what draws the controls, so the page does not need to know which door it came
      *  same way round — the rows themselves, read as the reader.
      *
      *  **There is a THIRD state.** `null` is not "you have none", it is **"nobody looked"** — the
-     *  host has not answered, or cannot. Read as "none", it takes the controls off your OWN
-     *  articles. So on `null` every row is drawn (the rules refuse the wrong ones) and the list
-     *  says why. */
+     *  host has not answered, or cannot. The two must not be collapsed — but the way to resolve the
+     *  unknown is to draw NO control and say the absence is temporary (see `reaches`). Drawing them
+     *  all instead was tried, and what it produced was an enabled Rewrite on somebody else's
+     *  article that failed every time it was pressed. */
     var mineIds = function () {
       var mine = (latest && latest.viewer && latest.viewer.mine) || {};
       if (!Object.prototype.hasOwnProperty.call(mine, "articles")) return null;
@@ -896,8 +901,9 @@ is what draws the controls, so the page does not need to know which door it came
       var from = can.withdrawFrom || [];
       return from.indexOf(status) !== -1;
     };
-    /** A refusal, with this reader's boundary added. Controls are only drawn on your own articles,
-     *  so arriving here means a conflict — or a press made **before `viewer.mine` had answered**. */
+    /** A refusal, with this reader's boundary added. Controls are drawn only on articles
+     *  `viewer.mine` has confirmed are the reader's, so arriving here is not an ownership mistake:
+     *  it is the record moving underneath them — deleted or corrected in another tab. */
     var refusalNote = function (can, error) {
       var own = can.correctAny !== true;
       return (error || "unknown") + (own ? " (only articles you published)" : "");
@@ -1162,6 +1168,711 @@ is what draws the controls, so the page does not need to know which door it came
 </script>
 ```
 
+## views/write.html — what YOU published, for a writer
+
+The `participant` view, at `/p/field-notes`. Its declaration carries `ownRead: ["articles"]`, so
+the query behind it is narrowed to `where(byUid == you)` before anything comes back.
+
+**Compare it against `desk.html` above and the difference is what the key buys.** This page has no
+`viewer.mine`, no third state and no per-row ownership test, because the read already answered the
+question those exist to answer. What it keeps is everything driven by `viewer.can` — the query
+narrowed WHO, not WHAT may be changed.
+
+It also loses something, and the page says so rather than pretending otherwise: it cannot check a
+URL name against the ones other writers took, because it does not hold their articles. It still
+catches the reader's own, and the refusal on a failed publish names a taken name first.
+
+```html
+<style>
+  * { box-sizing: border-box; }
+  :root {
+    --hue: 115;
+    --main:  oklch(47% .09 var(--hue));
+    --line:  oklch(47% .09 var(--hue) / .16);
+    --muted: oklch(53% .02 var(--hue));
+    --fill:  oklch(96% .018 var(--hue));
+    --ink:   oklch(23% .015 var(--hue));
+    --paper: oklch(99.4% .007 85);
+    --bad:   oklch(48% .16 25);
+  }
+  html { min-height: 100%; color: var(--ink); color-scheme: light; background: var(--paper); background-image: linear-gradient(180deg, oklch(98.6% .01 var(--hue)) 0, oklch(96.4% .012 var(--hue)) 100%); background-attachment: fixed; }
+  body {
+    margin: 0;
+    padding: clamp(16px, 3.5vw, 36px) clamp(14px, 3.5vw, 26px) 72px;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.55;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; display: grid; gap: 16px; }
+  .panel {
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 24px; padding: clamp(18px, 3.4vw, 28px);
+    box-shadow: 0 18px 50px oklch(30% .05 var(--hue) / .08);
+  }
+  .eyebrow {
+    font-size: 12px; font-weight: 800; letter-spacing: .16em;
+    text-transform: uppercase; color: var(--main); margin: 0 0 8px;
+  }
+  h1 { margin: 0; font-size: clamp(22px, 4.4vw, 30px); line-height: 1.15; letter-spacing: -.03em; font-weight: 780; }
+  h2 { margin: 0 0 14px; font-size: 17px; letter-spacing: -.015em; font-weight: 780; }
+  .note { margin: 10px 0 0; color: var(--muted); font-size: 13.5px; }
+
+  label { display: block; font-size: 12.5px; font-weight: 750; color: var(--muted); margin: 0 0 5px; }
+  .field { margin: 0 0 14px; }
+  input[type=text], textarea {
+    width: 100%; background: #fff; color: var(--ink);
+    border: 1px solid var(--line); border-radius: 12px;
+    padding: 10px 12px; font: inherit; font-size: 15px;
+  }
+  textarea { resize: vertical; line-height: 1.55; }
+  textarea.body { min-height: 220px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13.5px; }
+  input:focus, textarea:focus { outline: 2px solid var(--main); outline-offset: 1px; border-color: transparent; }
+
+  .btn {
+    background: var(--main); color: var(--paper);
+    border: 0; border-radius: 12px; padding: 10px 18px;
+    font: inherit; font-weight: 750; font-size: 14px;
+    min-height: 38px; touch-action: manipulation; cursor: pointer;
+  }
+  .btn.ghost { background: var(--fill); color: var(--main); }
+  .btn.danger { background: oklch(52% .16 25); color: oklch(99% .005 25); }
+  .btn.small { padding: 6px 12px; font-size: 12.5px; min-height: 32px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+  .msg { margin: 12px 0 0; font-size: 13.5px; font-weight: 700; color: var(--main); }
+  .msg.bad { color: var(--bad); }
+
+  .row {
+    display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start;
+    border: 1px solid var(--line); border-radius: 14px;
+    padding: 12px 14px; margin: 0 0 10px; background: var(--paper);
+  }
+  .row:last-child { margin-bottom: 0; }
+  .row.editing { border-radius: 14px 14px 0 0; margin-bottom: 0; }
+  .row .t { font-weight: 780; font-size: 15px; letter-spacing: -.01em; }
+  .row .m { margin-top: 4px; font-size: 12.5px; color: var(--muted); }
+  .row .m.bad { color: var(--bad); font-weight: 700; }
+  .row .side { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
+  .confirm { font-size: 12.5px; font-weight: 700; color: var(--bad); margin-right: 4px; }
+
+  .editor {
+    border: 1px solid var(--line); border-top: 0;
+    border-radius: 0 0 14px 14px; background: var(--fill);
+    padding: 14px 14px 12px; margin: 0 0 10px;
+  }
+  .editor input[type=text], .editor textarea { background: var(--paper); }
+
+  @media (max-width: 680px) {
+    .row { grid-template-columns: 1fr; }
+    .row .side { justify-content: flex-start; }
+    .btn { width: 100%; }
+    .btn.small { width: auto; }
+  }
+</style>
+
+<div class="wrap">
+  <div class="panel">
+    <p class="eyebrow">Field Notes</p>
+    <h1>Your articles</h1>
+    <p class="note">Publishing puts the article on <strong>/a/field-notes</strong> immediately, for
+      everybody. There are no drafts here, and <strong>the only way to withdraw one is to delete
+      it</strong>, which cannot be undone.</p>
+    <p class="note">A published article can be <strong>rewritten in place</strong> — headline,
+      standfirst, body, tags. <strong>Its URL name and its date do not change</strong>: the rules
+      froze both when it was created, so a link that once resolved goes on resolving. An article
+      that needs a different name is a different article.</p>
+    <p class="note">Writers here are <strong>equals</strong>. You can edit and delete
+      <strong>only what you published</strong>, and that includes whoever set the magazine up.
+      Nobody can reach everybody's work.</p>
+    <p class="note"><strong>Only your own articles are listed here</strong> — the others are not
+      hidden from you, they were never <strong>fetched</strong>: this page declares
+      <code>ownRead</code>, so the query to Firestore is narrowed to your rows before anything is
+      sent back. Everyone's work is public and readable by anybody at
+      <strong>/a/field-notes</strong>.</p>
+    <p class="note"><strong>The byline is filled in for you</strong> — from the part of your address
+      before the <code>@</code>. <strong>Only that name is published; your email address is
+      not.</strong> It appears under the headline on the article and at the foot of the card in the
+      index. <strong>It is a default, not an identity</strong>: you can change it here or later, and
+      the rules never check it. What does record who published an article is <code>byUid</code>,
+      which is never drawn.</p>
+  </div>
+
+  <div class="panel" id="compose">
+    <h2>New article</h2>
+    <p class="note" id="composeNote">Loading…</p>
+  </div>
+
+  <div class="panel">
+    <h2>Articles</h2>
+    <!-- Why a refused deletion is reported HERE as well as on its row: a row is
+         rebuilt on every render, and an element inserted after the fact is not
+         announced. This node is always present and only its text changes, which is
+         what a live region needs. -->
+    <p class="msg bad" id="listStatus" role="status" aria-live="polite" hidden></p>
+    <div id="list"><p class="note">Loading…</p></div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var view = window.__MC_APP_VIEW;
+    var compose = document.getElementById("compose");
+    var composeNote = document.getElementById("composeNote");
+    var list = document.getElementById("list");
+    var listStatus = document.getElementById("listStatus");
+    var latest = null;
+    var built = false;
+    // KEYED BY ARTICLE ID, WITH NO PROTOTYPE. A URL name is lowercase letters, digits and
+    // hyphens — which makes `constructor`, `toString` and `hasOwnProperty` all valid article
+    // names. A plain object hands those back off Object.prototype, so before anything is ever
+    // stored, `arming["constructor"]` is a function: truthy. That article would draw its delete
+    // confirmation already armed, and a refusal message under a deletion nobody attempted.
+    var arming = Object.create(null); // id -> its delete confirmation is showing
+    var failed = Object.create(null); // id -> why its deletion was refused, until the row is pressed again
+    // The article being rewritten, and what has been typed into it. `list` is rebuilt whenever
+    // state arrives, so anything held inside it is thrown away the moment somebody else publishes.
+    var editing = null; // { id, values, saving, msg, bad, node, nodes, keys, record, can, fields }
+
+    var el = function (tag, cls, text) {
+      var n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text != null) n.textContent = text;
+      return n;
+    };
+
+    /** A control and its label, ASSOCIATED — one `for`, one `id`, generated here because the
+     *  fields are built in script and have no ids of their own.
+     *
+     *  Putting a `<label>` next to a control is not a label relationship: without `for` (or the
+     *  control nested inside the label) a screen reader announces "edit text, blank" for every
+     *  one of these, so the whole form reads as five anonymous boxes. It also costs the click
+     *  target — pressing the word "Headline" should put the caret in the field. */
+    /** A line that says what happened. **It has to be a live region.**
+     *
+     *  Focus stays on the button that was pressed while only the text of a `<p>` changes, so
+     *  without one a screen reader says nothing at all — not the required-field refusal, not the
+     *  permission error, not that the article went out. A notice only sighted people receive is
+     *  not a notice. `polite` because none of them should interrupt typing.
+     */
+    var status = function (cls) {
+      var node = el("p", cls || "msg");
+      node.setAttribute("role", "status");
+      node.setAttribute("aria-live", "polite");
+      return node;
+    };
+
+    var seq = 0;
+    var field = function (labelText, node) {
+      seq += 1;
+      node.id = "field-" + seq;
+      var wrap = el("div", "field");
+      var label = el("label", null, labelText);
+      label.htmlFor = node.id;
+      wrap.appendChild(label);
+      wrap.appendChild(node);
+      return wrap;
+    };
+
+    // `publishedAt` is a server Timestamp, and it reaches the page as a `…Z` string.
+    var when = function (v) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?/.exec(String(v || ""));
+      if (!m) return "";
+      return m[1] + "-" + m[2] + "-" + m[3] + (m[4] ? " " + m[4] + ":" + m[5] : "");
+    };
+
+    // A URL name out of a headline. Anything that is not a-z, 0-9 or a hyphen is dropped, so a
+    // headline with no Latin letters in it produces nothing and the writer is asked for a name.
+    var slugify = function (text) {
+      return String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 64).replace(/-+$/, "");
+    };
+
+    var capOf = function () {
+      return (latest && latest.viewer && latest.viewer.can && latest.viewer.can.articles) || {};
+    };
+    var rows = function () {
+      return ((latest && latest.data && latest.data.articles) || []).slice().sort(function (a, b) {
+        return String(b.publishedAt || "").localeCompare(String(a.publishedAt || ""));
+      });
+    };
+
+    var LABELS = { title: "Headline", slug: "URL name", summary: "Standfirst", body: "Body", tags: "Tags", byline: "Byline" };
+    var labelOf = function (key) {
+      return Object.prototype.hasOwnProperty.call(LABELS, key) ? LABELS[key] : key;
+    };
+
+    /** The default byline: the part of the signed-in address before the `@`.
+     *
+     *  **Do not keep a table here.** The obvious next step is a map of address to display name so
+     *  that a byline cannot be faked — and it is a second roster, kept by hand, beside the one in
+     *  `app.json`. Nobody owns keeping the two in step, so it drifts, and the guarantee it offers
+     *  reaches only the addresses somebody remembered to add.
+     *
+     *  **The guarantee is not available anyway.** No rule looks at `byline`, and `selfUpdate` lists
+     *  it, so whatever the form does at submission time can be undone by the writer a second later.
+     *  So fill the field in and let it be edited, and make the page's own words true instead.
+     *  Who published an article is `byUid`, which the host fills in and the page never draws.
+     *
+     *  The address itself is not published: only the part before the `@` is, and this page is
+     *  reachable only by the roster. */
+    var bylineOf = function () {
+      var me = String((latest && latest.viewer && latest.viewer.me) || "");
+      var at = me.indexOf("@");
+      return at > 0 ? me.slice(0, at) : "";
+    };
+
+    // The one bound the rules do not also make. The host refuses an over-long value too, but
+    // saying it here lets the refusal **name the field and the number**.
+    var overLong = function (values) {
+      var caps = capOf().maxBytes || {};
+      var over = [];
+      Object.keys(values).forEach(function (key) {
+        if (!Object.prototype.hasOwnProperty.call(caps, key)) return;
+        var cap = caps[key];
+        if (typeof cap !== "number") return;
+        var bytes = new TextEncoder().encode(String(values[key])).length;
+        if (bytes > cap) over.push(labelOf(key) + " is " + bytes + " bytes, over the limit of " + cap);
+      });
+      return over;
+    };
+    var overLongMessage = function (over) {
+      return over.join(". ") + ". That is UTF-8 bytes rather than characters, and a non-Latin character is usually 3. Nothing was sent.";
+    };
+
+    // ---- New article (built ONCE; rebuilding it throws away what is half-typed) ----
+    var buildCompose = function () {
+      compose.replaceChildren();
+      compose.appendChild(el("h2", null, "New article"));
+
+      var mk = field;
+      var input = function (ph) {
+        var n = document.createElement("input");
+        n.type = "text";
+        n.placeholder = ph || "";
+        return n;
+      };
+
+      var title = input("Why our deploys got slower");
+      var summary = document.createElement("textarea");
+      summary.rows = 2;
+      var tags = input("deploys, ci");
+      var body = document.createElement("textarea");
+      body.className = "body";
+      body.placeholder = "Markdown: headings, **bold**, `code`, quotes, lists and\n[links](https://example.com). Images cannot be stored.";
+
+      var slug = document.createElement("input");
+      slug.type = "text";
+      slug.placeholder = "why-our-deploys-got-slower";
+      var slugTouched = false;
+      slug.oninput = function () { slugTouched = true; };
+      title.oninput = function () { if (!slugTouched) slug.value = slugify(title.value); };
+
+      compose.appendChild(mk("Headline", title));
+      compose.appendChild(mk("URL name — becomes /a/field-notes/<name>, and can never be changed", slug));
+      compose.appendChild(mk("Standfirst — the two lines the index shows", summary));
+      compose.appendChild(mk("Tags — comma separated", tags));
+
+      var byline = input("your name");
+      byline.value = bylineOf();
+      compose.appendChild(mk("Byline — printed under the headline and in the index. Editable (empty means unsigned)", byline));
+
+      compose.appendChild(mk("Body (Markdown)", body));
+
+      var actions = el("div", "actions");
+      var post = el("button", "btn", "Publish");
+      post.type = "button";
+      actions.appendChild(post);
+      compose.appendChild(actions);
+
+      var msg = status();
+      compose.appendChild(msg);
+      var say = function (text, bad) {
+        msg.textContent = text || "";
+        msg.className = bad ? "msg bad" : "msg";
+      };
+
+      post.onclick = function () {
+        if (!(title.value || "").trim()) { say("A headline is required.", true); return; }
+        if (!(body.value || "").trim()) { say("There is no body.", true); return; }
+        var name = slugify(slug.value || title.value);
+        if (!name) { say("Choose a URL name (lowercase letters, digits, hyphens). One cannot be made from this headline.", true); return; }
+        // The URL name IS the document id, so the same one cannot be created twice — but **this
+        // page cannot say so in advance**. It holds only the reader's own articles, so "not in my
+        // list" has stopped meaning "free", and a check that claimed otherwise would be lying about
+        // names it cannot see. What it CAN still say is that the reader took this one themselves,
+        // so it says that and nothing more. The rest is found out by sending (see the refusal).
+        if (rows().some(function (r) { return r.id === name; })) {
+          say("You already published an article at the URL name " + name + ". Pick another. Nothing was sent.", true);
+          return;
+        }
+
+        var written = {
+          slug: name,
+          title: title.value.trim(),
+          summary: (summary.value || "").trim(),
+          tags: (tags.value || "").trim(),
+          byline: (byline.value || "").trim(),
+          body: body.value
+          // `publishedAt` and `byUid` are NOT sent. The host and the rules fill in and freeze both.
+        };
+        var over = overLong(written);
+        if (over.length > 0) { say(overLongMessage(over), true); return; }
+
+        post.disabled = true;
+        say("");
+        view.submit("articles", written).then(function (res) {
+          post.disabled = false;
+          if (res && res.ok) {
+            say("Published. It is readable at /a/field-notes/" + name + ".");
+            // FIELD BY FIELD, and only where the box still holds what was just published. Only
+            // the button is disabled while the write is in flight, so the writer may already
+            // have started the next article in these very boxes — and emptying them
+            // unconditionally destroys it with **nowhere to recover it from**, since this app
+            // has no drafts. A box somebody has moved on from is left exactly as they left it.
+            // Compared through THE SAME TRANSFORM THAT PRODUCED THE SENT VALUE — the one-line
+            // fields were trimmed on the way out, the body was not. Trimming the body here
+            // instead would erase a newer draft that differs from the published one only in
+            // leading or trailing whitespace, and in Markdown that is not nothing: a trailing
+            // blank line ends a list, and leading spaces open a code block.
+            var clearIfSent = function (node, sent, trimmed) {
+              if ((trimmed ? String(node.value).trim() : String(node.value)) !== String(sent)) return;
+              node.value = "";
+            };
+            clearIfSent(title, written.title, true);
+            clearIfSent(summary, written.summary, true);
+            clearIfSent(tags, written.tags, true);
+            clearIfSent(body, written.body, false);
+            // The URL name is compared through `slugify`, because the box holds what was typed
+            // and `name` is what that resolved to.
+            if (slugify(slug.value) === name) { slug.value = ""; slugTouched = false; }
+            return;
+          }
+          if (res && res.error === "cancelled") { say(""); return; }
+          say("Could not publish: " + ((res && res.error) || "unknown") + ". Suspect the URL name " + name + " first — this page does not hold the other writers' articles, so a name one of them already took cannot be seen from here until you send. Another name will work. Otherwise: only people on the roster may publish, so if you were invited just now the app may not have been published since.", true);
+        });
+      };
+    };
+
+    // There is no capability that says "may create" — creating is not among them. So the form is
+    // drawn for everybody who can open this page, which is only ever the roster, and a refusal is
+    // reported with its reason.
+    var renderCompose = function () {
+      if (built) return;
+      buildCompose();
+      built = true;
+    };
+
+    // ---- Rewriting what has been published ----
+    /** The fields `public.submit.articles.validate.required` names.
+     *
+     *  Restated here because no capability carries it, and because the rule it mirrors is WEAKER
+     *  THAN IT SOUNDS: `required` is checked on the update as well as the create, but what it
+     *  checks is `keys().hasAll(required)` — that the field is PRESENT. An empty string is
+     *  present. So the rules will happily accept a published article whose headline is "", and
+     *  the compose form's own check is the only thing standing between a writer and that. It has
+     *  to stand on the rewrite path too, or the guarantee lasts exactly as long as the first
+     *  edit. */
+    var REQUIRED = ["title", "body"];
+
+    var EDITABLE = [
+      { key: "title", label: "Headline", kind: "text" },
+      { key: "summary", label: "Standfirst", kind: "area" },
+      { key: "tags", label: "Tags (comma separated)", kind: "text" },
+      { key: "byline", label: "Byline", kind: "text" },
+      { key: "body", label: "Body (Markdown)", kind: "body" }
+    ];
+
+    // Who may rewrite what. The question is asked of the CAPABILITY, never of the audience.
+    // `can.frozen` is what NOBODY may write (slug, publishedAt, byUid, status). `correctFrom` is
+    // your own article, per status. `correctAny` — reaching everybody's — is held by nobody in
+    // this app; it is read anyway so that the page stays correct the day somebody is made editor.
+    var editableFields = function (can, status) {
+      var frozen = can.frozen || [];
+      var reachable = EDITABLE.filter(function (f) { return frozen.indexOf(f.key) === -1; });
+      if (can.correctAny === true) return reachable;
+      var byStatus = can.correctFrom || {};
+      var allowed = Object.prototype.hasOwnProperty.call(byStatus, status) ? byStatus[status] || [] : [];
+      return reachable.filter(function (f) { return allowed.indexOf(f.key) !== -1; });
+    };
+
+    /** **There is no ownership test on this page, and that is the point of `ownRead`.**
+     *
+     *  The desk at `/m/` has one: it is handed every article, so it asks `viewer.mine` which of
+     *  them are the reader's, and has to keep "you have none" apart from "nobody looked yet".
+     *
+     *  Here the query already answered it. `ownRead` narrows the read to `where(<uidField> ==
+     *  you)`, so **every row that arrives is the reader's**. Asking again would be a second answer
+     *  to a settled question — and a second answer that DISAGREES for the moment before
+     *  `viewer.mine` lands, which is exactly the window where the desk had to be careful.
+     *
+     *  **What may be changed is a different question, and it is still asked.** Which fields, and
+     *  from which status, comes from `viewer.can` below — the query narrowed who, not what. */
+
+    // Deletable? In this app only `withdrawFrom` (your own, from that status): `writerDelete` is
+    // not declared, so `withdrawAny` is held by nobody. Nobody reaching everybody is the design.
+    var mayWithdraw = function (can, status) {
+      if (can.withdrawAny === true) return true;
+      var from = can.withdrawFrom || [];
+      return from.indexOf(status) !== -1;
+    };
+    /** A refusal. Every row here is the reader's, so this is never about ownership: it is the
+     *  record moving underneath them — deleted or corrected in another tab — or the write itself. */
+    var refusalNote = function (can, error) {
+      return error || "unknown";
+    };
+
+    // Three parts that keep somebody's hands on the keyboard when state arrives mid-sentence.
+    // **The editor is not rebuilt.** Rebuilding keeps the text (it is in `editing.values`) but
+    // loses **the caret and the undo history** — and state arrives when anybody publishes, which
+    // is indistinguishable from the middle of a sentence. `editorFor` reuses the node, `syncEditor`
+    // changes only state, and `focusMemo` / `restoreFocus` carry the caret: `replaceChildren()`
+    // detaches the focused element, so re-appending the same node is not enough on its own.
+    var syncEditor = function () {
+      if (editing === null || !editing.node) return;
+      var saving = editing.saving === true;
+      Object.keys(editing.nodes).forEach(function (key) { editing.nodes[key].disabled = saving; });
+      editing.saveBtn.textContent = saving ? "Saving…" : "Save";
+      editing.saveBtn.disabled = saving;
+      editing.cancelBtn.disabled = saving;
+      editing.msgNode.textContent = editing.msg || "";
+      editing.msgNode.className = editing.bad ? "msg bad" : "msg";
+      editing.msgNode.hidden = !editing.msg;
+    };
+
+    var focusMemo = function () {
+      if (editing === null || !editing.nodes) return null;
+      var active = document.activeElement;
+      var found = null;
+      Object.keys(editing.nodes).forEach(function (key) { if (editing.nodes[key] === active) found = key; });
+      if (found === null) return null;
+      return { key: found, start: active.selectionStart, end: active.selectionEnd };
+    };
+
+    var restoreFocus = function (memo) {
+      if (memo === null || editing === null || !editing.nodes) return;
+      var node = editing.nodes[memo.key];
+      if (!node || node.disabled) return;
+      node.focus();
+      if (typeof memo.start === "number" && typeof node.setSelectionRange === "function") node.setSelectionRange(memo.start, memo.end);
+    };
+
+    /** Reuse, or build. Rebuilt only when the set of writable fields changes — a status can move,
+     *  and `correctFrom` moves with it. */
+    var editorFor = function (record, fields, can) {
+      var keys = fields.map(function (f) { return f.key; }).join(",");
+      // The record is replaced every time. What is reused is the FIELDS, not the baseline they are
+      // compared against — against a stale record, a field somebody else corrected reads as
+      // unchanged and is dropped from the write.
+      editing.record = record;
+      editing.can = can;
+      editing.fields = fields;
+      if (editing.node && editing.keys === keys) {
+        syncEditor();
+        return editing.node;
+      }
+
+      var box = el("div", "editor");
+      editing.nodes = {};
+      editing.keys = keys;
+      fields.forEach(function (f) {
+        var node;
+        if (f.kind === "text") {
+          node = document.createElement("input");
+          node.type = "text";
+        } else {
+          node = document.createElement("textarea");
+          if (f.kind === "body") node.className = "body";
+          else node.rows = 2;
+        }
+        node.value = editing.values[f.key] != null ? editing.values[f.key] : String(record[f.key] || "");
+        node.oninput = function () { editing.values[f.key] = node.value; };
+        editing.nodes[f.key] = node;
+        box.appendChild(field(f.label, node));
+      });
+
+      var actions = el("div", "actions");
+      var save = el("button", "btn small", "Save");
+      save.type = "button";
+      var cancel = el("button", "btn ghost small", "Cancel");
+      cancel.type = "button";
+      actions.appendChild(save);
+      actions.appendChild(cancel);
+      box.appendChild(actions);
+      var msg = status();
+      box.appendChild(msg);
+
+      editing.node = box;
+      editing.saveBtn = save;
+      editing.cancelBtn = cancel;
+      editing.msgNode = msg;
+
+      cancel.onclick = function () { editing = null; renderList(); };
+
+      save.onclick = function () {
+        var record = editing.record;
+        var can = editing.can;
+        // Only what changed. Sending everything rewrites fields nobody touched.
+        var changed = {};
+        var any = false;
+        editing.fields.forEach(function (f) {
+          var was = String(record[f.key] || "");
+          var now = editing.values[f.key] != null ? editing.values[f.key] : was;
+          if (now !== was) { changed[f.key] = now; any = true; }
+        });
+        if (!any) { editing.msg = "Nothing has changed."; editing.bad = false; syncEditor(); return; }
+
+        var emptied = editing.fields
+          .filter(function (f) {
+            return REQUIRED.indexOf(f.key) !== -1 && Object.prototype.hasOwnProperty.call(changed, f.key) && String(changed[f.key]).trim() === "";
+          })
+          .map(function (f) { return labelOf(f.key); });
+        if (emptied.length > 0) {
+          editing.msg = emptied.join(" and ") + " cannot be left empty. Nothing was sent.";
+          editing.bad = true;
+          syncEditor();
+          return;
+        }
+
+        var over = overLong(changed);
+        if (over.length > 0) { editing.msg = overLongMessage(over); editing.bad = true; syncEditor(); return; }
+
+        editing.saving = true;
+        editing.msg = "";
+        syncEditor();
+        // WHICH EDITOR THIS ANSWER BELONGS TO. Only the fields being saved are disabled — the
+        // rows are still live, so pressing Rewrite on another article during the write replaces
+        // `editing` with a different one. A completion read against the module variable then
+        // closes somebody else's half-written editor on success, or reports this request's
+        // refusal into it. Captured here, and anything but this session is dropped: the editor
+        // it belonged to is gone, and there is nowhere for the answer to go.
+        var session = editing;
+        view.correct("articles", record.id, changed).then(function (res) {
+          if (editing !== session) return;
+          if (res && res.ok) { editing = null; renderList(); return; }
+          editing.saving = false;
+          if (res && res.error === "cancelled") { editing.msg = ""; syncEditor(); return; }
+          editing.msg = "Could not save: " + refusalNote(can, res && res.error) + ". Nothing was written.";
+          editing.bad = true;
+          syncEditor();
+        });
+      };
+
+      syncEditor();
+      return box;
+    };
+
+    // ---- The list ----
+    var renderList = function () {
+      var can = capOf();
+      var all = rows();
+      // Taken before anything is detached; put back after the editor is appended, at the end.
+      var memo = focusMemo();
+      list.replaceChildren();
+
+      // The article being rewritten may be gone (its author deleted it).
+      if (editing !== null && !all.some(function (r) { return r.id === editing.id; })) editing = null;
+
+      // Clear the "are you sure?" of an article that no longer exists. Left behind, it reappears
+      // open on whatever is published under that URL name next.
+      var living = Object.create(null);
+      all.forEach(function (r) { living[r.id] = true; });
+      Object.keys(arming).forEach(function (id) { if (living[id] !== true) delete arming[id]; });
+      Object.keys(failed).forEach(function (id) { if (living[id] !== true) delete failed[id]; });
+      var notices = Object.keys(failed).map(function (id) { return failed[id]; });
+      listStatus.textContent = notices.join(" ");
+      listStatus.hidden = notices.length === 0;
+
+      if (!all.length) {
+        list.appendChild(el("p", "note", "You have not published anything yet."));
+        return;
+      }
+
+      all.forEach(function (r) {
+        var row = el("div", "row");
+        var main = el("div");
+        main.appendChild(el("div", "t", r.title || r.id));
+        var bits = [];
+        if (r.publishedAt) bits.push(when(r.publishedAt));
+        bits.push(r.id);
+        if (r.tags) bits.push(r.tags);
+        main.appendChild(el("div", "m", bits.join("  ·  ")));
+        if (failed[r.id]) main.appendChild(el("div", "m bad", failed[r.id]));
+        row.appendChild(main);
+
+        var side = el("div", "side");
+        var fields = editableFields(can, r.status);
+        var open = editing !== null && editing.id === r.id;
+
+        if (fields.length > 0) {
+          var edit = el("button", "btn ghost small", open ? "Close" : "Rewrite");
+          edit.type = "button";
+          edit.onclick = function () {
+            // One at a time. Two open editors are two half-written articles.
+            editing = open ? null : { id: r.id, values: {}, saving: false, msg: "", bad: false };
+            renderList();
+          };
+          side.appendChild(edit);
+        }
+
+        if (mayWithdraw(can, r.status)) {
+          if (arming[r.id]) {
+            side.appendChild(el("span", "confirm", "Deleting this cannot be undone. Sure?"));
+            var yes = el("button", "btn danger small", "Delete");
+            yes.type = "button";
+            yes.onclick = function () {
+              yes.disabled = true;
+              view.withdraw("articles", r.id).then(function (res) {
+                delete arming[r.id];
+                // Into `failed` and then re-rendered, NOT appended to `main`. That node belongs
+                // to the render this click came from, and any state arriving in the meantime has
+                // already replaced it — appending to it puts the refusal in a detached element,
+                // so the deletion looks as though it silently worked.
+                if (!res || !res.ok) {
+                  if (!res || res.error !== "cancelled") failed[r.id] = "Could not delete: " + refusalNote(can, res && res.error);
+                  renderList();
+                  return;
+                }
+                renderList();
+              });
+            };
+            var no = el("button", "btn ghost small", "Keep");
+            no.type = "button";
+            no.onclick = function () { delete arming[r.id]; renderList(); };
+            side.appendChild(yes);
+            side.appendChild(no);
+          } else {
+            var del = el("button", "btn ghost small", "Delete");
+            del.type = "button";
+            del.onclick = function () { delete failed[r.id]; arming[r.id] = true; renderList(); };
+            side.appendChild(del);
+          }
+        }
+
+        row.appendChild(side);
+        if (open) row.className = "row editing";
+        list.appendChild(row);
+        if (open) list.appendChild(editorFor(r, fields, can));
+      });
+
+      restoreFocus(memo);
+    };
+
+    if (!view) {
+      composeNote.textContent = "This page only runs inside the host. Open it at /p/field-notes.";
+      return;
+    }
+
+    view.onState(function (data, viewer) {
+      latest = { data: data || {}, viewer: viewer || {} };
+      renderCompose();
+      renderList();
+    });
+    // OUTSIDE `onState`. Called from inside it, it is never called at all.
+    view.ready();
+  })();
+</script>
+```
+
 ## Why the shape is this way — the ten decisions
 
 ### 1. The owner has to demote themselves, and that is not a workaround
@@ -1287,63 +1998,37 @@ grow past what a desk should download, the answer is the same one the index has:
 collection carrying the slug and title alone. Adding `"limit": { "articles": 50 }` to the desk views
 is accepted by the gate — it is the *page* that stops being correct, not the declaration.
 
-### 10. When the writers' page should stop reading the archive
+### 10. The writers' page reads only its own, and the desk reads everything
 
-Both desks here are handed every article, and for a magazine of a few writers that is the right
-shape: the page can tell a writer their URL name is taken before it sends anything, and the owner's
-desk is the one place the whole archive is visible to somebody who can act on it.
+Two pages, one collection, two queries. `views[].ownRead` on the participant view narrows its read
+to the reader's rows; the member view has no such key and is handed the archive whole.
 
-It stops being right as the archive grows. A writers' page exists to correct what YOU published, and
-handing it every article — bodies included, because a rule cannot project a field away — is a read
-that grows with the app's age to draw a list that does not.
+**It is not a permission.** Every article stays as readable as it was — anybody at all can read the
+lot at `/a/field-notes`, signed out. What changes is one page's QUERY. That distinction is worth
+spending a sentence on in the page's own words too, which `write.html` does: a writer who sees
+fewer rows will otherwise assume the rest were hidden from them.
 
-`views[].ownRead` narrows one page's query to the reader's own rows. It is one line on the
-participant view above:
+**Why the writers' page wants it.** That page exists to correct what YOU published. Handing it every
+article — bodies included, because a rule cannot project a field away — is a read that grows with
+the app's age in order to draw a list that does not. The desk is the opposite case and keeps the
+whole read on purpose: it is the one place the archive is visible to somebody who can act on it.
 
-```diff
-   {
-     "id": "write",
-     "audience": "participant",
-     "path": "views/desk.html",
-     "collections": ["articles"],
-+    "ownRead": ["articles"],
-     "live": ["articles"]
-   }
-```
+Three things follow, and they are why this is a decision rather than a default:
 
-**Written as a diff because the rest of the change is a page this template does not ship.** Every
-`path` a declaration names is opened when you deploy, and the operation is refused if the file is
-not there — so a snippet pointing at a `views/write.html` you have not written yet is a deploy that
-fails rather than a shape to copy. Point the participant view at a second file once you have
-written it.
+- **The page gets simpler, not more complicated.** With every delivered row already the reader's,
+  `viewer.mine` has nothing left to answer — no third state, no per-row test. The trap below about
+  `mine` being three-valued applies to `desk.html` and not to `write.html` at all.
+- **`limit` becomes unavailable on that view.** Publish refuses a cap on an own-scoped read: the
+  query already carries a `where`, so ordering it as well needs a composite index no deployment
+  declares, and the read would fail rather than return fewer rows. It is not needed either — a
+  writer's own rows are bounded by how much they wrote.
+- **The duplicate URL name can no longer be caught before sending.** "Not in my list" stops meaning
+  "free", because the list is no longer everyone's. Keep the check for the reader's own articles,
+  where it is still true, and let the refusal carry the rest.
 
-**It is not a permission.** Every article stays as readable as it was — anybody can read the lot at
-`/a/{slug}`. What changes is one page's query, from the whole collection to
-`where(<uidField> == you)`. It is worth being exact about this in the page's own words too, because
-a writer who sees fewer rows will otherwise assume the others were hidden from them.
-
-Three things follow, and the third is why this is a decision rather than a default:
-
-- **The page gets simpler.** With every delivered row already the reader's, there is no `viewer.mine`
-  to consult, no third state to handle, and no per-row ownership test — the trap in this list about
-  `mine` being three-valued stops applying to that page entirely.
-- **`limit` becomes unavailable.** Publish refuses a cap on an own-scoped view: the query already
-  carries a `where`, so ordering it needs a composite index no deployment declares, and the read
-  would fail rather than return fewer rows. It is not needed either — a writer's own rows are
-  bounded by how much they wrote.
-- **The duplicate URL name can no longer be caught before sending.** The page cannot see the names
-  other writers took, so "not in my list" stops meaning "free". Keep the check for the reader's own
-  articles, where it is still true, and let the refusal carry the rest — which is why the message on
-  a failed publish names a taken slug first.
-
-**And it does need a second file.** The member desk keeps its whole-collection read — `ownRead` is
-per view — so the two audiences stop being able to share one page: `desk.html` above tells the
-reader that the list shows everyone's articles, which is exactly what stops being true on the
-narrowed one. Copy it and take out the three things the narrowed page no longer has a question to
-ask: `viewer.mine`, the third state, and the per-row ownership test. What stays is everything driven
-by `viewer.can` — which fields may be rewritten, and from which status — because "may I edit this"
-is a different question from "is this mine", and only the second one the query has already
-answered.
+**The two pages stop being one file.** `desk.html` tells its reader the list shows everyone's
+articles, and that is exactly the sentence that stops being true once the query is narrowed. A
+shared file would have to hedge both ways in every paragraph; two files each say one true thing.
 
 ## Traps
 

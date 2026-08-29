@@ -454,6 +454,58 @@ describe("magazine.md — the desk", () => {
   });
 });
 
+describe("magazine.md — the writers' page", () => {
+  it("is narrowed by the DECLARATION, which is what lets the page skip the ownership test", () => {
+    // The binding this page rests on. Take `ownRead` off the view and every assertion below still
+    // passes while the shipped app shows a writer everyone's articles with every control enabled —
+    // which is the failure this template was corrected for. So the declaration is asserted here,
+    // beside the page that assumes it, rather than left to the publish gate that cannot know why.
+    const [, json] = /^## app\.json\n\n```json\n([\s\S]*?)\n```/m.exec(template) ?? [];
+    const app = JSON.parse(json ?? "{}") as { views?: { path?: string; audience?: string; ownRead?: string[]; collections?: string[] }[] };
+    const writers = (app.views ?? []).find((view) => view.path === "views/write.html");
+    expect(`views/write.html: ${writers === undefined ? "not declared" : "declared"}`).toBe("views/write.html: declared");
+    expect(writers?.audience).toBe("participant");
+    expect(writers?.ownRead).toEqual(["articles"]);
+
+    // And the member desk is NOT narrowed — it is the one page handed the whole archive.
+    const desk = (app.views ?? []).find((view) => view.path === "views/desk.html");
+    expect(desk?.audience).toBe("member");
+    expect(desk?.ownRead).toBeUndefined();
+  });
+
+  it("acts on every row it is handed, without asking viewer.mine anything", () => {
+    // The whole of what `ownRead` buys. The read is narrowed to `where(byUid == you)`, so every
+    // delivered row is the reader's — and a page that tested it again would be giving a second
+    // answer to a settled question, one that disagrees for the moment before `mine` lands.
+    const page = load("views/write.html");
+    page.tell([MINE, THEIRS], { me: "ada@example.com", can: CAN });
+    expect(buttons("#list button")).toEqual(["Rewrite", "Delete", "Rewrite", "Delete"]);
+    // …and no third-state notice, because there is no third state on this page.
+    expect(document.querySelector("#list .note")).toBeNull();
+  });
+
+  it("says the others were never fetched, rather than hidden", () => {
+    const page = load("views/write.html");
+    page.tell([MINE], { me: "ada@example.com", can: CAN });
+    expect(document.body.textContent).toContain("never");
+    expect(document.body.textContent).toContain("ownRead");
+  });
+
+  it("claims only what a narrowed list can know about a taken URL name", () => {
+    // It can still catch the reader's own. What it must not do is say a name is free.
+    const page = load("views/write.html");
+    page.tell([MINE], { me: "ada@example.com", can: CAN });
+    const inputs = document.querySelectorAll<HTMLInputElement>("#compose input");
+    const areas = document.querySelectorAll<HTMLTextAreaElement>("#compose textarea");
+    inputs[0].value = "again";
+    inputs[1].value = MINE.id;
+    areas[1].value = "text";
+    document.querySelector<HTMLButtonElement>("#compose .btn")?.click();
+    expect(page.calls.filter((call) => call.kind === "submit")).toEqual([]);
+    expect(document.querySelector("#compose .msg")?.textContent).toContain(`You already published an article at the URL name ${MINE.id}`);
+  });
+});
+
 describe("magazine.md — the index", () => {
   it("counts what it was handed rather than claiming a total", () => {
     const page = load("views/home.html");
