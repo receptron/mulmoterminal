@@ -238,6 +238,26 @@ describe("magazine.md — the desk", () => {
     expect(inputs[1].value).toBe("");
   });
 
+  it("keeps a body that differs from the published one only in whitespace", async () => {
+    // The body is sent untrimmed, so it has to be compared untrimmed. Markdown makes the
+    // difference real: a trailing blank line closes a list, leading spaces open a code block.
+    const page = load("views/desk.html");
+    page.tell([], viewerWhoOwns);
+    const inputs = document.querySelectorAll<HTMLInputElement>("#compose input");
+    const areas = document.querySelectorAll<HTMLTextAreaElement>("#compose textarea");
+    inputs[0].value = "A piece";
+    areas[1].value = "- one\n- two";
+    document.querySelector<HTMLButtonElement>("#compose .btn")?.click();
+
+    // Still in flight: the writer starts the next draft from the same text plus a blank line.
+    areas[1].value = "- one\n- two\n";
+    await settle();
+
+    expect(areas[1].value).toBe("- one\n- two\n");
+    // The headline WAS what was sent, so that box is cleared — the two halves are independent.
+    expect(inputs[0].value).toBe("");
+  });
+
   it("survives an article whose URL name is a property of Object.prototype", () => {
     // `constructor`, `toString` and `hasOwnProperty` are all lowercase-and-letters, so all three
     // are valid URL names. Off a plain object they come back as inherited FUNCTIONS — truthy — so

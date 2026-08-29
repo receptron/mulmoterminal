@@ -748,14 +748,19 @@ is what draws the controls, so the page does not need to know which door it came
             // have started the next article in these very boxes — and emptying them
             // unconditionally destroys it with **nowhere to recover it from**, since this app
             // has no drafts. A box somebody has moved on from is left exactly as they left it.
-            var clearIfSent = function (node, sent) {
-              if (String(node.value).trim() !== String(sent).trim()) return;
+            // Compared through THE SAME TRANSFORM THAT PRODUCED THE SENT VALUE — the one-line
+            // fields were trimmed on the way out, the body was not. Trimming the body here
+            // instead would erase a newer draft that differs from the published one only in
+            // leading or trailing whitespace, and in Markdown that is not nothing: a trailing
+            // blank line ends a list, and leading spaces open a code block.
+            var clearIfSent = function (node, sent, trimmed) {
+              if ((trimmed ? String(node.value).trim() : String(node.value)) !== String(sent)) return;
               node.value = "";
             };
-            clearIfSent(title, written.title);
-            clearIfSent(summary, written.summary);
-            clearIfSent(tags, written.tags);
-            clearIfSent(body, written.body);
+            clearIfSent(title, written.title, true);
+            clearIfSent(summary, written.summary, true);
+            clearIfSent(tags, written.tags, true);
+            clearIfSent(body, written.body, false);
             // The URL name is compared through `slugify`, because the box holds what was typed
             // and `name` is what that resolved to.
             if (slugify(slug.value) === name) { slug.value = ""; slugTouched = false; }
