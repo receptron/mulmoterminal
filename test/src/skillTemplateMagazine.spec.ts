@@ -238,6 +238,25 @@ describe("magazine.md — the desk", () => {
     expect(inputs[1].value).toBe("");
   });
 
+  it("survives an article whose URL name is a property of Object.prototype", () => {
+    // `constructor`, `toString` and `hasOwnProperty` are all lowercase-and-letters, so all three
+    // are valid URL names. Off a plain object they come back as inherited FUNCTIONS — truthy — so
+    // the row would draw an armed delete confirmation and a refusal for a deletion nobody tried.
+    const cursed: Row[] = ["constructor", "toString", "hasOwnProperty"].map((id, index) => ({
+      id,
+      title: `Article ${id}`,
+      body: "text",
+      status: "published",
+      publishedAt: `2026-03-0${index + 1}T09:00:00.000000000Z`,
+    }));
+    const page = load("views/desk.html");
+    page.tell(cursed, { me: "ada@example.com", can: CAN, mine: { articles: cursed.map(({ id }) => ({ id })) } });
+
+    expect(document.querySelector("#list .m.bad")).toBeNull();
+    expect(document.querySelector("#list .confirm")).toBeNull();
+    expect(buttons("#list button")).toEqual(["Rewrite", "Delete", "Rewrite", "Delete", "Rewrite", "Delete"]);
+  });
+
   it("names every field for a screen reader, in both forms", () => {
     // Siblings are not a label relationship. Without `for`, all of these announce as "edit text,
     // blank" — the form reads as five anonymous boxes, and the label is not a click target either.

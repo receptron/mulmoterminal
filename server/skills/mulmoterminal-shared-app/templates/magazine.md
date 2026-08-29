@@ -547,8 +547,13 @@ is what draws the controls, so the page does not need to know which door it came
     var list = document.getElementById("list");
     var latest = null;
     var built = false;
-    var arming = {};    // id -> its delete confirmation is showing
-    var failed = {};    // id -> why its deletion was refused, kept until the row is pressed again
+    // KEYED BY ARTICLE ID, WITH NO PROTOTYPE. A URL name is lowercase letters, digits and
+    // hyphens — which makes `constructor`, `toString` and `hasOwnProperty` all valid article
+    // names. A plain object hands those back off Object.prototype, so before anything is ever
+    // stored, `arming["constructor"]` is a function: truthy. That article would draw its delete
+    // confirmation already armed, and a refusal message under a deletion nobody attempted.
+    var arming = Object.create(null); // id -> its delete confirmation is showing
+    var failed = Object.create(null); // id -> why its deletion was refused, until the row is pressed again
     // The article being rewritten, and what has been typed into it. `list` is rebuilt whenever
     // state arrives, so anything held inside it is thrown away the moment somebody else publishes.
     var editing = null; // { id, values, saving, msg, bad, node, nodes, keys, record, can, fields }
@@ -798,7 +803,7 @@ is what draws the controls, so the page does not need to know which door it came
       if (!Object.prototype.hasOwnProperty.call(mine, "articles")) return null;
       var rows = mine.articles;
       if (!Array.isArray(rows)) return null;
-      var ids = {};
+      var ids = Object.create(null);
       rows.forEach(function (r) {
         if (r && typeof r.id === "string") ids[r.id] = true;
       });
@@ -975,7 +980,7 @@ is what draws the controls, so the page does not need to know which door it came
 
       // Clear the "are you sure?" of an article that no longer exists. Left behind, it reappears
       // open on whatever is published under that URL name next.
-      var living = {};
+      var living = Object.create(null);
       all.forEach(function (r) { living[r.id] = true; });
       Object.keys(arming).forEach(function (id) { if (living[id] !== true) delete arming[id]; });
       Object.keys(failed).forEach(function (id) { if (living[id] !== true) delete failed[id]; });
