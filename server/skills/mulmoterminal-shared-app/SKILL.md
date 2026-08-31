@@ -1262,8 +1262,10 @@ Then `manageSharedApp` with `action: "publish"`.
 Three things are worth asking and the rest are not:
 
 - **their email address**, if you do not have it — nothing works without it in `members`;
-- **whether people outside the roster should be able to answer** — it decides whether there is a
-  `public` block at all. If yes, ask the second half too, because it is the one that decides whether
+- **whether people outside the roster should be able to answer** — it decides `public.enabled`,
+  which is the switch that opens the app. NOT whether there is a `public` block: an invite-only app
+  whose pages write records declares `public.submit` and stays closed, so the block being there is
+  no answer to this question. If yes, ask the second half too, because it is the one that decides whether
   they actually answer: **are they asked to sign in?** `verifiedEmail` means a Google sign-in and a
   recorded address — the app can write to them, and one row per account. `anonymous` means no screen
   at all and no address, at the price of one row per browser rather than per person (see the `auth`

@@ -98,6 +98,24 @@ describe("manageSharedApp, the tool", () => {
     expect(confirmDoc).toContain("ASK THE USER BEFORE SENDING IT");
   });
 
+  it("tells the agent that the SWITCH opens the app, not the `public` block (#1926)", () => {
+    // Raised in review of the fix for #1926: the result line learned the three states while the
+    // contract an agent reads BEFORE calling still said a `public` block opens the app. That
+    // contradiction goes wrong in both directions — an agent omitting `enabled: true` from an app
+    // the user asked to be public, and one warning that an invite-only app is exposed.
+    //
+    // The one-liner carries it too: an agent that reads only the tool list must not conclude that
+    // writing a `public` block is what publishes to the world.
+    expect(String(MANAGE_SHARED_APP.description)).toContain("`public.enabled: true`");
+    const prompt = String(MANAGE_SHARED_APP.prompt);
+    expect(prompt).toContain("THE SWITCH IS WHAT OPENS IT, not the block");
+    expect(prompt).toContain("`public.submit`");
+    // `unpublish` takes the WHOLE block, and the rules authorize a member's write out of it — so on
+    // an invite-only app it stops the pages saving. The contract used to say only that anonymous
+    // access closes.
+    expect(prompt).toMatch(/unpublish also stops those pages saving/);
+  });
+
   it("answers an unknown action with the ones that exist", async () => {
     expect(await manageSharedApp(makeTempDir("mt-shared-tool-"), { action: "ship" })).toContain("init, fork, check, preview, invite, publish, unpublish");
     expect(await manageSharedApp(makeTempDir("mt-shared-tool-"), {})).toContain("init, fork, check, preview, invite, publish, unpublish");
