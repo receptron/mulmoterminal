@@ -28,6 +28,7 @@ import {
 } from "../backends/sharedApp/declare.js";
 import { isRecord } from "../../common/isRecord.js";
 import { MULMOSERVER_ORIGIN } from "../../common/firebaseConfig.js";
+import type { PublicFace } from "../../common/sharedAppPublicFace.js";
 import { manifestKey } from "../backends/sharedApp/manifestWrite.js";
 import { serializeBy } from "../backends/sharedApp/serialize.js";
 
@@ -161,15 +162,42 @@ export function pageNote(memberPages: readonly string[], participantPages: reado
   return lines;
 }
 
+/** Whether the app anyone can reach is open, in the three states the rules actually have.
+ *
+ *  TWO states was the bug (#1926): this read the EXISTENCE of a `public` block and called it open,
+ *  so an invite-only app was told it was "OPEN to anonymous visitors" while `public.enabled` sat
+ *  unset and mulmoserver refused every anonymous read. The author cannot check it from here — that
+ *  needs reading Firestore — so a wrong sentence stops the work it is reporting on.
+ *
+ *  The middle state has to be its own sentence rather than folded into "not open", because an
+ *  invite-only app that writes records from its members' pages MUST declare `public.submit` (the
+ *  package projects it to the member tier without consulting `public.enabled`). The author who did
+ *  that correctly is the one who was alarmed, and telling them only "not open" leaves the block
+ *  they are looking at unexplained.
+ *
+ *  Exported for the spec beside this file: these are three sentences an author reads instead of
+ *  checking Firestore, so what they SAY is the contract. */
+export function openNote(face: PublicFace, slug: string | undefined): string {
+  switch (face) {
+    case "open":
+      return `The app is now OPEN to anonymous visitors${at(slug)}.`;
+    case "declared":
+      return (
+        "The app is NOT open to anonymous visitors — app.json declares a `public` block but `public.enabled` is not true, so the schemas are readable only by the roster. " +
+        "That is a normal shape rather than an oversight: a members' page that writes records needs its collection declared under `public.submit`, and declaring one opens nothing on its own."
+      );
+    case "none":
+      return "The app is NOT open to anonymous visitors — app.json declares no `public` block, so the schemas are readable only by the roster.";
+  }
+}
+
 async function narratePublish(root: string, confirm: boolean): Promise<string> {
   const result = await publishSharedApp(root, { confirm });
   if (!result.ok) return result.problems.join("\n");
   const plural = result.cids.length === 1 ? "" : "s";
   return [
     `Published apps/${result.aid}: wrote ${result.cids.length} collection${plural} (${result.cids.join(", ")}).`,
-    result.publicOpen
-      ? `The app is now OPEN to anonymous visitors${at(result.slug)}.`
-      : "The app is NOT open to anonymous visitors — app.json declares no `public` block, so the schemas are readable only by the roster.",
+    openNote(result.publicFace, result.slug),
     ...pageNote(result.memberPages, result.participantPages, result.slug),
     ...warningNote(result.warnings),
     ...recordNote(result.recordIssues, result.recordIssuesCapped),

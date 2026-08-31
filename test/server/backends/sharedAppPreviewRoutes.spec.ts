@@ -123,7 +123,7 @@ describe("shared app preview routes", () => {
       aid: "a",
       submit: { bookings: { createFields: ["slot"] } },
       pages: [],
-      publicOpen: true,
+      publicFace: "open",
       fromLiveApp: false,
       generatedForm: false,
       datasets: { "public:public": { bookings: [] } },

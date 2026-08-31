@@ -33,7 +33,7 @@ const magazine = (over: Record<string, unknown> = {}) => ({
     submit: { articles: { createFields: ["slug", "title", "body"] } },
     articleCid: "articles",
     pages: [{ id: "public", html: PAGE, audience: "public" }],
-    publicOpen: true,
+    publicFace: "open",
     fromLiveApp: false,
     generatedForm: false,
     datasets: { "public:public": { articles: [] } },

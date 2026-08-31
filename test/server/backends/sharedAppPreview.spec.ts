@@ -231,14 +231,14 @@ describe("shared app preview", () => {
     // the PROJECTION's answer, and drawing from the declaration instead is how "it all showed up on
     // my machine" happens.
     expect(result.ok && result.config.read).toEqual(["bookings"]);
-    expect(result.ok && result.publicOpen).toBe(true);
+    expect(result.ok && result.publicFace).toBe("declared");
   });
 
   it("is a normal outcome for an app with no public block — it just is not open", async () => {
     const result = await previewSharedApp(root, stamp);
 
     expect(result.ok).toBe(true);
-    expect(result.ok && result.publicOpen).toBe(false);
+    expect(result.ok && result.publicFace).toBe("none");
   });
 
   it("needs no slug — the one irreversible write out of a shared namespace stays publish's", async () => {

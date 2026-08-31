@@ -43,7 +43,7 @@ const payload = (over: Record<string, unknown> = {}) => ({
     aid: "aid-1",
     submit: { bookings: { createFields: ["slot", "requesterName"] } },
     pages: [{ id: "public", html: PAGE, audience: "public", viewer: PUBLIC_VIEWER }],
-    publicOpen: true,
+    publicFace: "open",
     fromLiveApp: false,
     generatedForm: false,
     datasets: { "public:public": { bookings: [] } },

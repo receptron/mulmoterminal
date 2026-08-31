@@ -7,6 +7,7 @@
 //
 // Design: `plans/feat-shared-app-preview.md`.
 import type { IntentKind, Viewer } from "@receptron/sharedapp/view";
+import type { PublicFace } from "./sharedAppPublicFace.js";
 
 /** Who a page was written for. Three audiences, three DOCUMENTS with three sets of rules — never
  *  one page shown three ways. Reading them as interchangeable is how a page written for the front
@@ -116,9 +117,10 @@ export interface SharedAppPreview {
   articleCid?: string;
   /** Every page this publish would put live, public first. */
   pages: PreviewPage[];
-  /** Whether this publish would leave the app open to anonymous visitors. False is normal: an app
-   *  with no `public` block is one only its roster ever sees. */
-  publicOpen: boolean;
+  /** How open this publish would leave the app — see {@link PublicFace}. Anything but `open` is
+   *  normal: an app whose `public.enabled` is not true is one only its roster ever sees, and it may
+   *  still carry a `public` block for its members' pages to submit through. */
+  publicFace: PublicFace;
   /** Whether there was a live `apps/{aid}` to project from. Said out loud because the projection
    *  DEPENDS on it — keys publish does not own are carried forward from the live document, so a
    *  preview computed without one is the projection of a FIRST publish, not of the next one. */

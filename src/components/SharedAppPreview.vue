@@ -632,7 +632,7 @@ async function copyLog(): Promise<void> {
       cwd: props.cwd,
       page: page.value?.id ?? null,
       audience: page.value?.audience ?? null,
-      publicOpen: payload.value?.publicOpen === true,
+      publicFace: payload.value?.publicFace ?? "none",
       fromLiveApp: payload.value?.fromLiveApp === true,
     },
     log,

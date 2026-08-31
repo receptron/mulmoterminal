@@ -7,11 +7,17 @@
 // The wire shape itself lives in `common/sharedAppPreview.ts`, decided by both ends.
 import type { Viewer, ViewCapability } from "@receptron/sharedapp/view";
 import { isRecord } from "../../common/isRecord";
+import type { PublicFace } from "../../common/sharedAppPublicFace";
 import type { PreviewAudience, PreviewDataset, PreviewForm, PreviewFormField, PreviewPage, SharedAppPreview } from "../../common/sharedAppPreview";
 
 /** The payload, narrowed rather than asserted. Every field has a floor, because a pane that threw
  *  on an unexpected shape would report a server it could not read as an app that will not publish —
  *  two very different things to be told while you are trying to fix a page. */
+/** The face, narrowed to the three the type names. An unknown value falls to the CLOSED end: a
+ *  header that says "roster only" about an app that is open is a diagnostic to correct, while the
+ *  reverse is the alarm #1926 was filed about. */
+const asPublicFace = (value: unknown): PublicFace => (value === "open" || value === "declared" ? value : "none");
+
 export function asPayload(value: unknown): SharedAppPreview | null {
   if (!isRecord(value)) return null;
   return {
@@ -22,7 +28,10 @@ export function asPayload(value: unknown): SharedAppPreview | null {
     // shape that must refuse an `open` rather than one that accidentally matches nothing.
     ...(typeof value.articleCid === "string" && value.articleCid !== "" ? { articleCid: value.articleCid } : {}),
     pages: Array.isArray(value.pages) ? value.pages.flatMap(asPage) : [],
-    publicOpen: value.publicOpen === true,
+    // Narrowed to the three the type names, and an unknown value falls to the CLOSED end: a header
+    // that says "roster only" about an app that is open is a diagnostic to correct, while the
+    // reverse is the alarm #1926 was filed about.
+    publicFace: asPublicFace(value.publicFace),
     fromLiveApp: value.fromLiveApp === true,
     generatedForm: value.generatedForm === true,
     formInputs: asFormInputs(value.formInputs),

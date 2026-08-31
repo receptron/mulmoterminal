@@ -35,6 +35,7 @@
 // and `plans/feat-shared-app-view-diagnostics.md` (why the facts do not reach the author today).
 import type { IntentKind, ViewNoticeCode } from "@receptron/sharedapp/view";
 import type { PreviewAudience } from "../../common/sharedAppPreview";
+import type { PublicFace } from "../../common/sharedAppPublicFace";
 import { explainRefusal, NOTICES, quoteForReport } from "../../common/sharedAppViewVocabulary";
 
 /** How many events are kept. Older ones are dropped, and the block SAYS how many — a list that
@@ -179,7 +180,7 @@ export interface PreviewLogHeader {
   cwd: string | null;
   page: string | null;
   audience: PreviewAudience | null;
-  publicOpen: boolean;
+  publicFace: PublicFace;
   fromLiveApp: boolean;
 }
 
@@ -258,9 +259,20 @@ const lineFor = (entry: PreviewLogEntry): string[] => {
   }
 };
 
+/** How the header says the app's public face, in the reader's terms rather than the field's. The
+ *  middle line names the SWITCH, because "a `public` block exists" is precisely the thing that is
+ *  not the question. */
+const ENTRANCE: Record<PublicFace, string> = {
+  open: "public entrance OPEN",
+  declared: "roster only — `public` declared, `public.enabled` not on",
+  none: "roster only",
+};
+
 const headerLines = (header: PreviewLogHeader): string[] => {
   const where = header.cwd === null ? "no directory" : foldHome(header.cwd);
-  const entrance = header.publicOpen ? "public entrance OPEN" : "roster only";
+  // Three states, because the middle one is what an invite-only app that writes records looks
+  // like, and calling it "public entrance OPEN" is what #1926 was filed about.
+  const entrance = ENTRANCE[header.publicFace];
   const before = header.fromLiveApp ? "published before" : "never published";
   const page = header.page === null ? "no page selected" : `page '${header.page}' (${header.audience ?? "public"})`;
   return [

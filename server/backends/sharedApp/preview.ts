@@ -35,6 +35,7 @@ import { planAppViewTiers, type TierPlan } from "./appViews.js";
 import { publicFormOf, type PublicForm } from "./publicForm.js";
 import { declaredView, readAppViewFile } from "./publicView.js";
 import { isRecord } from "../../../common/isRecord.js";
+import { publicFaceOf } from "../../../common/sharedAppPublicFace.js";
 // Both from `/view`, which is where the PARENT's vocabulary lives — and where the read-back has to
 // be: the root entry reaches the compiler, and the compiler imports core's server half at runtime.
 import { ownRowsFor, projectedWritesOf, PUBLIC_WRITE_TIER, viewerFor, writableFields, type Viewer } from "@receptron/sharedapp/view";
@@ -559,7 +560,7 @@ export async function previewSharedApp(root: string, opts: SharedAppOptions = {}
     form,
     writes,
     pages,
-    publicOpen: face.public !== undefined,
+    publicFace: publicFaceOf(face.public),
     fromLiveApp: existingApp !== null,
     generatedForm: publicHtml === null && Object.keys(form).length > 0,
     formInputs,

@@ -24,7 +24,7 @@ const header: PreviewLogHeader = {
   cwd: "/Users/someone/git/rooms",
   page: "book",
   audience: "public",
-  publicOpen: true,
+  publicFace: "open",
   fromLiveApp: false,
 };
 

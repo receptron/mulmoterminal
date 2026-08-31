@@ -80,7 +80,7 @@ async function respondPreview(req: Request, res: Response): Promise<void> {
     submit: result.submit,
     ...(result.articleCid === undefined ? {} : { articleCid: result.articleCid }),
     pages: result.pages,
-    publicOpen: result.publicOpen,
+    publicFace: result.publicFace,
     fromLiveApp: result.fromLiveApp,
     generatedForm: result.generatedForm,
     formInputs: result.formInputs,

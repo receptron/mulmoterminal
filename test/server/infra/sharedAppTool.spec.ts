@@ -11,6 +11,7 @@ import {
   checkKeyNote,
   checkRecordNote,
   manageSharedApp,
+  openNote,
   pageNote,
   recordsHeadline,
 } from "../../../server/infra/shared-app-tool.js";
@@ -40,6 +41,23 @@ describe("manageSharedApp, the tool", () => {
     // operations have to refuse in.
     setSharedCollectionsSupport(true);
     setFirestoreAccessor(null);
+  });
+
+  it("reports an invite-only app as NOT open, and says why the `public` block is there (#1926)", () => {
+    // The sentence that sent an author to check Firestore. `public.submit` on its own is what an
+    // invite-only app needs for its members' pages to write records; it opens nothing, and the
+    // reporting used to read the block's existence as "open".
+    const declared = openNote("declared", "sakura-hair");
+    expect(declared).toContain("NOT open to anonymous visitors");
+    // The SWITCH is named. "declares no `public` block" was the old false-side reason and it is
+    // untrue of exactly the app that most needs this sentence.
+    expect(declared).toContain("`public.enabled` is not true");
+    expect(declared).toContain("`public.submit`");
+    // No address: an app that is not open has no public entrance to hand anybody.
+    expect(declared).not.toContain("https://");
+
+    expect(openNote("none", "sakura-hair")).toContain("declares no `public` block");
+    expect(openNote("open", "sakura-hair")).toBe("The app is now OPEN to anonymous visitors at https://mulmoserver.web.app/a/sakura-hair.");
   });
 
   it("is registered as a host tool and reaches the group the collections live in", () => {

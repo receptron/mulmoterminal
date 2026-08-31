@@ -57,6 +57,7 @@ import { PUBLIC_VIEW_DOC, declaredView, readAppViewFile, type ViewFile } from ".
 import { frozenKeyProblems } from "./exclusivity.js";
 import { scopedFieldProblems } from "./scopedFields.js";
 import { claimApp, reserveHeldSlug, type SlugRequest } from "./establish.js";
+import { publicFaceOf, type PublicFace } from "../../../common/sharedAppPublicFace.js";
 import { setSlugPublished } from "./slug.js";
 import { runWrites, type WriteStep } from "./writes.js";
 
@@ -66,10 +67,12 @@ export interface PublishSuccess {
   cids: string[];
   /** The URL name that now resolves to this app, when it has one. */
   slug?: string | undefined;
-  /** Whether this publish left the app open to anonymous visitors. False is a normal outcome — a
-   *  declaration with no `public` block publishes the schemas to the roster's URL and grants the
-   *  world nothing — and it is the one thing an operator is most likely to assume wrongly. */
-  publicOpen: boolean;
+  /** How open this publish left the app — see {@link PublicFace}. Anything but `open` is a normal
+   *  outcome: a declaration whose `public.enabled` is not true publishes the schemas to the
+   *  roster's URL and grants the world nothing, and it is the one thing an operator is most likely
+   *  to assume wrongly. `declared` is that outcome for an app that carries a `public` block anyway,
+   *  which an invite-only app whose members' pages write records has to. */
+  publicFace: PublicFace;
   /** Pages this publish put live for the app's staff, by id. Reported because
    *  what a members' page is handed is NOT public data: the argument that made
    *  the public view safe — a view can only carry off what any stranger could
@@ -466,7 +469,7 @@ async function runPublish(root: string, opts: SharedAppOptions, ran: RunState): 
     ok: true,
     aid,
     cids: face.schemas.map((entry) => entry.cid),
-    publicOpen: face.public !== undefined,
+    publicFace: publicFaceOf(face.public),
     // Which pages this publish put live, per tier. Said out loud because the data behind a
     // members' page is NOT public data — the argument that made the public view safe (a view can
     // only carry off what any stranger could fetch) does not hold here.

@@ -172,7 +172,7 @@ describe("shared app publish / unpublish", () => {
 
     const result = await publishSharedApp(root, stamp);
     expect(result.ok === false ? result.problems : []).toEqual([]);
-    expect(result.ok === true && result.publicOpen).toBe(true);
+    expect(result.ok === true && result.publicFace).toBe("open");
     // The app document goes in FIRST here because this publish created it: the records are
     // authorized through it, so the migration gate cannot read them until it exists. Then the
     // data, and the authorization at the very end.
@@ -192,9 +192,37 @@ describe("shared app publish / unpublish", () => {
     expect(docs.app()?.memberEmails).toEqual([OWNER.email]);
   });
 
+  it("does not call an invite-only app open just because it declares `public.submit` (#1926)", async () => {
+    // The bug this pins: `publicFace` read the EXISTENCE of the `public` block, and an invite-only
+    // app that writes records from its members' pages MUST declare `public.submit` — the package
+    // projects that to the member tier without consulting `public.enabled`. So the author who
+    // built it correctly was told their family's app was OPEN to anonymous visitors, and could not
+    // check it without reading Firestore.
+    //
+    // What actually decides it is `publicOn()` in mulmoserver's rules: `"enabled" in a.public &&
+    // a.public.enabled == true`. Unset is not on.
+    writeApp(root, declaration({ public: { submit: { bookings: { auth: "verifiedEmail", createFields: ["note"] } } } }));
+
+    const result = await publishSharedApp(root, stamp);
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    expect(result.ok === true && result.publicFace).toBe("declared");
+    // The block IS written — that is the whole point of the middle state. It carries the
+    // declaration the member tier needs, and no `enabled`.
+    expect(docs.app()?.public).toBeDefined();
+    expect((docs.app()?.public as Record<string, unknown>).enabled).toBeUndefined();
+  });
+
+  it("does not call an app open when `public.enabled` is explicitly false", async () => {
+    writeApp(root, declaration({ public: { enabled: false, read: ["bookings"] } }));
+
+    const result = await publishSharedApp(root, stamp);
+    expect(result.ok === false ? result.problems : []).toEqual([]);
+    expect(result.ok === true && result.publicFace).toBe("declared");
+  });
+
   it("writes nothing public when the declaration opens nothing", async () => {
     const result = await publishSharedApp(root, stamp);
-    expect(result.ok === true && result.publicOpen).toBe(false);
+    expect(result.ok === true && result.publicFace).toBe("none");
     // `publicOn` reads THIS field, not the world-readable projection.
     expect(docs.app()).not.toHaveProperty("public");
     // The schema is written all the same: the roster reads it at `/m/{slug}`, which is what a
@@ -401,7 +429,7 @@ describe("shared app publish / unpublish", () => {
     writeApp(root, declaration({ slug: "sakura-hair" }));
     const closed = await publishSharedApp(root, stamp);
     expect(closed.ok === false ? closed.problems : []).toEqual([]);
-    expect(closed.ok === true && closed.publicOpen).toBe(false);
+    expect(closed.ok === true && closed.publicFace).toBe("none");
     expect(docs.app()).not.toHaveProperty("public");
     expect(docs.doc(`apps/${AID}/config`, "public")).toBeUndefined();
     expect(docs.doc(`apps/${AID}/config`, "view")).toBeUndefined();
@@ -494,7 +522,7 @@ describe("shared app publish / unpublish", () => {
     // and it must not hand that out while the same operation reports the app is closed.
     writeApp(root, declaration({ slug: "sakura-hair" }));
     const result = await publishSharedApp(root, stamp);
-    expect(result.ok === true && result.publicOpen).toBe(false);
+    expect(result.ok === true && result.publicFace).toBe("none");
     expect(docs.doc("appSlugs", "sakura-hair")).toEqual({ aid: AID, published: false });
   });
 
