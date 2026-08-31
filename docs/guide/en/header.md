@@ -217,7 +217,7 @@ process starts.
 
 ## Next {#next}
 
-That's enough to build buttons. The things you **look up while writing** are on the next page:
+That's §1–4, and enough to build buttons. The things you **look up while writing** are on the next page, which **continues at §5**:
 
 [Header reference — variables, `when`, chips, recipes](header-reference.html){: .btn .btn-purple }
 

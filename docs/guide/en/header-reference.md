@@ -13,13 +13,16 @@ description: The page to look things up in while writing MulmoTerminal header co
 - TOC
 {:toc}
 
-This is the page to look things up in. **If you haven't made a button yet**, read
+This is the page to look things up in. The section numbers **continue** from §1–4 of
+[the beginner's guide](header.html).
+
+**If you haven't made a button yet**, read
 [Customizing the header](header.html) first — in particular, starting to write without knowing that
 [writing `buttons` replaces the defaults](header.html#replace) will break your header.
 
 ---
 
-## 1. `${variables}` {#vars-when}
+## 5. `${variables}` {#vars-when}
 
 ### The twelve of them {#vars}
 
@@ -61,7 +64,7 @@ one in a button or a chip, check the spelling.
 
 ---
 
-## 2. `when` — show it only sometimes {#when-section}
+## 6. `when` — show it only sometimes {#when-section}
 
 ### The forms {#when}
 
@@ -119,7 +122,7 @@ something". Every button that interpolates a `${variable}` into a URL or a comma
 
 ---
 
-## 3. Ordering, and how the two files combine {#order-merge}
+## 7. Ordering, and how the two files combine {#order-merge}
 
 - **`order`** (a number) sorts them. Buttons without one go last, and equal values keep the order you wrote.
 - **Global and project buttons merge by `id`.** Same `id` → the project wins; new `id` → it's added.
@@ -132,7 +135,7 @@ something". Every button that interpolates a `${variable}` into a URL or a comma
 
 ---
 
-## 4. Chips — putting information in the header {#chips}
+## 8. Chips — putting information in the header {#chips}
 
 `chips` reorders and hides the info display on row 1, and adds your own. Omit it and the default set
 stays.
@@ -169,7 +172,7 @@ The `env staging` on the right-hand cell of the screenshot above is exactly this
 
 ---
 
-## 5. Filtering the Skill menu {#skills}
+## 9. Filtering the Skill menu {#skills}
 
 The header's **⚡ Skill** lists the skills available in that directory (the project's
 `.claude/skills` first, then `~/.claude/skills`; alphabetical within each group, and a project
@@ -193,7 +196,7 @@ allow-list showing **only those slugs, in that order**.
 
 ---
 
-## 6. Recipes {#recipes}
+## 10. Recipes {#recipes}
 
 Paste and adjust. Remember that **writing `buttons` replaces the built-in set**, so include
 [the two defaults](header.html#replace) if you want them.
