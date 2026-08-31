@@ -115,7 +115,7 @@ Along the bottom of the diff panel are three buttons:
 
 A worktree started from an issue carries the number in its branch, so **Open PR** writes
 `Fixes #<number>` into the PR body. From then on the header's
-[work chip](header.html#builtin-chips), the work comments on the issue, and the auto-close on merge
+[work chip](header-reference.html#builtin-chips), the work comments on the issue, and the auto-close on merge
 all read that same number.
 
 ---

@@ -4,7 +4,7 @@ nav_title: ヘッダーのカスタマイズ
 layout: default
 parent: 日本語
 nav_order: 10
-description: MulmoTerminal のターミナルヘッダーに自分のボタンを足す方法を、スクリーンショット付きで最初から。run の 3 種類（input / open / shell）、アイコンとツールチップ、when での出し分け、チップ、Skill メニューの絞り込みまで。
+description: MulmoTerminal のターミナルヘッダーに自分のボタンを足す方法を、スクリーンショット付きで最初から。どのファイルに書くか、アイコンとツールチップ、run の 4 種類（input / shell / open / action）まで。変数・when・チップの一覧はリファレンスへ。
 ---
 
 # ヘッダーをカスタマイズする
@@ -17,8 +17,10 @@ description: MulmoTerminal のターミナルヘッダーに自分のボタン�
 MulmoTerminal は、稼働中セッションのヘッダーに**自分のボタン**を足せます。設定ファイルに数行
 書くだけで、`/compact` の送信も、テストの実行も、社内 wiki を開くのも、ワンクリックになります。
 
-このページは**最初の 1 個を足すところから**順に説明します。全フィールドの一覧は
-[設定 → ヘッダーのカスタマイズ](config.html#header)に。
+このページは**最初の 1 個を足すところから**順に説明します。上から読んでください。
+
+書きはじめてから引くもの —— `${変数}` の一覧、`when` の書き方、チップ、そのまま貼れる
+サンプル —— は [ヘッダーのリファレンス](header-reference.html)にまとめてあります。
 
 ---
 
@@ -210,113 +212,27 @@ MCP の登録変更・`~/.mulmoterminal/config.json` の編集・plugin の更�
 
 ---
 
-## 5. `${変数}` と `when` — 状況に合わせる {#vars-when}
+---
 
-### `${変数}` {#vars}
+## 次は {#next}
 
-`text` / `cmd` / `open` の値と、カスタムチップの `text` で使えます。
+ここまでで、ボタンは作れます。**書きながら引くもの**は次のページに:
 
-`dir` `dirName` `branch` `repo` `remoteUrl` `ahead` `behind` `dirty` `agent` `model` `task` `session`
+[ヘッダーのリファレンス — 変数・`when`・チップ・レシピ集](header-reference.html){: .btn .btn-purple }
 
-```json
-{ "id": "files", "icon": "folder_open", "label": "Browse this project's files", "run": "open", "open": { "files": "${dir}" } }
-```
-
-### `when` — 出す条件 {#when}
-
-条件を満たさないボタンは**そもそも描かれません**（押せないボタンが並ぶより良いので）。
-
-| 書き方 | 意味 |
+| 探しているもの | 行き先 |
 |---|---|
-| `isGitRepo` | git リポジトリのとき |
-| `agent == claude` | このセルが Claude のとき（`codex` / `antigravity` も） |
-| `repo == owner/name` | そのリポジトリのとき |
-
-`&&` と `||` で繋げられます（`&&` が優先）。
-
-```json
-{ "id": "compact", "icon": "compress", "label": "Compact this conversation", "run": "input", "text": "/compact", "when": "agent == claude" }
-```
-
-> `when` は**表示の出し分けだけ**で、セキュリティの境界ではありません。`run: "shell"` を
-> 実行できる根拠は「そのコマンドがあなたの設定ファイルに書いてある」ことです。
-
----
-
-## 6. 並び順と、2 つの設定ファイルの関係 {#order-merge}
-
-- **`order`**（数値）で並びます。書かなかったボタンは後ろに回り、同じ値どうしは書いた順のままです。
-- **global と project は `id` でマージされます。** 同じ `id` があればプロジェクト側が勝ち、
-  無ければ足されます。つまり全体に共通のボタンを global に置き、プロジェクト固有のものだけ
-  `.mulmoterminal.json` に書けます。
-- ただし**組み込みの既定セット**は、どちらか一方でも `buttons` を書いた時点で置き換わります
-  （→ [落とし穴](#replace)）。
-- `chips` はマージ**されません**。プロジェクト側があれば、そちらが丸ごと勝ちます。
-- 上限は `buttons` が 32 個、`chips` が 16 個です。
-
----
-
-## 7. チップ — ヘッダーに情報を出す {#chips}
-
-`chips` は 1 段目の情報表示を並べ替え・非表示にし、自分のものを足します。書かなければ既定のままです。
-
-```json
-{ "chips": ["git", "ctx", { "label": "Which environment this project deploys to", "text": "env staging" }] }
-```
-
-### 効くのは 6 つだけ {#builtin-chips}
-
-| id | 出るもの | |
-|---|---|---|
-| `git` | ブランチと未保存の数（`⎇ main ●1`） | ✅ 制御できます |
-| `work` | このセルがやっている PR / issue（`#977 → #966`） | ✅ |
-| `diff` | worktree の差分バッジ（`+2 ●5`） | ✅ [worktree のセルで、変更があるときだけ](worktree.html#diff-badge) |
-| `ctx` | モデルとコンテキスト使用率 | ✅ エージェントが報告してから |
-| `usage` | レート制限の消費率 | ✅ 同上 |
-| `env` | このワーキングツリーに配られた値。ポートは `:3010` でクリックでき、それ以外はそのまま表示 | ✅ [プロジェクトが `worktreeEnv` を宣言しているときだけ](config.html#worktree-env) |
-| `dir` / `status` / `tools` | プロジェクトバッジ / 状態ドット / ツール履歴 | ❌ **構造なので、書いても効かず、書かなくても消えません** |
-
-`dir` / `status` / `tools` を書いてもエラーにはならず、黙って無視されます。
-
-### カスタムチップ {#custom-chips}
-
-`{ "label": …, "text": …, "when": … }` で読み取り専用のテキストを足せます。
-
-**表示されるのは `text` です。`label` はここでもツールチップ**（ボタンと同じ）。
-`text` では `${変数}` が展開されます。
-
-上のスクリーンショットの右のセルにある `env staging` が、このカスタムチップです。
-
-> **`chips` を書いたら、欲しいものは全部書いてください。** 書いたリストがそのまま全部になるので、
-> `work` を落とすと PR / issue の表示も消えます。
-
----
-
-## 8. Skill メニューを絞り込む {#skills}
-
-ヘッダーの **⚡ Skill** は、そのディレクトリで使えるスキルを一覧します（プロジェクトの
-`.claude/skills` が先、次に `~/.claude/skills`。それぞれの中はアルファベット順で、同じ slug が
-両方にあればプロジェクト側が勝ちます）。選ぶと**今のセッション**でそれを実行します
-（Claude は `/<slug>`、他のエージェントは `Use the "<slug>" skill.`）。
-
-![Skill メニュー](../images/header-skill-menu.png)
-
-数が増えて選びにくくなったら、プロジェクトの `.mulmoterminal.json` に `skills` を書くと、
-**その slug だけを、その並び順で**出す許可リストになります。
-
-```json
-{ "skills": ["review-diff", "commit-msg"] }
-```
-
-- 書かなければ**全部**出ます。
-- 存在しない slug は無視されます。
-- **これはプロジェクト単位の設定です。** global の `config.json` には書けません。
+| `${dir}` みたいな変数に何があるか | [変数の一覧](header-reference.html#vars) |
+| ボタンを出す条件の書き方 | [`when`](header-reference.html#when) |
+| global と project の両方に書いたらどうなるか | [並び順とマージ](header-reference.html#order-merge) |
+| ヘッダーの表示（ブランチ、コンテキスト量…）を変えたい | [チップ](header-reference.html#chips) |
+| とりあえず動くものを貼りたい | [レシピ集](header-reference.html#recipes) |
 
 ---
 
 ## 関連 {#related}
 
+- [ヘッダーのリファレンス](header-reference.html) — 変数・`when`・チップ・レシピ集
 - [設定 → ヘッダーのカスタマイズ](config.html#header) — 全フィールドのリファレンス
 - [設定 → プロジェクトごとの設定](config.html#per-dir) — 色・名前・並び順など、同じファイルの他のキー
-- [設定](config.html) → 「よく使うコマンドを Run メニューに」 — `script.json` で **Run** メニューを足す
 - `/mulmoterminal-header` スキル — 対話で書いてもらう場合はこちら

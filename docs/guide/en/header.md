@@ -4,7 +4,7 @@ nav_title: Header buttons
 layout: default
 parent: English
 nav_order: 10
-description: How to put your own buttons on a MulmoTerminal terminal header, with screenshots and from the beginning — the three run types (input / open / shell), icons and tooltips, conditional buttons with when, chips, and filtering the Skill menu.
+description: How to put your own buttons on a MulmoTerminal terminal header, with screenshots and from the beginning — which file to write in, icons and tooltips, and the four run types (input / shell / open / action). Variables, when and chips are in the reference.
 ---
 
 # Customizing the header
@@ -17,8 +17,10 @@ When the only way to run something is to type it into the terminal, you type it 
 day. MulmoTerminal lets you put **your own buttons** on the header of a running session: a few lines
 of config, and sending `/compact`, running the tests, or opening the team wiki all become one click.
 
-This page starts from **adding your very first button**. The full field reference lives in
-[Configuration → customizing the header](config.html#header).
+This page starts from **adding your very first button**. Read it top to bottom.
+
+The things you look up *while* writing — the `${variable}` list, how to write `when`, chips,
+recipes you can paste — are in the [header reference](header-reference.html).
 
 ---
 
@@ -211,114 +213,27 @@ process starts.
 
 ---
 
-## 5. `${variables}` and `when` {#vars-when}
+---
 
-### `${variables}` {#vars}
+## Next {#next}
 
-Available in `text`, `cmd`, the `open` values, and a custom chip's `text`:
+That's enough to build buttons. The things you **look up while writing** are on the next page:
 
-`dir` `dirName` `branch` `repo` `remoteUrl` `ahead` `behind` `dirty` `agent` `model` `task` `session`
+[Header reference — variables, `when`, chips, recipes](header-reference.html){: .btn .btn-purple }
 
-```json
-{ "id": "files", "icon": "folder_open", "label": "Browse this project's files", "run": "open", "open": { "files": "${dir}" } }
-```
-
-### `when` — show it only sometimes {#when}
-
-A button whose condition fails is **not drawn at all** (better than a row of buttons that do nothing).
-
-| Form | Meaning |
+| What you're after | Where |
 |---|---|
-| `isGitRepo` | in a git repository |
-| `agent == claude` | this cell is Claude (also `codex` / `antigravity`) |
-| `repo == owner/name` | in that repository |
-
-Combine with `&&` and `||` (`&&` binds tighter).
-
-```json
-{ "id": "compact", "icon": "compress", "label": "Compact this conversation", "run": "input", "text": "/compact", "when": "agent == claude" }
-```
-
-> `when` is a **visibility filter, not a security boundary**. What authorizes a `run: "shell"` button
-> is that the command is written in your own config file.
-
----
-
-## 6. Ordering, and how the two files combine {#order-merge}
-
-- **`order`** (a number) sorts them. Buttons without one go last, and equal values keep the order you wrote.
-- **Global and project buttons merge by `id`.** Same `id` → the project wins; new `id` → it's added.
-  So common buttons can live in the global config and only the project-specific ones in
-  `.mulmoterminal.json`.
-- The **built-in default set**, though, is replaced as soon as *either* file writes `buttons`
-  (→ [the trap](#replace)).
-- `chips` do **not** merge. If the project has them, the project's list wins outright.
-- The caps are 32 `buttons` and 16 `chips`.
-
----
-
-## 7. Chips — putting information in the header {#chips}
-
-`chips` reorders and hides the info display on row 1, and adds your own. Omit it and the default set
-stays.
-
-```json
-{ "chips": ["git", "ctx", { "label": "Which environment this project deploys to", "text": "env staging" }] }
-```
-
-### Only six of them actually respond {#builtin-chips}
-
-| id | Shows | |
-|---|---|---|
-| `git` | branch and unsaved count (`⎇ main ●1`) | ✅ you control it |
-| `work` | the PR / issue this cell is on (`#977 → #966`) | ✅ |
-| `diff` | the worktree diff badge (`+2 ●5`) | ✅ [worktree cells with changes only](worktree.html#diff-badge) |
-| `ctx` | model and context usage | ✅ once the agent reports it |
-| `usage` | rate-limit consumption | ✅ same |
-| `env` | the values this working tree was reserved — a port shows as a clickable `:3010`, anything else as its text | ✅ [only where the project declares `worktreeEnv`](config.html#worktree-env) |
-| `dir` / `status` / `tools` | project badge / status dot / tool timeline | ❌ **structural — listing them does nothing, omitting them hides nothing** |
-
-Writing `dir` / `status` / `tools` is not an error; it is silently ignored.
-
-### Custom chips {#custom-chips}
-
-`{ "label": …, "text": …, "when": … }` adds a read-only piece of text.
-
-**What's displayed is `text`; `label` is again the tooltip** — same rule as buttons. `${variables}`
-expand inside `text`.
-
-The `env staging` on the right-hand cell of the screenshot above is exactly this.
-
-> **Once you write `chips`, list everything you want.** The list you write becomes the whole set, so
-> dropping `work` also drops the PR / issue display.
-
----
-
-## 8. Filtering the Skill menu {#skills}
-
-The header's **⚡ Skill** lists the skills available in that directory (the project's
-`.claude/skills` first, then `~/.claude/skills`; alphabetical within each group, and a project
-skill shadows a user one of the same slug). Picking one runs it **in the current session**
-(`/<slug>` for Claude, `Use the "<slug>" skill.` for the other agents).
-
-![The Skill menu](../images/header-skill-menu.png)
-
-When the list grows unwieldy, `skills` in the project's `.mulmoterminal.json` turns it into an
-allow-list showing **only those slugs, in that order**.
-
-```json
-{ "skills": ["review-diff", "commit-msg"] }
-```
-
-- Omit it and **everything** shows.
-- A slug that matches nothing is ignored.
-- **This is a per-project setting.** It cannot be written in the global `config.json`.
+| Which `${variables}` exist | [The variables](header-reference.html#vars) |
+| How to write a button's condition | [`when`](header-reference.html#when) |
+| What happens when both files set it | [Ordering and merging](header-reference.html#order-merge) |
+| Changing what the header displays | [Chips](header-reference.html#chips) |
+| Something to paste and adjust | [Recipes](header-reference.html#recipes) |
 
 ---
 
 ## See also {#related}
 
+- [Header reference](header-reference.html) — variables, `when`, chips, recipes
 - [Configuration → customizing the header](config.html#header) — the full field reference
 - [Configuration → per-project settings](config.html#per-dir) — colours, names, ordering: the other keys in the same file
-- [Configuration](config.html) → "Frequent commands in the Run menu" — adding a **Run** menu with `script.json`
 - The `/mulmoterminal-header` skill — if you'd rather have it written for you

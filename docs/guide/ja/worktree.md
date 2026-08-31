@@ -117,7 +117,7 @@ worktree はブランチに紐づくので、**多重起動しません**。同�
 | **Open PR** | push して、PR をブラウザで開きます | 同上 |
 
 issue 起点の worktree ならブランチが issue 番号を持っているので、**Open PR** は PR 本文に
-`Fixes #<番号>` を入れます。以降、ヘッダーの [work チップ](header.html#builtin-chips)・
+`Fixes #<番号>` を入れます。以降、ヘッダーの [work チップ](header-reference.html#builtin-chips)・
 issue への作業コメント・マージ時の自動クローズが、すべて同じ番号を読みます。
 
 ---
