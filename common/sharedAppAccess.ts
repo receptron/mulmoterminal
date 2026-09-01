@@ -274,11 +274,17 @@ function requiredCreateFields(declared: Declared, stage: CollectionAccess["authS
 function initialStatusOk(declared: Declared): boolean {
   const { c, s } = declared;
   const initial = s?.initialStatus;
-  if (initial === undefined) return true;
+  const transitions = asRecord(c.transitions);
+  if (initial === undefined) {
+    // `initialOk` only binds when BOTH are declared. When they are, the submitter has to supply a
+    // status the map lists under `initial` — so a map that lists none there (an empty list, or no
+    // `initial` key at all) can be satisfied by no value whatsoever.
+    if (transitions === undefined || typeof c.statusField !== "string") return true;
+    return asStrings(transitions.initial).length > 0;
+  }
   // A non-string `initialStatus` can never equal the record's status field, which the rules compare
   // without coercing — so it refuses every create for the same reason and by the same rule.
   if (typeof initial !== "string" || typeof c.statusField !== "string") return false;
-  const transitions = asRecord(c.transitions);
   if (transitions === undefined) return true;
   return asStrings(transitions.initial).includes(initial);
 }

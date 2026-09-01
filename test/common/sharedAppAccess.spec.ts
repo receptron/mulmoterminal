@@ -197,6 +197,17 @@ describe("a status declaration that refuses every create by itself", () => {
     expect(only(open({ statusField: "status", transitions: { open: ["closed"] } }, "new"), "answers").access.visitor.create).toBe(false);
   });
 
+  it("refuses when `transitions` lists nothing under `initial` and the submit names no status", () => {
+    // Nothing the submitter can send satisfies `initialOk`: it looks the value up under `initial`
+    // and that list is empty.
+    const empty = sharedAppAccessOf(
+      { members: {}, collections: { answers: { statusField: "status", transitions: { initial: [], open: ["closed"] } } } },
+      { enabled: true, submit: { answers: { auth: "none", createFields: ["a", "status"] } } },
+      ["answers"],
+    );
+    expect(only(empty, "answers").access.visitor.create).toBe(false);
+  });
+
   it("allows it when the map lists it", () => {
     expect(only(open({ statusField: "status", transitions: { initial: ["new"], new: ["done"] } }, "new"), "answers").access.visitor.create).toBe(true);
   });
