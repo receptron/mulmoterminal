@@ -232,6 +232,16 @@ describe("a createFields list that cannot carry what the rules demand", () => {
     expect(only(with_(submit, collection), "answers").access.visitor.create).toBe(false);
   });
 
+  it("demands the status field even with no `initialStatus`, when `transitions` is declared", () => {
+    // `initialOk` refuses a create whose status is null whenever `transitions` and `statusField`
+    // are both declared, so the submitter has to be able to send one either way.
+    const c = { statusField: "status", transitions: { initial: ["new"] } };
+    expect(only(with_({ createFields: ["title"] }, c), "answers").access.visitor.create).toBe(false);
+    // With the field allowed the create is possible; WHICH value passes is not decidable from the
+    // declaration, and the `transitions` caveat is what carries that.
+    expect(only(with_({ createFields: ["title", "status"] }, c), "answers").access.visitor.create).toBe(true);
+  });
+
   it("allows the create once the list carries them", () => {
     expect(only(with_({ uidField: "uid", stampField: "at", createFields: ["title", "uid", "at"] }), "answers").access.visitor.create).toBe(true);
   });

@@ -248,7 +248,11 @@ function requiredCreateFields(declared: Declared, stage: CollectionAccess["authS
   if (typeof s.uidField === "string") need.push(s.uidField);
   if (typeof s.idField === "string" && (s.idFrom === "auth.uid+field" || s.idFrom === "field" || s.idFrom === "slug")) need.push(s.idField);
   if (typeof s.stampField === "string") need.push(s.stampField);
-  if (typeof c.statusField === "string" && s.initialStatus !== undefined) need.push(c.statusField);
+  // The status field is demanded by TWO different rules, and the second one has no `initialStatus`
+  // in it: `initialOk` refuses a create whose status is null whenever `transitions` and
+  // `statusField` are both declared, so the submitter must be able to send one either way. Which
+  // VALUE they send is not decidable from the declaration — the `transitions` caveat carries that.
+  if (typeof c.statusField === "string" && (s.initialStatus !== undefined || c.transitions !== undefined)) need.push(c.statusField);
   const gate = asRecord(s.gateOn);
   if (gate !== undefined && typeof gate.match === "string") need.push(gate.match);
   // `refIn` builds the parent's path out of this field of the submission.
