@@ -197,6 +197,18 @@ describe("the two write paths a closed window separates", () => {
     expect(only(access, "rsvps").access.visitor).toEqual({ read: "own", create: false, editOwn: true, editAll: false, repairMirror: false });
   });
 
+  it("does not promise a withdrawal the declaration never named", () => {
+    const access = sharedAppAccessOf(app, shape(CLOSED, { selfUpdate: { in: ["uid"] } }), ["rsvps"], NOW);
+    const said = only(access, "rsvps").caveats.join(" ");
+    expect(said).toContain("still reads their own row");
+    expect(said).not.toContain("withdraw");
+  });
+
+  it("promises it where `selfDelete` names one", () => {
+    const access = sharedAppAccessOf(app, shape(CLOSED, { selfDelete: ["in"] }), ["rsvps"], NOW);
+    expect(only(access, "rsvps").caveats.join(" ")).toContain("may still withdraw it");
+  });
+
   it("takes away the edit it does", () => {
     const access = sharedAppAccessOf(app, shape(CLOSED, { selfUpdate: { in: ["uid"] } }), ["rsvps"], NOW);
     expect(only(access, "rsvps").access.visitor).toEqual({ read: "own", create: false, editOwn: false, editAll: false, repairMirror: false });
@@ -252,7 +264,7 @@ describe("what the summary refuses to overstate", () => {
     // exists to answer exactly this question.
     const access = sharedAppAccessOf({ members: {} }, { submit: { records: { auth: "verifiedEmail", emailField: "by", createFields: ["by"] } } }, ["records"]);
     expect(only(access, "records").access.stranger.read).toBe("none");
-    expect(only(access, "records").caveats.join(" ")).toContain("still reads their own row, and may still withdraw it");
+    expect(only(access, "records").caveats.join(" ")).toContain("still reads their own row");
   });
 
   it("does not hand an emailField row to the visitor, who has a uid and no verified address", () => {

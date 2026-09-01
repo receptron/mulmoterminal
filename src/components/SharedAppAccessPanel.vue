@@ -115,14 +115,23 @@ const READ_LABEL = { all: "All rows", own: "Own rows", none: "Nothing" } as cons
 /** The write cell, from the three permissions rather than a fourth enum: they are independent in
  *  the rules (`submitOnly` takes creation off a writer and leaves editing; `immutable` does the
  *  reverse) and any enum of the combinations is a list somebody has to keep complete. */
-function writeLabel(entry: SubjectAccess): string {
-  if (entry.editAll) return entry.create ? "Anything" : "Edit any row";
+/** The label for the two ordinary permissions, before `mirrorRepair` is added to it. `""` is
+ *  "neither", which is a different answer from "Nothing" once a repair may still be possible. */
+function writeBase(entry: SubjectAccess): string {
   if (entry.create) return entry.editOwn ? "Submit, edit own" : "Submit only";
-  if (entry.editOwn) return "Edit own only";
-  // LAST, and it is the only label that is not "Nothing" for somebody who may do almost nothing:
-  // a `mirrorOf` collection lets anyone at all write its `state` back to the truth, so the cell
-  // that would otherwise read "Nothing" would be contradicting the deployed rule.
-  return entry.repairMirror ? "Repair `state` only" : "Nothing";
+  return entry.editOwn ? "Edit own only" : "";
+}
+
+function writeLabel(entry: SubjectAccess): string {
+  // A writer's `editAll` already covers the one field a repair touches, so it is the only branch
+  // that does not mention it.
+  if (entry.editAll) return entry.create ? "Anything" : "Edit any row";
+  const base = writeBase(entry);
+  // `mirrorRepair` is an ADDITION to whatever else this subject may do, not an alternative to it:
+  // a visitor who may submit here may also repair `state` on somebody else's row, and a label that
+  // named only the submission would be describing the smaller of the two permissions.
+  if (!entry.repairMirror) return base === "" ? "Nothing" : base;
+  return base === "" ? "Repair `state` only" : `${base}, repair \`state\``;
 }
 
 /** Any write at all — the test the write cell's colour uses. Not `writeLabel(...) !== "Nothing"`:

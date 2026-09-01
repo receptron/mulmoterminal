@@ -102,6 +102,18 @@ describe("the access panel", () => {
     expect(w.text()).toContain("0 of 1 collections are shut");
   });
 
+  it("adds the repair to a subject who may already do something else", async () => {
+    // The repair is an ADDITION, not an alternative: a visitor who may submit here may also write
+    // `state` on somebody else's row, and naming only the submission describes the smaller half.
+    answer({
+      ...CLOSED,
+      collections: [{ ...CLOSED.collections[0], access: { ...CLOSED.collections[0].access, visitor: { ...shut, create: true, repairMirror: true } } }],
+    });
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    expect(w.find('[data-testid="access-records-visitor"]').text()).toContain("Submit only, repair `state`");
+  });
+
   it("says the app.json went away rather than drawing nothing at all", async () => {
     // Reachable when the manifest is removed between the pane's `/declared` probe and this
     // request. Returning silently left a blank panel with no state.

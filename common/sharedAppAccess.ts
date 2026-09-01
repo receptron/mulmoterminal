@@ -332,8 +332,11 @@ function caveatsOf(declared: Declared, stage: CollectionAccess["authStage"]): st
     (who) => ownRowReachable(declared, who) && !canCreate(declared, stage, who) && canCreate({ ...declared, publicOn: true }, stage, who, true),
   );
   if (strandable) {
+    // ONLY what is actually declared. `selfDelete` is what makes a withdrawal possible, and a
+    // caveat promising one where the declaration names none is the panel inventing a permission.
+    const andWithdraw = selfDeleteDeclared(declared) ? ", and may still withdraw it" : "";
     caveats.push(
-      "Anyone who submitted while this collection was open still reads their own row, and may still withdraw it — the rules bind a row to its submitter without asking the switch or the window.",
+      `Anyone who submitted while this collection was open still reads their own row${andWithdraw} — the rules bind a row to its submitter without asking the switch or the window.`,
     );
   }
   caveats.push(...windowCaveats(declared));
