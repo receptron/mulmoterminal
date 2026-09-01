@@ -180,6 +180,34 @@ describe("the submission window, evaluated rather than mentioned", () => {
   });
 });
 
+describe("a status declaration that refuses every create by itself", () => {
+  // Both fail CLOSED in the rules, and both are shapes a half-finished manifest really has. They
+  // are modelled rather than caveated because the declaration alone decides them: nothing about
+  // the record or the caller can rescue the create, which is exactly when the table may speak.
+  const open = (c: Record<string, unknown>, initialStatus: string) =>
+    sharedAppAccessOf(
+      { members: {}, collections: { answers: c } },
+      { enabled: true, submit: { answers: { auth: "none", createFields: ["a", "status"], initialStatus } } },
+      ["answers"],
+    );
+
+  it("refuses when the submit names an initial status and the collection names no status field", () => {
+    expect(only(open({}, "new"), "answers").access.visitor.create).toBe(false);
+  });
+
+  it("refuses when `transitions` does not list that status under `initial`", () => {
+    expect(only(open({ statusField: "status", transitions: { open: ["closed"] } }, "new"), "answers").access.visitor.create).toBe(false);
+  });
+
+  it("allows it when the map lists it", () => {
+    expect(only(open({ statusField: "status", transitions: { initial: ["new"], new: ["done"] } }, "new"), "answers").access.visitor.create).toBe(true);
+  });
+
+  it("leaves a collection with no `transitions` alone", () => {
+    expect(only(open({ statusField: "status" }, "new"), "answers").access.visitor.create).toBe(true);
+  });
+});
+
 describe("a reveal-gated collection", () => {
   // `readWith` opens a gated row to every listed member once its parent reveals it. Reporting
   // `Nothing` for the participant row contradicted the deployed read rule; there is no "some rows"

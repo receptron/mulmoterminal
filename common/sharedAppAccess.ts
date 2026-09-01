@@ -222,6 +222,28 @@ function windowOpen(submit: Record<string, unknown>, now: number): boolean {
   return state !== "closed" && state !== "early";
 }
 
+/** The two ways a status DECLARATION refuses every create by itself — both fail closed in the
+ *  rules, and both are shapes a half-finished manifest really has.
+ *
+ *  `submitCreate` requires `statusField in c` before it will compare `initialStatus`, so a submit
+ *  block naming an initial status over a collection that declares no status field denies every
+ *  submission. And `initialOk` looks the create's status up under `transitions.initial`, defaulting
+ *  to the empty list — so an initial status the map does not list denies them too.
+ *
+ *  Modelled rather than caveated because the answer is decided by the declaration alone: nothing
+ *  about the record or the caller can rescue it, which is exactly when the table can speak. */
+function initialStatusOk(declared: Declared): boolean {
+  const { c, s } = declared;
+  const initial = s?.initialStatus;
+  if (initial === undefined) return true;
+  // A non-string `initialStatus` can never equal the record's status field, which the rules compare
+  // without coercing — so it refuses every create for the same reason and by the same rule.
+  if (typeof initial !== "string" || typeof c.statusField !== "string") return false;
+  const transitions = asRecord(c.transitions);
+  if (transitions === undefined) return true;
+  return asStrings(transitions.initial).includes(initial);
+}
+
 /** `submitCreate` minus the parts that depend on the record and the clock.
  *
  *  The first conjunct is the one #1926 was about and the one this whole panel is for: a
@@ -237,6 +259,7 @@ function canCreate(declared: Declared, stage: CollectionAccess["authStage"], who
   if (!ignoreWindow && !windowOpen(s, declared.now)) return false;
   if (!Array.isArray(s.createFields)) return false;
   if (!authOk(stage, who)) return false;
+  if (!initialStatusOk(declared)) return false;
   // `audience: "participant"` is matched against the ROLE, so it shuts out viewers and editors as
   // firmly as it shuts out strangers.
   return s.audience !== "participant" || who.role === "participant";
