@@ -222,6 +222,41 @@ function windowOpen(submit: Record<string, unknown>, now: number): boolean {
   return state !== "closed" && state !== "early";
 }
 
+/** The fields `validate` makes mandatory — `required` outright, and the `field` of each
+ *  `keyFields` entry, which the rules index into. */
+function validatedFields(submit: Record<string, unknown>): string[] {
+  const validate = asRecord(submit.validate);
+  if (validate === undefined) return [];
+  const keyed = Array.isArray(validate.keyFields) ? validate.keyFields : [];
+  return [...asStrings(validate.required), ...keyed.flatMap((entry) => (isRecord(entry) && typeof entry.field === "string" ? [entry.field] : []))];
+}
+
+/** Every field the rules REQUIRE a create to carry.
+ *
+ *  It matters because `submitCreate` also asks `hasOnly(s.createFields)`: a field the rules demand
+ *  and the list does not allow makes the two conjuncts contradict each other, and the collection
+ *  accepts nothing at all from anybody. `{ emailField: "email", createFields: ["title"] }` is the
+ *  shape — sending `email` fails `hasOnly`, omitting it fails the identity check — and this route
+ *  answers for declarations a publish would refuse, so the contradiction reaches the panel. */
+function requiredCreateFields(declared: Declared, stage: CollectionAccess["authStage"]): string[] {
+  const { c, s } = declared;
+  if (s === undefined) return [];
+  const need: string[] = [...validatedFields(s)];
+  // Only on the `verifiedEmail` stage: that is the branch of `authOk` that reads it.
+  if (stage === "verifiedEmail" && typeof s.emailField === "string") need.push(s.emailField);
+  // `uidOk` compares `.get(uidField, null)` against the uid, so an absent field simply loses.
+  if (typeof s.uidField === "string") need.push(s.uidField);
+  if (typeof s.idField === "string" && (s.idFrom === "auth.uid+field" || s.idFrom === "field" || s.idFrom === "slug")) need.push(s.idField);
+  if (typeof s.stampField === "string") need.push(s.stampField);
+  if (typeof c.statusField === "string" && s.initialStatus !== undefined) need.push(c.statusField);
+  const gate = asRecord(s.gateOn);
+  if (gate !== undefined && typeof gate.match === "string") need.push(gate.match);
+  // `refIn` builds the parent's path out of this field of the submission.
+  const refIn = asRecord(c.refIn);
+  if (refIn !== undefined && typeof refIn.ref === "string") need.push(refIn.ref);
+  return need;
+}
+
 /** The two ways a status DECLARATION refuses every create by itself — both fail closed in the
  *  rules, and both are shapes a half-finished manifest really has.
  *
@@ -239,10 +274,6 @@ function initialStatusOk(declared: Declared): boolean {
   // A non-string `initialStatus` can never equal the record's status field, which the rules compare
   // without coercing — so it refuses every create for the same reason and by the same rule.
   if (typeof initial !== "string" || typeof c.statusField !== "string") return false;
-  // And the submitter has to be ALLOWED to send it. `submitCreate` asks `hasOnly(createFields)` and
-  // then requires the status field to be present at the declared value, so a `createFields` that
-  // omits it makes those two conjuncts contradict each other and every create is refused.
-  if (!asStrings(s?.createFields).includes(c.statusField)) return false;
   const transitions = asRecord(c.transitions);
   if (transitions === undefined) return true;
   return asStrings(transitions.initial).includes(initial);
@@ -262,6 +293,8 @@ function canCreate(declared: Declared, stage: CollectionAccess["authStage"], who
   // door on most of the apps there are.
   if (!ignoreWindow && !windowOpen(s, declared.now)) return false;
   if (!Array.isArray(s.createFields)) return false;
+  const allowed = asStrings(s.createFields);
+  if (!requiredCreateFields(declared, stage).every((field) => allowed.includes(field))) return false;
   if (!authOk(stage, who)) return false;
   if (!initialStatusOk(declared)) return false;
   // `audience: "participant"` is matched against the ROLE, so it shuts out viewers and editors as
@@ -291,7 +324,11 @@ function selfUpdateDeclared(declared: Declared): boolean {
 function selfDeleteDeclared(declared: Declared): boolean {
   const { c, s } = declared;
   if (s === undefined || typeof c.statusField !== "string") return false;
-  return asStrings(s.selfDelete).length > 0;
+  // MINUS the sealed states. `deleteWith` asks `!sealedNow(c)` before it reaches `selfDelete`, so a
+  // declaration whose every withdrawable status is also sealed grants no withdrawal at all — and
+  // `selfDelete: ["draft"]` beside `sealed: ["draft"]` is a shape a manifest really has.
+  const sealed = asStrings(c.sealed);
+  return asStrings(s.selfDelete).some((status) => !sealed.includes(status));
 }
 
 /** Whether this subject can hold a row here AT ALL — the binding reaching them is necessary and

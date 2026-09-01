@@ -212,6 +212,60 @@ describe("a status declaration that refuses every create by itself", () => {
   });
 });
 
+describe("a createFields list that cannot carry what the rules demand", () => {
+  // `submitCreate` asks `hasOnly(createFields)` AND requires certain fields to be present. A field
+  // the rules demand and the list does not allow makes those two contradict each other, and the
+  // collection accepts nothing from anybody.
+  const with_ = (submit: Record<string, unknown>, collection: Record<string, unknown> = {}) =>
+    sharedAppAccessOf({ members: {}, collections: { answers: collection } }, { enabled: true, submit: { answers: { auth: "none", ...submit } } }, ["answers"]);
+
+  it.each([
+    ["the verified address it checks the submitter against", { auth: "verifiedEmail", emailField: "email", createFields: ["title"] }, {}],
+    ["the uid field it binds the row by", { uidField: "uid", createFields: ["title"] }, {}],
+    ["the field the document id is built from", { idFrom: "field", idField: "slot", createFields: ["title"] }, {}],
+    ["the server-stamped field", { stampField: "at", createFields: ["title"] }, {}],
+    ["the field a session gate matches on", { gateOn: { phase: "answering", match: "questionId" }, createFields: ["title"] }, {}],
+    ["a field `validate.required` names", { validate: { required: ["title"] }, createFields: ["body"] }, {}],
+    ["the field a `keyFields` entry indexes", { validate: { keyFields: [{ field: "kind", values: ["a"] }] }, createFields: ["title"] }, {}],
+    ["the reference `refIn` builds the parent path from", { createFields: ["title"] }, { refIn: { collection: "topics", ref: "topicId" } }],
+  ])("refuses every create when the list omits %s", (_name, submit, collection) => {
+    expect(only(with_(submit, collection), "answers").access.visitor.create).toBe(false);
+  });
+
+  it("allows the create once the list carries them", () => {
+    expect(only(with_({ uidField: "uid", stampField: "at", createFields: ["title", "uid", "at"] }), "answers").access.visitor.create).toBe(true);
+  });
+
+  it("does not demand an emailField the auth stage never reads", () => {
+    // `authOk` reads it on the `verifiedEmail` branch and nowhere else; `ownRow` reads it on a
+    // READ, which is not this question.
+    expect(only(with_({ auth: "anonymous", emailField: "email", createFields: ["title"] }), "answers").access.visitor.create).toBe(true);
+  });
+});
+
+describe("a withdrawal every sealed state takes back", () => {
+  // `deleteWith` asks `!sealedNow(c)` before it reaches `selfDelete`, so a declaration whose every
+  // withdrawable status is also sealed grants no withdrawal at all.
+  const shape = (sealed: string[]) =>
+    sharedAppAccessOf(
+      { members: {}, collections: { drafts: { statusField: "status", sealed } } },
+      {
+        enabled: true,
+        submit: { drafts: { auth: "anonymous", uidField: "uid", createFields: ["uid", "status"], initialStatus: "draft", selfDelete: ["draft"] } },
+      },
+      ["drafts"],
+    );
+
+  it("grants nothing when the sealed list covers every withdrawable status", () => {
+    expect(only(shape(["draft"]), "drafts").access.visitor.editOwn).toBe(false);
+    expect(only(shape(["draft"]), "drafts").caveats.join(" ")).not.toContain("withdraw");
+  });
+
+  it("grants it when one status is left", () => {
+    expect(only(shape(["published"]), "drafts").access.visitor.editOwn).toBe(true);
+  });
+});
+
 describe("a reveal-gated collection", () => {
   // `readWith` opens a gated row to every listed member once its parent reveals it. Reporting
   // `Nothing` for the participant row contradicted the deployed read rule; there is no "some rows"
