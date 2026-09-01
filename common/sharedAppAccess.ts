@@ -394,6 +394,12 @@ function caveatsOf(declared: Declared, stage: CollectionAccess["authStage"]): st
   }
   if (typeof c.assigneeField === "string") caveats.push("An assignee reads everything here and writes only the rows assigned to them.");
   if (typeof c.mirrorOf === "string") caveats.push("Anyone may repair this collection's `state` field to match the record it mirrors.");
+  // The SUBMISSION side of the same pair (`mirrorClaimed` / `mirrorReleased`), which binds every
+  // create and every delete here — the writer branches included. Without it a create that looks
+  // allowed in the table is refused for a reason nothing on this panel names.
+  if (typeof s?.mirror === "string") {
+    caveats.push(`A record here cannot be created or deleted on its own: the same write has to move the slot it claims in \`${s.mirror}\`.`);
+  }
   return caveats;
 }
 

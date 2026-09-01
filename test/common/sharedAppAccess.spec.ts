@@ -307,6 +307,18 @@ describe("a mirror is writable by everyone, and the table has to say so", () => 
     expect(only(access, "slots").access.stranger.repairMirror).toBe(true);
   });
 
+  it("names the paired write on the submission side too", () => {
+    // `mirrorClaimed` / `mirrorReleased` bind every create and delete, the writer branches
+    // included. Without this a create that looks allowed in the table is refused for a reason
+    // nothing on the panel names.
+    const paired = sharedAppAccessOf(
+      { members: {}, collections: { bookings: {} } },
+      { enabled: true, submit: { bookings: { auth: "anonymous", uidField: "uid", createFields: ["uid"], mirror: "slots" } } },
+      ["bookings"],
+    );
+    expect(only(paired, "bookings").caveats.join(" ")).toContain("move the slot it claims in `slots`");
+  });
+
   it("says in words what the one field is", () => {
     expect(only(access, "slots").caveats.join(" ")).toContain("`state`");
   });
