@@ -59,11 +59,16 @@ function asCollectionAccess(value: unknown): CollectionAccess | null {
 export function asAccess(value: unknown): SharedAppAccess | null {
   if (!isRecord(value)) return null;
   if (!isFace(value.publicFace) || !Array.isArray(value.collections)) return null;
+  if (!Array.isArray(value.unmatchableRoster) || value.unmatchableRoster.some((entry) => typeof entry !== "string")) return null;
   const collections: CollectionAccess[] = [];
   for (const entry of value.collections) {
     const parsed = asCollectionAccess(entry);
     if (parsed === null) return null;
     collections.push(parsed);
   }
-  return { publicFace: value.publicFace, collections };
+  return {
+    publicFace: value.publicFace,
+    collections,
+    unmatchableRoster: value.unmatchableRoster.filter((entry): entry is string => typeof entry === "string"),
+  };
 }

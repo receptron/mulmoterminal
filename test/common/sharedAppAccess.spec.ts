@@ -180,6 +180,25 @@ describe("the submission window, evaluated rather than mentioned", () => {
   });
 });
 
+describe("a roster key the rules can never match", () => {
+  // `email() in a.members` is exact and Firebase lower-cases the token, so `Foo@Example.com`
+  // grants that person nothing — and the file reads correctly to a human. Counting it printed
+  // `Owner / editor (1)` over an app whose owner is locked out of their own roster.
+  const access = sharedAppAccessOf(
+    { members: { "Owner@Example.com": { "*": "owner" }, "guest@example.com": { "*": "participant" } }, collections: { records: {} } },
+    undefined,
+    ["records"],
+  );
+
+  it("is left out of the census", () => {
+    expect(only(access, "records").census).toEqual({ writers: 0, readers: 0, participants: 1 });
+  });
+
+  it("is named, so the missing count has a reason", () => {
+    expect(access.unmatchableRoster).toEqual(["Owner@Example.com"]);
+  });
+});
+
 describe("the two write paths a closed window separates", () => {
   // `updateWith` carries `inWindow`; `deleteWith` does not. So after a window closes a submitter
   // may still WITHDRAW their row and may no longer EDIT it, and a summary that folded the two

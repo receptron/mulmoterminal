@@ -178,6 +178,14 @@ const shutToOutsiders = computed(
         {{ shutToOutsiders }} of {{ access.collections.length }} collections are shut to everyone outside the roster.
       </p>
 
+      <!-- Coloured, because it is a permission the author believes they granted and did not. The
+           rules compare an address exactly, so a capital letter on the roster grants nothing and
+           the file still reads correctly to a human. -->
+      <p v-if="access.unmatchableRoster.length" class="m-0 mt-1 leading-[1.45] text-amber" data-testid="access-unmatchable-roster">
+        {{ access.unmatchableRoster.length }} roster {{ access.unmatchableRoster.length === 1 ? "address is" : "addresses are" }} written with capitals and
+        grant nothing — the rules compare an address exactly. Counted nowhere below: {{ access.unmatchableRoster.join(", ") }}
+      </p>
+
       <div v-if="!access.collections.length" class="mt-3 text-dim">This app publishes no collections yet.</div>
 
       <section v-for="collection in access.collections" :key="collection.cid" class="mt-4" :data-testid="`access-collection-${collection.cid}`">

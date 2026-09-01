@@ -93,6 +93,13 @@ export interface CollectionAccess {
 export interface SharedAppAccess {
   publicFace: PublicFace;
   collections: CollectionAccess[];
+  /** Roster addresses the rules will never match, because they are not lower case — see
+   *  `unmatchable`. App-wide rather than per collection, because the roster is.
+   *
+   *  Reported rather than silently dropped from the census: an author whose `Owner / editor` count
+   *  reads `(0)` is owed the reason, and this one is invisible in a file that reads correctly to a
+   *  human. */
+  unmatchableRoster: string[];
 }
 
 const asRecord = (value: unknown): Record<string, unknown> | undefined => (isRecord(value) ? value : undefined);
@@ -108,9 +115,21 @@ function roleFor(roles: Record<string, unknown>, cid: string): string | null {
   return typeof fallback === "string" ? fallback : null;
 }
 
+/** Roster keys the rules can never match, because of their case.
+ *
+ *  `email() in a.members` is an exact string comparison and rules have no `lower()`; Firebase puts
+ *  a lower-cased address in the token. So `Foo@Example.com` on the roster grants that person
+ *  nothing at all — the same defect `rosterCaseProblems` reports at publish time, and this route
+ *  deliberately answers even for a declaration a publish would refuse. */
+const unmatchable = (address: string): boolean => address !== address.toLowerCase();
+
 function censusOf(members: Record<string, unknown>, cid: string): RoleCensus {
   const census: RoleCensus = { writers: 0, readers: 0, participants: 0 };
-  for (const roles of Object.values(members)) {
+  for (const [address, roles] of Object.entries(members)) {
+    // NOT COUNTED, rather than counted with a warning beside them: the count is what the row says
+    // about who holds this permission, and a key the rules cannot match holds none of it. Counting
+    // it printed `Owner / editor (1)` over an app whose owner is locked out of their own roster.
+    if (unmatchable(address)) continue;
     if (!isRecord(roles)) continue;
     const role = roleFor(roles, cid);
     if (role === "owner" || role === "editor") census.writers += 1;
@@ -373,6 +392,7 @@ export function sharedAppAccessOf(
 
   return {
     publicFace: publicFaceOf(publicBlock),
+    unmatchableRoster: Object.keys(members).filter(unmatchable).sort(byCodeUnit),
     collections: all.map((cid): CollectionAccess => {
       const s = asRecord(submit[cid]);
       const declared: Declared = {

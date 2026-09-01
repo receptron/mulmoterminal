@@ -14,6 +14,7 @@ function answer(access: SharedAppAccess) {
 
 const CLOSED: SharedAppAccess = {
   publicFace: "declared",
+  unmatchableRoster: [],
   collections: [
     {
       cid: "records",
@@ -112,6 +113,16 @@ describe("the access panel", () => {
     const w = mount(Panel, { props: { cwd: "/srv/app" } });
     await flushPromises();
     expect(w.find('[data-testid="access-records-visitor"]').text()).toContain("Submit only, repair `state`");
+  });
+
+  it("names the roster addresses the rules can never match", async () => {
+    answer({ ...CLOSED, unmatchableRoster: ["Foo@Example.com"] });
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    const line = w.find('[data-testid="access-unmatchable-roster"]');
+    expect(line.text()).toContain("Foo@Example.com");
+    // Coloured: it is a permission the author believes they granted and did not.
+    expect(line.html()).toContain("text-amber");
   });
 
   it("says the app.json went away rather than drawing nothing at all", async () => {

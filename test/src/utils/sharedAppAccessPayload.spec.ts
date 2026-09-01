@@ -8,6 +8,7 @@ const entry = { read: "none", create: false, editOwn: false, editAll: false, rep
  *  `ACCESS_SUBJECTS` so a fifth subject joins these cases by existing. */
 const payload = (omit?: string) => ({
   publicFace: "declared",
+  unmatchableRoster: [] as string[],
   collections: [
     {
       cid: "records",
@@ -36,6 +37,7 @@ describe("narrowing the access response", () => {
   it.each([
     ["an unknown public face", { publicFace: "maybe" }],
     ["collections that are not a list", { collections: {} }],
+    ["a roster list that is not a list of strings", { unmatchableRoster: [1] }],
   ])("refuses %s", (_name, patch) => {
     expect(asAccess({ ...payload(), ...patch })).toBeNull();
   });
