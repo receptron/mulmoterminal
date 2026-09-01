@@ -22,6 +22,8 @@ const props = defineProps<{ cwd: string | null }>();
 const loading = ref(true);
 const problems = ref<string[]>([]);
 const failed = ref(false);
+/** The app.json went away under us — not a fault, and not something to draw a table about. */
+const notDeclared = ref(false);
 const access = ref<SharedAppAccess | null>(null);
 
 // A GENERATION token rather than a comparison of `cwd`, for the reason every other lookup in this
@@ -30,10 +32,35 @@ const access = ref<SharedAppAccess | null>(null);
 // which is the single worst thing a panel about permissions can do.
 let generation = 0;
 
+/** What the response MEANS, decided in one place and away from the refs it sets.
+ *
+ *  FOUR outcomes, and "none of them" is not one — a body that classifies as nothing left the panel
+ *  blank with no state at all, which reads as a rendering fault rather than an answer. So the two
+ *  shapes with nothing to say (`declared` absent, and a refusal carrying no reasons) both land on
+ *  `failed`, and only a directory that genuinely stopped declaring an app gets its own quiet line. */
+type Outcome = { kind: "notDeclared" } | { kind: "failed" } | { kind: "problems"; problems: string[] } | { kind: "access"; access: SharedAppAccess };
+
+function outcomeOf(body: unknown): Outcome {
+  if (!isRecord(body)) return { kind: "failed" };
+  // Reachable when the manifest is removed between the pane's `/declared` probe and this request.
+  if (body.declared === false) return { kind: "notDeclared" };
+  if (body.declared !== true) return { kind: "failed" };
+  if (body.ok === false) {
+    const listed = Array.isArray(body.problems) ? body.problems.filter((entry): entry is string => typeof entry === "string") : [];
+    return listed.length > 0 ? { kind: "problems", problems: listed } : { kind: "failed" };
+  }
+  // Narrowed rather than asserted, and a payload that does not narrow becomes the SAME failure a
+  // dead server is — see `asAccess`. A permission table drawn from something we could not read is
+  // the one thing worse than no table.
+  const parsed = asAccess(body.access);
+  return parsed === null ? { kind: "failed" } : { kind: "access", access: parsed };
+}
+
 async function load(cwd: string | null): Promise<void> {
   const mine = ++generation;
   loading.value = true;
   failed.value = false;
+  notDeclared.value = false;
   problems.value = [];
   access.value = null;
   if (cwd === null) {
@@ -45,17 +72,11 @@ async function load(cwd: string | null): Promise<void> {
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const body: unknown = await res.json();
     if (mine !== generation) return;
-    if (!isRecord(body) || body.declared !== true) return;
-    if (body.ok === false) {
-      problems.value = Array.isArray(body.problems) ? body.problems.filter((entry): entry is string => typeof entry === "string") : [];
-      return;
-    }
-    // Narrowed rather than asserted, and a payload that does not narrow becomes the SAME failure a
-    // dead server is — see `asAccess`. A permission table drawn from something we could not read is
-    // the one thing worse than no table.
-    const parsed = asAccess(body.access);
-    if (parsed === null) failed.value = true;
-    else access.value = parsed;
+    const outcome = outcomeOf(body);
+    if (outcome.kind === "notDeclared") notDeclared.value = true;
+    else if (outcome.kind === "failed") failed.value = true;
+    else if (outcome.kind === "problems") problems.value = outcome.problems;
+    else access.value = outcome.access;
   } catch {
     if (mine === generation) failed.value = true;
   } finally {
@@ -97,10 +118,18 @@ const READ_LABEL = { all: "All rows", own: "Own rows", none: "Nothing" } as cons
 function writeLabel(entry: SubjectAccess): string {
   if (entry.editAll) return entry.create ? "Anything" : "Edit any row";
   if (entry.create) return entry.editOwn ? "Submit, edit own" : "Submit only";
-  return entry.editOwn ? "Edit own only" : "Nothing";
+  if (entry.editOwn) return "Edit own only";
+  // LAST, and it is the only label that is not "Nothing" for somebody who may do almost nothing:
+  // a `mirrorOf` collection lets anyone at all write its `state` back to the truth, so the cell
+  // that would otherwise read "Nothing" would be contradicting the deployed rule.
+  return entry.repairMirror ? "Repair `state` only" : "Nothing";
 }
 
-const reaches = (entry: SubjectAccess): boolean => entry.read !== "none" || entry.create || entry.editOwn || entry.editAll;
+/** Any write at all — the test the write cell's colour uses. Not `writeLabel(...) !== "Nothing"`:
+ *  a colour decided by comparing rendered English breaks the moment a label is reworded. */
+const writes = (entry: SubjectAccess): boolean => entry.create || entry.editOwn || entry.editAll || entry.repairMirror;
+
+const reaches = (entry: SubjectAccess): boolean => entry.read !== "none" || entry.create || entry.editOwn || entry.editAll || entry.repairMirror;
 
 /** How many people the roster actually puts in this row. `null` for the two outsiders, who are not
  *  a group anyone is enrolled in — printing "0 people" beside a stranger would read as "nobody can
@@ -124,6 +153,7 @@ const shutToOutsiders = computed(
   <div class="flex h-full min-h-0 flex-col overflow-y-auto px-4 py-3 font-sans text-[11px]">
     <div v-if="loading" class="text-dim">Working out who can see what…</div>
     <div v-else-if="failed" class="text-err-text">Could not work out the access summary.</div>
+    <div v-else-if="notDeclared" class="text-dim">This directory no longer declares a shared app, so it grants nobody anything.</div>
     <div v-else-if="problems.length" class="flex flex-col gap-1">
       <span class="text-err-text">The declaration could not be read.</span>
       <span v-for="problem in problems" :key="problem" class="leading-[1.4] text-dim">{{ problem }}</span>
@@ -171,7 +201,7 @@ const shutToOutsiders = computed(
               <td class="py-1 pr-2" :class="OUTSIDERS.includes(subject) && collection.access[subject].read !== 'none' ? 'text-amber' : 'text-dim'">
                 {{ READ_LABEL[collection.access[subject].read] }}
               </td>
-              <td class="py-1" :class="OUTSIDERS.includes(subject) && writeLabel(collection.access[subject]) !== 'Nothing' ? 'text-amber' : 'text-dim'">
+              <td class="py-1" :class="OUTSIDERS.includes(subject) && writes(collection.access[subject]) ? 'text-amber' : 'text-dim'">
                 {{ writeLabel(collection.access[subject]) }}
               </td>
             </tr>

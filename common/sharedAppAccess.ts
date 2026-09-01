@@ -52,6 +52,14 @@ export interface SubjectAccess {
   editOwn: boolean;
   /** May change or delete ANY record here. */
   editAll: boolean;
+  /** `mirrorRepair` — this collection is the PUBLIC PROJECTION of records nobody outside may read
+   *  (`mirrorOf`), and the rules let ANYONE write its `state` field back to the truth. Not even
+   *  `authed()`: a stale grid repairing itself is the whole point of the rule.
+   *
+   *  A flag of its own rather than folded into `editAll`, because it is neither nothing nor a
+   *  general write — one field, to one value, that cannot be a lie. Its own flag is what stops the
+   *  table saying "Nothing" about a collection every visitor may write to. */
+  repairMirror: boolean;
 }
 
 /** How many roster addresses hold each kind of role ON THIS COLLECTION.
@@ -187,20 +195,27 @@ function windowState(submit: Record<string, unknown>, now: number): "none" | "op
   return "open";
 }
 
+/** Only the two states that are DECIDED and shut. `none` is a collection with no window at all,
+ *  and `perRecord` is a bound this summary cannot read — refusing on either would report a closed
+ *  door on most of the apps there are. */
+function windowOpen(submit: Record<string, unknown>, now: number): boolean {
+  const state = windowState(submit, now);
+  return state !== "closed" && state !== "early";
+}
+
 /** `submitCreate` minus the parts that depend on the record and the clock.
  *
  *  The first conjunct is the one #1926 was about and the one this whole panel is for: a
  *  `public.submit` declaration is not a statement that the app is open, so the gate is the SWITCH
  *  or the ROSTER, never the declaration's existence. */
-function canCreate(declared: Declared, stage: CollectionAccess["authStage"], who: Principal): boolean {
+function canCreate(declared: Declared, stage: CollectionAccess["authStage"], who: Principal, ignoreWindow = false): boolean {
   const { s } = declared;
   if (s === undefined) return false;
   if (!(declared.publicOn || who.listed)) return false;
   // Only the two states that are DECIDED and shut. `none` is a collection with no window at all,
   // and `perRecord` is a bound this summary cannot read — refusing on either would report a closed
   // door on most of the apps there are.
-  const window = windowState(s, declared.now);
-  if (window === "closed" || window === "early") return false;
+  if (!ignoreWindow && !windowOpen(s, declared.now)) return false;
   if (!Array.isArray(s.createFields)) return false;
   if (!authOk(stage, who)) return false;
   // `audience: "participant"` is matched against the ROLE, so it shuts out viewers and editors as
@@ -208,33 +223,49 @@ function canCreate(declared: Declared, stage: CollectionAccess["authStage"], who
   return s.audience !== "participant" || who.role === "participant";
 }
 
-/** `selfWriteOk` / `selfDelete` — is there any self-service edit declared at all?
+/** `selfWriteOk` and `selfDelete`, kept APART — the rules gate them differently and the difference
+ *  shows up exactly when a window closes.
  *
  *  Both are keyed by the CURRENT STATUS, so a collection with no `statusField` can say neither and
- *  the rules fail closed on it. That prerequisite is the declaration's, not a status machine's: a
- *  single-status collection satisfies it. */
-function selfEditDeclared(declared: Declared): boolean {
+ *  the rules fail closed on it. That prerequisite is the declaration's, not a state machine's: a
+ *  single-status collection satisfies it.
+ *
+ *  The update half sits inside `updateWith`, which carries `inWindow`; the delete half is reached
+ *  through `deleteWith`, which does not. So after a window closes a submitter may still WITHDRAW
+ *  their row and may no longer EDIT it. */
+function selfUpdateDeclared(declared: Declared): boolean {
   const { c, s } = declared;
-  if (s === undefined || typeof c.statusField !== "string") return false;
-  if (flagOn(s, "finalize")) return false;
+  if (s === undefined || typeof c.statusField !== "string" || flagOn(s, "finalize")) return false;
+  if (!windowOpen(s, declared.now)) return false;
   const updates = asRecord(s.selfUpdate) ?? {};
   const transitions = asRecord(s.selfTransitions) ?? {};
-  return Object.keys(updates).length > 0 || Object.keys(transitions).length > 0 || asStrings(s.selfDelete).length > 0;
+  return Object.keys(updates).length > 0 || Object.keys(transitions).length > 0;
+}
+
+function selfDeleteDeclared(declared: Declared): boolean {
+  const { c, s } = declared;
+  if (s === undefined || typeof c.statusField !== "string") return false;
+  return asStrings(s.selfDelete).length > 0;
 }
 
 /** Whether this subject can hold a row here AT ALL — the binding reaching them is necessary and
  *  not sufficient.
  *
- *  An `emailField` binding reaches every verified account in the world, so `ownRowReachable` alone
- *  would report "own rows" for a stranger who has no way to create one, in the one panel whose
- *  job is to say that strangers reach nothing. So the row has to have been creatable: by them, or
- *  — for someone on the roster — by the desk on their behalf.
+ *  `emailField` reaches every verified account in the world, so `ownRowReachable` alone would
+ *  report "own rows" for a stranger who has no way to make one, in the one panel whose job is to
+ *  say that strangers reach nothing. So the row has to have been creatable: by them, or — for
+ *  someone on the roster — by the desk on their behalf.
  *
- *  The case this closes over rather than models is a stranger who submitted while the app WAS open
- *  and still owns that row after it closed. The rules do let them read and edit it, and nothing in
- *  the working tree records that it happened; `caveatsOf` says so in words instead. */
-function ownRow(declared: Declared, stage: CollectionAccess["authStage"], who: Principal): boolean {
-  return ownRowReachable(declared, who) && (who.listed || canCreate(declared, stage, who));
+ *  THE WINDOW IS DELIBERATELY IGNORED HERE. `ownRow` in the rules asks for a submit binding and the
+ *  caller's identity and nothing else, so a visitor who submitted while the window was open goes on
+ *  reading that row after it closes. Asking `canCreate` in full would erase their row from this
+ *  table at the exact moment the panel is most likely to be consulted.
+ *
+ *  What it still closes over is a stranger who submitted while the SWITCH was on and the app was
+ *  closed afterwards. Nothing in the working tree records that it happened; `caveatsOf` says so in
+ *  words instead. */
+function holdsRow(declared: Declared, stage: CollectionAccess["authStage"], who: Principal): boolean {
+  return ownRowReachable(declared, who) && (who.listed || canCreate(declared, stage, who, true));
 }
 
 /** `readWith`, in its own order: a role first, then the public switch, then the two roster-wide
@@ -249,7 +280,7 @@ function accessFor(declared: Declared, stage: CollectionAccess["authStage"], who
   const { c } = declared;
   const immutable = flagOn(c, "immutable");
   const isWriter = who.role === "writer";
-  const own = ownRow(declared, stage, who);
+  const own = holdsRow(declared, stage, who);
 
   const read = readAccessFor(declared, who, isWriter, own);
 
@@ -257,7 +288,15 @@ function accessFor(declared: Declared, stage: CollectionAccess["authStage"], who
   // public submission path is open to them on the same terms as everybody else.
   const create = (isWriter && !flagOn(c, "submitOnly")) || canCreate(declared, stage, who);
 
-  return { read, create, editOwn: own && !immutable && selfEditDeclared(declared), editAll: isWriter && !immutable };
+  return {
+    read,
+    create,
+    editOwn: own && !immutable && (selfUpdateDeclared(declared) || selfDeleteDeclared(declared)),
+    editAll: isWriter && !immutable,
+    // Everybody's, and unconditionally: `mirrorRepair` is the FIRST branch of `updateWith` and asks
+    // nothing about the caller.
+    repairMirror: typeof c.mirrorOf === "string",
+  };
 }
 
 /** The window's own sentence, in the four states `windowState` distinguishes. Split out of
@@ -290,13 +329,17 @@ function caveatsOf(declared: Declared, stage: CollectionAccess["authStage"]): st
   // says, so it never had the open period this sentence describes — and printing the caveat
   // there put a warning on `apps/ai-blogs`, whose strangers have never been able to submit.
   const strandable = OUTSIDER_PRINCIPALS.some(
-    (who) => ownRowReachable(declared, who) && !canCreate(declared, stage, who) && canCreate({ ...declared, publicOn: true }, stage, who),
+    (who) => ownRowReachable(declared, who) && !canCreate(declared, stage, who) && canCreate({ ...declared, publicOn: true }, stage, who, true),
   );
   if (strandable) {
-    caveats.push("Anyone who submitted while this collection was open still reads and edits that row of theirs, whatever it says above.");
+    caveats.push(
+      "Anyone who submitted while this collection was open still reads their own row, and may still withdraw it — the rules bind a row to its submitter without asking the switch or the window.",
+    );
   }
   caveats.push(...windowCaveats(declared));
-  if (s !== undefined && s.gate !== undefined) caveats.push("A session gate has to be open before a submission is taken.");
+  // `gateOn` — the projected key, and the one the rules read. `gate` is not produced by anything.
+  if (s !== undefined && s.gateOn !== undefined)
+    caveats.push("A session gate has to be open, on the question the host is currently showing, before a submission is taken.");
   if (s !== undefined && s.idFrom === "field")
     caveats.push("The record id is a field, so the first submission for a value takes it and later ones are refused.");
   if (flagOn(c, "revealGated")) caveats.push("Everyone on the roster reads a row once its parent reveals it.");

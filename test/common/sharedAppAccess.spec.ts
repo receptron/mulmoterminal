@@ -48,7 +48,7 @@ describe("an INVITE-ONLY app — the #1926 shape", () => {
   it("gives a signed-in STRANGER nothing at all", () => {
     // The whole point. The aid and the cid are world-readable, so a summary that let this cell
     // read as anything but empty would be describing the hole #1926's fix closed.
-    expect(only(access, "records").access.stranger).toEqual({ read: "none", create: false, editOwn: false, editAll: false });
+    expect(only(access, "records").access.stranger).toEqual({ read: "none", create: false, editOwn: false, editAll: false, repairMirror: false });
     expect(reaches(access, "records", "stranger")).toBe(false);
   });
 
@@ -57,11 +57,11 @@ describe("an INVITE-ONLY app — the #1926 shape", () => {
   });
 
   it("lets a participant read the collection and edit their own row", () => {
-    expect(only(access, "records").access.participant).toEqual({ read: "all", create: true, editOwn: true, editAll: false });
+    expect(only(access, "records").access.participant).toEqual({ read: "all", create: true, editOwn: true, editAll: false, repairMirror: false });
   });
 
   it("lets an owner do anything", () => {
-    expect(only(access, "records").access.writer).toEqual({ read: "all", create: true, editOwn: true, editAll: true });
+    expect(only(access, "records").access.writer).toEqual({ read: "all", create: true, editOwn: true, editAll: true, repairMirror: false });
   });
 
   it("counts the people the roster actually puts in each row", () => {
@@ -79,7 +79,7 @@ describe("an app whose switch is ON", () => {
   const access = sharedAppAccessOf(app, block, ["answers"]);
 
   it("takes an anonymous visitor's submission, since `anonymous` is satisfied by the session the public page holds", () => {
-    expect(only(access, "answers").access.visitor).toEqual({ read: "own", create: true, editOwn: false, editAll: false });
+    expect(only(access, "answers").access.visitor).toEqual({ read: "own", create: true, editOwn: false, editAll: false, repairMirror: false });
   });
 
   it("keeps everyone else's rows out of sight — nothing is in `public.read`", () => {
@@ -124,12 +124,12 @@ describe("a BLOG — the writer edits their own article forever", () => {
   const access = sharedAppAccessOf(app, block, ["articles"]);
 
   it("lets the world read the articles and write nothing", () => {
-    expect(only(access, "articles").access.visitor).toEqual({ read: "all", create: false, editOwn: false, editAll: false });
-    expect(only(access, "articles").access.stranger).toEqual({ read: "all", create: false, editOwn: false, editAll: false });
+    expect(only(access, "articles").access.visitor).toEqual({ read: "all", create: false, editOwn: false, editAll: false, repairMirror: false });
+    expect(only(access, "articles").access.stranger).toEqual({ read: "all", create: false, editOwn: false, editAll: false, repairMirror: false });
   });
 
   it("lets a participant publish and go on editing what they published", () => {
-    expect(only(access, "articles").access.participant).toEqual({ read: "all", create: true, editOwn: true, editAll: false });
+    expect(only(access, "articles").access.participant).toEqual({ read: "all", create: true, editOwn: true, editAll: false, repairMirror: false });
   });
 
   it('shuts a writer out of `audience: "participant"` and out of creating at all, because the collection is submitOnly', () => {
@@ -140,10 +140,11 @@ describe("a BLOG — the writer edits their own article forever", () => {
 
 describe("the submission window, evaluated rather than mentioned", () => {
   const app = { members: {}, collections: { topics: { statusField: "status" } } };
+  // No `read` list on purpose: with the collection world-readable every cell would answer "all"
+  // and the own-row assertion below could not tell the two apart.
   const block = (window: Record<string, unknown>) => ({
     enabled: true,
-    read: ["topics"],
-    submit: { topics: { auth: "anonymous", uidField: "uid", createFields: ["uid", "status"], initialStatus: "open", window } },
+    submit: { topics: { auth: "anonymous", uidField: "uid", createFields: ["uid", "status"], initialStatus: "open", window, selfUpdate: { open: ["uid"] } } },
   });
   const NOW = Date.UTC(2026, 8, 1);
 
@@ -152,26 +153,80 @@ describe("the submission window, evaluated rather than mentioned", () => {
     // summary that only said "there is a window" reported an open board nobody can post to.
     const access = sharedAppAccessOf(app, block({ untilMs: Date.UTC(2000, 0, 1) }), ["topics"], NOW);
     expect(only(access, "topics").access.visitor.create).toBe(false);
-    expect(only(access, "topics").caveats[0]).toContain("has CLOSED");
+    expect(only(access, "topics").caveats.join(" ")).toContain("has CLOSED");
+    // AND the row they already submitted is still theirs. `ownRow` in the rules never asks about
+    // the window, so erasing this cell when the window shuts is false reassurance at exactly the
+    // moment the panel is most likely to be read.
+    expect(only(access, "topics").access.visitor.read).toBe("own");
   });
 
   it("shuts it on a window that has not opened", () => {
     const access = sharedAppAccessOf(app, block({ fromMs: Date.UTC(2030, 0, 1) }), ["topics"], NOW);
     expect(only(access, "topics").access.visitor.create).toBe(false);
-    expect(only(access, "topics").caveats[0]).toContain("not opened yet");
+    expect(only(access, "topics").caveats.join(" ")).toContain("not opened yet");
   });
 
   it("leaves it open inside the window, and says the window is there", () => {
     const access = sharedAppAccessOf(app, block({ fromMs: Date.UTC(2020, 0, 1), untilMs: Date.UTC(2030, 0, 1) }), ["topics"], NOW);
     expect(only(access, "topics").access.visitor.create).toBe(true);
-    expect(only(access, "topics").caveats[0]).toContain("open right now");
+    expect(only(access, "topics").caveats.join(" ")).toContain("open right now");
   });
 
   it("refuses to guess when the bound lives on another record", () => {
     const access = sharedAppAccessOf(app, block({ fromField: { collection: "classes", ref: "classId", field: "opensAt" } }), ["topics"], NOW);
     // Neither answer is available, so the table keeps the wider one and the caveat says why.
     expect(only(access, "topics").access.visitor.create).toBe(true);
-    expect(only(access, "topics").caveats[0]).toContain("cannot say whether any one of them is open");
+    expect(only(access, "topics").caveats.join(" ")).toContain("cannot say whether any one of them is open");
+  });
+});
+
+describe("the two write paths a closed window separates", () => {
+  // `updateWith` carries `inWindow`; `deleteWith` does not. So after a window closes a submitter
+  // may still WITHDRAW their row and may no longer EDIT it, and a summary that folded the two
+  // together had to be wrong about one of them.
+  const app = { members: {}, collections: { rsvps: { statusField: "status" } } };
+  const shape = (window: Record<string, unknown>, self: Record<string, unknown>) => ({
+    enabled: true,
+    submit: { rsvps: { auth: "anonymous", uidField: "uid", createFields: ["uid", "status"], initialStatus: "in", window, ...self } },
+  });
+  const CLOSED = { untilMs: Date.UTC(2000, 0, 1) };
+  const NOW = Date.UTC(2026, 8, 1);
+
+  it("keeps the withdrawal a closed window does not take away", () => {
+    const access = sharedAppAccessOf(app, shape(CLOSED, { selfDelete: ["in"] }), ["rsvps"], NOW);
+    expect(only(access, "rsvps").access.visitor).toEqual({ read: "own", create: false, editOwn: true, editAll: false, repairMirror: false });
+  });
+
+  it("takes away the edit it does", () => {
+    const access = sharedAppAccessOf(app, shape(CLOSED, { selfUpdate: { in: ["uid"] } }), ["rsvps"], NOW);
+    expect(only(access, "rsvps").access.visitor).toEqual({ read: "own", create: false, editOwn: false, editAll: false, repairMirror: false });
+  });
+});
+
+describe("a mirror is writable by everyone, and the table has to say so", () => {
+  // `mirrorRepair` is the FIRST branch of `updateWith` and asks nothing about the caller — not even
+  // `authed()`. A stale grid repairing itself is the whole point of the rule.
+  const access = sharedAppAccessOf({ members: {}, collections: { slots: { mirrorOf: "bookings" } } }, undefined, ["slots"]);
+
+  it("gives every subject the repair, whatever else they may not do", () => {
+    expect(only(access, "slots").access.visitor).toEqual({ read: "none", create: false, editOwn: false, editAll: false, repairMirror: true });
+    expect(only(access, "slots").access.stranger.repairMirror).toBe(true);
+  });
+
+  it("says in words what the one field is", () => {
+    expect(only(access, "slots").caveats.join(" ")).toContain("`state`");
+  });
+});
+
+describe("a session gate", () => {
+  it("is read under the key the rules read, which is `gateOn`", () => {
+    // `gate` is produced by nothing. Checking it meant the caveat never appeared on any real app.
+    const access = sharedAppAccessOf(
+      { members: {}, collections: { answers: {} } },
+      { enabled: true, submit: { answers: { auth: "anonymous", createFields: ["a"], gateOn: { phase: "answering", match: "questionId" } } } },
+      ["answers"],
+    );
+    expect(only(access, "answers").caveats.join(" ")).toContain("session gate");
   });
 });
 
@@ -197,9 +252,7 @@ describe("what the summary refuses to overstate", () => {
     // exists to answer exactly this question.
     const access = sharedAppAccessOf({ members: {} }, { submit: { records: { auth: "verifiedEmail", emailField: "by", createFields: ["by"] } } }, ["records"]);
     expect(only(access, "records").access.stranger.read).toBe("none");
-    expect(only(access, "records").caveats).toContain(
-      "Anyone who submitted while this collection was open still reads and edits that row of theirs, whatever it says above.",
-    );
+    expect(only(access, "records").caveats.join(" ")).toContain("still reads their own row, and may still withdraw it");
   });
 
   it("does not hand an emailField row to the visitor, who has a uid and no verified address", () => {
@@ -210,8 +263,8 @@ describe("what the summary refuses to overstate", () => {
       { enabled: true, submit: { rsvps: { auth: "none", emailField: "by", createFields: ["by", "status"], initialStatus: "in", selfUpdate: { in: ["by"] } } } },
       ["rsvps"],
     );
-    expect(only(access, "rsvps").access.visitor).toEqual({ read: "none", create: true, editOwn: false, editAll: false });
-    expect(only(access, "rsvps").access.stranger).toEqual({ read: "own", create: true, editOwn: true, editAll: false });
+    expect(only(access, "rsvps").access.visitor).toEqual({ read: "none", create: true, editOwn: false, editAll: false, repairMirror: false });
+    expect(only(access, "rsvps").access.stranger).toEqual({ read: "own", create: true, editOwn: true, editAll: false, repairMirror: false });
   });
 
   it("says nobody may edit anything when the collection is immutable", () => {

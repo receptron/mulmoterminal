@@ -21,8 +21,9 @@ const count = (value: unknown): number | null => (typeof value === "number" && N
 function asSubjectAccess(value: unknown): SubjectAccess | null {
   if (!isRecord(value)) return null;
   if (!isRead(value.read)) return null;
-  if (typeof value.create !== "boolean" || typeof value.editOwn !== "boolean" || typeof value.editAll !== "boolean") return null;
-  return { read: value.read, create: value.create, editOwn: value.editOwn, editAll: value.editAll };
+  if (typeof value.create !== "boolean" || typeof value.editOwn !== "boolean" || typeof value.editAll !== "boolean" || typeof value.repairMirror !== "boolean")
+    return null;
+  return { read: value.read, create: value.create, editOwn: value.editOwn, editAll: value.editAll, repairMirror: value.repairMirror };
 }
 
 function asCollectionAccess(value: unknown): CollectionAccess | null {

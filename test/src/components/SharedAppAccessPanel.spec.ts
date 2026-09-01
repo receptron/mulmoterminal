@@ -4,7 +4,7 @@ import type { SharedAppAccess } from "../../../common/sharedAppAccess";
 
 const Panel = (await import("../../../src/components/SharedAppAccessPanel.vue")).default;
 
-const shut = { read: "none", create: false, editOwn: false, editAll: false } as const;
+const shut = { read: "none", create: false, editOwn: false, editAll: false, repairMirror: false } as const;
 
 function answer(access: SharedAppAccess) {
   globalThis.fetch = vi.fn(
@@ -24,8 +24,8 @@ const CLOSED: SharedAppAccess = {
       access: {
         visitor: shut,
         stranger: shut,
-        participant: { read: "all", create: true, editOwn: true, editAll: false },
-        writer: { read: "all", create: true, editOwn: true, editAll: true },
+        participant: { read: "all", create: true, editOwn: true, editAll: false, repairMirror: false },
+        writer: { read: "all", create: true, editOwn: true, editAll: true, repairMirror: false },
       },
     },
   ],
@@ -54,7 +54,10 @@ describe("the access panel", () => {
       ...CLOSED,
       publicFace: "open",
       collections: [
-        { ...CLOSED.collections[0], access: { ...CLOSED.collections[0].access, stranger: { read: "all", create: true, editOwn: false, editAll: false } } },
+        {
+          ...CLOSED.collections[0],
+          access: { ...CLOSED.collections[0].access, stranger: { read: "all", create: true, editOwn: false, editAll: false, repairMirror: false } },
+        },
       ],
     });
     const open = mount(Panel, { props: { cwd: "/srv/app" } });
@@ -84,6 +87,39 @@ describe("the access panel", () => {
     expect(w.find('[data-testid="access-records-stranger"]').text()).not.toContain("(");
   });
 
+  it("labels the one field a mirror lets anyone write, rather than calling it Nothing", async () => {
+    answer({
+      ...CLOSED,
+      collections: [{ ...CLOSED.collections[0], access: { ...CLOSED.collections[0].access, visitor: { ...shut, repairMirror: true } } }],
+    });
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    const row = w.find('[data-testid="access-records-visitor"]');
+    expect(row.text()).toContain("Repair `state` only");
+    // And it counts as reaching something, so the row is coloured and the collection is not
+    // counted among those shut to outsiders.
+    expect(row.html()).toContain("text-amber");
+    expect(w.text()).toContain("0 of 1 collections are shut");
+  });
+
+  it("says the app.json went away rather than drawing nothing at all", async () => {
+    // Reachable when the manifest is removed between the pane's `/declared` probe and this
+    // request. Returning silently left a blank panel with no state.
+    globalThis.fetch = vi.fn(
+      async () => ({ ok: true, status: 200, json: async () => ({ declared: false }) }) as unknown as Response,
+    ) as unknown as typeof fetch;
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    expect(w.text()).toContain("no longer declares a shared app");
+  });
+
+  it("treats an answer that carries no `declared` at all as a failure", async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ some: "thing" }) }) as unknown as Response) as unknown as typeof fetch;
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    expect(w.text()).toContain("Could not work out the access summary.");
+  });
+
   it("reports a manifest it could not read instead of an empty table", async () => {
     globalThis.fetch = vi.fn(
       async () => ({ ok: true, status: 200, json: async () => ({ declared: true, ok: false, problems: ["app.json is not JSON"] }) }) as unknown as Response,
@@ -92,6 +128,16 @@ describe("the access panel", () => {
     await flushPromises();
     expect(w.text()).toContain("app.json is not JSON");
     expect(w.text()).not.toContain("collections are shut");
+  });
+
+  it("does not print an empty list of reasons", async () => {
+    globalThis.fetch = vi.fn(
+      async () => ({ ok: true, status: 200, json: async () => ({ declared: true, ok: false, problems: [] }) }) as unknown as Response,
+    ) as unknown as typeof fetch;
+    const w = mount(Panel, { props: { cwd: "/srv/app" } });
+    await flushPromises();
+    expect(w.text()).toContain("Could not work out the access summary.");
+    expect(w.text()).not.toContain("The declaration could not be read.");
   });
 
   it("says so when the summary could not be computed at all", async () => {

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { asAccess } from "../../../src/utils/sharedAppAccessPayload";
 import { ACCESS_SUBJECTS } from "../../../common/sharedAppAccess";
 
-const entry = { read: "none", create: false, editOwn: false, editAll: false };
+const entry = { read: "none", create: false, editOwn: false, editAll: false, repairMirror: false };
 
 /** The server's summary, optionally with one subject's row left out — built from
  *  `ACCESS_SUBJECTS` so a fifth subject joins these cases by existing. */

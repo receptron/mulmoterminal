@@ -73,7 +73,7 @@ describe("the shared-app access summary", () => {
     if (!result.ok) return;
     expect(result.access.publicFace).toBe("declared");
     expect(result.access.collections.map((entry) => entry.cid)).toEqual(["records"]);
-    expect(result.access.collections[0].access.stranger).toEqual({ read: "none", create: false, editOwn: false, editAll: false });
+    expect(result.access.collections[0].access.stranger).toEqual({ read: "none", create: false, editOwn: false, editAll: false, repairMirror: false });
     expect(result.access.collections[0].census).toEqual({ writers: 1, readers: 0, participants: 1 });
   });
 
@@ -92,7 +92,7 @@ describe("the shared-app access summary", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.access.publicFace).toBe("open");
-    expect(result.access.collections[0].access.visitor).toEqual({ read: "all", create: true, editOwn: false, editAll: false });
+    expect(result.access.collections[0].access.visitor).toEqual({ read: "all", create: true, editOwn: false, editAll: false, repairMirror: false });
   });
 
   it("still answers for a declaration a publish would refuse", async () => {
