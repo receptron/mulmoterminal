@@ -180,6 +180,30 @@ describe("the submission window, evaluated rather than mentioned", () => {
   });
 });
 
+describe("a reveal-gated collection", () => {
+  // `readWith` opens a gated row to every listed member once its parent reveals it. Reporting
+  // `Nothing` for the participant row contradicted the deployed read rule; there is no "some rows"
+  // state, so the table takes the wider answer and the caveat carries the condition.
+  const access = sharedAppAccessOf(
+    { members: { "guest@example.com": { "*": "participant" } }, collections: { answers: { revealGated: true, gatedFrom: "questions", revealBy: "revealed" } } },
+    undefined,
+    ["answers"],
+  );
+
+  it("lets the roster read it", () => {
+    expect(only(access, "answers").access.participant.read).toBe("all");
+  });
+
+  it("leaves the outsiders where they were — the opening is roster-only", () => {
+    expect(only(access, "answers").access.visitor.read).toBe("none");
+    expect(only(access, "answers").access.stranger.read).toBe("none");
+  });
+
+  it("says the read only happens after the parent reveals it", () => {
+    expect(only(access, "answers").caveats.join(" ")).toContain("ONCE ITS PARENT REVEALS IT");
+  });
+});
+
 describe("what still binds an owner", () => {
   // The `Owner / editor` row is one cell for the whole collection, and these three are decided per
   // RECORD — by the status it is in, or by another record entirely. Without them the row reads

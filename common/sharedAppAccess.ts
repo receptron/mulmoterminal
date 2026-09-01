@@ -291,7 +291,12 @@ function holdsRow(declared: Declared, stage: CollectionAccess["authStage"], who:
  *  openings, and `ownRow` last as the narrowest answer that is still an answer. */
 function readAccessFor(declared: Declared, who: Principal, isWriter: boolean, own: boolean): ReadAccess {
   if (isWriter || declared.publicRead) return "all";
-  if (who.listed && (declared.partRead || declared.c.peerVisibility === "public")) return "all";
+  // `revealGated` sits with the other two roster-wide openings, and it is CONDITIONAL: the row
+  // opens once its parent says so. There is no "some rows" state and this table would rather
+  // overstate an insider's reach than report `Nothing` about a row the rules hand them — the
+  // caveat below carries the condition. Roster-only, so no outsider row moves.
+  const rosterWide = declared.partRead || declared.c.peerVisibility === "public" || flagOn(declared.c, "revealGated");
+  if (who.listed && rosterWide) return "all";
   return own ? "own" : "none";
 }
 
@@ -382,7 +387,11 @@ function caveatsOf(declared: Declared, stage: CollectionAccess["authStage"]): st
       "A new record is refused unless the record it points at is in the state `refIn` requires, and that reference is frozen afterwards — the owner is bound too.",
     );
   }
-  if (flagOn(c, "revealGated")) caveats.push("Everyone on the roster reads a row once its parent reveals it.");
+  if (flagOn(c, "revealGated")) {
+    // The condition the `All rows` above cannot carry: it is per record, and only after the parent
+    // says so.
+    caveats.push("Everyone on the roster reads a row ONCE ITS PARENT REVEALS IT, and not before — the roster rows above are the state after the reveal.");
+  }
   if (typeof c.assigneeField === "string") caveats.push("An assignee reads everything here and writes only the rows assigned to them.");
   if (typeof c.mirrorOf === "string") caveats.push("Anyone may repair this collection's `state` field to match the record it mirrors.");
   return caveats;
