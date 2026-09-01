@@ -277,6 +277,37 @@ describe("a createFields list that cannot carry what the rules demand", () => {
   });
 });
 
+describe("a self-edit declaration that names nothing reachable", () => {
+  const shape = (collection: Record<string, unknown>, self: Record<string, unknown>) =>
+    sharedAppAccessOf(
+      { members: {}, collections: { drafts: { statusField: "status", ...collection } } },
+      { enabled: true, submit: { drafts: { auth: "anonymous", uidField: "uid", createFields: ["uid", "status"], initialStatus: "draft", ...self } } },
+      ["drafts"],
+    );
+
+  it("refuses a `selfTransitions` entry with no target", () => {
+    // `selfWriteOk` asks `selfTransitions[current].hasAny([next])` — an empty list matches nothing.
+    expect(only(shape({}, { selfTransitions: { draft: [] } }), "drafts").access.visitor.editOwn).toBe(false);
+  });
+
+  it("refuses a target the collection's own `transitions` forbid", () => {
+    // `updateWith` asks `transitionOk(c)` before it ever reaches `selfWriteOk`.
+    const c = { transitions: { initial: ["draft"], draft: ["sent"] } };
+    expect(only(shape(c, { selfTransitions: { draft: ["cancelled"] } }), "drafts").access.visitor.editOwn).toBe(false);
+    expect(only(shape(c, { selfTransitions: { draft: ["sent"] } }), "drafts").access.visitor.editOwn).toBe(true);
+  });
+
+  it("refuses a move to the status it moves from, which changes nothing", () => {
+    expect(only(shape({}, { selfTransitions: { draft: ["draft"] } }), "drafts").access.visitor.editOwn).toBe(false);
+  });
+
+  it("refuses a `selfUpdate` entry that names no field", () => {
+    // `changed().hasOnly([])` passes only for a write that changes nothing, which is not an edit.
+    expect(only(shape({}, { selfUpdate: { draft: [] } }), "drafts").access.visitor.editOwn).toBe(false);
+    expect(only(shape({}, { selfUpdate: { draft: ["uid"] } }), "drafts").access.visitor.editOwn).toBe(true);
+  });
+});
+
 describe("a withdrawal every sealed state takes back", () => {
   // `deleteWith` asks `!sealedNow(c)` before it reaches `selfDelete`, so a declaration whose every
   // withdrawable status is also sealed grants no withdrawal at all.

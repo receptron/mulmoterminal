@@ -343,9 +343,29 @@ function selfUpdateDeclared(declared: Declared): boolean {
   const { c, s } = declared;
   if (s === undefined || typeof c.statusField !== "string" || flagOn(s, "finalize")) return false;
   if (!windowOpen(s, declared.now)) return false;
-  const updates = asRecord(s.selfUpdate) ?? {};
-  const transitions = asRecord(s.selfTransitions) ?? {};
-  return Object.keys(updates).length > 0 || Object.keys(transitions).length > 0;
+  return editsSomeField(s) || movesSomeStatus(c, s);
+}
+
+/** A `selfUpdate` entry that actually names a field.
+ *
+ *  `selfWriteOk` asks `changed().hasOnly(selfUpdate[current])`, so an empty list passes only for a
+ *  write that changes nothing — which is not an edit, and reporting it as one puts `Edit own only`
+ *  on a row whose owner can change nothing at all. */
+function editsSomeField(submit: Record<string, unknown>): boolean {
+  return Object.values(asRecord(submit.selfUpdate) ?? {}).some((fields) => asStrings(fields).length > 0);
+}
+
+/** A `selfTransitions` entry with a target the state machine will actually accept.
+ *
+ *  Two ways it can name none: an empty target list, and a target the collection's own `transitions`
+ *  forbid — `updateWith` asks `transitionOk(c)` before it ever reaches `selfWriteOk`, so a move the
+ *  machine does not allow is refused however the submit block declares it. A target equal to the
+ *  status it moves from passes `transitionOk` and changes nothing, so it is not a move either. */
+function movesSomeStatus(c: Record<string, unknown>, submit: Record<string, unknown>): boolean {
+  const machine = asRecord(c.transitions);
+  return Object.entries(asRecord(submit.selfTransitions) ?? {}).some(([from, targets]) =>
+    asStrings(targets).some((to) => to !== from && (machine === undefined || asStrings(machine[from]).includes(to))),
+  );
 }
 
 function selfDeleteDeclared(declared: Declared): boolean {
