@@ -184,12 +184,10 @@ describe("a status declaration that refuses every create by itself", () => {
   // Both fail CLOSED in the rules, and both are shapes a half-finished manifest really has. They
   // are modelled rather than caveated because the declaration alone decides them: nothing about
   // the record or the caller can rescue the create, which is exactly when the table may speak.
-  const open = (c: Record<string, unknown>, initialStatus: string) =>
-    sharedAppAccessOf(
-      { members: {}, collections: { answers: c } },
-      { enabled: true, submit: { answers: { auth: "none", createFields: ["a", "status"], initialStatus } } },
-      ["answers"],
-    );
+  const open = (c: Record<string, unknown>, initialStatus: string, createFields: string[] = ["a", "status"]) =>
+    sharedAppAccessOf({ members: {}, collections: { answers: c } }, { enabled: true, submit: { answers: { auth: "none", createFields, initialStatus } } }, [
+      "answers",
+    ]);
 
   it("refuses when the submit names an initial status and the collection names no status field", () => {
     expect(only(open({}, "new"), "answers").access.visitor.create).toBe(false);
@@ -201,6 +199,12 @@ describe("a status declaration that refuses every create by itself", () => {
 
   it("allows it when the map lists it", () => {
     expect(only(open({ statusField: "status", transitions: { initial: ["new"], new: ["done"] } }, "new"), "answers").access.visitor.create).toBe(true);
+  });
+
+  it("refuses when `createFields` does not let the submitter send the status at all", () => {
+    // `hasOnly(createFields)` and "the status field must be present at the declared value" are
+    // then two conjuncts that contradict each other.
+    expect(only(open({ statusField: "status" }, "new", ["a"]), "answers").access.visitor.create).toBe(false);
   });
 
   it("leaves a collection with no `transitions` alone", () => {

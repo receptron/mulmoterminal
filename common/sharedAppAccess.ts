@@ -239,6 +239,10 @@ function initialStatusOk(declared: Declared): boolean {
   // A non-string `initialStatus` can never equal the record's status field, which the rules compare
   // without coercing — so it refuses every create for the same reason and by the same rule.
   if (typeof initial !== "string" || typeof c.statusField !== "string") return false;
+  // And the submitter has to be ALLOWED to send it. `submitCreate` asks `hasOnly(createFields)` and
+  // then requires the status field to be present at the declared value, so a `createFields` that
+  // omits it makes those two conjuncts contradict each other and every create is refused.
+  if (!asStrings(s?.createFields).includes(c.statusField)) return false;
   const transitions = asRecord(c.transitions);
   if (transitions === undefined) return true;
   return asStrings(transitions.initial).includes(initial);
