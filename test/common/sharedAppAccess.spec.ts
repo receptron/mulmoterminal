@@ -206,6 +206,19 @@ describe("a status declaration that refuses every create by itself", () => {
       ["answers"],
     );
     expect(only(empty, "answers").access.visitor.create).toBe(false);
+    // AND the owner. `initialOk` sits above the branch group in `createWith`, so it is asked of a
+    // writer's create exactly as it is asked of a visitor's.
+    expect(only(empty, "answers").access.writer.create).toBe(false);
+    expect(only(empty, "answers").access.writer.editAll).toBe(true);
+  });
+
+  it("leaves the owner alone when the map does list an initial status", () => {
+    const fine = sharedAppAccessOf(
+      { members: { "owner@example.com": { "*": "owner" } }, collections: { answers: { statusField: "status", transitions: { initial: ["new"] } } } },
+      undefined,
+      ["answers"],
+    );
+    expect(only(fine, "answers").access.writer.create).toBe(true);
   });
 
   it("allows it when the map lists it", () => {

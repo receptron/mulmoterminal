@@ -271,6 +271,24 @@ function requiredCreateFields(declared: Declared, stage: CollectionAccess["authS
  *
  *  Modelled rather than caveated because the answer is decided by the declaration alone: nothing
  *  about the record or the caller can rescue it, which is exactly when the table can speak. */
+/** `initialOk(c)`, the half that binds EVERYBODY.
+ *
+ *  It sits above the branch group in `createWith`, so it is asked of a writer's create exactly as
+ *  it is asked of a visitor's. Only one shape of it is decidable from the declaration alone: with
+ *  `transitions` and `statusField` both declared, the create's status is looked up under
+ *  `transitions.initial` — and a map listing nothing there can be satisfied by no value at all,
+ *  from anyone. Which value a writer WOULD send is not knowable here, which is why the rest of
+ *  `initialOk` stays in the `transitions` caveat.
+ *
+ *  Deliberately not folded into `initialStatusOk`: that one also carries the `initialStatus`
+ *  comparison, which lives inside `submitCreate` and binds the public path only. Folding them
+ *  would apply a public-path condition to a writer, which is the mirror image of this bug. */
+function initialTransitionPossible(c: Record<string, unknown>): boolean {
+  const transitions = asRecord(c.transitions);
+  if (transitions === undefined || typeof c.statusField !== "string") return true;
+  return asStrings(transitions.initial).length > 0;
+}
+
 function initialStatusOk(declared: Declared): boolean {
   const { c, s } = declared;
   const initial = s?.initialStatus;
@@ -279,8 +297,7 @@ function initialStatusOk(declared: Declared): boolean {
     // `initialOk` only binds when BOTH are declared. When they are, the submitter has to supply a
     // status the map lists under `initial` — so a map that lists none there (an empty list, or no
     // `initial` key at all) can be satisfied by no value whatsoever.
-    if (transitions === undefined || typeof c.statusField !== "string") return true;
-    return asStrings(transitions.initial).length > 0;
+    return initialTransitionPossible(c);
   }
   // A non-string `initialStatus` can never equal the record's status field, which the rules compare
   // without coercing — so it refuses every create for the same reason and by the same rule.
@@ -384,7 +401,7 @@ function accessFor(declared: Declared, stage: CollectionAccess["authStage"], who
 
   // `createWith`: a writer creates unless the collection is `submitOnly`, and either way the
   // public submission path is open to them on the same terms as everybody else.
-  const create = (isWriter && !flagOn(c, "submitOnly")) || canCreate(declared, stage, who);
+  const create = (isWriter && !flagOn(c, "submitOnly") && initialTransitionPossible(c)) || canCreate(declared, stage, who);
 
   return {
     read,
