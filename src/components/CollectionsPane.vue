@@ -18,6 +18,7 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 import { asSelfContainmentReport, type SelfContainmentReport, type SelfContainmentSeverity } from "../../common/collectionPortability";
 import type { ShortcutKind } from "../../common/shortcuts";
 import SharedAppPreview from "./SharedAppPreview.vue";
+import SharedAppAccessPanel from "./SharedAppAccessPanel.vue";
 import { isRecord } from "../../common/isRecord";
 
 const props = defineProps<{ cwd: string | null; expanded?: boolean }>();
@@ -37,6 +38,23 @@ const selectedId = ref<string | null>(null);
 const declaresApp = ref(false);
 const previewing = ref(false);
 
+// The pane's THIRD face: who, outside the roster, can reach these collections. It fills the body
+// like the preview does — the answer is a table per collection and there is no strip it fits in —
+// so the two are mutually exclusive, and each control turns the other off rather than leaving the
+// user to work out which one is winning.
+//
+// Not a checkbox beside `Previews`, because two independent-looking checkboxes over one slot is a
+// pair of controls that contradict each other on screen. A pressed button says "this is what you
+// are looking at", which is what it means.
+const showingAccess = ref(false);
+watch(previewing, (on) => {
+  if (on) showingAccess.value = false;
+});
+function toggleAccess(): void {
+  showingAccess.value = !showingAccess.value;
+  if (showingAccess.value) previewing.value = false;
+}
+
 // Whether anything has NAVIGATED since this directory was opened. The shared-app default below
 // only applies to a pane nobody has steered yet, and "still on the index" is not that test:
 // `gotoIndex("feed")` and a deliberate return to the collections index both leave `mode ===
@@ -50,6 +68,7 @@ let viewTouched = false;
 function navigated(next: PaneView, itemId: string | null): void {
   viewTouched = true;
   previewing.value = false;
+  showingAccess.value = false;
   selectedId.value = itemId;
   view.value = next;
 }
@@ -132,6 +151,7 @@ async function probeForApp(cwd: string | null): Promise<void> {
   const mine = ++probeGeneration;
   declaresApp.value = false;
   previewing.value = false;
+  showingAccess.value = false;
   if (cwd === null) return;
   try {
     const res = await fetchWithTimeout(`/api/shared-app/declared?cwd=${encodeURIComponent(cwd)}`);
@@ -279,6 +299,24 @@ useCollectionTeleportTarget(probe);
             <input v-model="previewing" data-testid="collections-preview-toggle" type="checkbox" class="h-3.5 w-3.5 cursor-pointer accent-accent" />
             Previews
           </label>
+          <!-- The THIRD face. A pressed button rather than a second checkbox beside `Previews`:
+               both fill the same slot, so a control that looks independent of the one next to it
+               would be a lie the first time you press it. It sits with `Previews` because it is
+               the same kind of question — about the APP rather than about the one collection on
+               screen — and it appears on the same condition, since a directory that declares no
+               app grants nobody anything and has no answer to give. -->
+          <button
+            v-if="declaresApp"
+            type="button"
+            data-testid="collections-access-btn"
+            class="shrink-0 cursor-pointer rounded-[5px] border px-1.5 py-[2px] text-[11px] hover:border-accent"
+            :class="showingAccess ? 'border-accent bg-input text-fg' : 'border-border bg-transparent text-dim'"
+            :aria-pressed="showingAccess"
+            title="Who can reach these collections — and which of them a stranger can read or write. Nothing is written."
+            @click="toggleAccess"
+          >
+            Access
+          </button>
           <!-- Where the preview's PAGE PICKER lands. It is the preview's control and its state
                lives there, so it is teleported in rather than lifted — but it belongs on this bar:
                a second strip of chrome directly beneath this one was two toolbars saying different
@@ -321,6 +359,9 @@ useCollectionTeleportTarget(probe);
     </div>
     <div v-else-if="previewing" class="min-h-0 flex-1">
       <SharedAppPreview :cwd="cwd" :picker-target="pickerSlot" />
+    </div>
+    <div v-else-if="showingAccess" class="min-h-0 flex-1">
+      <SharedAppAccessPanel :cwd="cwd" />
     </div>
     <template v-else>
       <div class="min-h-0 flex-1">

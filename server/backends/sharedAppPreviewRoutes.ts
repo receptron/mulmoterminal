@@ -15,6 +15,7 @@ import { access } from "node:fs/promises";
 import path from "node:path";
 import { APP_MANIFEST_FILE } from "@mulmoclaude/core/collection/server";
 import { previewSharedApp } from "./sharedApp/preview.js";
+import { sharedAppAccess } from "./sharedApp/access.js";
 import { holdOpen, watchPreviewRecords } from "./sharedApp/previewWatch.js";
 import { undoPreviewSubmission, writePreviewSubmission } from "./sharedApp/previewWrite.js";
 import { performPreviewIntent } from "./sharedApp/previewIntent.js";
@@ -23,6 +24,7 @@ import { requestBody } from "../routes/requestBody.js";
 import { isRecord } from "../../common/isRecord.js";
 import { workspaceForRoute } from "../routes/routeParams.js";
 import type { PreviewIntent, PreviewSubmission, SharedAppPreview, SharedAppPreviewResponse } from "../../common/sharedAppPreview.js";
+import type { SharedAppAccessResponse } from "../../common/sharedAppAccess.js";
 
 const messageOf = (err: unknown): string => (err instanceof Error ? err.message : String(err));
 
@@ -258,6 +260,58 @@ function mountRecordStream(app: Express): void {
   });
 }
 
+// WHO CAN SEE WHAT, per collection. A GET with no session behind it: the summary is a pure
+// projection of the working tree (see `sharedAppAccess`), so it answers on a machine that has
+// never connected to Firestore — which is the whole reason it can sit in a pane whose preview is
+// off, beside collections the author is editing.
+//
+// The same three-state answer shape as the preview route: `declared: false` for the ordinary
+// directory, a 200 carrying `problems` when the manifest cannot be read, and the summary
+// otherwise. Not because the shapes must match, but because the pane asks both and a second
+// convention for "this is not a shared app" is a second thing to get wrong.
+/** The two GETs that cost no Firestore session: "is there an app here?" and "who can reach it?".
+ *  Together because the pane asks them as one question and neither reads a record. */
+function mountAccessRoute(app: Express): void {
+  // "Is there anything to preview here?" — one `stat`, and its own route rather than a flag on the
+  // one below. The pane asks it for every directory a cell is open in, and computing a whole
+  // publish projection to answer "no" would put a Firestore session behind a question about a
+  // file's existence.
+  app.get("/api/shared-app/declared", (req, res) => {
+    void (async () => {
+      try {
+        const cwd = workspaceForRoute(req.query.cwd, res);
+        if (cwd === null) return;
+        res.json({ declared: await declaresAnApp(cwd) });
+      } catch (err) {
+        // `declaresAnApp` swallows its own failures, but the guard and the write can still throw,
+        // and an unhandled rejection here is a request that never gets an answer at all.
+        fail(res, err);
+      }
+    })();
+  });
+
+  app.get("/api/shared-app/access", (req, res) => {
+    void (async () => {
+      try {
+        const cwd = workspaceForRoute(req.query.cwd, res);
+        if (cwd === null) return;
+        if (!(await declaresAnApp(cwd))) {
+          res.json({ declared: false } satisfies SharedAppAccessResponse);
+          return;
+        }
+        const result = await sharedAppAccess(cwd);
+        res.json(
+          result.ok
+            ? ({ declared: true, ok: true, access: result.access } satisfies SharedAppAccessResponse)
+            : ({ declared: true, ok: false, problems: result.problems } satisfies SharedAppAccessResponse),
+        );
+      } catch (err) {
+        fail(res, err);
+      }
+    })();
+  });
+}
+
 export function mountSharedAppPreviewRoutes(app: Express): void {
   // The write the author accepted in the confirmation, performed as them.
   //
@@ -317,23 +371,7 @@ export function mountSharedAppPreviewRoutes(app: Express): void {
     })();
   });
 
-  // "Is there anything to preview here?" — one `stat`, and its own route rather than a flag on the
-  // one below. The pane asks it for every directory a cell is open in, and computing a whole
-  // publish projection to answer "no" would put a Firestore session behind a question about a
-  // file's existence.
-  app.get("/api/shared-app/declared", (req, res) => {
-    void (async () => {
-      try {
-        const cwd = workspaceForRoute(req.query.cwd, res);
-        if (cwd === null) return;
-        res.json({ declared: await declaresAnApp(cwd) });
-      } catch (err) {
-        // `declaresAnApp` swallows its own failures, but the guard and the write can still throw,
-        // and an unhandled rejection here is a request that never gets an answer at all.
-        fail(res, err);
-      }
-    })();
-  });
+  mountAccessRoute(app);
 
   mountRecordStream(app);
 

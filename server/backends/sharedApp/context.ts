@@ -97,7 +97,7 @@ function byCid(left: { cid: string }, right: { cid: string }): number {
   return left.cid < right.cid ? -1 : 1;
 }
 
-async function readAuthored(root: string): Promise<{ ok: true; app: AuthoredApp } | { ok: false; problems: string[] }> {
+export async function readAuthored(root: string): Promise<{ ok: true; app: AuthoredApp } | { ok: false; problems: string[] }> {
   let raw: string;
   try {
     raw = await readFile(path.join(root, APP_MANIFEST_FILE), "utf-8");

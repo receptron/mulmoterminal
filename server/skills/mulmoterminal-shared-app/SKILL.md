@@ -516,6 +516,20 @@ the cell open on this repository: the **Collections pane** → the **Previews** 
 so the pages are usually already there; turning it OFF is what shows the collections underneath
 them. Opening it reads only: nothing is written and no URL name is taken.
 
+**With that switch OFF there is an `Access` button beside it, and it answers the question neither
+preview can.** Both previews run as the AUTHOR, so they show what the author's own session may do;
+`Access` shows, per collection, what a person who never signed in and a person who signed in and was
+never invited may read and write. It is a transcription of `firestore.rules` off the two documents
+those rules read — the app document and its `public` block, projected from the working tree — so it
+needs no Firestore session and writes nothing, and it changes the moment you edit `app.json`.
+
+Read it before every `publish` of an app whose roster is the point, and **say what it shows in your
+own words** rather than only pointing at it: the row to read out is `Signed in, not invited`. A
+`public.submit` declaration is not a statement that the app is open — an invite-only app needs one so
+its own members' pages can write — and reading those two keys as one is what mulmoterminal#1926 was.
+The deployed rules decide; if that panel and the deployment ever disagree, the deployment is right
+and the disagreement is a bug worth reporting.
+
 **Accepting a submission there DOES write a real record**, as the signed-in author, into the live
 app — the pane says so at the button and lists what it made with an Undo beside it. So it is a
 real answer in the app's data, not a rehearsal: tell the user that before they press *Send it*,
