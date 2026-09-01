@@ -180,6 +180,45 @@ describe("the submission window, evaluated rather than mentioned", () => {
   });
 });
 
+describe("what still binds an owner", () => {
+  // The `Owner / editor` row is one cell for the whole collection, and these three are decided per
+  // RECORD — by the status it is in, or by another record entirely. Without them the row reads
+  // "Anything" about a collection whose owner cannot delete a closed topic.
+  const access = sharedAppAccessOf(
+    {
+      members: { "owner@example.com": { "*": "owner" } },
+      collections: {
+        topics: {
+          statusField: "status",
+          transitions: { open: ["closed"] },
+          sealed: ["closed"],
+        },
+        messages: { refIn: { collection: "topics", ref: "topicId", where: { field: "status", equals: "open" } } },
+      },
+    },
+    undefined,
+    ["topics", "messages"],
+  );
+
+  it("still calls the owner's write unrestricted in the table", () => {
+    // The table cannot say "unless the record is closed" — that is what the caveats are for.
+    expect(only(access, "topics").access.writer.editAll).toBe(true);
+  });
+
+  it("names the transitions and the seal", () => {
+    const said = only(access, "topics").caveats.join(" ");
+    expect(said).toContain("declared `transitions`");
+    // DELETE only. `sealedNow` is asked by `deleteWith` and by nothing else, so "cannot be changed"
+    // would make the panel stricter than the rules.
+    expect(said).toContain("cannot be DELETED by anyone, the owner included");
+    expect(said).toContain("fields can still be corrected");
+  });
+
+  it("names the parent a create has to match", () => {
+    expect(only(access, "messages").caveats.join(" ")).toContain("`refIn` requires");
+  });
+});
+
 describe("a roster key the rules can never match", () => {
   // `email() in a.members` is exact and Firebase lower-cases the token, so `Foo@Example.com`
   // grants that person nothing — and the file reads correctly to a human. Counting it printed

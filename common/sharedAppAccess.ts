@@ -364,6 +364,24 @@ function caveatsOf(declared: Declared, stage: CollectionAccess["authStage"]): st
     caveats.push("A session gate has to be open, on the question the host is currently showing, before a submission is taken.");
   if (s !== undefined && s.idFrom === "field")
     caveats.push("The record id is a field, so the first submission for a value takes it and later ones are refused.");
+  // THE THREE THAT BIND A WRITER, and the reason they are here rather than in the table: each one
+  // is decided per RECORD, by the status that record is in or by another record entirely, and the
+  // `Owner / editor` row is one cell for the whole collection. Without them the row reads
+  // "Anything" about a collection where the owner cannot delete a closed topic.
+  if ("transitions" in c && typeof c.statusField === "string") {
+    caveats.push("A record's status may only move along the declared `transitions` — for everyone, the owner included.");
+  }
+  if (asStrings(c.sealed).length > 0) {
+    // DELETE only: a sealed record can still have its fields corrected. It is `deleteWith` that
+    // asks `sealedNow`, and saying "cannot be changed" here would be the panel being stricter than
+    // the rules, which is its own kind of wrong.
+    caveats.push("A record in a sealed state cannot be DELETED by anyone, the owner included — though its fields can still be corrected.");
+  }
+  if (isRecord(c.refIn)) {
+    caveats.push(
+      "A new record is refused unless the record it points at is in the state `refIn` requires, and that reference is frozen afterwards — the owner is bound too.",
+    );
+  }
   if (flagOn(c, "revealGated")) caveats.push("Everyone on the roster reads a row once its parent reveals it.");
   if (typeof c.assigneeField === "string") caveats.push("An assignee reads everything here and writes only the rows assigned to them.");
   if (typeof c.mirrorOf === "string") caveats.push("Anyone may repair this collection's `state` field to match the record it mirrors.");
