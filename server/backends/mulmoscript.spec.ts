@@ -245,6 +245,30 @@ describe("absolute filePath", () => {
     expect(dataOf(direct.body).filePath).toBe(target);
   });
 
+  it("refuses media for an absolute path from a deck nobody opened, and serves it once one is", async () => {
+    // The media route is a bare GET on a server with NO authentication, so it must not be a
+    // standalone arbitrary-file reader: a `.mp4` belonging to no opened deck stays unreachable
+    // (Codex P1 on #1971). Its own directory, untouched by the tests above — the grant is
+    // per-directory, so a deck opened elsewhere in this spec must not decide this.
+    const dir = path.join(makeTempDir("mt-mulmoscript-abs-media-"), "deck");
+    fs.mkdirSync(dir, { recursive: true });
+    const movie = path.join(dir, "output", "talk.mp4");
+    fs.mkdirSync(path.dirname(movie), { recursive: true });
+    fs.writeFileSync(movie, "movie bytes");
+    const ask = () => routeCall(app)(`/api/mulmoscript/media?moviePath=${encodeURIComponent(movie)}`);
+
+    expect((await ask()).status).toBe(400);
+
+    // Media follows the deck: opening it is what makes its generated output reachable, which is
+    // exactly the set the feature needs and no more.
+    const deck = path.join(dir, "talk.json");
+    fs.writeFileSync(deck, JSON.stringify(VALID_SCRIPT));
+    const opened = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: deck }));
+    expect(dataOf(opened.body).filePath).toBe(deck);
+
+    expect((await ask()).status).toBe(200);
+  });
+
   it("leaves a relative filePath meaning artifacts/stories", async () => {
     // The regression that matters most: the workspace's own stories are addressed by a relative
     // path, and an identically-named deck sits outside. They must stay two different files.

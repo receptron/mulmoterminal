@@ -35,6 +35,7 @@ import { storiesRootId } from "./storiesRoot.js";
 import { uniqueRootPaths } from "./storiesRootSet.js";
 import { canonicalPath } from "../infra/canonical-path.js";
 import { isRecord } from "../../common/isRecord.js";
+import { isWithin } from "../infra/path-within.js";
 
 /** Pubsub channel the extracted View subscribes to for generation progress —
  *  `plugin:<scope>:<event>`, matching the client runtime's channel formula
@@ -237,6 +238,54 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
   };
 }
 
+// ── What the media route may serve for an ABSOLUTE deck ──────────────────────────────────────
+//
+// `GET /api/mulmoscript/media` takes a wire path and streams the file. That was safe while every
+// wire path was `stories/…`: the ops resolve those inside a registered stories directory, so the
+// route could only ever serve something under one. An absolute deck's movie and PDF have no such
+// spelling (mulmocast writes them beside the script), so they arrive as absolute paths — and
+// resolving those with no further question would let the route stream ANY existing `.mp4` /
+// `.mov` / `.pdf` / `.json` on disk (Codex P1 on #1971).
+//
+// That matters here in a way it does not in MulmoClaude, whose equivalent route sits behind
+// bearer auth. THIS SERVER HAS NO AUTHENTICATION — `bindSecurityWarning` says so in as many
+// words — so on a non-loopback bind the only thing between a stranger and the file is this check.
+// (Such a deployment is already fully exposed: the same stranger can start a terminal. That makes
+// the exposure not-new, not acceptable — a route should not widen on the way past.)
+//
+// So the route serves an absolute path only from a directory holding a deck this server actually
+// OPENED. Which is exactly the set the feature needs: an absolute movie ref exists only because a
+// deck at that path was opened and generated from. Nothing else on disk becomes reachable.
+//
+// Said precisely, because a security note that overclaims is worse than none: this does NOT
+// authorize anything against a caller who can already POST to the dispatch route — such a caller
+// opens whatever deck it likes and the directory joins the set. What it does is stop the media
+// route being a STANDALONE arbitrary-file reader, reachable with a bare GET and no prior request.
+// Media follows the deck; it is not a door of its own.
+//
+// Realpaths, because a lexical answer only constrains the string — `isWithin`'s own doc says the
+// security boundary has to canonicalize both sides first.
+const openedAbsoluteDirs = new Set<string>();
+
+/** Remember the directory of an absolute deck we just resolved, so its generated movie / PDF can
+ *  be streamed back. Silent for relative paths — those are already confined by the stories root —
+ *  and for anything that does not resolve. */
+function rememberAbsoluteDeck(wirePath: unknown, instance: MulmoScriptServerOps): void {
+  if (typeof wirePath !== "string" || !path.isAbsolute(wirePath)) return;
+  const resolved = instance.resolveStory(wirePath);
+  if (!resolved.ok) return;
+  openedAbsoluteDirs.add(canonicalPath(path.dirname(resolved.absolutePath)));
+}
+
+/** Whether an absolute media path belongs to a deck this server opened. */
+function servableAbsoluteMedia(absolutePath: string): boolean {
+  const real = canonicalPath(absolutePath);
+  for (const dir of openedAbsoluteDirs) {
+    if (isWithin(dir, real)) return true;
+  }
+  return false;
+}
+
 /** The core execute context for a tool call, read off the BACKEND rather than rebuilt.
  *
  *  Both capabilities have to be the ones the ops layer was constructed with, or the tool call and
@@ -376,6 +425,9 @@ export function mountMulmoScriptDispatchRoute(app: Express): void {
         res.status(400).json({ ok: false, code: "bad_request", error: mismatch });
         return;
       }
+      // Before the branch, so BOTH the View's dispatch and the agent's tool call are covered by
+      // one call — a deck opened either way can have its movie streamed back.
+      rememberAbsoluteDeck(body.filePath, ops);
       if (typeof body.kind === "string") {
         res.json(await dispatchHandler(body));
       } else {
@@ -405,6 +457,13 @@ export function mountMulmoScriptMediaRoute(app: Express): void {
     const resolved = ops.resolveStory(wirePath);
     if (!resolved.ok) {
       res.status(failureStatus(resolved.code)).json({ error: resolved.error });
+      return;
+    }
+    // An absolute wire path is only servable as the output of a deck this server opened — see
+    // `openedAbsoluteDirs`. A relative one is already confined to a registered stories root by
+    // `resolveStory`, and is unaffected.
+    if (path.isAbsolute(wirePath) && !servableAbsoluteMedia(resolved.absolutePath)) {
+      res.status(400).json({ error: "Invalid filePath" });
       return;
     }
     res.download(resolved.absolutePath);
