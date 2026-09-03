@@ -186,6 +186,30 @@ describe("ToolsPane", () => {
     expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentChart");
   });
 
+  // The same gate, one field over: `guiOnlyHistory` draws a note about the AGENT whose history is
+  // shown ("reports no hooks…"). Carried across a switch it describes the wrong agent, which is
+  // the stale-list bug wearing a different hat (#1968).
+  it("does not describe the previous session's agent while the new one is still being asked", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [], guiOnlyHistory: true }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(true);
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
+
+    held.forEach((resolve) => resolve(jsonRes({ tools: [], guiOnlyHistory: false })));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
+  });
+
   // The other half of the pairing, and the reason it is a pairing rather than a clear-on-switch:
   // a session re-asks when the server announces its groups, and blanking the pane for that would
   // throw away a good answer we already have (#1968).

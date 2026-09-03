@@ -50,7 +50,6 @@ const emit = defineEmits<{ close: []; toggleExpand: [] }>();
 // The SERVER decides it, and the client cannot: a codex launcher chip runs the user's own command
 // through the login shell, so nothing the browser holds about that cell names an agent at all
 // (server/mcp/gui-call-history.ts).
-const guiOnlyHistory = ref(false);
 
 /** The list AND the session it describes, because a list alone cannot say whose it is. Switching
  *  cells re-asks, and until the answer lands the previous session's tools were being shown as this
@@ -59,8 +58,13 @@ const guiOnlyHistory = ref(false);
  *  Paired rather than cleared on switch: clearing would also blank the pane on the re-ask a
  *  session makes when the server announces its groups, which is a good answer we already have.
  *  Pairing makes the stale state unrepresentable instead of short. */
-const loadedTools = ref<{ sessionId: string | null; tools: AvailableTool[] } | null>(null);
-const availableTools = computed<AvailableTool[]>(() => (loadedTools.value?.sessionId === props.sessionId ? loadedTools.value.tools : []));
+const loadedTools = ref<{ sessionId: string | null; tools: AvailableTool[]; guiOnlyHistory: boolean } | null>(null);
+/** The whole response, or nothing — one gate, so no field of it can go stale on its own. */
+const forThisSession = computed(() => (loadedTools.value?.sessionId === props.sessionId ? loadedTools.value : null));
+const availableTools = computed<AvailableTool[]>(() => forThisSession.value?.tools ?? []);
+// Same gate: this note describes the AGENT whose history is shown, so carrying it across a switch
+// would describe the wrong one.
+const guiOnlyHistory = computed(() => forThisSession.value?.guiOnlyHistory ?? false);
 const toolCalls = ref<ToolCall[]>([]);
 
 // One call off the live channel. `toolName`, `status` and `at` are what every row renders from;
@@ -126,15 +130,13 @@ async function loadAvailableTools(sessionId: string | null) {
     const raw = isUnknownArray(body.tools) ? body.tools : null;
     const listed = raw === null ? null : raw.filter(isAvailableTool);
     const readable = listed !== null && raw !== null && (raw.length === 0 || listed.length > 0);
-    loadedTools.value = { sessionId, tools: listed ?? [] };
-    guiOnlyHistory.value = body.guiOnlyHistory === true;
+    loadedTools.value = { sessionId, tools: listed ?? [], guiOnlyHistory: body.guiOnlyHistory === true };
     toolsState.value = readable ? "known" : "unknown";
   } catch {
     if (overtaken()) return;
-    loadedTools.value = { sessionId, tools: [] };
     // Unknown, so claim nothing: a note that appears on a failed request would be a statement
     // about a history we could not ask about.
-    guiOnlyHistory.value = false;
+    loadedTools.value = { sessionId, tools: [], guiOnlyHistory: false };
     // The same rule as the success path: an empty list we could not fill is not an answer.
     toolsState.value = "unknown";
   }
