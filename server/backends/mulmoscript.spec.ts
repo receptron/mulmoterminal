@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { initArtifactsBackend } from "./artifacts.js";
 import { initMulmoScriptBackend, mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "./mulmoscript.js";
+import { initOpenPathBackend } from "./openPath.js";
 
 const VALID_SCRIPT = { $mulmocast: { version: "1.1" }, title: "Test Story", beats: [{ text: "hello" }] };
 
@@ -54,6 +55,9 @@ describe("mulmoscript backend", () => {
   beforeAll(() => {
     workspace = makeTempDir("mt-mulmoscript-");
     initArtifactsBackend({ workspace });
+    // The absolute-`filePath` capability the mulmoScript backend hands the plugin comes from
+    // here, so it has to be initialised first — same order as server/index.ts.
+    initOpenPathBackend({ workspace });
     initMulmoScriptBackend({ workspace, pubsub: null });
     app = makeApp();
   });
@@ -152,5 +156,88 @@ describe("autoGenerateMovie without ffmpeg", () => {
     // The doomed background job must not have run: no error sidecar next to the script.
     const sidecar = path.join(workspace, "artifacts", `${filePathOf(res.body)}.error.txt`);
     expect(fs.existsSync(sidecar)).toBe(false);
+  });
+});
+
+// ── The absolute `filePath` form (plugin 4.6.0) ──────────────────────────────────────────────
+//
+// A deck kept in a repo, or written by another tool, opened where it lies. Through 4.5.2 every
+// absolute path was refused, so these also pin that RELATIVE paths did not change meaning.
+describe("absolute filePath", () => {
+  let app: Express;
+  let workspace: string;
+  let outside: string;
+
+  beforeAll(() => {
+    workspace = makeTempDir("mt-mulmoscript-abs-ws-");
+    outside = makeTempDir("mt-mulmoscript-abs-out-");
+    initArtifactsBackend({ workspace });
+    initOpenPathBackend({ workspace });
+    initMulmoScriptBackend({ workspace, pubsub: null });
+    app = makeApp();
+  });
+
+  const deckAt = (name: string, script: unknown = VALID_SCRIPT): string => {
+    const file = path.join(outside, name);
+    fs.writeFileSync(file, JSON.stringify(script));
+    return file;
+  };
+
+  it("opens a .json script that lives outside every stories directory", async () => {
+    const deck = deckAt("keynote.json", { ...VALID_SCRIPT, title: "Outside Deck" });
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: deck }));
+    expect(res.status).toBe(200);
+    const script = dataOf(res.body).script;
+    expect(isRecord(script) && script.title).toBe("Outside Deck");
+    // The wire path comes back as the absolute path itself: there is no stories-relative
+    // spelling for a file outside the stories dir, and minting one would read back as a
+    // DIFFERENT file.
+    expect(dataOf(res.body).filePath).toBe(deck);
+  });
+
+  it("writes a beat edit back to the file it was given, not into artifacts/stories", async () => {
+    const deck = deckAt("editable.json");
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: deck, beatIndex: 0, beat: { text: "edited in place" } }));
+    expect(res.status).toBe(200);
+    expect(JSON.parse(fs.readFileSync(deck, "utf8")).beats[0].text).toBe("edited in place");
+    expect(fs.existsSync(path.join(workspace, "artifacts", "stories", "editable.json"))).toBe(false);
+  });
+
+  it("accepts the same absolute path through the View's dispatch router", async () => {
+    // The tool call and the View must agree: one file, one answer. They build their execute
+    // context separately, which is exactly how they came to disagree before.
+    const deck = deckAt("dispatched.json");
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ kind: "save", filePath: deck }));
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.filePath).toBe(deck);
+  });
+
+  it("narrates a missing absolute path rather than inventing a file", async () => {
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: path.join(outside, "gone.json") }));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeUndefined();
+    expect(res.body.message).toContain("not found");
+  });
+
+  it("refuses an absolute path with a traversal segment", async () => {
+    // `path.format`, not `path.join`: joining normalises the `..` away and tests nothing.
+    const traversal = path.format({ dir: outside, base: path.join("..", "escape.json") });
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: traversal }));
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeUndefined();
+  });
+
+  it("leaves a relative filePath meaning artifacts/stories", async () => {
+    // The regression that matters most: the workspace's own stories are addressed by a relative
+    // path, and an identically-named deck sits outside. They must stay two different files.
+    deckAt("collision.json", { ...VALID_SCRIPT, title: "Outside" });
+    const saved = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ script: { ...VALID_SCRIPT, title: "Inside" }, filename: "collision" }));
+    const relative = filePathOf(saved.body);
+    expect(relative).toMatch(/^stories\/collision-.*\.json$/);
+    const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: relative }));
+    const script = dataOf(res.body).script;
+    expect(isRecord(script) && script.title).toBe("Inside");
+    expect(fs.existsSync(path.join(workspace, "artifacts", relative))).toBe(true);
   });
 });

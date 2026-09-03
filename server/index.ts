@@ -575,11 +575,14 @@ initArtifactsBackend({ workspace: CLAUDE_CWD });
 // Give the by-path backend the same workspace — presentDocument / presentHtml's
 // `path` argument resolves workspace-relative values against it (absolute ones are
 // taken as-is), and the /htmlfile mount resolves its `ws` scope from it.
+// BEFORE initMulmoScriptBackend, which hands one of this module's ops to the plugin as
+// its `byPath` capability (the absolute-`filePath` opt-in).
 initOpenPathBackend({ workspace: CLAUDE_CWD });
 
 // Create the mulmoScript server ops (stories dir under <workspace>/artifacts,
 // generation fan-out on the plugin pubsub channel). After initArtifactsBackend —
-// the ops' save/update kinds run against the artifacts FileOps.
+// the ops' save/update kinds run against the artifacts FileOps — and after
+// initOpenPathBackend, whose `mulmoScriptByPath` becomes the absolute-path capability.
 // `extraRoots` — every directory the user launches in, read ONCE; why in mulmoscript.ts (#1951).
 initMulmoScriptBackend({ workspace: CLAUDE_CWD, extraRoots: getCwdPresets().map((preset) => preset.path), pubsub });
 

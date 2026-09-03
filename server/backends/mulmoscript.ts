@@ -28,7 +28,9 @@ import {
   type MulmoScriptDispatchHandler,
 } from "@mulmoclaude/mulmoscript-plugin/server";
 import type { SaveMulmoScriptArgs } from "@mulmoclaude/mulmoscript-plugin";
+import type { FileOps } from "gui-chat-protocol";
 import { artifactsFileOps } from "./artifacts.js";
+import { mulmoScriptByPath } from "./openPath.js";
 import { createFileOps } from "./fileOps.js";
 import { storiesRootId } from "./storiesRoot.js";
 import { uniqueRootPaths } from "./storiesRootSet.js";
@@ -157,6 +159,15 @@ export function initMulmoScriptBackend(deps: {
     // named root for a danger this host does not have.
     rootScopedGenerationState: true,
     artifacts: artifactsFileOps,
+    // The host's opt-in to the ABSOLUTE `filePath` form (plugin 4.6.0): a `.json` MulmoScript
+    // anywhere on disk — a deck kept in a repo, a script another tool wrote — instead of only the
+    // ones under a registered stories directory. Without this the plugin refuses absolute paths,
+    // which is what MulmoTerminal did through 4.5.2.
+    //
+    // It is root-independent, and cannot be otherwise: an absolute path is relative to nothing, so
+    // no `extraRoots` id selects it. Relative `filePath`s are untouched and keep going through
+    // `artifacts` / `artifactsFor` exactly as before.
+    byPath: mulmoScriptByPath,
     writeFileAtomic,
     isFfmpegAvailable: deps.isFfmpegAvailable ?? (() => ffmpegAvailable),
     // Edge-triggered by the package's tracker; MulmoTerminal has no per-session
@@ -227,6 +238,18 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
   };
 }
 
+/** The core execute context for a tool call, read off the BACKEND rather than rebuilt.
+ *
+ *  Both capabilities have to be the ones the ops layer was constructed with, or the tool call and
+ *  the View's dispatch (which the package builds its own context for, from the same backend)
+ *  answer differently for one file — the split that let an absolute `filePath` work in one and
+ *  fail in the other. `byPath` is spread conditionally so an unset backend stays `undefined`
+ *  rather than becoming an explicit `undefined` property under `exactOptionalPropertyTypes`. */
+function executeContextFor(instance: MulmoScriptServerOps): { files: { artifacts: FileOps; byPath?: FileOps } } {
+  const { artifacts, byPath } = instance.backend;
+  return { files: { artifacts, ...(byPath ? { byPath } : {}) } };
+}
+
 async function handleToolCall(body: Record<string, unknown>, res: Response, instance: MulmoScriptServerOps): Promise<void> {
   const guard = instance.guardStoryWirePath(body.filePath);
   if (guard) {
@@ -234,7 +257,7 @@ async function handleToolCall(body: Record<string, unknown>, res: Response, inst
     return;
   }
   const args = saveArgsFrom(body);
-  const outcome = await executeMulmoScriptSave({ files: { artifacts: instance.backend.artifacts } }, args);
+  const outcome = await executeMulmoScriptSave(executeContextFor(instance), args);
   if (!outcome.ok) {
     res.json({ message: outcome.error, instructions: "Acknowledge the error and retry with a valid `script` (new) or an existing `filePath`." });
     return;
