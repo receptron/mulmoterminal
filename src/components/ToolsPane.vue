@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onUnmounted } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { isRecord, optionalString } from "../../common/isRecord";
@@ -52,7 +52,15 @@ const emit = defineEmits<{ close: []; toggleExpand: [] }>();
 // (server/mcp/gui-call-history.ts).
 const guiOnlyHistory = ref(false);
 
-const availableTools = ref<AvailableTool[]>([]);
+/** The list AND the session it describes, because a list alone cannot say whose it is. Switching
+ *  cells re-asks, and until the answer lands the previous session's tools were being shown as this
+ *  session's — the `loading` state below could not cover it, being about an EMPTY list (#1968).
+ *
+ *  Paired rather than cleared on switch: clearing would also blank the pane on the re-ask a
+ *  session makes when the server announces its groups, which is a good answer we already have.
+ *  Pairing makes the stale state unrepresentable instead of short. */
+const loadedTools = ref<{ sessionId: string | null; tools: AvailableTool[] } | null>(null);
+const availableTools = computed<AvailableTool[]>(() => (loadedTools.value?.sessionId === props.sessionId ? loadedTools.value.tools : []));
 const toolCalls = ref<ToolCall[]>([]);
 
 // One call off the live channel. `toolName`, `status` and `at` are what every row renders from;
@@ -118,12 +126,12 @@ async function loadAvailableTools(sessionId: string | null) {
     const raw = isUnknownArray(body.tools) ? body.tools : null;
     const listed = raw === null ? null : raw.filter(isAvailableTool);
     const readable = listed !== null && raw !== null && (raw.length === 0 || listed.length > 0);
-    availableTools.value = listed ?? [];
+    loadedTools.value = { sessionId, tools: listed ?? [] };
     guiOnlyHistory.value = body.guiOnlyHistory === true;
     toolsState.value = readable ? "known" : "unknown";
   } catch {
     if (overtaken()) return;
-    availableTools.value = [];
+    loadedTools.value = { sessionId, tools: [] };
     // Unknown, so claim nothing: a note that appears on a failed request would be a statement
     // about a history we could not ask about.
     guiOnlyHistory.value = false;
