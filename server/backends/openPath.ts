@@ -21,6 +21,7 @@
 // tool call that opened them.
 import { realpath } from "node:fs/promises";
 import { createByPathFileOps, resolveHtmlFileRequestPath, HTML_EXTENSIONS, MARKDOWN_EXTENSIONS } from "@mulmoclaude/core/files";
+import { STORY_SCRIPT_EXTENSIONS } from "@mulmoclaude/mulmoscript-plugin";
 import type { FileOps } from "gui-chat-protocol";
 
 // Injected at boot (server/index.ts), like the artifacts backend: the ops below are
@@ -46,6 +47,16 @@ export const markdownByPath = createByPathFileOps({ rootFor, extensions: MARKDOW
 
 /** `files.byPath` for presentHtml — reads/overwrites any `.html`/`.htm`. */
 export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENSIONS }) satisfies FileOps;
+
+/** `files.byPath` for presentMulmoScript — reads/overwrites any `.json` MulmoScript the tool
+ *  named by ABSOLUTE path (mulmoscript-plugin 4.6.0). It is the host's opt-in: without it the
+ *  plugin refuses an absolute `filePath` outright and keeps its stories-only behaviour.
+ *
+ *  A RELATIVE `filePath` never reaches this — it means "under `<workspace>/artifacts/stories`"
+ *  and goes to `files.artifacts`, which is also why presentMulmoScript is absent from
+ *  `PRESENT_PATH_EXTENSIONS` in backends/presentPathRoot.ts: re-rooting its relative form at the
+ *  session cwd would send every existing story somewhere it is not. */
+export const mulmoScriptByPath = createByPathFileOps({ rootFor, extensions: STORY_SCRIPT_EXTENSIONS }) satisfies FileOps;
 
 // The `/htmlfile` resolver wants a realpath'd root (a symlinked workspace would
 // otherwise resolve to a path the serving stat can't match). Cached — the workspace

@@ -16,6 +16,7 @@
 //      Wire paths resolve through the ops' realpath containment (resolveStory).
 import path from "node:path";
 import fs from "node:fs/promises";
+import { closeSync, createReadStream, fstatSync, openSync, type Stats } from "node:fs";
 import { execFile } from "node:child_process";
 import type { Express, Request, Response } from "express";
 import {
@@ -27,8 +28,9 @@ import {
   type MulmoScriptServerOps,
   type MulmoScriptDispatchHandler,
 } from "@mulmoclaude/mulmoscript-plugin/server";
-import type { SaveMulmoScriptArgs } from "@mulmoclaude/mulmoscript-plugin";
+import type { MulmoScriptExecuteContext, SaveMulmoScriptArgs } from "@mulmoclaude/mulmoscript-plugin";
 import { artifactsFileOps } from "./artifacts.js";
+import { mulmoScriptByPath } from "./openPath.js";
 import { createFileOps } from "./fileOps.js";
 import { storiesRootId } from "./storiesRoot.js";
 import { uniqueRootPaths } from "./storiesRootSet.js";
@@ -157,6 +159,15 @@ export function initMulmoScriptBackend(deps: {
     // named root for a danger this host does not have.
     rootScopedGenerationState: true,
     artifacts: artifactsFileOps,
+    // The host's opt-in to the ABSOLUTE `filePath` form (plugin 4.6.0): a `.json` MulmoScript
+    // anywhere on disk — a deck kept in a repo, a script another tool wrote — instead of only the
+    // ones under a registered stories directory. Without this the plugin refuses absolute paths,
+    // which is what MulmoTerminal did through 4.5.2.
+    //
+    // It is root-independent, and cannot be otherwise: an absolute path is relative to nothing, so
+    // no `extraRoots` id selects it. Relative `filePath`s are untouched and keep going through
+    // `artifacts` / `artifactsFor` exactly as before.
+    byPath: mulmoScriptByPath,
     writeFileAtomic,
     isFfmpegAvailable: deps.isFfmpegAvailable ?? (() => ffmpegAvailable),
     // Edge-triggered by the package's tracker; MulmoTerminal has no per-session
@@ -227,6 +238,126 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
   };
 }
 
+// ── What the media route may serve for an ABSOLUTE deck ──────────────────────────────────────
+//
+// `GET /api/mulmoscript/media` takes a wire path and streams the file. That was safe while every
+// wire path was `stories/…`: the ops resolve those inside a registered stories directory, so the
+// route could only ever serve something under one. An absolute deck's movie and PDF have no such
+// spelling (mulmocast writes them beside the script), so they arrive as absolute paths — and
+// resolving those with no further question would let the route stream ANY existing `.mp4` /
+// `.mov` / `.pdf` / `.json` on disk (Codex P1 on #1971).
+//
+// That matters here in a way it does not in MulmoClaude, whose equivalent route sits behind
+// bearer auth. THIS SERVER HAS NO AUTHENTICATION — `bindSecurityWarning` says so in as many
+// words — so on a non-loopback bind the only thing between a stranger and the file is this check.
+// (Such a deployment is already fully exposed: the same stranger can start a terminal. That makes
+// the exposure not-new, not acceptable — a route should not widen on the way past.)
+//
+// So the route serves back exactly the absolute paths it has already HANDED OUT: the movie / PDF
+// refs a status, probe or generation dispatch answered with. Not a directory, not a prefix — the
+// individual files, by canonical path.
+//
+// The deck's DIRECTORY was the first attempt and it was too wide: opening
+// `/home/me/decks/talk.json` also authorized `/home/me/decks/private.json` and every `.pdf`
+// below, for the life of the process, to anyone who could guess the name (Codex P1, second
+// round). The paths above are the ones the feature actually needs — the View asks for a movie
+// because a dispatch just told it where the movie is — and nothing else on disk is reachable
+// through this route at all.
+//
+// Said precisely, because a security note that overclaims is worse than none: this does NOT
+// authorize anything against a caller who can already POST to the dispatch route — such a caller
+// asks for a status and is handed a path. What it does is stop the media route being a STANDALONE
+// file reader, reachable with a bare GET and no prior request. Media follows the deck; it is not
+// a door of its own.
+//
+// Canonical paths, because a lexical answer only constrains the string: `/a/./out.mp4` and a
+// symlink to the same file are the same file, and the set has to say so.
+//
+// And the FILE, not the pathname: a grant kept as a bare path outlives the file it was issued for,
+// so deleting a generated movie and dropping a different `.mp4` at the same name would inherit its
+// grant (Codex P2, third round). Each entry carries the identity of the file that was minted, and
+// the download re-checks it — against the OPEN DESCRIPTOR it is about to stream, not against the
+// path, so nothing can be swapped in between the check and the read.
+const mintedAbsoluteMedia = new Map<string, string>();
+
+/** device + inode + size + mtime. Enough to say "the same file, unchanged": a replacement gets a
+ *  new inode, and an in-place rewrite changes size or mtime. Read from a `Stats` so the caller
+ *  chooses whether it came from a path (minting) or a descriptor (serving). */
+function fileIdentity(stats: Stats): string {
+  return `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+}
+
+/** The `moviePath` / `pdfPath` values in a dispatch answer, however deep the shape nests them.
+ *
+ *  Reads the RESPONSE rather than re-deriving where mulmocast would have written: the package owns
+ *  that layout and moves it (`outputRef`, `freshOutputRef`, the generate ops), so a copy of the
+ *  rule here would authorize the wrong file the day it changes. What was answered is what may be
+ *  fetched — the two cannot drift, because they are one value. */
+function collectMediaPaths(value: unknown, out: string[], depth = 0): void {
+  if (depth > 4 || !isRecord(value)) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if ((key === "moviePath" || key === "pdfPath") && typeof entry === "string" && entry !== "") out.push(entry);
+    else if (Array.isArray(entry)) entry.forEach((item) => collectMediaPaths(item, out, depth + 1));
+    else collectMediaPaths(entry, out, depth + 1);
+  }
+}
+
+/** Remember every absolute media path a dispatch just answered with, together with the identity of
+ *  the file it named, so the View can fetch exactly that. Relative ones need no entry —
+ *  `resolveStory` already confines those to a stories root. */
+function rememberMintedMedia(result: unknown): void {
+  const paths: string[] = [];
+  collectMediaPaths(result, paths);
+  for (const value of paths) {
+    if (!path.isAbsolute(value)) continue;
+    const real = canonicalPath(value);
+    let fd: number | undefined;
+    try {
+      fd = openSync(real, "r");
+      mintedAbsoluteMedia.set(real, fileIdentity(fstatSync(fd)));
+    } catch {
+      // Answered but unreadable — nothing to grant, and the View's fetch will 404 on its own.
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  }
+}
+
+/** The open descriptor for an absolute media file this server minted and that has not changed
+ *  since, or null. The CALLER owns the descriptor and must close it.
+ *
+ *  Returns a descriptor rather than a boolean on purpose: checking the path and then opening it
+ *  again leaves a window where the file can be swapped between the two, so the thing that is
+ *  checked has to be the thing that is read. */
+function openMintedMedia(absolutePath: string): number | null {
+  const recorded = mintedAbsoluteMedia.get(canonicalPath(absolutePath));
+  if (recorded === undefined) return null;
+  let fd: number | undefined;
+  try {
+    fd = openSync(absolutePath, "r");
+    if (fileIdentity(fstatSync(fd)) === recorded) return fd;
+  } catch {
+    // Gone or unreadable — falls through to the refusal below.
+  }
+  if (fd !== undefined) closeSync(fd);
+  return null;
+}
+
+/** The core execute context for a tool call, read off the BACKEND rather than rebuilt.
+ *
+ *  Both capabilities have to be the ones the ops layer was constructed with, or the tool call and
+ *  the View's dispatch (which the package builds its own context for, from the same backend)
+ *  answer differently for one file — the split that let an absolute `filePath` work in one and
+ *  fail in the other. `byPath` is spread conditionally so an unset backend stays `undefined`
+ *  rather than becoming an explicit `undefined` property under `exactOptionalPropertyTypes`.
+ *
+ *  Typed as the package's own `MulmoScriptExecuteContext` rather than a structural copy: the shape
+ *  is the package's to change, and a copy here would keep compiling on the day it gains a member. */
+function executeContextFor(instance: MulmoScriptServerOps): MulmoScriptExecuteContext {
+  const { artifacts, byPath } = instance.backend;
+  return { files: { artifacts, ...(byPath ? { byPath } : {}) } };
+}
+
 async function handleToolCall(body: Record<string, unknown>, res: Response, instance: MulmoScriptServerOps): Promise<void> {
   const guard = instance.guardStoryWirePath(body.filePath);
   if (guard) {
@@ -234,7 +365,7 @@ async function handleToolCall(body: Record<string, unknown>, res: Response, inst
     return;
   }
   const args = saveArgsFrom(body);
-  const outcome = await executeMulmoScriptSave({ files: { artifacts: instance.backend.artifacts } }, args);
+  const outcome = await executeMulmoScriptSave(executeContextFor(instance), args);
   if (!outcome.ok) {
     res.json({ message: outcome.error, instructions: "Acknowledge the error and retry with a valid `script` (new) or an existing `filePath`." });
     return;
@@ -352,7 +483,12 @@ export function mountMulmoScriptDispatchRoute(app: Express): void {
         return;
       }
       if (typeof body.kind === "string") {
-        res.json(await dispatchHandler(body));
+        const result = await dispatchHandler(body);
+        // Every absolute movie / PDF path this answer carries becomes fetchable through the media
+        // route, and nothing else does — see `mintedAbsoluteMedia`. Only the kind router mints
+        // them; the tool call answers a script and a filePath, never an output path.
+        rememberMintedMedia(result);
+        res.json(result);
       } else {
         await handleToolCall(body, res, ops);
       }
@@ -382,6 +518,24 @@ export function mountMulmoScriptMediaRoute(app: Express): void {
       res.status(failureStatus(resolved.code)).json({ error: resolved.error });
       return;
     }
-    res.download(resolved.absolutePath);
+    // A relative wire path is already confined to a registered stories root by `resolveStory`, and
+    // is served exactly as before. An absolute one is servable only as a file this server itself
+    // minted and that has not changed since — see `mintedAbsoluteMedia` — and is streamed from the
+    // descriptor that was checked, so the file cannot be swapped underneath the answer.
+    if (!path.isAbsolute(wirePath)) {
+      res.download(resolved.absolutePath);
+      return;
+    }
+    const fd = openMintedMedia(resolved.absolutePath);
+    if (fd === null) {
+      res.status(400).json({ error: "Invalid filePath" });
+      return;
+    }
+    res.attachment(path.basename(resolved.absolutePath));
+    // `autoClose` hands the descriptor's lifetime to the stream, including the error and
+    // client-disconnect paths — a manual close here would be the one that leaks.
+    createReadStream("", { fd, autoClose: true })
+      .on("error", () => res.destroy())
+      .pipe(res);
   });
 }

@@ -134,11 +134,16 @@ export function absoluteUnder(cwd: string | null, relative: string): string {
 /**
  * The wire path a mulmoScript card carries for `absolutePath`, or null when it is not a story.
  *
- * mulmoScript is the one tool here that cannot be handed an absolute path: `normalizeStoryPath`
- * refuses those (and backslashes) outright, taking only `stories/x.json` and its two historical
- * spellings. So where markdown and html are asked "can you render this file", this asks the
- * narrower question the plugin can actually act on — is this file in the WORKSPACE's story
- * directory — and answers with the path it wants.
+ * Where markdown and html are asked "can you render this file", this asks the narrower question —
+ * is this file under a stories directory this server registered — and answers with the wire path
+ * the plugin wants.
+ *
+ * Narrower BY CHOICE, not by necessity: the plugin has taken an absolute `filePath` since 4.6.0,
+ * so minting one here would open the file. What it would also do is give one deck two card
+ * identities — `stories/x.json` for the deck reached through a root, and its absolute path for the
+ * same deck reached any other way — and `canvasIdentity.ts` collapses re-opens on that string. A
+ * card per spelling is worse than a button that is not offered, so this gate stays in-root until
+ * an identity that survives both spellings exists.
  *
  * That distinction is the point rather than a technicality: a project cell may well have an
  * `artifacts/stories/` of its own, and those stories are not the ones the plugin would open.
