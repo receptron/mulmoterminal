@@ -8,6 +8,50 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.16.0 — 2026-09-03
+
+> **Setup guide:** [4.16.0 — Decks in an ordinary repository](https://receptron.github.io/mulmoterminal/guide/en/v4.16.0.html)
+
+### A deck in an ordinary repository can now be opened
+
+4.15.0 shipped the deck menu and the file tree's **Open in the Canvas** — and both only worked
+under the workspace MulmoTerminal was started in. A deck anywhere else was found and correctly
+refused, because nothing outside that one registered root could be opened at all.
+
+- **[#1958](https://github.com/receptron/mulmoterminal/pull/1958)** — every directory the launcher
+  has saved is now a stories root, registered at startup alongside the workspace. No new
+  configuration: a root is a directory you already launch in. Read **once at startup**, so a
+  repository opened for the first time needs a restart before its decks can be shown — the
+  deliberate half of the trade, because the plugin's ops are one instance per process and own the
+  in-flight movie/PDF state that rebuilding them would discard.
+
+### The Tools pane stops being a dead end
+
+- **[#1967](https://github.com/receptron/mulmoterminal/pull/1967)** — "No GUI plugin tools enabled."
+  said the one thing the reader could already see. It now says where tools come from and how to turn
+  a group on, naming the launcher's own switches. It also stops **claiming** that: an empty list
+  from a failed request, an unreadable response, or a request still in flight is no longer reported
+  as a confirmed empty configuration, so the pane never sends anyone to reconfigure a folder that is
+  fine.
+- **[#1969](https://github.com/receptron/mulmoterminal/pull/1969)** — switching cells kept the
+  previous session's tool list, and its "this agent reports no hooks" note, on screen until the new
+  answer arrived. The list now carries the session it describes, so it cannot outlive it — while a
+  same-session refresh still keeps the answer it has.
+- **[#1960](https://github.com/receptron/mulmoterminal/pull/1960)** — the `mulmoterminal-shared-app`
+  skill used to stop and point the user at the launcher's tool-group switch, which someone who has
+  never seen it cannot find. It now hands the agent the `claude mcp add` command that switch runs,
+  so the only thing left for the user is reopening the cell.
+
+### Fixes
+
+- **[#1955](https://github.com/receptron/mulmoterminal/pull/1955)** — a collection's custom view
+  could 404 in the Canvas. Staged authoring keeps `views/*.html` in the staging directory alone, and
+  the host's predicate for "is this a managed workspace" was asking whether the path was
+  `~/mulmoclaude` — so this server's own workspace lost staging entirely.
+- **[#1959](https://github.com/receptron/mulmoterminal/pull/1959)** — `@mulmoclaude/core` 4.6.0,
+  which decides staged-ness per collection slug rather than per root. Without it a stale staged view
+  could win over a committed one for a collection that was imported rather than staged.
+
 ## mulmoterminal@4.15.0 — 2026-09-03
 
 > **Setup guide:** [4.15.0 — Show a deck from your repository](https://receptron.github.io/mulmoterminal/guide/en/v4.15.0.html)
