@@ -27,8 +27,7 @@ import {
   type MulmoScriptServerOps,
   type MulmoScriptDispatchHandler,
 } from "@mulmoclaude/mulmoscript-plugin/server";
-import type { SaveMulmoScriptArgs } from "@mulmoclaude/mulmoscript-plugin";
-import type { FileOps } from "gui-chat-protocol";
+import type { MulmoScriptExecuteContext, SaveMulmoScriptArgs } from "@mulmoclaude/mulmoscript-plugin";
 import { artifactsFileOps } from "./artifacts.js";
 import { mulmoScriptByPath } from "./openPath.js";
 import { createFileOps } from "./fileOps.js";
@@ -244,8 +243,11 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
  *  the View's dispatch (which the package builds its own context for, from the same backend)
  *  answer differently for one file — the split that let an absolute `filePath` work in one and
  *  fail in the other. `byPath` is spread conditionally so an unset backend stays `undefined`
- *  rather than becoming an explicit `undefined` property under `exactOptionalPropertyTypes`. */
-function executeContextFor(instance: MulmoScriptServerOps): { files: { artifacts: FileOps; byPath?: FileOps } } {
+ *  rather than becoming an explicit `undefined` property under `exactOptionalPropertyTypes`.
+ *
+ *  Typed as the package's own `MulmoScriptExecuteContext` rather than a structural copy: the shape
+ *  is the package's to change, and a copy here would keep compiling on the day it gains a member. */
+function executeContextFor(instance: MulmoScriptServerOps): MulmoScriptExecuteContext {
   const { artifacts, byPath } = instance.backend;
   return { files: { artifacts, ...(byPath ? { byPath } : {}) } };
 }
