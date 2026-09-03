@@ -161,6 +161,128 @@ describe("ToolsPane", () => {
     expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(true);
   });
 
+  // Switching cells re-asks, and until the answer lands the pane was still showing the PREVIOUS
+  // session's tools — as this session's. The `loading` state cannot cover it: that branch is
+  // guarded on an empty list, and this list is not empty (#1968).
+  it("does not show the previous session's tools while the new one is still being asked", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [{ toolName: "presentDocument" }] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
+
+    held.forEach((resolve) => resolve(jsonRes({ tools: [{ toolName: "presentChart" }] })));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentChart");
+  });
+
+  // The same gate, one field over: `guiOnlyHistory` draws a note about the AGENT whose history is
+  // shown ("reports no hooks…"). Carried across a switch it describes the wrong agent, which is
+  // the stale-list bug wearing a different hat (#1968).
+  it("does not describe the previous session's agent while the new one is still being asked", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [], guiOnlyHistory: true }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(true);
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
+
+    held.forEach((resolve) => resolve(jsonRes({ tools: [], guiOnlyHistory: false })));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
+  });
+
+  // A -> B -> A, with A's earlier answer EMPTY. Codex read the session gate as re-showing A's
+  // prior response while the fresh A request is in flight; what matters is whether that response
+  // can be the misleading one, and it cannot: an empty list falls through to the loading branch,
+  // which is ordered first (#1969).
+  it("does not resurrect an EMPTY earlier answer when the same session is selected again", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(true); // A answered: none
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    await wrapper.setProps({ sessionId: "a" }); // back before either answered
+    await flushPromises();
+
+    expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(false);
+  });
+
+  // The same reselect with a NON-empty earlier answer. The session tag alone cannot tell "the user
+  // came back to this cell" from "this session announced its groups", and the two want opposite
+  // things — so the CALLER says which, and a selection drops what it held (#1969).
+  it("does not resurrect a NON-empty earlier answer when the same session is selected again", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [{ toolName: "presentDocument" }] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    await wrapper.setProps({ sessionId: "a" }); // back before either answered
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
+  });
+
+  // The other half of the pairing, and the reason it is a pairing rather than a clear-on-switch:
+  // a session re-asks when the server announces its groups, and blanking the pane for that would
+  // throw away a good answer we already have (#1968).
+  it("keeps the tools it has while the SAME session is re-asked", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [{ toolName: "presentDocument" }] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    // The server announces this session's groups, which re-asks for the SAME session.
+    pend = true;
+    capturedGroups?.({ sessionId: "a", groups: ["render"] });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    held.forEach((resolve) => resolve(jsonRes({ tools: [{ toolName: "presentChart" }] })));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentChart");
+  });
+
   // An empty list from a FAILED request is not evidence that nothing is registered, and the
   // guidance above would send the reader to fix a folder that may be configured fine. The file
   // already reasons this way one field over — `guiOnlyHistory` resets on failure with "Unknown, so

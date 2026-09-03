@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onUnmounted } from "vue";
+import { ref, computed, watch, onUnmounted } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { isRecord, optionalString } from "../../common/isRecord";
@@ -50,9 +50,21 @@ const emit = defineEmits<{ close: []; toggleExpand: [] }>();
 // The SERVER decides it, and the client cannot: a codex launcher chip runs the user's own command
 // through the login shell, so nothing the browser holds about that cell names an agent at all
 // (server/mcp/gui-call-history.ts).
-const guiOnlyHistory = ref(false);
 
-const availableTools = ref<AvailableTool[]>([]);
+/** The list AND the session it describes, because a list alone cannot say whose it is. Switching
+ *  cells re-asks, and until the answer lands the previous session's tools were being shown as this
+ *  session's — the `loading` state below could not cover it, being about an EMPTY list (#1968).
+ *
+ *  Paired rather than cleared on switch: clearing would also blank the pane on the re-ask a
+ *  session makes when the server announces its groups, which is a good answer we already have.
+ *  Pairing makes the stale state unrepresentable instead of short. */
+const loadedTools = ref<{ sessionId: string | null; tools: AvailableTool[]; guiOnlyHistory: boolean } | null>(null);
+/** The whole response, or nothing — one gate, so no field of it can go stale on its own. */
+const forThisSession = computed(() => (loadedTools.value?.sessionId === props.sessionId ? loadedTools.value : null));
+const availableTools = computed<AvailableTool[]>(() => forThisSession.value?.tools ?? []);
+// Same gate: this note describes the AGENT whose history is shown, so carrying it across a switch
+// would describe the wrong one.
+const guiOnlyHistory = computed(() => forThisSession.value?.guiOnlyHistory ?? false);
 const toolCalls = ref<ToolCall[]>([]);
 
 // One call off the live channel. `toolName`, `status` and `at` are what every row renders from;
@@ -98,12 +110,23 @@ let latestToolsLoad = 0;
  *  enabled" while it is still being asked (#1966). */
 const toolsState = ref<"loading" | "unknown" | "known">("loading");
 
-async function loadAvailableTools(sessionId: string | null) {
+/** WHY the pane is asking, because the two callers mean different things and the answer decides
+ *  what may stay on screen.
+ *
+ *  `selected` — the cell changed. Whatever is held describes a session the user has moved away
+ *  from, or an earlier visit to this one, so it is dropped and the pane says it is asking.
+ *  `refreshed` — the SAME session announced its groups and we are confirming an answer we already
+ *  have. Dropping there blanks a good list every time an agent's MCP client connects (Codex on
+ *  #1969, which is right that the session tag alone cannot tell these apart). */
+type LoadReason = "selected" | "refreshed";
+
+async function loadAvailableTools(sessionId: string | null, reason: LoadReason = "selected") {
   const loadId = ++latestToolsLoad;
   const url = sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools";
   // Overtaken: a load for another session (we switched away), or a newer load for this one.
   const overtaken = () => sessionId !== props.sessionId || loadId !== latestToolsLoad;
   toolsState.value = "loading";
+  if (reason === "selected") loadedTools.value = null;
   try {
     const res = await fetchWithTimeout(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -118,20 +141,22 @@ async function loadAvailableTools(sessionId: string | null) {
     const raw = isUnknownArray(body.tools) ? body.tools : null;
     const listed = raw === null ? null : raw.filter(isAvailableTool);
     const readable = listed !== null && raw !== null && (raw.length === 0 || listed.length > 0);
-    availableTools.value = listed ?? [];
-    guiOnlyHistory.value = body.guiOnlyHistory === true;
+    loadedTools.value = { sessionId, tools: listed ?? [], guiOnlyHistory: body.guiOnlyHistory === true };
     toolsState.value = readable ? "known" : "unknown";
   } catch {
     if (overtaken()) return;
-    availableTools.value = [];
     // Unknown, so claim nothing: a note that appears on a failed request would be a statement
     // about a history we could not ask about.
-    guiOnlyHistory.value = false;
+    loadedTools.value = { sessionId, tools: [], guiOnlyHistory: false };
     // The same rule as the success path: an empty list we could not fill is not an answer.
     toolsState.value = "unknown";
   }
 }
-watch(() => props.sessionId, loadAvailableTools, { immediate: true });
+watch(
+  () => props.sessionId,
+  (sessionId) => void loadAvailableTools(sessionId, "selected"),
+  { immediate: true },
+);
 
 // The question above is normally asked BEFORE it can be answered: the browser is handed a session
 // id while the agent is still being spawned, so its MCP client has not connected and the server
@@ -144,7 +169,7 @@ watch(() => props.sessionId, loadAvailableTools, { immediate: true });
 // does not, and the announcement for a single-view session carries no groups at all (see
 // mcp-routes.ts).
 onToolGroupsAnnounced((announcement) => {
-  if (announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
+  if (announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId, "refreshed");
 });
 
 function callKey(c: ToolCall, i: number): string {
