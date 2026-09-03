@@ -110,12 +110,23 @@ let latestToolsLoad = 0;
  *  enabled" while it is still being asked (#1966). */
 const toolsState = ref<"loading" | "unknown" | "known">("loading");
 
-async function loadAvailableTools(sessionId: string | null) {
+/** WHY the pane is asking, because the two callers mean different things and the answer decides
+ *  what may stay on screen.
+ *
+ *  `selected` — the cell changed. Whatever is held describes a session the user has moved away
+ *  from, or an earlier visit to this one, so it is dropped and the pane says it is asking.
+ *  `refreshed` — the SAME session announced its groups and we are confirming an answer we already
+ *  have. Dropping there blanks a good list every time an agent's MCP client connects (Codex on
+ *  #1969, which is right that the session tag alone cannot tell these apart). */
+type LoadReason = "selected" | "refreshed";
+
+async function loadAvailableTools(sessionId: string | null, reason: LoadReason = "selected") {
   const loadId = ++latestToolsLoad;
   const url = sessionId ? `/api/tools?sessionId=${encodeURIComponent(sessionId)}` : "/api/tools";
   // Overtaken: a load for another session (we switched away), or a newer load for this one.
   const overtaken = () => sessionId !== props.sessionId || loadId !== latestToolsLoad;
   toolsState.value = "loading";
+  if (reason === "selected") loadedTools.value = null;
   try {
     const res = await fetchWithTimeout(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -141,7 +152,11 @@ async function loadAvailableTools(sessionId: string | null) {
     toolsState.value = "unknown";
   }
 }
-watch(() => props.sessionId, loadAvailableTools, { immediate: true });
+watch(
+  () => props.sessionId,
+  (sessionId) => void loadAvailableTools(sessionId, "selected"),
+  { immediate: true },
+);
 
 // The question above is normally asked BEFORE it can be answered: the browser is handed a session
 // id while the agent is still being spawned, so its MCP client has not connected and the server
@@ -154,7 +169,7 @@ watch(() => props.sessionId, loadAvailableTools, { immediate: true });
 // does not, and the announcement for a single-view session carries no groups at all (see
 // mcp-routes.ts).
 onToolGroupsAnnounced((announcement) => {
-  if (announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId);
+  if (announcement.sessionId === props.sessionId) void loadAvailableTools(props.sessionId, "refreshed");
 });
 
 function callKey(c: ToolCall, i: number): string {

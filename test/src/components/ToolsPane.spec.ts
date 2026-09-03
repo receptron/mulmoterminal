@@ -231,10 +231,31 @@ describe("ToolsPane", () => {
     await wrapper.setProps({ sessionId: "a" }); // back before either answered
     await flushPromises();
 
-    // A's own earlier answer is what the gate lets through — and it is empty, so the guidance is
-    // NOT what shows. The pane says it is asking, which is true.
     expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(false);
+  });
+
+  // The same reselect with a NON-empty earlier answer. The session tag alone cannot tell "the user
+  // came back to this cell" from "this session announced its groups", and the two want opposite
+  // things — so the CALLER says which, and a selection drops what it held (#1969).
+  it("does not resurrect a NON-empty earlier answer when the same session is selected again", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [{ toolName: "presentDocument" }] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').text()).toBe("presentDocument");
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    await wrapper.setProps({ sessionId: "a" }); // back before either answered
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tool-name"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
   });
 
   // The other half of the pairing, and the reason it is a pairing rather than a clear-on-switch:
