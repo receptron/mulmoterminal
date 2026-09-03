@@ -35,7 +35,6 @@ import { storiesRootId } from "./storiesRoot.js";
 import { uniqueRootPaths } from "./storiesRootSet.js";
 import { canonicalPath } from "../infra/canonical-path.js";
 import { isRecord } from "../../common/isRecord.js";
-import { isWithin } from "../infra/path-within.js";
 
 /** Pubsub channel the extracted View subscribes to for generation progress —
  *  `plugin:<scope>:<event>`, matching the client runtime's channel formula
@@ -253,37 +252,55 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
 // (Such a deployment is already fully exposed: the same stranger can start a terminal. That makes
 // the exposure not-new, not acceptable — a route should not widen on the way past.)
 //
-// So the route serves an absolute path only from a directory holding a deck this server actually
-// OPENED. Which is exactly the set the feature needs: an absolute movie ref exists only because a
-// deck at that path was opened and generated from. Nothing else on disk becomes reachable.
+// So the route serves back exactly the absolute paths it has already HANDED OUT: the movie / PDF
+// refs a status, probe or generation dispatch answered with. Not a directory, not a prefix — the
+// individual files, by canonical path.
+//
+// The deck's DIRECTORY was the first attempt and it was too wide: opening
+// `/home/me/decks/talk.json` also authorized `/home/me/decks/private.json` and every `.pdf`
+// below, for the life of the process, to anyone who could guess the name (Codex P1, second
+// round). The paths above are the ones the feature actually needs — the View asks for a movie
+// because a dispatch just told it where the movie is — and nothing else on disk is reachable
+// through this route at all.
 //
 // Said precisely, because a security note that overclaims is worse than none: this does NOT
 // authorize anything against a caller who can already POST to the dispatch route — such a caller
-// opens whatever deck it likes and the directory joins the set. What it does is stop the media
-// route being a STANDALONE arbitrary-file reader, reachable with a bare GET and no prior request.
-// Media follows the deck; it is not a door of its own.
+// asks for a status and is handed a path. What it does is stop the media route being a STANDALONE
+// file reader, reachable with a bare GET and no prior request. Media follows the deck; it is not
+// a door of its own.
 //
-// Realpaths, because a lexical answer only constrains the string — `isWithin`'s own doc says the
-// security boundary has to canonicalize both sides first.
-const openedAbsoluteDirs = new Set<string>();
+// Canonical paths, because a lexical answer only constrains the string: `/a/./out.mp4` and a
+// symlink to the same file are the same file, and the set has to say so.
+const mintedAbsoluteMedia = new Set<string>();
 
-/** Remember the directory of an absolute deck we just resolved, so its generated movie / PDF can
- *  be streamed back. Silent for relative paths — those are already confined by the stories root —
- *  and for anything that does not resolve. */
-function rememberAbsoluteDeck(wirePath: unknown, instance: MulmoScriptServerOps): void {
-  if (typeof wirePath !== "string" || !path.isAbsolute(wirePath)) return;
-  const resolved = instance.resolveStory(wirePath);
-  if (!resolved.ok) return;
-  openedAbsoluteDirs.add(canonicalPath(path.dirname(resolved.absolutePath)));
+/** The `moviePath` / `pdfPath` values in a dispatch answer, however deep the shape nests them.
+ *
+ *  Reads the RESPONSE rather than re-deriving where mulmocast would have written: the package owns
+ *  that layout and moves it (`outputRef`, `freshOutputRef`, the generate ops), so a copy of the
+ *  rule here would authorize the wrong file the day it changes. What was answered is what may be
+ *  fetched — the two cannot drift, because they are one value. */
+function collectMediaPaths(value: unknown, out: string[], depth = 0): void {
+  if (depth > 4 || !isRecord(value)) return;
+  for (const [key, entry] of Object.entries(value)) {
+    if ((key === "moviePath" || key === "pdfPath") && typeof entry === "string" && entry !== "") out.push(entry);
+    else if (Array.isArray(entry)) entry.forEach((item) => collectMediaPaths(item, out, depth + 1));
+    else collectMediaPaths(entry, out, depth + 1);
+  }
 }
 
-/** Whether an absolute media path belongs to a deck this server opened. */
-function servableAbsoluteMedia(absolutePath: string): boolean {
-  const real = canonicalPath(absolutePath);
-  for (const dir of openedAbsoluteDirs) {
-    if (isWithin(dir, real)) return true;
+/** Remember every absolute media path a dispatch just answered with, so the View can fetch it.
+ *  Relative ones need no entry — `resolveStory` already confines those to a stories root. */
+function rememberMintedMedia(result: unknown): void {
+  const paths: string[] = [];
+  collectMediaPaths(result, paths);
+  for (const value of paths) {
+    if (path.isAbsolute(value)) mintedAbsoluteMedia.add(canonicalPath(value));
   }
-  return false;
+}
+
+/** Whether an absolute media path is one this server handed out. */
+function servableAbsoluteMedia(absolutePath: string): boolean {
+  return mintedAbsoluteMedia.has(canonicalPath(absolutePath));
 }
 
 /** The core execute context for a tool call, read off the BACKEND rather than rebuilt.
@@ -425,11 +442,13 @@ export function mountMulmoScriptDispatchRoute(app: Express): void {
         res.status(400).json({ ok: false, code: "bad_request", error: mismatch });
         return;
       }
-      // Before the branch, so BOTH the View's dispatch and the agent's tool call are covered by
-      // one call — a deck opened either way can have its movie streamed back.
-      rememberAbsoluteDeck(body.filePath, ops);
       if (typeof body.kind === "string") {
-        res.json(await dispatchHandler(body));
+        const result = await dispatchHandler(body);
+        // Every absolute movie / PDF path this answer carries becomes fetchable through the media
+        // route, and nothing else does — see `mintedAbsoluteMedia`. Only the kind router mints
+        // them; the tool call answers a script and a filePath, never an output path.
+        rememberMintedMedia(result);
+        res.json(result);
       } else {
         await handleToolCall(body, res, ops);
       }

@@ -245,28 +245,63 @@ describe("absolute filePath", () => {
     expect(dataOf(direct.body).filePath).toBe(target);
   });
 
-  it("refuses media for an absolute path from a deck nobody opened, and serves it once one is", async () => {
-    // The media route is a bare GET on a server with NO authentication, so it must not be a
-    // standalone arbitrary-file reader: a `.mp4` belonging to no opened deck stays unreachable
-    // (Codex P1 on #1971). Its own directory, untouched by the tests above — the grant is
-    // per-directory, so a deck opened elsewhere in this spec must not decide this.
-    const dir = path.join(makeTempDir("mt-mulmoscript-abs-media-"), "deck");
+  /** A deck plus the movie files mulmocast might name for it, so a `movieStatus` dispatch answers
+   *  with a real path. The exact filename carries a language suffix that depends on the script and
+   *  on mulmocast's defaults, and reconstructing that rule here would be a second copy of it — so
+   *  write every candidate and let the dispatch say which one it means. */
+  function deckWithMovie(prefix: string): { dir: string; deck: string; outDir: string } {
+    const dir = path.join(makeTempDir(prefix), "deck");
     fs.mkdirSync(dir, { recursive: true });
-    const movie = path.join(dir, "output", "talk.mp4");
-    fs.mkdirSync(path.dirname(movie), { recursive: true });
-    fs.writeFileSync(movie, "movie bytes");
-    const ask = () => routeCall(app)(`/api/mulmoscript/media?moviePath=${encodeURIComponent(movie)}`);
-
-    expect((await ask()).status).toBe(400);
-
-    // Media follows the deck: opening it is what makes its generated output reachable, which is
-    // exactly the set the feature needs and no more.
     const deck = path.join(dir, "talk.json");
     fs.writeFileSync(deck, JSON.stringify(VALID_SCRIPT));
-    const opened = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: deck }));
-    expect(dataOf(opened.body).filePath).toBe(deck);
+    const outDir = path.join(dir, "output", "talk");
+    fs.mkdirSync(outDir, { recursive: true });
+    for (const name of ["talk.mp4", "talk_en.mp4", "talk_ja.mp4"]) fs.writeFileSync(path.join(outDir, name), "movie bytes");
+    return { dir, deck, outDir };
+  }
 
-    expect((await ask()).status).toBe(200);
+  const fetchMedia = (file: string) => routeCall(app)(`/api/mulmoscript/media?moviePath=${encodeURIComponent(file)}`);
+
+  /** The movie path a `movieStatus` dispatch answers with — the grant itself. */
+  async function grantedMoviePath(deck: string): Promise<string> {
+    const status = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ kind: "movieStatus", filePath: deck }));
+    expect(status.status).toBe(200);
+    return asFilePath(status.body.moviePath, status.body);
+  }
+
+  it("serves an absolute media path only after a dispatch answered with it", async () => {
+    // The media route is a bare GET on a server with NO authentication, so it must not be a
+    // standalone file reader (Codex P1 on #1971). It serves back what it HANDED OUT: the movie /
+    // PDF ref a status dispatch answered with, and nothing else.
+    const { deck, outDir } = deckWithMovie("mt-mulmoscript-abs-media-");
+    const movie = path.join(outDir, "talk_en.mp4");
+
+    // Cold, before any dispatch named it.
+    expect((await fetchMedia(movie)).status).toBe(400);
+
+    const granted = await grantedMoviePath(deck);
+    expect(path.dirname(granted)).toBe(outDir);
+    expect((await fetchMedia(granted)).status).toBe(200);
+  });
+
+  it("does NOT reach a sibling of a granted media file", async () => {
+    // The grant is the FILE, not its directory and not the deck's: a `.json` or `.mp4` that no
+    // dispatch ever named stays unreachable however close it sits to one that was (Codex P1,
+    // second round — the first fix granted `dirname(deck)` recursively).
+    const { dir, deck, outDir } = deckWithMovie("mt-mulmoscript-abs-sibling-");
+    const siblingDeck = path.join(dir, "private.json");
+    fs.writeFileSync(siblingDeck, JSON.stringify(VALID_SCRIPT));
+    const nestedClip = path.join(outDir, "private.mp4");
+    fs.writeFileSync(nestedClip, "not yours");
+
+    // Open the deck AND take the grant, so both the deck directory and the output directory have
+    // been involved — neither may carry anything else with them.
+    await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: deck }));
+    const granted = await grantedMoviePath(deck);
+
+    expect((await fetchMedia(granted)).status).toBe(200);
+    expect((await fetchMedia(siblingDeck)).status).toBe(400);
+    expect((await fetchMedia(nestedClip)).status).toBe(400);
   });
 
   it("leaves a relative filePath meaning artifacts/stories", async () => {
