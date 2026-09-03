@@ -210,6 +210,33 @@ describe("ToolsPane", () => {
     expect(wrapper.find('[data-testid="gui-only-note"]').exists()).toBe(false);
   });
 
+  // A -> B -> A, with A's earlier answer EMPTY. Codex read the session gate as re-showing A's
+  // prior response while the fresh A request is in flight; what matters is whether that response
+  // can be the misleading one, and it cannot: an empty list falls through to the loading branch,
+  // which is ordered first (#1969).
+  it("does not resurrect an EMPTY earlier answer when the same session is selected again", async () => {
+    const held: Array<(value: unknown) => void> = [];
+    let pend = false;
+    mockFetch((url) => {
+      if (!url.startsWith("/api/tools")) return Promise.resolve(jsonRes({ toolCalls: [] }));
+      return pend ? new Promise<unknown>((resolve) => held.push(resolve)) : Promise.resolve(jsonRes({ tools: [] }));
+    });
+    const wrapper = mount(ToolsPane, { props: { sessionId: "a" } });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(true); // A answered: none
+
+    pend = true;
+    await wrapper.setProps({ sessionId: "b" });
+    await flushPromises();
+    await wrapper.setProps({ sessionId: "a" }); // back before either answered
+    await flushPromises();
+
+    // A's own earlier answer is what the gate lets through — and it is empty, so the guidance is
+    // NOT what shows. The pane says it is asking, which is true.
+    expect(wrapper.find('[data-testid="tools-loading"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="tools-empty"]').exists()).toBe(false);
+  });
+
   // The other half of the pairing, and the reason it is a pairing rather than a clear-on-switch:
   // a session re-asks when the server announces its groups, and blanking the pane for that would
   // throw away a good answer we already have (#1968).
