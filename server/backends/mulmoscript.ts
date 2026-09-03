@@ -16,6 +16,7 @@
 //      Wire paths resolve through the ops' realpath containment (resolveStory).
 import path from "node:path";
 import fs from "node:fs/promises";
+import { closeSync, createReadStream, fstatSync, openSync, type Stats } from "node:fs";
 import { execFile } from "node:child_process";
 import type { Express, Request, Response } from "express";
 import {
@@ -271,7 +272,20 @@ function saveArgsFrom(body: Record<string, unknown>): SaveMulmoScriptArgs {
 //
 // Canonical paths, because a lexical answer only constrains the string: `/a/./out.mp4` and a
 // symlink to the same file are the same file, and the set has to say so.
-const mintedAbsoluteMedia = new Set<string>();
+//
+// And the FILE, not the pathname: a grant kept as a bare path outlives the file it was issued for,
+// so deleting a generated movie and dropping a different `.mp4` at the same name would inherit its
+// grant (Codex P2, third round). Each entry carries the identity of the file that was minted, and
+// the download re-checks it — against the OPEN DESCRIPTOR it is about to stream, not against the
+// path, so nothing can be swapped in between the check and the read.
+const mintedAbsoluteMedia = new Map<string, string>();
+
+/** device + inode + size + mtime. Enough to say "the same file, unchanged": a replacement gets a
+ *  new inode, and an in-place rewrite changes size or mtime. Read from a `Stats` so the caller
+ *  chooses whether it came from a path (minting) or a descriptor (serving). */
+function fileIdentity(stats: Stats): string {
+  return `${stats.dev}:${stats.ino}:${stats.size}:${stats.mtimeMs}`;
+}
 
 /** The `moviePath` / `pdfPath` values in a dispatch answer, however deep the shape nests them.
  *
@@ -288,19 +302,45 @@ function collectMediaPaths(value: unknown, out: string[], depth = 0): void {
   }
 }
 
-/** Remember every absolute media path a dispatch just answered with, so the View can fetch it.
- *  Relative ones need no entry — `resolveStory` already confines those to a stories root. */
+/** Remember every absolute media path a dispatch just answered with, together with the identity of
+ *  the file it named, so the View can fetch exactly that. Relative ones need no entry —
+ *  `resolveStory` already confines those to a stories root. */
 function rememberMintedMedia(result: unknown): void {
   const paths: string[] = [];
   collectMediaPaths(result, paths);
   for (const value of paths) {
-    if (path.isAbsolute(value)) mintedAbsoluteMedia.add(canonicalPath(value));
+    if (!path.isAbsolute(value)) continue;
+    const real = canonicalPath(value);
+    let fd: number | undefined;
+    try {
+      fd = openSync(real, "r");
+      mintedAbsoluteMedia.set(real, fileIdentity(fstatSync(fd)));
+    } catch {
+      // Answered but unreadable — nothing to grant, and the View's fetch will 404 on its own.
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
   }
 }
 
-/** Whether an absolute media path is one this server handed out. */
-function servableAbsoluteMedia(absolutePath: string): boolean {
-  return mintedAbsoluteMedia.has(canonicalPath(absolutePath));
+/** The open descriptor for an absolute media file this server minted and that has not changed
+ *  since, or null. The CALLER owns the descriptor and must close it.
+ *
+ *  Returns a descriptor rather than a boolean on purpose: checking the path and then opening it
+ *  again leaves a window where the file can be swapped between the two, so the thing that is
+ *  checked has to be the thing that is read. */
+function openMintedMedia(absolutePath: string): number | null {
+  const recorded = mintedAbsoluteMedia.get(canonicalPath(absolutePath));
+  if (recorded === undefined) return null;
+  let fd: number | undefined;
+  try {
+    fd = openSync(absolutePath, "r");
+    if (fileIdentity(fstatSync(fd)) === recorded) return fd;
+  } catch {
+    // Gone or unreadable — falls through to the refusal below.
+  }
+  if (fd !== undefined) closeSync(fd);
+  return null;
 }
 
 /** The core execute context for a tool call, read off the BACKEND rather than rebuilt.
@@ -478,13 +518,24 @@ export function mountMulmoScriptMediaRoute(app: Express): void {
       res.status(failureStatus(resolved.code)).json({ error: resolved.error });
       return;
     }
-    // An absolute wire path is only servable as the output of a deck this server opened — see
-    // `openedAbsoluteDirs`. A relative one is already confined to a registered stories root by
-    // `resolveStory`, and is unaffected.
-    if (path.isAbsolute(wirePath) && !servableAbsoluteMedia(resolved.absolutePath)) {
+    // A relative wire path is already confined to a registered stories root by `resolveStory`, and
+    // is served exactly as before. An absolute one is servable only as a file this server itself
+    // minted and that has not changed since — see `mintedAbsoluteMedia` — and is streamed from the
+    // descriptor that was checked, so the file cannot be swapped underneath the answer.
+    if (!path.isAbsolute(wirePath)) {
+      res.download(resolved.absolutePath);
+      return;
+    }
+    const fd = openMintedMedia(resolved.absolutePath);
+    if (fd === null) {
       res.status(400).json({ error: "Invalid filePath" });
       return;
     }
-    res.download(resolved.absolutePath);
+    res.attachment(path.basename(resolved.absolutePath));
+    // `autoClose` hands the descriptor's lifetime to the stream, including the error and
+    // client-disconnect paths — a manual close here would be the one that leaks.
+    createReadStream("", { fd, autoClose: true })
+      .on("error", () => res.destroy())
+      .pipe(res);
   });
 }

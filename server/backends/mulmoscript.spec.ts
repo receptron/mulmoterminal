@@ -304,6 +304,31 @@ describe("absolute filePath", () => {
     expect((await fetchMedia(nestedClip)).status).toBe(400);
   });
 
+  it("streams the granted bytes, and refuses the grant once the file is replaced", async () => {
+    // A grant kept as a bare pathname outlives the file it was issued for: delete the movie, drop
+    // a different `.mp4` at the same name, and the old grant would serve the replacement (Codex P2
+    // on #1971). The entry carries the file's identity, and the download re-checks it.
+    const { deck, outDir } = deckWithMovie("mt-mulmoscript-abs-replace-");
+    const granted = await grantedMoviePath(deck);
+    expect(path.dirname(granted)).toBe(outDir);
+
+    const served = await fetchMedia(granted);
+    expect(served.status).toBe(200);
+    // The bytes, not just the status: the descriptor that was checked has to be the one read.
+    expect(served.text).toContain("movie bytes");
+
+    fs.rmSync(granted);
+    fs.writeFileSync(granted, "someone else's file");
+    expect((await fetchMedia(granted)).status).toBe(400);
+
+    // A fresh dispatch is what re-grants it — the recovery path is the normal one.
+    const regranted = await grantedMoviePath(deck);
+    expect(regranted).toBe(granted);
+    const after = await fetchMedia(granted);
+    expect(after.status).toBe(200);
+    expect(after.text).toContain("someone else's file");
+  });
+
   it("leaves a relative filePath meaning artifacts/stories", async () => {
     // The regression that matters most: the workspace's own stories are addressed by a relative
     // path, and an identically-named deck sits outside. They must stay two different files.
