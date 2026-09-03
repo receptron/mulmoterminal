@@ -167,10 +167,15 @@ describe("absolute filePath", () => {
   let app: Express;
   let workspace: string;
   let outside: string;
+  /** `outside`'s parent, so the traversal test's `..` lands somewhere this spec owns and can
+   *  put a REAL deck — a traversal refused for the wrong reason (no such file) proves nothing. */
+  let outsideParent: string;
 
   beforeAll(() => {
     workspace = makeTempDir("mt-mulmoscript-abs-ws-");
-    outside = makeTempDir("mt-mulmoscript-abs-out-");
+    outsideParent = makeTempDir("mt-mulmoscript-abs-out-");
+    outside = path.join(outsideParent, "decks");
+    fs.mkdirSync(outside, { recursive: true });
     initArtifactsBackend({ workspace });
     initOpenPathBackend({ workspace });
     initMulmoScriptBackend({ workspace, pubsub: null });
@@ -220,12 +225,24 @@ describe("absolute filePath", () => {
     expect(res.body.message).toContain("not found");
   });
 
-  it("refuses an absolute path with a traversal segment", async () => {
+  it("refuses an absolute path with a traversal segment, even when the target is a real deck", async () => {
+    // A VALID deck at the normalised target, so the refusal can only come from the `..` segment.
+    // Without it the path resolves to nothing and the test passes with the guard deleted — green
+    // for the wrong reason (CodeRabbit on #1971).
+    const target = path.join(outsideParent, "escape.json");
+    fs.writeFileSync(target, JSON.stringify(VALID_SCRIPT));
+    expect(fs.existsSync(target)).toBe(true);
     // `path.format`, not `path.join`: joining normalises the `..` away and tests nothing.
     const traversal = path.format({ dir: outside, base: path.join("..", "escape.json") });
+    expect(path.resolve(traversal)).toBe(target);
+
     const res = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: traversal }));
     expect(res.status).toBe(200);
     expect(res.body.data).toBeUndefined();
+    // And the same file IS readable when named without the `..`, so the refusal is about the
+    // spelling rather than about the file.
+    const direct = await routeCall(app)("/api/plugin/presentMulmoScript", jsonPost({ filePath: target }));
+    expect(dataOf(direct.body).filePath).toBe(target);
   });
 
   it("leaves a relative filePath meaning artifacts/stories", async () => {
