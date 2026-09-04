@@ -244,9 +244,10 @@ more.
   view, everyday workflows, the full feature list, configuration, and mobile push notifications.
 - **ユーザーガイド:** [日本語](https://receptron.github.io/mulmoterminal/guide/ja/) —
   グリッドの使い方・日々のワークフロー・機能一覧・設定・スマホ通知の設定はこちら。
-- **Updates / アップデート情報:** new releases and features are announced **in Japanese** on X —
-  新バージョンや新機能のお知らせは X の
-  [Singularity Society (@SingularitySoci)](https://x.com/SingularitySoci) で。
+- **Updates / アップデート情報:** new releases and features are announced on X —
+  in English on [@mulmocast](https://x.com/mulmocast), in Japanese on
+  [Singularity Society (@SingularitySoci)](https://x.com/SingularitySoci)。
+  新バージョンや新機能のお知らせは X で。
 
 ---
 
@@ -2170,7 +2171,7 @@ MulmoTerminal is the seventh.
 It exists because we run several coding agents every day and kept losing track of which one was
 waiting on us. Everything here was built for that, then kept because it worked. MIT licensed.
 
-- **Updates** are announced in Japanese on X: [@SingularitySoci](https://x.com/SingularitySoci)
+- **Updates** are announced on X: in English [@mulmocast](https://x.com/mulmocast), in Japanese [@SingularitySoci](https://x.com/SingularitySoci)
 - **Sister project:** [MulmoClaude](https://github.com/receptron/mulmoclaude)
 
 ## Contributing
