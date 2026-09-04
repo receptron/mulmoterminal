@@ -39,10 +39,11 @@ Opening a terminal through installing Node.js, Claude Code and git / gh on macOS
 >
 > 新バージョンや新機能のお知らせは、X の
 > [Singularity Society（@SingularitySoci）](https://x.com/SingularitySoci) で流していきます。
-> **ぜひフォローしてください！**
+> **ぜひフォローしてください！** 英語では [@mulmocast](https://x.com/mulmocast) が発信しています。
 >
-> New releases and features are announced on X (in Japanese) —
-> [**follow @SingularitySoci**](https://x.com/SingularitySoci) to hear about them first.
+> New releases and features are announced on X — in English on
+> [**@mulmocast**](https://x.com/mulmocast), in Japanese on
+> [**@SingularitySoci**](https://x.com/SingularitySoci). Follow to hear about them first.
 
 ## ✨ おすすめ機能 / Highlights
 
@@ -147,4 +148,4 @@ The launcher detects it and prints the exact removal command; run that, then `np
 > Repo: [github.com/receptron/mulmoterminal](https://github.com/receptron/mulmoterminal) ·
 > npm: [`mulmoterminal`](https://www.npmjs.com/package/mulmoterminal) — `npx mulmoterminal@latest`
 
-> X: [**@SingularitySoci**](https://x.com/SingularitySoci) — 更新情報はこちらで / follow for updates
+> X: [**@mulmocast**](https://x.com/mulmocast) (English) · [**@SingularitySoci**](https://x.com/SingularitySoci) (日本語) — 更新情報はこちらで / follow for updates

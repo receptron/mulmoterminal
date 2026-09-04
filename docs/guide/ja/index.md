@@ -92,7 +92,7 @@ MulmoTerminal は、すべてのセッションを 1 画面に並べます。青
 >
 > **[4.0.0 で変わったこと](v4.0.0.html)** — **単一ターミナルビューを廃止**。グリッドがアプリそのものになり、1 体に集中するのは「セルを拡大する」こと。コンテンツ系の画面にはツールバーの **Collections** という入口ができた。**worktree は 1 セッションだけ**を持ち、2 つ目の起動を断る。Docker サンドボックスも削除（2026-08-01 時点）
 >
-> **X で最新情報を発信しています** — 新バージョンや新機能のお知らせは X の [Singularity Society（@SingularitySoci）](https://x.com/SingularitySoci) で流していきます。ここが一番早いので、[**@SingularitySoci をフォローしてください！**](https://x.com/SingularitySoci)
+> **X で最新情報を発信しています** — 新バージョンや新機能のお知らせは X の [Singularity Society（@SingularitySoci）](https://x.com/SingularitySoci) で流していきます。ここが一番早いので、[**@SingularitySoci をフォローしてください！**](https://x.com/SingularitySoci) 英語では [@mulmocast](https://x.com/mulmocast) が発信しています。
 >
 > **[❓ よくある質問（FAQ）](faq.html)** — VS Code / Cursor / tmux 分割との違い、**既存の Claude Code セッションはそのまま使えるのか**、Windows で動くのか、トークン代はどうなるのか。試す前に聞かれることをまとめました
 >
