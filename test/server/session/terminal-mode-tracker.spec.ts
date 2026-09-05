@@ -84,9 +84,16 @@ describe("TerminalModeTracker", () => {
   it("clears all modes on RIS (ESC c)", () => {
     const t = new TerminalModeTracker();
     t.scan(`${ESC}[?1049h${ESC}[?1000h${ESC}[?1006h`);
-    expect(t.modes().length).toBe(3);
+    expect(t.modes()).toHaveLength(3);
     t.scan(`${ESC}c`);
     expect(t.modes()).toEqual([]);
+  });
+
+  it("tracks a mode after an ESC-aborted CSI sequence", () => {
+    const t = new TerminalModeTracker();
+    // ESC[? with no final byte, immediately followed by a valid DECSET
+    t.scan(`${ESC}[?${ESC}[?1049h`);
+    expect(t.modes()).toEqual([1049]);
   });
 
   it("discards an overlong partial candidate (malformed PTY)", () => {

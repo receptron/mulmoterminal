@@ -93,7 +93,9 @@ export class TerminalModeTracker {
       if (params.length > 0) applyModes(params, finalByte === "h", this.active);
     }
 
-    return paramEnd + 1;
+    // When a CSI is aborted by another ESC (e.g. `ESC[?ESC[?1049h`), the "final byte" is
+    // ESC itself. Return to it so the scanner picks up the new sequence instead of skipping it.
+    return finalByte === ESC ? paramEnd : paramEnd + 1;
   }
 
   /** The modes currently on, in the same shape terminalModesOf returns. */
