@@ -168,6 +168,17 @@
   --err-hover-bg: #f6d4d7;
 }
 
+/* xterm.css hard-codes .composition-view to white-on-black, which shows up as a
+   black box on light themes. Override with theme tokens so the IME pre-edit
+   string follows the active palette (#1973). `:root` raises specificity above
+   the identically-qualified xterm.css rule that loads later (via
+   useTerminalConnections.ts), so import order cannot win back. */
+:root .xterm .composition-view {
+  color: var(--term-fg);
+  background: var(--bg-selected);
+  outline: 1px solid var(--accent);
+}
+
 /* These global defaults live in @layer base so Tailwind utilities (@layer
    utilities, declared last in tailwind.css) can override them. Unlayered they
    would WIN over every utility: the universal reset silently killed every
