@@ -180,4 +180,24 @@ describe("wireBufferedOutput", () => {
     pty.feed("c");
     expect(seen).toEqual(["a", "b", "c"]); // b and c are still queued for the browser
   });
+
+  it("creates a mode tracker for non-tmux entries and feeds PTY output through it (#1972)", () => {
+    const pty = fakePty();
+    const entry = entryFor(pty, fakeSocket().socket);
+    wireBufferedOutput(entry, LIMIT);
+    expect(entry.modeTracker).toBeDefined();
+    pty.feed("\x1b[?1049h\x1b[?1006h");
+    const tracker = entry.modeTracker;
+    expect(tracker).toBeDefined();
+    if (!tracker) return; // type guard — the assertion above catches the real failure
+    const modes = [...tracker.modes()].sort();
+    expect(modes).toEqual([1006, 1049]);
+  });
+
+  it("does not create a mode tracker for tmux entries", () => {
+    const pty = fakePty();
+    const entry = { ...entryFor(pty, fakeSocket().socket), tmux: true } as unknown as PtyEntry;
+    wireBufferedOutput(entry, LIMIT);
+    expect(entry.modeTracker).toBeUndefined();
+  });
 });
