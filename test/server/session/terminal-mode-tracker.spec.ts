@@ -80,4 +80,22 @@ describe("TerminalModeTracker", () => {
     t.scan(`${ESC}[31m${ESC}[?1049h${ESC}[0m`);
     expect(t.modes()).toEqual([1049]);
   });
+
+  it("clears all modes on RIS (ESC c)", () => {
+    const t = new TerminalModeTracker();
+    t.scan(`${ESC}[?1049h${ESC}[?1000h${ESC}[?1006h`);
+    expect(t.modes().length).toBe(3);
+    t.scan(`${ESC}c`);
+    expect(t.modes()).toEqual([]);
+  });
+
+  it("discards an overlong partial candidate (malformed PTY)", () => {
+    const t = new TerminalModeTracker();
+    // A partial that exceeds the bound is dropped rather than retained.
+    const longDigits = "1".repeat(100);
+    t.scan(`${ESC}[?${longDigits}`);
+    // Next chunk should not see the stale partial.
+    t.scan(`${ESC}[?1049h`);
+    expect(t.modes()).toEqual([1049]);
+  });
 });
