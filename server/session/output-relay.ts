@@ -6,6 +6,7 @@
 // from 118k to 655k in one measurement (#1506). One frame each would move the cost we just
 // removed from appendBoundedOutput onto JSON.stringify and the socket.
 import { growOutputTail } from "./terminal-replay.js";
+import { TerminalModeTracker } from "./terminal-mode-tracker.js";
 import { sendFrame } from "./ws-frames.js";
 import type { PtyEntry } from "./types.js";
 
@@ -79,8 +80,14 @@ export function createOutputRelay(entry: PtyEntry, limit: number): OutputRelay {
 export function wireBufferedOutput(entry: PtyEntry, limit: number, tap?: (data: string) => void): OutputRelay {
   const relay = createOutputRelay(entry, limit);
   entry.output = relay;
+  // On a non-tmux session, track DECSET/DECRST modes from the byte stream so reattachPty can
+  // restore alternate-screen and mouse modes without querying tmux (#1972).
+  if (!entry.tmux) {
+    entry.modeTracker = new TerminalModeTracker();
+  }
   entry.term.onData((data) => {
     relay.push(data);
+    entry.modeTracker?.scan(data);
     tap?.(data);
   });
   return relay;

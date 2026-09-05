@@ -6,6 +6,7 @@ import type { WebSocket } from "ws";
 import type { WorkerStatus } from "../../common/workerStatus.js";
 import type { SessionAgent } from "../../common/sessionAgent.js";
 import type { OutputRelay } from "./output-relay.js";
+import type { TerminalModeTracker } from "./terminal-mode-tracker.js";
 
 export interface Activity {
   working?: boolean;
@@ -39,6 +40,9 @@ export interface PtyEntry {
   // (see tmuxRedrawClient). Cleared by the first resize frame after the reattach — waiting for it
   // is the point, since that frame is where the client tells us the size it actually settled at.
   redrawPending?: boolean;
+  // DECSET/DECRST modes tracked from the PTY byte stream, for hosts with no tmux (#1972).
+  // tmux-backed sessions query tmux instead (terminalModesOf); this is the non-tmux fallback.
+  modeTracker?: TerminalModeTracker;
   // What is running in this PTY. Recorded at spawn because nothing else can recover it
   // later, and the phone needs it to offer input that suits the session (mulmoserver#84).
   agent: SessionAgent;

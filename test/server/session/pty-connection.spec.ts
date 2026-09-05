@@ -2,6 +2,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { createConnectionHandlers, handleCommandFrame } from "../../../server/session/pty-connection.js";
 import type { PtyEntry } from "../../../server/session/types.js";
+import { TerminalModeTracker } from "../../../server/session/terminal-mode-tracker.js";
 import { otherWriteCount, stopWatchingOtherWrites, watchOtherWrites } from "../../../server/session/write-to-session";
 
 const OPEN = 1;
@@ -432,6 +433,25 @@ describe("reattachPty", () => {
     reattachPty(entryWith({ ws: null, buffer: "sandboxed output" }), s.ws as never, SESSION);
     expect(calls).toEqual([`cancelReap:${SESSION}`]);
     expect(s.parsed()).toEqual([{ type: "output", data: "sandboxed output" }]);
+  });
+
+  it("restores tracked modes on a non-tmux reattach (#1972)", () => {
+    // End-to-end: a non-tmux entry whose modeTracker has seen DECSET sequences gets the
+    // mode prefix prepended to its replay, just as a tmux entry would via terminalModesOf.
+    const { reattachPty, calls } = setup();
+    const s = fakeSocket();
+    const tracker = new TerminalModeTracker();
+    tracker.scan("\x1b[?1049h\x1b[?1006h");
+    const entry = entryWith({ ws: null, buffer: "app output", modeTracker: tracker });
+    reattachPty(entry, s.ws as never, SESSION);
+    // terminalModesOf must NOT be called — the tracker is the source.
+    expect(calls).toEqual([`cancelReap:${SESSION}`]);
+    const frames = s.parsed();
+    expect(frames).toHaveLength(1);
+    const data = frames[0].data as string;
+    expect(data).toContain("\x1b[?1049h");
+    expect(data).toContain("\x1b[?1006h");
+    expect(data).toContain("app output");
   });
 
   it("leaves a pane with nothing sticky set replaying exactly as before", () => {
