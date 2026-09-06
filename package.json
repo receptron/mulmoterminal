@@ -34,7 +34,7 @@
     "plugins/"
   ],
   "engines": {
-    "node": ">=22.9"
+    "node": ">=22.12"
   },
   "scripts": {
     "dev": "concurrently -n server,vite -c blue,green \"node scripts/dev-server.mjs\" \"vite\"",
