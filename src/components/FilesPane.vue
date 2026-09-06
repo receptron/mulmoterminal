@@ -489,24 +489,27 @@ function teardown(): void {
 }
 
 async function start(): Promise<void> {
+  const reqIdAtStart = fileReqId;
   await nextTick();
   if (editorHost.value) editor = createEditor(editorHost.value, () => (dirty.value = true));
   await loadRoot();
-  await restore(props.initialState ?? null);
+  await restore(props.initialState ?? null, reqIdAtStart);
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
   if (props.requestedPath) void loadFile(props.requestedPath);
 }
 
 /** Put a remembered tree back: open its directories parents-first (each fetches its children),
- *  then the file that was open. Anything since deleted simply isn't found and is skipped. */
-async function restore(state: FilesPaneState | null): Promise<void> {
+ *  then the file that was open. Anything since deleted simply isn't found and is skipped.
+ *  `reqIdAtStart` is the fileReqId snapshot from the beginning of start() — restore only
+ *  opens the remembered file when no competing request arrived during THIS startup cycle. */
+async function restore(state: FilesPaneState | null, reqIdAtStart: number): Promise<void> {
   if (!state) return;
   for (const dirPath of restoreOrder(state.expanded)) {
     const node = findNode(roots.value, dirPath);
     if (node?.dir && !node.expanded) await toggleDir(node);
   }
-  if (state.openPath) await loadFile(state.openPath);
+  if (state.openPath && fileReqId === reqIdAtStart) await loadFile(state.openPath);
 }
 
 function findNode(nodes: Node[], target: string): Node | null {

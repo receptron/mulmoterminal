@@ -357,6 +357,53 @@ describe("FilesPane restoring a remembered tree", () => {
     expect(w.text()).toContain("deep"); // src still opened
   });
 
+  // Regression: #1979. When the pane opens from a terminal link click, openFile() races with
+  // restore() — the click fires loadFile during restore's async directory expansion, and without
+  // the per-start baseline guard the remembered file overwrites the clicked one.
+  // The test blocks the /list response for `src` so restore is paused in toggleDir(), then calls
+  // openFile while restore is waiting, and finally releases the response to let restore finish.
+  it("shows the clicked file, not the remembered one, when openFile races with restore (#1979)", async () => {
+    let releaseSrcList!: () => void;
+    const srcListGate = new Promise<void>((resolve) => (releaseSrcList = resolve));
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/list")) {
+        const p = new URL(url, "https://x").searchParams.get("path");
+        if (p === "")
+          return {
+            ok: true,
+            json: async () => ({
+              entries: [
+                { name: "src", dir: true, size: 0 },
+                { name: "README.md", dir: false, size: 10 },
+              ],
+            }),
+          };
+        if (p === "src") {
+          await srcListGate;
+          return { ok: true, json: async () => ({ entries: [{ name: "deep", dir: true, size: 0 }] }) };
+        }
+        return { ok: true, json: async () => ({ entries: [{ name: "app.ts", dir: false, size: 5 }] }) };
+      }
+      if (url.includes("/text")) return { ok: true, json: async () => ({ text: "# hello", version: "v1" }) };
+      return { ok: true, json: async () => ({ ok: true, version: "v2" }) };
+    }) as unknown as typeof fetch;
+
+    const w = mount(FilesPane, {
+      props: { cwd: "/proj", initialState: { openPath: "README.md", expanded: ["src"] } },
+    });
+    await flushPromises(); // restore starts and blocks on srcListGate inside toggleDir("src")
+
+    // The click arrives while restore is paused.
+    await (w.vm as unknown as { openFile: (p: string) => Promise<void> }).openFile("src/deep/app.ts");
+
+    // Release restore — it finishes toggleDir and reaches the openPath guard.
+    releaseSrcList();
+    await flushPromises();
+
+    expect(fakeEditor.setDoc.mock.calls.at(-1)?.[1]).toBe("app.ts");
+  });
+
   it("reports what to remember", async () => {
     const w = mount(FilesPane, { props: { cwd: "/proj", initialState: { openPath: "README.md", expanded: ["src"] } } });
     await flushPromises();
