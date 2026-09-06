@@ -144,8 +144,8 @@
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.69.0",
-    "vite": "^8.0.12",
-    "vitest": "^4.1.11",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0",
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.11"
   },
