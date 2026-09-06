@@ -28,6 +28,15 @@ describe("TerminalModeTracker", () => {
     expect(t.modes()).toContain(1000);
   });
 
+  it("tracks legacy alternate-screen modes 47 and 1047", () => {
+    const t = new TerminalModeTracker();
+    t.scan(`${ESC}[?47h`);
+    expect(t.modes()).toEqual([47]);
+    t.scan(`${ESC}[?1047h`);
+    const modes = [...t.modes()].sort((a, b) => a - b);
+    expect(modes).toEqual([47, 1047]);
+  });
+
   it("ignores untracked modes", () => {
     const t = new TerminalModeTracker();
     t.scan(`${ESC}[?25h`); // cursor visibility — not tracked
