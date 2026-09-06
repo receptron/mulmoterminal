@@ -357,6 +357,21 @@ describe("FilesPane restoring a remembered tree", () => {
     expect(w.text()).toContain("deep"); // src still opened
   });
 
+  // Regression: #1979. When the pane opens from a terminal link click, openFile() races with
+  // restore() — the click fires loadFile during restore's async directory expansion, and without
+  // the per-start baseline guard the remembered file overwrites the clicked one.
+  it("shows the clicked file, not the remembered one, when openFile races with restore (#1979)", async () => {
+    const w = mount(FilesPane, {
+      props: { cwd: "/proj", initialState: { openPath: "README.md", expanded: ["src"] } },
+    });
+    // The host's showClickedPath: one nextTick after mounting the pane, then openFile.
+    await w.vm.$nextTick();
+    await (w.vm as unknown as { openFile: (p: string) => Promise<void> }).openFile("src/deep/app.ts");
+    await flushPromises();
+
+    expect(fakeEditor.setDoc.mock.calls.at(-1)?.[1]).toBe("app.ts");
+  });
+
   it("reports what to remember", async () => {
     const w = mount(FilesPane, { props: { cwd: "/proj", initialState: { openPath: "README.md", expanded: ["src"] } } });
     await flushPromises();
