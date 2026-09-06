@@ -506,7 +506,7 @@ async function restore(state: FilesPaneState | null): Promise<void> {
     const node = findNode(roots.value, dirPath);
     if (node?.dir && !node.expanded) await toggleDir(node);
   }
-  if (state.openPath) await loadFile(state.openPath);
+  if (state.openPath && fileReqId === 0) await loadFile(state.openPath);
 }
 
 function findNode(nodes: Node[], target: string): Node | null {
