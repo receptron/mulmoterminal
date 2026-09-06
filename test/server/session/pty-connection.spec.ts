@@ -449,9 +449,9 @@ describe("reattachPty", () => {
     const frames = s.parsed();
     expect(frames).toHaveLength(1);
     const data = frames[0].data as string;
-    expect(data).toContain("\x1b[?1049h");
-    expect(data).toContain("\x1b[?1006h");
-    expect(data).toContain("app output");
+    const outputIndex = data.indexOf("app output");
+    expect(data.indexOf("\x1b[?1049h")).toBeLessThan(outputIndex);
+    expect(data.indexOf("\x1b[?1006h")).toBeLessThan(outputIndex);
   });
 
   it("leaves a pane with nothing sticky set replaying exactly as before", () => {
