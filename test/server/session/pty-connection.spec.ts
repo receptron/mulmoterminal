@@ -2,6 +2,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { createConnectionHandlers, handleCommandFrame } from "../../../server/session/pty-connection.js";
 import type { PtyEntry } from "../../../server/session/types.js";
+import { TerminalModeTracker } from "../../../server/session/terminal-mode-tracker.js";
+import { wireBufferedOutput } from "../../../server/session/output-relay.js";
 import { otherWriteCount, stopWatchingOtherWrites, watchOtherWrites } from "../../../server/session/write-to-session";
 
 const OPEN = 1;
@@ -432,6 +434,48 @@ describe("reattachPty", () => {
     reattachPty(entryWith({ ws: null, buffer: "sandboxed output" }), s.ws as never, SESSION);
     expect(calls).toEqual([`cancelReap:${SESSION}`]);
     expect(s.parsed()).toEqual([{ type: "output", data: "sandboxed output" }]);
+  });
+
+  it("restores tracked modes on a non-tmux reattach (#1972)", () => {
+    // End-to-end: a non-tmux entry whose modeTracker has seen DECSET sequences gets the
+    // mode prefix prepended to its replay, just as a tmux entry would via terminalModesOf.
+    const { reattachPty, calls } = setup();
+    const s = fakeSocket();
+    const tracker = new TerminalModeTracker();
+    tracker.scan("\x1b[?1049h\x1b[?1006h");
+    const entry = entryWith({ ws: null, buffer: "app output", modeTracker: tracker });
+    reattachPty(entry, s.ws as never, SESSION);
+    // terminalModesOf must NOT be called — the tracker is the source.
+    expect(calls).toEqual([`cancelReap:${SESSION}`]);
+    const frames = s.parsed();
+    expect(frames).toHaveLength(1);
+    const data = frames[0].data as string;
+    const outputIndex = data.indexOf("app output");
+    expect(data.indexOf("\x1b[?1049h")).toBeLessThan(outputIndex);
+    expect(data.indexOf("\x1b[?1006h")).toBeLessThan(outputIndex);
+  });
+
+  it("restores modes wired through wireBufferedOutput on non-tmux reattach (#1972 e2e)", () => {
+    // Full path: wireBufferedOutput creates the tracker, PTY output feeds through it,
+    // and reattachPty reads the tracked modes into the replay prefix.
+    const { reattachPty, calls } = setup();
+    let emit: ((data: string) => void) | undefined;
+    const term = { pid: 9999, onData: (fn: (data: string) => void) => (emit = fn) };
+    const entry = { term, ws: null, buffer: "", cwd: "/e2e", active: false, agent: "claude" } as unknown as PtyEntry;
+    wireBufferedOutput(entry, OUTPUT_BUFFER_LIMIT);
+    // Simulate PTY emitting DECSET sequences (as Claude Code does at startup).
+    emit?.("\x1b[?1049h\x1b[?1006happ output");
+    // Detach the relay socket so reattach replays from the buffer.
+    entry.ws = null;
+    const s = fakeSocket();
+    reattachPty(entry, s.ws as never, SESSION);
+    expect(calls).toEqual([`cancelReap:${SESSION}`]);
+    const frames = s.parsed();
+    expect(frames).toHaveLength(1);
+    const data = frames[0].data as string;
+    const outputIndex = data.indexOf("app output");
+    expect(data.indexOf("\x1b[?1049h")).toBeLessThan(outputIndex);
+    expect(data.indexOf("\x1b[?1006h")).toBeLessThan(outputIndex);
   });
 
   it("leaves a pane with nothing sticky set replaying exactly as before", () => {
