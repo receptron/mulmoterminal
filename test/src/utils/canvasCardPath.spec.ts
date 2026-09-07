@@ -94,6 +94,43 @@ describe("canonicalCardPath", () => {
     expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBe("C:/decks/x.json");
   });
 
+  // The rule both Windows findings on #1976 are instances of: a path that leans on the server's
+  // CURRENT DRIVE names no one file, and which host that is comes from how the server spells its
+  // own roots — the one signal a browser has (the page may be open on a phone). `/decks/x.json` is
+  // the POSIX absolute form, so refusing it everywhere would disable identity on every other host.
+  it("says nothing for a drive-less path when the server's roots are Windows ones", () => {
+    const onWindows: StoryRootDirs = { workspace: "C:/Users/me/w", byId: { W: "C:/Users/me/w" } };
+    expect(canonicalCardPath("/decks/x.json", null, onWindows)).toBeNull();
+    expect(canonicalCardPath("\\decks\\x.json", null, onWindows)).toBeNull();
+    // …while the two spellings that DO name a file on that host still resolve.
+    expect(canonicalCardPath("C:\\decks\\x.json", null, onWindows)).toBe("C:/decks/x.json");
+    expect(canonicalCardPath("//server/share/x.json", null, onWindows)).toBe("//server/share/x.json");
+    // A root-relative card is unaffected: its base is the root's own drive-qualified spelling.
+    expect(canonicalCardPath("stories/decks/x.json", "W", onWindows)).toBe("C:/Users/me/w/decks/x.json");
+    // And on a POSIX server the same spelling is the answer it always was.
+    expect(canonicalCardPath("/decks/x.json", null, dirs)).toBe("/decks/x.json");
+  });
+
+  // A Windows server whose workspace is a UNC share rather than a drive: `canonicalPath` keeps that
+  // spelling, and a drive-less card path is just as unreconcilable there (Codex P2, third round).
+  // The host test is the same one applied to the server's own root, so this case is closed by the
+  // rule rather than by another branch.
+  it("reads a UNC-rooted server as a Windows one too", () => {
+    const onShare: StoryRootDirs = { workspace: "//server/share/project", byId: { W: "//server/share/project" } };
+    expect(canonicalCardPath("/decks/x.json", null, onShare)).toBeNull();
+    expect(canonicalCardPath("\\decks\\x.json", null, onShare)).toBeNull();
+    expect(canonicalCardPath("//server/share/project/decks/x.json", null, onShare)).toBe("//server/share/project/decks/x.json");
+    expect(canonicalCardPath("C:\\decks\\x.json", null, onShare)).toBe("C:/decks/x.json");
+    expect(canonicalCardPath("stories/decks/x.json", "W", onShare)).toBe("//server/share/project/decks/x.json");
+  });
+
+  // The server's spelling is read from whichever root is there — a card can arrive before the
+  // workspace entry does, and the map is what `storyRootDirsFrom` fills either way.
+  it("reads the host's spelling from a named root when there is no workspace", () => {
+    expect(canonicalCardPath("/decks/x.json", null, { workspace: null, byId: { P: "C:/Users/me/w/proj" } })).toBeNull();
+    expect(canonicalCardPath("/decks/x.json", null, { workspace: null, byId: { P: "/Users/me/w/proj" } })).toBe("/decks/x.json");
+  });
+
   it("says nothing for the stories directory itself", () => {
     expect(canonicalCardPath("stories/", null, dirs)).toBeNull();
   });
