@@ -41,12 +41,12 @@ describe("MulmoMenu", () => {
     expect(labels(w)).toEqual(["Launch talk", "plan.json"]);
   });
 
-  // The rule this menu shares with the file tree's row menu, rather than restating: a deck the
-  // server can list is not necessarily one the plugin can serve, because stories come from the
-  // roots the server REGISTERED. A cell outside them has nothing to offer, so it has no button.
-  it("shows no button when the deck is outside the registered stories root", async () => {
+  // The rule this menu shares with the file tree's row menu, rather than restating — which is why
+  // relaxing that gate for #1976 lands here too: a deck outside every registered root is addressed
+  // by its absolute path, so a cell that can list one can now offer it.
+  it("shows the button for a deck outside the registered stories root", async () => {
     answerWith([{ path: "/somewhere/else/decks/talk.json", label: "Launch talk" }]);
-    expect(btn(await open("/somewhere/else")).exists()).toBe(false);
+    expect(btn(await open("/somewhere/else")).exists()).toBe(true);
   });
 
   it("shows no button when the directory holds no deck", async () => {

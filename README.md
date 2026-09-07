@@ -1083,11 +1083,13 @@ everything else on disk that happens to parse as a deck. Measured on a real work
 matched, 33 were the user's own decks and 217 were a checked-out repository's test fixtures and
 samples.** A menu is a short list of things you chose.
 
-**Where the decks have to live:** in any directory MulmoTerminal knows about — the workspace it
-was started in, plus the directories in your launcher's saved list (up to 64 in total, and one that
-is no longer on disk is skipped). Those are read **once at startup**, so a repository you open for
-the first time needs a restart before its decks can be shown. Any deck you can see in the file tree is also reachable there — right-click a row and choose
-**Open in the Canvas** — with no configuration at all.
+**Where the decks have to live:** anywhere. A deck under the workspace — or under a directory in
+your launcher's saved list (up to 64 in total, read once at startup) — is addressed by its place in
+that directory; one anywhere else is addressed by its own path. Either way it opens, and a deck you
+open both ways is **one card**, not two. A deck you can see in the file tree is reachable there too
+— right-click a row and choose **Open in the Canvas** — with no configuration at all, as long as the
+pane knows the directory its tree is rooted at. It shows that path in its header; a pane still
+reading `(default workspace)` has nothing to resolve a row against and offers no entry.
 
 If a deck cannot be opened (it was deleted, or the workspace moved since startup), the cell says
 why rather than doing nothing.

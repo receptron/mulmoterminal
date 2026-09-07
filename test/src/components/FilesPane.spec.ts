@@ -628,12 +628,23 @@ describe("the Canvas button", () => {
     expect(btn(await openRow("design.md", "/work/proj", false)).exists()).toBe(false);
   });
 
-  // A story is the one file judged by WHERE it is rather than what it is called: the plugin only
-  // takes a workspace-relative `stories/…`, so a project cell's own artifacts/stories holds files
-  // it would not open. Same name, same shape, two different answers.
-  it("is offered for a story in the workspace and withheld for one outside it", async () => {
+  // WHERE a story is decides its wire spelling — a workspace-relative `stories/…` under the
+  // registered root, its own absolute path anywhere else — but since #1976 it no longer decides
+  // whether the button appears. A project cell's own artifacts/stories used to be silently
+  // unopenable; it opens by path now, and the card is the same card as the workspace one when it
+  // IS the same file.
+  it("is offered for a story in the workspace and for one outside it", async () => {
     expect(btn(await openRow("tale.json", "/work/ws/artifacts/stories", true, "/work/ws")).exists()).toBe(true);
-    expect(btn(await openRow("tale.json", "/work/other/artifacts/stories", true, "/work/ws")).exists()).toBe(false);
+    expect(btn(await openRow("tale.json", "/work/other/artifacts/stories", true, "/work/ws")).exists()).toBe(true);
+  });
+
+  // The limit the README and both guides now state: without a directory to join the row onto, the
+  // row is not a path anything can resolve — the pane falls back to the bare row, and a relative
+  // `filePath` would name the DEFAULT stories root's file of that name instead (CodeRabbit on
+  // #1992). The pane shows `(default workspace)` in its header in that state.
+  it("is withheld for a deck when the pane has no directory to resolve the row against", async () => {
+    expect(btn(await openRow("keynote.json", "/work/proj")).exists()).toBe(true);
+    expect(btn(await openRow("keynote.json", null)).exists()).toBe(false);
   });
 
   // The gate runs on the JOINED path, not the row's. `p.html` passes on its own and fails under a
