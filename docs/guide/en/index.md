@@ -230,7 +230,7 @@ The bottleneck isn't the CPU or the terminal — it's **your attention**.
 
 ## Get started {#cli-tools}
 
-If the [`claude`](https://claude.com/claude-code) CLI (Claude Code) runs on your machine and you have **Node ≥ 22.9**,
+If the [`claude`](https://claude.com/claude-code) CLI (Claude Code) runs on your machine and you have **Node ≥ 22.12**,
 one command starts it:
 
 ```bash

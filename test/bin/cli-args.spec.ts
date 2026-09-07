@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import path from "node:path";
+import { readFileSync } from "node:fs";
 
 import {
   bindHostFor,
@@ -17,6 +18,21 @@ import {
   serverNodeArgs,
   stopCommandFor,
 } from "../../bin/cli-args.js";
+
+// #1986: what npm enforces at install time lives in package.json, not in the doctor's constant.
+// Read the manifest rather than restating the range, so the two cannot be edited apart.
+const hasNodeEngine = (value: unknown): value is { engines: { node: string } } => {
+  if (typeof value !== "object" || value === null || !("engines" in value)) return false;
+  const { engines } = value;
+  if (typeof engines !== "object" || engines === null || !("node" in engines)) return false;
+  return typeof engines.node === "string";
+};
+
+const declaredNodeEngine = (): string => {
+  const manifest: unknown = JSON.parse(readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
+  if (!hasNodeEngine(manifest)) throw new Error("package.json has no engines.node string");
+  return manifest.engines.node;
+};
 
 const DEFAULT_PORT = 34567;
 const port = (args: string[], env: Record<string, string | undefined> = {}) => parsePortArg(args, env, DEFAULT_PORT);
@@ -324,28 +340,28 @@ describe("SECOND_INSTANCE_NOTE", () => {
   });
 });
 
-// The `init` pre-flight tick, fed process.versions.node ("22.9.0", "22.9.0-nightly…").
+// The `init` pre-flight tick, fed process.versions.node ("22.12.0", "22.12.0-nightly…").
 // Display-only: a wrong answer changes a ✓/✗, it never blocks the launch.
 describe("nodeMeetsMinimum", () => {
   it("passes the minimum and anything above it", () => {
-    expect(nodeMeetsMinimum("22.9.0")).toBe(true);
-    expect(nodeMeetsMinimum("22.10.0")).toBe(true);
+    expect(nodeMeetsMinimum("22.12.0")).toBe(true);
+    expect(nodeMeetsMinimum("22.13.0")).toBe(true);
     expect(nodeMeetsMinimum("23.0.0")).toBe(true);
   });
 
   it("fails a lower minor on the boundary major", () => {
-    expect(nodeMeetsMinimum("22.8.0")).toBe(false);
+    expect(nodeMeetsMinimum("22.11.0")).toBe(false);
   });
 
   it("fails a lower major even with a high minor", () => {
-    expect(nodeMeetsMinimum("21.9.0")).toBe(false);
+    expect(nodeMeetsMinimum("21.12.0")).toBe(false);
   });
 
   // Number.parseInt stops at the first non-digit, so the nightly tag on the patch never
   // reaches the comparison — major.minor is all that gates.
   it("judges a nightly by its major.minor", () => {
-    expect(nodeMeetsMinimum("22.9.0-nightly20240101abcd")).toBe(true);
-    expect(nodeMeetsMinimum("22.8.0-nightly20240101abcd")).toBe(false);
+    expect(nodeMeetsMinimum("22.12.0-nightly20240101abcd")).toBe(true);
+    expect(nodeMeetsMinimum("22.11.0-nightly20240101abcd")).toBe(false);
   });
 
   // An unreadable version parses to NaN, and every comparison against NaN is false, so it
@@ -359,8 +375,18 @@ describe("nodeMeetsMinimum", () => {
   // The message's "needs ≥ x.y" and the comparison have to name the same minimum, or the
   // tick and the advice disagree.
   it("labels the minimum it enforces", () => {
-    expect(MIN_NODE_LABEL).toBe("22.9");
+    expect(MIN_NODE_LABEL).toBe("22.12");
     expect(nodeMeetsMinimum(`${MIN_NODE_LABEL}.0`)).toBe(true);
+  });
+
+  // #1986: `engines.node` was raised for a dependency and this label was not, so npm refused
+  // an install the doctor had just ticked. Neither side's own tests could see the gap, because
+  // each was self-consistent. Pin them to each other so the next engine bump goes red here.
+  it("names the same minimum as the package's engines field", () => {
+    const engine = declaredNodeEngine();
+    const match = /^>=(\d+)\.(\d+)$/.exec(engine);
+    expect(match, `engines.node is ${engine}, no longer ">=major.minor"`).not.toBeNull();
+    expect(`${match?.[1]}.${match?.[2]}`).toBe(MIN_NODE_LABEL);
   });
 });
 

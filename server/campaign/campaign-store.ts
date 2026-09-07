@@ -188,7 +188,7 @@ export function appendCampaignRecord(campaign: string, record: CampaignRecord): 
     // `flush: true` is what makes the `true` below mean something across a power cut: without it
     // the write sits in the page cache, and a host that dies after this call loses the intent
     // while the caller has already been told to go ahead. Node supports it from 21.x and this
-    // package requires >=22.9. `rooms.ts` does not flush and is right not to — a lost message is
+    // package requires >=22.12. `rooms.ts` does not flush and is right not to — a lost message is
     // a lost message, while a lost intent is a side effect nobody can reconcile.
     appendFileSync(file, line, { encoding: "utf8", flush: true });
     // The record is on disk from here on, so nothing after this point may report failure.
