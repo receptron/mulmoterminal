@@ -84,6 +84,27 @@ describe("initFileChangePublisher", () => {
     expect(published.map((p) => p.channel)).toEqual([`plugin:${scope}:file:${rel}`]);
   });
 
+  it("forwards a shape artifact to the shapescript plugin channel", async () => {
+    const rel = "artifacts/shapes/lamp-1718765432101-abcd1234.shape";
+    seedFile(rel);
+
+    await publishFileChange(rel);
+
+    expect(published).toHaveLength(1);
+    expect(published[0].channel).toBe(`plugin:shapescript:file:${rel}`);
+  });
+
+  // presentShapeScript's `path` form opens any `.shape` on disk, so the matcher has to
+  // be as wide as the write site — a save that never refreshes is the failure mode.
+  it("forwards a model OUTSIDE artifacts/shapes too", async () => {
+    const rel = "models/bracket.shape";
+    seedFile(rel);
+
+    await publishFileChange(rel);
+
+    expect(published.map((entry) => entry.channel)).toEqual([`plugin:shapescript:file:${rel}`]);
+  });
+
   it("does not publish for a path that matches no scope", async () => {
     const rel = "artifacts/other/data.txt";
     seedFile(rel);
