@@ -80,6 +80,27 @@ root **の綴り**は解決できる。サーバが boot 時に realpath 済み�
 逃げ道は「正確な版」: `resolveStory` の realpath 済み `absolutePath` を card payload に載せて返す。
 両側とも手元に値はある（こちらの `wirePathMismatch` も計算している）。今は入れない。
 
+## 綴りの規則（レビュー 3 往復で固まった部分）
+
+identity は「そのファイルを *名指しできる* 綴りか」で決める。**どの host かは、サーバが自分の
+登録 root をどう綴っているか**から読む（`navigator` は見ない —— この画面はスマホで開かれ得る）。
+
+| card path | POSIX 綴りのサーバ | Windows 綴りのサーバ |
+|---|---|---|
+| `/a/x.json` | `/a/x.json` | **null**（現在ドライブ依存） |
+| `//a/x.json` | `/a/x.json`（先頭の連続スラッシュは 1 つの root。`realpath` で実測） | 共有（別の場所） |
+| `//server/share/x.json` | `/server/share/x.json` | `//server/share/x.json` |
+| `C:\a\x.json` | **null**（そこでは何も名指さない） | `C:/a/x.json` |
+| `\a\x.json` | **null** | **null** |
+
+null は「旧来の文字列 identity に落ちる」＝この PR 以前の挙動。**ルート相対のカードも同じ規則で
+キーを取る**（`dirPathKey` を直接呼ばない）: workspace が `/` のとき base が `//artifacts/stories`
+になり、UNC root として読まれて絶対パスのカードと畳めなくなる。
+
+**この family で残すもの**: 誰も解決していない symlink と、**case-insensitive ボリューム上の
+大文字小文字違い**。ブラウザには判定できず、case-sensitive なボリュームで畳むと**別のファイルが
+1 枚になる**（より悪い誤り）。どれも「サーバが解決済み絶対パスを card payload に載せる」で閉じる。
+
 ## 検証
 
 - (B)(C) を**現行コードに対して**再現させてから直した（上の実測値）。
