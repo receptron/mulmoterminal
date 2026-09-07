@@ -8,10 +8,11 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.16.1 is out.** It needs **Node 22.12** — check yours before you upgrade. Reconnecting on a
-> host without tmux no longer redraws the same answer several times, the IME box follows your theme
-> instead of being a black rectangle, and the Files pane opens the file you clicked — [what changed
-> and what it asks of you](v4.16.1.html).
+> **4.17.0 is out.** A few of your pinned collections can now sit in **the toolbar itself**, one
+> press from anywhere — the one thing here to turn on (**Settings → Toolbar pins**). If you also run
+> MulmoClaude: pinning anything here no longer **wipes the colours** it stored in the shared
+> favourites file. And a deck outside a stories root opens in Canvas — [how to set it up, and what
+> was fixed](v4.17.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

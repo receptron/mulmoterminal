@@ -8,6 +8,65 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.17.0 — 2026-09-08
+
+> **Setup guide:** [4.17.0 — Your favourites on the toolbar](https://receptron.github.io/mulmoterminal/guide/en/v4.17.0.html)
+
+### A favourite is one press away
+
+- **[#1991](https://github.com/receptron/mulmoterminal/pull/1991)** — pinning a collection put it in
+  the row at the top of the Collections overlay, which is invisible until the overlay is open, so
+  opening a pinned thing cost two presses every time. A few of those pins can now sit in the
+  **toolbar itself**, beside Grid and Collections. New global key `toolbarPins`
+  (`["collection:works", …]`, five buttons, empty by default) and a **Settings → Toolbar pins**
+  checklist that offers exactly what is pinned. They sit on the view-switch side of the toolbar's
+  rule on purpose: pressing one leaves the view you are in, which is what everything left of that
+  rule does. Nothing renders while none is promoted — the empty case leaves the header, rule
+  included, exactly as it was.
+- **[#1998](https://github.com/receptron/mulmoterminal/pull/1998)** — the guide got screenshots of
+  both surfaces, captured against a scratch server with invented pins so no real workspace appears
+  in them.
+
+### The shared favourites file stops losing fields
+
+MulmoTerminal and MulmoClaude share `<workspace>/config/shortcuts.json`, and **both apps rebuild
+every record they write** — so a field only one of them names is deleted by the other, silently, and
+visibly only from the app that lost it.
+
+- **[#1994](https://github.com/receptron/mulmoterminal/pull/1994)** — MulmoClaude stores an accent
+  **colour** and draws it in its launcher; MulmoTerminal rebuilt each record from the four fields it
+  knew, so **every pin or unpin here wiped the colours from every entry**. It reappeared on the next
+  collection-index visit in MulmoClaude, which is why it read as flicker rather than as a bug.
+- **[#1997](https://github.com/receptron/mulmoterminal/pull/1997)** — a pin created *here* arrived
+  colourless: the plugin has been passing the colour to the pin toggle all along, and this app's
+  props did not declare it.
+- **[#1999](https://github.com/receptron/mulmoterminal/pull/1999)** — the general form. Fields this
+  build does not know are now **carried through** rather than dropped, the way
+  `serializableAppConfig` already treats unknown keys in the global config (#966): the file is the
+  union of every version that shares it. Carried, not merged — a field the other app has just
+  removed stays removed. The matching change on MulmoClaude's side is
+  [mulmoclaude#3055](https://github.com/receptron/mulmoclaude/issues/3055); until it lands, the
+  protection is one-directional.
+
+### A deck outside a stories root opens in Canvas
+
+- **[#1990](https://github.com/receptron/mulmoterminal/pull/1990)** — a Canvas card's identity was
+  the **wire spelling** of its path, which is a function of what the server has registered rather
+  than of the file. Adding a directory preset and restarting split one deck into two cards, and two
+  decks under different workspaces could share one identity when neither had a path component. The
+  identity is now the file.
+- **[#1992](https://github.com/receptron/mulmoterminal/pull/1992)** — with that fixed, **Open in
+  Canvas** no longer needs the deck to live under a registered stories root: a `.json` deck anywhere
+  opens by its own absolute path. The button was withheld because the card would otherwise split in
+  two, not because the path could not be opened.
+
+### Also
+
+- **[#1989](https://github.com/receptron/mulmoterminal/pull/1989)** — `docs/facts.json`, the
+  machine-readable statement of what this package is, said `4.4.0` while 4.16.1 was on npm: twelve
+  releases of a file answering wrong to readers who cannot tell. Its schema stated the rule in prose
+  and nothing enforced it; a test now pins `version` and `requires.node` to `package.json`.
+
 ## mulmoterminal@4.16.1 — 2026-09-07
 
 > **Setup guide:** [4.16.1 — Node 22.12, and four fixes](https://receptron.github.io/mulmoterminal/guide/en/v4.16.1.html)
