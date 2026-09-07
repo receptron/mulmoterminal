@@ -1363,11 +1363,15 @@ macOS は `Option` を代替文字やアクセントの入力に使うため、`
 そのうちの数件を昇格させると、**ツールバー自体**の **Grid** / **Collections** の隣にボタンが出ます。
 どの画面からでも 1 手です。
 
+![ツールバー。昇格させた 3 件（Work log / ToDo / Weather）が、Grid・Collections の組とグリッド自身の操作の間に、独立したグループとして並んでいる](../images/config-toolbar-pins.png)
+
 ```json
 { "toolbarPins": ["collection:works", "collection:todos", "feed:news"] }
 ```
 
 **Settings → Toolbar pins** でチェックしても同じです（ピン留め済みのものが一覧されます）。
+
+![Settings → ツールバーのピン。ピン留め済みの 5 件がチェックリストになっていて、上の 3 件にチェックが入っている](../images/config-toolbar-pins-settings-ja.png)
 
 | | |
 |---|---|
