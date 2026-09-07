@@ -19,6 +19,14 @@ export interface Shortcut {
   title: string;
   /** Cached material-symbols glyph — refreshed on reconcile. */
   icon: string;
+  /** Cached accent colour name — MulmoClaude's, and only MulmoClaude draws it (#1993).
+   *
+   *  Carried rather than understood: this app has no accent palette, so it keeps whatever string
+   *  the file holds and hands it back unchanged. Deliberately NOT validated here — deciding which
+   *  colours are legal is the job of the app that draws them, and a check that drifted from theirs
+   *  would silently delete a colour they consider valid, which is the bug this field exists to fix.
+   *  Absent when the collection names none. */
+  color?: string;
 }
 
 /** True when two shortcuts target the same thing (the dedupe key). */

@@ -27,6 +27,26 @@ describe("normalizeShortcuts", () => {
     expect(normalizeShortcuts(undefined)).toEqual([]);
     expect(normalizeShortcuts({ shortcuts: [] })).toEqual([]);
   });
+
+  // #1993: this rebuilds every record, so a field it does not list is DELETED rather than passed
+  // through. `color` is MulmoClaude's — it stores it in this shared file and draws it — and leaving
+  // it out wiped the colours from every entry each time this app wrote the file.
+  it("keeps the colour MulmoClaude stores, whatever the palette says", () => {
+    expect(normalizeShortcuts([{ kind: "collection", slug: "a", title: "A", icon: "star", color: "violet" }])).toEqual([
+      { kind: "collection", slug: "a", title: "A", icon: "star", color: "violet" },
+    ]);
+    // Not validated against a palette this app does not have: a check that drifted from theirs
+    // would delete a colour they consider valid, which is the bug itself.
+    expect(normalizeShortcuts([{ kind: "collection", slug: "a", color: "not-a-palette-name" }])[0].color).toBe("not-a-palette-name");
+  });
+
+  // Absent rather than null: `color: undefined` serialises as `null`, a value the other app would
+  // then have to know to ignore.
+  it("leaves the key out when there is no colour to carry", () => {
+    const [entry] = normalizeShortcuts([{ kind: "feed", slug: "b", color: 7 }]);
+    expect(entry).toEqual({ kind: "feed", slug: "b", title: "b", icon: "bookmark" });
+    expect("color" in entry).toBe(false);
+  });
 });
 
 describe("/api/shortcuts routes", () => {
@@ -105,6 +125,28 @@ describe("/api/shortcuts routes", () => {
     const onDisk = JSON.parse(readFileSync(path.join(ws, "config", "shortcuts.json"), "utf8"));
     expect(Array.isArray(onDisk.shortcuts)).toBe(true);
     expect(onDisk.shortcuts).toHaveLength(1);
+  });
+
+  // The path that actually broke (#1993): MulmoClaude writes a colour, this app reads the file and
+  // writes it back — a pin/unpin here is exactly that — and the colour has to survive the round
+  // trip, on the wire AND on disk.
+  it("does not strip MulmoClaude's colour when it rewrites the file", async () => {
+    const file = path.join(ws, "config", "shortcuts.json");
+    mkdirSync(path.dirname(file), { recursive: true });
+    const stored = [{ kind: "collection", slug: "lens", title: "カメラのレンズ", icon: "photo_camera", color: "amber" }];
+    writeFileSync(file, JSON.stringify({ shortcuts: stored }));
+
+    const served = await (await request("/api/shortcuts")).json();
+    expect(served).toEqual({ shortcuts: stored });
+
+    // ...and putting back what was served — what pinning one more thing does — keeps it on disk.
+    const put = await request("/api/shortcuts", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shortcuts: [...stored, { kind: "feed", slug: "news", title: "News", icon: "rss_feed" }] }),
+    });
+    expect(put.status).toBe(200);
+    expect(JSON.parse(readFileSync(file, "utf8")).shortcuts[0]).toEqual(stored[0]);
   });
 
   it("reads an existing MulmoClaude-written file (wrapper format)", async () => {
