@@ -18,6 +18,11 @@ const props = defineProps<{
   /** Cached at pin time so the launcher renders without re-fetching. */
   title: string;
   icon: string;
+  /** The collection's accent colour, cached with the label. The plugin passes it (MulmoClaude's
+   *  pin toggle has taken it all along); leaving it out of these props is what left a pin made
+   *  HERE colourless in MulmoClaude's launcher until its next index visit reconciled one in
+   *  (#1995). Nothing in this app draws it — see `Shortcut.color`. */
+  color?: string;
 }>();
 
 const { isPinned, pin, unpin } = useShortcuts();
@@ -25,7 +30,9 @@ const pinned = computed(() => isPinned(props.kind, props.slug));
 
 function toggle(): void {
   if (pinned.value) void unpin(props.kind, props.slug);
-  else void pin({ kind: props.kind, slug: props.slug, title: props.title, icon: props.icon });
+  // Absent rather than null when there is no colour: `color: undefined` survives as a key on the
+  // object, and the file is shared — the other app should not have to know to ignore it.
+  else void pin({ kind: props.kind, slug: props.slug, title: props.title, icon: props.icon, ...(props.color ? { color: props.color } : {}) });
 }
 </script>
 
