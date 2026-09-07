@@ -88,6 +88,26 @@ describe("the registered stories root", () => {
     expect(roots[0]?.paths).toContain(ws);
   });
 
+  // WHICH of the spellings is the resolved one, labelled rather than left to be picked out of the
+  // list. The browser cannot realpath, and it resolves a Canvas card's wire path against this
+  // directory to decide what the card is about (#1976) — two cards resolved against two spellings
+  // of one root would be two cards for one deck.
+  it("says which spelling is the resolved one", () => {
+    const real = path.join(base, "real-ws");
+    const link = path.join(base, "ws-link");
+    mkdirSync(real);
+    symlinkSync(real, link);
+    initArtifactsBackend({ workspace: link });
+    initMulmoScriptBackend({ workspace: link, pubsub: null });
+    const root = registeredStoriesRoots()[0];
+    expect(root?.canonical).toBeDefined();
+    expect(root?.canonical).not.toBe(link);
+    expect(root?.paths).toContain(root?.canonical);
+    // The same value the id was derived from, so a card naming this id resolves against the
+    // directory the plugin actually serves.
+    expect(root?.id).toBe(storiesRootId(String(root?.canonical)));
+  });
+
   it("does not follow a symlink retargeted after boot", () => {
     const first = path.join(base, "first");
     const second = path.join(base, "second");

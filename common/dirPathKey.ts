@@ -43,3 +43,8 @@ export function dirPathKey(path: string): string {
 
 /** Whether two paths name the same directory, as far as spelling can tell. */
 export const isSameDirPath = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && dirPathKey(a) === dirPathKey(b);
+
+/** Whether `path` names a place from a root — POSIX `/…`, a Windows drive root, a UNC share —
+ *  rather than one relative to a directory the spelling does not name. The same three spellings
+ *  `dirPathKey` keeps, so a caller cannot disagree with it about what "absolute" means. */
+export const isRootedPath = (path: string): boolean => rootOf(path.trim()) !== "";

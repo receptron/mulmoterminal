@@ -20,6 +20,9 @@ import { TOOL_NAME as DOCUMENT_TOOL, isDocumentPath } from "@mulmoclaude/markdow
 import { TOOL_NAME as HTML_TOOL, isPresentableHtmlPath, isHtmlArtifactPath, htmlArtifactPreviewUrl, htmlFileUrl } from "@mulmoclaude/html-plugin";
 import { TOOL_NAME as STORY_TOOL } from "@mulmoclaude/mulmoscript-plugin";
 import { dirPathKey } from "../../common/dirPathKey";
+// The wire spelling is minted here and parsed back into a path there — one pair of constants, so a
+// card's identity cannot come to disagree with the ref that opened it.
+import { STORY_DIR, STORY_WIRE_PREFIX } from "../utils/canvasCardPath";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
@@ -37,10 +40,6 @@ export interface CanvasCard {
  *  `none` stays silent on purpose: nothing offers the action for such a file, so it cannot be
  *  clicked. `refused` carries what the server said, which is already a sentence about what to do. */
 export type CanvasCardResult = { kind: "card"; card: CanvasCard } | { kind: "refused"; reason: string } | { kind: "none" };
-
-/** Where mulmoScript keeps its stories, under the workspace. Both halves are fixed by the plugin:
- *  the artifacts area is its only file capability, and `stories/` is its wire prefix. */
-const STORY_DIR = "artifacts/stories";
 
 /** One directory the plugin serves stories from, as this server registered it.
  *
@@ -183,7 +182,7 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
   // `stories/artifacts/stories/x.json` — and the two spellings are two identities, hence two cards
   // for one deck. Deciding the narrower one first means only one spelling is ever minted.
   const inDefault = underAny(workspaces, (workspace) => joinPath(workspace, STORY_DIR));
-  if (inDefault) return { filePath: `stories/${inDefault}` };
+  if (inDefault) return { filePath: `${STORY_WIRE_PREFIX}${inDefault}` };
   // Otherwise the most SPECIFIC registered root that contains it. Roots nest — a saved project
   // under the workspace is both — and the longest prefix is the only choice that does not depend
   // on the order the server happened to list them in, which would make one file's card identity
@@ -193,7 +192,7 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
     const tail = underAny(root.paths, (dir) => dir);
     if (tail !== null && (best === null || tail.length < best.tail.length)) best = { root: root.id, tail };
   }
-  return best === null ? null : { filePath: `stories/${best.tail}`, root: best.root };
+  return best === null ? null : { filePath: `${STORY_WIRE_PREFIX}${best.tail}`, root: best.root };
 }
 
 /**

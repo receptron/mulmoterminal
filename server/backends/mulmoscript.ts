@@ -52,13 +52,19 @@ interface PubSubLike {
 
 let ops: MulmoScriptServerOps | null = null;
 /** The named stories root this server actually registered with the plugin, or null before boot. */
-let registeredRoots: Array<{ id: string; paths: string[] }> = [];
+let registeredRoots: Array<{ id: string; canonical: string; paths: string[] }> = [];
 
-/** What the browser is told about the named stories root: the id a Canvas card must carry, and
- *  every spelling of the workspace it may compare a file against. The REGISTERED value, never
- *  re-derived — see initMulmoScriptBackend. Null until the backend is initialised, which reads as
- *  "no named root" and is exactly the behaviour before #1933. */
-export const registeredStoriesRoots = (): ReadonlyArray<{ id: string; paths: readonly string[] }> => registeredRoots;
+/** What the browser is told about the named stories root: the id a Canvas card must carry, every
+ *  spelling of the workspace it may compare a file against, and which of those spellings is the
+ *  RESOLVED one. The REGISTERED value, never re-derived — see initMulmoScriptBackend. Empty until
+ *  the backend is initialised, which reads as "no named root" and is exactly the behaviour before
+ *  #1933.
+ *
+ *  `canonical` is labelled rather than left to be picked out of `paths`, because only this side can
+ *  tell which spelling that is: the browser cannot realpath, and it builds a Canvas card's identity
+ *  by resolving the card's wire path against this directory (#1976). Two cards resolved against two
+ *  different spellings of one root are two cards for one deck. */
+export const registeredStoriesRoots = (): ReadonlyArray<{ id: string; canonical: string; paths: readonly string[] }> => registeredRoots;
 let dispatchHandler: MulmoScriptDispatchHandler | null = null;
 
 // undefined = probe not finished yet; the ops treat that as "assume available"
@@ -127,7 +133,7 @@ export function initMulmoScriptBackend(deps: {
   //
   // Merging them is also the right answer for the browser: the spellings become one root's `paths`,
   // which is exactly what the workspace's own two spellings already are.
-  const byCanonical = new Map<string, { id: string; paths: string[] }>();
+  const byCanonical = new Map<string, { id: string; canonical: string; paths: string[] }>();
   for (const dir of uniqueRootPaths([deps.workspace, ...(deps.extraRoots ?? [])])) {
     const canonical = canonicalPath(dir);
     const seen = byCanonical.get(canonical);
@@ -135,7 +141,7 @@ export function initMulmoScriptBackend(deps: {
       if (!seen.paths.includes(dir)) seen.paths.push(dir);
       continue;
     }
-    byCanonical.set(canonical, { id: storiesRootId(canonical), paths: [...new Set([dir, canonical])] });
+    byCanonical.set(canonical, { id: storiesRootId(canonical), canonical, paths: [...new Set([dir, canonical])] });
   }
   const dirForId = new Map([...byCanonical].map(([canonical, root]) => [root.id, canonical]));
   // BOTH spellings travel to the browser: the one the user launched with reaches the Files pane

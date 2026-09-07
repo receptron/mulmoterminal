@@ -17,6 +17,7 @@ import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
 import { documentIdentity, filePathIdentity, collectionIdentity } from "./utils/canvasIdentity";
+import type { StoryRootDirs } from "./utils/canvasCardPath";
 import { CANVAS_CARD_HEIGHT_VAR } from "./composables/useCanvasCardHeight";
 // Import each package's compiled stylesheet as a STRING (?inline), not as a global
 // side-effect. GuiPanel injects it into a per-view Shadow DOM (see PluginFrame),
@@ -109,8 +110,12 @@ interface Registration {
    *
    * The value is namespaced by toolName at the call site, so two plugins may return the same
    * string without colliding.
+   *
+   * `storyRoots` is passed to every accessor and used by the file-backed ones: a card's wire path
+   * only names a file once it is read against the directories this server registered (#1976, see
+   * utils/canvasCardPath.ts). An accessor that does not need it simply declares one parameter.
    */
-  identityOf?: (result: unknown) => string | null;
+  identityOf?: (result: unknown, storyRoots: StoryRootDirs) => string | null;
   // Optional fixed frame height for views that rely on an internal h-full layout
   // (vs flowing at natural content height). See PluginFrame's `height` prop.
   height?: string;

@@ -11,6 +11,7 @@
 import { documentPathOf, type MarkdownToolData } from "@mulmoclaude/markdown-plugin/vue";
 import { isRecord } from "../../common/isRecord";
 import { collectionSlugOf } from "../../common/collectionSeed";
+import { canonicalCardPath, NO_STORY_ROOTS, type StoryRootDirs } from "./canvasCardPath";
 
 // A tool result's payload travels in `data` and `jsonData` both. Read through both because a
 // partial update (a view persisting its state) may carry only one — the same lookup, for the same
@@ -60,14 +61,26 @@ export function documentIdentity(result: unknown): string | null {
  * story's path is the wire form every mulmoScript endpoint keys on), and each tool's CREATE path
  * writes a FRESH path — so this collapses re-presentations of one artifact without ever merging
  * two distinct ones.
+ *
+ * Resolved to the file it names before comparing, because ONE deck has several wire spellings and
+ * which one a card carries depends on what this server registered. `storyRoots` is what resolves
+ * them; its default is "nothing registered", under which every card keeps the identity it had
+ * before this existed — which is also what the browser has until `/api/config` lands.
  */
-export function filePathIdentity(result: unknown): string | null {
+export function filePathIdentity(result: unknown, storyRoots: StoryRootDirs = NO_STORY_ROOTS): string | null {
   const filePath = payloadString(result, "filePath");
   if (filePath === null) return null;
-  // The PAIR, not the path: since the workspace subtree is a named stories root (#1933), two decks
-  // in different roots can share `stories/deck.json`, and collapsing on the path alone would merge
-  // two files into one card. `presentHtml` payloads carry no `root` and fold as they always did.
   const root = payloadString(result, "root");
+  // The FILE, whichever spelling this card carries — see canvasCardPath.ts. The wire spelling moves
+  // when the user registers another directory, so identity built from it splits one deck into two
+  // cards on a restart (#1976).
+  const resolved = canonicalCardPath(filePath, root, storyRoots);
+  if (resolved !== null) return resolved;
+  // Nothing here can say where that path is: a root this server never registered, a config that has
+  // not arrived, a relative path with no root to read it against. Then the wire spelling itself,
+  // exactly as before — the PAIR, not the path, because since the workspace subtree became a named
+  // stories root (#1933) two decks in different roots can share `stories/deck.json`, and collapsing
+  // on the path alone merges two files into one card.
   return root === null ? filePath : `${root}\u0000${filePath}`;
 }
 

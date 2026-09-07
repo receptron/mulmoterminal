@@ -57,6 +57,37 @@ beforeEach(() => {
   mockConfigFetch();
 });
 
+// What the browser keeps of `/api/config`'s stories roots. `canonical` is the spelling the server
+// RESOLVED, and the Canvas reads a card's wire path against it to decide what the card is about
+// (#1976) — dropping it here would quietly put one deck back on two cards.
+describe("useAppConfig — the stories roots off the wire", () => {
+  it("keeps the resolved spelling alongside the ones the file is compared against", async () => {
+    mockServer([], { get: { storiesRoots: [{ id: "W", canonical: "/private/w", paths: ["/w", "/private/w"] }] } });
+    const { storiesRoots, loadConfig } = useAppConfig();
+    await loadConfig();
+    expect(storiesRoots.value).toEqual([{ id: "W", canonical: "/private/w", paths: ["/w", "/private/w"] }]);
+  });
+
+  // A server older than #1976 sends no `canonical`. The root still gates the Files pane's Canvas
+  // entry; only the identity resolution stands down, which is the behaviour before that change.
+  it("keeps a root that names no resolved spelling", async () => {
+    mockServer([], {
+      get: {
+        storiesRoots: [
+          { id: "W", paths: ["/w"] },
+          { id: "bad", canonical: 7, paths: ["/x"] },
+        ],
+      },
+    });
+    const { storiesRoots, loadConfig } = useAppConfig();
+    await loadConfig();
+    expect(storiesRoots.value).toEqual([
+      { id: "W", paths: ["/w"] },
+      { id: "bad", paths: ["/x"] },
+    ]);
+  });
+});
+
 describe("useAppConfig — auto preset recording", () => {
   it("recordPreset prepends a new dir with a basename label", async () => {
     const { presets, recordPreset } = useAppConfig();

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { collectionIdentity, documentIdentity, filePathIdentity, payloadString } from "../../src/utils/canvasIdentity";
+import { storyWirePath } from "../../src/composables/canvasOpenFile";
+import { storyRootDirsFrom } from "../../src/utils/canvasCardPath";
 
 // What each tool calls "the same thing". These decide whether a card on screen is REPLACED, so
 // the cases that must return null (nothing durable behind the result, an unrecognised shape) are
@@ -64,6 +66,76 @@ describe("filePathIdentity", () => {
     const one = filePathIdentity({ data: { filePath: "artifacts/html/a.html" } });
     const two = filePathIdentity({ data: { filePath: "artifacts/html/b.html" } });
     expect(one).not.toBe(two);
+  });
+});
+
+// The wire spelling a card carries is not a property of the FILE — it is a property of what this
+// server registered when the card was made. These drive the real chain (the Files pane's
+// `storyWirePath` mints the ref, the card carries it, this reads it back), because the defect is in
+// how the two fit together and neither half shows it alone (#1976).
+describe("filePathIdentity — one deck, whatever spelling reached it", () => {
+  const WS = "/Users/me/w";
+  const FILE = `${WS}/proj/decks/x.json`;
+  /** What the server registers with only the workspace opened, and after `…/proj` is added as a
+   *  preset — both as `/api/config` reports them. */
+  const workspaceOnly = [{ id: "W", canonical: WS, paths: [WS] }];
+  const withPreset = [...workspaceOnly, { id: "P", canonical: `${WS}/proj`, paths: [`${WS}/proj`] }];
+  const gate = (registered: typeof workspaceOnly) => ({ workspaces: registered[0]?.paths ?? [], roots: registered });
+
+  /** The identity the Canvas gives the card the Files pane would seed for `absolutePath`. */
+  const identityFor = (absolutePath: string, registered: typeof workspaceOnly): string | null => {
+    const ref = storyWirePath(absolutePath, gate(registered));
+    return ref === null ? null : filePathIdentity({ data: { ...ref, script: {} } }, storyRootDirsFrom(registered));
+  };
+
+  // (B) Registering another directory re-spells every deck beneath it — `W\0stories/proj/decks/x.json`
+  // became `P\0stories/decks/x.json`, measured on the pure functions. A card stored before the
+  // preset and one made after it are then two cards for one file, and the older one supersedes
+  // nothing.
+  it("does not change when the user registers another directory", () => {
+    expect(identityFor(FILE, workspaceOnly)).toBe(identityFor(FILE, withPreset));
+    expect(identityFor(FILE, withPreset)).toBe(FILE);
+  });
+
+  // (C) A card in the workspace's own stories directory carried NO path component at all — every
+  // workspace's `stories/x.json` was one identity, so the guard named roots got in #1933 did not
+  // apply to the default root.
+  it("tells two workspaces' default-root decks apart", () => {
+    const one = identityFor("/Users/me/w1/artifacts/stories/x.json", [{ id: "W1", canonical: "/Users/me/w1", paths: ["/Users/me/w1"] }]);
+    const two = identityFor("/Users/me/w2/artifacts/stories/x.json", [{ id: "W2", canonical: "/Users/me/w2", paths: ["/Users/me/w2"] }]);
+    expect(one).toBe("/Users/me/w1/artifacts/stories/x.json");
+    expect(two).not.toBe(one);
+  });
+
+  // What the gate in canvasOpenFile.ts is waiting for: once a deck outside every root can be opened
+  // by absolute path, its card must be the SAME card as the one reached through a root. Both sides
+  // are lexical — the plugin echoes an absolute `filePath` as the caller spelled it — so this holds
+  // for a spelling that names the root the way the server resolved it, and a cell reached through a
+  // symlink is the limit stated in canvasCardPath.ts.
+  it("folds the absolute spelling onto the deck opened through a root", () => {
+    const throughRoot = filePathIdentity({ data: { filePath: "stories/decks/x.json", root: "P", script: {} } }, storyRootDirsFrom(withPreset));
+    const byPath = filePathIdentity({ data: { filePath: FILE, script: {} } }, storyRootDirsFrom(withPreset));
+    expect(throughRoot).toBe(byPath);
+  });
+
+  it("still tells two roots' identically-named decks apart", () => {
+    const inPreset = filePathIdentity({ data: { filePath: "stories/deck.json", root: "P", script: {} } }, storyRootDirsFrom(withPreset));
+    const inWorkspace = filePathIdentity({ data: { filePath: "stories/deck.json", root: "W", script: {} } }, storyRootDirsFrom(withPreset));
+    expect(inPreset).toBe(`${WS}/proj/deck.json`);
+    expect(inWorkspace).toBe(`${WS}/deck.json`);
+  });
+
+  // A card made on another machine, or under a preset since removed. Resolving it would need a
+  // directory nothing here knows, so it keeps the identity it has always had rather than folding
+  // onto a guess.
+  it("keeps the old identity for a root this server never registered", () => {
+    expect(filePathIdentity({ data: { filePath: "stories/x.json", root: "gone" } }, storyRootDirsFrom(withPreset))).toBe("gone\u0000stories/x.json");
+  });
+
+  // The state the panel is in for the first moments after it opens.
+  it("keeps the old identity until the config arrives", () => {
+    expect(filePathIdentity({ data: { filePath: "stories/x.json", root: "W" } })).toBe("W\u0000stories/x.json");
+    expect(filePathIdentity({ data: { filePath: "artifacts/html/a.html" } })).toBe("artifacts/html/a.html");
   });
 });
 
