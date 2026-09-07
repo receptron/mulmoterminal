@@ -134,8 +134,12 @@ describe("storyWirePath — the workspace subtree", () => {
     expect(storyWirePath(`${WS}/artifacts/stories/tale.json`, ROOTS)).toEqual({ filePath: "stories/tale.json" });
   });
 
-  it("answers nothing without the id — the subtree is not addressable until the server names it", () => {
-    expect(storyWirePath(`${WS}/myrepo/decks/talk.json`, { workspaces: [WS], roots: [] })).toBeNull();
+  // Without the id the subtree has no ROOT-RELATIVE spelling — and since #1976 that is no longer
+  // the end of it: the deck is addressed by its own absolute path, which is the form the plugin
+  // takes for a file outside every root. The card is the same card either way (canvasCardPath.ts
+  // resolves both to this path), which is what made offering it safe.
+  it("falls back to the absolute path when the subtree has no id", () => {
+    expect(storyWirePath(`${WS}/myrepo/decks/talk.json`, { workspaces: [WS], roots: [] })).toEqual({ filePath: `${WS}/myrepo/decks/talk.json` });
   });
 
   // A workspace that IS a root directory: `dirPathKey` answers `/`, `C:/` or `//server/share`, and
@@ -188,8 +192,10 @@ describe("storyWirePath — the workspace subtree", () => {
     expect(storyWirePath("/srv/real-ws/artifacts/stories/x.json", BOTH)).toEqual({ filePath: "stories/x.json" });
   });
 
-  it("stops at the workspace boundary", () => {
-    expect(storyWirePath("/work/elsewhere/deck.json", ROOTS)).toBeNull();
+  // The BOUNDARY still decides the spelling — a deck outside the workspace does not borrow its
+  // root — but it no longer decides whether the deck can be opened at all (#1976).
+  it("names a deck outside the workspace by its absolute path, with no root", () => {
+    expect(storyWirePath("/work/elsewhere/deck.json", ROOTS)).toEqual({ filePath: "/work/elsewhere/deck.json" });
   });
 
   it("takes only .json, here too", () => {
@@ -198,7 +204,8 @@ describe("storyWirePath — the workspace subtree", () => {
 
   it("is what canOpenInCanvas answers on", () => {
     expect(canOpenInCanvas(`${WS}/myrepo/decks/talk.json`, ROOTS)).toBe(true);
-    expect(canOpenInCanvas(`${WS}/myrepo/decks/talk.json`, { workspaces: [WS], roots: [] })).toBe(false);
+    // …and the entry is offered without the id too, on the absolute form (#1976).
+    expect(canOpenInCanvas(`${WS}/myrepo/decks/talk.json`, { workspaces: [WS], roots: [] })).toBe(true);
   });
 });
 
@@ -213,10 +220,13 @@ describe("storyWirePath", () => {
     expect(storyWirePath(`${WS}/artifacts/stories/drafts/tale.json`, { workspaces: [WS], roots: [] })).toEqual({ filePath: "stories/drafts/tale.json" });
   });
 
-  // The reason this is rooted at the workspace rather than matched on shape: a project cell may
-  // have an artifacts/stories of its own, and those stories are not the ones the plugin opens.
-  it("refuses an identically-shaped path under another directory", () => {
-    expect(storyWirePath("/work/other/artifacts/stories/tale.json", { workspaces: [WS], roots: [] })).toBeNull();
+  // The reason the root-relative form is rooted at the workspace rather than matched on shape: a
+  // project cell may have an artifacts/stories of its own, and `stories/tale.json` would open the
+  // WORKSPACE's file of that name instead. It gets the absolute form, which names the file it is.
+  it("does not give an identically-shaped path under another directory the workspace's spelling", () => {
+    expect(storyWirePath("/work/other/artifacts/stories/tale.json", { workspaces: [WS], roots: [] })).toEqual({
+      filePath: "/work/other/artifacts/stories/tale.json",
+    });
   });
 
   it("refuses a file in the story directory that is not a script", () => {
@@ -225,18 +235,27 @@ describe("storyWirePath", () => {
   });
 
   // `..` folds away in the key, so a traversal stops matching the prefix rather than being
-  // spotted as a traversal — the same reason the workspace chip can compare paths at all.
-  it("refuses a path that climbs out of the story directory", () => {
+  // spotted as a traversal — the same reason the workspace chip can compare paths at all. It never
+  // gets the stories root's spelling, which is the part that mattered: `stories/secrets.json` would
+  // have named a file INSIDE the root. What it gets now is itself, unfolded — and the plugin
+  // refuses a `.`/`..` segment in an absolute path, so the open ends in a sentence rather than a
+  // surprise. Nothing in the tree produces such a row; this pins the shape, not a workflow.
+  it("never gives a path that climbs out of the story directory the root's spelling", () => {
     expect(storyWirePath(`${WS}/artifacts/stories/../../../etc/passwd`, { workspaces: [WS], roots: [] })).toBeNull();
-    expect(storyWirePath(`${WS}/artifacts/stories/../secrets.json`, { workspaces: [WS], roots: [] })).toBeNull();
+    expect(storyWirePath(`${WS}/artifacts/stories/../secrets.json`, { workspaces: [WS], roots: [] })).toEqual({
+      filePath: `${WS}/artifacts/stories/../secrets.json`,
+    });
   });
 
   it("refuses the story directory itself, which is not a file", () => {
     expect(storyWirePath(`${WS}/artifacts/stories`, { workspaces: [WS], roots: [] })).toBeNull();
   });
 
-  it("has no workspace to root against before the config lands", () => {
-    expect(storyWirePath(`${WS}/artifacts/stories/tale.json`, { workspaces: [], roots: [] })).toBeNull();
+  // Before the config lands there is no root to be relative TO, so the absolute form answers — and
+  // it resolves to the same identity the root-relative card gets afterwards, so the two collapse
+  // rather than doubling.
+  it("uses the absolute form before the config lands", () => {
+    expect(storyWirePath(`${WS}/artifacts/stories/tale.json`, { workspaces: [], roots: [] })).toEqual({ filePath: `${WS}/artifacts/stories/tale.json` });
   });
 
   // Both separators fold, so the mixed path `absoluteUnder` produces on Windows still matches.
@@ -247,9 +266,58 @@ describe("storyWirePath", () => {
 
   it("is what canOpenInCanvas answers on for a story", () => {
     expect(canOpenInCanvas(`${WS}/artifacts/stories/tale.json`, { workspaces: [WS], roots: [] })).toBe(true);
-    // Without the workspace a story is unrecognisable; markdown and html are judged anywhere.
-    expect(canOpenInCanvas(`${WS}/artifacts/stories/tale.json`, { workspaces: [], roots: [] })).toBe(false);
+    // A story is offered wherever it lives now, like markdown and html always were (#1976) — but
+    // only when the pane could say WHERE it is: a bare row with no cwd behind it still cannot.
+    expect(canOpenInCanvas(`${WS}/artifacts/stories/tale.json`, { workspaces: [], roots: [] })).toBe(true);
+    expect(canOpenInCanvas("tale.json", { workspaces: [], roots: [] })).toBe(false);
     expect(canOpenInCanvas(`${WS}/notes.md`, { workspaces: [], roots: [] })).toBe(true);
+  });
+});
+
+// #1976: a deck that lives outside every registered stories root. The plugin has taken an absolute
+// `filePath` since 4.6.0 and this host opts into it (`byPath`), so the file always opened when the
+// AGENT asked for it — the Files pane simply never offered the entry, because one deck reached two
+// ways would have become two cards. Identity is the resolved path now, so it is one card either way
+// and the entry can be offered.
+describe("storyWirePath — a deck outside every root", () => {
+  const WS = "/work/ws";
+  const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] };
+
+  // The issue's own example: a deck in a directory the user never launched in.
+  it("names it by its absolute path, with no root", () => {
+    expect(storyWirePath("/Users/me/decks/keynote.json", ROOTS)).toEqual({ filePath: "/Users/me/decks/keynote.json" });
+  });
+
+  it("offers the Canvas entry for it", () => {
+    expect(canOpenInCanvas("/Users/me/decks/keynote.json", ROOTS)).toBe(true);
+  });
+
+  it("still takes only .json", () => {
+    expect(storyWirePath("/Users/me/decks/notes.md", ROOTS)).toBeNull();
+    expect(storyWirePath("/Users/me/decks/keynote.json.bak", ROOTS)).toBeNull();
+  });
+
+  // The pane joins the row onto the cell's cwd, and falls back to the ROW ALONE when it has no cwd
+  // (`absoluteUnder`). A relative `filePath` is not "the file over there" — the plugin reads it
+  // against the default stories root, i.e. a different file that may well exist.
+  it("refuses a path that is not rooted, because it names no file", () => {
+    expect(storyWirePath("decks/keynote.json", ROOTS)).toBeNull();
+    expect(storyWirePath("keynote.json", ROOTS)).toBeNull();
+    expect(canOpenInCanvas("decks/keynote.json", ROOTS)).toBe(false);
+  });
+
+  // Rooted on the process's current DRIVE, which the spelling does not carry (Codex P2 on the
+  // identity half). Nothing here can say which file that is.
+  it("refuses a Windows path whose drive is unknown", () => {
+    expect(storyWirePath("\\decks\\keynote.json", ROOTS)).toBeNull();
+    expect(storyWirePath("C:\\decks\\keynote.json", ROOTS)).toEqual({ filePath: "C:\\decks\\keynote.json" });
+  });
+
+  // The root-relative form still wins where there is one: it is the shorter, readable spelling, and
+  // it keeps the root a card names true.
+  it("prefers the root-relative spelling where the file has one", () => {
+    expect(storyWirePath(`${WS}/decks/keynote.json`, ROOTS)).toEqual({ filePath: "stories/decks/keynote.json", root: "abc123" });
+    expect(storyWirePath(`${WS}/artifacts/stories/keynote.json`, ROOTS)).toEqual({ filePath: "stories/keynote.json" });
   });
 });
 
@@ -290,6 +358,35 @@ describe("buildCanvasCard", () => {
     // `expectPath` is the absolute path the pane showed: the server compares it with what the wire
     // path resolves to, because the browser's own check is lexical and cannot see a moved workspace.
     expect(JSON.parse(String(init.body))).toEqual({ kind: "save", filePath: "stories/tale.json", expectPath: `${WS}/artifacts/stories/tale.json` });
+  });
+
+  // #1976, the whole point of the gate change: a deck outside every root reaches the same reopen,
+  // by its own absolute path. `expectPath` is that same string — the server compares its realpath
+  // with the one the wire path resolved to, which for this form is trivially the same file, and the
+  // check stays meaningful for the root-relative forms above.
+  it("reopens a deck outside every root by absolute path", async () => {
+    const fetchMock = mockReopen({ ok: true, script: { title: "Keynote" }, filePath: "/Users/me/decks/keynote.json" });
+    expect(await buildCanvasCard("/Users/me/decks/keynote.json", { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] })).toEqual({
+      kind: "card",
+      card: { toolName: "presentMulmoScript", data: { script: { title: "Keynote" }, filePath: "/Users/me/decks/keynote.json" } },
+    });
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({
+      kind: "save",
+      filePath: "/Users/me/decks/keynote.json",
+      expectPath: "/Users/me/decks/keynote.json",
+    });
+  });
+
+  // What the pane shows when the file is a `.json` that is not a deck — every repository has one,
+  // and the entry is offered on the extension alone. The plugin's sentence is what the user sees;
+  // silence here is the dead button #1941 removed.
+  it("carries back the plugin's sentence for a .json that is not a deck", async () => {
+    mockReopen({ ok: false, code: "bad_request", error: "File is not a valid MulmoScript" });
+    expect(await buildCanvasCard("/Users/me/proj/package.json", { workspaces: [WS], roots: [] })).toEqual({
+      kind: "refused",
+      reason: "File is not a valid MulmoScript",
+    });
   });
 
   // The root travels on the card, because that is what keeps two roots' identically-named decks on
@@ -490,13 +587,17 @@ describe("storyWirePath across several roots", () => {
     expect(storyWirePath("/work/ws/artifacts/stories/x.json", { workspaces: ["/work/ws"], roots: [WS_ROOT] })).toEqual({ filePath: "stories/x.json" });
   });
 
-  it("answers nothing for a path under no registered root", () => {
-    expect(storyWirePath("/somewhere/else/deck.json", { workspaces: ["/work/ws"], roots: [WS_ROOT, OTHER] })).toBeNull();
+  // Under NO root, so no root-relative spelling is available — the deck travels as itself (#1976).
+  it("names a path under no registered root by its absolute path", () => {
+    expect(storyWirePath("/somewhere/else/deck.json", { workspaces: ["/work/ws"], roots: [WS_ROOT, OTHER] })).toEqual({
+      filePath: "/somewhere/else/deck.json",
+    });
   });
 
-  // Before /api/config arrives the browser knows no roots, which has to read as the pre-#1933
-  // behaviour rather than as "anything goes".
-  it("answers nothing at all before the config arrives", () => {
-    expect(storyWirePath("/work/ws/decks/talk.json", { workspaces: [], roots: [] })).toBeNull();
+  // Before /api/config arrives the browser knows no roots. That used to mean "nothing is a story";
+  // it now means "nothing has a root-relative spelling yet", and the absolute form covers the gap —
+  // resolving to the same identity the root-relative card gets once the config lands.
+  it("uses the absolute form before the config arrives", () => {
+    expect(storyWirePath("/work/ws/decks/talk.json", { workspaces: [], roots: [] })).toEqual({ filePath: "/work/ws/decks/talk.json" });
   });
 });

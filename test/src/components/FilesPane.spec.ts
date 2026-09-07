@@ -628,12 +628,14 @@ describe("the Canvas button", () => {
     expect(btn(await openRow("design.md", "/work/proj", false)).exists()).toBe(false);
   });
 
-  // A story is the one file judged by WHERE it is rather than what it is called: the plugin only
-  // takes a workspace-relative `stories/…`, so a project cell's own artifacts/stories holds files
-  // it would not open. Same name, same shape, two different answers.
-  it("is offered for a story in the workspace and withheld for one outside it", async () => {
+  // WHERE a story is decides its wire spelling — a workspace-relative `stories/…` under the
+  // registered root, its own absolute path anywhere else — but since #1976 it no longer decides
+  // whether the button appears. A project cell's own artifacts/stories used to be silently
+  // unopenable; it opens by path now, and the card is the same card as the workspace one when it
+  // IS the same file.
+  it("is offered for a story in the workspace and for one outside it", async () => {
     expect(btn(await openRow("tale.json", "/work/ws/artifacts/stories", true, "/work/ws")).exists()).toBe(true);
-    expect(btn(await openRow("tale.json", "/work/other/artifacts/stories", true, "/work/ws")).exists()).toBe(false);
+    expect(btn(await openRow("tale.json", "/work/other/artifacts/stories", true, "/work/ws")).exists()).toBe(true);
   });
 
   // The gate runs on the JOINED path, not the row's. `p.html` passes on its own and fails under a
