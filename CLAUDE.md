@@ -231,8 +231,9 @@ a slower way to do what the UI already does is not pressed.
 
 ## Publishing a release
 
-`/publish` drives the mechanics (bump, tag, npm, GitHub release). Two things are this repo's
-own, and both are easy to skip because the release still "works" without them:
+`/publish` drives the mechanics (bump, tag, npm, GitHub release). Three things are this repo's own.
+The first two are easy to skip because the release still "works" without them; the third is the one
+a spec will stop you on:
 
 **1. `docs/ChangeLog.md`** — English, newest-first, the same per-PR detail as the GitHub release.
 It records **what changed and why**.
@@ -292,6 +293,13 @@ procedure: open this file, paste this, restart what, how to tell it worked, what
   - **Never guess where a terminal link is.** Hover across the row and take the x range where the
     computed `cursor` becomes `pointer`; a coordinate estimated from the image is off by enough to
     click nothing (and a click that silently misses looks exactly like a broken feature).
+
+**3. `docs/facts.json`** — the machine-readable copy of what this package is, read by tools rather
+than people, so a stale field is a wrong answer nobody can see is wrong. Unlike 1 and 2 this one is
+**enforced**: a spec pins its `version` and `requires.node` to `package.json`, so the bump belongs
+in the same commit and `yarn test` goes red until it is there. Leave `updated` alone — it means
+"when a human last read this file against reality", not "when it was last touched". Nothing checked
+any of it until #1988, and the version had sat on 4.4.0 for twelve releases.
 
 ## Filing issues
 - Before filing a **bug / "broken" / "weird behaviour"** issue about MulmoTerminal, run the
