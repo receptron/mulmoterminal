@@ -24,26 +24,40 @@ const KINDS = new Set<string>(SHORTCUT_KINDS);
 // entry below can be built without asserting the kind it just checked.
 const isShortcutKind = (value: string): value is ShortcutKind => KINDS.has(value);
 
-/** Coerce arbitrary JSON into a clean `Shortcut[]`: drop malformed entries (bad
- *  kind / empty slug / non-string fields), default title→slug and icon→"bookmark",
- *  and dedupe on (kind, slug) keeping the first. Pure — exported for tests. */
+/** What ONE stored record has to be to survive: a known kind and a non-empty slug, with the label
+ *  and glyph defaulted. Split out of the loop below so each concern reads on its own — the same
+ *  split, and the same name, MulmoClaude gives it in `shortcuts-io.ts`.
+ *
+ *  It REBUILDS the record, which is why every field the file may carry has to be listed here: one
+ *  left out is not passed through, it is deleted — from the copy served to the browser AND from the
+ *  file the next write puts back. `color` was missing for exactly that reason (#1993), so every
+ *  pin/unpin in this app wiped the colours MulmoClaude had stored in the shared file. */
+function toShortcut(raw: unknown): Shortcut | null {
+  if (!isRecord(raw)) return null;
+  const { kind, slug, title, icon, color } = raw;
+  if (typeof kind !== "string" || !isShortcutKind(kind)) return null;
+  if (typeof slug !== "string" || slug.length === 0) return null;
+  return {
+    kind,
+    slug,
+    title: typeof title === "string" ? title : slug,
+    icon: typeof icon === "string" && icon.length > 0 ? icon : "bookmark",
+    // Added conditionally, the way MulmoClaude adds it: an explicit `color: undefined` serialises
+    // as `null`, which is a value the other app would then have to know to ignore.
+    ...(typeof color === "string" && color.length > 0 ? { color } : {}),
+  };
+}
+
+/** Coerce arbitrary JSON into a clean `Shortcut[]`: drop malformed entries and dedupe on
+ *  (kind, slug), keeping the first. Pure — exported for tests. */
 export function normalizeShortcuts(input: unknown): Shortcut[] {
   if (!Array.isArray(input)) return [];
   const out: Shortcut[] = [];
-  for (const raw of input) {
-    if (!isRecord(raw)) continue;
-    const { kind, slug, title, icon } = raw;
-    if (typeof kind !== "string" || !isShortcutKind(kind)) continue;
-    if (typeof slug !== "string" || slug.length === 0) continue;
-    const entry: Shortcut = {
-      kind,
-      slug,
-      title: typeof title === "string" ? title : slug,
-      icon: typeof icon === "string" && icon.length > 0 ? icon : "bookmark",
-    };
-    if (out.some((existing) => sameShortcut(existing, entry))) continue;
+  input.forEach((raw) => {
+    const entry = toShortcut(raw);
+    if (!entry || out.some((existing) => sameShortcut(existing, entry))) return;
     out.push(entry);
-  }
+  });
   return out;
 }
 
