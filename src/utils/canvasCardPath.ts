@@ -58,20 +58,28 @@ export const storyRootDirsFrom = (registered: ReadonlyArray<{ id: string; canoni
   byId: Object.fromEntries(registered.flatMap((root) => (root.canonical ? [[root.id, root.canonical] as const] : []))),
 });
 
-/** Drive-qualified or a UNC share: the two spellings that name a file on a WINDOWS host without
- *  depending on which drive the process happens to be on. */
+/** Drive-qualified (`C:\…`) or a UNC share (`\\server\share\…`) — the two spellings Windows uses
+ *  to name a place without leaning on which drive a process happens to be on. */
 const DRIVE_OR_SHARE = /^([a-zA-Z]:[/\\]|[/\\]{2})/;
 
 /**
- * Whether this SERVER spells its own directories with a drive letter.
+ * Whether `filePath` names one file ON THIS SERVER — the rule the two Windows findings on #1976
+ * are both instances of, stated once rather than enumerated.
  *
- * Read off the roots it registered, never off `navigator`: the page can be open on a phone while
- * the files live on a Windows machine, so the browser's own platform says nothing about theirs.
- * Unknown (no roots yet) reads as POSIX, which is the spelling every other host uses.
+ * Rooted is not enough on Windows: `\deck.json` AND `/deck.json` are both rooted on the process's
+ * CURRENT DRIVE, which the spelling does not carry, so neither can be reconciled with the same
+ * file spelled `C:\deck.json`. Only a drive or a share qualifies there. On every other host a
+ * leading `/` is the whole of it.
+ *
+ * Which host that is comes from the way the SERVER spells its own registered roots — the same test,
+ * applied to a directory it resolved — and never from `navigator`: this page can be open on a phone
+ * while the files live on Windows. No roots yet reads as POSIX, the spelling every other host uses.
  */
-const windowsSpelled = (dirs: StoryRootDirs): boolean => {
-  const dir = dirs.workspace ?? Object.values(dirs.byId)[0];
-  return dir !== undefined && /^[a-zA-Z]:[/\\]/.test(dir);
+const namesOneFileOnThisServer = (filePath: string, dirs: StoryRootDirs): boolean => {
+  if (!isRootedPath(filePath)) return false;
+  const serverDir = dirs.workspace ?? Object.values(dirs.byId)[0];
+  const windowsSpelled = serverDir !== undefined && DRIVE_OR_SHARE.test(serverDir);
+  return !windowsSpelled || DRIVE_OR_SHARE.test(filePath.trim());
 };
 
 /** No join helper: `dirPathKey` folds a doubled separator, so a root directory (`/`, `C:/`) that
@@ -88,14 +96,10 @@ const defaultStoriesDir = (workspace: string | null): string | null => (workspac
 export function canonicalCardPath(filePath: string, root: string | null, dirs: StoryRootDirs): string | null {
   // Already the answer, whoever minted it. Keyed all the same, so `/w/./x.json` and `/w/x.json` are
   // one card.
-  //
-  // Except on a Windows host, where `/deck.json` means what `\deck.json` does — rooted on the
-  // process's CURRENT DRIVE, which the spelling does not carry (Codex P2 on #1976). `isRootedPath`
-  // cannot refuse that form, since on every other host it is THE absolute spelling; only the
-  // server's own roots say which host this is. Refused there, the card keeps its legacy identity
-  // rather than being keyed into something `C:\deck.json` cannot match. What closes it properly is
-  // the server putting its resolved path on the card — see the header.
-  if (isRootedPath(filePath)) return windowsSpelled(dirs) && !DRIVE_OR_SHARE.test(filePath.trim()) ? null : dirPathKey(filePath);
+  // A spelling that leans on the server's current drive answers nothing and keeps its legacy
+  // identity — better than being keyed into something the drive-qualified card cannot match. What
+  // closes that case properly is the server putting its own resolved path on the card; see header.
+  if (isRootedPath(filePath)) return namesOneFileOnThisServer(filePath, dirs) ? dirPathKey(filePath) : null;
   if (!filePath.startsWith(STORY_WIRE_PREFIX)) return null;
   const tail = filePath.slice(STORY_WIRE_PREFIX.length);
   const base = root === null ? defaultStoriesDir(dirs.workspace) : (dirs.byId[root] ?? null);
