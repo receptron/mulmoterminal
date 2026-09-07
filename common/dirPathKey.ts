@@ -43,3 +43,22 @@ export function dirPathKey(path: string): string {
 
 /** Whether two paths name the same directory, as far as spelling can tell. */
 export const isSameDirPath = (a: string | null | undefined, b: string | null | undefined): boolean => !!a && !!b && dirPathKey(a) === dirPathKey(b);
+
+/**
+ * Whether `path` names one file on its own — POSIX `/…`, a Windows drive root, a UNC share.
+ *
+ * NARROWER than `rootOf` on purpose, in the one place the two could disagree: a SINGLE leading
+ * backslash. `rootOf` keys `\deck.json` as `/deck.json`, which is right for its job (comparing two
+ * spellings of a directory lexically) and wrong for this one — on Windows that path is rooted on
+ * the process's CURRENT DRIVE, which the spelling does not carry and a browser cannot infer. Keying
+ * it would give `\deck.json` and `C:\deck.json` two identities for one file while conflating the
+ * first with a POSIX `/deck.json` (Codex P2 on #1976). A caller that needs a decision here gets
+ * "no", and whatever it falls back to is at worst what it did before.
+ *
+ * The same distinction `rootOf` already draws for `C:foo` and `\server\share`: a spelling that
+ * means something else must not borrow a rooted one's key.
+ */
+export const isRootedPath = (path: string): boolean => {
+  const trimmed = path.trim();
+  return /^[a-zA-Z]:[/\\]/.test(trimmed) || /^[/\\]{2}/.test(trimmed) || trimmed.startsWith("/");
+};

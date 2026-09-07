@@ -33,17 +33,23 @@ const StubView = defineComponent({
   },
 });
 
-// A registry with just the two tools this file needs: one that collapses (by a `data.key`) and one
-// that does not, so the opt-out default is exercised alongside the new behaviour.
-vi.mock("../../../src/plugins-registry", () => ({
-  getPlugin: (toolName: string) => {
-    if (toolName === "collapsing") {
-      return { toolName, viewComponent: StubView, identityOf: (r: { data?: { key?: string } }) => r.data?.key ?? null };
-    }
-    if (toolName === "plain") return { toolName, viewComponent: StubView };
-    return undefined;
-  },
-}));
+// A registry with just the three tools this file needs: one that collapses (by a `data.key`), one
+// that does not — so the opt-out default is exercised alongside the new behaviour — and one that
+// uses the REAL file-path accessor, which is the only way to see that the panel hands it the
+// registered stories roots (#1976).
+vi.mock("../../../src/plugins-registry", async () => {
+  const { filePathIdentity } = await import("../../../src/utils/canvasIdentity");
+  return {
+    getPlugin: (toolName: string) => {
+      if (toolName === "collapsing") {
+        return { toolName, viewComponent: StubView, identityOf: (r: { data?: { key?: string } }) => r.data?.key ?? null };
+      }
+      if (toolName === "story") return { toolName, viewComponent: StubView, identityOf: filePathIdentity };
+      if (toolName === "plain") return { toolName, viewComponent: StubView };
+      return undefined;
+    },
+  };
+});
 
 // PluginFrame puts each view in a Shadow DOM, which hides it from the queries below and has
 // nothing to do with what is being tested.
@@ -58,6 +64,7 @@ vi.mock("../../../src/components/PluginFrame.vue", () => ({
 }));
 
 const { activeCollectionProjectId } = await import("../../../src/composables/collectionSurface");
+const { useAppConfig } = await import("../../../src/composables/useAppConfig");
 const GuiPanel = (await import("../../../src/components/GuiPanel.vue")).default;
 
 function mountPanel() {
@@ -107,6 +114,8 @@ function stubScrollMetrics(element: Element, { scrollHeight = 1000, clientHeight
 beforeEach(() => {
   handlers.clear();
   viewMounts = 0;
+  // A module-level singleton, so a root left behind here would decide the next file's cards too.
+  useAppConfig().storiesRoots.value = [];
 });
 
 describe("GuiPanel — collapsing repeated cards", () => {
@@ -252,5 +261,52 @@ describe("GuiPanel — following the newest card", () => {
     await push({ uuid: "p1", toolName: "plain", data: {}, viewState: { typed: "x" } });
     await nextTick();
     expect(scroller.element.scrollTop).toBe(250);
+  });
+});
+
+// The panel is where a card's wire path meets the directories it has to be read against: the
+// accessor is pure and the roots are a singleton ref, so nothing but a mounted panel shows that the
+// two were actually joined up.
+describe("GuiPanel — one deck, whichever spelling reached it", () => {
+  const WS = "/Users/me/w";
+  const throughRoot = (uuid: string) => ({ uuid, toolName: "story", data: { filePath: "stories/decks/x.json", root: "W", script: {} } });
+  const byAbsolutePath = (uuid: string) => ({ uuid, toolName: "story", data: { filePath: `${WS}/decks/x.json`, script: {} } });
+
+  it("collapses the two spellings of one deck", async () => {
+    useAppConfig().storiesRoots.value = [{ id: "W", canonical: WS, paths: [WS] }];
+    const wrapper = mountPanel();
+    await flushPromises();
+    await push(throughRoot("s1"));
+    await push(byAbsolutePath("s2"));
+    expect(rendered(wrapper)).toEqual(["s2"]);
+  });
+
+  // The panel opens before `/api/config` lands, and cards can arrive in that window. Until the
+  // roots are known the wire path names no file, so the two stand apart — and the moment the config
+  // arrives they collapse, without the cards being re-sent.
+  it("re-collapses when the config arrives", async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    await push(throughRoot("s1"));
+    await push(byAbsolutePath("s2"));
+    expect(rendered(wrapper)).toEqual(["s1", "s2"]);
+
+    useAppConfig().storiesRoots.value = [{ id: "W", canonical: WS, paths: [WS] }];
+    await nextTick();
+    expect(rendered(wrapper)).toEqual(["s2"]);
+  });
+
+  // Two decks that merely share a wire tail under different roots are still two cards — the guard
+  // #1933 added, now held by the paths the roots resolve to.
+  it("keeps two roots' identically-named decks apart", async () => {
+    useAppConfig().storiesRoots.value = [
+      { id: "W", canonical: WS, paths: [WS] },
+      { id: "P", canonical: `${WS}/proj`, paths: [`${WS}/proj`] },
+    ];
+    const wrapper = mountPanel();
+    await flushPromises();
+    await push({ uuid: "w1", toolName: "story", data: { filePath: "stories/deck.json", root: "W", script: {} } });
+    await push({ uuid: "p1", toolName: "story", data: { filePath: "stories/deck.json", root: "P", script: {} } });
+    expect(rendered(wrapper)).toEqual(["w1", "p1"]);
   });
 });

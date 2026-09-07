@@ -90,7 +90,7 @@ const worktreesRoot = ref<string | null>(null);
 // carries, and the CANONICAL path to compare a file against. Read, never derived — an id the
 // browser re-computed could drift from the one the server registered, and a non-canonical path
 // would stop matching the moment the workspace was reached through a symlink.
-const storiesRoots = ref<Array<{ id: string; paths: string[] }>>([]);
+const storiesRoots = ref<StoriesRootConfig[]>([]);
 
 // The initial /api/config while it is still in flight, so a launch that lands first can wait for
 // the root rather than decide without it (Codex on #1543). Null when nothing is loading — then
@@ -171,21 +171,33 @@ function readLegacyRecents(): string[] {
 const listOf = <T>(value: unknown, isEntry: (entry: unknown) => entry is T): T[] => (isUnknownArray(value) ? value.filter(isEntry) : []);
 
 const stringsOf = (value: unknown): string[] => (Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : []);
+/** A stories root as `/api/config` reports it. `canonical` is the server's RESOLVED spelling of the
+ *  same directory — optional because a server older than #1976 does not send it, and a card whose
+ *  root has none keeps the identity it had before that change. */
+export interface StoriesRootConfig {
+  id: string;
+  canonical?: string;
+  paths: string[];
+}
+
 /** The named stories root off the wire: an id plus EVERY spelling of the workspace (the launched
  *  one and the resolved one). Both travel because both reach the Files pane, and the browser's
  *  containment check is lexical (#1934). Anything malformed reads as "no named root". */
-function readStoriesRoot(value: unknown): { id: string; paths: string[] } | null {
+function readStoriesRoot(value: unknown): StoriesRootConfig | null {
   if (!isRecord(value) || typeof value.id !== "string" || !Array.isArray(value.paths)) return null;
   const paths = value.paths.filter((path): path is string => typeof path === "string");
-  return paths.length > 0 ? { id: value.id, paths } : null;
+  if (paths.length === 0) return null;
+  // Omitted rather than set to undefined: exactOptionalPropertyTypes is on. A blank one is dropped
+  // for the same reason a blank path is — it names no directory to resolve a card against.
+  return { id: value.id, ...(typeof value.canonical === "string" && value.canonical !== "" ? { canonical: value.canonical } : {}), paths };
 }
 
 /** Every directory the server serves stories from (#1951). The WORKSPACE is the first entry — the
  *  server registers it first and the browser's default-stories rule needs to know which one it is,
  *  so the order is part of the contract rather than a coincidence. */
-function readStoriesRoots(value: unknown): Array<{ id: string; paths: string[] }> {
+function readStoriesRoots(value: unknown): StoriesRootConfig[] {
   if (!Array.isArray(value)) return [];
-  return value.map(readStoriesRoot).filter((root): root is { id: string; paths: string[] } => root !== null);
+  return value.map(readStoriesRoot).filter((root): root is StoriesRootConfig => root !== null);
 }
 
 const isCwdPreset = (value: unknown): value is CwdPreset => isRecord(value) && typeof value.label === "string" && typeof value.path === "string";

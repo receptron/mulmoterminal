@@ -7,6 +7,8 @@ import PluginFrame from "./PluginFrame.vue";
 import { TOOL_GROUPS, groupOfTool, toolsInGroup } from "../../common/toolGroups";
 import { reconcileCollectionCard } from "../../common/collectionSeed";
 import { collapseByIdentity } from "../utils/canvasCollapse";
+import { storyRootDirsFrom } from "../utils/canvasCardPath";
+import { useAppConfig } from "../composables/useAppConfig";
 import { useCanvasCardHeight } from "../composables/useCanvasCardHeight";
 import { isRecord } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
@@ -133,11 +135,19 @@ async function onUpdateResult(existing: ToolResult, update: Partial<ToolResult>)
 
 const hasContent = computed(() => results.value.length > 0);
 
+// The directories a card's wire path is read against, so `stories/<tail>` + a root id names a FILE
+// rather than a spelling that moves when the user registers another directory (#1976). A singleton
+// ref filled in by the shell's `loadConfig`, the way Terminal.vue and MulmoMenu.vue read it — and
+// reactive on purpose: cards drawn before the config lands keep the old identity, and re-collapse
+// against the file the moment it arrives.
+const { storiesRoots } = useAppConfig();
+const storyRoots = computed(() => storyRootDirsFrom(storiesRoots.value));
+
 // What a result IS, for the purpose of "this is the same thing you already drew". The plugin
 // decides (Registration.identityOf); the toolName prefix is added here so two plugins returning
 // the same string — a collection slug that happens to read like a path — stay separate.
 function cardIdentity(result: ToolResult): string | null {
-  const identity = getPlugin(result.toolName)?.identityOf?.(result) ?? null;
+  const identity = getPlugin(result.toolName)?.identityOf?.(result, storyRoots.value) ?? null;
   return identity === null ? null : `${result.toolName}:${identity}`;
 }
 
