@@ -6,6 +6,11 @@
 // show up in the other — so the on-disk format is the contract: an OBJECT WRAPPER
 // `{ shortcuts: Shortcut[] }`, not a bare array, matching mulmoclaude/src/types/shortcuts.ts.
 // Keep this type in sync with MulmoClaude's.
+//
+// It is a SUBSET of what a record may hold, not the whole of it: the file is the union of every
+// version of both apps that has written it, and a stored record can carry fields this build has
+// never heard of. `toShortcut` (server/backends/shortcuts.ts) carries those through rather than
+// dropping them (#1996) — so this type says what MulmoTerminal understands, not what exists.
 
 export const SHORTCUT_KINDS = ["collection", "feed"] as const;
 export type ShortcutKind = (typeof SHORTCUT_KINDS)[number];

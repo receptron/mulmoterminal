@@ -40,6 +40,30 @@ describe("normalizeShortcuts", () => {
     expect(normalizeShortcuts([{ kind: "collection", slug: "a", color: "not-a-palette-name" }])[0].color).toBe("not-a-palette-name");
   });
 
+  // #1996: the file is shared, and BOTH apps rebuild every record they write — so a field only one
+  // of them names is deleted by the other. Naming each new one in both apps is a rule someone has
+  // to remember; carrying the rest through is not.
+  it("carries a field this build has never heard of", () => {
+    const stored = { kind: "collection", slug: "a", title: "A", icon: "star", sortHint: 3, badge: { text: "new" } };
+    expect(normalizeShortcuts([stored])).toEqual([stored]);
+  });
+
+  // ...but a carried field never beats a validated one: the known fields are applied last.
+  it("lets the checked value win over what the file held", () => {
+    expect(normalizeShortcuts([{ kind: "feed", slug: "b", title: 5, icon: "", extra: "kept" }])).toEqual([
+      { kind: "feed", slug: "b", title: "b", icon: "bookmark", extra: "kept" },
+    ]);
+  });
+
+  // The trap #966 records for the global config: assigning a key named `__proto__` re-parents the
+  // object and drops the key from the JSON. Built with fromEntries, it stays ordinary data.
+  it("keeps a __proto__ key as data rather than a prototype", () => {
+    const [entry] = normalizeShortcuts([JSON.parse('{"kind":"collection","slug":"a","__proto__":{"polluted":true}}')]);
+    expect(Object.getPrototypeOf(entry)).toBe(Object.prototype);
+    expect(Object.hasOwn(entry, "__proto__")).toBe(true);
+    expect(Object.prototype).not.toHaveProperty("polluted");
+  });
+
   // Absent rather than null: `color: undefined` serialises as `null`, a value the other app would
   // then have to know to ignore.
   it("leaves the key out when there is no colour to carry", () => {
@@ -125,6 +149,24 @@ describe("/api/shortcuts routes", () => {
     const onDisk = JSON.parse(readFileSync(path.join(ws, "config", "shortcuts.json"), "utf8"));
     expect(Array.isArray(onDisk.shortcuts)).toBe(true);
     expect(onDisk.shortcuts).toHaveLength(1);
+  });
+
+  // The same round trip as the colour one below, for a field NEITHER app names today: this is what
+  // stops the next `color` from being a bug report (#1996).
+  it("keeps an unknown field through the read/write round trip", async () => {
+    const file = path.join(ws, "config", "shortcuts.json");
+    mkdirSync(path.dirname(file), { recursive: true });
+    const stored = [{ kind: "collection", slug: "lens", title: "Lens", icon: "photo_camera", futureField: "from another build" }];
+    writeFileSync(file, JSON.stringify({ shortcuts: stored }));
+
+    expect(await (await request("/api/shortcuts")).json()).toEqual({ shortcuts: stored });
+    const put = await request("/api/shortcuts", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shortcuts: stored }),
+    });
+    expect(put.status).toBe(200);
+    expect(JSON.parse(readFileSync(file, "utf8")).shortcuts[0]).toEqual(stored[0]);
   });
 
   // The path that actually broke (#1993): MulmoClaude writes a colour, this app reads the file and
