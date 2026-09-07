@@ -56,6 +56,7 @@ const PLUGINS: string[] = Object.keys(manifestAt(root).dependencies ?? {})
  *  added here on purpose. */
 const NO_CORE: Record<string, string> = {
   "@mulmoclaude/form-plugin": "the form card is self-contained; it names core in neither list",
+  "@mulmoclaude/shapescript-plugin": "parses and renders the script client-side; it touches no host service, so it peers only on gui-chat-protocol and vue",
   "@mulmoclaude/x-plugin": "no peer dependencies at all",
 };
 
