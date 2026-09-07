@@ -159,14 +159,35 @@ describe("/api/shortcuts routes", () => {
     const stored = [{ kind: "collection", slug: "lens", title: "Lens", icon: "photo_camera", futureField: "from another build" }];
     writeFileSync(file, JSON.stringify({ shortcuts: stored }));
 
-    expect(await (await request("/api/shortcuts")).json()).toEqual({ shortcuts: stored });
+    // The body that goes back UP is the one that came DOWN, not the fixture: a client that dropped
+    // the field would otherwise pass this test while losing it in real use (CodeRabbit, PR #1999).
+    const served = await (await request("/api/shortcuts")).json();
+    expect(served).toEqual({ shortcuts: stored });
     const put = await request("/api/shortcuts", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ shortcuts: stored }),
+      body: JSON.stringify(served),
     });
     expect(put.status).toBe(200);
     expect(JSON.parse(readFileSync(file, "utf8")).shortcuts[0]).toEqual(stored[0]);
+  });
+
+  // Carried, NOT merged. A writer that means to REMOVE the field — the other app dropping something
+  // it no longer stores — must not have it put back by this one, which is what a merge against the
+  // file on write would do.
+  it("lets a write remove an unknown field it left out", async () => {
+    const file = path.join(ws, "config", "shortcuts.json");
+    mkdirSync(path.dirname(file), { recursive: true });
+    const kept = { kind: "collection", slug: "lens", title: "Lens", icon: "photo_camera" };
+    writeFileSync(file, JSON.stringify({ shortcuts: [{ ...kept, futureField: "from another build" }] }));
+
+    const put = await request("/api/shortcuts", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shortcuts: [kept] }),
+    });
+    expect(put.status).toBe(200);
+    expect(JSON.parse(readFileSync(file, "utf8")).shortcuts[0]).toEqual(kept);
   });
 
   // The path that actually broke (#1993): MulmoClaude writes a colour, this app reads the file and
