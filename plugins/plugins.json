@@ -7,7 +7,8 @@
     "@mulmoclaude/core/collection",
     "@mulmoclaude/html-plugin",
     "@mulmoclaude/google-plugin",
-    "@mulmoclaude/mulmoscript-plugin"
+    "@mulmoclaude/mulmoscript-plugin",
+    "@mulmoclaude/shapescript-plugin"
   ],
   "servers": ["@mulmoclaude/x-plugin"],
   "local": []

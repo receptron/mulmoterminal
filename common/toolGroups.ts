@@ -84,6 +84,7 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   ["presentForm", "render"],
   ["presentChart", "render"],
   ["presentHtml", "render"],
+  ["presentShapeScript", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -175,8 +176,10 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // model spend money silently under a switch the UI presents as "let the agent draw", so it
 // keeps Claude Code's prompt (answer it once per project and the prompt stops).
 //
-// The three below save an artifact and draw it, and call nothing external.
-export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml"];
+// The four below save an artifact and draw it, and call nothing external.
+// `presentShapeScript` does not even save one — the ShapeScript source travels in
+// the result and is rendered client-side — so it clears the bar the others meet.
+export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript"];
 
 /** Tools that must keep the agent's permission prompt on EVERY claude session, including the
  *  workspace.
