@@ -132,6 +132,13 @@ describe("filePathIdentity — one deck, whatever spelling reached it", () => {
     expect(filePathIdentity({ data: { filePath: "stories/x.json", root: "gone" } }, storyRootDirsFrom(withPreset))).toBe("gone\u0000stories/x.json");
   });
 
+  // Not every absolute-looking spelling names a file: a Windows path rooted on the current drive
+  // does not carry the drive. Keeping the old identity is what stops it merging with a POSIX card
+  // of the same tail (Codex P2 on #1976).
+  it("keeps the old identity for a path whose drive is unknown", () => {
+    expect(filePathIdentity({ data: { filePath: "\\decks\\x.json" } }, storyRootDirsFrom(withPreset))).toBe("\\decks\\x.json");
+  });
+
   // The state the panel is in for the first moments after it opens.
   it("keeps the old identity until the config arrives", () => {
     expect(filePathIdentity({ data: { filePath: "stories/x.json", root: "W" } })).toBe("W\u0000stories/x.json");

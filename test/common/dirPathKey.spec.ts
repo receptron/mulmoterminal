@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { dirPathKey, isSameDirPath } from "../../common/dirPathKey";
+import { dirPathKey, isRootedPath, isSameDirPath } from "../../common/dirPathKey";
 
 // Raised by Codex on #1208: the launcher compared a path the user typed against one git reported
 // with `===`, so `/wt/foo/` and `/repo/../wt/foo` read as different directories and the control
@@ -61,5 +61,45 @@ describe("dirPathKey", () => {
     expect(isSameDirPath(null, null)).toBe(false);
     expect(isSameDirPath("/wt/foo", undefined)).toBe(false);
     expect(isSameDirPath("  ", "")).toBe(false);
+  });
+});
+
+// Whether a spelling names one file BY ITSELF — what a Canvas card's identity is built from
+// (src/utils/canvasCardPath.ts). Narrower than the key above in exactly one place, and that is the
+// point of testing it separately.
+describe("isRootedPath", () => {
+  it("accepts the three rooted spellings", () => {
+    expect(isRootedPath("/work/deck.json")).toBe(true);
+    expect(isRootedPath("C:\\work\\deck.json")).toBe(true);
+    expect(isRootedPath("c:/work/deck.json")).toBe(true);
+    expect(isRootedPath("//server/share/deck.json")).toBe(true);
+    expect(isRootedPath("\\\\server\\share\\deck.json")).toBe(true);
+  });
+
+  it("refuses a relative path", () => {
+    expect(isRootedPath("deck.json")).toBe(false);
+    expect(isRootedPath("../deck.json")).toBe(false);
+    expect(isRootedPath("")).toBe(false);
+  });
+
+  // The Windows boundary this exists for. `\deck.json` is rooted on the process's CURRENT DRIVE —
+  // a drive the spelling does not carry and a browser cannot infer — so it names no one file.
+  // `dirPathKey` still keys it as `/deck.json`, which is right for comparing directories and wrong
+  // for identity: it would split `\deck.json` from `C:\deck.json` while conflating it with a POSIX
+  // `/deck.json` (Codex P2 on #1976).
+  it("refuses a single leading backslash, whose drive is unknown", () => {
+    expect(isRootedPath("\\deck.json")).toBe(false);
+    expect(isRootedPath("\\work\\deck.json")).toBe(false);
+    expect(dirPathKey("\\deck.json")).toBe("/deck.json"); // …while the KEY still folds it, deliberately
+  });
+
+  // The other spelling `rootOf` already refuses to fold: relative to the current directory ON that
+  // drive, which is not the drive root.
+  it("refuses a drive-relative path", () => {
+    expect(isRootedPath("C:deck.json")).toBe(false);
+  });
+
+  it("ignores surrounding whitespace, as the key does", () => {
+    expect(isRootedPath("  /work/deck.json  ")).toBe(true);
   });
 });

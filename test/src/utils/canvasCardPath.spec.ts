@@ -86,6 +86,14 @@ describe("canonicalCardPath", () => {
     expect(canonicalCardPath("artifacts/html/report.html", null, dirs)).toBeNull();
   });
 
+  // A Windows path rooted on the CURRENT DRIVE names no one file — the drive is not in the
+  // spelling and the browser cannot infer it — so it is left to the caller's legacy identity
+  // rather than keyed into something a drive-qualified card would not match (Codex P2 on #1976).
+  it("says nothing for a path whose drive is unknown", () => {
+    expect(canonicalCardPath("\\decks\\x.json", null, dirs)).toBeNull();
+    expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBe("C:/decks/x.json");
+  });
+
   it("says nothing for the stories directory itself", () => {
     expect(canonicalCardPath("stories/", null, dirs)).toBeNull();
   });
