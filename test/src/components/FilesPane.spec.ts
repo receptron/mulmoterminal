@@ -638,6 +638,15 @@ describe("the Canvas button", () => {
     expect(btn(await openRow("tale.json", "/work/other/artifacts/stories", true, "/work/ws")).exists()).toBe(true);
   });
 
+  // The limit the README and both guides now state: without a directory to join the row onto, the
+  // row is not a path anything can resolve — the pane falls back to the bare row, and a relative
+  // `filePath` would name the DEFAULT stories root's file of that name instead (CodeRabbit on
+  // #1992). The pane shows `(default workspace)` in its header in that state.
+  it("is withheld for a deck when the pane has no directory to resolve the row against", async () => {
+    expect(btn(await openRow("keynote.json", "/work/proj")).exists()).toBe(true);
+    expect(btn(await openRow("keynote.json", null)).exists()).toBe(false);
+  });
+
   // The gate runs on the JOINED path, not the row's. `p.html` passes on its own and fails under a
   // directory with a dot segment, which the plugin's iframe mount refuses — so offering it there
   // would be offering a click that silently does nothing.
