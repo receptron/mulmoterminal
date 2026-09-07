@@ -20,7 +20,7 @@ card identity は `src/utils/canvasIdentity.ts` の `filePathIdentity` が決め
 
 **(B) preset を 1 つ足して再起動すると、同じファイルの identity が変わる**
 
-```
+```text
 file = /Users/me/w/proj/decks/x.json
 workspace のみ登録        → "W\0stories/proj/decks/x.json"
 /Users/me/w/proj も登録   → "P\0stories/decks/x.json"
@@ -30,7 +30,7 @@ preset 追加の前後に作られたカードは 1 つのデッキで 2 枚に�
 
 **(C) default root のカードにはパス成分が無い**
 
-```
+```text
 /Users/me/w1/artifacts/stories/x.json → "stories/x.json"
 /Users/me/w2/artifacts/stories/x.json → "stories/x.json"   ← 別ファイルが同一 identity
 ```
