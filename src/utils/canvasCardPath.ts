@@ -17,8 +17,10 @@
 // boot, and says which one that is. What it cannot see through is a symlink in a path nobody
 // resolved: below a root, or inside an absolute `filePath`, which the plugin echoes as the CALLER
 // spelled it (`locate` in the package's core hands `byPath` the path it was given). Those stay two
-// identities. Closing that gap means putting the server's realpath on the card payload — both sides
-// already compute one — and it is deliberately not in this change.
+// identities. So is a path rooted on a Windows drive the spelling does not carry (`\deck.json`, or
+// `/deck.json` on a Windows host) — see `windowsSpelled` below. Closing all of it means putting the
+// server's own resolved path on the card payload — both sides already compute one — and it is
+// deliberately not in this change.
 import { dirPathKey, isRootedPath } from "../../common/dirPathKey";
 
 /** The plugin's wire prefix for a story. Minted by `storyWirePath`, parsed here — one constant, so
@@ -56,6 +58,22 @@ export const storyRootDirsFrom = (registered: ReadonlyArray<{ id: string; canoni
   byId: Object.fromEntries(registered.flatMap((root) => (root.canonical ? [[root.id, root.canonical] as const] : []))),
 });
 
+/** Drive-qualified or a UNC share: the two spellings that name a file on a WINDOWS host without
+ *  depending on which drive the process happens to be on. */
+const DRIVE_OR_SHARE = /^([a-zA-Z]:[/\\]|[/\\]{2})/;
+
+/**
+ * Whether this SERVER spells its own directories with a drive letter.
+ *
+ * Read off the roots it registered, never off `navigator`: the page can be open on a phone while
+ * the files live on a Windows machine, so the browser's own platform says nothing about theirs.
+ * Unknown (no roots yet) reads as POSIX, which is the spelling every other host uses.
+ */
+const windowsSpelled = (dirs: StoryRootDirs): boolean => {
+  const dir = dirs.workspace ?? Object.values(dirs.byId)[0];
+  return dir !== undefined && /^[a-zA-Z]:[/\\]/.test(dir);
+};
+
 /** No join helper: `dirPathKey` folds a doubled separator, so a root directory (`/`, `C:/`) that
  *  already ends in one costs nothing. */
 const defaultStoriesDir = (workspace: string | null): string | null => (workspace === null ? null : `${workspace}/${STORY_DIR}`);
@@ -70,7 +88,14 @@ const defaultStoriesDir = (workspace: string | null): string | null => (workspac
 export function canonicalCardPath(filePath: string, root: string | null, dirs: StoryRootDirs): string | null {
   // Already the answer, whoever minted it. Keyed all the same, so `/w/./x.json` and `/w/x.json` are
   // one card.
-  if (isRootedPath(filePath)) return dirPathKey(filePath);
+  //
+  // Except on a Windows host, where `/deck.json` means what `\deck.json` does — rooted on the
+  // process's CURRENT DRIVE, which the spelling does not carry (Codex P2 on #1976). `isRootedPath`
+  // cannot refuse that form, since on every other host it is THE absolute spelling; only the
+  // server's own roots say which host this is. Refused there, the card keeps its legacy identity
+  // rather than being keyed into something `C:\deck.json` cannot match. What closes it properly is
+  // the server putting its resolved path on the card — see the header.
+  if (isRootedPath(filePath)) return windowsSpelled(dirs) && !DRIVE_OR_SHARE.test(filePath.trim()) ? null : dirPathKey(filePath);
   if (!filePath.startsWith(STORY_WIRE_PREFIX)) return null;
   const tail = filePath.slice(STORY_WIRE_PREFIX.length);
   const base = root === null ? defaultStoriesDir(dirs.workspace) : (dirs.byId[root] ?? null);

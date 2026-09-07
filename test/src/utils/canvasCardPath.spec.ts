@@ -94,6 +94,23 @@ describe("canonicalCardPath", () => {
     expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBe("C:/decks/x.json");
   });
 
+  // The forward-slash half of the same Windows boundary. `/decks/x.json` is the POSIX absolute
+  // form — refusing it everywhere would disable identity on every other host — so it is refused
+  // only where the SERVER's own roots are drive-qualified, which is the one signal a browser has
+  // (it may itself be a phone). Codex P2 on #1976, second half.
+  it("says nothing for a drive-less path when the server's roots are Windows ones", () => {
+    const onWindows: StoryRootDirs = { workspace: "C:/Users/me/w", byId: { W: "C:/Users/me/w" } };
+    expect(canonicalCardPath("/decks/x.json", null, onWindows)).toBeNull();
+    expect(canonicalCardPath("\\decks\\x.json", null, onWindows)).toBeNull();
+    // …while the two spellings that DO name a file on that host still resolve.
+    expect(canonicalCardPath("C:\\decks\\x.json", null, onWindows)).toBe("C:/decks/x.json");
+    expect(canonicalCardPath("//server/share/x.json", null, onWindows)).toBe("//server/share/x.json");
+    // A root-relative card is unaffected: its base is the root's own drive-qualified spelling.
+    expect(canonicalCardPath("stories/decks/x.json", "W", onWindows)).toBe("C:/Users/me/w/decks/x.json");
+    // And on a POSIX server the same spelling is the answer it always was.
+    expect(canonicalCardPath("/decks/x.json", null, dirs)).toBe("/decks/x.json");
+  });
+
   it("says nothing for the stories directory itself", () => {
     expect(canonicalCardPath("stories/", null, dirs)).toBeNull();
   });
