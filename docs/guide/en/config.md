@@ -1430,8 +1430,10 @@ Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
   pins**; until one of those happens, the button is still there (and still works — unpinning does
   not delete the collection).
 - A key like that does **not** hold one of the five slots, and **nothing deletes it**. Unpin
-  something you had promoted, and its button disappears; pin it again and the button is back where
-  it was, with no second trip to Settings. The file keeps the line either way — which is the trade:
+  something you had promoted and its button goes; pin it again and the button comes back where it
+  was, with no second trip to Settings — **on the same terms as the bullet above**: this app sees
+  either change once it re-reads the shared list, at page load or when Settings → Toolbar pins
+  opens. The file keeps the line either way — which is the trade:
   tidying it would mean deciding "this pin is gone" from a list that might be out of date, and one
   wrong answer there silently deletes a button you still wanted.
 - The pinned row at the top of the Collections overlay is unchanged, and still lists **all** of
@@ -1922,7 +1924,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `questionPaneEnabled` | Offer a Claude session's question as buttons in a pane beside the enlarged terminal. **Off by default** (→ [Answering from a side pane](#question-pane)) |
 | `prWorkdirFooter` | End a created PR's body with `work in <clone>` (→ [Which clone made this PR](#pr-workdir-footer)). **On by default**; `false` opts out |
 | `appendSystemPrompt` | Have replies end with a summary of what was asked / achieved / not done (→ [Turning off the closing summary](#append-system-prompt)). **On by default**; `false` opts out, and a directory's `.mulmoterminal.json` wins |
-| `toolbarPins` | Pinned collections / feeds that also get a button in the toolbar, e.g. `["collection:works"]` — up to five, empty by default (→ [A favourite you open all day](#toolbar-pins)) |
+| `toolbarPins` | Pinned collections / feeds that also get a button in the toolbar, e.g. `["collection:works"]`. Empty by default. **Five buttons** are drawn; the array itself may hold more (up to 50) — a key whose pin is currently unpinned is kept, not drawn, so do not tidy those out by hand (→ [A favourite you open all day](#toolbar-pins)) |
 | `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3` → [Cockpit roster line counts](#cockpit-lines)) |
 | `fontFamily` | The font every terminal renders in — a CSS font-family stack (→ [Terminal font](#font-family)) |
 

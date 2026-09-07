@@ -346,7 +346,10 @@ Which of the pinned favourites get a permanent button in the toolbar, beside **G
   `<workspace>/config/shortcuts.json`, shared with MulmoClaude) — the button's name and icon are
   read from the pin, so renaming a collection renames the button. A key whose pin is gone draws
   nothing and does not hold one of the five slots, and **nothing deletes it** — re-pinning brings the
-  button back where it was. Do not "tidy" such keys out of the config on the user's behalf.
+  button back where it was, once the app re-reads the shared list (page load, or opening Settings'
+  Toolbar pins). Do not "tidy" such keys out of the config on the user's behalf.
+- The array may hold up to 50 keys while only five are drawn, so a config with more than five
+  entries is not an error to correct.
 - The shared pin list is read once per page load, and again when Settings' **Toolbar pins** opens.
   So a pin removed in MulmoClaude leaves the button on the toolbar of an already-open session until
   one of those happens; it is not a live feed.
