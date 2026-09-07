@@ -8,6 +8,20 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### A 3D model is a file you can edit
+
+- **[#2000](https://github.com/receptron/mulmoterminal/pull/2000)** — a ShapeScript model used to
+  live only inside the chat message that produced it, so editing one meant editing a copy: the
+  source box wrote back into the conversation, and nothing on disk knew about it.
+  `@mulmoclaude/shapescript-plugin` 1.1.0 makes it a **file**. A new model is saved to
+  `artifacts/shapes/`, `presentShapeScript` can be pointed at a `.shape` that already exists
+  (yours, or one it wrote earlier) and presents it in place rather than copying it, and the
+  source editor now saves back to that same file and re-reads it when opened — so a model the
+  agent rewrote is what you see, not a stale copy. The plugin also raised its conversion budgets
+  (100,000 objects, 5,000,000 vertices, a 30-second wall clock), which is what lets a genuinely
+  large procedural model through: the old object cap refused a 150×150 grid of cubes while using
+  barely a quarter of its vertex budget.
+
 ## mulmoterminal@4.17.0 — 2026-09-08
 
 > **Setup guide:** [4.17.0 — Your favourites on the toolbar](https://receptron.github.io/mulmoterminal/guide/en/v4.17.0.html)
