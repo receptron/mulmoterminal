@@ -81,6 +81,43 @@ describe("useShortcuts reads", () => {
     expect(store.loadError.value).toBeNull();
   });
 
+  // Codex on #1991: reads race WRITES too, in the one order the store does not already handle. A
+  // write that is ALREADY past its own `await load()` is a PUT in flight; a forced read issued
+  // after it can be served the file as it was, and answer last — putting the unpinned favourite
+  // back on screen, from where the next full-list PUT would write it to disk again.
+  it("does not put back what a pin/unpin removed while the read was out", async () => {
+    vi.resetModules();
+    const put = gate();
+    const read = gate();
+    let calls = 0;
+    globalThis.fetch = vi.fn(async (_url: unknown, init?: { method?: string }) => {
+      calls += 1;
+      if (init?.method === "PUT") {
+        await put.promise;
+        return { ok: true, json: async () => ({ shortcuts: [] }) };
+      }
+      if (calls > 1) await read.promise; // the forced read; the first one is the store's own
+      return { ok: true, json: async () => ({ shortcuts: [shortcut("removed")] }) };
+    }) as unknown as typeof fetch;
+
+    const { useShortcuts } = await import("../../../src/composables/useShortcuts");
+    const store = useShortcuts();
+    await store.load(); // the cache is warm, so the unpin below does not wait on a read
+    const unpinned = store.unpin("collection", "removed"); // PUT in flight
+    await flushPromises();
+    const forced = store.load(true); // ...and Settings opens now
+    await flushPromises();
+
+    put.open();
+    expect(await unpinned).toBe(true);
+    expect(store.shortcuts.value).toEqual([]);
+
+    read.open();
+    // The read is dropped, not failed: what is in hand is the write's answer, which is newer.
+    expect(await forced).toBe(true);
+    expect(store.shortcuts.value).toEqual([]);
+  });
+
   // The pane that asks for a forced read decides whether it may SAVE from the answer, and a read
   // that failed must not read as "confirmed" — false is what makes that decidable at the call site.
   it("answers false when the read itself fails", async () => {

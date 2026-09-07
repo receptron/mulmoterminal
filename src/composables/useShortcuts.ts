@@ -38,27 +38,38 @@ const readShortcuts = (raw: unknown): ShortcutsResponse => ({
   shortcuts: isRecord(raw) && Array.isArray(raw.shortcuts) ? raw.shortcuts.filter(isShortcut) : [],
 });
 
-// Which read is the current one. A forced re-read starts a SECOND request while the first is still
-// in flight, and nothing about the network says the older one answers first — so an answer that has
-// been superseded is dropped rather than adopted (Codex, PR #1991). Latest wins, including its
-// error and its retry: a stale failure must not null the promise the newer read is waiting on.
+// THE RULE, for both counters below: an answer is only worth adopting if nothing newer has already
+// been adopted. Reads race each other, and they race WRITES — a forced re-read (Settings' Toolbar
+// pins) can be issued before a pin/unpin and answer after it, carrying the file as it was. Both
+// were found on PR #1991, and they are the same rule seen from two sides.
+//
+// `loadGeneration` orders reads against reads: a read that a newer one has overtaken is dropped,
+// including its error and its retry — a stale failure must not null the promise the newer read is
+// waiting on.
 let loadGeneration = 0;
+// `writes` orders reads against writes: `persist` adopts the server's canonical list for the file
+// AFTER the write, so a read issued before it is answering about a file that no longer exists.
+// Dropping that read is not a failure — the list in hand is the newer one — so the read still
+// reports success.
+let writes = 0;
 
 /** Load once per session (deduped). A FAILED load is not cached so the next call
  *  retries. `force` re-reads even when a result is already cached — the file is shared with
  *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches.
  *
- *  TRUE means `shortcuts` now holds what the server answered THIS call. False covers both ways
- *  that can fail to be true — the request failed, or a newer read overtook this one — and a caller
- *  that is about to decide something from the list needs to tell those apart from success: reading
- *  `loadError` instead answers a different question, since a failed PUT sets it too (Codex,
- *  PR #1991). */
+ *  TRUE means `shortcuts` holds the file as the server last answered for it — this read, or a write
+ *  that landed while this read was out and answered about the file AFTER it. That is the question a
+ *  caller about to save from the list is asking, and both answers settle it. FALSE is the two ways
+ *  it is unsettled: the request failed, or a newer read overtook this one. Reading `loadError`
+ *  instead answers a different question, since a failed PUT sets it too (Codex, PR #1991). */
 async function load(force = false): Promise<boolean> {
   if (loadPromise && !force) return loadPromise;
   const generation = ++loadGeneration;
+  const writesBefore = writes;
   loadPromise = (async () => {
     const result = await fetchJson("/api/shortcuts", readShortcuts);
     if (generation !== loadGeneration) return false;
+    if (writes !== writesBefore) return true;
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry
@@ -99,6 +110,7 @@ async function persist(next: Shortcut[], previous: Shortcut[]): Promise<boolean>
     console.error("[useShortcuts] persist failed", result.error);
     return false;
   }
+  writes += 1; // ...before adopting, so a read already in flight cannot put the old list back
   shortcuts.value = result.data.shortcuts; // adopt the server's canonical list
   loadError.value = null;
   return true;
