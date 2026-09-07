@@ -9,7 +9,11 @@ import { showLoadAverage } from "../composables/showLoadAverage";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
 import { CONTENT_ROUTES } from "../composables/overlayOrigin";
-import { useCollectionBrowse, browseGotoIndex } from "../composables/useCollectionBrowse";
+import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
+import { useShortcuts } from "../composables/useShortcuts";
+import { toolbarPinKeys } from "../composables/toolbarPins";
+import { resolveToolbarPins, toolbarPinKey } from "../../common/toolbarPins";
+import type { Shortcut } from "../../common/shortcuts";
 import { filesGotoIndex } from "../composables/useFilesView";
 import { useAccountingView, accountingViewOpen } from "../composables/useAccountingView";
 import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
@@ -51,6 +55,13 @@ const summary = computed(() => gridStatusSummary(props.statusCounts));
 const summaryTitle = computed(() => summary.value.title);
 const hasSummary = computed(() => summary.value.show);
 const { view: browseView } = useCollectionBrowse();
+// The few favourites the user promoted out of the Collections overlay (#1984). Opening one used to
+// take two presses — Collections, then the pinned row inside it — and the pins were invisible until
+// the first of them. The label and the icon come from the PIN, never from the config that promoted
+// it, so renaming a collection cannot leave a button here saying the old name.
+const { shortcuts } = useShortcuts();
+const pins = computed(() => resolveToolbarPins(shortcuts.value, toolbarPinKeys.value));
+const pinActive = (pin: Shortcut): boolean => browseView.value.mode === "detail" && browseView.value.kind === pin.kind && browseView.value.slug === pin.slug;
 const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = useGithubView();
@@ -159,6 +170,28 @@ function showRooms(): void {
              Same `database` icon as the cell header's collections pane (CellChromeButtons.vue), so
              the door and the pane read as one thing wherever you meet them. -->
         <LauncherButton icon="database" title="Collections" label="Collections" :active="collectionsActive" @click="showCollections" />
+      </span>
+      <!-- The promoted favourites, right of the door they used to hide behind (#1984). They belong on
+           THIS side of the fence and not with the buttons after it: pressing one leaves the view you
+           are in, exactly as Grid and Collections do, where everything to the right acts within the
+           current view. Their own rule, because they are the user's list rather than the app's pair.
+           Nothing renders when none is promoted — the empty case has to leave the header, rule
+           included, exactly as it was. -->
+      <span
+        v-if="pins.length"
+        class="mr-1.5 inline-flex flex-none items-center gap-[3px] border-r border-border pr-2.5"
+        role="group"
+        aria-label="Pinned collections and feeds"
+      >
+        <LauncherButton
+          v-for="pin in pins"
+          :key="toolbarPinKey(pin)"
+          :icon="pin.icon || 'bookmark'"
+          :title="pin.title"
+          :label="pin.title"
+          :active="pinActive(pin)"
+          @click="browseGotoDetail(pin.kind, pin.slug)"
+        />
       </span>
       <!-- The other content surfaces, revealed by being IN the section rather than always present.
            Same reasoning as the fence above: everything here acts within the view you are in. -->

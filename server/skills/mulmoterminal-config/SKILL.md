@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-config
-description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines), the grid header's load read-out (showLoadAverage), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), and a project's Mulmo menu (decks). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
+description: The way into configuring MulmoTerminal, and the way to find out how it is configured now. Use for a broad or unsure request — "configure MulmoTerminal", "set this up", "customize this", "what can I change?", first-run setup — and route to the skill that owns the area. Also answers "how is this set up right now?", "why isn't my setting working?", "did that take effect?" by reading the live config — the global `~/.mulmoterminal/config.json`, each project's `.mulmoterminal.json`, and what the app ACTUALLY parsed from them — including keys it dropped in validation, which is the difference between a setting you never made and one that silently never applied. Owns the global settings that have no skill of their own — work comments on an issue (issueWorkComments), the PR clone footer (prWorkdirFooter), the closing summary (appendSystemPrompt), the decision digest (decisionDigest), the periodic dev-work log (worklogEnabled), roster row length (cockpitLines), the grid header's load read-out (showLoadAverage), pinned collections on the toolbar (toolbarPins), a self-hosted GitLab (gitlabHosts), a project's Skill menu (skills), and a project's Mulmo menu (decks). When the request names another area, go straight to that skill instead — mulmoterminal-dirs (colours, grid order, project names, font size), mulmoterminal-theme (your own colour scheme), mulmoterminal-header (buttons and chips), mulmoterminal-keys (shortcuts, copy-on-select, Enter behaviour), mulmoterminal-model (other models and backends, and your own command for starting Claude Code), mulmoterminal-notify (sounds and push).
 ---
 
 # Configuring MulmoTerminal — start here
@@ -326,3 +326,31 @@ percentage of its cores (`load 334%` = 66.8 on 20 cores). **On unless set to `fa
 - **A host that keeps no load average shows nothing whatever this says.** Windows is the case:
   `os.loadavg()` returns zeros there, and 0% would read as "idle" rather than "not measured".
 - Also in Settings, under **Grid header read-outs**.
+
+### `toolbarPins` — pinned collections on the toolbar itself
+
+Which of the pinned favourites get a permanent button in the toolbar, beside **Grid** and
+**Collections**, so opening one is a single press instead of Collections-then-the-row-inside-it.
+**Empty by default** — the toolbar is exactly as it was until something is promoted.
+
+```json
+{ "toolbarPins": ["collection:works", "collection:todos", "feed:news"] }
+```
+
+- Each entry is `"<kind>:<slug>"`, where kind is `collection` or `feed`. The array order is the
+  order the buttons are drawn in.
+- **Five buttons.** Past that they push the row into its horizontal scroll, which is the very
+  two-step this removes. The array may hold more than five: entries whose pins are currently unpinned
+  are kept, not drawn.
+- It promotes; it does not pin. An entry must already be PINNED (the star in Collections, stored in
+  `<workspace>/config/shortcuts.json`, shared with MulmoClaude) — the button's name and icon are
+  read from the pin, so renaming a collection renames the button. A key whose pin is gone draws
+  nothing and does not hold one of the five slots, and **nothing deletes it** — re-pinning brings the
+  button back where it was, once the app re-reads the shared list (page load, or opening Settings'
+  Toolbar pins). Do not "tidy" such keys out of the config on the user's behalf.
+- The array may hold up to 50 keys while only five are drawn, so a config with more than five
+  entries is not an error to correct.
+- The shared pin list is read once per page load, and again when Settings' **Toolbar pins** opens.
+  So a pin removed in MulmoClaude leaves the button on the toolbar of an already-open session until
+  one of those happens; it is not a live feed.
+- Also in Settings, under **Toolbar pins**, which lists what is pinned and takes a tick per entry.

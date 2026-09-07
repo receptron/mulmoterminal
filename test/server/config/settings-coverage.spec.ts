@@ -67,6 +67,7 @@ const REACHABLE_BY: Record<string, Reachable> = {
   headerStatusTint: { skill: "mulmoterminal-dirs" },
   cockpitLines: { ui: true, skill: CONFIG_SKILL },
   showLoadAverage: { ui: true, skill: CONFIG_SKILL },
+  toolbarPins: { ui: true, skill: CONFIG_SKILL },
   fontFamily: { ui: true, skill: "mulmoterminal-dirs" },
 };
 

@@ -36,6 +36,7 @@ export const en = {
       scroll: "Terminal scroll speed",
       waitingRows: "Waiting rows",
       gridHeader: "Grid header read-outs",
+      toolbarPins: "Toolbar pins",
       dirAppearance: "Directory appearance",
       dirSettings: "Directory settings",
       launchers: "Launch commands",
@@ -383,6 +384,15 @@ export const en = {
       returnLabel: "Return to the latest output when you send",
       returnHint:
         "pressing Enter (or a send button) takes a scrolled-up terminal back to the bottom, the way an ordinary terminal does. A shell already behaves this way; a full-screen agent like Claude Code keeps its own scroll position and does not, so this unwinds exactly the scrolling you did. Turn it off to stay where you are reading while a turn runs.",
+    },
+
+    toolbarPins: {
+      intro:
+        "Collections and feeds you pinned can also sit in the toolbar itself, beside Grid and Collections — one press instead of opening Collections first and finding them in the row at its top. Choose up to {max}; the toolbar is unchanged while none is chosen.",
+      empty: "Nothing is pinned yet. Open Collections and pin a collection or a feed there first — this list offers what you pinned.",
+      unavailable:
+        "The pinned list is unavailable ({error}), so there is nothing to offer here. The toolbar keeps whatever it was already showing; reopen this once the list is back.",
+      full: "{max} is the limit. Clear one to make room — past a handful they crowd out what the toolbar already carries.",
     },
 
     gridHeader: {

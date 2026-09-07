@@ -19,6 +19,7 @@ description: Configuring MulmoTerminal — the settings modal, per-project colou
 | Copy **without pressing a key** after selecting | [Copy just by selecting](#copy-on-select) |
 | Move the enlargement **from the keyboard** | [Keyboard shortcuts](#keymap) |
 | Roster rows are **too long or too short** | [Roster rows](#cockpit-lines) |
+| A collection you open **all day** takes two presses | [Favourites on the toolbar](#toolbar-pins) |
 | Let a session **see another folder** | [Several folders](#add-dirs) |
 | Two `yarn dev` **fighting over port 3000** | [A port per worktree](#worktree-env) |
 | A **worktree** looks like a different project | [Worktrees inherit this file](#worktree-inherit) |
@@ -82,8 +83,8 @@ That row is what to quote in a bug report.
 ![The Settings modal — the sidebar scrolled to show Appearance down to Sessions, with Theme open and its Create a theme… button](../images/config-settings-modal.png)
 
 The **sidebar** groups the sections and shows one at a time; below `sm` (a phone) it becomes a picker
-above the section. Twenty-five sections in nine groups — **Voice input** is there only on a machine
-that can transcribe, so most setups see twenty-four.
+above the section. Twenty-eight sections in nine groups — **Voice input** is there only on a machine
+that can transcribe, so most setups see twenty-seven.
 
 A button that hands a section over to a skill — "Create a theme…", "Configure notifications…" —
 **asks first**. It starts an agent session in a new grid cell, so the dialog says what will happen
@@ -96,7 +97,7 @@ one in **Language** — the first entry in the sidebar, because it is the one se
 cannot read the rest of the screen has to find first. Only this modal is translated so far; the rest
 of the app is still English.
 
-- **Appearance** — Language, Theme, Terminal font, Terminal font size, Terminal scroll speed, Waiting rows
+- **Appearance** — Language, Theme, Terminal font, Terminal font size, Terminal scroll speed, Waiting rows, Grid header read-outs, Toolbar pins
 - **Projects** — Directory appearance, Directory settings
 - **Header & launch** — Launch commands, Header buttons and chips
 - **Input** — Terminal keys, Keyboard shortcuts, Voice input
@@ -116,6 +117,7 @@ of the app is still English.
 | **Terminal font size** | The xterm font size in px (8–32). Applies to every terminal **in this browser** — a phone and a desktop each keep their own. A directory can override it with `fontSize` ([below](#per-dir)) |
 | **Terminal scroll speed** | How far one wheel notch or trackpad swipe moves the terminal (1× is xterm's own). Per browser, like the font size, because it is a property of the pointing device |
 | **Waiting rows** | In the roster beside an enlarged cell, a row whose agent is **waiting on you** carries an amber ring and blinks; one that has merely **finished** is green and still. The checkbox turns off the movement, not the colour — and no row blinks when your system asks for reduced motion. The three steppers below it set how many lines each row shows before clamping (`cockpitLines` → [Roster rows](#cockpit-lines)) |
+| **Toolbar pins** | Which of your pinned collections and feeds get a button in the toolbar itself, up to five. A tick per pinned entry; none ticked leaves the toolbar as it was (`toolbarPins` → [Favourites on the toolbar](#toolbar-pins)) |
 | **Directory appearance** | "Configure appearance…" — set a directory's name badge, colors, terminal palette, and grid position interactively, through the `mulmoterminal-dirs` skill |
 | **Directory settings** | What each directory's `.mulmoterminal.json` is **actually doing**. Expand a row for the values in force (colors with a swatch), **which file each came from**, **keys dropped in validation**, and **keys this app never reads**. Read-only — "Explain my settings…" starts the `mulmoterminal-config` skill to say why and fix it (→ [When a setting isn't working](#dir-settings-preview)) |
 | **Launch commands** | Commands you can launch besides the agents in a grid cell (`{ label, command }`). A plain shell needs no entry — the launcher's **Shell** toggle opens `$SHELL` unconfigured |
@@ -1398,6 +1400,50 @@ Or use the three steppers in **Settings → Waiting rows**.
 > This is a **global** setting, not a per-directory one. The roster mixes sessions from every
 > directory, so a per-directory value would leave neighbouring rows disagreeing about their height.
 
+## A favourite you open all day (`toolbarPins`) {#toolbar-pins}
+
+Pinning a collection or a feed (the star in **Collections**) puts it in the row at the top of the
+Collections overlay. That row is only visible **once the overlay is open**, so opening a pinned
+thing costs two presses: Collections, then the icon.
+
+Promote a few of those pins and they get a button in the **toolbar itself**, beside **Grid** and
+**Collections** — one press, from wherever you are.
+
+```json
+{ "toolbarPins": ["collection:works", "collection:todos", "feed:news"] }
+```
+
+Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
+
+| | |
+|---|---|
+| Entry | `"<kind>:<slug>"` — kind is `collection` or `feed`, slug is the one in the address (`/collections/works`) |
+| Order | The array's order, left to right |
+| How many | **Five** buttons. The file itself may hold more — see the last bullet below |
+| Default | **Empty** — the toolbar is exactly as it was |
+
+- **It promotes; it does not pin.** An entry has to be pinned already: the button's name and icon
+  are read from the pin, so renaming the collection renames the button, and nothing here can go
+  stale. A key whose pin has been removed simply draws nothing — re-pin it and the button is back.
+- **Removing a pin in MulmoClaude does not take the button away at once.** This app reads the
+  shared pinned list once when the page loads, and again whenever you open **Settings → Toolbar
+  pins**; until one of those happens, the button is still there (and still works — unpinning does
+  not delete the collection).
+- A key like that does **not** hold one of the five slots, and **nothing deletes it**. Unpin
+  something you had promoted and its button goes; pin it again and the button comes back where it
+  was, with no second trip to Settings — **on the same terms as the bullet above**: this app sees
+  either change once it re-reads the shared list, at page load or when Settings → Toolbar pins
+  opens. The file keeps the line either way — which is the trade:
+  tidying it would mean deciding "this pin is gone" from a list that might be out of date, and one
+  wrong answer there silently deletes a button you still wanted.
+- The pinned row at the top of the Collections overlay is unchanged, and still lists **all** of
+  them. This is a second, shorter list on top of it.
+- Five is the cap because the toolbar already carries the view switch, the grid's own controls, the
+  status tally and two gauges. Past a handful they push that row into a horizontal scroll, which is
+  the very two-step this removes.
+- The pins themselves live in `<workspace>/config/shortcuts.json`, which MulmoTerminal **shares
+  with MulmoClaude**; `toolbarPins` is MulmoTerminal's own and names only which of them to promote.
+
 ## Seeing several folders in one session (`addDirs`) {#add-dirs}
 
 To have an agent work across more than one directory — a repo plus the shared library next to
@@ -1878,6 +1924,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 | `questionPaneEnabled` | Offer a Claude session's question as buttons in a pane beside the enlarged terminal. **Off by default** (→ [Answering from a side pane](#question-pane)) |
 | `prWorkdirFooter` | End a created PR's body with `work in <clone>` (→ [Which clone made this PR](#pr-workdir-footer)). **On by default**; `false` opts out |
 | `appendSystemPrompt` | Have replies end with a summary of what was asked / achieved / not done (→ [Turning off the closing summary](#append-system-prompt)). **On by default**; `false` opts out, and a directory's `.mulmoterminal.json` wins |
+| `toolbarPins` | Pinned collections / feeds that also get a button in the toolbar, e.g. `["collection:works"]`. Empty by default. **Five buttons** are drawn; the array itself may hold more (up to 50) — a key whose pin is currently unpinned is kept, not drawn, so do not tidy those out by hand (→ [A favourite you open all day](#toolbar-pins)) |
 | `cockpitLines` | How many lines each cockpit-roster row shows before clamping (default `2 / 2 / 3` → [Cockpit roster line counts](#cockpit-lines)) |
 | `fontFamily` | The font every terminal renders in — a CSS font-family stack (→ [Terminal font](#font-family)) |
 

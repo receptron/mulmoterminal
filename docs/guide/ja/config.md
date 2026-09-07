@@ -19,6 +19,7 @@ description: MulmoTerminal の設定方法。設定モーダル、プロジェ�
 | 選択したら**キーを押さずにコピー**したい | [マウスで選ぶだけでコピー](#copy-on-select) |
 | キーボードで**拡大するターミナルを切り替えたい** | [キーボードショートカット](#keymap) |
 | ロスターの1行が**長すぎる / 短すぎる** | [ロスターの行数](#cockpit-lines) |
+| **毎日開くコレクション**に 2 手かかる | [ツールバーに出すお気に入り](#toolbar-pins) |
 | セッションに**別のフォルダも見せたい** | [複数フォルダ](#add-dirs) |
 | 2つの `yarn dev` が **ポート 3000 を取り合う** | [worktree ごとのポート](#worktree-env) |
 | **worktree だけ別プロジェクトに見える** | [worktree はこのファイルを引き継ぐ](#worktree-inherit) |
@@ -81,8 +82,8 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 ![設定モーダル — 左サイドバーの Appearance から Sessions までのグループと、開いている Theme（Create a theme… ボタン付き）](../images/config-settings-modal.png)
 
 **左のサイドバー**がセクションをグループ分けし、一度に 1 つだけ表示します（`sm` 未満、つまりスマホでは
-セクションの上のセレクタになります）。9 グループ・25 セクション（**Voice input** は文字起こしできる
-マシンでのみ出るので、多くの環境では 24）。
+セクションの上のセレクタになります）。9 グループ・28 セクション（**Voice input** は文字起こしできる
+マシンでのみ出るので、多くの環境では 27）。
 
 セクションをスキルに引き渡すボタン（「Create a theme…」「Configure notifications…」など）は、押すと
 **確認を出します**。新しいグリッドセルでエージェントのセッションが始まるので、何が起きるか・やめ方
@@ -94,7 +95,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 選ぶこともできます。Language をサイドバーの先頭に置いてあるのは、画面の他が読めない人が最初に探すのが
 この設定だからです。いまのところ訳されているのはこのモーダルだけで、他の画面は英語のままです。
 
-- **Appearance** — Language, Theme, Terminal font, Terminal font size, Terminal scroll speed, Waiting rows
+- **Appearance** — Language, Theme, Terminal font, Terminal font size, Terminal scroll speed, Waiting rows, Grid header read-outs, Toolbar pins
 - **Projects** — Directory appearance, Directory settings
 - **Header & launch** — Launch commands, Header buttons and chips
 - **Input** — Terminal keys, Keyboard shortcuts, Voice input
@@ -114,6 +115,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | **Terminal font size** | ターミナル（xterm）のフォントサイズ（px, 8〜32）。**このブラウザ**の全ターミナルに適用され、スマホと PC でそれぞれ別の値を保持します。ディレクトリ側の `fontSize`（[後述](#per-dir)）が優先されます |
 | **Terminal scroll speed** | ホイール1ノッチ／トラックパッドの1スワイプでターミナルがどれだけ動くか（1× が xterm 既定）。フォントサイズと同じくブラウザ単位 — ポインティングデバイスの性質なので |
 | **Waiting rows** | 拡大したセルの横（下）に出る一覧で、**入力を待っている**行に琥珀色のリングが付いて点滅し、**終わっただけ**の行は緑で静止します。チェックを外すと止まるのは**動きだけ**で色は残ります。OS が「視差効果を減らす」設定のときは点滅しません。下の 3 つのステッパーは各行を何行で打ち切るか（`cockpitLines` → [ロスターの行](#cockpit-lines)） |
+| **Toolbar pins** | ピン留めしたコレクション / フィードのうち、ツールバー自体にボタンを出すものを最大 5 件選びます。1 件もチェックしなければツールバーは今までのまま（`toolbarPins` → [ツールバーに出すお気に入り](#toolbar-pins)） |
 | **Directory appearance** | 「Configure appearance…」— ディレクトリの名前バッジ・色・ターミナルのパレット・グリッド上の位置を、`mulmoterminal-dirs` スキルで対話的に設定 |
 | **Directory settings** | 各ディレクトリの `.mulmoterminal.json` が**実際に何をしているか**。行を開くと、効いている値（色は見本付き）・**どのファイル由来か**・**検証で落ちたキー**・**このアプリが読まないキー**が出ます。読み取り専用 — 「Explain my settings…」で `mulmoterminal-config` スキルが同じものを読み、理由を説明して直します（→ [設定が効かないとき](#dir-settings-preview)） |
 | **Launch commands** | グリッドセルでエージェント以外に起動できるコマンド（`{ label, command }`）。素のシェルは登録不要 — ランチャの **Shell** トグルが無設定で `$SHELL` を開く |
@@ -1352,6 +1354,47 @@ macOS は `Option` を代替文字やアクセントの入力に使うため、`
 > これは**全体設定**で、ディレクトリごとの設定ではありません。ロスターは複数ディレクトリの
 > セッションを混ぜて並べるため、ディレクトリ単位にすると隣り合う行で高さの根拠が食い違います。
 
+## 毎日開くお気に入りをツールバーに出す（`toolbarPins`） {#toolbar-pins}
+
+コレクションやフィードをピン留めすると（**Collections** の星）、Collections オーバーレイの上端の行に
+並びます。この行は**オーバーレイを開かないと見えない**ので、ピン留めしたものを開くのに
+「Collections を押す → アイコンを押す」の 2 手かかります。
+
+そのうちの数件を昇格させると、**ツールバー自体**の **Grid** / **Collections** の隣にボタンが出ます。
+どの画面からでも 1 手です。
+
+```json
+{ "toolbarPins": ["collection:works", "collection:todos", "feed:news"] }
+```
+
+**Settings → Toolbar pins** でチェックしても同じです（ピン留め済みのものが一覧されます）。
+
+| | |
+|---|---|
+| 書き方 | `"<種類>:<slug>"` — 種類は `collection` か `feed`、slug はアドレスに出るもの（`/collections/works`） |
+| 並び順 | 配列の順（左から右） |
+| 件数 | ボタンは **5 件**。ファイル自体はそれ以上持てます（下の最後の項目） |
+| 既定 | **空**（ツールバーは今までのまま） |
+
+- **昇格させるだけで、ピン留めはしません。** 対象は先にピン留めされている必要があります。ボタンの名前と
+  アイコンは**ピン側から読む**ので、コレクションの名前を変えればボタンの名前も変わり、古い名前が残ることは
+  ありません。ピンが外れたキーは何も描かれず、ピンし直せばボタンも戻ります。
+- **MulmoClaude 側でピンを外しても、ボタンはすぐには消えません。** このアプリが共有のピン一覧を読むのは
+  ページを開いたときと、**Settings → Toolbar pins** を開いたときだけです。それまではボタンは残ります
+  （押せば開きます — ピンを外してもコレクション自体は消えないので）。
+- そういうキーは **5 件の枠を消費せず、消されもしません**。昇格させたものをピン留めから外すとボタンは消え、
+  もう一度ピン留めすれば**元の位置にそのまま戻ります**（Settings で選び直す必要はありません）。ただし
+  **反映のタイミングは上の項目と同じ**で、消えるのも戻るのも、このアプリが共有の一覧を読み直したとき
+  （ページを開いたとき、または Settings → Toolbar pins を開いたとき）です。ファイルには
+  行が残りますが、それがトレードオフです — 片付けようとすると「このピンはもう無い」を古いかもしれない一覧から
+  判断することになり、一度でも間違えると、まだ欲しいボタンを黙って消してしまいます。
+- Collections オーバーレイ上端のピンの行はこれまで通りで、**全件**並びます。これはその上に重ねる
+  「もっと短い一覧」です。
+- 上限が 5 件なのは、ツールバーがすでにビュー切り替え・グリッドの操作・状態タリー・2 つのゲージを
+  載せているからです。数件を超えると横スクロールに押し込まれ、この機能が無くそうとしている 2 手に戻ります。
+- ピン本体は `<workspace>/config/shortcuts.json` にあり、**MulmoClaude と共有**しています。
+  `toolbarPins` は MulmoTerminal 固有で、そのうちどれを昇格させるかだけを持ちます。
+
 ## 1 つのセッションで複数フォルダを見る（`addDirs`） {#add-dirs}
 
 リポジトリと、その隣にある共有ライブラリのように、**複数のディレクトリを横断して**エージェントに作業させたい場合、これまでは複数フォルダを開けるエディタが必要でした。Claude Code は `--add-dir` を受け取るので、ディレクトリ側の設定として書けます。
@@ -1813,6 +1856,7 @@ posted by MulmoTerminal
 | `questionPaneEnabled` | Claude のセッションの質問を、拡大したターミナルの横のペインにボタンとして出す。**既定 OFF**（→ [サイドペインから答える](#question-pane)） |
 | `prWorkdirFooter` | 作成した PR の本文末尾に `work in <クローン名>` を書く（→ [この PR はどのクローンの作業か](#pr-workdir-footer)）。**既定 ON**、`false` で無効 |
 | `appendSystemPrompt` | 返信の最後に「何を頼まれたか / できたこと / できていないこと」のまとめを書かせる（→ [返信の最後のまとめを切る](#append-system-prompt)）。**既定 ON**、`false` で無効。`.mulmoterminal.json` の指定が優先 |
+| `toolbarPins` | ツールバーにもボタンを出すピン留め（例 `["collection:works"]`）。既定は空。**描くボタンは 5 件**で、配列自体はそれ以上（最大 50）持てます — いまピン留めが外れているキーは描かれないだけで残るので、手で片付けないでください（→ [毎日開くお気に入りをツールバーに出す](#toolbar-pins)） |
 | `cockpitLines` | コックピットのロスター各行を何行で打ち切るか（既定 `2 / 2 / 3` → [ロスターの表示行数](#cockpit-lines)） |
 | `fontFamily` | 全ターミナルのフォント（CSS の font-family スタック）（→ [ターミナルのフォント](#font-family)） |
 

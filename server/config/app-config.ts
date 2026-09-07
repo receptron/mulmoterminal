@@ -32,6 +32,7 @@ import { parsePresetRef } from "../../common/notifySounds.js";
 import { MODEL_ID_ALLOWED } from "../../common/modelIds.js";
 import { sanitizeKeymap, type Keymap } from "../../common/keymap.js";
 import { sanitizeCockpitLines, DEFAULT_COCKPIT_LINES, type CockpitLines } from "../../common/cockpitLines.js";
+import { sanitizeToolbarPins } from "../../common/toolbarPins.js";
 import {
   sanitizeHeaderStatusColors,
   sanitizeHeaderStatusTint,
@@ -129,6 +130,11 @@ export interface AppConfig {
   // question the grid screen poses and could not answer. A host that keeps no load average
   // (Windows) draws nothing whatever this says.
   showLoadAverage: boolean;
+  // Which pinned favourites the toolbar shows without opening Collections (#1984), as
+  // `"<kind>:<slug>"` keys in the order they are drawn. Empty by default — the toolbar is
+  // unchanged until the user promotes one. The pins themselves live in the workspace file
+  // MulmoClaude shares; this only says which of them are worth a permanent button here.
+  toolbarPins: string[];
   // Put a mouse selection on the clipboard the moment it settles, with no key pressed (#900).
   // Off unless asked for: it is the one setting that changes the clipboard when the user only
   // meant to highlight, and it is also the only place in the app that writes the clipboard on
@@ -491,6 +497,7 @@ export const emptyConfig = (): AppConfig => ({
   appendSystemPrompt: true,
   autoDirIcon: true,
   showLoadAverage: SHOW_LOAD_AVERAGE_DEFAULT,
+  toolbarPins: [],
   cockpitLines: { ...DEFAULT_COCKPIT_LINES },
   fontFamily: null,
 });
@@ -580,6 +587,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     appendSystemPrompt: sanitizeAppendSystemPrompt(o.appendSystemPrompt),
     autoDirIcon: sanitizeAutoDirIcon(o.autoDirIcon),
     showLoadAverage: sanitizeShowLoadAverage(o.showLoadAverage),
+    toolbarPins: sanitizeToolbarPins(o.toolbarPins),
     cockpitLines: sanitizeCockpitLines(o.cockpitLines),
     fontFamily: normalizeFontFamily(o.fontFamily),
   };
@@ -693,6 +701,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     appendSystemPrompt: updated("appendSystemPrompt", sanitizeAppendSystemPrompt, base.appendSystemPrompt),
     autoDirIcon: updated("autoDirIcon", sanitizeAutoDirIcon, base.autoDirIcon),
     showLoadAverage: updated("showLoadAverage", sanitizeShowLoadAverage, base.showLoadAverage),
+    toolbarPins: updated("toolbarPins", sanitizeToolbarPins, base.toolbarPins),
     cockpitLines: updated("cockpitLines", sanitizeCockpitLines, base.cockpitLines),
   };
 }
@@ -734,6 +743,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     appendSystemPrompt: config.appendSystemPrompt,
     autoDirIcon: config.autoDirIcon,
     showLoadAverage: config.showLoadAverage,
+    toolbarPins: config.toolbarPins,
     cockpitLines: config.cockpitLines,
     fontFamily: config.fontFamily,
   };

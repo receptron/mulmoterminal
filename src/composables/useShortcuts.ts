@@ -38,12 +38,34 @@ const readShortcuts = (raw: unknown): ShortcutsResponse => ({
   shortcuts: isRecord(raw) && Array.isArray(raw.shortcuts) ? raw.shortcuts.filter(isShortcut) : [],
 });
 
+// THE RULE, for both counters below: an answer is only worth adopting if nothing newer has already
+// been adopted. Reads race each other, and they race WRITES — a forced re-read (Settings' Toolbar
+// pins) can be issued before a pin/unpin and answer after it, carrying the file as it was. Both
+// were found on PR #1991, and they are the same rule seen from two sides.
+//
+// `loadGeneration` orders reads against reads: a read that a newer one has overtaken is dropped,
+// including its error and its retry — a stale failure must not null the promise the newer read is
+// waiting on.
+let loadGeneration = 0;
+// `writes` orders reads against writes: `persist` adopts the server's canonical list for the file
+// AFTER the write, so a read issued before it is answering about a file that no longer exists, and
+// adopting it would put back the favourite the write just removed.
+let writes = 0;
+
 /** Load once per session (deduped). A FAILED load is not cached so the next call
- *  retries. */
+ *  retries. `force` re-reads even when a result is already cached — the file is shared with
+ *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches.
+ *
+ *  Callers do not learn whether THIS read is the one that landed, and none needs to: `shortcuts`
+ *  ends up holding the newest answer either way, and nothing in the app deletes anything on the
+ *  strength of that list (see `nextToolbarPins`). */
 async function load(force = false): Promise<void> {
   if (loadPromise && !force) return loadPromise;
+  const generation = ++loadGeneration;
+  const writesBefore = writes;
   loadPromise = (async () => {
     const result = await fetchJson("/api/shortcuts", readShortcuts);
+    if (generation !== loadGeneration || writes !== writesBefore) return;
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry
@@ -83,6 +105,7 @@ async function persist(next: Shortcut[], previous: Shortcut[]): Promise<boolean>
     console.error("[useShortcuts] persist failed", result.error);
     return false;
   }
+  writes += 1; // ...before adopting, so a read already in flight cannot put the old list back
   shortcuts.value = result.data.shortcuts; // adopt the server's canonical list
   loadError.value = null;
   return true;
