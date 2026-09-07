@@ -197,6 +197,13 @@ const PACKAGES: Record<string, Registration> = {
     // flowing at content height, so it needs the measured card height — same as
     // the other canvas-filling views.
     height: CANVAS_CARD_HEIGHT,
+    // The MODEL on disk, so re-presenting the same `.shape` replaces its card
+    // instead of stacking another one beside it. Only meaningful since 1.1.0 —
+    // before it there was no `data.filePath`, and every result was genuinely a
+    // new thing. A result with no filePath (a host with no file layer) returns
+    // null here and keeps standing alone, which is correct: nothing identifies
+    // it. See canvasIdentity.ts.
+    identityOf: filePathIdentity,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,
