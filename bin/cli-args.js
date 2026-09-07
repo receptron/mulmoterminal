@@ -387,7 +387,7 @@ export const SECOND_INSTANCE_NOTE = [
 ].join("\n");
 
 const MIN_NODE_MAJOR = 22;
-const MIN_NODE_MINOR = 9;
+const MIN_NODE_MINOR = 12;
 
 /**
  * The lowest Node the `init` check reports as good, for the "needs ≥ x.y" line.
@@ -398,7 +398,7 @@ export const MIN_NODE_LABEL = `${MIN_NODE_MAJOR}.${MIN_NODE_MINOR}`;
  * Whether the running Node is new enough for the `init` pre-flight tick.
  *
  * `process.versions.node` is "major.minor.patch", with a "-prerelease" tag on the patch for
- * nightlies ("22.9.0-nightly…"). Only major.minor gate, and Number.parseInt stops at the
+ * nightlies ("22.12.0-nightly…"). Only major.minor gate, and Number.parseInt stops at the
  * first non-digit, so that tag never reaches the comparison. A string that is not a version
  * parses to NaN, and every comparison against NaN is false, so an unreadable version reads as
  * "below minimum" — the safe direction for a display-only check.

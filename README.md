@@ -57,7 +57,7 @@ ping to your phone when a task finishes. One `npx` command, no Electron, no conf
 npx mulmoterminal@latest        # starts on http://localhost:34567 and opens your browser
 ```
 
-Requires **Node ≥ 22.9** and the [`claude`](https://claude.com/claude-code) CLI on your
+Requires **Node ≥ 22.12** and the [`claude`](https://claude.com/claude-code) CLI on your
 `PATH`, already logged in. `npx mulmoterminal@latest init` reports what it can't find.
 
 ### Why not tmux + iTerm panes?
@@ -253,7 +253,7 @@ more.
 
 ## Install & run
 
-Needs **Node ≥ 22.9**, plus these CLIs on your `PATH`:
+Needs **Node ≥ 22.12**, plus these CLIs on your `PATH`:
 
 > **Never installed any of this before?** The guide walks it end to end, macOS and Windows,
 > assuming no command-line experience:
@@ -290,7 +290,7 @@ from any terminal (installed globally, just `mulmoterminal stop`). All three run
 with `tmux` installed the agent sessions survive and come back under **Settings → Sessions that
 survived a restart**; without it they end with the server.
 
-**First-run setup (optional).** `npx mulmoterminal@latest init` checks your environment (Node ≥ 22.9
+**First-run setup (optional).** `npx mulmoterminal@latest init` checks your environment (Node ≥ 22.12
 and every CLI in the table above), seeds the launcher's **directory
 presets** from the projects in your Claude Code history, and writes `~/.mulmoterminal/config.json`.
 It's **idempotent** — re-run it any time to refresh the presets; it overwrites the managed parts
@@ -576,7 +576,7 @@ detects `tmux` on `PATH` at startup and uses it automatically when present.
 | Plugins  | GUI-protocol Vue plugins (`@mulmoclaude/*`, `@mulmochat-plugin/*`): markdown, form, image, chart, HTML, collection, accounting, mulmoscript (MulmoCast video/slides), google |
 | Tests    | Vitest + @vue/test-utils + jsdom |
 
-Requires **Node ≥ 22.9** (uses `node --env-file-if-exists`) and the `claude` CLI on `PATH`.
+Requires **Node ≥ 22.12** (uses `node --env-file-if-exists`) and the `claude` CLI on `PATH`.
 
 ---
 

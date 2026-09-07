@@ -92,7 +92,7 @@ Several agents on one repo without collisions — diff, commit, push, and **⧉ 
 > **New here? → [Getting started — from zero to running](guide/en/getting-started.html)** —
 > terminal, Node.js, Claude Code, git / gh on macOS and Windows, and troubleshooting, on one page.
 
-**必要なもの:** [`claude`](https://claude.com/claude-code) CLI（Claude Code）· `git` · `gh` が PATH にあること + **Node ≥ 22.9**。
+**必要なもの:** [`claude`](https://claude.com/claude-code) CLI（Claude Code）· `git` · `gh` が PATH にあること + **Node ≥ 22.12**。
 **あると便利:** `tmux`（セッション永続化）· `codex`（Codex セッション）· `ffmpeg`（動画生成）· `ollama`（ローカルモデル）。
 → 各コマンドが何に効くかは [一緒に入れておくコマンド](guide/ja/getting-started.html#cli-tools)。
 
@@ -101,7 +101,7 @@ npx mulmoterminal@latest                       # → http://localhost:34567 が�
 npx mulmoterminal@latest --cwd ./my-project    # 作業ディレクトリを指定（--port <n> も可）
 ```
 
-**Prerequisites:** the [`claude`](https://claude.com/claude-code) CLI · `git` · `gh` on your PATH + **Node ≥ 22.9**.
+**Prerequisites:** the [`claude`](https://claude.com/claude-code) CLI · `git` · `gh` on your PATH + **Node ≥ 22.12**.
 **Also useful:** `tmux` (session persistence) · `codex` (Codex sessions) · `ffmpeg` (video rendering) ·
 `ollama` (local models). → what each one unlocks: [The CLIs it drives](guide/en/getting-started.html#cli-tools).
 

@@ -114,7 +114,7 @@ CI runs Linux and macOS on every PR, and Windows nightly. There are Windows-spec
 
 ### What do I need?
 
-- **Node.js 22.9+**
+- **Node.js 22.12+**
 - `claude` or `codex` on your `PATH`
 - optional: `tmux`, for session persistence
 
