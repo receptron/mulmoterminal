@@ -2,8 +2,8 @@
 import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useShortcuts } from "../../composables/useShortcuts";
-import { toolbarPinKeys, saveToolbarPins } from "../../composables/toolbarPins";
-import { MAX_TOOLBAR_PINS, toolbarPinKey, toggleToolbarPin } from "../../../common/toolbarPins";
+import { toolbarPinKeys, promoteToolbarPin } from "../../composables/toolbarPins";
+import { MAX_TOOLBAR_PINS, toolbarPinKey } from "../../../common/toolbarPins";
 import type { Shortcut } from "../../../common/shortcuts";
 
 // Which of the pinned favourites get a permanent button on the toolbar (#1984). A checklist rather
@@ -12,8 +12,14 @@ import type { Shortcut } from "../../../common/shortcuts";
 const { t } = useI18n();
 const { shortcuts } = useShortcuts();
 
-const promoted = (pin: Shortcut): boolean => toolbarPinKeys.value.includes(toolbarPinKey(pin));
-const full = computed(() => toolbarPinKeys.value.length >= MAX_TOOLBAR_PINS);
+const live = computed(() => shortcuts.value.map(toolbarPinKey));
+// What is promoted AND still exists. The cap is counted on this rather than on the stored list: a
+// key whose pin was removed is not offered here, so counting it would fill the five slots with
+// rows the user cannot see to untick and lock the section (Codex, PR #1991). Such a key is dropped
+// by the next save — `nextToolbarPins` prunes what `live` no longer holds.
+const promotedKeys = computed(() => toolbarPinKeys.value.filter((key) => live.value.includes(key)));
+const promoted = (pin: Shortcut): boolean => promotedKeys.value.includes(toolbarPinKey(pin));
+const full = computed(() => promotedKeys.value.length >= MAX_TOOLBAR_PINS);
 
 // The browser has already flipped the box by the time this runs, and neither a refused save nor a
 // change the cap declined moves the stored list — so the box is put back where the list says,
@@ -21,8 +27,7 @@ const full = computed(() => toolbarPinKeys.value.length >= MAX_TOOLBAR_PINS);
 async function onToggle(e: Event, pin: Shortcut): Promise<void> {
   if (!(e.target instanceof HTMLInputElement)) return;
   const input = e.target;
-  const next = toggleToolbarPin(toolbarPinKeys.value, toolbarPinKey(pin), input.checked);
-  if (next === toolbarPinKeys.value || !(await saveToolbarPins(next))) input.checked = promoted(pin);
+  if (!(await promoteToolbarPin(toolbarPinKey(pin), input.checked, live.value))) input.checked = promoted(pin);
 }
 </script>
 

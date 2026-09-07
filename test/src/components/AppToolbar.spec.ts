@@ -218,7 +218,7 @@ describe("AppToolbar view-switch grouping", () => {
 describe("AppToolbar pinned collections", () => {
   const works: Shortcut = { kind: "collection", slug: "works", title: "Work log", icon: "task" };
   const news: Shortcut = { kind: "feed", slug: "news", title: "News", icon: "rss_feed" };
-  const pinGroup = (wrapper: ReturnType<typeof mount>) => wrapper.find("nav[aria-label='Views'] [role='group'][aria-label='Pinned collections']");
+  const pinGroup = (wrapper: ReturnType<typeof mount>) => wrapper.find("nav[aria-label='Views'] [role='group'][aria-label='Pinned collections and feeds']");
 
   beforeEach(() => {
     pinned.current = [works, news];

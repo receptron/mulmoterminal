@@ -308,6 +308,18 @@ describe("ToolbarPinsSection", () => {
     expect(posts).toEqual([{ toolbarPins: ["collection:todos"] }]);
   });
 
+  // Codex on #1991: each save used to build its list from the last CONFIRMED one, so two boxes
+  // ticked before the first response landed both started from [] and the second write dropped the
+  // first. The mutation is queued and re-resolved when it runs, so both survive.
+  it("keeps both when two boxes are ticked before the first save lands", async () => {
+    const wrapper = mount(ToolbarPinsSection);
+    const boxes = wrapper.findAll("input[type=checkbox]");
+    await Promise.all([boxes[0].setValue(true), boxes[1].setValue(true)]);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:works"] }, { toolbarPins: ["collection:works", "collection:todos"] }]);
+    expect(toolbarPinKeys.value).toEqual(["collection:works", "collection:todos"]);
+  });
+
   // At the cap the box cannot be ticked at all, so the refusal is visible rather than a silent
   // no-op the user reads as a failed save.
   it("disables what it cannot promote once the cap is full", async () => {
@@ -319,6 +331,17 @@ describe("ToolbarPinsSection", () => {
     expect(boxes[MAX_TOOLBAR_PINS].attributes("disabled")).toBeDefined();
     // ...while the promoted ones stay enabled: being at the cap is what makes removing one useful.
     expect(boxes[0].attributes("disabled")).toBeUndefined();
+  });
+
+  // Codex on #1991: keys whose pins are gone are not offered here, so counting them toward the cap
+  // would lock the section with nothing on screen to untick — and the first save clears them out.
+  it("does not let vanished pins fill the cap", async () => {
+    setToolbarPins(Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`));
+    const wrapper = mount(ToolbarPinsSection);
+    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:works"] }]);
   });
 
   // A refused save must not leave the screen showing a state the host never took.

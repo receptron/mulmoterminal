@@ -61,15 +61,31 @@ export function resolveToolbarPins(shortcuts: readonly Shortcut[], keys: readonl
   });
 }
 
-/** Promote or demote one pin, returning the list to save.
+/** The list to save after promoting or demoting one pin.
+ *
+ *  `live` is what is pinned RIGHT NOW (`toolbarPinKey` of each favourite). Keys outside it are
+ *  dropped from the result, which is what keeps a key whose pin was removed — here or in
+ *  MulmoClaude — from occupying a slot the toolbar cannot draw. That matters because such a key is
+ *  invisible: it is not in the list Settings offers, so five of them would fill the cap with
+ *  nothing on screen to untick (Codex, PR #1991). The pruning rides on a save the user asked for
+ *  rather than happening on load, so a routine visit never rewrites the config.
+ *
+ *  An EMPTY `live` prunes nothing: "no favourites exist" and "the favourites have not loaded" look
+ *  identical from here, and the second must not be written back as a deletion — the rule
+ *  `reconcileShortcuts` states for the shared file, applied to this one.
  *
  *  Existing entries keep their positions and a newly promoted one goes to the END, so a user who
  *  hand-ordered the config does not have it reshuffled by ticking one more box. Returns the SAME
- *  array when nothing would change — including a promotion refused because the cap is full, which
- *  is what the UI disables the box for. */
-export function toggleToolbarPin(keys: readonly string[], key: string, promote: boolean): readonly string[] {
-  const held = keys.includes(key);
-  if (!promote) return held ? keys.filter((entry) => entry !== key) : keys;
-  if (held || keys.length >= MAX_TOOLBAR_PINS) return keys;
-  return [...keys, key];
+ *  array when nothing would change — including a promotion refused because the cap is full. */
+export function nextToolbarPins(keys: readonly string[], live: readonly string[], key: string, promote: boolean): readonly string[] {
+  const kept = live.length ? keys.filter((entry) => live.includes(entry)) : [...keys];
+  const held = kept.includes(key);
+  const promoted = held || kept.length >= MAX_TOOLBAR_PINS ? kept : [...kept, key];
+  const next = promote ? promoted : kept.filter((entry) => entry !== key);
+  return sameKeys(next, keys) ? keys : next;
 }
+
+/** Same keys in the same order — what "nothing to save" means for a list whose ORDER is what it
+ *  says. Answered by value rather than by reference so the caller can skip the write. */
+const sameKeys = (left: readonly string[], right: readonly string[]): boolean =>
+  left.length === right.length && left.every((entry, index) => entry === right[index]);

@@ -181,7 +181,7 @@ function showRooms(): void {
         v-if="pins.length"
         class="mr-1.5 inline-flex flex-none items-center gap-[3px] border-r border-border pr-2.5"
         role="group"
-        aria-label="Pinned collections"
+        aria-label="Pinned collections and feeds"
       >
         <LauncherButton
           v-for="pin in pins"

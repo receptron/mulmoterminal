@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { MAX_TOOLBAR_PINS, toolbarPinKey, sanitizeToolbarPins, resolveToolbarPins, toggleToolbarPin } from "../../common/toolbarPins";
+import { MAX_TOOLBAR_PINS, toolbarPinKey, sanitizeToolbarPins, resolveToolbarPins, nextToolbarPins } from "../../common/toolbarPins";
 import type { Shortcut } from "../../common/shortcuts";
 
 const pin = (slug: string, kind: Shortcut["kind"] = "collection"): Shortcut => ({ kind, slug, title: slug, icon: "task" });
@@ -70,30 +70,59 @@ describe("resolveToolbarPins", () => {
   });
 });
 
-describe("toggleToolbarPin", () => {
+describe("nextToolbarPins", () => {
+  const live = ["collection:a", "collection:b", "collection:c"];
+
   it("appends a newly promoted pin, leaving the existing order alone", () => {
-    expect(toggleToolbarPin(["collection:b", "collection:a"], "collection:c", true)).toEqual(["collection:b", "collection:a", "collection:c"]);
+    expect(nextToolbarPins(["collection:b", "collection:a"], live, "collection:c", true)).toEqual(["collection:b", "collection:a", "collection:c"]);
   });
 
   it("removes a demoted one", () => {
-    expect(toggleToolbarPin(["collection:a", "collection:b"], "collection:a", false)).toEqual(["collection:b"]);
+    expect(nextToolbarPins(["collection:a", "collection:b"], live, "collection:a", false)).toEqual(["collection:b"]);
   });
 
   // Same reference means "nothing to save" — the caller skips the write and puts the checkbox back.
   it("returns the same list when nothing would change", () => {
     const keys = ["collection:a"];
-    expect(toggleToolbarPin(keys, "collection:a", true)).toBe(keys);
-    expect(toggleToolbarPin(keys, "collection:b", false)).toBe(keys);
+    expect(nextToolbarPins(keys, live, "collection:a", true)).toBe(keys);
+    expect(nextToolbarPins(keys, live, "collection:b", false)).toBe(keys);
   });
 
   it("refuses to promote past the cap", () => {
     const full = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:c${i}`);
-    expect(toggleToolbarPin(full, "collection:extra", true)).toBe(full);
+    expect(nextToolbarPins(full, full, "collection:extra", true)).toBe(full);
   });
 
   it("still demotes when the list is full", () => {
     const full = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:c${i}`);
-    expect(toggleToolbarPin(full, "collection:c0", false)).toEqual(full.slice(1));
+    expect(nextToolbarPins(full, full, "collection:c0", false)).toEqual(full.slice(1));
+  });
+
+  // Codex on #1991: a promoted key whose pin was removed — here or in MulmoClaude, which writes the
+  // same file — is invisible in Settings, so five of them would fill the cap with nothing to untick.
+  it("drops a promoted key whose pin no longer exists", () => {
+    expect(nextToolbarPins(["collection:gone", "collection:a"], live, "collection:b", true)).toEqual(["collection:a", "collection:b"]);
+  });
+
+  it("frees the slot a vanished pin was holding, so a full list can still take one", () => {
+    const stale = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`);
+    expect(nextToolbarPins(stale, live, "collection:a", true)).toEqual(["collection:a"]);
+  });
+
+  it("prunes on a demotion too, and reports the prune as a change worth saving", () => {
+    const keys = ["collection:gone", "collection:a"];
+    expect(nextToolbarPins(keys, live, "collection:a", false)).toEqual([]);
+    // ...and a demotion of something not held still saves, because the prune itself is the change.
+    expect(nextToolbarPins(keys, live, "collection:b", false)).toEqual(["collection:a"]);
+  });
+
+  // "No favourites exist" and "the favourites have not loaded" look identical from here, and
+  // writing the second back would delete the user's promotions — the rule reconcileShortcuts states
+  // for the shared file.
+  it("prunes nothing when the live list is empty", () => {
+    const keys = ["collection:a", "collection:gone"];
+    expect(nextToolbarPins(keys, [], "collection:a", false)).toEqual(["collection:gone"]);
+    expect(nextToolbarPins(keys, [], "collection:b", false)).toBe(keys);
   });
 });
 

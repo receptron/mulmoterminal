@@ -344,5 +344,6 @@ Which of the pinned favourites get a permanent button in the toolbar, beside **G
 - It promotes; it does not pin. An entry must already be PINNED (the star in Collections, stored in
   `<workspace>/config/shortcuts.json`, shared with MulmoClaude) — the button's name and icon are
   read from the pin, so renaming a collection renames the button. A key whose pin is gone draws
-  nothing and is simply ignored, so re-pinning it brings the button back.
+  nothing, does not hold one of the five slots, and is dropped from the file by the next tick in
+  Settings — re-pinning it before that brings the button back.
 - Also in Settings, under **Toolbar pins**, which lists what is pinned and takes a tick per entry.

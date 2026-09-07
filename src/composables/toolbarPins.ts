@@ -1,5 +1,5 @@
 import { computed, ref, type ComputedRef } from "vue";
-import { sanitizeToolbarPins } from "../../common/toolbarPins";
+import { nextToolbarPins, sanitizeToolbarPins } from "../../common/toolbarPins";
 import { postConfigField } from "./postConfigField";
 
 // Which pinned favourites the toolbar carries (#1984), hydrated from /api/config.
@@ -16,9 +16,33 @@ export const setToolbarPins = (input: unknown): void => {
   keys.value = sanitizeToolbarPins(input);
 };
 
-/** The whole list goes each time — the server replaces this key rather than merging into it. */
-export async function saveToolbarPins(next: readonly string[]): Promise<boolean> {
-  const r = await postConfigField("toolbarPins", [...next]);
-  if (r.ok) setToolbarPins(r.value);
-  return r.ok;
+// Mutations are SERIALIZED, and each one is expressed as an INTENT (this key, on or off) that is
+// resolved against the stored list at the moment it runs — the shape `useShortcuts` uses for the
+// same reason. The field is replaced whole by a partial POST, so two boxes ticked in quick
+// succession would otherwise both build their list from the last CONFIRMED one and the second
+// write would drop the first (Codex, PR #1991).
+let chain: Promise<unknown> = Promise.resolve();
+
+/** Promote (`promote`) or demote one pin, and persist the result.
+ *
+ *  `live` is what is pinned right now — the caller has it, this store does not. It is what lets a
+ *  key whose pin is gone be dropped instead of holding a slot forever; an empty `live` prunes
+ *  nothing (see `nextToolbarPins`).
+ *
+ *  False means NOTHING WAS SAVED: the request failed, or the change was refused (already there,
+ *  or the cap is full). Either way the caller should show what the store says rather than what the
+ *  user just clicked. */
+export function promoteToolbarPin(key: string, promote: boolean, live: readonly string[]): Promise<boolean> {
+  const run = chain.then(async () => {
+    const next = nextToolbarPins(keys.value, live, key, promote);
+    if (next === keys.value) return false;
+    const r = await postConfigField("toolbarPins", [...next]);
+    if (r.ok) setToolbarPins(r.value);
+    return r.ok;
+  });
+  chain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
 }

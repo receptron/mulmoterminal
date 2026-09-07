@@ -1425,6 +1425,9 @@ Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
 - **It promotes; it does not pin.** An entry has to be pinned already: the button's name and icon
   are read from the pin, so renaming the collection renames the button, and nothing here can go
   stale. A key whose pin has been removed simply draws nothing — re-pin it and the button is back.
+- A key like that does **not** hold one of the five slots, and the next tick in **Settings → Toolbar
+  pins** drops it from the file. So unpinning something you had promoted costs you nothing, and
+  re-promoting it later is one tick.
 - The pinned row at the top of the Collections overlay is unchanged, and still lists **all** of
   them. This is a second, shorter list on top of it.
 - Five is the cap because the toolbar already carries the view switch, the grid's own controls, the
