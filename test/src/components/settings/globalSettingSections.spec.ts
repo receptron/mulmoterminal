@@ -5,7 +5,7 @@ import SessionSection from "../../../../src/components/settings/SessionSection.v
 import TerminalFontFamilySection from "../../../../src/components/settings/TerminalFontFamilySection.vue";
 import ModelsSection from "../../../../src/components/settings/ModelsSection.vue";
 import ToolbarPinsSection from "../../../../src/components/settings/ToolbarPinsSection.vue";
-import { setToolbarPins, toolbarPinKeys } from "../../../../src/composables/toolbarPins";
+import { setToolbarPins, toolbarPinKeys, toolbarPinsMark } from "../../../../src/composables/toolbarPins";
 import { MAX_TOOLBAR_PINS } from "../../../../common/toolbarPins";
 import type { Shortcut } from "../../../../common/shortcuts";
 import { setIssueWorkComments } from "../../../../src/composables/issueWorkComments";
@@ -35,12 +35,14 @@ const pinned = vi.hoisted(
     refreshes: number;
     gate: Promise<void> | null;
     landed: boolean;
+    throws: boolean;
   } => ({
     setList: () => {},
     setError: () => {},
     refreshes: 0,
     gate: null,
     landed: true,
+    throws: false,
   }),
 );
 vi.mock("../../../../src/composables/useShortcuts", async () => {
@@ -53,6 +55,7 @@ vi.mock("../../../../src/composables/useShortcuts", async () => {
     if (!force) return true;
     pinned.refreshes += 1;
     if (pinned.gate) await pinned.gate;
+    if (pinned.throws) throw new Error("boom");
     return pinned.landed;
   };
   return { useShortcuts: () => ({ shortcuts: computed(() => list.value), loadError: computed(() => error.value), load }) };
@@ -321,6 +324,7 @@ describe("ToolbarPinsSection", () => {
     pinned.refreshes = 0;
     pinned.gate = null;
     pinned.landed = true;
+    pinned.throws = false;
     setToolbarPins([]);
   });
 
@@ -441,6 +445,36 @@ describe("ToolbarPinsSection", () => {
     await toggleAt(wrapper, 0, true);
     await flushPromises();
     expect(posts).toEqual([]);
+    expect(toolbarPinKeys.value).toEqual(["collection:todos"]);
+  });
+
+  // Fails CLOSED: the read is documented to answer rather than throw, but if it ever did, the pane
+  // must land in the same read-only state as a failed read rather than leave a rejection loose in a
+  // DOM handler.
+  it("stays read-only if the re-read throws", async () => {
+    pinned.throws = true;
+    const wrapper = await openPane();
+    for (const box of wrapper.findAll("input[type=checkbox]")) expect(box.attributes("disabled")).toBeDefined();
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([]);
+  });
+
+  // CodeRabbit on #1991: `loadConfig` RETRIES, so a /api/config read can still be in flight when a
+  // tick here saves. Its answer carries the list as it was, and hydrating that puts the promotion
+  // back the way it was — after which the next toggle persists the reverted list for good.
+  it("ignores a config read that started before a save landed", async () => {
+    const mark = toolbarPinsMark(); // what a read in flight would be holding
+    const wrapper = await openPane();
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(toolbarPinKeys.value).toEqual(["collection:works"]);
+
+    setToolbarPins([], mark); // ...the older answer arrives now
+    expect(toolbarPinKeys.value).toEqual(["collection:works"]);
+
+    // ...while an answer from after the save is still adopted, so the config stays the authority.
+    setToolbarPins(["collection:todos"], toolbarPinsMark());
     expect(toolbarPinKeys.value).toEqual(["collection:todos"]);
   });
 

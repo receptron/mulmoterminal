@@ -23,7 +23,7 @@ import { setCopyOnSelect } from "./copyOnSelect";
 import { setQuestionPaneEnabled } from "./questionPane";
 import { setIssueWorkComments } from "./issueWorkComments";
 import { setShowLoadAverage } from "./showLoadAverage";
-import { setToolbarPins } from "./toolbarPins";
+import { setToolbarPins, toolbarPinsMark } from "./toolbarPins";
 import { setPrWorkdirFooter } from "./prWorkdirFooter";
 import { setAppendSystemPrompt } from "./appendSystemPrompt";
 import { setDecisionDigest } from "./decisionDigest";
@@ -432,7 +432,7 @@ async function saveGitlabHosts(next: string[]): Promise<boolean> {
 // The settings that are PUSHED into other modules rather than held as refs here. Grouped for the
 // same reason as adoptSoundConfig: loadConfig should read as what the config decides, not as the
 // plumbing for each decision.
-function applyGlobalSettings(c: Record<string, unknown>): void {
+function applyGlobalSettings(c: Record<string, unknown>, pinsMark: number): void {
   // The Enter-key submit/newline byte mapping, so every terminal's key handler honours it.
   // Unset falls back to the standard binding.
   setTerminalSubmitMode(isTerminalSubmitMode(c.terminalSubmit) ? c.terminalSubmit : DEFAULT_TERMINAL_SUBMIT_MODE);
@@ -447,8 +447,9 @@ function applyGlobalSettings(c: Record<string, unknown>): void {
   setIssueWorkComments(c.issueWorkComments);
   // Whether the grid header carries this machine's load average (#1786). On unless opted out.
   setShowLoadAverage(c.showLoadAverage);
-  // Which pinned favourites the toolbar carries (#1984). Absent, it carries none.
-  setToolbarPins(c.toolbarPins);
+  // Which pinned favourites the toolbar carries (#1984). Absent, it carries none. The mark is what
+  // stops a read that started before a save from putting the old list back — see toolbarPins.ts.
+  setToolbarPins(c.toolbarPins, pinsMark);
   // How far the cockpit roster clamps each line. Absent `cockpitLines` keeps 2/2/3.
   setCockpitLines(c.cockpitLines);
   // What a header shows once a status replaces the directory's colour (#1617). The default for
@@ -587,6 +588,9 @@ type ConfigRead = (attempt: ReadAttempt) => Promise<boolean>;
 function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, migrateLegacyRecents }: ConfigReaderDeps): ConfigRead {
   return async function readConfig({ signal, stale }: ReadAttempt): Promise<boolean> {
     const version = snapshotVersion();
+    // Taken BEFORE the request, like `version` above and for a sibling reason: this answer must not
+    // undo a toolbar-pin save that lands while it is in flight (CodeRabbit, PR #1991).
+    const pinsMark = toolbarPinsMark();
     let res: Response;
     try {
       res = await fetchWithTimeout("/api/config", { signal });
@@ -613,7 +617,7 @@ function createConfigReader({ defaultCwd, snapshotVersion, adoptServerPresets, m
       pushKinds.value = listOf(c.pushKinds, isPushKind);
       adoptRepoConfig(c);
       adoptListConfig(c);
-      applyGlobalSettings(c);
+      applyGlobalSettings(c, pinsMark);
       adoptServerSideSettings(c);
       await migrateLegacyRecents();
     } catch {

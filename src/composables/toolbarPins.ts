@@ -12,7 +12,21 @@ const keys = ref<string[]>([]);
 
 export const toolbarPinKeys: ComputedRef<string[]> = computed(() => keys.value);
 
-export const setToolbarPins = (input: unknown): void => {
+// How many saves this page has landed. A config GET that started BEFORE one of them answers with
+// the list as it was, and hydrating that would put the promotions the user just made back the way
+// they were — after which the next toggle persists the reverted list and the change is gone for
+// good (CodeRabbit, PR #1991). The reader takes this mark when its request starts and hands it back
+// with the answer; an answer from before a save is dropped rather than applied.
+//
+// Reachable because `loadConfig` RETRIES: the first read is long finished by the time a Settings
+// pane opens, but a retry after a failed one is not.
+let saves = 0;
+
+/** Take before starting a read of /api/config, hand back to `setToolbarPins`. */
+export const toolbarPinsMark = (): number => saves;
+
+export const setToolbarPins = (input: unknown, mark?: number): void => {
+  if (mark !== undefined && mark !== saves) return;
   keys.value = sanitizeToolbarPins(input);
 };
 
@@ -37,8 +51,10 @@ export function promoteToolbarPin(key: string, promote: boolean, live: readonly 
     const next = nextToolbarPins(keys.value, live, key, promote);
     if (next === keys.value) return false;
     const r = await postConfigField("toolbarPins", [...next]);
-    if (r.ok) setToolbarPins(r.value);
-    return r.ok;
+    if (!r.ok) return false;
+    saves += 1; // ...before adopting, so a read already in flight cannot undo this
+    setToolbarPins(r.value);
+    return true;
   });
   chain = run.then(
     () => undefined,

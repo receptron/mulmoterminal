@@ -42,7 +42,7 @@ it**:
 | Group | Buttons |
 |---|---|
 | **Switch view** (left of the rule) | **Grid** and **Collections** — the two places to be |
-| Pinned collections (left of the rule, its own group) | The favourites you promoted to the toolbar — one press each, from either view. Nothing shows until you promote one (→ [A favourite you open all day](config.html#toolbar-pins)) |
+| Pinned collections and feeds (left of the rule, its own group) | The favourites you promoted to the toolbar — one press each, from either view. Nothing shows until you promote one (→ [A favourite you open all day](config.html#toolbar-pins)) |
 | Inside Collections | **Feeds**, **Wiki**, **Accounting**, **Files** appear once you are in the content section |
 | Inside the grid | **Pull requests**, **Worklog**, **New terminal**, cell ordering, the status tally |
 | Always | sound, roster / filmstrip, **Settings** |

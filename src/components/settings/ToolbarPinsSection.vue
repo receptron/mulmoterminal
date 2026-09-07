@@ -27,10 +27,12 @@ const { shortcuts, loadError, load } = useShortcuts();
 // enforces it rather than trusting them.
 const refreshing = ref(true);
 const unconfirmed = ref(false);
-const refreshed = load(true).then((landed) => {
-  unconfirmed.value = !landed;
-  refreshing.value = false;
-});
+const refreshed = load(true)
+  .catch(() => false) // it answers rather than throws, but a rejection here must not reach a DOM handler
+  .then((landed) => {
+    unconfirmed.value = !landed;
+    refreshing.value = false;
+  });
 const readOnly = computed(() => refreshing.value || unconfirmed.value);
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
