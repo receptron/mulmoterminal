@@ -36,13 +36,26 @@ describe("filesRowActions — the Canvas entry", () => {
     expect(ids({ ...inProject, pathRel: "src/index.ts" })).toEqual(["insert-relative", "insert-absolute"]);
   });
 
-  // A story opens only from the WORKSPACE's stories directory: the plugin resolves `stories/…`
-  // against that one root, so a project's own copy is a different file it would not read
-  // (receptron/mulmoclaude#3014).
-  it("offers it on a story in the workspace, and not on one inside a project", () => {
+  // A story in the WORKSPACE's own stories directory travels as `stories/…`; a project's own copy
+  // of that path is a DIFFERENT file, which the plugin would not read under that spelling
+  // (receptron/mulmoclaude#3014). Since #1976 it is still offered — by its absolute path, which
+  // names the file the row actually points at — so the rule is about which spelling is minted, not
+  // about whether the entry appears.
+  it("offers it on a story in the workspace and on a project's own copy alike", () => {
     const inWorkspace = { cwd: WORKSPACE, terminal: { cwd: WORKSPACE }, canvas: { roots: { workspaces: [WORKSPACE], roots: [] } } };
     expect(ids({ ...inWorkspace, pathRel: "artifacts/stories/deck.json" })[0]).toBe("open-canvas");
-    expect(ids({ ...inProject, pathRel: "artifacts/stories/deck.json" })).toEqual(["insert-relative", "insert-absolute"]);
+    expect(ids({ ...inProject, pathRel: "artifacts/stories/deck.json" })[0]).toBe("open-canvas");
+  });
+
+  // #1976: the deck that has no root at all — the reason the entry was missing in the first place.
+  it("offers it on a deck outside every registered root", () => {
+    expect(ids({ ...inProject, pathRel: "decks/keynote.json" })[0]).toBe("open-canvas");
+  });
+
+  // The tree with no root behind it: the row alone is not a path anything can resolve, so nothing
+  // is offered at all — the module's first rule, and the absolute form does not get around it.
+  it("still offers nothing when the tree has no root", () => {
+    expect(ids({ ...inProject, cwd: null, pathRel: "decks/keynote.json" })).toEqual([]);
   });
 
   // The full-screen Files view mounts the same pane with no cell to put a Canvas beside.
