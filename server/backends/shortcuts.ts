@@ -24,20 +24,37 @@ const KINDS = new Set<string>(SHORTCUT_KINDS);
 // entry below can be built without asserting the kind it just checked.
 const isShortcutKind = (value: string): value is ShortcutKind => KINDS.has(value);
 
+// The fields this build understands. Everything else in a stored record is carried through
+// untouched (see `toShortcut`), so this list decides what gets VALIDATED — not what may exist.
+const KNOWN_SHORTCUT_KEYS: readonly (keyof Shortcut)[] = ["kind", "slug", "title", "icon", "color"];
+
 /** What ONE stored record has to be to survive: a known kind and a non-empty slug, with the label
  *  and glyph defaulted. Split out of the loop below so each concern reads on its own — the same
  *  split, and the same name, MulmoClaude gives it in `shortcuts-io.ts`.
  *
- *  It REBUILDS the record, which is why every field the file may carry has to be listed here: one
- *  left out is not passed through, it is deleted — from the copy served to the browser AND from the
- *  file the next write puts back. `color` was missing for exactly that reason (#1993), so every
- *  pin/unpin in this app wiped the colours MulmoClaude had stored in the shared file. */
+ *  KEYS THIS BUILD DOES NOT KNOW ARE KEPT (#1996). The file is shared with MulmoClaude and both
+ *  apps rebuild every record they write, so a field only one of them names is deleted by the other
+ *  — silently, and visibly only to someone looking at the app that lost it. `color` was exactly
+ *  that (#1993). Naming each new field in both apps is a rule someone has to remember; carrying the
+ *  rest through is the same answer `serializableAppConfig` gives for the global config (#966),
+ *  where the file is likewise the union of every version that shares it.
+ *
+ *  Carried, NOT merged: what is written back is what was read, so a field the OTHER app has just
+ *  removed stays removed rather than being resurrected by this one.
+ *
+ *  Built with `Object.fromEntries` rather than by assignment, for the reason #966 records: a key
+ *  named `__proto__` is a setter on Object.prototype, so assigning it re-parents the object and
+ *  drops the key from the JSON entirely. `fromEntries` defines an own property, leaving it as data.
+ *
+ *  The known fields are applied LAST, so a validated value always beats whatever the file held. */
 function toShortcut(raw: unknown): Shortcut | null {
   if (!isRecord(raw)) return null;
   const { kind, slug, title, icon, color } = raw;
   if (typeof kind !== "string" || !isShortcutKind(kind)) return null;
   if (typeof slug !== "string" || slug.length === 0) return null;
+  const carried: Record<string, unknown> = Object.fromEntries(Object.entries(raw).filter(([key]) => !KNOWN_SHORTCUT_KEYS.some((known) => known === key)));
   return {
+    ...carried,
     kind,
     slug,
     title: typeof title === "string" ? title : slug,
