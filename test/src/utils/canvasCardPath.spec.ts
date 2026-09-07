@@ -61,8 +61,12 @@ describe("canonicalCardPath", () => {
     expect(canonicalCardPath("/Users/me//w/./decks/x.json", null, dirs)).toBe("/Users/me/w/decks/x.json");
   });
 
+  // On a WINDOWS server, where such a path names a file. Both separators fold, so the mixed
+  // spelling `absoluteUnder` produces there keys the same as the backslashed one.
   it("keys a Windows path onto the separator the rest of the app compares with", () => {
-    expect(canonicalCardPath("C:\\Users\\me\\decks\\x.json", null, dirs)).toBe("C:/Users/me/decks/x.json");
+    const onWindows: StoryRootDirs = { workspace: "C:/Users/me/w", byId: {} };
+    expect(canonicalCardPath("C:\\Users\\me\\decks\\x.json", null, onWindows)).toBe("C:/Users/me/decks/x.json");
+    expect(canonicalCardPath("C:\\Users\\me/decks/x.json", null, onWindows)).toBe("C:/Users/me/decks/x.json");
   });
 
   // Folded rather than refused: this value opens nothing (the server resolves and realpath-checks
@@ -90,8 +94,12 @@ describe("canonicalCardPath", () => {
   // spelling and the browser cannot infer it — so it is left to the caller's legacy identity
   // rather than keyed into something a drive-qualified card would not match (Codex P2 on #1976).
   it("says nothing for a path whose drive is unknown", () => {
+    const onWindows: StoryRootDirs = { workspace: "C:/Users/me/w", byId: {} };
+    expect(canonicalCardPath("\\decks\\x.json", null, onWindows)).toBeNull();
+    expect(canonicalCardPath("C:\\decks\\x.json", null, onWindows)).toBe("C:/decks/x.json");
+    // …and on a POSIX server neither spelling names anything at all.
     expect(canonicalCardPath("\\decks\\x.json", null, dirs)).toBeNull();
-    expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBe("C:/decks/x.json");
+    expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBeNull();
   });
 
   // The rule both Windows findings on #1976 are instances of: a path that leans on the server's
@@ -122,6 +130,39 @@ describe("canonicalCardPath", () => {
     expect(canonicalCardPath("//server/share/project/decks/x.json", null, onShare)).toBe("//server/share/project/decks/x.json");
     expect(canonicalCardPath("C:\\decks\\x.json", null, onShare)).toBe("C:/decks/x.json");
     expect(canonicalCardPath("stories/decks/x.json", "W", onShare)).toBe("//server/share/project/decks/x.json");
+  });
+
+  // A leading RUN of slashes is one root on POSIX — measured: `realpath("//tmp/x")` is `/tmp/x` —
+  // while `dirPathKey` reads the first as a UNC share, which would give one file two cards
+  // (Codex, re-review of the same head). Collapsed here rather than in the key: on a Windows host
+  // `//server/share` really is a different place.
+  it("folds a POSIX path's leading slash run, which names one file", () => {
+    expect(canonicalCardPath("//Users/me/decks/x.json", null, dirs)).toBe("/Users/me/decks/x.json");
+    expect(canonicalCardPath("///Users/me/decks/x.json", null, dirs)).toBe("/Users/me/decks/x.json");
+    expect(canonicalCardPath("//Users/me/decks/x.json", null, dirs)).toBe(canonicalCardPath("/Users/me/decks/x.json", null, dirs));
+  });
+
+  // …and the same spelling on a Windows host is a share, which is a place of its own.
+  it("keeps a UNC share as a share on a Windows host", () => {
+    const onWindows: StoryRootDirs = { workspace: "C:/Users/me/w", byId: { W: "C:/Users/me/w" } };
+    expect(canonicalCardPath("//server/share/x.json", null, onWindows)).toBe("//server/share/x.json");
+  });
+
+  // The mirror of the drive-less case: a Windows spelling names no file on a POSIX server, so it
+  // keeps its legacy identity instead of being keyed as though it did.
+  it("says nothing for a Windows spelling when the server is a POSIX one", () => {
+    expect(canonicalCardPath("C:\\decks\\x.json", null, dirs)).toBeNull();
+    expect(canonicalCardPath("\\\\server\\share\\x.json", null, dirs)).toBeNull();
+  });
+
+  // A workspace AT a filesystem root builds `//artifacts/stories/…` when the default root's base is
+  // joined — a doubled leading slash, which `dirPathKey` reads as a UNC share. Both branches key by
+  // one rule so that card is the same card as the absolute one for the same file.
+  it("resolves the default root under a workspace that is the filesystem root", () => {
+    const atRoot: StoryRootDirs = { workspace: "/", byId: { W: "/" } };
+    expect(canonicalCardPath("stories/x.json", null, atRoot)).toBe("/artifacts/stories/x.json");
+    expect(canonicalCardPath("stories/x.json", null, atRoot)).toBe(canonicalCardPath("/artifacts/stories/x.json", null, atRoot));
+    expect(canonicalCardPath("stories/decks/x.json", "W", atRoot)).toBe("/decks/x.json");
   });
 
   // The server's spelling is read from whichever root is there — a card can arrive before the
