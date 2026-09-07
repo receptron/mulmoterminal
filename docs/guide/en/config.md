@@ -1425,6 +1425,10 @@ Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
 - **It promotes; it does not pin.** An entry has to be pinned already: the button's name and icon
   are read from the pin, so renaming the collection renames the button, and nothing here can go
   stale. A key whose pin has been removed simply draws nothing — re-pin it and the button is back.
+- **Removing a pin in MulmoClaude does not take the button away at once.** This app reads the
+  shared pinned list once when the page loads, and again whenever you open **Settings → Toolbar
+  pins**; until one of those happens, the button is still there (and still works — unpinning does
+  not delete the collection).
 - A key like that does **not** hold one of the five slots, and the next tick in **Settings → Toolbar
   pins** drops it from the file. So unpinning something you had promoted costs you nothing, and
   re-promoting it later is one tick.

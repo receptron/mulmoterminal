@@ -10,7 +10,14 @@ import type { Shortcut } from "../../../common/shortcuts";
 // than an editor: the entries already exist — pinning is done in Collections, where the thing being
 // pinned is on screen — so the only question here is which few are worth the row's width.
 const { t } = useI18n();
-const { shortcuts, loadError } = useShortcuts();
+const { shortcuts, loadError, load } = useShortcuts();
+
+// FORCE a re-read on open. The store caches its first successful `/api/shortcuts` for the life of
+// the page, and the file is shared with MulmoClaude — so a session that has been open a while can
+// be holding a list that no longer matches the disk (Codex, PR #1991). Two things here depend on it
+// being current: what this pane offers, and the prune `nextToolbarPins` applies on save, which
+// judges "this pin is gone" from exactly this list. One request, when the user opens the pane.
+void load(true);
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
 // What is promoted AND still exists. The cap is counted on this rather than on the stored list: a

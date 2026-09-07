@@ -346,4 +346,7 @@ Which of the pinned favourites get a permanent button in the toolbar, beside **G
   read from the pin, so renaming a collection renames the button. A key whose pin is gone draws
   nothing, does not hold one of the five slots, and is dropped from the file by the next tick in
   Settings — re-pinning it before that brings the button back.
+- The shared pin list is read once per page load, and again when Settings' **Toolbar pins** opens.
+  So a pin removed in MulmoClaude leaves the button on the toolbar of an already-open session until
+  one of those happens; it is not a live feed.
 - Also in Settings, under **Toolbar pins**, which lists what is pinned and takes a tick per entry.

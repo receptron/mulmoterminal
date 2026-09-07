@@ -53,7 +53,11 @@ export function sanitizeToolbarPins(input: unknown): string[] {
  *  A key whose pin is gone — unpinned here, or in MulmoClaude, which writes the same file — is
  *  dropped rather than drawn: the title and icon come from the pin, so there is nothing to label
  *  it with. Drawing is all this decides: the key itself survives in the config until the next save
- *  clears it (`nextToolbarPins`), so re-pinning before then brings the button back. */
+ *  clears it (`nextToolbarPins`), so re-pinning before then brings the button back.
+ *
+ *  "Gone" means gone from the list the CALLER holds. The client store reads `/api/shortcuts` once
+ *  per page, so a pin removed by the other app is still drawn until something re-reads it — which
+ *  opening Settings' Toolbar pins does (Codex, PR #1991). */
 export function resolveToolbarPins(shortcuts: readonly Shortcut[], keys: readonly string[]): Shortcut[] {
   const byKey = new Map(shortcuts.map((shortcut) => [toolbarPinKey(shortcut), shortcut]));
   return keys.flatMap((key) => {

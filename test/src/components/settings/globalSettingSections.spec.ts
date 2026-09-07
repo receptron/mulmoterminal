@@ -24,10 +24,13 @@ import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOption
 
 // The pinned favourites the toolbar section lists (#1984) — stubbed, since the real store loads
 // them over /api/shortcuts and this file's fetch stub answers every request with the POST echo.
-const pinned = vi.hoisted((): { current: Shortcut[]; error: string | null } => ({ current: [], error: null }));
+const pinned = vi.hoisted((): { current: Shortcut[]; error: string | null; refreshes: number } => ({ current: [], error: null, refreshes: 0 }));
 vi.mock("../../../../src/composables/useShortcuts", async () => {
   const { computed } = await import("vue");
-  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current), loadError: computed(() => pinned.error) }) };
+  const load = async (force?: boolean): Promise<void> => {
+    if (force) pinned.refreshes += 1;
+  };
+  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current), loadError: computed(() => pinned.error), load }) };
 });
 
 // The POST bodies, in order. The echo answers with what was sent, which is what the server does.
@@ -281,6 +284,7 @@ describe("ToolbarPinsSection", () => {
   beforeEach(() => {
     pinned.current = [works, todos];
     pinned.error = null;
+    pinned.refreshes = 0;
     setToolbarPins([]);
   });
 
@@ -354,6 +358,14 @@ describe("ToolbarPinsSection", () => {
     expect(toolbarPinKeys.value).toEqual([]);
     const box = wrapper.findAll("input[type=checkbox]")[0];
     expect(box.element instanceof HTMLInputElement && box.element.checked).toBe(false);
+  });
+
+  // Codex on #1991: the store caches its first successful read for the life of the page, and the
+  // file is shared with MulmoClaude — so what this pane offers, and the prune it applies on save,
+  // would both judge from a list that can be hours old.
+  it("re-reads the pinned list when the pane opens", () => {
+    mount(ToolbarPinsSection);
+    expect(pinned.refreshes).toBe(1);
   });
 
   it("says what to do when nothing is pinned at all", () => {
