@@ -8,6 +8,74 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.16.1 — 2026-09-07
+
+> **Setup guide:** [4.16.1 — Node 22.12, and four fixes](https://receptron.github.io/mulmoterminal/guide/en/v4.16.1.html)
+
+### Node 22.12 is the floor, and now everything says so
+
+- **[#1982](https://github.com/receptron/mulmoterminal/pull/1982)** — `@google/genai` 2.21.0,
+  `material-symbols` 0.47.1 and `puppeteer` 25.10.0. puppeteer 25.10 declares `node >=22.12`, and it
+  is a **runtime** dependency here (PDF export, the shared-app headless preview), so `engines.node`
+  moved with it. `jsdom` 29 → 30 was left alone as a major needing its own evaluation.
+- **[#1987](https://github.com/receptron/mulmoterminal/pull/1987)** — the requirement moved and
+  nothing that tells a person moved with it. The README, both guides, `docs/facts.json` and the
+  `init` doctor's own gate all still said 22.9, so `npx mulmoterminal init` printed a tick for a
+  Node that npm would then refuse to install on. All of them now say 22.12. The interesting half is
+  why it happened: `package.json` had no test asserting anything about `bin/`, and
+  `cli-args.spec.ts` asserted the label against a constant it also owned — **both green while they
+  disagreed**. The spec now reads `engines.node` from the manifest and pins the doctor's label to
+  it, so the next engine bump goes red here instead of shipping.
+
+### A deck can be opened by absolute path
+
+- **[#1971](https://github.com/receptron/mulmoterminal/pull/1971)** — `presentMulmoScript` with a
+  full path returned `Invalid filePath`, so a deck kept in a repository, or written by another
+  tool, could only be opened by copying it into the workspace. `@mulmoclaude/mulmoscript-plugin`
+  4.6.0 supports absolute paths but **only when the host opts in**, so bumping the dependency alone
+  changes nothing; the wiring is the change. `server/backends/openPath.ts` gains
+  `mulmoScriptByPath`, built from the same `createByPathFileOps` as the markdown and HTML ones — so
+  the containment rules stay shared with `@mulmoclaude/core/files` and identical to MulmoClaude's.
+  The tool call and the View dispatch now build their execute context from the same place, because
+  passing `byPath` to only one of them would have made a file openable by an agent and not by the
+  View. **Relative `filePath` is unchanged** and still resolves under `artifacts/stories`, pinned by
+  a regression test that puts a same-named deck on both sides. The file tree's **Open in the Canvas**
+  gate stays in-root deliberately: an absolute-path card would give one deck two card identities and
+  split `canvasIdentity.ts`'s re-open aggregation.
+
+### Fixes
+
+- **[#1977](https://github.com/receptron/mulmoterminal/pull/1977)** — on a host with **no tmux**, a
+  reattach replayed the buffered tail into the normal buffer, so a Claude cell came back with the
+  same answer drawn several times over and interleaved ([#1972](https://github.com/receptron/mulmoterminal/issues/1972),
+  [#1773](https://github.com/receptron/mulmoterminal/issues/1773)). The mode-restoration prefix was
+  read out of tmux and `terminalModePrefix` was gated on `entry.tmux`, so with no tmux it went out
+  empty. A new `TerminalModeTracker` scans the PTY byte stream for DECSET/DECRST and records which
+  modes are on, carrying a partial escape sequence across chunk boundaries; `reattachPty` uses that
+  as the fallback, so the browser enters the alternate screen before the replay arrives.
+- **[#1978](https://github.com/receptron/mulmoterminal/pull/1978)** — the IME pre-edit box was a
+  **black rectangle on light themes** ([#1973](https://github.com/receptron/mulmoterminal/issues/1973)):
+  xterm.css paints `.xterm .composition-view` white-on-black and nothing overrode it. It now takes
+  `--term-fg`, `--bg-selected` and `--accent` from the active palette — `--bg-selected` rather than
+  `--term-selection` on purpose, so composing text stays distinguishable from a mouse selection.
+- **[#1981](https://github.com/receptron/mulmoterminal/pull/1981)** — clicking a file link in
+  terminal output while the Files pane was closed could open **the file the pane remembered**
+  instead ([#1979](https://github.com/receptron/mulmoterminal/issues/1979)). `restore()` and the
+  click were racing at startup; the restore now stands down when a file has already been requested,
+  using the same `fileReqId` counter `loadFile()` already resolves races with. Tree expansion still
+  runs unconditionally — only the file open is guarded.
+
+### Docs
+
+- **[#1975](https://github.com/receptron/mulmoterminal/pull/1975)** — the "Updates" line pointed
+  only at the Japanese account [@SingularitySoci](https://x.com/SingularitySoci). It now names
+  [@mulmocast](https://x.com/mulmocast) alongside it, so an English reader has a window that is
+  theirs, across the README, `docs/index.md` and both guide indexes
+  ([#1974](https://github.com/receptron/mulmoterminal/issues/1974)).
+
+- **[#1980](https://github.com/receptron/mulmoterminal/pull/1980)** — routine dependency refresh
+  (routing, security, build, lint and test packages).
+
 ## mulmoterminal@4.16.0 — 2026-09-03
 
 > **Setup guide:** [4.16.0 — Decks in an ordinary repository](https://receptron.github.io/mulmoterminal/guide/en/v4.16.0.html)

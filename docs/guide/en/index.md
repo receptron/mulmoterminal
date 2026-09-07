@@ -8,10 +8,10 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.16.0 is out.** A mulmoScript **deck kept in any repository your launcher knows about** can now
-> be opened in the Canvas — not just one under the workspace — and the Tools pane finally says how to
-> turn a tool group on instead of just reporting that none are — [what changed and what it asks of
-> you](v4.16.0.html).
+> **4.16.1 is out.** It needs **Node 22.12** — check yours before you upgrade. Reconnecting on a
+> host without tmux no longer redraws the same answer several times, the IME box follows your theme
+> instead of being a black rectangle, and the Files pane opens the file you clicked — [what changed
+> and what it asks of you](v4.16.1.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching
