@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { useShortcuts } from "../../composables/useShortcuts";
 import { toolbarPinKeys, promoteToolbarPin } from "../../composables/toolbarPins";
@@ -17,7 +17,13 @@ const { shortcuts, loadError, load } = useShortcuts();
 // be holding a list that no longer matches the disk (Codex, PR #1991). Two things here depend on it
 // being current: what this pane offers, and the prune `nextToolbarPins` applies on save, which
 // judges "this pin is gone" from exactly this list. One request, when the user opens the pane.
-void load(true);
+//
+// And nothing may be SAVED until it lands. A tick in that window would carry the old list into the
+// prune and persist a preference with the missing entries stripped — the very promotions this pane
+// exists to keep. So the boxes are disabled while it is in flight, and a toggle awaits it anyway:
+// the disabled state is the explanation, not the guarantee.
+const refreshing = ref(true);
+const refreshed = load(true).finally(() => (refreshing.value = false));
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
 // What is promoted AND still exists. The cap is counted on this rather than on the stored list: a
@@ -34,6 +40,7 @@ const full = computed(() => promotedKeys.value.length >= MAX_TOOLBAR_PINS);
 async function onToggle(e: Event, pin: Shortcut): Promise<void> {
   if (!(e.target instanceof HTMLInputElement)) return;
   const input = e.target;
+  await refreshed;
   if (!(await promoteToolbarPin(toolbarPinKey(pin), input.checked, live.value))) input.checked = promoted(pin);
 }
 </script>
@@ -54,7 +61,7 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
       type="checkbox"
       class="cursor-pointer disabled:cursor-not-allowed"
       :checked="promoted(pin)"
-      :disabled="full && !promoted(pin)"
+      :disabled="refreshing || (full && !promoted(pin))"
       :aria-label="pin.title"
       @change="(e) => void onToggle(e, pin)"
     />

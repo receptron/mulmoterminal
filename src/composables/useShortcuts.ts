@@ -38,12 +38,21 @@ const readShortcuts = (raw: unknown): ShortcutsResponse => ({
   shortcuts: isRecord(raw) && Array.isArray(raw.shortcuts) ? raw.shortcuts.filter(isShortcut) : [],
 });
 
+// Which read is the current one. A forced re-read starts a SECOND request while the first is still
+// in flight, and nothing about the network says the older one answers first — so an answer that has
+// been superseded is dropped rather than adopted (Codex, PR #1991). Latest wins, including its
+// error and its retry: a stale failure must not null the promise the newer read is waiting on.
+let loadGeneration = 0;
+
 /** Load once per session (deduped). A FAILED load is not cached so the next call
- *  retries. */
+ *  retries. `force` re-reads even when a result is already cached — the file is shared with
+ *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches. */
 async function load(force = false): Promise<void> {
   if (loadPromise && !force) return loadPromise;
+  const generation = ++loadGeneration;
   loadPromise = (async () => {
     const result = await fetchJson("/api/shortcuts", readShortcuts);
+    if (generation !== loadGeneration) return;
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry

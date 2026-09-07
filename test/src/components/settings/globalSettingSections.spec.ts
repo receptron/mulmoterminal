@@ -24,13 +24,30 @@ import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOption
 
 // The pinned favourites the toolbar section lists (#1984) — stubbed, since the real store loads
 // them over /api/shortcuts and this file's fetch stub answers every request with the POST echo.
-const pinned = vi.hoisted((): { current: Shortcut[]; error: string | null; refreshes: number } => ({ current: [], error: null, refreshes: 0 }));
+// The stub's list has to be REACTIVE: the section reads it through a computed, and a plain object
+// would leave that computed pinned to whatever it saw first — so a test that changes the list
+// mid-flight (the refresh window below) would be testing the stub rather than the component.
+// The refs live inside the mock factory, which is the only place `vue` can be imported from here.
+const pinned = vi.hoisted(
+  (): { setList: (list: Shortcut[]) => void; setError: (error: string | null) => void; refreshes: number; gate: Promise<void> | null } => ({
+    setList: () => {},
+    setError: () => {},
+    refreshes: 0,
+    gate: null,
+  }),
+);
 vi.mock("../../../../src/composables/useShortcuts", async () => {
-  const { computed } = await import("vue");
+  const { computed, ref } = await import("vue");
+  const list = ref<Shortcut[]>([]);
+  const error = ref<string | null>(null);
+  pinned.setList = (next) => (list.value = next);
+  pinned.setError = (next) => (error.value = next);
   const load = async (force?: boolean): Promise<void> => {
-    if (force) pinned.refreshes += 1;
+    if (!force) return;
+    pinned.refreshes += 1;
+    if (pinned.gate) await pinned.gate;
   };
-  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current), loadError: computed(() => pinned.error), load }) };
+  return { useShortcuts: () => ({ shortcuts: computed(() => list.value), loadError: computed(() => error.value), load }) };
 });
 
 // The POST bodies, in order. The echo answers with what was sent, which is what the server does.
@@ -281,15 +298,25 @@ describe("ToolbarPinsSection", () => {
   const works: Shortcut = { kind: "collection", slug: "works", title: "Work log", icon: "task" };
   const todos: Shortcut = { kind: "collection", slug: "todos", title: "ToDo", icon: "checklist" };
 
+  // Mount AND let the forced re-read land: until it does, the boxes are disabled on purpose, and
+  // vue-test-utils will not fire an event on a disabled input — which is the same thing a user
+  // clicking early gets.
+  const openPane = async () => {
+    const wrapper = mount(ToolbarPinsSection);
+    await flushPromises();
+    return wrapper;
+  };
+
   beforeEach(() => {
-    pinned.current = [works, todos];
-    pinned.error = null;
+    pinned.setList([works, todos]);
+    pinned.setError(null);
     pinned.refreshes = 0;
+    pinned.gate = null;
     setToolbarPins([]);
   });
 
   it("posts the promoted pin as a toolbarPins key", async () => {
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     await toggleAt(wrapper, 1, true);
     await flushPromises();
     expect(posts).toEqual([{ toolbarPins: ["collection:todos"] }]);
@@ -299,7 +326,7 @@ describe("ToolbarPinsSection", () => {
   // body carrying only the box just ticked would delete the others.
   it("sends the whole list, keeping the order it already had", async () => {
     setToolbarPins(["collection:todos"]);
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
     expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:works"] }]);
@@ -307,7 +334,7 @@ describe("ToolbarPinsSection", () => {
 
   it("posts the remaining ones when a pin is demoted", async () => {
     setToolbarPins(["collection:works", "collection:todos"]);
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     await toggleAt(wrapper, 0, false);
     await flushPromises();
     expect(posts).toEqual([{ toolbarPins: ["collection:todos"] }]);
@@ -317,7 +344,7 @@ describe("ToolbarPinsSection", () => {
   // ticked before the first response landed both started from [] and the second write dropped the
   // first. The mutation is queued and re-resolved when it runs, so both survive.
   it("keeps both when two boxes are ticked before the first save lands", async () => {
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     const boxes = wrapper.findAll("input[type=checkbox]");
     await Promise.all([boxes[0].setValue(true), boxes[1].setValue(true)]);
     await flushPromises();
@@ -329,9 +356,9 @@ describe("ToolbarPinsSection", () => {
   // no-op the user reads as a failed save.
   it("disables what it cannot promote once the cap is full", async () => {
     const many: Shortcut[] = Array.from({ length: MAX_TOOLBAR_PINS + 1 }, (_, i) => ({ kind: "collection", slug: `c${i}`, title: `C${i}`, icon: "task" }));
-    pinned.current = many;
+    pinned.setList(many);
     setToolbarPins(many.slice(0, MAX_TOOLBAR_PINS).map((pin) => `collection:${pin.slug}`));
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     const boxes = wrapper.findAll("input[type=checkbox]");
     expect(boxes[MAX_TOOLBAR_PINS].attributes("disabled")).toBeDefined();
     // ...while the promoted ones stay enabled: being at the cap is what makes removing one useful.
@@ -342,7 +369,7 @@ describe("ToolbarPinsSection", () => {
   // would lock the section with nothing on screen to untick — and the first save clears them out.
   it("does not let vanished pins fill the cap", async () => {
     setToolbarPins(Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`));
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
@@ -352,7 +379,7 @@ describe("ToolbarPinsSection", () => {
   // A refused save must not leave the screen showing a state the host never took.
   it("puts the box back when the save fails", async () => {
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
-    const wrapper = mount(ToolbarPinsSection);
+    const wrapper = await openPane();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
     expect(toolbarPinKeys.value).toEqual([]);
@@ -368,8 +395,31 @@ describe("ToolbarPinsSection", () => {
     expect(pinned.refreshes).toBe(1);
   });
 
+  // Codex on #1991 (P1): the forced read leaves a window where the rows on screen are the OLD list.
+  // A tick in that window would carry it into the prune and persist a preference with the entries
+  // the refresh was about to bring back stripped out. The pane must not be actable until it lands.
+  it("cannot be saved from while the forced re-read is in flight", async () => {
+    let open: () => void = () => {};
+    pinned.gate = new Promise<void>((resolve) => (open = resolve));
+    // Promoted, but absent from the list this page has been holding — exactly what a stale prune eats.
+    pinned.setList([works]);
+    setToolbarPins(["collection:todos"]);
+    const wrapper = mount(ToolbarPinsSection);
+    await flushPromises();
+    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeDefined();
+
+    pinned.setList([works, todos]); // what the re-read brings back
+    open();
+    await flushPromises();
+    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
+
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:works"] }]);
+  });
+
   it("says what to do when nothing is pinned at all", () => {
-    pinned.current = [];
+    pinned.setList([]);
     expect(mount(ToolbarPinsSection).text()).toContain("Nothing is pinned yet");
   });
 
@@ -377,8 +427,8 @@ describe("ToolbarPinsSection", () => {
   // first" is advice that cannot be followed, and it hides the reason the pane is empty. Observed
   // during Claude review, not flagged by a bot.
   it("tells an unavailable list apart from an empty one", () => {
-    pinned.current = [];
-    pinned.error = "HTTP 500";
+    pinned.setList([]);
+    pinned.setError("HTTP 500");
     const text = mount(ToolbarPinsSection).text();
     expect(text).toContain("HTTP 500");
     expect(text).not.toContain("Nothing is pinned yet");
@@ -388,8 +438,8 @@ describe("ToolbarPinsSection", () => {
   // and that leaves the list loaded. Reporting it here would describe neither the cause nor what is
   // on screen — the rows are right there and still tickable.
   it("stays quiet about an error that left the list on screen", async () => {
-    pinned.error = "HTTP 500";
-    const wrapper = mount(ToolbarPinsSection);
+    pinned.setError("HTTP 500");
+    const wrapper = await openPane();
     expect(wrapper.findAll("input[type=checkbox]")).toHaveLength(2);
     expect(wrapper.text()).not.toContain("HTTP 500");
     // ...and the pane still works: promoting from here writes toolbarPins, not shortcuts.
