@@ -12,18 +12,26 @@ import type { Shortcut } from "../../../common/shortcuts";
 const { t } = useI18n();
 const { shortcuts, loadError, load } = useShortcuts();
 
-// FORCE a re-read on open. The store caches its first successful `/api/shortcuts` for the life of
-// the page, and the file is shared with MulmoClaude — so a session that has been open a while can
-// be holding a list that no longer matches the disk (Codex, PR #1991). Two things here depend on it
-// being current: what this pane offers, and the prune `nextToolbarPins` applies on save, which
-// judges "this pin is gone" from exactly this list. One request, when the user opens the pane.
+// THE RULE, once, because three review rounds found three ways to break it: this pane may only
+// save from a list it has just CONFIRMED. Saving prunes — `nextToolbarPins` drops every configured
+// key the list does not hold — so a list that is merely the best guess available turns a promotion
+// the user still wants into a deletion they never asked for.
 //
-// And nothing may be SAVED until it lands. A tick in that window would carry the old list into the
-// prune and persist a preference with the missing entries stripped — the very promotions this pane
-// exists to keep. So the boxes are disabled while it is in flight, and a toggle awaits it anyway:
-// the disabled state is the explanation, not the guarantee.
+// Confirming it means a forced re-read: the store caches its first successful `/api/shortcuts` for
+// the life of the page, and the file is shared with MulmoClaude, so a session open for an hour can
+// be holding something the disk no longer has. `load(true)` answers whether ITS read landed — a
+// failure and an overtaking newer read both come back false, and both mean the same thing here.
+//
+// Until it lands, and for good if it fails, the checklist is read-only and says why (Codex,
+// PR #1991). Not saving is the point; the disabled boxes are how that is explained, and `onToggle`
+// enforces it rather than trusting them.
 const refreshing = ref(true);
-const refreshed = load(true).finally(() => (refreshing.value = false));
+const unconfirmed = ref(false);
+const refreshed = load(true).then((landed) => {
+  unconfirmed.value = !landed;
+  refreshing.value = false;
+});
+const readOnly = computed(() => refreshing.value || unconfirmed.value);
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
 // What is promoted AND still exists. The cap is counted on this rather than on the stored list: a
@@ -41,6 +49,10 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
   if (!(e.target instanceof HTMLInputElement)) return;
   const input = e.target;
   await refreshed;
+  if (readOnly.value) {
+    input.checked = promoted(pin);
+    return;
+  }
   if (!(await promoteToolbarPin(toolbarPinKey(pin), input.checked, live.value))) input.checked = promoted(pin);
 }
 </script>
@@ -54,14 +66,15 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
        also what a failed pin/unpin sets (`persist` in useShortcuts), and that leaves the list
        loaded and worth showing — reporting it here as "could not read your pins" would describe
        neither the cause nor what is on screen (Codex, PR #1991). -->
-  <p v-if="!shortcuts.length && loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unavailable", { error: loadError }) }}</p>
+  <p v-if="unconfirmed" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unconfirmed", { error: loadError ?? "" }) }}</p>
+  <p v-else-if="!shortcuts.length && loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unavailable", { error: loadError }) }}</p>
   <p v-else-if="!shortcuts.length" class="mb-2 text-[12px] text-dim">{{ t("settings.toolbarPins.empty") }}</p>
   <label v-for="pin in shortcuts" :key="toolbarPinKey(pin)" class="mb-1.5 flex cursor-pointer items-center gap-2">
     <input
       type="checkbox"
       class="cursor-pointer disabled:cursor-not-allowed"
       :checked="promoted(pin)"
-      :disabled="refreshing || (full && !promoted(pin))"
+      :disabled="readOnly || (full && !promoted(pin))"
       :aria-label="pin.title"
       @change="(e) => void onToggle(e, pin)"
     />

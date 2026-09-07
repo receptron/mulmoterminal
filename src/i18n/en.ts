@@ -390,6 +390,8 @@ export const en = {
       intro:
         "Collections and feeds you pinned can also sit in the toolbar itself, beside Grid and Collections — one press instead of opening Collections first and finding them in the row at its top. Choose up to {max}; the toolbar is unchanged while none is chosen.",
       empty: "Nothing is pinned yet. Open Collections and pin a collection or a feed there first — this list offers what you pinned.",
+      unconfirmed:
+        "The pinned list could not be re-read ({error}), so this cannot be edited right now — what is shown is what this page loaded earlier, and saving from it could drop a pin you still want. Close and reopen Settings to try again.",
       unavailable:
         "The pinned list is unavailable ({error}), so there is nothing to offer here. The toolbar keeps whatever it was already showing; reopen this once the list is back.",
       full: "{max} is the limit. Clear one to make room — past a handful they crowd out what the toolbar already carries.",

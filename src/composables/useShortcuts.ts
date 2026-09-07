@@ -19,7 +19,7 @@ const loadError = ref<string | null>(null);
  *  mutations refuse to persist — a replace-all PUT built on the empty default would
  *  clobber an existing shortcuts.json. */
 const loaded = ref(false);
-let loadPromise: Promise<void> | null = null;
+let loadPromise: Promise<boolean> | null = null;
 
 interface ShortcutsResponse {
   shortcuts: Shortcut[];
@@ -46,21 +46,28 @@ let loadGeneration = 0;
 
 /** Load once per session (deduped). A FAILED load is not cached so the next call
  *  retries. `force` re-reads even when a result is already cached — the file is shared with
- *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches. */
-async function load(force = false): Promise<void> {
+ *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches.
+ *
+ *  TRUE means `shortcuts` now holds what the server answered THIS call. False covers both ways
+ *  that can fail to be true — the request failed, or a newer read overtook this one — and a caller
+ *  that is about to decide something from the list needs to tell those apart from success: reading
+ *  `loadError` instead answers a different question, since a failed PUT sets it too (Codex,
+ *  PR #1991). */
+async function load(force = false): Promise<boolean> {
   if (loadPromise && !force) return loadPromise;
   const generation = ++loadGeneration;
   loadPromise = (async () => {
     const result = await fetchJson("/api/shortcuts", readShortcuts);
-    if (generation !== loadGeneration) return;
+    if (generation !== loadGeneration) return false;
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry
-      return;
+      return false;
     }
     loadError.value = null;
     shortcuts.value = result.data.shortcuts;
     loaded.value = true;
+    return true;
   })();
   return loadPromise;
 }
@@ -145,7 +152,7 @@ function reconcile(kind: ShortcutKind, live: { slug: string; title: string; icon
 export function useShortcuts(): {
   shortcuts: ComputedRef<Shortcut[]>;
   loadError: ComputedRef<string | null>;
-  load: (force?: boolean) => Promise<void>;
+  load: (force?: boolean) => Promise<boolean>;
   isPinned: (kind: ShortcutKind, slug: string) => boolean;
   pin: (shortcut: Shortcut) => Promise<boolean>;
   unpin: (kind: ShortcutKind, slug: string) => Promise<boolean>;

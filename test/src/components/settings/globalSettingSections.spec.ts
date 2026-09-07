@@ -29,11 +29,18 @@ import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOption
 // mid-flight (the refresh window below) would be testing the stub rather than the component.
 // The refs live inside the mock factory, which is the only place `vue` can be imported from here.
 const pinned = vi.hoisted(
-  (): { setList: (list: Shortcut[]) => void; setError: (error: string | null) => void; refreshes: number; gate: Promise<void> | null } => ({
+  (): {
+    setList: (list: Shortcut[]) => void;
+    setError: (error: string | null) => void;
+    refreshes: number;
+    gate: Promise<void> | null;
+    landed: boolean;
+  } => ({
     setList: () => {},
     setError: () => {},
     refreshes: 0,
     gate: null,
+    landed: true,
   }),
 );
 vi.mock("../../../../src/composables/useShortcuts", async () => {
@@ -42,10 +49,11 @@ vi.mock("../../../../src/composables/useShortcuts", async () => {
   const error = ref<string | null>(null);
   pinned.setList = (next) => (list.value = next);
   pinned.setError = (next) => (error.value = next);
-  const load = async (force?: boolean): Promise<void> => {
-    if (!force) return;
+  const load = async (force?: boolean): Promise<boolean> => {
+    if (!force) return true;
     pinned.refreshes += 1;
     if (pinned.gate) await pinned.gate;
+    return pinned.landed;
   };
   return { useShortcuts: () => ({ shortcuts: computed(() => list.value), loadError: computed(() => error.value), load }) };
 });
@@ -312,6 +320,7 @@ describe("ToolbarPinsSection", () => {
     pinned.setError(null);
     pinned.refreshes = 0;
     pinned.gate = null;
+    pinned.landed = true;
     setToolbarPins([]);
   });
 
@@ -416,6 +425,23 @@ describe("ToolbarPinsSection", () => {
     await toggleAt(wrapper, 0, true);
     await flushPromises();
     expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:works"] }]);
+  });
+
+  // Codex on #1991 (P1), the third finding on one rule: a forced read that FAILS leaves the cached
+  // list on screen, and saving from it prunes every configured key that list happens to lack. So a
+  // read that did not land leaves the pane read-only rather than merely un-refreshed.
+  it("stays read-only when the forced re-read fails, and says why", async () => {
+    pinned.landed = false;
+    pinned.setError("HTTP 500");
+    setToolbarPins(["collection:todos"]);
+    const wrapper = await openPane();
+    expect(wrapper.text()).toContain("could not be re-read");
+    for (const box of wrapper.findAll("input[type=checkbox]")) expect(box.attributes("disabled")).toBeDefined();
+    // ...and nothing reaches the config even if a change is forced through the DOM.
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([]);
+    expect(toolbarPinKeys.value).toEqual(["collection:todos"]);
   });
 
   it("says what to do when nothing is pinned at all", () => {

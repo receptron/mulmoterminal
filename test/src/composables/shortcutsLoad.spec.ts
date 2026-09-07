@@ -47,7 +47,8 @@ describe("useShortcuts reads", () => {
     const forced = store.load(true); // read #2, from the Toolbar pins pane
 
     gates[1].open();
-    await forced;
+    // TRUE is the caller's whole question: "is what I am about to decide from the current file?"
+    expect(await forced).toBe(true);
     expect(store.shortcuts.value.map((entry) => entry.slug)).toEqual(["fresh"]);
 
     gates[0].open(); // ...and the overtaken one answers now
@@ -71,12 +72,23 @@ describe("useShortcuts reads", () => {
     const forced = store.load(true);
 
     gates[1].open();
-    await forced;
+    expect(await forced).toBe(true);
     gates[0].open();
     await flushPromises();
 
     // The stale failure must not surface as the current state — neither its list nor its error.
     expect(store.shortcuts.value.map((entry) => entry.slug)).toEqual(["fresh"]);
     expect(store.loadError.value).toBeNull();
+  });
+
+  // The pane that asks for a forced read decides whether it may SAVE from the answer, and a read
+  // that failed must not read as "confirmed" — false is what makes that decidable at the call site.
+  it("answers false when the read itself fails", async () => {
+    vi.resetModules();
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
+    const { useShortcuts } = await import("../../../src/composables/useShortcuts");
+    const store = useShortcuts();
+    expect(await store.load(true)).toBe(false);
+    expect(store.loadError.value).toBe("HTTP 500");
   });
 });
