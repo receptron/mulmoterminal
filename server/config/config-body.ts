@@ -25,6 +25,7 @@ export const ARRAY_FIELDS = [
   "userMcpServers",
   "providers",
   "themes",
+  "toolbarPins",
 ] as const;
 
 // `buttons`/`chips` are nullable (null = unconfigured), so they can't join ARRAY_FIELDS:

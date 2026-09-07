@@ -4,6 +4,10 @@ import GitHubSection from "../../../../src/components/settings/GitHubSection.vue
 import SessionSection from "../../../../src/components/settings/SessionSection.vue";
 import TerminalFontFamilySection from "../../../../src/components/settings/TerminalFontFamilySection.vue";
 import ModelsSection from "../../../../src/components/settings/ModelsSection.vue";
+import ToolbarPinsSection from "../../../../src/components/settings/ToolbarPinsSection.vue";
+import { setToolbarPins, toolbarPinKeys } from "../../../../src/composables/toolbarPins";
+import { MAX_TOOLBAR_PINS } from "../../../../common/toolbarPins";
+import type { Shortcut } from "../../../../common/shortcuts";
 import { setIssueWorkComments } from "../../../../src/composables/issueWorkComments";
 import { setPrWorkdirFooter } from "../../../../src/composables/prWorkdirFooter";
 import { setAppendSystemPrompt } from "../../../../src/composables/appendSystemPrompt";
@@ -17,6 +21,14 @@ import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOption
 // that flipping it POSTs the RIGHT FIELD: every one is a partial update, so a section naming the
 // wrong key writes a setting the user never touched and leaves theirs unchanged — and nothing in
 // the UI would show either half of that.
+
+// The pinned favourites the toolbar section lists (#1984) — stubbed, since the real store loads
+// them over /api/shortcuts and this file's fetch stub answers every request with the POST echo.
+const pinned = vi.hoisted((): { current: Shortcut[] } => ({ current: [] }));
+vi.mock("../../../../src/composables/useShortcuts", async () => {
+  const { computed } = await import("vue");
+  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current) }) };
+});
 
 // The POST bodies, in order. The echo answers with what was sent, which is what the server does.
 let posts: Record<string, unknown>[] = [];
@@ -259,5 +271,69 @@ describe("ModelsSection", () => {
     expect(row).toContain("0 models");
     expect(row).toContain("not in the picker");
     expect(row).not.toContain("ready");
+  });
+});
+
+describe("ToolbarPinsSection", () => {
+  const works: Shortcut = { kind: "collection", slug: "works", title: "Work log", icon: "task" };
+  const todos: Shortcut = { kind: "collection", slug: "todos", title: "ToDo", icon: "checklist" };
+
+  beforeEach(() => {
+    pinned.current = [works, todos];
+    setToolbarPins([]);
+  });
+
+  it("posts the promoted pin as a toolbarPins key", async () => {
+    const wrapper = mount(ToolbarPinsSection);
+    await toggleAt(wrapper, 1, true);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:todos"] }]);
+  });
+
+  // The whole list goes every time: the server replaces this key rather than merging into it, so a
+  // body carrying only the box just ticked would delete the others.
+  it("sends the whole list, keeping the order it already had", async () => {
+    setToolbarPins(["collection:todos"]);
+    const wrapper = mount(ToolbarPinsSection);
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:works"] }]);
+  });
+
+  it("posts the remaining ones when a pin is demoted", async () => {
+    setToolbarPins(["collection:works", "collection:todos"]);
+    const wrapper = mount(ToolbarPinsSection);
+    await toggleAt(wrapper, 0, false);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:todos"] }]);
+  });
+
+  // At the cap the box cannot be ticked at all, so the refusal is visible rather than a silent
+  // no-op the user reads as a failed save.
+  it("disables what it cannot promote once the cap is full", async () => {
+    const many: Shortcut[] = Array.from({ length: MAX_TOOLBAR_PINS + 1 }, (_, i) => ({ kind: "collection", slug: `c${i}`, title: `C${i}`, icon: "task" }));
+    pinned.current = many;
+    setToolbarPins(many.slice(0, MAX_TOOLBAR_PINS).map((pin) => `collection:${pin.slug}`));
+    const wrapper = mount(ToolbarPinsSection);
+    const boxes = wrapper.findAll("input[type=checkbox]");
+    expect(boxes[MAX_TOOLBAR_PINS].attributes("disabled")).toBeDefined();
+    // ...while the promoted ones stay enabled: being at the cap is what makes removing one useful.
+    expect(boxes[0].attributes("disabled")).toBeUndefined();
+  });
+
+  // A refused save must not leave the screen showing a state the host never took.
+  it("puts the box back when the save fails", async () => {
+    globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
+    const wrapper = mount(ToolbarPinsSection);
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(toolbarPinKeys.value).toEqual([]);
+    const box = wrapper.findAll("input[type=checkbox]")[0];
+    expect(box.element instanceof HTMLInputElement && box.element.checked).toBe(false);
+  });
+
+  it("says what to do when nothing is pinned at all", () => {
+    pinned.current = [];
+    expect(mount(ToolbarPinsSection).text()).toContain("Nothing is pinned yet");
   });
 });

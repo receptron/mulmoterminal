@@ -51,6 +51,7 @@ describe("badArrayField", () => {
       "userMcpServers",
       "providers",
       "themes",
+      "toolbarPins",
     ]);
   });
 

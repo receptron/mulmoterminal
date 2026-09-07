@@ -23,6 +23,7 @@ import { setCopyOnSelect } from "./copyOnSelect";
 import { setQuestionPaneEnabled } from "./questionPane";
 import { setIssueWorkComments } from "./issueWorkComments";
 import { setShowLoadAverage } from "./showLoadAverage";
+import { setToolbarPins } from "./toolbarPins";
 import { setPrWorkdirFooter } from "./prWorkdirFooter";
 import { setAppendSystemPrompt } from "./appendSystemPrompt";
 import { setDecisionDigest } from "./decisionDigest";
@@ -446,6 +447,8 @@ function applyGlobalSettings(c: Record<string, unknown>): void {
   setIssueWorkComments(c.issueWorkComments);
   // Whether the grid header carries this machine's load average (#1786). On unless opted out.
   setShowLoadAverage(c.showLoadAverage);
+  // Which pinned favourites the toolbar carries (#1984). Absent, it carries none.
+  setToolbarPins(c.toolbarPins);
   // How far the cockpit roster clamps each line. Absent `cockpitLines` keeps 2/2/3.
   setCockpitLines(c.cockpitLines);
   // What a header shows once a status replaces the directory's colour (#1617). The default for
