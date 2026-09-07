@@ -24,10 +24,10 @@ import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOption
 
 // The pinned favourites the toolbar section lists (#1984) — stubbed, since the real store loads
 // them over /api/shortcuts and this file's fetch stub answers every request with the POST echo.
-const pinned = vi.hoisted((): { current: Shortcut[] } => ({ current: [] }));
+const pinned = vi.hoisted((): { current: Shortcut[]; error: string | null } => ({ current: [], error: null }));
 vi.mock("../../../../src/composables/useShortcuts", async () => {
   const { computed } = await import("vue");
-  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current) }) };
+  return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current), loadError: computed(() => pinned.error) }) };
 });
 
 // The POST bodies, in order. The echo answers with what was sent, which is what the server does.
@@ -280,6 +280,7 @@ describe("ToolbarPinsSection", () => {
 
   beforeEach(() => {
     pinned.current = [works, todos];
+    pinned.error = null;
     setToolbarPins([]);
   });
 
@@ -358,5 +359,16 @@ describe("ToolbarPinsSection", () => {
   it("says what to do when nothing is pinned at all", () => {
     pinned.current = [];
     expect(mount(ToolbarPinsSection).text()).toContain("Nothing is pinned yet");
+  });
+
+  // ...and does NOT say it when the list merely failed to load: "go and pin something first" is
+  // advice that cannot be followed, and it hides the reason the pane is empty. Observed during
+  // Claude review, not flagged by a bot.
+  it("tells a failed load apart from an empty list", () => {
+    pinned.current = [];
+    pinned.error = "HTTP 500";
+    const text = mount(ToolbarPinsSection).text();
+    expect(text).toContain("HTTP 500");
+    expect(text).not.toContain("Nothing is pinned yet");
   });
 });

@@ -52,7 +52,8 @@ export function sanitizeToolbarPins(input: unknown): string[] {
  *
  *  A key whose pin is gone — unpinned here, or in MulmoClaude, which writes the same file — is
  *  dropped rather than drawn: the title and icon come from the pin, so there is nothing to label
- *  it with. The key stays in the config, so re-pinning it brings the button back. */
+ *  it with. Drawing is all this decides: the key itself survives in the config until the next save
+ *  clears it (`nextToolbarPins`), so re-pinning before then brings the button back. */
 export function resolveToolbarPins(shortcuts: readonly Shortcut[], keys: readonly string[]): Shortcut[] {
   const byKey = new Map(shortcuts.map((shortcut) => [toolbarPinKey(shortcut), shortcut]));
   return keys.flatMap((key) => {

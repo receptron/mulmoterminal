@@ -10,7 +10,7 @@ import type { Shortcut } from "../../../common/shortcuts";
 // than an editor: the entries already exist — pinning is done in Collections, where the thing being
 // pinned is on screen — so the only question here is which few are worth the row's width.
 const { t } = useI18n();
-const { shortcuts } = useShortcuts();
+const { shortcuts, loadError } = useShortcuts();
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
 // What is promoted AND still exists. The cap is counted on this rather than on the stored list: a
@@ -33,7 +33,11 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
 
 <template>
   <p class="mb-2 mt-1.5 text-[12px] text-dim">{{ t("settings.toolbarPins.intro", { max: MAX_TOOLBAR_PINS }) }}</p>
-  <p v-if="!shortcuts.length" class="mb-2 text-[12px] text-dim">{{ t("settings.toolbarPins.empty") }}</p>
+  <!-- A failed load and an empty list are DIFFERENT: the advice "go and pin something first" is
+       wrong, and unfollowable, when the list simply did not arrive. This pane is nothing but that
+       list, so the difference is the whole screen. -->
+  <p v-if="loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.loadFailed", { error: loadError }) }}</p>
+  <p v-else-if="!shortcuts.length" class="mb-2 text-[12px] text-dim">{{ t("settings.toolbarPins.empty") }}</p>
   <label v-for="pin in shortcuts" :key="toolbarPinKey(pin)" class="mb-1.5 flex cursor-pointer items-center gap-2">
     <input
       type="checkbox"
