@@ -1409,11 +1409,15 @@ thing costs two presses: Collections, then the icon.
 Promote a few of those pins and they get a button in the **toolbar itself**, beside **Grid** and
 **Collections** — one press, from wherever you are.
 
+![The toolbar with three promoted pins — Work log, ToDo and Weather — in their own group between the Grid / Collections pair and the grid's own controls](../images/config-toolbar-pins.png)
+
 ```json
 { "toolbarPins": ["collection:works", "collection:todos", "feed:news"] }
 ```
 
 Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
+
+![Settings → Toolbar pins — the five pinned entries as a checklist, the first three ticked](../images/config-toolbar-pins-settings-en.png)
 
 | | |
 |---|---|
