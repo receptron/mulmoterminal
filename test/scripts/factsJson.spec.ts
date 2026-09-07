@@ -34,14 +34,17 @@ describe("docs/facts.json restates package.json", () => {
   const manifest = readJson("package.json");
 
   it("names the version being shipped", () => {
-    expect(hasVersion(facts) && hasVersion(manifest)).toBe(true);
+    expect(hasVersion(facts), "docs/facts.json has no string `version`").toBe(true);
+    expect(hasVersion(manifest), "package.json has no string `version`").toBe(true);
     if (!hasVersion(facts) || !hasVersion(manifest)) return;
-    expect(facts.version).toBe(manifest.version);
+    // Failing here means the release commit bumped package.json and left facts.json behind.
+    expect(facts.version, "docs/facts.json is behind the version being released").toBe(manifest.version);
   });
 
   it("names the Node requirement npm enforces", () => {
-    expect(hasNodeRequirement(facts) && hasNodeEngine(manifest)).toBe(true);
+    expect(hasNodeRequirement(facts), "docs/facts.json has no string `requires.node`").toBe(true);
+    expect(hasNodeEngine(manifest), "package.json has no string `engines.node`").toBe(true);
     if (!hasNodeRequirement(facts) || !hasNodeEngine(manifest)) return;
-    expect(facts.requires.node).toBe(manifest.engines.node);
+    expect(facts.requires.node, "docs/facts.json states a Node floor npm does not enforce").toBe(manifest.engines.node);
   });
 });
