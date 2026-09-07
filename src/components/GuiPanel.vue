@@ -228,6 +228,7 @@ const TOOL_HINTS = new Map<string, string>([
   ["presentForm", "a form to fill in and send back"],
   ["presentChart", "a chart from a set of data"],
   ["presentHtml", "a self-contained web page"],
+  ["presentShapeScript", "a 3D model you can rotate and zoom, written as ShapeScript"],
 
   ["presentCollection", "a collection from this workspace, laid out to browse"],
   ["manageCollection", "reads and writes those collections and their schemas"],

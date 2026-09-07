@@ -13,6 +13,7 @@ import { plugin as collectionPlugin } from "@mulmoclaude/collection-plugin/vue";
 import { plugin as htmlPlugin } from "@mulmoclaude/html-plugin/vue";
 import GenerateImagePlugin from "@mulmochat-plugin/generate-image/vue";
 import { plugin as mulmoScriptPlugin, MULMOSCRIPT_HOST_ADAPTER_KEY, type MulmoScriptHostAdapter } from "@mulmoclaude/mulmoscript-plugin/vue";
+import { plugin as shapeScriptPlugin } from "@mulmoclaude/shapescript-plugin/vue";
 import { AccountingView } from "@mulmoclaude/accounting-plugin/vue";
 import { wrapWithPluginRuntime } from "./composables/pluginRuntime";
 import CollectionCardView from "./components/CollectionCardView.vue";
@@ -27,6 +28,7 @@ import formCss from "@mulmoclaude/form-plugin/style.css?inline";
 import chartCss from "@mulmoclaude/chart-plugin/style.css?inline";
 import htmlCss from "@mulmoclaude/html-plugin/style.css?inline";
 import mulmoScriptCss from "@mulmoclaude/mulmoscript-plugin/style.css?inline";
+import shapeScriptCss from "@mulmoclaude/shapescript-plugin/style.css?inline";
 import { collectionShadowCss } from "./collectionShadowCss";
 // The accounting package ships its own self-contained Tailwind in style.css (its
 // content scan can't reach node_modules), imported as a STRING for shadow-DOM
@@ -167,6 +169,19 @@ const PACKAGES: Record<string, Registration> = {
     // ?? "en"), so it renders standalone. Its style.css is self-contained Tailwind.
     viewComponent: viewOf("@mulmoclaude/chart-plugin", chartPlugin.viewComponent),
     css: chartCss,
+  },
+  "@mulmoclaude/shapescript-plugin": {
+    toolName: shapeScriptPlugin.toolDefinition.name,
+    // No runtime wrap: the View reads the ShapeScript source out of
+    // selectedResult.data and renders it with its own Three.js canvas, and its
+    // only injected dependency is the locale its 8-locale bundle falls back to
+    // English without. Its style.css is self-contained.
+    viewComponent: viewOf("@mulmoclaude/shapescript-plugin", shapeScriptPlugin.viewComponent),
+    css: shapeScriptCss,
+    // The WebGL viewport lays out with an internal h-full chain rather than
+    // flowing at content height, so it needs the measured card height — same as
+    // the other canvas-filling views.
+    height: CANVAS_CARD_HEIGHT,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,

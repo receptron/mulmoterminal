@@ -1950,6 +1950,15 @@
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
 
+"@mulmoclaude/shapescript-plugin@^1.0.0":
+  version "1.0.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-1.0.0.tgz#f60870816daa56247b37412b36c19defeeb0c61a"
+  integrity sha512-4MpY5QiZ5yTFQfBbrynwhsU9rPdTiAmQq2n8WojzajwDh4Mg8W/4UTo7Ezepgr5n9Y7zctr+H2tUQ7p1V8q+DQ==
+  dependencies:
+    three "^0.185.1"
+    three-bvh-csg "^0.0.18"
+    three-mesh-bvh "0.9.13"
+
 "@mulmoclaude/x-plugin@^1.0.3":
   version "1.0.3"
   resolved "https://registry.yarnpkg.com/@mulmoclaude/x-plugin/-/x-plugin-1.0.3.tgz#14f437a3fbe95952fa8f4347f62619ed51c34b57"
@@ -7577,6 +7586,21 @@ text-decoder@^1.1.0:
   integrity sha512-vlLytXkeP4xvEq2otHeJfSQIRyWxo/oZGEbXrtEEF9Hnmrdly59sUbzZ/QgyWuLYHctCHxFF4tRQZNQ9k60ExQ==
   dependencies:
     b4a "^1.6.4"
+
+three-bvh-csg@^0.0.18:
+  version "0.0.18"
+  resolved "https://registry.yarnpkg.com/three-bvh-csg/-/three-bvh-csg-0.0.18.tgz#c2801788f35c3d830800194cf414dcdbd2a84924"
+  integrity sha512-M3GCZMmGFgASGuDf+YMamM83nVlD/vdwzVHcYbFxgW+g1S7/nKPiuY00YVHOMbjmJPh8mLevGZL65ItHUuGt2w==
+
+three-mesh-bvh@0.9.13:
+  version "0.9.13"
+  resolved "https://registry.yarnpkg.com/three-mesh-bvh/-/three-mesh-bvh-0.9.13.tgz#706db5d6ad138ef6db155d90cc2807d8c72fe114"
+  integrity sha512-2zRh4iTFDmiTISanSVFofIw6J92DxFSqWn2qsQTtKp2ko5Ebk/JaI/wpMqNaBJ3F0qx7/NuP9GPK4jGDX99J2Q==
+
+three@^0.185.1:
+  version "0.185.1"
+  resolved "https://registry.yarnpkg.com/three/-/three-0.185.1.tgz#63e9e241a17b101e211965121a017b4b4d8054ae"
+  integrity sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==
 
 tiny-inflate@^1.0.0, tiny-inflate@^1.0.3:
   version "1.0.3"
