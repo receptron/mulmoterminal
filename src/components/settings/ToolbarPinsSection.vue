@@ -33,10 +33,14 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
 
 <template>
   <p class="mb-2 mt-1.5 text-[12px] text-dim">{{ t("settings.toolbarPins.intro", { max: MAX_TOOLBAR_PINS }) }}</p>
-  <!-- A failed load and an empty list are DIFFERENT: the advice "go and pin something first" is
-       wrong, and unfollowable, when the list simply did not arrive. This pane is nothing but that
-       list, so the difference is the whole screen. -->
-  <p v-if="loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.loadFailed", { error: loadError }) }}</p>
+  <!-- An empty list with an error behind it, and an empty list because nothing is pinned, are
+       DIFFERENT: "go and pin something first" is unfollowable advice when the list simply is not
+       there, and this pane is nothing but that list.
+       Only when it is EMPTY, and worded for any failure rather than a failed read: `loadError` is
+       also what a failed pin/unpin sets (`persist` in useShortcuts), and that leaves the list
+       loaded and worth showing — reporting it here as "could not read your pins" would describe
+       neither the cause nor what is on screen (Codex, PR #1991). -->
+  <p v-if="!shortcuts.length && loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unavailable", { error: loadError }) }}</p>
   <p v-else-if="!shortcuts.length" class="mb-2 text-[12px] text-dim">{{ t("settings.toolbarPins.empty") }}</p>
   <label v-for="pin in shortcuts" :key="toolbarPinKey(pin)" class="mb-1.5 flex cursor-pointer items-center gap-2">
     <input

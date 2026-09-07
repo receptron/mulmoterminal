@@ -361,14 +361,28 @@ describe("ToolbarPinsSection", () => {
     expect(mount(ToolbarPinsSection).text()).toContain("Nothing is pinned yet");
   });
 
-  // ...and does NOT say it when the list merely failed to load: "go and pin something first" is
-  // advice that cannot be followed, and it hides the reason the pane is empty. Observed during
-  // Claude review, not flagged by a bot.
-  it("tells a failed load apart from an empty list", () => {
+  // ...and does NOT say it when the list is empty because something failed: "go and pin something
+  // first" is advice that cannot be followed, and it hides the reason the pane is empty. Observed
+  // during Claude review, not flagged by a bot.
+  it("tells an unavailable list apart from an empty one", () => {
     pinned.current = [];
     pinned.error = "HTTP 500";
     const text = mount(ToolbarPinsSection).text();
     expect(text).toContain("HTTP 500");
     expect(text).not.toContain("Nothing is pinned yet");
+  });
+
+  // Codex on #1991: `loadError` is also what a FAILED PIN/UNPIN sets (`persist` in useShortcuts),
+  // and that leaves the list loaded. Reporting it here would describe neither the cause nor what is
+  // on screen — the rows are right there and still tickable.
+  it("stays quiet about an error that left the list on screen", async () => {
+    pinned.error = "HTTP 500";
+    const wrapper = mount(ToolbarPinsSection);
+    expect(wrapper.findAll("input[type=checkbox]")).toHaveLength(2);
+    expect(wrapper.text()).not.toContain("HTTP 500");
+    // ...and the pane still works: promoting from here writes toolbarPins, not shortcuts.
+    await toggleAt(wrapper, 0, true);
+    await flushPromises();
+    expect(posts).toEqual([{ toolbarPins: ["collection:works"] }]);
   });
 });
