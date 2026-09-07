@@ -1419,7 +1419,7 @@ Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
 |---|---|
 | Entry | `"<kind>:<slug>"` — kind is `collection` or `feed`, slug is the one in the address (`/collections/works`) |
 | Order | The array's order, left to right |
-| How many | Up to **five** |
+| How many | **Five** buttons. The file itself may hold more — see the last bullet below |
 | Default | **Empty** — the toolbar is exactly as it was |
 
 - **It promotes; it does not pin.** An entry has to be pinned already: the button's name and icon
@@ -1429,9 +1429,11 @@ Or tick them in **Settings → Toolbar pins**, which lists what you have pinned.
   shared pinned list once when the page loads, and again whenever you open **Settings → Toolbar
   pins**; until one of those happens, the button is still there (and still works — unpinning does
   not delete the collection).
-- A key like that does **not** hold one of the five slots, and the next tick in **Settings → Toolbar
-  pins** drops it from the file. So unpinning something you had promoted costs you nothing, and
-  re-promoting it later is one tick.
+- A key like that does **not** hold one of the five slots, and **nothing deletes it**. Unpin
+  something you had promoted, and its button disappears; pin it again and the button is back where
+  it was, with no second trip to Settings. The file keeps the line either way — which is the trade:
+  tidying it would mean deciding "this pin is gone" from a list that might be out of date, and one
+  wrong answer there silently deletes a button you still wanted.
 - The pinned row at the top of the Collections overlay is unchanged, and still lists **all** of
   them. This is a second, shorter list on top of it.
 - Five is the cap because the toolbar already carries the view switch, the grid's own controls, the

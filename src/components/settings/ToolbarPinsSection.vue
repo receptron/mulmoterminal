@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import { useI18n } from "vue-i18n";
 import { useShortcuts } from "../../composables/useShortcuts";
 import { toolbarPinKeys, promoteToolbarPin } from "../../composables/toolbarPins";
@@ -12,28 +12,16 @@ import type { Shortcut } from "../../../common/shortcuts";
 const { t } = useI18n();
 const { shortcuts, loadError, load } = useShortcuts();
 
-// THE RULE, once, because three review rounds found three ways to break it: this pane may only
-// save from a list it has just CONFIRMED. Saving prunes — `nextToolbarPins` drops every configured
-// key the list does not hold — so a list that is merely the best guess available turns a promotion
-// the user still wants into a deletion they never asked for.
+// Re-read on open. The store caches its first successful `/api/shortcuts` for the life of the page,
+// and the file is shared with MulmoClaude, so a session open for an hour can be offering a list the
+// disk no longer has (Codex, PR #1991).
 //
-// Confirming it means a forced re-read: the store caches its first successful `/api/shortcuts` for
-// the life of the page, and the file is shared with MulmoClaude, so a session open for an hour can
-// be holding something the disk no longer has. `load(true)` answers whether ITS read landed — a
-// failure and an overtaking newer read both come back false, and both mean the same thing here.
-//
-// Until it lands, and for good if it fails, the checklist is read-only and says why (Codex,
-// PR #1991). Not saving is the point; the disabled boxes are how that is explained, and `onToggle`
-// enforces it rather than trusting them.
-const refreshing = ref(true);
-const unconfirmed = ref(false);
-const refreshed = load(true)
-  .catch(() => false) // it answers rather than throws, but a rejection here must not reach a DOM handler
-  .then((landed) => {
-    unconfirmed.value = !landed;
-    refreshing.value = false;
-  });
-const readOnly = computed(() => refreshing.value || unconfirmed.value);
+// It is a FRESHNESS measure and nothing more. Saving cannot delete a key the user did not untick
+// (`nextToolbarPins`), so a list that arrives late or not at all costs an out-of-date row and a cap
+// that may be off by one — never a promotion. That is why this pane is usable while the read is out
+// rather than disabled behind it: an earlier version gated every tick on the read landing, and the
+// gate only existed to protect a prune that no longer happens.
+const refreshed = load(true).catch(() => undefined); // it answers rather than throws; a rejection must not reach a DOM handler
 
 const live = computed(() => shortcuts.value.map(toolbarPinKey));
 // What is promoted AND still exists. The cap is counted on this rather than on the stored list: a
@@ -50,11 +38,9 @@ const full = computed(() => promotedKeys.value.length >= MAX_TOOLBAR_PINS);
 async function onToggle(e: Event, pin: Shortcut): Promise<void> {
   if (!(e.target instanceof HTMLInputElement)) return;
   const input = e.target;
+  // Awaited so the cap is counted from the fresh list when it is nearly here, which is the common
+  // case. Not a guard — see above.
   await refreshed;
-  if (readOnly.value) {
-    input.checked = promoted(pin);
-    return;
-  }
   if (!(await promoteToolbarPin(toolbarPinKey(pin), input.checked, live.value))) input.checked = promoted(pin);
 }
 </script>
@@ -68,15 +54,14 @@ async function onToggle(e: Event, pin: Shortcut): Promise<void> {
        also what a failed pin/unpin sets (`persist` in useShortcuts), and that leaves the list
        loaded and worth showing — reporting it here as "could not read your pins" would describe
        neither the cause nor what is on screen (Codex, PR #1991). -->
-  <p v-if="unconfirmed" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unconfirmed", { error: loadError ?? "" }) }}</p>
-  <p v-else-if="!shortcuts.length && loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unavailable", { error: loadError }) }}</p>
+  <p v-if="!shortcuts.length && loadError" class="mb-2 text-[12px] text-warn">{{ t("settings.toolbarPins.unavailable", { error: loadError }) }}</p>
   <p v-else-if="!shortcuts.length" class="mb-2 text-[12px] text-dim">{{ t("settings.toolbarPins.empty") }}</p>
   <label v-for="pin in shortcuts" :key="toolbarPinKey(pin)" class="mb-1.5 flex cursor-pointer items-center gap-2">
     <input
       type="checkbox"
       class="cursor-pointer disabled:cursor-not-allowed"
       :checked="promoted(pin)"
-      :disabled="readOnly || (full && !promoted(pin))"
+      :disabled="full && !promoted(pin)"
       :aria-label="pin.title"
       @change="(e) => void onToggle(e, pin)"
     />

@@ -19,6 +19,7 @@
 | 保存先 | `~/.mulmoterminal/config.json` の **`toolbarPins`**（MulmoTerminal 固有） | ピン本体の `<workspace>/config/shortcuts.json` は MulmoClaude と**共有**で、両アプリのサーバがレコードを組み立て直す（`normalizeShortcuts`）。そこに足したフィールドは相手側の書き込みで落ちる |
 | 値の形 | `["collection:works", "feed:news"]` の文字列配列 | 手で書くのが楽で、`kind` は enum なので最初の `:` で割れば曖昧さがない |
 | ラベル / アイコン | **ピン側（shortcuts.json）から取る**。config は「どれを昇格させるか」だけを言う | 二重に持つとコレクション名を変えたときにツールバーだけ古い名前を出す |
+| 消えたピンのキー | **消さない。描かないだけ**（枠も消費しない）。保存はクリックされたキーだけを足す / 外す | 片付けようとすると「このピンはもう無い」を古いかもしれない一覧から判断することになる。#1991 のレビューで P1/Major が 4 件出て、全部がその判断の間違え方だった。保存する配列の上限は 50（サニティ）で、描くのは 5 件 |
 | 設定 UI | Settings に **Toolbar pins** タブ（appearance グループ、Grid header の次） | チェックリスト。既にピン留めしてあるものから選ぶだけなので編集フォームは要らない |
 | 並び順 | config の配列順。UI は既存の順を保ったまま、新しくチェックしたものを**末尾に足す** | 手で並べ替えた順が、チェックを 1 つ足しただけで崩れない |
 
@@ -26,11 +27,12 @@
 
 ### 新規
 
-- `common/toolbarPins.ts` — 純粋関数のみ。`MAX_TOOLBAR_PINS` / `toolbarPinKey` / `sanitizeToolbarPins`
-  （配列以外・壊れたキー・重複・上限を落とす）/ `resolveToolbarPins`（キー列 → 実在するピン。
-  ピンが外れたキーは落とす）/ `toggleToolbarPin`（順序保持・上限で拒否）。
-- `src/composables/toolbarPins.ts` — `cockpitLines.ts` と同じシングルトン ref + `setToolbarPins` +
-  `saveToolbarPins`（`postConfigField`）。
+- `common/toolbarPins.ts` — 純粋関数のみ。`MAX_TOOLBAR_PINS`（描くボタン数 5）/
+  `MAX_STORED_TOOLBAR_PINS`（ファイルの上限 50）/ `toolbarPinKey` / `sanitizeToolbarPins`
+  （配列以外・壊れたキー・重複を落とす）/ `resolveToolbarPins`（キー列 → 実在するピン、先頭 5 件）/
+  `nextToolbarPins`（クリックされたキーだけを足す / 外す。`live` は描ける件数を数えるためだけに読む）。
+- `src/composables/toolbarPins.ts` — シングルトン ref + `setToolbarPins`（`toolbarPinsMark` と対で、
+  保存を跨いだ古い読み込みを捨てる）+ `promoteToolbarPin`（intent を直列キューに載せ、実行時に解決）。
 - `src/components/settings/ToolbarPinsSection.vue` — ピン一覧のチェックリスト。
 - `test/common/toolbarPins.spec.ts`。
 
@@ -49,7 +51,8 @@
 ## 確認すること
 
 - ピンが 0 件のとき、ヘッダーが今までと 1px も変わらないこと（区切り線が残らない）。
-- MulmoClaude 側でピンを外した項目がツールバーから消えること（config には残るが描かない）。
+- MulmoClaude 側でピンを外した項目がツールバーから消え、**ピンし直すと元の位置に戻る**こと
+  （config のキーは消さない）。
 - 上限（5）に達したとき、チェックできないことが見て分かること。
 
 ## やらないこと

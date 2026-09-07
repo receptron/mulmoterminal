@@ -19,7 +19,7 @@ const loadError = ref<string | null>(null);
  *  mutations refuse to persist — a replace-all PUT built on the empty default would
  *  clobber an existing shortcuts.json. */
 const loaded = ref(false);
-let loadPromise: Promise<boolean> | null = null;
+let loadPromise: Promise<void> | null = null;
 
 interface ShortcutsResponse {
   shortcuts: Shortcut[];
@@ -48,37 +48,32 @@ const readShortcuts = (raw: unknown): ShortcutsResponse => ({
 // waiting on.
 let loadGeneration = 0;
 // `writes` orders reads against writes: `persist` adopts the server's canonical list for the file
-// AFTER the write, so a read issued before it is answering about a file that no longer exists.
-// Dropping that read is not a failure — the list in hand is the newer one — so the read still
-// reports success.
+// AFTER the write, so a read issued before it is answering about a file that no longer exists, and
+// adopting it would put back the favourite the write just removed.
 let writes = 0;
 
 /** Load once per session (deduped). A FAILED load is not cached so the next call
  *  retries. `force` re-reads even when a result is already cached — the file is shared with
  *  MulmoClaude, so a long-lived page can be holding a list the disk no longer matches.
  *
- *  TRUE means `shortcuts` holds the file as the server last answered for it — this read, or a write
- *  that landed while this read was out and answered about the file AFTER it. That is the question a
- *  caller about to save from the list is asking, and both answers settle it. FALSE is the two ways
- *  it is unsettled: the request failed, or a newer read overtook this one. Reading `loadError`
- *  instead answers a different question, since a failed PUT sets it too (Codex, PR #1991). */
-async function load(force = false): Promise<boolean> {
+ *  Callers do not learn whether THIS read is the one that landed, and none needs to: `shortcuts`
+ *  ends up holding the newest answer either way, and nothing in the app deletes anything on the
+ *  strength of that list (see `nextToolbarPins`). */
+async function load(force = false): Promise<void> {
   if (loadPromise && !force) return loadPromise;
   const generation = ++loadGeneration;
   const writesBefore = writes;
   loadPromise = (async () => {
     const result = await fetchJson("/api/shortcuts", readShortcuts);
-    if (generation !== loadGeneration) return false;
-    if (writes !== writesBefore) return true;
+    if (generation !== loadGeneration || writes !== writesBefore) return;
     if (!result.ok) {
       loadError.value = result.error;
       loadPromise = null; // allow retry
-      return false;
+      return;
     }
     loadError.value = null;
     shortcuts.value = result.data.shortcuts;
     loaded.value = true;
-    return true;
   })();
   return loadPromise;
 }
@@ -164,7 +159,7 @@ function reconcile(kind: ShortcutKind, live: { slug: string; title: string; icon
 export function useShortcuts(): {
   shortcuts: ComputedRef<Shortcut[]>;
   loadError: ComputedRef<string | null>;
-  load: (force?: boolean) => Promise<boolean>;
+  load: (force?: boolean) => Promise<void>;
   isPinned: (kind: ShortcutKind, slug: string) => boolean;
   pin: (shortcut: Shortcut) => Promise<boolean>;
   unpin: (kind: ShortcutKind, slug: string) => Promise<boolean>;

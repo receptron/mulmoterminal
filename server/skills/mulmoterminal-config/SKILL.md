@@ -339,13 +339,14 @@ Which of the pinned favourites get a permanent button in the toolbar, beside **G
 
 - Each entry is `"<kind>:<slug>"`, where kind is `collection` or `feed`. The array order is the
   order the buttons are drawn in.
-- **Up to five.** Past that they push the row into its horizontal scroll, which is the very
-  two-step this removes.
+- **Five buttons.** Past that they push the row into its horizontal scroll, which is the very
+  two-step this removes. The array may hold more than five: entries whose pins are currently unpinned
+  are kept, not drawn.
 - It promotes; it does not pin. An entry must already be PINNED (the star in Collections, stored in
   `<workspace>/config/shortcuts.json`, shared with MulmoClaude) — the button's name and icon are
   read from the pin, so renaming a collection renames the button. A key whose pin is gone draws
-  nothing, does not hold one of the five slots, and is dropped from the file by the next tick in
-  Settings — re-pinning it before that brings the button back.
+  nothing and does not hold one of the five slots, and **nothing deletes it** — re-pinning brings the
+  button back where it was. Do not "tidy" such keys out of the config on the user's behalf.
 - The shared pin list is read once per page load, and again when Settings' **Toolbar pins** opens.
   So a pin removed in MulmoClaude leaves the button on the toolbar of an already-open session until
   one of those happens; it is not a live feed.

@@ -47,8 +47,7 @@ describe("useShortcuts reads", () => {
     const forced = store.load(true); // read #2, from the Toolbar pins pane
 
     gates[1].open();
-    // TRUE is the caller's whole question: "is what I am about to decide from the current file?"
-    expect(await forced).toBe(true);
+    await forced;
     expect(store.shortcuts.value.map((entry) => entry.slug)).toEqual(["fresh"]);
 
     gates[0].open(); // ...and the overtaken one answers now
@@ -72,7 +71,7 @@ describe("useShortcuts reads", () => {
     const forced = store.load(true);
 
     gates[1].open();
-    expect(await forced).toBe(true);
+    await forced;
     gates[0].open();
     await flushPromises();
 
@@ -113,19 +112,18 @@ describe("useShortcuts reads", () => {
     expect(store.shortcuts.value).toEqual([]);
 
     read.open();
-    // The read is dropped, not failed: what is in hand is the write's answer, which is newer.
-    expect(await forced).toBe(true);
+    await forced;
+    // The read is dropped: what is in hand is the write's answer, which is newer.
     expect(store.shortcuts.value).toEqual([]);
   });
 
-  // The pane that asks for a forced read decides whether it may SAVE from the answer, and a read
-  // that failed must not read as "confirmed" — false is what makes that decidable at the call site.
-  it("answers false when the read itself fails", async () => {
+  it("reports a failed read through loadError, leaving the list alone", async () => {
     vi.resetModules();
     globalThis.fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) as unknown as typeof fetch;
     const { useShortcuts } = await import("../../../src/composables/useShortcuts");
     const store = useShortcuts();
-    expect(await store.load(true)).toBe(false);
+    await store.load(true);
     expect(store.loadError.value).toBe("HTTP 500");
+    expect(store.shortcuts.value).toEqual([]);
   });
 });

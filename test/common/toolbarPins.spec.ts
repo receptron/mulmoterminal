@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { MAX_TOOLBAR_PINS, toolbarPinKey, sanitizeToolbarPins, resolveToolbarPins, nextToolbarPins } from "../../common/toolbarPins";
+import { MAX_TOOLBAR_PINS, MAX_STORED_TOOLBAR_PINS, toolbarPinKey, sanitizeToolbarPins, resolveToolbarPins, nextToolbarPins } from "../../common/toolbarPins";
 import type { Shortcut } from "../../common/shortcuts";
 
 const pin = (slug: string, kind: Shortcut["kind"] = "collection"): Shortcut => ({ kind, slug, title: slug, icon: "task" });
@@ -30,9 +30,12 @@ describe("sanitizeToolbarPins", () => {
     expect(sanitizeToolbarPins(["collection:news", "feed:news"])).toEqual(["collection:news", "feed:news"]);
   });
 
-  it("truncates past the cap rather than letting the row grow without limit", () => {
-    const many = Array.from({ length: MAX_TOOLBAR_PINS + 3 }, (_, i) => `collection:c${i}`);
-    expect(sanitizeToolbarPins(many)).toEqual(many.slice(0, MAX_TOOLBAR_PINS));
+  // The FILE's bound, not the number of buttons: a key past the fifth is one whose pin is unpinned
+  // right now, and truncating to five would delete it.
+  it("keeps more keys than the toolbar can draw, up to the file's bound", () => {
+    const many = Array.from({ length: MAX_STORED_TOOLBAR_PINS + 3 }, (_, i) => `collection:c${i}`);
+    expect(sanitizeToolbarPins(many)).toEqual(many.slice(0, MAX_STORED_TOOLBAR_PINS));
+    expect(MAX_STORED_TOOLBAR_PINS).toBeGreaterThan(MAX_TOOLBAR_PINS);
   });
 
   // The kind is one of two known words, so everything after the FIRST colon is the slug.
@@ -62,6 +65,14 @@ describe("resolveToolbarPins", () => {
     expect(resolveToolbarPins([pin("a")], [])).toEqual([]);
   });
 
+  // The file may hold more keys than the row has buttons, so the cut happens here — and it happens
+  // AFTER the gone ones are skipped, so a dead key never costs a live one its place.
+  it("draws at most the row's worth, skipping the ones whose pins are gone", () => {
+    const shortcuts = Array.from({ length: MAX_TOOLBAR_PINS + 2 }, (_, i) => pin(`live${i}`));
+    const keys = ["collection:gone", ...shortcuts.map((s) => `collection:${s.slug}`)];
+    expect(resolveToolbarPins(shortcuts, keys).map((s) => s.slug)).toEqual(shortcuts.slice(0, MAX_TOOLBAR_PINS).map((s) => s.slug));
+  });
+
   // Renaming a collection updates the PIN (reconcile refreshes title/icon), and the toolbar has to
   // follow it rather than carry a copy of the old name.
   it("takes the title and icon from the pin", () => {
@@ -88,41 +99,44 @@ describe("nextToolbarPins", () => {
     expect(nextToolbarPins(keys, live, "collection:b", false)).toBe(keys);
   });
 
-  it("refuses to promote past the cap", () => {
+  it("refuses to promote past the number of buttons the row can draw", () => {
     const full = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:c${i}`);
     expect(nextToolbarPins(full, full, "collection:extra", true)).toBe(full);
   });
 
-  it("still demotes when the list is full", () => {
+  it("still demotes when the row is full", () => {
     const full = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:c${i}`);
     expect(nextToolbarPins(full, full, "collection:c0", false)).toEqual(full.slice(1));
   });
 
-  // Codex on #1991: a promoted key whose pin was removed — here or in MulmoClaude, which writes the
-  // same file — is invisible in Settings, so five of them would fill the cap with nothing to untick.
-  it("drops a promoted key whose pin no longer exists", () => {
-    expect(nextToolbarPins(["collection:gone", "collection:a"], live, "collection:b", true)).toEqual(["collection:a", "collection:b"]);
+  // THE invariant of this design: a save touches the key that was clicked and nothing else. It is
+  // what makes a stale `live` harmless, and it is why the four freshness findings on PR #1991
+  // cannot come back as data loss.
+  it("never removes a key other than the one being demoted", () => {
+    const keys = ["collection:gone", "collection:a", "feed:also-gone"];
+    expect(nextToolbarPins(keys, live, "collection:b", true)).toEqual([...keys, "collection:b"]);
+    expect(nextToolbarPins(keys, live, "collection:a", false)).toEqual(["collection:gone", "feed:also-gone"]);
   });
 
-  it("frees the slot a vanished pin was holding, so a full list can still take one", () => {
+  // Codex on #1991: a key whose pin is gone draws nothing, so counting it toward the five would
+  // fill the row with buttons that are not there and leave nothing to untick.
+  it("does not let keys whose pins are gone use up the row", () => {
     const stale = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`);
-    expect(nextToolbarPins(stale, live, "collection:a", true)).toEqual(["collection:a"]);
+    expect(nextToolbarPins(stale, live, "collection:a", true)).toEqual([...stale, "collection:a"]);
   });
 
-  it("prunes on a demotion too, and reports the prune as a change worth saving", () => {
-    const keys = ["collection:gone", "collection:a"];
-    expect(nextToolbarPins(keys, live, "collection:a", false)).toEqual([]);
-    // ...and a demotion of something not held still saves, because the prune itself is the change.
-    expect(nextToolbarPins(keys, live, "collection:b", false)).toEqual(["collection:a"]);
+  // An empty `live` is "the favourites have not loaded". Nothing is deleted on the strength of it —
+  // the count is simply zero, so a promotion still goes through.
+  it("promotes even when the live list is unknown", () => {
+    const keys = ["collection:a"];
+    expect(nextToolbarPins(keys, [], "collection:b", true)).toEqual(["collection:a", "collection:b"]);
   });
 
-  // "No favourites exist" and "the favourites have not loaded" look identical from here, and
-  // writing the second back would delete the user's promotions — the rule reconcileShortcuts states
-  // for the shared file.
-  it("prunes nothing when the live list is empty", () => {
-    const keys = ["collection:a", "collection:gone"];
-    expect(nextToolbarPins(keys, [], "collection:a", false)).toEqual(["collection:gone"]);
-    expect(nextToolbarPins(keys, [], "collection:b", false)).toBe(keys);
+  // The file's own bound is the only thing that can refuse a promotion for a reason other than the
+  // row being full — a config would need forty-five unpinned promotions to reach it.
+  it("stops appending at the file's bound", () => {
+    const many = Array.from({ length: MAX_STORED_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`);
+    expect(nextToolbarPins(many, live, "collection:a", true)).toBe(many);
   });
 });
 

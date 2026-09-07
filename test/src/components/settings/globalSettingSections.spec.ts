@@ -380,13 +380,15 @@ describe("ToolbarPinsSection", () => {
 
   // Codex on #1991: keys whose pins are gone are not offered here, so counting them toward the cap
   // would lock the section with nothing on screen to untick — and the first save clears them out.
-  it("does not let vanished pins fill the cap", async () => {
-    setToolbarPins(Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`));
+  it("does not let vanished pins fill the cap, and does not delete them either", async () => {
+    const gone = Array.from({ length: MAX_TOOLBAR_PINS }, (_, i) => `collection:gone${i}`);
+    setToolbarPins(gone);
     const wrapper = await openPane();
     expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
-    expect(posts).toEqual([{ toolbarPins: ["collection:works"] }]);
+    // They keep their place in the file: re-pin one and its button comes straight back.
+    expect(posts).toEqual([{ toolbarPins: [...gone, "collection:works"] }]);
   });
 
   // A refused save must not leave the screen showing a state the host never took.
@@ -408,56 +410,46 @@ describe("ToolbarPinsSection", () => {
     expect(pinned.refreshes).toBe(1);
   });
 
-  // Codex on #1991 (P1): the forced read leaves a window where the rows on screen are the OLD list.
-  // A tick in that window would carry it into the prune and persist a preference with the entries
-  // the refresh was about to bring back stripped out. The pane must not be actable until it lands.
-  it("cannot be saved from while the forced re-read is in flight", async () => {
+  // The read is a freshness measure, not a gate: a save cannot delete a key the user did not untick,
+  // so a list that is still arriving costs an out-of-date row, never a promotion. The gate that used
+  // to be here existed only to protect a prune that no longer happens.
+  it("is usable while the re-read is still out, and keeps every other key", async () => {
     let open: () => void = () => {};
     pinned.gate = new Promise<void>((resolve) => (open = resolve));
-    // Promoted, but absent from the list this page has been holding — exactly what a stale prune eats.
-    pinned.setList([works]);
-    setToolbarPins(["collection:todos"]);
+    pinned.setList([works]); // the list this page has been holding
+    setToolbarPins(["collection:todos"]); // ...promoted, and absent from it
     const wrapper = mount(ToolbarPinsSection);
     await flushPromises();
-    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeDefined();
 
+    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
     pinned.setList([works, todos]); // what the re-read brings back
     open();
-    await flushPromises();
-    expect(wrapper.findAll("input[type=checkbox]")[0].attributes("disabled")).toBeUndefined();
-
     await toggleAt(wrapper, 0, true);
     await flushPromises();
     expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:works"] }]);
   });
 
-  // Codex on #1991 (P1), the third finding on one rule: a forced read that FAILS leaves the cached
-  // list on screen, and saving from it prunes every configured key that list happens to lack. So a
-  // read that did not land leaves the pane read-only rather than merely un-refreshed.
-  it("stays read-only when the forced re-read fails, and says why", async () => {
+  // A re-read that fails leaves the cached list on screen. That is worth using — the alternative is
+  // a pane nobody can act on — because the save that follows still cannot remove anything else.
+  it("still works when the re-read fails, without deleting what it cannot see", async () => {
     pinned.landed = false;
     pinned.setError("HTTP 500");
-    setToolbarPins(["collection:todos"]);
+    setToolbarPins(["collection:todos", "collection:gone"]);
     const wrapper = await openPane();
-    expect(wrapper.text()).toContain("could not be re-read");
-    for (const box of wrapper.findAll("input[type=checkbox]")) expect(box.attributes("disabled")).toBeDefined();
-    // ...and nothing reaches the config even if a change is forced through the DOM.
+    for (const box of wrapper.findAll("input[type=checkbox]")) expect(box.attributes("disabled")).toBeUndefined();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
-    expect(posts).toEqual([]);
-    expect(toolbarPinKeys.value).toEqual(["collection:todos"]);
+    expect(posts).toEqual([{ toolbarPins: ["collection:todos", "collection:gone", "collection:works"] }]);
   });
 
-  // Fails CLOSED: the read is documented to answer rather than throw, but if it ever did, the pane
-  // must land in the same read-only state as a failed read rather than leave a rejection loose in a
-  // DOM handler.
-  it("stays read-only if the re-read throws", async () => {
+  // The read is documented to answer rather than throw; if it ever did, the pane must still work
+  // rather than leave a rejection loose in a DOM handler.
+  it("still works if the re-read throws", async () => {
     pinned.throws = true;
     const wrapper = await openPane();
-    for (const box of wrapper.findAll("input[type=checkbox]")) expect(box.attributes("disabled")).toBeDefined();
     await toggleAt(wrapper, 0, true);
     await flushPromises();
-    expect(posts).toEqual([]);
+    expect(posts).toEqual([{ toolbarPins: ["collection:works"] }]);
   });
 
   // CodeRabbit on #1991: `loadConfig` RETRIES, so a /api/config read can still be in flight when a
