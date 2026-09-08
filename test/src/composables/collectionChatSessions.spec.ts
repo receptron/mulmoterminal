@@ -14,6 +14,17 @@ const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void;
   subscribed: 0,
   listening: 0,
 }));
+// What the grid holds. Null until it has said — the filing must not read that as "no cells".
+const grid = vi.hoisted((): { ids: string[] | null } => ({ ids: null }));
+// A getter rather than a `computed`: a computed with no reactive dependency caches its first
+// answer forever, so the cases below would all read whatever the first one set.
+vi.mock("../../../src/composables/collectionTerminalClaim", () => ({
+  gridSessionIds: {
+    get value() {
+      return grid.ids;
+    },
+  },
+}));
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
     subscribe: (_channel: string, callback: (data: unknown) => void) => {
@@ -67,6 +78,7 @@ describe("filing a collection's chats", () => {
     resetCollectionChats();
     bus.subscribed = 0;
     bus.listening = 0;
+    grid.ids = null;
     served = null;
     consider = null;
     vi.stubGlobal(
@@ -298,5 +310,31 @@ describe("filing a collection's chats", () => {
     expect(asked).toContain("s240");
     expect(ids(works)).toHaveLength(249);
     expect(ids(works)).not.toContain("s240");
+  });
+
+  // A tab whose cell is gone sits over an empty pane: the pane borrows a cell's terminal rather
+  // than owning one. This is what a filing restored across a reload can produce.
+  it("retires a chat this grid holds no cell for", async () => {
+    holdCollectionChat(works, request("has-a-cell"));
+    holdCollectionChat(works, request("cell-closed"));
+    grid.ids = ["has-a-cell"];
+    served = ["has-a-cell", "cell-closed"]; // the server still runs both — this is not about that
+    await settle();
+    expect(ids(works)).toEqual(["has-a-cell"]);
+  });
+
+  // The grid publishes once it has parsed its layout; before that it has said nothing, and a chat
+  // is filed a moment before its cell is placed.
+  it("retires nothing while the grid has not said, or while the chat is new", async () => {
+    holdCollectionChat(works, request("a"));
+    grid.ids = null; // the grid has not answered yet
+    served = ["a"];
+    await settle();
+    expect(ids(works)).toEqual(["a"]);
+
+    holdCollectionChat(todos, request("just-placed"));
+    grid.ids = []; // ...and now it has, but this one's cell is still being placed
+    await flush();
+    expect(ids(todos)).toEqual(["just-placed"]);
   });
 });

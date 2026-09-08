@@ -1,7 +1,13 @@
 // @vitest-environment node
 // Which session's cell the collection pane is showing, and where (#2001).
 import { describe, it, expect, beforeEach } from "vitest";
-import { claimCollectionTerminal, collectionTerminalClaim, releaseCollectionTerminal } from "../../../src/composables/collectionTerminalClaim";
+import {
+  claimCollectionTerminal,
+  collectionTerminalClaim,
+  gridSessionIds,
+  publishGridSessions,
+  releaseCollectionTerminal,
+} from "../../../src/composables/collectionTerminalClaim";
 
 // A stand-in for the pane's receptacle: the claim carries a DOM node, and what these cases are
 // about is which node is carried, not what is in it.
@@ -40,5 +46,19 @@ describe("the collection terminal claim", () => {
     claimCollectionTerminal("b", el("second"));
     releaseCollectionTerminal("a");
     expect(collectionTerminalClaim.value?.sessionId).toBe("b");
+  });
+});
+
+// The grid's half of the same conversation.
+describe("what the grid says it holds", () => {
+  it("says nothing until the grid has answered", () => {
+    expect(gridSessionIds.value === null || Array.isArray(gridSessionIds.value)).toBe(true);
+  });
+
+  it("reports the sessions it was given, including none", () => {
+    publishGridSessions(["a", "b"]);
+    expect(gridSessionIds.value).toEqual(["a", "b"]);
+    publishGridSessions([]);
+    expect(gridSessionIds.value).toEqual([]); // an EMPTY answer, which is not the same as no answer
   });
 });

@@ -1,6 +1,10 @@
 import { ref, type Ref } from "vue";
 
-// Which session's terminal the collection pane is currently showing, and WHERE (#2001).
+// What the grid and the collection pane tell each other (#2001).
+//
+// Two halves of one relationship, in one file because they are only ever read together: the pane
+// says which session it wants and where to put it, and the grid says which sessions it has a cell
+// for. Neither side imports the other's component.
 //
 // The chat is an ordinary grid cell — placed at spawn, counted in the grid, closable there. While
 // the Collections overlay is open, that cell's `TerminalCell` is TELEPORTED into the pane rather
@@ -33,4 +37,20 @@ export function claimCollectionTerminal(sessionId: string, el: HTMLElement): voi
  *  one before the old component's teardown runs, and that must not strand the new claim. */
 export function releaseCollectionTerminal(sessionId: string): void {
   if (claim.value?.sessionId === sessionId) claim.value = null;
+}
+
+// ---- the grid's half -------------------------------------------------------------------------
+//
+// The pane owns no terminal: it borrows a cell's, by having the grid teleport it. So a filed chat
+// with no cell has nothing to show, and its tab would sit over an empty pane — which is what a
+// filing restored across a reload produces when that cell has since been closed.
+//
+// Null until the grid has said, which is NOT the same as "no cells": absence is only evidence once
+// there is an answer to read.
+const held: Ref<readonly string[] | null> = ref(null);
+
+export const gridSessionIds = held;
+
+export function publishGridSessions(ids: readonly string[]): void {
+  held.value = ids;
 }

@@ -5,6 +5,8 @@ import { parseSessionActivityPayload } from "./sessionActivity";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
+import { COLLECTION_CHATS_KEY, parseFiledChats, serializeFiledChats } from "./collectionChatStorage";
+import { gridSessionIds } from "./collectionTerminalClaim";
 
 // Which chats belong to which collection (#2001).
 //
@@ -29,7 +31,30 @@ export interface CollectionChats {
 }
 
 const NONE: CollectionChats = { sessions: [], activeId: null };
-const filed = reactive(new Map<string, CollectionChats>());
+
+// Restored on load, saved on every change: the chats are grid cells and outlive a reload, so the
+// filing has to as well — otherwise the collection comes back empty while the same agents are
+// still running in the grid (reported in use).
+//
+// A restored chat is not trusted to still exist. It is checked the same way every other filed chat
+// is: against the sessions the SERVER still runs, and against the cells this grid holds.
+const filed = reactive(readFiled());
+
+function readFiled(): Map<string, CollectionChats> {
+  try {
+    return parseFiledChats(localStorage.getItem(COLLECTION_CHATS_KEY));
+  } catch {
+    return new Map<string, CollectionChats>(); // no storage (a spec, a locked-down browser)
+  }
+}
+
+function saveFiled(): void {
+  try {
+    localStorage.setItem(COLLECTION_CHATS_KEY, serializeFiledChats(filed));
+  } catch {
+    // best-effort — a full or unavailable store must not break the pane
+  }
+}
 
 export function collectionChatsFor(key: string | null): CollectionChats {
   return (key && filed.get(key)) || NONE;
@@ -45,13 +70,16 @@ export function holdCollectionChat(key: string, req: SpawnedChatRequest): void {
   if (!held.sessions.some((session) => session.id === req.id)) held.sessions.push(req);
   held.activeId = req.id;
   filed.set(key, held);
+  saveFiled();
 }
 
 /** Show one of the collection's chats. Ignores an id it does not hold, so a stale click cannot
  *  leave the pane pointing at nothing. */
 export function activateCollectionChat(key: string, id: string): void {
   const held = filed.get(key);
-  if (held?.sessions.some((session) => session.id === id)) held.activeId = id;
+  if (!held?.sessions.some((session) => session.id === id)) return;
+  held.activeId = id;
+  saveFiled();
 }
 
 /** Stop showing one chat here — it has gone to the grid, or it has exited.
@@ -72,10 +100,12 @@ export function dropCollectionChat(key: string, id: string): void {
     // publishes, and `holdCollectionChat` puts it back the moment there is a chat again (Codex,
     // PR #2002).
     if (filed.size === 0) stopWatchingEndings();
+    saveFiled();
     return;
   }
   const next = held.sessions[index - 1] ?? held.sessions[0];
   if (held.activeId === id && next) held.activeId = next.id;
+  saveFiled();
 }
 
 // A session that ends while its terminal is NOT mounted — you are on another tab, in another
@@ -105,7 +135,10 @@ function listenForEndings(): void {
   // server outright which of these are still running. Every connect rather than every RE-connect:
   // a chat is filed as soon as it is spawned, which can be before this socket has ever come up, and
   // an ending in THAT window is equally invisible (Codex again, iteration 3).
-  const offConnect = onConnect(() => void reconcileWithServer());
+  const offConnect = onConnect(() => {
+    retireCellless();
+    void reconcileWithServer();
+  });
   stopListening = () => {
     off();
     offConnect();
@@ -133,9 +166,27 @@ function scheduleSettleCheck(): void {
   if (settleTimer) return;
   settleTimer = setTimeout(() => {
     settleTimer = null;
+    retireCellless();
     void reconcileWithServer();
     if ([...filedAt.values()].some((at) => Date.now() - at < SPAWN_SETTLE_MS)) scheduleSettleCheck();
   }, SPAWN_SETTLE_MS);
+}
+
+/** Drop chats this grid holds no cell for. The pane borrows a cell's terminal rather than owning
+ *  one, so a tab with no cell sits over an empty pane — which is what a restored filing produces
+ *  when the cell has since been closed.
+ *
+ *  Only ids that have SETTLED, and only once the grid has published something: a chat is filed a
+ *  moment before its cell is placed, and "the grid has not said yet" is not "the grid has none". */
+function retireCellless(): void {
+  const held = gridSessionIds.value;
+  if (!held) return;
+  const cells = new Set(held);
+  const settled = Date.now() - SPAWN_SETTLE_MS;
+  [...filed.values()]
+    .flatMap((chats) => chats.sessions.map((session) => session.id))
+    .filter((id) => !cells.has(id) && (filedAt.get(id) ?? 0) <= settled)
+    .forEach(forgetEndedChat);
 }
 
 /** Ask which filed chats the server still has, and retire the rest. Silent on failure and on a
@@ -201,4 +252,13 @@ function stopWatchingEndings(): void {
 export function resetCollectionChats(): void {
   filed.clear();
   stopWatchingEndings();
+  saveFiled();
+}
+
+// A filing restored from storage has had none of this arranged for it — nothing called
+// `holdCollectionChat` this time round. Without it a reloaded tab would never be retired: no
+// listener for the server's `closed`, and no settle check to notice a cell that is gone.
+if (filed.size > 0) {
+  listenForEndings();
+  scheduleSettleCheck();
 }

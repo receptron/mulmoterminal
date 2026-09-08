@@ -46,7 +46,7 @@ import {
   MAX_TERMINALS,
 } from "./gridTabs";
 import { activityStatus, type AttentionStatus } from "./attentionStatus";
-import { collectionTerminalClaim } from "../composables/collectionTerminalClaim";
+import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
 import { gridShortcutFor, isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
 import { isImeConfirming } from "../composables/imeComposition";
@@ -149,12 +149,13 @@ const { priorities: priorityByCwd } = useDirPriorities(cellCwds);
 // declared rank; "manual" keeps the hand-arranged order.
 // The ONE ordering both the grid and the cockpit roster read, so the two can't drift (#720).
 const orderedCells = computed(() => orderCells(state.value.cells, statusForSort.value, state.value.sortMode, priorityByCwd.value));
-// The grid: while a cell is zoomed, render EVERY cell (the filmstrip lines up all tabs' terminals,
-// live); otherwise just the active page's slice. A waiting cell from any page floats to the front.
 const expandedUid = computed(() => zoomedUid(state.value));
 // The page on screen, the whole list while zoomed, plus whatever the collection pane claimed —
 // a cell that is not rendered cannot be teleported into it (displayCells.ts, #2001).
 const displayCells = computed(() => cellsToDisplay(orderedCells.value, state.value.page, expandedUid.value !== null, collectionTerminalClaim.value?.sessionId));
+// What the grid holds, for the collection pane: a chat filed under a collection whose cell is gone
+// has nothing to be shown IN, and the pane borrows cells rather than owning terminals (#2001).
+watch(() => state.value.cells.map((cell) => cell.session).filter((id): id is string => !!id), publishGridSessions, { immediate: true });
 
 // The zoomed grid's cockpit roster: a text row per cell — status + dir + the user's memo +
 // AI summary + current prompt + the agent's latest reply — so many parallel agents can be
