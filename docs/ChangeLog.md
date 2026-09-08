@@ -17,8 +17,10 @@ Entries here are folded into the next release's heading when it ships.
   default, because one view cannot settle what is in front of what — and hands back the file for
   the agent to read before showing you anything. It takes the same source as
   `presentShapeScript`: inline, or a `.shape` you point it at. It lives in the same **Canvas
-  (render MCPs)** group, so a cell that can show a model can check one; unlike the other render
-  tools it asks permission the first time, because it starts a headless browser to do the drawing.
+  (render MCPs)** group, so a cell that can show a model can check one, and it runs without asking
+  like the other drawing tools — it writes a PNG into your workspace artifacts and reaches nothing
+  outside this machine. Drawing needs a local headless browser; where there is none, the tool says
+  so and the agent carries on with `presentShapeScript`.
 
 ### A 3D model is a file you can edit
 
