@@ -1434,6 +1434,14 @@ prompt and spawns a fresh agent session for it — the **Launch with Claude / Co
 decides which agent (and whether the seed auto-runs or drops in as an editable draft).
 Favorited collections get their own toolbar buttons.
 
+That session is an ordinary **grid cell**, and starting it no longer takes the screen to the
+grid: while the collection is open, the grid **teleports that cell into a pane below it**, so
+the same terminal is driven from whichever view you have open — no hand-off, no reconnect, and
+nothing to move back. Several chats under one collection become tabs, each with the grid's own
+attention dot and a line of what the shown one is doing; the **Collections** button carries how
+many are running behind it. Which collection a chat belongs to survives a reload, and a chat
+whose cell is gone drops out rather than sitting over an empty pane.
+
 ---
 
 ## More features
@@ -2117,6 +2125,8 @@ src/
     GitBranchChip.vue, ModelContextBadge.vue header chips / badges
     PrsOverlay.vue                           cross-repo PRs & Issues
     Wiki*View.vue, Collections*.vue, AccountingOverlay.vue   workspace views
+    CollectionChatPane.vue                   the pane under an open collection: tabs, and the
+                                             receptacle the grid teleports a chat's cell into
     TimelineOverlay.vue, ToolsPane.vue, NotificationBell.vue, RemoteHostControl.vue
     SettingsModal.vue                        settings — the dialog shell + section order
     settings/                                one file per settings section (theme, sounds,
