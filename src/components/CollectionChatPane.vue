@@ -18,13 +18,12 @@ import Terminal from "./Terminal.vue";
 import { claimCollectionChat } from "../composables/collectionChatPane";
 import {
   activateCollectionChat,
-  collectionChatKey,
   collectionChatSlotKey,
   collectionChatsFor,
   dropCollectionChat,
   holdCollectionChat,
 } from "../composables/collectionChatSessions";
-import { useCollectionBrowse, browseRouteProjectId } from "../composables/useCollectionBrowse";
+import { currentCollectionChatKey } from "../composables/useCollectionBrowse";
 import { placeSpawnedChat, type SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { release } from "../composables/useTerminalConnections";
 import { dragSplitter } from "../composables/dragSplitter";
@@ -37,8 +36,9 @@ import { activityStatus, type AttentionStatus } from "./attentionStatus";
 const HEIGHT_KEY = "mt-collection-chat-height";
 const DEFAULT_HEIGHT = 320;
 
-const { view } = useCollectionBrowse();
-const key = computed(() => collectionChatKey(view.value, browseRouteProjectId()));
+// The collection on screen, as the filing key — the same answer `startCollectionChat` captures
+// when a chat begins, so the pane looks under exactly where the launcher filed it.
+const key = computed(currentCollectionChatKey);
 const chats = computed(() => collectionChatsFor(key.value));
 const held = computed(() => chats.value.sessions.find((session) => session.id === chats.value.activeId) ?? null);
 
@@ -94,8 +94,11 @@ function unfile(target: string, req: SpawnedChatRequest): void {
 // A chat started while a collection is open is filed under THAT collection, as another tab. The one
 // already running keeps its tab and its terminal — asking a second thing while the first is working
 // is the ordinary case, and the first version paid for it by pushing that one to the grid.
-const stopClaiming = claimCollectionChat((req) => {
-  const target = key.value;
+const stopClaiming = claimCollectionChat((req, from) => {
+  // Filed where it was ASKED from, falling back to what is on screen for a caller that did not say.
+  // A chat started in one collection while its spawn is in flight, and the reader moves on, belongs
+  // to the collection whose card was pressed (Codex, PR #2002).
+  const target = from ?? key.value;
   if (!target) return false; // nothing open to file it under — the grid path takes it
   holdCollectionChat(target, req);
   return true;

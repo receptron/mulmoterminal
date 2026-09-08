@@ -54,4 +54,18 @@ describe("collection chat placement", () => {
     expect(offerCollectionChat(request("a"))).toBe(false);
     release();
   });
+
+  // The key the caller captured when the chat was STARTED travels with the offer; a caller that
+  // captured none leaves the pane to decide from what is on screen.
+  it("carries the collection it was started from", () => {
+    const seen: (string | null)[] = [];
+    const release = claimCollectionChat((_req, key) => {
+      seen.push(key);
+      return true;
+    });
+    offerCollectionChat(request("a"), "workspace|collection:works");
+    offerCollectionChat(request("b"));
+    expect(seen).toEqual(["workspace|collection:works", null]);
+    release();
+  });
 });

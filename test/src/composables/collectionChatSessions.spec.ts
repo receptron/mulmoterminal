@@ -35,13 +35,13 @@ import {
   collectionChatSlotKey,
   forgetEndedChat,
   activateCollectionChat,
-  collectionChatKey,
   collectionChatCount,
   collectionChatsFor,
   dropCollectionChat,
   holdCollectionChat,
   resetCollectionChats,
 } from "../../../src/composables/collectionChatSessions";
+import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
 const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draft: false });
@@ -59,34 +59,6 @@ const flush = async (): Promise<void> => {
 const settle = async (): Promise<void> => {
   await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
 };
-
-describe("collectionChatKey", () => {
-  it("files a collection and a feed of the same slug apart", () => {
-    const collection = collectionChatKey({ mode: "detail", kind: "collection", slug: "news" }, null);
-    const feed = collectionChatKey({ mode: "detail", kind: "feed", slug: "news" }, null);
-    expect(collection).not.toBe(feed);
-  });
-
-  // The same slug in two projects is two collections — the distinction the whole collectionSurface
-  // stack exists to keep.
-  it("files the same slug in two projects apart", () => {
-    const workspace = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null);
-    const project = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, "proj-1");
-    expect(workspace).not.toBe(project);
-  });
-
-  // The index is a place too: the "+ Collection" flow starts its chat there, before any collection
-  // exists to belong to.
-  it("gives the index its own key, apart from any collection", () => {
-    const index = collectionChatKey({ mode: "index", kind: "collection" }, null);
-    expect(index).not.toBeNull();
-    expect(index).not.toBe(collectionChatKey({ mode: "detail", kind: "collection", slug: "index" }, null));
-  });
-
-  it("answers null when nothing is open to file under", () => {
-    expect(collectionChatKey({ mode: "closed" }, null)).toBeNull();
-  });
-});
 
 describe("filing a collection's chats", () => {
   const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";

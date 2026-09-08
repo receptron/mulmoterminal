@@ -10,6 +10,7 @@ import { ref } from "vue";
 import CollectionChatPane from "../../../src/components/CollectionChatPane.vue";
 import { offerCollectionChat } from "../../../src/composables/collectionChatPane";
 import { resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
 const placed = vi.hoisted((): { calls: SpawnedChatRequest[] } => ({ calls: [] }));
@@ -23,10 +24,10 @@ vi.mock("../../../src/composables/useTerminalConnections", () => ({
 // Which collection is on screen. The pane reads it through useCollectionBrowse, so moving the view
 // IS "switching collections" from the pane's point of view.
 const browse = vi.hoisted((): { view: { value: unknown } } => ({ view: { value: null } }));
-vi.mock("../../../src/composables/useCollectionBrowse", () => ({
-  useCollectionBrowse: () => ({ view: browse.view }),
-  browseRouteProjectId: () => null,
-}));
+vi.mock("../../../src/composables/useCollectionBrowse", async () => {
+  const { collectionChatKey } = await import("../../../src/composables/collectionChatKey");
+  return { currentCollectionChatKey: () => collectionChatKey(browse.view.value as never, null) };
+});
 // The supervision sources the pane reads. Real ones fetch and subscribe; what these cases are about
 // is what the pane DOES with the answers.
 type Activity = { working: boolean; waiting: boolean; event: string | null };
@@ -316,6 +317,23 @@ describe("CollectionChatPane", () => {
     offerCollectionChat(request("c2", "claude"));
     await wrapper.vm.$nextTick();
     expect(tabs(wrapper).map((t) => t.text())).toEqual(["Claude 1", "Codex", "Claude 2"]);
+    wrapper.unmount();
+  });
+
+  // The spawn is a request, and the reader can move on while it is in flight. The chat belongs to
+  // the collection whose card was pressed, not to whatever is on screen when the answer lands
+  // (Codex, PR #2002).
+  it("files a chat where it was started, not where you ended up", async () => {
+    const wrapper = mount(CollectionChatPane);
+    const startedIn = collectionChatKey(at("works") as never, null);
+    browse.view.value = at("todos"); // the reader moved on before the spawn came back
+    await wrapper.vm.$nextTick();
+    expect(offerCollectionChat(request("slow-spawn"), startedIn)).toBe(true);
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find("[data-session]").exists()).toBe(false); // not here
+    browse.view.value = at("works");
+    await wrapper.vm.$nextTick();
+    expect(shown(wrapper)).toBe("slow-spawn"); // ...it is where it was asked for
     wrapper.unmount();
   });
 });

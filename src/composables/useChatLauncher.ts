@@ -23,6 +23,7 @@ import { activeCollectionProjectId } from "./collectionSurface";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { placeSpawnedChat } from "./useSpawnedChat";
 import { offerCollectionChat } from "./collectionChatPane";
+import { currentCollectionChatKey } from "./useCollectionBrowse";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
@@ -56,6 +57,9 @@ export async function startCollectionChat(
 ): Promise<SpawnedChat | null> {
   const message = prompt.trim();
   if (!message) return null;
+  // Where this was asked from, read now rather than after the spawn: the request below is awaited,
+  // and moving to another collection meanwhile must not file the chat where you landed.
+  const filingKey = currentCollectionChatKey();
   const agent = launchAgent.value;
   // codex has no editable-draft path (it auto-runs the seed), so a draft only applies to claude.
   const draft = agent === "claude" && opts.draft === true;
@@ -102,7 +106,7 @@ export async function startCollectionChat(
     // in a pane UNDER the collection instead of taking the screen to the grid. Nothing is claimed
     // unless that pane is open, and the pane hands the same request on to `placeSpawnedChat` when
     // it lets go — so the session still becomes a grid cell, later rather than instead.
-    if (!offerCollectionChat(request)) placeSpawnedChat(request);
+    if (!offerCollectionChat(request, filingKey)) placeSpawnedChat(request);
   }
   // `agent` is what the route was ASKED for, and the route echoes it back in jsonData — so this is
   // the agent the PTY actually runs, not a second reading of the toggle.

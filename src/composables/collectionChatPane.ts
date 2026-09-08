@@ -16,11 +16,11 @@ import type { SpawnedChatRequest } from "./useSpawnedChat";
 // attach supersedes the old one, `server/session/pty-connection.ts`), so the pane hands the
 // request on to `placeSpawnedChat` when it lets go. Every session still ends up a grid cell; the
 // pane only decides WHEN.
-let claim: ((req: SpawnedChatRequest) => boolean) | null = null;
+let claim: ((req: SpawnedChatRequest, key: string | null) => boolean) | null = null;
 
 /** Claim placement while the pane can show it. The returned function releases the claim — call it
  *  on unmount, and only it clears the claim, so a stale release cannot detach a newer one. */
-export function claimCollectionChat(take: (req: SpawnedChatRequest) => boolean): () => void {
+export function claimCollectionChat(take: (req: SpawnedChatRequest, key: string | null) => boolean): () => void {
   claim = take;
   return () => {
     if (claim === take) claim = null;
@@ -28,7 +28,10 @@ export function claimCollectionChat(take: (req: SpawnedChatRequest) => boolean):
 }
 
 /** True when the pane took the session — the caller must then NOT place it in the grid. False
- *  whenever no pane is open, which is every path that existed before this. */
-export function offerCollectionChat(req: SpawnedChatRequest): boolean {
-  return claim?.(req) ?? false;
+ *  whenever no pane is open, which is every path that existed before this.
+ *
+ *  `key` is where the caller asked from, captured before the spawn; omitted, the pane files under
+ *  whatever is on screen when the offer arrives. */
+export function offerCollectionChat(req: SpawnedChatRequest, key?: string | null): boolean {
+  return claim?.(req, key ?? null) ?? false;
 }

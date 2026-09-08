@@ -4,7 +4,8 @@ import AppToolbar from "../../../src/components/AppToolbar.vue";
 import { router } from "../../../src/router/index";
 import { githubGotoIndex } from "../../../src/composables/useGithubView";
 import { setToolbarPins } from "../../../src/composables/toolbarPins";
-import { collectionChatKey, holdCollectionChat, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import { holdCollectionChat, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 import type { Shortcut } from "../../../common/shortcuts";
 
