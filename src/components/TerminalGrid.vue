@@ -670,10 +670,16 @@ function placementOf(cell: { uid: number; session: string | null }): CellPlaceme
   return cellPlacement({ claimedByCollection: paneTargetFor(cell) !== null, zoomed: zoomed.value, expanded: cell.uid === props.expandedUid });
 }
 
-/** The pane's receptacle for this cell, when the collection pane is showing it. */
-function paneTargetFor(cell: { session: string | null }): HTMLElement | null {
+/** The pane's receptacle for this cell, when the collection pane is showing it.
+ *
+ *  A COMMAND cell is never eligible, and that is a safety rule rather than a tidiness one: its
+ *  terminal is handed no `persist-key`, so the slot is ephemeral and a remount — which the pane's
+ *  own key change causes — would RELEASE it and kill the running command. The pane only ever claims
+ *  a chat's session, so this cannot happen today; saying it here is what keeps the two facts from
+ *  drifting apart (CodeRabbit, PR #2002). */
+function paneTargetFor(cell: { session: string | null; command?: unknown }): HTMLElement | null {
   const claim = collectionTerminalClaim.value;
-  return claim && cell.session === claim.sessionId ? claim.el : null;
+  return claim && !cell.command && cell.session === claim.sessionId ? claim.el : null;
 }
 
 // GUI -> LLM for the enlarged cell (a submitted form's answer). App.vue routes this through the

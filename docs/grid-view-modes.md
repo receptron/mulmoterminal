@@ -17,9 +17,11 @@ layout). `listMode` defaults to **true**, so the roster is what you get when you
 
 ## The five facts that keep being re-derived wrong
 
-**1. There is one component instance per cell, and it is always mounted.**
+**1. There is one component instance per cell, and the grid's own modes never remount it.**
 The `.grid` div renders every cell in `props.cells` unconditionally. A `<Teleport>` moves the
-enlarged one into `.zoom-main`, and a chat's cell into the pane under an open collection. So a single
+enlarged one into `.zoom-main`, and a chat's cell into the pane under an open collection. Tile,
+thumbnail, enlarged and parked-off-screen are the same instance throughout — **the one exception is
+the collection trip, which re-keys deliberately (fact 5)**. So a single
 `TerminalCell` is, over its life, a tile / a thumbnail / the enlarged terminal / an off-screen box —
 without ever being remounted. Anything a cell renders must therefore make sense in all four
 positions, or be conditioned on the mode.
@@ -58,7 +60,10 @@ Two consequences worth keeping:
   the switch and moves them after; a re-key there would hand it different elements.
 - **A re-key remounts the cell, and that is safe *because the slot is durable*.** `attach`
   re-parents the same xterm instead of reconnecting, which is the same mechanism paging already
-  relies on. It would not be safe for anything a cell holds in its own state.
+  relies on. What it does NOT preserve is anything the cell holds in its own state — an open menu,
+  a half-typed memo — so fact 1's "never remounted" holds for the grid's modes and not for this
+  trip. It is also why a **command** cell is never claimed: its terminal has no `persist-key`, so a
+  remount would release the slot and kill the process (`paneTargetFor` refuses one outright).
 
 `PluginFrame.vue` reaches the same place from the other side (`<Teleport v-if="target" :to="target">`):
 a teleport that exists only while its target does.

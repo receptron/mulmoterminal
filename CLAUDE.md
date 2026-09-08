@@ -88,7 +88,9 @@ looking at.
 A cell can also be teleported OUT of the grid entirely — into the pane under an open collection —
 and a `<Teleport>` whose `to` changes while it is **disabled** keeps the old target, so re-enabling
 it later moves the cell into a node that has left the document and it appears in no view at all.
-The key carries the destination for that reason; fact 5 in the same document has the rest.
+The key carries the destination for that reason — which means the collection trip is the one place
+a cell IS remounted, safe only because the terminal's slot is durable (a command cell, whose slot is
+not, is never claimed). Fact 5 in the same document has the rest.
 
 ## MulmoClaude is the reference host — read it before wiring a shared package
 
