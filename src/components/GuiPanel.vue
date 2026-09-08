@@ -239,6 +239,7 @@ const TOOL_HINTS = new Map<string, string>([
   ["presentChart", "a chart from a set of data"],
   ["presentHtml", "a self-contained web page"],
   ["presentShapeScript", "a 3D model you can rotate and zoom, written as ShapeScript"],
+  ["renderShapeScript", "a picture of a 3D model from several angles at once, saved as a PNG"],
 
   ["presentCollection", "a collection from this workspace, laid out to browse"],
   ["manageCollection", "reads and writes those collections and their schemas"],

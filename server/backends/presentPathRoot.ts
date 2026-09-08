@@ -1,5 +1,5 @@
-// Make presentDocument / presentHtml / presentShapeScript's RELATIVE `path` argument mean
-// "relative to the directory this session is running in", not "relative to the workspace".
+// Make the present*/render* tools' RELATIVE `path` argument mean "relative to the
+// directory this session is running in", not "relative to the workspace".
 //
 // Why this exists: the by-path ops (backends/openPath.ts → @mulmoclaude/core/files)
 // resolve a relative value against ONE root, the workspace (CLAUDE_CWD). In MulmoClaude
@@ -57,6 +57,10 @@ export const PRESENT_PATH_EXTENSIONS = new Map<string, readonly string[]>([
   ["presentDocument", MARKDOWN_EXTENSIONS],
   ["presentHtml", HTML_EXTENSIONS],
   ["presentShapeScript", SHAPE_EXTENSIONS],
+  // renderShapeScript takes the SAME `path` argument and must resolve it the same
+  // way, or the pair disagrees about which file "models/lamp.shape" names: present
+  // would open the session's copy and render the workspace's (codex on #2010).
+  ["renderShapeScript", SHAPE_EXTENSIONS],
 ]);
 
 // `artifacts/…` is the workspace's own output area: the plugins route those values to

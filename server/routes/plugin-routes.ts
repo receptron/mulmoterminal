@@ -22,6 +22,7 @@ import { SESSION_HEADER, sessionIdFromHeader } from "../backends/presentPathRoot
 import { cwdForSession } from "../session/session-cwd.js";
 import { projectScopeForCwd, rootForProjectId } from "../infra/project-root.js";
 import { manageCollectionHandlerFor } from "../infra/collection-tool.js";
+import { runRenderShapeScript } from "../infra/shapescript-render-tool.js";
 import { manageSharedApp } from "../infra/shared-app-tool.js";
 import { useSharedApp } from "../infra/use-shared-app-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
@@ -197,6 +198,7 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
   });
 
   mountCollectionRoute(app);
+  mountRenderShapeScriptRoute(app);
   mountSharedAppRoute(app);
   mountUseSharedAppRoute(app);
 }
@@ -227,6 +229,25 @@ function mountCollectionRoute(app: Express): void {
     } catch (err) {
       console.error(`[manageCollection] dispatch failed: ${messageOf(err)}`);
       return res.json({ message: `manageCollection failed: ${messageOf(err)}` });
+    }
+  });
+}
+
+function mountRenderShapeScriptRoute(app: Express): void {
+  // Host tool: renderShapeScript — rasterise a ShapeScript model to a PNG the agent
+  // can read back. Unlike manageCollection this is NOT session-scoped: the image is a
+  // by-product of a model, it goes to the workspace artifacts root beside the `.shape`
+  // files presentShapeScript saves, and the tool answers with an ABSOLUTE path so a
+  // session in any project directory can open it.
+  app.post("/api/plugin/renderShapeScript", async (req, res) => {
+    try {
+      const { message } = await runRenderShapeScript(isRecord(req.body) ? req.body : {});
+      return res.json({ message });
+    } catch (err) {
+      // A bad argument or an unrenderable model is the agent's to fix, so the reason
+      // goes back as the envelope message rather than as a transport error.
+      console.error(`[renderShapeScript] dispatch failed: ${messageOf(err)}`);
+      return res.json({ message: `renderShapeScript failed: ${messageOf(err)}` });
     }
   });
 }

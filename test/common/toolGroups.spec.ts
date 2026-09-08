@@ -9,6 +9,7 @@ import {
   GUI_SERVER_ID,
   LEGACY_GUI_SERVER_IDS,
   AUTO_ALLOWED_TOOLS,
+  NEVER_AUTO_APPROVED_TOOLS,
   CANVAS_TOOL_GROUPS,
   TOOL_GROUP_HEADINGS,
   hasCanvasGroup,
@@ -22,6 +23,10 @@ describe("tool groups", () => {
     expect(groupOfTool("presentForm")).toBe("render");
     expect(groupOfTool("presentChart")).toBe("render");
     expect(groupOfTool("presentHtml")).toBe("render");
+    expect(groupOfTool("presentShapeScript")).toBe("render");
+    // Beside presentShapeScript on purpose: a cell that can show a 3D model should be
+    // able to check one, and a directory enabling Canvas gets the pair or neither.
+    expect(groupOfTool("renderShapeScript")).toBe("render");
   });
 
   // The blast-radius split is the whole point of the grouping: only `render` is auto-allowed,
@@ -95,8 +100,29 @@ describe("tool groups", () => {
   // its execute resolves image placeholders through the image backend, a PAID call. Auto-
   // allowing it would let a model spend money under a switch labelled "let the agent draw".
   it("auto-allows only tools that call nothing external", () => {
-    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript"]);
+    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript"]);
     expect(AUTO_ALLOWED_TOOLS).not.toContain("presentDocument");
+  });
+
+  // The two approval paths have to agree, and nothing asserted that until they didn't:
+  // AUTO_ALLOWED_TOOLS governs GRID cells, while the workspace passes allowedToolNames(),
+  // which approves everything not in NEVER_AUTO_APPROVED_TOOLS. A tool left off the first
+  // list but not added to the second prompts in a cell and runs unattended in the
+  // workspace — no stated policy, and invisible (codex on #2010).
+  it("does not leave a tool prompted in a cell but auto-approved in the workspace", () => {
+    for (const name of AUTO_ALLOWED_TOOLS) {
+      expect(NEVER_AUTO_APPROVED_TOOLS, `${name} is auto-allowed and must not also be always-prompted`).not.toContain(name);
+    }
+    // The gap is the other direction: a render tool on NEITHER list is auto-approved in
+    // the workspace regardless, so its absence from AUTO_ALLOWED_TOOLS buys nothing there.
+    const unstated = toolsInGroup("render").filter((name) => !AUTO_ALLOWED_TOOLS.includes(name) && !NEVER_AUTO_APPROVED_TOOLS.includes(name));
+    // `presentDocument` is the one, and it is PRE-EXISTING rather than new: it is kept off
+    // AUTO_ALLOWED_TOOLS because its image fill is a paid call, but nothing puts it on the
+    // always-prompted list, so the workspace spends that money without asking. Pinned as
+    // the current state rather than quietly tolerated — deciding it is a policy call about
+    // money, not a detail of the renderShapeScript port that found it. When it is decided,
+    // this line fails and says so.
+    expect(unstated).toEqual(["presentDocument"]);
   });
 
   // They still have to BE render tools — a directory that enabled Canvas is what grants them.
