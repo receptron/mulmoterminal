@@ -25,11 +25,11 @@ import path from "path";
 import { fileURLToPath, pathToFileURL } from "url";
 import type { Express } from "express";
 import { isPluginFactory } from "gui-chat-protocol";
-import type { PluginRuntime, PluginFactoryResult, ToolDefinition } from "gui-chat-protocol";
+import type { FileOps, PluginRuntime, PluginFactoryResult, ToolDefinition } from "gui-chat-protocol";
 import { generateImage } from "../backends/image-gen.js";
 import { markdownHostApp } from "../backends/markdown.js";
 import { artifactsFileOps } from "../backends/artifacts.js";
-import { htmlByPath } from "../backends/openPath.js";
+import { htmlByPath, shapeScriptByPath } from "../backends/openPath.js";
 import { createPluginRuntime } from "./pluginRuntime.js";
 import { resolvePluginTools } from "./tool-precedence.js";
 import { HOST_TOOL_DEFINITIONS } from "./host-tools.js";
@@ -57,13 +57,26 @@ const APP_CONTEXT = { generateImage, ...markdownHostApp };
 // persist the chart document. Plugins that don't write artifacts ignore it.
 //
 // `byPath` is the uncontained one — a file the tool call NAMED, anywhere on disk —
-// and it is extension-scoped, so this single shared object can only carry one
-// plugin's version of it. presentHtml is the only reader today (its tool-call path
-// runs through this generic loader, so without it `presentHtml(path)` would refuse
-// anything outside artifacts/html). The moment a second plugin wants `byPath`,
-// FILES_CONTEXT has to become per-tool — MulmoClaude doesn't hit this because it
-// assembles the context per route.
-const FILES_CONTEXT = { artifacts: artifactsFileOps, byPath: htmlByPath };
+// and it is EXTENSION-SCOPED, so it cannot be shared: handing presentShapeScript the
+// html-scoped one would refuse every `.shape` it was pointed at, and widening one
+// object to every extension would let each tool open the others' files. So the
+// context is built per tool, which is the shape MulmoClaude has always had (it
+// assembles one per route) and which this file's previous comment predicted would be
+// needed the moment a second plugin wanted `byPath`. shapescript-plugin 1.1.0 is that
+// second plugin.
+//
+// A tool with no entry gets `artifacts` alone. That is the right default rather than
+// an oversight: a plugin that never takes a `path` argument has no use for byPath,
+// and the ones that do have to opt in HERE, where the extension is chosen.
+const BY_PATH_BY_TOOL: Readonly<Record<string, FileOps>> = {
+  presentHtml: htmlByPath,
+  presentShapeScript: shapeScriptByPath,
+};
+
+function filesContextFor(toolName: string): { artifacts: FileOps; byPath?: FileOps } {
+  const byPath = Object.prototype.hasOwnProperty.call(BY_PATH_BY_TOOL, toolName) ? BY_PATH_BY_TOOL[toolName] : undefined;
+  return byPath ? { artifacts: artifactsFileOps, byPath } : { artifacts: artifactsFileOps };
+}
 
 // The normalized shape every loader below answers with, and the only one the broker and the
 // dispatch route consume. Stated once because four loaders have to agree on it.
@@ -138,7 +151,11 @@ async function loadPackage(name: string): Promise<LoadedPlugin> {
   if (!isToolDefinition(definition) || !isExecutor(execute)) {
     throw new Error(`Package "${name}" is not a gui-chat-protocol plugin (missing TOOL_DEFINITION/execute).`);
   }
-  return { toolName: definition.name, definition, execute: (args?: unknown) => execute({ app: APP_CONTEXT, files: FILES_CONTEXT }, args ?? {}) };
+  return {
+    toolName: definition.name,
+    definition,
+    execute: (args?: unknown) => execute({ app: APP_CONTEXT, files: filesContextFor(definition.name) }, args ?? {}),
+  };
 }
 
 // An `XTool`-shaped server-only tool (see @mulmoclaude/x-plugin): a JSON-schema

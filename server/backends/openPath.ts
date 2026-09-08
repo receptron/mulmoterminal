@@ -21,6 +21,7 @@
 // tool call that opened them.
 import { realpath } from "node:fs/promises";
 import { createByPathFileOps, resolveHtmlFileRequestPath, HTML_EXTENSIONS, MARKDOWN_EXTENSIONS } from "@mulmoclaude/core/files";
+import { SHAPE_EXTENSIONS } from "@mulmoclaude/shapescript-plugin";
 import { STORY_SCRIPT_EXTENSIONS } from "@mulmoclaude/mulmoscript-plugin";
 import type { FileOps } from "gui-chat-protocol";
 
@@ -47,6 +48,11 @@ export const markdownByPath = createByPathFileOps({ rootFor, extensions: MARKDOW
 
 /** `files.byPath` for presentHtml — reads/overwrites any `.html`/`.htm`. */
 export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENSIONS }) satisfies FileOps;
+
+/** `files.byPath` for presentShapeScript — reads/overwrites any `.shape` the tool named
+ *  (shapescript-plugin 1.1.0). Without it the plugin keeps its artifacts-only behaviour and
+ *  `presentShapeScript(path: "models/lamp.shape")` is refused. */
+export const shapeScriptByPath = createByPathFileOps({ rootFor, extensions: SHAPE_EXTENSIONS }) satisfies FileOps;
 
 /** `files.byPath` for presentMulmoScript — reads/overwrites any `.json` MulmoScript the tool
  *  named by ABSOLUTE path (mulmoscript-plugin 4.6.0). It is the host's opt-in: without it the

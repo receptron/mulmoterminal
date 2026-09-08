@@ -12,6 +12,7 @@ import { absolutizePresentPath, mountPresentPathRoot, SESSION_HEADER } from "../
 
 const MD = [".md"] as const;
 const HTML = [".html", ".htm"] as const;
+const SHAPE = [".shape"] as const;
 // A session cwd is a native absolute path, so the fixtures are resolved rather than spelled
 // POSIX-only: on Windows `/repos/…` is drive-relative and the separator is `\`.
 const CWD = path.resolve("/repos/mulmoterminal");
@@ -22,6 +23,7 @@ describe("absolutizePresentPath", () => {
     expect(absolutizePresentPath({ title: "T", path: "README.md" }, CWD, MD)).toEqual({ title: "T", path: path.join(CWD, "README.md") });
     expect(absolutizePresentPath({ path: "docs/design.md" }, CWD, MD)).toEqual({ path: path.join(CWD, "docs", "design.md") });
     expect(absolutizePresentPath({ path: "docs/report.html" }, CWD, HTML)).toEqual({ path: path.join(CWD, "docs", "report.html") });
+    expect(absolutizePresentPath({ path: "models/lamp.shape" }, CWD, SHAPE)).toEqual({ path: path.join(CWD, "models", "lamp.shape") });
   });
 
   it("leaves an absolute path alone", () => {
@@ -89,6 +91,9 @@ describe("the /api/plugin middleware", () => {
   it("resolves against the calling session's directory", async () => {
     expect((await call("presentDocument", { path: "README.md" }, SESSION)).path).toBe(path.resolve(CWD, "README.md"));
     expect((await call("presentHtml", { path: "docs/report.html" }, SESSION)).path).toBe(path.resolve(CWD, "docs/report.html"));
+    // Without this mapping a model named relatively resolves from the global workspace,
+    // so an agent in one project silently opens another project's same-named file.
+    expect((await call("presentShapeScript", { path: "models/lamp.shape" }, SESSION)).path).toBe(path.resolve(CWD, "models/lamp.shape"));
   });
 
   // Byte-identical, NOT "resolved to the same file": an absolute document path breaks the

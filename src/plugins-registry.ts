@@ -177,16 +177,33 @@ const PACKAGES: Record<string, Registration> = {
   },
   "@mulmoclaude/shapescript-plugin": {
     toolName: shapeScriptPlugin.toolDefinition.name,
-    // No runtime wrap: the View reads the ShapeScript source out of
-    // selectedResult.data and renders it with its own Three.js canvas, and its
-    // only injected dependency is the locale its 8-locale bundle falls back to
-    // English without. Its style.css is self-contained.
-    viewComponent: viewOf("@mulmoclaude/shapescript-plugin", shapeScriptPlugin.viewComponent),
+    // The View needs the runtime as of shapescript-plugin 1.1.0: a model is now a
+    // FILE, and the source editor reads and writes it with
+    // useRuntime().dispatch({ kind: "loadShape" | "saveShape" }). `useRuntime`
+    // THROWS outside a scope provider, so the previous unwrapped registration
+    // would not merely lose the save — it would fail the view on mount.
+    //
+    // scope "shapescript" matches the server's file-change channel
+    // (plugin:shapescript:file:<path>, see backends/fileChange.ts); dispatch
+    // targets /api/plugin/presentShapeScript, where the server intercepts
+    // loadShape/saveShape (see server/backends/shapescript.ts).
+    viewComponent: wrapWithPluginRuntime(
+      "shapescript",
+      shapeScriptPlugin.toolDefinition.name,
+      viewOf("@mulmoclaude/shapescript-plugin", shapeScriptPlugin.viewComponent),
+    ),
     css: shapeScriptCss,
     // The WebGL viewport lays out with an internal h-full chain rather than
     // flowing at content height, so it needs the measured card height — same as
     // the other canvas-filling views.
     height: CANVAS_CARD_HEIGHT,
+    // The MODEL on disk, so re-presenting the same `.shape` replaces its card
+    // instead of stacking another one beside it. Only meaningful since 1.1.0 —
+    // before it there was no `data.filePath`, and every result was genuinely a
+    // new thing. A result with no filePath (a host with no file layer) returns
+    // null here and keeps standing alone, which is correct: nothing identifies
+    // it. See canvasIdentity.ts.
+    identityOf: filePathIdentity,
   },
   "@mulmoclaude/mulmoscript-plugin": {
     toolName: mulmoScriptPlugin.toolDefinition.name,

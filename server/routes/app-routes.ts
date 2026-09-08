@@ -69,6 +69,7 @@ import { mountDecisionRoutes } from "./decision-routes.js";
 import { mountRoomRoutes } from "./room-routes.js";
 import { mountTranslationRoutes } from "../backends/translation.js";
 import { mountHtmlDispatchRoute, mountHtmlFileRoute, mountHtmlPreviewRoute } from "../backends/html.js";
+import { mountShapeScriptDispatchRoute } from "../backends/shapescript.js";
 import { mountPresentPathRoot } from "../backends/presentPathRoot.js";
 import { cwdForSession } from "../session/session-cwd.js";
 import { mountMulmoScriptDispatchRoute, mountMulmoScriptMediaRoute } from "../backends/mulmoscript.js";
@@ -172,6 +173,12 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
   // catch-all (which handles the tool-call); a request without `kind` falls through.
   mountHtmlDispatchRoute(app);
+
+  // presentShapeScript View's source-editor dispatch (loadShape/saveShape) on
+  // /api/plugin/presentShapeScript. Same rule as presentHtml above: MUST precede
+  // mountAllRoutes' catch-all, and a request without `kind` falls through to the
+  // package's tool-call execute.
+  mountShapeScriptDispatchRoute(app);
 
   // presentMulmoScript: the View's dispatch (kind router) AND the tool-call both
   // handled by the mulmoscript backend (realpath guard + autoGenerateMovie trigger
