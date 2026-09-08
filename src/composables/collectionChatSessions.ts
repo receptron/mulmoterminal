@@ -112,25 +112,31 @@ export const collectionChatSlotKey = (id: string): string => `collection-chat-${
 let stopListening: (() => void) | null = null;
 function listenForEndings(): void {
   if (stopListening) return;
-  const { subscribe, onReconnect } = usePubSub();
+  const { subscribe, onConnect } = usePubSub();
   const off = subscribe("sessions", (data) => {
     const update = parseSessionActivityPayload(data);
     if (update && "closed" in update) forgetEndedChat(update.id);
   });
   // A push that happened while the socket was down is not replayed when it comes back — pub/sub
-  // restores room membership, not the events missed (Codex, PR #2002). So a reconnect asks the
-  // server outright which of these are still running. The same shape `useSessions` and
-  // `useGridActivity` use for their own re-syncs, for the same reason.
-  const offReconnect = onReconnect(() => void reconcileWithServer());
+  // restores room membership, not the events missed (Codex, PR #2002). So every connect asks the
+  // server outright which of these are still running. Every connect rather than every RE-connect:
+  // a chat is filed as soon as it is spawned, which can be before this socket has ever come up, and
+  // an ending in THAT window is equally invisible (Codex again, iteration 3).
+  const offConnect = onConnect(() => void reconcileWithServer());
   stopListening = () => {
     off();
-    offReconnect();
+    offConnect();
   };
 }
 
 /** Ask which filed chats the server still has, and retire the rest. Silent on failure and on a
  *  malformed answer: the tabs are of running agents, so "we could not check" must leave them
- *  standing rather than close them. */
+ *  standing rather than close them.
+ *
+ *  Retires only within the ids the answer says it CONSIDERED, never within the ids we sent. The
+ *  route validates and caps what it was given, so the two differ — and treating a capped-off id as
+ *  absent would close a live chat's tab (Codex, PR #2002). Whatever it did not consider is simply
+ *  left for the next connect. */
 async function reconcileWithServer(): Promise<void> {
   const ids = [...new Set([...filed.values()].flatMap((held) => held.sessions.map((session) => session.id)))];
   if (ids.length === 0) return;
@@ -138,9 +144,9 @@ async function reconcileWithServer(): Promise<void> {
     const res = await fetchWithTimeout(`/api/sessions/live?ids=${encodeURIComponent(ids.join(","))}`);
     if (!res.ok) return;
     const body = await jsonBody(res);
-    if (!isUnknownArray(body.live)) return;
+    if (!isUnknownArray(body.live) || !isUnknownArray(body.asked)) return;
     const live = new Set(body.live.filter((id): id is string => typeof id === "string"));
-    ids.filter((id) => !live.has(id)).forEach(forgetEndedChat);
+    body.asked.filter((id): id is string => typeof id === "string" && !live.has(id)).forEach(forgetEndedChat);
   } catch {
     // best-effort — the next reconnect asks again
   }

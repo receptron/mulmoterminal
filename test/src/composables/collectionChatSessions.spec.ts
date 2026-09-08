@@ -9,9 +9,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // The filing keeps itself honest off the server's own session channel, and tears a terminal slot
 // down when it does. Both are played by hand here.
 const silence = (): void => {};
-const bus = vi.hoisted((): { push: (data: unknown) => void; reconnect: () => void; subscribed: number; released: string[] } => ({
+const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void; subscribed: number; released: string[] } => ({
   push: () => {},
-  reconnect: () => {},
+  connect: () => {},
   subscribed: 0,
   released: [],
 }));
@@ -22,8 +22,8 @@ vi.mock("../../../src/composables/usePubSub", () => ({
       bus.subscribed += 1;
       return silence;
     },
-    onReconnect: (callback: () => void) => {
-      bus.reconnect = callback;
+    onConnect: (callback: () => void) => {
+      bus.connect = callback;
       return silence;
     },
   }),
@@ -47,6 +47,8 @@ const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draf
 
 /** What `/api/sessions/live` answers, or null for a request that fails outright. */
 let served: unknown = null;
+/** What the route says it CONSIDERED — null to echo everything it was sent. */
+let consider: unknown = null;
 const flush = async (): Promise<void> => {
   await new Promise((r) => setTimeout(r, 0));
   await new Promise((r) => setTimeout(r, 0));
@@ -90,9 +92,15 @@ describe("filing a collection's chats", () => {
     bus.subscribed = 0;
     bus.released = [];
     served = null;
+    consider = null;
     vi.stubGlobal(
       "fetch",
-      vi.fn(() => (served === null ? Promise.reject(new Error("offline")) : Promise.resolve({ ok: true, json: () => Promise.resolve({ live: served }) }))),
+      vi.fn((url: string) => {
+        if (served === null) return Promise.reject(new Error("offline"));
+        // What the route answers: the ids it actually considered, and which of those are running.
+        const asked = new URL(url, "https://spec.invalid").searchParams.get("ids")?.split(",") ?? [];
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ asked: consider === null ? asked : consider, live: served }) });
+      }),
     );
   });
 
@@ -198,7 +206,7 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(works, request("a"));
     holdCollectionChat(todos, request("gone"));
     served = ["a"];
-    bus.reconnect();
+    bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
     expect(ids(todos)).toEqual([]);
@@ -210,11 +218,16 @@ describe("filing a collection's chats", () => {
   it("leaves every tab standing when the check fails or makes no sense", async () => {
     holdCollectionChat(works, request("a"));
     served = null; // the request throws
-    bus.reconnect();
+    bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
     served = "not a list";
-    bus.reconnect();
+    bus.connect();
+    await flush();
+    expect(ids(works)).toEqual(["a"]);
+    consider = "not a list either";
+    served = [];
+    bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
     expect(bus.released).toEqual([]);
@@ -224,13 +237,26 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(works, request("a"));
     holdCollectionChat(todos, request("b"));
     served = ["a", "b"];
-    bus.reconnect();
+    bus.connect();
     await flush();
     expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain("ids=a%2Cb");
     resetCollectionChats();
     vi.mocked(fetch).mockClear();
-    bus.reconnect();
+    bus.connect();
     await flush();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // The route validates and caps the ids it was given, so what it answers about is not what we
+  // sent. Retiring on "not in live" would close a live chat we merely failed to ask about.
+  it("retires only among the ids the answer considered", async () => {
+    holdCollectionChat(works, request("asked-about"));
+    holdCollectionChat(works, request("over-the-cap"));
+    consider = ["asked-about"]; // the route dropped the rest
+    served = [];
+    bus.connect();
+    await flush();
+    expect(ids(works)).toEqual(["over-the-cap"]);
+    expect(bus.released).toEqual([collectionChatSlotKey("asked-about")]);
   });
 });

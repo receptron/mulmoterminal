@@ -475,8 +475,11 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   // absence from either says nothing about whether a session is alive.
   app.get("/api/sessions/live", (req, res) => {
     const ids = parseActivityIds(req.query.ids, (id) => SESSION_ID_RE.test(id), ACTIVITY_IDS_LIMIT);
+    // `asked` is what this answer is ABOUT: the ids left after validation and the cap above. A
+    // caller retiring "everything I sent that is not in `live`" would otherwise retire a live
+    // session it merely sent too many ids to ask about (Codex, PR #2002).
     // One tmux call for the whole set rather than a `has-session` per id.
-    res.json({ live: liveSessionIds(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxListSessionIds() : []) });
+    res.json({ asked: ids, live: liveSessionIds(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxListSessionIds() : []) });
   });
   // The four conversation listings are mounted FROM the shared map rather than from literals
   // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth
