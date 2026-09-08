@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { isRecord } from "../../common/isRecord.js";
 import { cleanTitle, parseJsonRecord, readFirstLine, readTranscriptHead } from "./transcript-head.js";
+import { codexHomeOf, readThreadNames } from "./codex-thread-names.js";
 import { byCodeUnit } from "../../common/byCodeUnit.js";
 import { mapConcurrent } from "../infra/mapConcurrent.js";
 
@@ -54,10 +55,49 @@ export interface RolloutMeta {
 const isSessionMeta = (d: Record<string, unknown>): boolean =>
   d.type === "session_meta" && isRecord(d.payload) && typeof d.payload.id === "string" && UUID_RE.test(d.payload.id);
 
-// codex records the first real prompt as an event_msg/user_message — distinct from the
-// environment_context it injects first (a response_item/message).
-const isUserMessage = (d: Record<string, unknown>): boolean =>
-  d.type === "event_msg" && isRecord(d.payload) && d.payload.type === "user_message" && typeof d.payload.message === "string";
+// A user's turn, in EITHER shape codex has recorded it in. Older rollouts write an `event_msg`
+// whose payload type is `user_message`; since 2026-08 the same turn is a `response_item` `message`
+// with `role: "user"`. Measured on this machine: 899 of the 2,840 rollouts written in August 2026
+// carry the old record and NONE of the 160 written in September do — which is why every recent row
+// read "Codex session" (#1962). Both are read because the store holds both.
+function userTurnTexts(d: Record<string, unknown>): string[] | null {
+  const { payload } = d;
+  if (!isRecord(payload)) return null;
+  if (d.type === "event_msg" && payload.type === "user_message") return typeof payload.message === "string" ? [payload.message] : null;
+  if (d.type !== "response_item" || payload.type !== "message" || payload.role !== "user") return null;
+  const { content } = payload;
+  if (typeof content === "string") return [content];
+  return Array.isArray(content) ? content.flatMap((part) => (isRecord(part) && typeof part.text === "string" ? [part.text] : [])) : null;
+}
+
+// The blocks codex writes INTO a user turn rather than the person writing them. Every leading tag
+// in the 6,325 rollouts on this machine is one of these four — environment_context 6,315,
+// recommended_plugins 4,521, user_action 14, turn_aborted 8 — and none of them is a prompt.
+//
+// Named rather than "anything that opens with a tag", because a person's prompt may perfectly well
+// open with `<div>` or `<task>`, and treating that as codex's own would drop the one row it titles.
+// If codex adds a fifth wrapper the cost is a visibly wrong title rather than a missing session,
+// and the bundle below still catches it whenever it travels with one of these.
+const CODEX_WRAPPER_TAGS: ReadonlySet<string> = new Set(["environment_context", "recommended_plugins", "user_action", "turn_aborted"]);
+const LEADING_TAG_RE = /^<([a-zA-Z_][\w.:-]*)[\s>/]/;
+
+// codex bundles its preamble into ONE message with several content parts: the plugin list, the
+// repo's AGENTS.md and the environment context together. The person's prompt is the next message.
+//
+// So the test is per MESSAGE, not per part. The AGENTS.md part carries no tag of its own, and a
+// part-level skip would make it the title of every session in a repo that has one.
+const isSyntheticTurn = (texts: readonly string[]): boolean =>
+  texts.some((t) => {
+    const tag = LEADING_TAG_RE.exec(t)?.[1];
+    return tag !== undefined && CODEX_WRAPPER_TAGS.has(tag);
+  });
+
+// A user turn's prompt, or null when the record is not one, or is codex talking to itself.
+function userPrompt(d: Record<string, unknown>): string | null {
+  const texts = (userTurnTexts(d) ?? []).map((t) => t.trim()).filter((t) => t !== "");
+  if (texts.length === 0 || isSyntheticTurn(texts)) return null;
+  return texts[0] ?? null;
+}
 
 function stringField(doc: Record<string, unknown> | undefined, key: string): string | null {
   const payload = doc?.payload;
@@ -74,7 +114,8 @@ export function parseCodexRolloutHead(head: string): RolloutHead | null {
   const meta = docs.find(isSessionMeta);
   const id = stringField(meta, "id");
   if (!id) return null;
-  return { id, cwd: stringField(meta, "cwd"), title: cleanTitle(stringField(docs.find(isUserMessage), "message"), DEFAULT_TITLE) };
+  const prompt = docs.map(userPrompt).find((t): t is string => t !== null) ?? null;
+  return { id, cwd: stringField(meta, "cwd"), title: cleanTitle(prompt, DEFAULT_TITLE) };
 }
 
 /** Line 1 of a rollout as the routing facts, or null when it is not a session_meta. */
@@ -237,8 +278,10 @@ async function matchingRollouts(root: string, cwd: string): Promise<MatchedRollo
 // one where a global cap costs accuracy rather than just work — see the note in grok-sessions.ts.
 export async function listCodexSessions(root: string, cwd: string, limit: number): Promise<CodexSessionSummary[]> {
   const matches = (await matchingRollouts(root, cwd)).slice(0, limit);
+  // A name the user typed beats a prompt we guessed at, which is the whole point of `/rename`.
+  const names = await readThreadNames(codexHomeOf(root));
   return mapConcurrent(matches, READ_CONCURRENCY, async ({ file, meta, mtime }) => {
     const summary = await readRolloutSummary(file);
-    return { id: meta.id, title: summary?.title ?? DEFAULT_TITLE, mtime: summary?.mtime ?? mtime };
+    return { id: meta.id, title: cleanTitle(names.get(meta.id) ?? null, summary?.title ?? DEFAULT_TITLE), mtime: summary?.mtime ?? mtime };
   });
 }
