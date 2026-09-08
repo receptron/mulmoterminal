@@ -42,6 +42,22 @@ describe("filePathIdentity", () => {
     expect(filePathIdentity({ data: { filePath: "artifacts/html/report.html", title: "Report" } })).toBe("artifacts/html/report.html");
   });
 
+  // shapescript-plugin 1.1.0 made a model file-backed, which is what lets its card
+  // collapse at all: before it, every result carried only inline `script` and was
+  // genuinely a new thing. An edited model re-presented from the same path folds onto
+  // the card already on screen rather than stacking beside it.
+  it("identifies presentShapeScript by its model on disk, whatever the source says", () => {
+    const path = "artifacts/shapes/lamp-1718765432101-abcd1234.shape";
+    expect(filePathIdentity({ data: { filePath: path, script: "cube { size 1 }" } })).toBe(path);
+    expect(filePathIdentity({ data: { filePath: path, script: "cone { size 2 }" } })).toBe(path);
+  });
+
+  // A host with no file layer still returns an inline-only result; nothing identifies it,
+  // so it must stand alone rather than merge with the last one.
+  it("gives an inline-only ShapeScript result no identity", () => {
+    expect(filePathIdentity({ data: { script: "cube { size 1 }" } })).toBeNull();
+  });
+
   it("identifies presentMulmoScript by its story on disk", () => {
     expect(filePathIdentity({ data: { filePath: "stories/demo.json", script: {} } })).toBe("stories/demo.json");
   });

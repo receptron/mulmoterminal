@@ -38,6 +38,14 @@ function isHtmlDoc(posixPath: string): boolean {
   return /\.html?$/i.test(posixPath);
 }
 
+// presentShapeScript's `path` form opens any `.shape` on disk, the same widening the
+// two above already have. Without this scope the publish in backends/shapescript.ts
+// matches nothing and emits no channel at all — a save that silently never refreshes
+// (codex on #2000).
+function isShapeDoc(posixPath: string): boolean {
+  return /\.shape$/i.test(posixPath);
+}
+
 /** Configure the shared publisher against MulmoTerminal's pubsub + workspace. Call
  *  once at startup, before any write route runs. */
 export function initFileChangePublisher(deps: { workspace: string; pubsub: PubSub | null }): void {
@@ -51,6 +59,7 @@ export function initFileChangePublisher(deps: { workspace: string; pubsub: PubSu
     pluginScopes: [
       { scope: "markdown", matches: isMarkdownDoc },
       { scope: "html", matches: isHtmlDoc },
+      { scope: "shapescript", matches: isShapeDoc },
     ],
     warn: (message, data) => log.warn(message, data),
   });

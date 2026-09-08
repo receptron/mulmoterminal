@@ -1878,10 +1878,10 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/common/-/common-1.2.0.tgz#ad2d696a6a06ea47c078e45d8d7f6f41b53d4aeb"
   integrity sha512-Y459jz/3fGY+QPSOtRUpq+JA1v839qlhaKmuz6LohoJp0nneP9Eot+gsn7Yl8RKhEGqxhfmJaCDa28bWK7RhCA==
 
-"@mulmoclaude/core@^4.7.0":
-  version "4.7.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.7.0.tgz#100f9f030287fca0949e15bf0cdc75b554dd696f"
-  integrity sha512-oDyNkymdSWNexpyTRqYhQTjdrKh12jz6RDbo28KdP4XfMw0UAU9+cI0EodTw2duQ6BirS0ilGY0UwZgZezrGEg==
+"@mulmoclaude/core@^4.8.0":
+  version "4.8.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.8.0.tgz#00a152a0a06129d68e50e17a8ce16c05286ebb54"
+  integrity sha512-ghXKZwq1vAZkgPgrqrbcPHeCWQNjwAuTaNO/DcELsqfRHdf/id7NRnH0up3C5wT6tG+9OC5lVOcFmLnMBWSIyQ==
   dependencies:
     "@duckdb/node-api" "^1.5.5-r.2"
     "@mulmoclaude/common" "^1.2.0"
@@ -1950,10 +1950,10 @@
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
 
-"@mulmoclaude/shapescript-plugin@^1.0.0":
-  version "1.0.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-1.0.0.tgz#f60870816daa56247b37412b36c19defeeb0c61a"
-  integrity sha512-4MpY5QiZ5yTFQfBbrynwhsU9rPdTiAmQq2n8WojzajwDh4Mg8W/4UTo7Ezepgr5n9Y7zctr+H2tUQ7p1V8q+DQ==
+"@mulmoclaude/shapescript-plugin@^1.1.0":
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-1.1.0.tgz#abf10a281c1f47205599e12a7baeb1af8e1a0017"
+  integrity sha512-O0E+D5ogexfT4nZ4wTOvW6kvsWfWXUDS4U+JljBZWbqmU75R7wdpccrV+fjGINzhzxId1KskITYNOx67dwkPww==
   dependencies:
     three "^0.185.1"
     three-bvh-csg "^0.0.18"
