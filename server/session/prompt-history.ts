@@ -13,7 +13,7 @@
 import { isRecord } from "../../common/isRecord.js";
 import { readString } from "../../common/readString.js";
 import type { PromptEntry, PromptWindow } from "../../common/promptHistory.js";
-import { codexEventPayload } from "../agents/codex-events.js";
+import { codexUserTurn, isDoubleWrite, type CodexUserTurn } from "../agents/codex-user-turn.js";
 import { userPromptText } from "./transcript.js";
 
 /** Enough to recognise a prompt again, which is what this is for. Deliberately far above
@@ -133,14 +133,23 @@ export function foldClaudePrompt(scan: ClaudePromptScan, record: Record<string, 
   keepNewest(scan, read && scan.wanted.has(read.sessionId) && afterFloor(read.prompt, scan.since) ? read.prompt : null);
 }
 
+/** A codex scan also carries the turn the PREVIOUS record held, which is what lets the fold
+ *  recognise codex's double-write (see `isDoubleWrite`). It is the previous RECORD's turn, not the
+ *  previous prompt's: any other record in between resets it to null, which is the whole point. */
+export interface CodexPromptScan extends PromptScan {
+  previousTurn: CodexUserTurn | null;
+}
+
 /** The codex equivalent. A rollout is one file per conversation, so it needs no session filter —
  *  but it still has to be STREAMED: three of the 2,586 rollouts on this machine are past the 4 MB
  *  tail window, and the largest would have shown 5 of its 9 prompts (#1749). */
-export const codexPromptScan = (limit: number = PROMPT_HISTORY_MAX): PromptScan => ({ limit, found: [] });
+export const codexPromptScan = (limit: number = PROMPT_HISTORY_MAX): CodexPromptScan => ({ limit, found: [], previousTurn: null });
 
-export function foldCodexPrompt(scan: PromptScan, record: Record<string, unknown>): void {
-  const payload = codexEventPayload(record, "user_message");
-  keepNewest(scan, payload ? entry(epochMs(record.timestamp), payload.message) : null);
+export function foldCodexPrompt(scan: CodexPromptScan, record: Record<string, unknown>): void {
+  const turn = codexUserTurn(record);
+  const duplicate = turn !== null && isDoubleWrite(turn, scan.previousTurn);
+  scan.previousTurn = turn;
+  keepNewest(scan, turn === null || duplicate ? null : entry(epochMs(record.timestamp), turn.text));
 }
 
 /** These ids' prompts, oldest first, capped to the newest `limit`. Several ids are ONE session
@@ -176,9 +185,11 @@ export function claudePromptsFor(
  *  kept, since there is then nothing it could be on the wrong side of. */
 const afterFloor = (prompt: PromptEntry, since: number | undefined): boolean => since === undefined || (prompt.at !== null && prompt.at >= since);
 
-/** codex has no history file and no hooks, so its rollout is the only record of a prompt. The
- *  `user_message` events are the ones a person sent: measured over 40 real rollouts, none of them
- *  carried injected text (codex files its environment context under other payload types).
+/** codex has no history file and no hooks, so its rollout is the only record of a prompt. Which
+ *  records those are is `codexUserPrompt`'s job, and it is shared with the resume list and the
+ *  handoff: codex moved the user's turn to a `response_item` during 2026-08 AND started filing its
+ *  own injected blocks under that same record, so "the user's turn" stopped being a record type
+ *  and became a record type minus a preamble (#2011).
  *
  *  Through the same fold the server streams, so what a test drives is what production runs. */
 export function codexPrompts(records: Record<string, unknown>[], limit: number = PROMPT_HISTORY_MAX): PromptEntry[] {

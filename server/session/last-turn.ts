@@ -6,6 +6,7 @@
 
 import { conversationTurnsFromParsed, parseJsonl } from "./transcript.js";
 import { codexEventPayload as eventPayload } from "../agents/codex-events.js";
+import { codexUserPrompt } from "../agents/codex-user-turn.js";
 
 export interface LastTurn {
   prompt: string | null;
@@ -62,10 +63,12 @@ export function currentTurnReplyFromClaudeParsed(records: Record<string, unknown
 }
 
 // codex tags only its turn BOUNDARIES with a turn_id (task_started / turn_context /
-// task_complete) — the user_message and agent_message rows in between carry none. So a
-// turn is the positional span between a task_started and its matching task_complete,
-// and the id serves to pair those two rather than to group the contents. Each of those
-// rows is reached through `eventPayload` above, which is shared with the badge reader.
+// task_complete) — the prompt and reply rows in between carry none. So a turn is the
+// positional span between a task_started and its matching task_complete, and the id
+// serves to pair those two rather than to group the contents. The boundaries are reached
+// through `eventPayload` above, which is shared with the badge reader; the prompt inside
+// them is not, because codex has written it in two different record shapes and that
+// question belongs to `codexUserPrompt` (#2011).
 const trimmedString = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value.trim() : null);
 
 // Walk back to the task_started that opened this turn, then forward to the first
@@ -85,11 +88,8 @@ function codexPromptForTurn(docs: Record<string, unknown>[], completeIndex: numb
   if (start < 0) return null;
   for (let i = start + 1; i < completeIndex; i++) {
     const doc = docs[i];
-    const message = doc === undefined ? null : eventPayload(doc, "user_message");
-    if (message) {
-      const text = trimmedString(message.message);
-      if (text) return text;
-    }
+    const text = doc === undefined ? null : codexUserPrompt(doc);
+    if (text) return text;
   }
   return null;
 }
