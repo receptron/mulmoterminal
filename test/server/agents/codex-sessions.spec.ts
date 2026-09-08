@@ -68,6 +68,22 @@ describe("parseCodexRolloutHead", () => {
     const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("the real prompt")].join("\n");
     expect(parseCodexRolloutHead(head)?.title).toBe("the real prompt");
   });
+  // Both review bots on #2009: the first version treated ANY tag-prefixed turn as codex's own, so a
+  // person whose prompt opens with markup lost their row's title. codex's own wrappers are a named
+  // set of four — every leading tag in the 6,325 rollouts measured — and none of the 6,330 first
+  // prompts codex itself recorded starts with "<".
+  it.each(["<div>fix the login bug</div>", "<task> explain this file", "<foo/> and then some"])("titles a real prompt that opens with markup: %s", (prompt) => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine(prompt)].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe(prompt);
+  });
+  it("keeps a multi-part prompt whose second part opens with an unknown tag", () => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("explain this", "<foo>bar</foo>")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("explain this");
+  });
+  it.each(["environment_context", "recommended_plugins", "user_action", "turn_aborted"])("skips codex's own <%s> block", (tag) => {
+    const head = [metaLine(UUID_A, "/work"), responseItemUserLine(`<${tag}>\n  something\n</${tag}>`), responseItemUserLine("the real prompt")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("the real prompt");
+  });
   it("still reads the old event_msg shape, so sessions already on disk keep their titles", () => {
     const head = [metaLine(UUID_A, "/work"), envContextLine(), userMsgLine("an older session")].join("\n");
     expect(parseCodexRolloutHead(head)?.title).toBe("an older session");

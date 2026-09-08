@@ -70,21 +70,32 @@ function userTurnTexts(d: Record<string, unknown>): string[] | null {
   return Array.isArray(content) ? content.flatMap((part) => (isRecord(part) && typeof part.text === "string" ? [part.text] : [])) : null;
 }
 
-// codex opens the new shape with a SYNTHETIC user turn: ONE message whose content parts are
-// `<recommended_plugins>`, `# AGENTS.md instructions for …` and `<environment_context>` together.
-// The person's prompt is the next message, alone in its own.
+// The blocks codex writes INTO a user turn rather than the person writing them. Every leading tag
+// in the 6,325 rollouts on this machine is one of these four — environment_context 6,315,
+// recommended_plugins 4,521, user_action 14, turn_aborted 8 — and none of them is a prompt.
 //
-// So a message is skipped whole when ANY of its parts opens with an XML-ish wrapper tag. That
-// keeps the AGENTS.md part out without naming it — it has no tag of its own and would otherwise
-// become the title of every session in a repo that has one. Checked against codex's own
-// `first_user_message` over all 6,325 rollouts here: 6,322 identical, and the 3 others are rows
-// where codex recorded no first message and this finds the real prompt.
-const WRAPPER_RE = /^<[a-zA-Z_][\w.-]*>/;
+// Named rather than "anything that opens with a tag", because a person's prompt may perfectly well
+// open with `<div>` or `<task>`, and treating that as codex's own would drop the one row it titles.
+// If codex adds a fifth wrapper the cost is a visibly wrong title rather than a missing session,
+// and the bundle below still catches it whenever it travels with one of these.
+const CODEX_WRAPPER_TAGS: ReadonlySet<string> = new Set(["environment_context", "recommended_plugins", "user_action", "turn_aborted"]);
+const LEADING_TAG_RE = /^<([a-zA-Z_][\w.:-]*)[\s>/]/;
+
+// codex bundles its preamble into ONE message with several content parts: the plugin list, the
+// repo's AGENTS.md and the environment context together. The person's prompt is the next message.
+//
+// So the test is per MESSAGE, not per part. The AGENTS.md part carries no tag of its own, and a
+// part-level skip would make it the title of every session in a repo that has one.
+const isSyntheticTurn = (texts: readonly string[]): boolean =>
+  texts.some((t) => {
+    const tag = LEADING_TAG_RE.exec(t)?.[1];
+    return tag !== undefined && CODEX_WRAPPER_TAGS.has(tag);
+  });
 
 // A user turn's prompt, or null when the record is not one, or is codex talking to itself.
 function userPrompt(d: Record<string, unknown>): string | null {
   const texts = (userTurnTexts(d) ?? []).map((t) => t.trim()).filter((t) => t !== "");
-  if (texts.length === 0 || texts.some((t) => WRAPPER_RE.test(t))) return null;
+  if (texts.length === 0 || isSyntheticTurn(texts)) return null;
   return texts[0] ?? null;
 }
 
