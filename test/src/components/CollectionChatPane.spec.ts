@@ -27,6 +27,33 @@ vi.mock("../../../src/composables/useCollectionBrowse", () => ({
   useCollectionBrowse: () => ({ view: browse.view }),
   browseRouteProjectId: () => null,
 }));
+// The supervision sources the pane reads. Real ones fetch and subscribe; what these cases are about
+// is what the pane DOES with the answers.
+type Activity = { working: boolean; waiting: boolean; event: string | null };
+const feed = vi.hoisted(
+  (): {
+    activity: Map<string, Activity>;
+    push: (data: unknown) => void;
+    setTitle: (title: string | null) => void;
+  } => ({ activity: new Map(), push: () => {}, setTitle: () => {} }),
+);
+vi.mock("../../../src/composables/useGridActivity", () => ({ useGridActivity: () => ({ activity: feed.activity }) }));
+// The server's session channel, played by hand: a "closed" push is how the filing hears that a
+// session ended while its terminal was not mounted.
+vi.mock("../../../src/composables/usePubSub", () => ({
+  usePubSub: () => ({
+    subscribe: (_channel: string, callback: (data: unknown) => void) => {
+      feed.push = callback;
+      return () => {};
+    },
+  }),
+}));
+vi.mock("../../../src/composables/useSessionSummary", async () => {
+  const { ref } = await import("vue");
+  const meta = ref({ lastPrompt: null, aiTitle: null as string | null, lastResponse: null, memo: null, workPhase: null });
+  feed.setTitle = (title) => (meta.value = { ...meta.value, aiTitle: title });
+  return { useSessionSummary: () => meta };
+});
 // The terminal opens a socket and an xterm; what matters here is which session it is pointed at.
 vi.mock("../../../src/components/Terminal.vue", () => ({
   default: {
@@ -46,6 +73,8 @@ describe("CollectionChatPane", () => {
     placed.calls = [];
     released.keys = [];
     resetCollectionChats();
+    feed.activity.clear();
+    feed.setTitle(null);
     browse.view = ref(at("works"));
   });
 
@@ -162,6 +191,72 @@ describe("CollectionChatPane", () => {
     offerCollectionChat(request("a"));
     await wrapper.vm.$nextTick();
     expect(wrapper.findComponent({ name: "Terminal" }).props("persistKey")).toBe("collection-chat-a");
+    wrapper.unmount();
+  });
+
+  // A tab that only says "something is running" is the half a grid cell never had to say. The dot
+  // and the line come from the same sources the cockpit roster reads.
+  it("shows whose turn it is, in the grid's own colours", async () => {
+    feed.activity.set("a", { working: false, waiting: true, event: "Notification" }); // blocked
+    feed.activity.set("b", { working: true, waiting: false, event: null }); // working
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("a"));
+    offerCollectionChat(request("b"));
+    await wrapper.vm.$nextTick();
+    expect(tabs(wrapper)[0].find(".bg-amber").exists()).toBe(true);
+    expect(tabs(wrapper)[1].find(".bg-muted").exists()).toBe(true);
+    expect(tabs(wrapper)[0].attributes("title")).toContain("waiting on you");
+    wrapper.unmount();
+  });
+
+  it("says what the agent is doing", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("a"));
+    feed.setTitle("Fixing the failing spec");
+    await wrapper.vm.$nextTick();
+    expect(wrapper.text()).toContain("Fixing the failing spec");
+    wrapper.unmount();
+  });
+
+  // Codex on #2002: a session that ends while its terminal is NOT mounted never fires `exit` — the
+  // slot's handlers are cleared on detach, and attaching again replays session and cwd, not an end
+  // already seen. The tab goes when the server says the session closed.
+  it("drops a tab whose session has ended off-screen", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("gone"));
+    offerCollectionChat(request("alive"));
+    await wrapper.vm.$nextTick();
+    feed.push({ id: "gone", event: "closed" });
+    await wrapper.vm.$nextTick();
+    expect(tabs(wrapper)).toHaveLength(1);
+    expect(shown(wrapper)).toBe("alive");
+    expect(placed.calls).toEqual([]); // it ended — there is nothing to move to the grid
+    wrapper.unmount();
+  });
+
+  // `role="tab"` is a promise about the keyboard (Codex, #2002).
+  it("moves between tabs with the arrow keys, and keeps one in the tab order", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("first"));
+    offerCollectionChat(request("second"));
+    await wrapper.vm.$nextTick();
+    expect(tabs(wrapper).map((t) => t.attributes("tabindex"))).toEqual(["-1", "0"]);
+
+    await tabs(wrapper)[1].trigger("keydown", { key: "ArrowRight" }); // wraps to the first
+    expect(shown(wrapper)).toBe("first");
+    await tabs(wrapper)[0].trigger("keydown", { key: "End" });
+    expect(shown(wrapper)).toBe("second");
+    await tabs(wrapper)[1].trigger("keydown", { key: "Home" });
+    expect(shown(wrapper)).toBe("first");
+    wrapper.unmount();
+  });
+
+  it("names the panel its tabs control", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("a"));
+    await wrapper.vm.$nextTick();
+    const panel = wrapper.get("[role='tabpanel']");
+    expect(tabs(wrapper)[0].attributes("aria-controls")).toBe(panel.attributes("id"));
     wrapper.unmount();
   });
 });

@@ -1,5 +1,8 @@
 import { reactive } from "vue";
 import type { SpawnedChatRequest } from "./useSpawnedChat";
+import { usePubSub } from "./usePubSub";
+import { parseSessionActivityPayload } from "./sessionActivity";
+import { release } from "./useTerminalConnections";
 
 // Which chats belong to which collection (#2001).
 //
@@ -51,6 +54,7 @@ export function collectionChatsFor(key: string | null): CollectionChats {
 /** File a new chat under a collection and show it. Appended rather than replacing: the one already
  *  running is still running, and taking its screen away to make room is what the tabs are for. */
 export function holdCollectionChat(key: string, req: SpawnedChatRequest): void {
+  listenForEndings();
   const held = filed.get(key) ?? { sessions: [], activeId: null };
   if (!held.sessions.some((session) => session.id === req.id)) held.sessions.push(req);
   held.activeId = req.id;
@@ -83,6 +87,43 @@ export function dropCollectionChat(key: string, id: string): void {
   if (held.activeId === id && next) held.activeId = next.id;
 }
 
+/** The durable terminal slot a filed chat runs in. Named for the session rather than for a
+ *  position, so the same chat shown again — another tab, another visit to the collection — comes
+ *  back to the terminal it left rather than reconnecting and redrawing. */
+export const collectionChatSlotKey = (id: string): string => `collection-chat-${id}`;
+
+// A session that ends while its terminal is NOT mounted — you are on another tab, in another
+// collection, or out on the grid — never fires the `exit` a mounted terminal would: `detach` clears
+// the slot's handlers, and `attach` replays the session and cwd but not an end already seen (Codex,
+// PR #2002). Left alone, the tab comes back pointing at a session that is over.
+//
+// The truth is a push, not a poll: the server publishes one `{ id, event: "closed" }` on the
+// sessions channel when a PTY is reaped (`SESSIONS_CHANNEL` in server/session/lifecycle.ts), which
+// is what `useGridActivity` already listens to. Deliberately NOT `/api/sessions` — that list is
+// scoped to one cwd and capped at the most recent N, so a chat under a collection in another
+// directory, or an older one, is missing from it while perfectly alive, and dropping on absence
+// would close a live tab.
+//
+// It listens here rather than in the pane because the filing outlives the pane: the case above is
+// mostly a session that ends while nothing of this is on screen.
+let stopListening: (() => void) | null = null;
+function listenForEndings(): void {
+  if (stopListening) return;
+  stopListening = usePubSub().subscribe("sessions", (data) => {
+    const update = parseSessionActivityPayload(data);
+    if (update && "closed" in update) forgetEndedChat(update.id);
+  });
+}
+
+/** Forget a session wherever it is filed — it has ended, so there is nothing to move and nothing
+ *  to come back to. Its terminal slot goes with it. */
+export function forgetEndedChat(id: string): void {
+  const holders = [...filed.entries()].filter(([, held]) => held.sessions.some((session) => session.id === id)).map(([key]) => key);
+  if (holders.length === 0) return;
+  holders.forEach((key) => dropCollectionChat(key, id));
+  release(collectionChatSlotKey(id));
+}
+
 /** How many chats are running under collections, across all of them.
  *
  *  The toolbar's Collections button wears this: a session in the pane is invisible from anywhere
@@ -97,4 +138,6 @@ export function collectionChatCount(): number {
 /** Test seam: forget everything filed. Not used by the app. */
 export function resetCollectionChats(): void {
   filed.clear();
+  stopListening?.();
+  stopListening = null;
 }

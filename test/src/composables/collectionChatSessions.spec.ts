@@ -4,10 +4,33 @@
 // The key is the whole design: the first version filed nothing and tied the session to the OVERLAY,
 // which is why the pane stayed open after switching collections and why going to the grid and back
 // left nothing to return to.
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
+
+// The filing keeps itself honest off the server's own session channel, and tears a terminal slot
+// down when it does. Both are played by hand here.
+const silence = (): void => {};
+const bus = vi.hoisted((): { push: (data: unknown) => void; subscribed: number; released: string[] } => ({
+  push: () => {},
+  subscribed: 0,
+  released: [],
+}));
+vi.mock("../../../src/composables/usePubSub", () => ({
+  usePubSub: () => ({
+    subscribe: (_channel: string, callback: (data: unknown) => void) => {
+      bus.push = callback;
+      bus.subscribed += 1;
+      return silence;
+    },
+  }),
+}));
+vi.mock("../../../src/composables/useTerminalConnections", () => ({ release: (key: string) => bus.released.push(key) }));
+
 import {
+  collectionChatSlotKey,
+  forgetEndedChat,
   activateCollectionChat,
   collectionChatKey,
+  collectionChatCount,
   collectionChatsFor,
   dropCollectionChat,
   holdCollectionChat,
@@ -50,7 +73,11 @@ describe("filing a collection's chats", () => {
   const todos = collectionChatKey({ mode: "detail", kind: "collection", slug: "todos" }, null) ?? "";
   const ids = (key: string): string[] => collectionChatsFor(key).sessions.map((session) => session.id);
 
-  beforeEach(resetCollectionChats);
+  beforeEach(() => {
+    resetCollectionChats();
+    bus.subscribed = 0;
+    bus.released = [];
+  });
 
   it("gives each collection its own chats, and nothing to the others", () => {
     holdCollectionChat(works, request("a"));
@@ -110,5 +137,41 @@ describe("filing a collection's chats", () => {
 
   it("answers empty for a view that cannot hold any", () => {
     expect(collectionChatsFor(null).sessions).toEqual([]);
+  });
+
+  // A session that ends while its terminal is not mounted never fires an `exit` for anyone to hear
+  // (Codex, PR #2002). The server says so on its own channel, once, for every consumer.
+  it("forgets a chat the server says has closed, wherever it is filed", () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(todos, request("a")); // the same session cannot really be in two, but the
+    holdCollectionChat(todos, request("b")); // sweep must not depend on knowing where it was
+    bus.push({ id: "a", event: "closed" });
+    expect(ids(works)).toEqual([]);
+    expect(ids(todos)).toEqual(["b"]);
+    expect(bus.released).toEqual([collectionChatSlotKey("a")]); // and its terminal goes with it
+  });
+
+  it("leaves everything alone for a session it does not hold, and for an ordinary update", () => {
+    holdCollectionChat(works, request("a"));
+    bus.push({ id: "somebody-else", event: "closed" });
+    bus.push({ id: "a", working: true }); // still going — not an ending
+    expect(ids(works)).toEqual(["a"]);
+    expect(bus.released).toEqual([]);
+  });
+
+  // One listener, opened when there is something to listen for. Filing more chats must not stack up
+  // callbacks on a socket every other composable shares.
+  it("listens once, however many chats are filed", () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(works, request("b"));
+    holdCollectionChat(todos, request("c"));
+    expect(bus.subscribed).toBe(1);
+  });
+
+  it("takes an ended session out of the door's count", () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(todos, request("b"));
+    forgetEndedChat("a");
+    expect(collectionChatCount()).toBe(1);
   });
 });
