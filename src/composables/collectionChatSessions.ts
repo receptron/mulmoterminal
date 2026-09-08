@@ -230,11 +230,11 @@ export function forgetEndedChat(id: string): void {
   holders.forEach((key) => dropCollectionChat(key, id));
 }
 
-/** How many chats are running under collections, across all of them.
+/** How many chats belong to a collection, across all of them.
  *
- *  The toolbar's Collections button wears this: a session in the pane is invisible from anywhere
- *  else — that is the price of not putting it in the grid — so the door it lives behind is where
- *  its existence has to be legible. */
+ *  The toolbar's Collections button wears it. They are ordinary grid cells, so this is not the only
+ *  place they can be seen; what it answers is "is anything waiting for me behind that door", which
+ *  the grid's own tally cannot say — it counts every cell alike. */
 export function collectionChatCount(): number {
   let total = 0;
   filed.forEach((held) => (total += held.sessions.length));

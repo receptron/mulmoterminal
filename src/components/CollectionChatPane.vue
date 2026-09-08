@@ -35,11 +35,11 @@ const key = computed(currentCollectionChatKey);
 const chats = computed(() => collectionChatsFor(key.value));
 const held = computed(() => chats.value.sessions.find((session) => session.id === chats.value.activeId) ?? null);
 
-// The supervision the grid gives a cell, for a tab: whose turn it is, and what the agent is doing.
-// Read from the SAME sources the cockpit roster reads — attention from the session activity stream
-// (keyed by session id, so it covers a session no cell holds), the summary from the transcript
-// endpoint. A chat that runs here rather than in the grid was invisible to every read-out the app
-// has; these two are what make a tab worth glancing at (#2001).
+// The supervision a grid cell wears, for a TAB: whose turn it is, and what the agent is doing.
+// Read from the SAME sources the cockpit roster reads — attention from the session activity stream,
+// the summary from the transcript endpoint — so the two never disagree. A tab is one line of chrome
+// with no cell header to read, and the other chats here are off-screen entirely; without these it
+// says only that something exists (#2001).
 const sessionIds = computed(() => chats.value.sessions.map((session) => session.id));
 const { activity } = useGridActivity(sessionIds);
 const statusOf = (id: string): AttentionStatus => {

@@ -107,9 +107,10 @@ const onGridRoute = computed(() => route.name === "terminals");
 // would be lit either (Codex, PR #1201). The index/detail distinction belongs to the view, not to
 // which section you are in.
 const collectionsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "collection");
-// Chats running in the collection pane (#2001). They are not grid cells, so without this the only
-// way to find out one is still there is to go and look. The count is on the button rather than in
-// its own control because it is not a thing to press — it is a property of what is behind the door.
+// Chats belonging to a collection (#2001). They ARE grid cells — the grid's own tally counts them
+// with everything else — so what this adds is which of them are answerable behind this door, and
+// that any exist at all while you are looking at the grid. The count is on the button rather than
+// in its own control because it is not a thing to press: it is a property of what is behind it.
 // The accessible name carries it too: a badge is `aria-hidden`, and a screen reader that only hears
 // "Collections" is told less than the screen says.
 const chatCount = computed(() => collectionChatCount());

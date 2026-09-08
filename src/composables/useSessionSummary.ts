@@ -6,11 +6,11 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 // What ONE session is doing, in the words the cockpit roster uses: the AI summary, the prompt it is
 // answering, the tail of its last reply (#2001).
 //
-// The roster reads the same endpoint for every cell it lists and keeps a cache it prunes against
-// the cells. This is the one-session case — a chat in the collection pane, which is not a cell and
-// must not be pruned by that cache. Deliberately NOT sharing the roster's map: its cleanup drops
-// every id no CELL asks for, so a pane session filed there would be deleted by a grid that has
-// never heard of it. Same endpoint, same merge, separate lifetime.
+// The roster reads the same endpoint for every cell it LISTS, into a cache it fills while it is on
+// screen and prunes against those cells. This is the one-session case: the collection pane needs an
+// answer for the tab it is showing, whether or not the roster has ever been opened, and it needs it
+// to survive a prune it takes no part in. Same endpoint, same merge, separate lifetime — sharing
+// the map would tie the pane's line to whether a different view happens to be open.
 //
 // `GET /api/session/:id` reads the transcript on disk, so it is current even for a session this
 // build did not spawn, and a poll is what keeps it moving while the pane is open.
