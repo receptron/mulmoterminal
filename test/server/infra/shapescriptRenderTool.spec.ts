@@ -34,12 +34,19 @@ initArtifactsBackend({ workspace: ws });
 resetOpenPathBackend();
 initOpenPathBackend({ workspace: ws });
 
-/** Whether this machine can actually rasterise. Probed rather than assumed: the tool
- *  answers `rendered: false` with install guidance when Puppeteer has no browser,
- *  which is a legitimate outcome and not a test failure. */
-const probe = await runRenderShapeScript({ script: CUBE, views: "single", width: 160, height: 160 });
+/** Whether this machine can actually rasterise.
+ *
+ *  Probed rather than assumed, and the probe CANNOT be allowed to throw. A missing
+ *  browser answers `rendered: false`, which is tidy — but a browser that launches and
+ *  then cannot navigate throws instead, and on Windows CI that is what happens
+ *  (`Navigation timeout of 30000 ms exceeded`). An unguarded probe at module scope
+ *  took the whole FILE down with it, including the cases that need no browser at all. */
+const probe = await runRenderShapeScript({ script: CUBE, views: "single", width: 160, height: 160 }).catch((err: unknown) => ({
+  rendered: false,
+  message: `probe threw: ${err instanceof Error ? err.message : String(err)}`,
+}));
 const canRender = probe.rendered;
-if (!canRender) console.warn(`[shapescriptRenderTool.spec] no browser here — skipping the pixel cases: ${probe.message}`);
+if (!canRender) console.warn(`[shapescriptRenderTool.spec] cannot rasterise here — skipping the pixel cases: ${probe.message}`);
 
 const savedPath = (message: string): string => {
   const match = /Saved render to (\S+)/.exec(message);
