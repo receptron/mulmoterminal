@@ -8,12 +8,11 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
 // The filing keeps itself honest off the server's own session channel, and tears a terminal slot
 // down when it does. Both are played by hand here.
-const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void; subscribed: number; listening: number; released: string[] } => ({
+const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void; subscribed: number; listening: number } => ({
   push: () => {},
   connect: () => {},
   subscribed: 0,
   listening: 0,
-  released: [],
 }));
 vi.mock("../../../src/composables/usePubSub", () => ({
   usePubSub: () => ({
@@ -29,10 +28,8 @@ vi.mock("../../../src/composables/usePubSub", () => ({
     },
   }),
 }));
-vi.mock("../../../src/composables/useTerminalConnections", () => ({ release: (key: string) => bus.released.push(key) }));
 
 import {
-  collectionChatSlotKey,
   forgetEndedChat,
   activateCollectionChat,
   collectionChatCount,
@@ -70,7 +67,6 @@ describe("filing a collection's chats", () => {
     resetCollectionChats();
     bus.subscribed = 0;
     bus.listening = 0;
-    bus.released = [];
     served = null;
     consider = null;
     vi.stubGlobal(
@@ -155,7 +151,7 @@ describe("filing a collection's chats", () => {
     bus.push({ id: "a", event: "closed" });
     expect(ids(works)).toEqual([]);
     expect(ids(todos)).toEqual(["b"]);
-    expect(bus.released).toEqual([collectionChatSlotKey("a")]); // and its terminal goes with it
+    expect(collectionChatCount()).toBe(1); // and nothing else moved
   });
 
   it("leaves everything alone for a session it does not hold, and for an ordinary update", () => {
@@ -163,7 +159,6 @@ describe("filing a collection's chats", () => {
     bus.push({ id: "somebody-else", event: "closed" });
     bus.push({ id: "a", working: true }); // still going — not an ending
     expect(ids(works)).toEqual(["a"]);
-    expect(bus.released).toEqual([]);
   });
 
   // One listener, opened when there is something to listen for. Filing more chats must not stack up
@@ -195,7 +190,7 @@ describe("filing a collection's chats", () => {
     await flush();
     expect(ids(works)).toEqual(["a"]);
     expect(ids(todos)).toEqual([]); // and only the reconnect could have found that out
-    expect(bus.released).toEqual([collectionChatSlotKey("gone")]);
+    expect(collectionChatCount()).toBe(1);
   });
 
   // These are running agents. "We could not check" is not "it ended", and closing a live chat's
@@ -216,7 +211,6 @@ describe("filing a collection's chats", () => {
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
-    expect(bus.released).toEqual([]);
   });
 
   it("asks about every collection's chats at once, and asks nothing when there are none", async () => {
@@ -246,7 +240,7 @@ describe("filing a collection's chats", () => {
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["over-the-cap"]);
-    expect(bus.released).toEqual([collectionChatSlotKey("asked-about")]);
+    expect(ids(works)).not.toContain("asked-about");
   });
 
   // Subscribing does not close the window on its own: on an already-connected socket the room join
@@ -260,7 +254,6 @@ describe("filing a collection's chats", () => {
     expect(fetch).not.toHaveBeenCalled();
     await settle();
     expect(ids(works)).toEqual([]);
-    expect(bus.released).toEqual([collectionChatSlotKey("died-instantly")]);
   });
 
   // The other half of that grace: the spawn route answers before the session is registered, so a
@@ -304,6 +297,6 @@ describe("filing a collection's chats", () => {
     expect(asked).toHaveLength(250);
     expect(asked).toContain("s240");
     expect(ids(works)).toHaveLength(249);
-    expect(bus.released).toEqual([collectionChatSlotKey("s240")]);
+    expect(ids(works)).not.toContain("s240");
   });
 });

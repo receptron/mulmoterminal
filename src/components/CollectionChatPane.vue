@@ -2,30 +2,23 @@
 // The terminal under an open collection (#2001).
 //
 // A chat started from a card used to appear as a grid cell, and placing it there brings the grid on
-// screen — so the collection you were reading closed the moment you asked something about it. This
-// pane claims that placement while it is mounted and runs the session HERE instead.
+// screen — so the collection you were reading closed the moment you asked something about it. It is
+// still an ordinary grid cell; what changed is that starting one no longer takes the screen, and
+// that the cell can be worked from HERE while the collection is open.
 //
-// What it shows is THIS COLLECTION's session (collectionChatSessions.ts), not "whatever was started
-// last": switching to another collection switches the pane with it, and coming back — from another
-// collection, or from the grid — brings the same terminal back, scrollback and all. The socket and
-// the xterm survive because the slot is durable (`persistKey`), keyed by the session.
+// This pane owns NO terminal. It is a receptacle: it claims one session and the grid TELEPORTS that
+// session's cell into it (`collectionTerminalClaim.ts`). One component, one socket, one xterm, one
+// scrollback — the same mechanism the zoomed cell uses. So the same chat is operated from the grid
+// or from here depending only on which view is open, with no hand-off button and no reconnect.
 //
-// The session stays filed under its collection until it is deliberately moved: "Move to the grid"
-// makes it an ordinary cell, and an exit clears it. Closing the overlay does neither — that is
-// what made it impossible to come back to.
-import { computed, nextTick, onBeforeUnmount, ref } from "vue";
-import Terminal from "./Terminal.vue";
-import { claimCollectionChat } from "../composables/collectionChatPane";
-import {
-  activateCollectionChat,
-  collectionChatSlotKey,
-  collectionChatsFor,
-  dropCollectionChat,
-  holdCollectionChat,
-} from "../composables/collectionChatSessions";
+// What it shows is THIS COLLECTION's chats (collectionChatSessions.ts), not "whatever was started
+// last": switching to another collection switches the strip with it, and the cells of the one you
+// left keep running in the grid.
+import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { activateCollectionChat, collectionChatsFor } from "../composables/collectionChatSessions";
+import { claimCollectionTerminal, releaseCollectionTerminal } from "../composables/collectionTerminalClaim";
 import { currentCollectionChatKey } from "../composables/useCollectionBrowse";
-import { placeSpawnedChat, type SpawnedChatRequest } from "../composables/useSpawnedChat";
-import { release } from "../composables/useTerminalConnections";
+import type { SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { dragSplitter } from "../composables/dragSplitter";
 import { clampPrimary, maxPrimary, MIN_TERMINAL_HEIGHT, splitterKeySize, TERMINAL_COLLECTION } from "./splitterWidth";
 import { BUILTIN_AGENT_OPTIONS } from "./agentPicker";
@@ -85,28 +78,32 @@ const setHeight = (next: number): void => {
 };
 setHeight(height.value); // what was restored was clamped against another viewport, not this one
 
-/** Stop showing `req` here and tear its slot down. The caller decides where it goes instead. */
-function unfile(target: string, req: SpawnedChatRequest): void {
-  dropCollectionChat(target, req.id);
-  release(collectionChatSlotKey(req.id));
+// The receptacle the grid teleports the shown chat's cell into. Claimed by SESSION rather than by
+// cell uid: uids are positional and are renumbered whenever the grid is re-parsed, so a number held
+// here would eventually name a different terminal.
+const slot = ref<HTMLElement | null>(null);
+let claimed: string | null = null;
+
+function claimShown(): void {
+  const id = held.value?.id ?? null;
+  if (claimed === id && (!id || slot.value)) return;
+  if (claimed) releaseCollectionTerminal(claimed);
+  claimed = id;
+  if (id && slot.value) claimCollectionTerminal(id, slot.value);
 }
 
-// A chat started while a collection is open is filed under THAT collection, as another tab. The one
-// already running keeps its tab and its terminal — asking a second thing while the first is working
-// is the ordinary case, and the first version paid for it by pushing that one to the grid.
-const stopClaiming = claimCollectionChat((req, from) => {
-  // Filed where it was ASKED from, falling back to what is on screen for a caller that did not say.
-  // A chat started in one collection while its spawn is in flight, and the reader moves on, belongs
-  // to the collection whose card was pressed (Codex, PR #2002).
-  const target = from ?? key.value;
-  if (!target) return false; // nothing open to file it under — the grid path takes it
-  holdCollectionChat(target, req);
-  return true;
+// The element arrives with the v-if, so both the shown session AND the receptacle are watched. Post
+// flush: the claim hands the grid a DOM node to teleport into, which has to exist first.
+watch([held, slot], claimShown, { flush: "post" });
+
+// Give the cell back to the grid — this is what puts the terminal back in its tile when the overlay
+// closes, and it must run even though the session goes on running.
+onBeforeUnmount(() => {
+  if (claimed) releaseCollectionTerminal(claimed);
+  claimed = null;
 });
 
-onBeforeUnmount(stopClaiming); // the sessions stay filed — that is what makes coming back work
-
-/** Bring one of this collection's chats to the front. */
+/** Bring one of this collection's chats to the front — which moves the teleport with it. */
 function show(id: string): void {
   if (key.value) activateCollectionChat(key.value, id);
 }
@@ -114,8 +111,8 @@ function show(id: string): void {
 // `role="tab"` is a promise about the keyboard, not just a label: arrows move between tabs, Home
 // and End reach the ends, and only the selected tab is in the tab order so Tab leaves the strip
 // rather than walking it (Codex, PR #2002). Focus follows selection, which is the pattern's
-// automatic-activation form — right here, where selecting is switching a terminal that is already
-// running rather than loading something.
+// automatic-activation form — right here, where selecting only moves a terminal that is already
+// running and on screen somewhere.
 const tabRefs = ref<HTMLElement[]>([]);
 const KEY_STEPS: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 };
 function onTabKey(e: KeyboardEvent, index: number): void {
@@ -131,22 +128,6 @@ function onTabKey(e: KeyboardEvent, index: number): void {
   if (!target) return;
   show(target.id);
   void nextTick(() => tabRefs.value[next]?.focus());
-}
-
-/** Hand the chat you are looking at to the grid, where it becomes an ordinary cell. */
-function moveToGrid(): void {
-  const target = key.value;
-  const req = held.value;
-  if (!target || !req) return;
-  unfile(target, req);
-  placeSpawnedChat(req);
-}
-
-/** The agent ended. Nothing to show and nothing to move — just stop offering it. */
-function onExit(): void {
-  const target = key.value;
-  const req = held.value;
-  if (target && req) unfile(target, req);
 }
 
 // The picker's own words for the agent, so a tab names it the way the dropdown above it does. The
@@ -244,35 +225,16 @@ function onSplitterKey(e: KeyboardEvent): void {
         <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
         {{ tabLabel(session) }}
       </button>
-      <!-- Acts on the tab you are looking at. Not a close: the session is live, so "closing" it here
-           can only mean sending it where it lives — the grid. Leaving the collection is NOT closing;
-           the tabs stay filed and come back. -->
-      <button
-        type="button"
-        class="ml-auto flex-none cursor-pointer rounded border border-border bg-transparent px-2 py-0.5 text-[12px] text-fg hover:bg-hover"
-        :title="`Move this ${label} session to the grid and close its tab`"
-        @click="moveToGrid"
-      >
-        Move to the grid
-      </button>
+      <!-- No "move to the grid": it is ALREADY a grid cell. Closing it is the cell's own business,
+           in the grid, where closing a terminal has always lived. -->
     </div>
     <!-- What this agent is doing, in the words the cockpit roster uses. Without it a tab says only
          that something is running, which is the half a terminal in the grid never had to say. -->
     <div v-if="summaryLine" class="flex-none truncate border-b border-border px-3 py-1 font-sans text-[12px] text-muted" :title="summaryLine">
       {{ summaryLine }}
     </div>
-    <div :id="PANEL_ID" role="tabpanel" :aria-labelledby="tabId(held.id)" class="min-h-0 flex-1">
-      <!-- Keyed by the session so switching collections switches terminals; the durable slot of the
-           same name is what each one comes back to. -->
-      <Terminal
-        :key="held.id"
-        :session-id="held.id"
-        :connect-key="0"
-        :agent="held.agent"
-        :persist-key="collectionChatSlotKey(held.id)"
-        hide-header
-        @exit="onExit"
-      />
-    </div>
+    <!-- Empty on purpose: the grid teleports this chat's own cell in here, so nothing this
+         component renders is remounted when the view changes. -->
+    <div :id="PANEL_ID" ref="slot" role="tabpanel" :aria-labelledby="tabId(held.id)" class="min-h-0 flex-1" />
   </div>
 </template>

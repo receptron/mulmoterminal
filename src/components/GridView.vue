@@ -34,7 +34,6 @@ import {
   nextAttention,
   nextAttentionUid,
   orderCells,
-  pageSlice,
   countByStatus,
   pageCount,
   zoomedUid,
@@ -47,6 +46,8 @@ import {
   MAX_TERMINALS,
 } from "./gridTabs";
 import { activityStatus, type AttentionStatus } from "./attentionStatus";
+import { collectionTerminalClaim } from "../composables/collectionTerminalClaim";
+import { cellsToDisplay } from "./displayCells";
 import { gridShortcutFor, isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
 import { isImeConfirming } from "../composables/imeComposition";
 import { useCaptureKeydown } from "../composables/useCaptureKeydown";
@@ -150,8 +151,10 @@ const { priorities: priorityByCwd } = useDirPriorities(cellCwds);
 const orderedCells = computed(() => orderCells(state.value.cells, statusForSort.value, state.value.sortMode, priorityByCwd.value));
 // The grid: while a cell is zoomed, render EVERY cell (the filmstrip lines up all tabs' terminals,
 // live); otherwise just the active page's slice. A waiting cell from any page floats to the front.
-const displayCells = computed(() => (zoomedUid(state.value) !== null ? orderedCells.value : pageSlice(orderedCells.value, state.value.page)));
 const expandedUid = computed(() => zoomedUid(state.value));
+// The page on screen, the whole list while zoomed, plus whatever the collection pane claimed —
+// a cell that is not rendered cannot be teleported into it (displayCells.ts, #2001).
+const displayCells = computed(() => cellsToDisplay(orderedCells.value, state.value.page, expandedUid.value !== null, collectionTerminalClaim.value?.sessionId));
 
 // The zoomed grid's cockpit roster: a text row per cell — status + dir + the user's memo +
 // AI summary + current prompt + the agent's latest reply — so many parallel agents can be

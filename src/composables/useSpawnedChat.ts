@@ -51,8 +51,18 @@ export function registerSpawnedChatHandler(h: Handler): () => void {
   return queue.register(h);
 }
 
-/** Show a spawned chat as a grid cell. If the grid isn't mounted yet, queue it and switch to it. */
-export function placeSpawnedChat(req: SpawnedChatRequest): void {
+/** Options for where the user should be left afterwards. */
+export interface PlaceOptions {
+  /** Bring the grid on screen. False for a chat started from a collection: it becomes a cell like
+   *  any other, but the reader stays with the collection and sees it in the pane there (#2001). */
+  reveal?: boolean;
+}
+
+/** Show a spawned chat as a grid cell. If the grid isn't mounted yet, queue it and switch to it.
+ *
+ *  Returns whether the grid took it — false means it was FULL, so the session is waiting with no
+ *  cell, which a caller that was going to show it somewhere has to know. */
+export function placeSpawnedChat(req: SpawnedChatRequest, opts: PlaceOptions = {}): boolean {
   // `true` for a queued request too: the grid will have it as soon as it registers, so the grid is
   // still where the user should be looking.
   const goingToTheGrid = queue.deliver(req, true);
@@ -64,8 +74,9 @@ export function placeSpawnedChat(req: SpawnedChatRequest): void {
   //
   // NOT when the grid refused it. A full grid falls back to the single view, and pushing here
   // would drag the user off the view the session was just shown in (Codex, PR #1193).
-  if (!goingToTheGrid) return;
-  if (router.currentRoute.value.name !== "terminals") router.push({ name: "terminals" }).catch(() => {});
+  if (!goingToTheGrid) return false;
+  if (opts.reveal !== false && router.currentRoute.value.name !== "terminals") router.push({ name: "terminals" }).catch(() => {});
+  return true;
 }
 
 /** Test seam: drop anything queued by a previous case. Not used by the app. */

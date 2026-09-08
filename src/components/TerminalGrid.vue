@@ -12,6 +12,8 @@ import { dragSplitter } from "../composables/dragSplitter";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { canMoveCell, type Cell } from "./gridTabs";
 import type { AttentionStatus } from "./attentionStatus";
+import { collectionTerminalClaim } from "../composables/collectionTerminalClaim";
+import { cellPlacement, type CellPlacement } from "./cellTeleport";
 import type { RunCommand } from "./runCommand";
 import type { PrPhase, WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
@@ -658,6 +660,25 @@ async function answerQuestion(picks: number[][]): Promise<void> {
   if (!failure || failure === "closed") return;
   answerFailure.value = failure;
   await revealQuestion(event.sessionId);
+}
+
+// Where the collection pane wants this cell, or null when it wants nothing to do with it. Read
+// straight from the claim rather than passed down as a prop: the pane is in another component tree
+// (an overlay App.vue renders over this one), and what it hands over is a DOM node.
+function placementOf(cell: { uid: number; session: string | null }): CellPlacement {
+  const claim = collectionTerminalClaim.value;
+  return cellPlacement({
+    claimedByCollection: claim !== null && cell.session === claim.sessionId,
+    zoomed: zoomed.value,
+    expanded: cell.uid === props.expandedUid,
+  });
+}
+
+/** The element a moved cell lands in. Null for a cell that stays in its tile. */
+function teleportTargetFor(cell: { uid: number; session: string | null }): HTMLElement | null {
+  const placement = placementOf(cell);
+  if (placement === "collection") return collectionTerminalClaim.value?.el ?? null;
+  return placement === "zoom" ? zoomMain.value : null;
 }
 
 // GUI -> LLM for the enlarged cell (a submitted form's answer). App.vue routes this through the
@@ -1463,7 +1484,11 @@ watch(
          stylesheet's `flex: 0 0 150px` stays as the default; an inline basis outranks it, and is
          bound only in that mode so it cannot reach the tiled grid or list mode's off-screen one. -->
     <div class="grid" :style="[gridStyle, zoomed && !listMode ? { flexBasis: `${stripHeight}px` } : {}]">
-      <Teleport v-for="cell in cells" :key="cell.uid" :to="zoomMain" :disabled="!(zoomed && cell.uid === expandedUid)">
+      <!-- Two places a cell can be shown somewhere else, and the collection pane wins while it is
+           open — it is an overlay ON TOP of the grid, so the zoom underneath is not on screen
+           (#2001). Same mechanism either way: the cell is MOVED, never re-created, so its socket,
+           its xterm and its scrollback carry across untouched. -->
+      <Teleport v-for="cell in cells" :key="cell.uid" :to="teleportTargetFor(cell) ?? zoomMain" :disabled="teleportTargetFor(cell) === null">
         <CommandCell v-if="cell.command" v-bind="gridCellProps(cell)" :command="cell.command" v-on="gridCellEvents(cell)" />
         <LauncherCell
           v-else-if="cell.launcher"

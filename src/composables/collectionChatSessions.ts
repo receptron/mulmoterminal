@@ -2,7 +2,6 @@ import { reactive } from "vue";
 import type { SpawnedChatRequest } from "./useSpawnedChat";
 import { usePubSub } from "./usePubSub";
 import { parseSessionActivityPayload } from "./sessionActivity";
-import { release } from "./useTerminalConnections";
 import { isUnknownArray } from "../../common/isUnknownArray";
 import { jsonBody } from "../jsonBody";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
@@ -18,10 +17,10 @@ import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 // A collection holds SEVERAL: asking a second thing while the first is still working is the ordinary
 // case, and the earlier version paid for it by pushing the first one to the grid. They are tabs now.
 //
-// Module state, not the pane's: it has to outlive the overlay for a session to still be there when
-// you come back. The terminal's own socket and scrollback outlive it too — the pane gives each
-// terminal a durable slot keyed by the session (`persistKey`), which is what makes returning, and
-// switching tabs, instant rather than a reconnect that redraws.
+// Module state, not the pane's: it has to outlive the overlay for a chat to still be listed when
+// you come back. The TERMINAL is not here at all — a chat is an ordinary grid cell, and the pane
+// shows one by having the grid teleport it (`collectionTerminalClaim.ts`). This file only answers
+// "which chats belong to this collection", which is what the tab strip is.
 
 /** One collection's chats, in the order they were started, and which of them the pane is showing. */
 export interface CollectionChats {
@@ -78,11 +77,6 @@ export function dropCollectionChat(key: string, id: string): void {
   const next = held.sessions[index - 1] ?? held.sessions[0];
   if (held.activeId === id && next) held.activeId = next.id;
 }
-
-/** The durable terminal slot a filed chat runs in. Named for the session rather than for a
- *  position, so the same chat shown again — another tab, another visit to the collection — comes
- *  back to the terminal it left rather than reconnecting and redrawing. */
-export const collectionChatSlotKey = (id: string): string => `collection-chat-${id}`;
 
 // A session that ends while its terminal is NOT mounted — you are on another tab, in another
 // collection, or out on the grid — never fires the `exit` a mounted terminal would: `detach` clears
@@ -177,13 +171,12 @@ async function askAbout(ids: readonly string[]): Promise<void> {
   }
 }
 
-/** Forget a session wherever it is filed — it has ended, so there is nothing to move and nothing
- *  to come back to. Its terminal slot goes with it. */
+/** Forget a session wherever it is filed — it has ended, so the tab names nothing. The terminal
+ *  itself is the grid's: the cell tears its own connection down. */
 export function forgetEndedChat(id: string): void {
   const holders = [...filed.entries()].filter(([, held]) => held.sessions.some((session) => session.id === id)).map(([key]) => key);
   if (holders.length === 0) return;
   holders.forEach((key) => dropCollectionChat(key, id));
-  release(collectionChatSlotKey(id));
 }
 
 /** How many chats are running under collections, across all of them.

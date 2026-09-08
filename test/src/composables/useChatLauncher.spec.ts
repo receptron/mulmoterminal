@@ -3,6 +3,8 @@ import { pushCollectionSurface, popCollectionSurface } from "../../../src/compos
 import { nextTick } from "vue";
 import { startCollectionChat, launchAgent } from "../../../src/composables/useChatLauncher";
 import { registerSpawnedChatHandler, resetSpawnedChatQueue, type SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
+import { collectionChatsFor, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import { router } from "../../../src/router";
 
 function mockFetch(impl: (url: string, init?: RequestInit) => { ok: boolean; json: () => unknown }) {
   const fn = vi.fn((url: string, init?: RequestInit) => {
@@ -142,5 +144,37 @@ describe("startCollectionChat", () => {
     launchAgent.value = "codex";
     await nextTick();
     expect(localStorage.getItem("mt-launch-agent")).toBe("codex");
+  });
+
+  // A chat started while a collection is open belongs to that collection (#2001). It is placed as
+  // an ordinary cell all the same — the pane shows it by having the grid teleport that cell — and
+  // the reader is NOT taken to the grid.
+  it("files the chat under the open collection and leaves the reader in it", async () => {
+    mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-c" } }) }));
+    await router.push("/collections/works");
+    resetCollectionChats();
+
+    await startCollectionChat("tidy this up");
+
+    expect(placed.map((p) => p.id)).toEqual(["sess-c"]); // still a grid cell
+    expect(router.currentRoute.value.path).toBe("/collections/works"); // ...but we stayed
+    expect(collectionChatsFor("workspace|collection:works").sessions.map((s) => s.id)).toEqual(["sess-c"]);
+    resetCollectionChats();
+  });
+
+  // A full grid leaves the session waiting with no cell. A tab pointing at a cell that does not
+  // exist is worse than no tab, so the filing is undone.
+  it("files nothing when the grid could not take the cell", async () => {
+    mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-full" } }) }));
+    resetSpawnedChatQueue();
+    registerSpawnedChatHandler(() => false); // the grid is full
+    await router.push("/collections/works");
+    resetCollectionChats();
+
+    await startCollectionChat("tidy this up");
+
+    expect(collectionChatsFor("workspace|collection:works").sessions).toEqual([]);
+    resetCollectionChats();
+    await router.push("/terminals");
   });
 });

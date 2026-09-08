@@ -1,26 +1,16 @@
-// The pane shows THIS collection's session (#2001).
+// The pane under an open collection (#2001).
 //
-// The first version tied the session to the pane's own lifetime, and both halves of that were wrong
-// in use: it stayed open after switching to another collection, and going to the grid and back left
-// nothing to come back to. These cases are those two, plus the invariant that survived the rewrite —
-// a running agent is never left on no screen at all.
+// It owns no terminal. A chat is an ordinary grid cell, and the pane is the receptacle the grid
+// TELEPORTS that cell into while its collection is open — so what these cases check is which
+// session is claimed, and when the claim is given back.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
 import { ref } from "vue";
 import CollectionChatPane from "../../../src/components/CollectionChatPane.vue";
-import { offerCollectionChat } from "../../../src/composables/collectionChatPane";
-import { resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import { holdCollectionChat, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
 import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
-const placed = vi.hoisted((): { calls: SpawnedChatRequest[] } => ({ calls: [] }));
-vi.mock("../../../src/composables/useSpawnedChat", () => ({
-  placeSpawnedChat: (req: SpawnedChatRequest) => placed.calls.push(req),
-}));
-const released = vi.hoisted((): { keys: string[] } => ({ keys: [] }));
-vi.mock("../../../src/composables/useTerminalConnections", () => ({
-  release: (key: string) => released.keys.push(key),
-}));
 // Which collection is on screen. The pane reads it through useCollectionBrowse, so moving the view
 // IS "switching collections" from the pane's point of view.
 const browse = vi.hoisted((): { view: { value: unknown } } => ({ view: { value: null } }));
@@ -28,171 +18,128 @@ vi.mock("../../../src/composables/useCollectionBrowse", async () => {
   const { collectionChatKey } = await import("../../../src/composables/collectionChatKey");
   return { currentCollectionChatKey: () => collectionChatKey(browse.view.value as never, null) };
 });
-// The supervision sources the pane reads. Real ones fetch and subscribe; what these cases are about
-// is what the pane DOES with the answers.
-type Activity = { working: boolean; waiting: boolean; event: string | null };
-const feed = vi.hoisted(
-  (): {
-    activity: Map<string, Activity>;
-    push: (data: unknown) => void;
-    setTitle: (title: string | null) => void;
-  } => ({ activity: new Map(), push: () => {}, setTitle: () => {} }),
-);
-vi.mock("../../../src/composables/useGridActivity", () => ({ useGridActivity: () => ({ activity: feed.activity }) }));
-// The server's session channel, played by hand: a "closed" push is how the filing hears that a
-// session ended while its terminal was not mounted.
-vi.mock("../../../src/composables/usePubSub", () => ({
-  usePubSub: () => ({
-    subscribe: (_channel: string, callback: (data: unknown) => void) => {
-      feed.push = callback;
-      return () => {};
-    },
-    onConnect: () => () => {},
-  }),
+// The claim, recorded rather than acted on: what the grid does with it is TerminalGrid's business.
+const claim = vi.hoisted((): { current: { sessionId: string; el: unknown } | null } => ({ current: null }));
+vi.mock("../../../src/composables/collectionTerminalClaim", () => ({
+  claimCollectionTerminal: (sessionId: string, el: unknown) => (claim.current = { sessionId, el }),
+  releaseCollectionTerminal: (sessionId: string) => {
+    if (claim.current?.sessionId === sessionId) claim.current = null;
+  },
 }));
+// The supervision sources the tab strip reads. Real ones fetch and subscribe; what these cases are
+// about is what the strip DOES with the answers.
+type Activity = { working: boolean; waiting: boolean; event: string | null };
+const feed = vi.hoisted((): { activity: Map<string, Activity>; setTitle: (title: string | null) => void } => ({ activity: new Map(), setTitle: () => {} }));
+vi.mock("../../../src/composables/useGridActivity", () => ({ useGridActivity: () => ({ activity: feed.activity }) }));
+vi.mock("../../../src/composables/usePubSub", () => ({
+  usePubSub: () => ({ subscribe: () => () => {}, onConnect: () => () => {} }),
+}));
+vi.mock("../../../src/composables/useTerminalConnections", () => ({ release: () => {} }));
 vi.mock("../../../src/composables/useSessionSummary", async () => {
   const { ref } = await import("vue");
   const meta = ref({ lastPrompt: null, aiTitle: null as string | null, lastResponse: null, memo: null, workPhase: null });
   feed.setTitle = (title) => (meta.value = { ...meta.value, aiTitle: title });
   return { useSessionSummary: () => meta };
 });
-// The terminal opens a socket and an xterm; what matters here is which session it is pointed at.
-vi.mock("../../../src/components/Terminal.vue", () => ({
-  default: {
-    name: "Terminal",
-    props: ["sessionId", "connectKey", "agent", "persistKey"],
-    template: '<div :data-session="sessionId" />',
-  },
-}));
 
 const request = (id: string, agent: SpawnedChatRequest["agent"] = "claude"): SpawnedChatRequest => ({ id, agent, draft: false });
 const at = (slug: string) => ({ mode: "detail", kind: "collection", slug });
-const shown = (wrapper: ReturnType<typeof mount>): string | undefined => wrapper.find("[data-session]").attributes("data-session");
+const keyOf = (slug: string) => collectionChatKey(at(slug) as never, null) ?? "";
+const file = (slug: string, id: string, agent: SpawnedChatRequest["agent"] = "claude") => holdCollectionChat(keyOf(slug), request(id, agent));
+const shown = (): string | null => claim.current?.sessionId ?? null;
 const tabs = (wrapper: ReturnType<typeof mount>) => wrapper.findAll("[role='tab']");
 
 describe("CollectionChatPane", () => {
   beforeEach(() => {
-    placed.calls = [];
-    released.keys = [];
     resetCollectionChats();
+    claim.current = null;
     feed.activity.clear();
     feed.setTitle(null);
     browse.view = ref(at("works"));
   });
 
-  it("runs the session here instead of sending it to the grid", async () => {
-    const wrapper = mount(CollectionChatPane);
-    expect(offerCollectionChat(request("a"))).toBe(true);
+  it("claims the chat it is showing, and hands the grid somewhere to put it", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     await wrapper.vm.$nextTick();
-    expect(shown(wrapper)).toBe("a");
-    expect(placed.calls).toEqual([]);
+    expect(shown()).toBe("a");
+    expect(claim.current?.el).toBe(wrapper.get("[role='tabpanel']").element);
     wrapper.unmount();
   });
 
-  // (1) The pane used to stay open on whatever was started last, whichever collection you moved to.
-  it("follows the collection: another one's pane is its own, or empty", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("works-chat"));
+  // Switching collections switches what the pane is showing; the chats of the one you left keep
+  // running in the grid, which is where they live.
+  it("follows the collection, and claims nothing where there is nothing", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "works-chat");
     await wrapper.vm.$nextTick();
-    expect(shown(wrapper)).toBe("works-chat");
+    expect(shown()).toBe("works-chat");
 
-    browse.view.value = at("todos"); // switch collections
+    browse.view.value = at("todos");
     await wrapper.vm.$nextTick();
-    expect(wrapper.find("[data-session]").exists()).toBe(false);
+    expect(shown()).toBeNull();
 
-    offerCollectionChat(request("todos-chat"));
+    file("todos", "todos-chat");
     await wrapper.vm.$nextTick();
-    expect(shown(wrapper)).toBe("todos-chat");
+    expect(shown()).toBe("todos-chat");
 
-    browse.view.value = at("works"); // ...and back
+    browse.view.value = at("works");
     await wrapper.vm.$nextTick();
-    expect(shown(wrapper)).toBe("works-chat");
-    expect(placed.calls).toEqual([]); // nothing was moved anywhere by looking around
+    expect(shown()).toBe("works-chat");
     wrapper.unmount();
   });
 
-  // (2) Going to the grid and back used to leave nothing: the session had been handed away on close.
-  it("is still there after the overlay closes and opens again", async () => {
-    const first = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
+  // Closing the overlay is what puts the terminal back in its tile — the cell was never anywhere
+  // else, and the session goes on running either way.
+  it("gives the cell back to the grid when it goes away", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
+    await wrapper.vm.$nextTick();
+    wrapper.unmount();
+    expect(shown()).toBeNull();
+  });
+
+  it("comes back to the same chat when the overlay opens again", async () => {
+    const first = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     await first.vm.$nextTick();
-    first.unmount(); // the overlay closed
+    first.unmount();
 
-    expect(placed.calls).toEqual([]); // ...and that is NOT a hand-off
-    const second = mount(CollectionChatPane);
+    const second = mount(CollectionChatPane, { attachTo: document.body });
     await second.vm.$nextTick();
-    expect(shown(second)).toBe("a");
+    expect(shown()).toBe("a");
     second.unmount();
   });
 
-  it("hands it over on Move to the grid, and stops showing it", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
+  it("keeps both when a second chat starts in the same collection, and shows the new one", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "first");
+    file("works", "second");
     await wrapper.vm.$nextTick();
-    await wrapper.get("button[title*='Move this']").trigger("click");
-    expect(placed.calls.map((c) => c.id)).toEqual(["a"]);
-    expect(wrapper.find("[data-session]").exists()).toBe(false);
-    expect(released.keys).toEqual(["collection-chat-a"]); // the durable slot goes with it
-    wrapper.unmount();
-  });
-
-  // A second question while the first is still working is the ordinary case. It used to cost the
-  // first one its screen; now they are tabs and both keep their terminal.
-  it("keeps both when a second chat starts in the same collection", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("first"));
-    offerCollectionChat(request("second"));
-    await wrapper.vm.$nextTick();
-    expect(placed.calls).toEqual([]); // nothing was pushed anywhere
     expect(tabs(wrapper)).toHaveLength(2);
-    expect(shown(wrapper)).toBe("second"); // the new one is what you are looking at
+    expect(shown()).toBe("second");
     wrapper.unmount();
   });
 
-  it("switches terminals when another tab is pressed", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("first"));
-    offerCollectionChat(request("second"));
+  it("moves the claim when another tab is pressed", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "first");
+    file("works", "second");
     await wrapper.vm.$nextTick();
     await tabs(wrapper)[0].trigger("click");
-    expect(shown(wrapper)).toBe("first");
+    expect(shown()).toBe("first");
     expect(tabs(wrapper)[0].attributes("aria-selected")).toBe("true");
     expect(tabs(wrapper)[1].attributes("aria-selected")).toBe("false");
     wrapper.unmount();
   });
 
-  // Moving one out leaves the rest alone — and lands you on its left neighbour, which is where you
-  // were before you opened it.
-  it("moves only the tab you are looking at", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("first"));
-    offerCollectionChat(request("second"));
+  // It is a grid cell: closing it is the grid's business, and the pane must not offer a second,
+  // different way to get rid of a terminal.
+  it("offers no hand-off button, because there is nothing to hand off", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     await wrapper.vm.$nextTick();
-    await wrapper.get("button[title*='Move this']").trigger("click");
-    expect(placed.calls.map((c) => c.id)).toEqual(["second"]);
-    expect(tabs(wrapper)).toHaveLength(1);
-    expect(shown(wrapper)).toBe("first");
-    wrapper.unmount();
-  });
-
-  it("stops offering a session that has exited", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
-    await wrapper.vm.$nextTick();
-    wrapper.findComponent({ name: "Terminal" }).vm.$emit("exit", 0);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find("[data-session]").exists()).toBe(false);
-    expect(placed.calls).toEqual([]); // nothing to move — it ended
-    wrapper.unmount();
-  });
-
-  // Each session gets its own durable slot, which is what brings the terminal back rather than
-  // reconnecting it: the same session shown again reuses the same slot name.
-  it("gives the terminal a slot named for its session", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
-    await wrapper.vm.$nextTick();
-    expect(wrapper.findComponent({ name: "Terminal" }).props("persistKey")).toBe("collection-chat-a");
+    expect(wrapper.find("button[title*='Move this']").exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -201,9 +148,9 @@ describe("CollectionChatPane", () => {
   it("shows whose turn it is, in the grid's own colours", async () => {
     feed.activity.set("a", { working: false, waiting: true, event: "Notification" }); // blocked
     feed.activity.set("b", { working: true, waiting: false, event: null }); // working
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
-    offerCollectionChat(request("b"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
+    file("works", "b");
     await wrapper.vm.$nextTick();
     expect(tabs(wrapper)[0].find(".bg-amber").exists()).toBe(true);
     expect(tabs(wrapper)[1].find(".bg-muted").exists()).toBe(true);
@@ -212,53 +159,47 @@ describe("CollectionChatPane", () => {
   });
 
   it("says what the agent is doing", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     feed.setTitle("Fixing the failing spec");
     await wrapper.vm.$nextTick();
     expect(wrapper.text()).toContain("Fixing the failing spec");
     wrapper.unmount();
   });
 
-  // Codex on #2002: a session that ends while its terminal is NOT mounted never fires `exit` — the
-  // slot's handlers are cleared on detach, and attaching again replays session and cwd, not an end
-  // already seen. The tab goes when the server says the session closed.
-  it("drops a tab whose session has ended off-screen", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("gone"));
-    offerCollectionChat(request("alive"));
+  // Numbered among its own kind: the strip's position would call the second Claude "Claude 3"
+  // whenever another agent sits between them (Codex, PR #2002).
+  it("numbers two of the same agent, and leaves a lone one unnumbered", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "c1", "claude");
+    file("works", "x", "codex");
+    file("works", "c2", "claude");
     await wrapper.vm.$nextTick();
-    feed.push({ id: "gone", event: "closed" });
-    await wrapper.vm.$nextTick();
-    expect(tabs(wrapper)).toHaveLength(1);
-    expect(shown(wrapper)).toBe("alive");
-    expect(placed.calls).toEqual([]); // it ended — there is nothing to move to the grid
+    expect(tabs(wrapper).map((t) => t.text())).toEqual(["Claude 1", "Codex", "Claude 2"]);
     wrapper.unmount();
   });
 
   // `role="tab"` is a promise about the keyboard (Codex, #2002).
   it("moves between tabs with the arrow keys, and keeps one in the tab order", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("first"));
-    offerCollectionChat(request("second"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "first");
+    file("works", "second");
     await wrapper.vm.$nextTick();
     expect(tabs(wrapper).map((t) => t.attributes("tabindex"))).toEqual(["-1", "0"]);
 
     await tabs(wrapper)[1].trigger("keydown", { key: "ArrowRight" }); // wraps to the first
-    expect(shown(wrapper)).toBe("first");
+    expect(shown()).toBe("first");
     await tabs(wrapper)[0].trigger("keydown", { key: "End" });
-    expect(shown(wrapper)).toBe("second");
+    expect(shown()).toBe("second");
     await tabs(wrapper)[1].trigger("keydown", { key: "Home" });
-    expect(shown(wrapper)).toBe("first");
+    expect(shown()).toBe("first");
     wrapper.unmount();
   });
 
-  // Both directions of the relationship: every tab points at the panel, and the panel names the tab
-  // whose chat it is showing — which is what says WHICH one you are looking at.
   it("names the panel its tabs control, and the tab the panel is showing", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("first"));
-    offerCollectionChat(request("second"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "first");
+    file("works", "second");
     await wrapper.vm.$nextTick();
     const panel = wrapper.get("[role='tabpanel']");
     expect(tabs(wrapper).map((t) => t.attributes("aria-controls"))).toEqual([panel.attributes("id"), panel.attributes("id")]);
@@ -273,8 +214,8 @@ describe("CollectionChatPane", () => {
   it("brings a height saved on another viewport back into range", async () => {
     const viewport = window.innerHeight;
     localStorage.setItem("mt-collection-chat-height", "5000");
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     await wrapper.vm.$nextTick();
     const separator = () => wrapper.get("[role='separator']");
     expect(Number(separator().attributes("aria-valuenow"))).toBeLessThanOrEqual(Number(separator().attributes("aria-valuemax")));
@@ -290,11 +231,10 @@ describe("CollectionChatPane", () => {
     window.innerHeight = viewport;
   });
 
-  // A separator a keyboard can move has to say where it is and how far it goes, or it can be
-  // operated without being understood.
+  // A separator a keyboard can move has to say where it is and how far it goes.
   it("publishes the separator's position and its range", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("a"));
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
     await wrapper.vm.$nextTick();
     const separator = wrapper.get("[role='separator']");
     const now = Number(separator.attributes("aria-valuenow"));
@@ -305,35 +245,6 @@ describe("CollectionChatPane", () => {
     expect(now).toBeGreaterThanOrEqual(min);
     await separator.trigger("keydown", { key: "ArrowUp" }); // dragging up grows the terminal
     expect(Number(wrapper.get("[role='separator']").attributes("aria-valuenow"))).toBeGreaterThan(now);
-    wrapper.unmount();
-  });
-
-  // Numbered among its own kind: the strip's position would call the second Claude "Claude 3"
-  // whenever another agent sits between them (Codex, PR #2002).
-  it("numbers two of the same agent, and leaves a lone one unnumbered", async () => {
-    const wrapper = mount(CollectionChatPane);
-    offerCollectionChat(request("c1", "claude"));
-    offerCollectionChat(request("x", "codex"));
-    offerCollectionChat(request("c2", "claude"));
-    await wrapper.vm.$nextTick();
-    expect(tabs(wrapper).map((t) => t.text())).toEqual(["Claude 1", "Codex", "Claude 2"]);
-    wrapper.unmount();
-  });
-
-  // The spawn is a request, and the reader can move on while it is in flight. The chat belongs to
-  // the collection whose card was pressed, not to whatever is on screen when the answer lands
-  // (Codex, PR #2002).
-  it("files a chat where it was started, not where you ended up", async () => {
-    const wrapper = mount(CollectionChatPane);
-    const startedIn = collectionChatKey(at("works") as never, null);
-    browse.view.value = at("todos"); // the reader moved on before the spawn came back
-    await wrapper.vm.$nextTick();
-    expect(offerCollectionChat(request("slow-spawn"), startedIn)).toBe(true);
-    await wrapper.vm.$nextTick();
-    expect(wrapper.find("[data-session]").exists()).toBe(false); // not here
-    browse.view.value = at("works");
-    await wrapper.vm.$nextTick();
-    expect(shown(wrapper)).toBe("slow-spawn"); // ...it is where it was asked for
     wrapper.unmount();
   });
 });
