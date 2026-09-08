@@ -252,12 +252,36 @@ describe("CollectionChatPane", () => {
     wrapper.unmount();
   });
 
-  it("names the panel its tabs control", async () => {
+  // Both directions of the relationship: every tab points at the panel, and the panel names the tab
+  // whose chat it is showing — which is what says WHICH one you are looking at.
+  it("names the panel its tabs control, and the tab the panel is showing", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("first"));
+    offerCollectionChat(request("second"));
+    await wrapper.vm.$nextTick();
+    const panel = wrapper.get("[role='tabpanel']");
+    expect(tabs(wrapper).map((t) => t.attributes("aria-controls"))).toEqual([panel.attributes("id"), panel.attributes("id")]);
+    expect(panel.attributes("aria-labelledby")).toBe(tabs(wrapper)[1].attributes("id"));
+    await tabs(wrapper)[0].trigger("click");
+    expect(panel.attributes("aria-labelledby")).toBe(tabs(wrapper)[0].attributes("id"));
+    wrapper.unmount();
+  });
+
+  // A separator a keyboard can move has to say where it is and how far it goes, or it can be
+  // operated without being understood.
+  it("publishes the separator's position and its range", async () => {
     const wrapper = mount(CollectionChatPane);
     offerCollectionChat(request("a"));
     await wrapper.vm.$nextTick();
-    const panel = wrapper.get("[role='tabpanel']");
-    expect(tabs(wrapper)[0].attributes("aria-controls")).toBe(panel.attributes("id"));
+    const separator = wrapper.get("[role='separator']");
+    const now = Number(separator.attributes("aria-valuenow"));
+    const min = Number(separator.attributes("aria-valuemin"));
+    const max = Number(separator.attributes("aria-valuemax"));
+    expect(min).toBeGreaterThan(0);
+    expect(max).toBeGreaterThanOrEqual(min);
+    expect(now).toBeGreaterThanOrEqual(min);
+    await separator.trigger("keydown", { key: "ArrowUp" }); // dragging up grows the terminal
+    expect(Number(wrapper.get("[role='separator']").attributes("aria-valuenow"))).toBeGreaterThan(now);
     wrapper.unmount();
   });
 });

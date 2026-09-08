@@ -28,7 +28,7 @@ import { useCollectionBrowse, browseRouteProjectId } from "../composables/useCol
 import { placeSpawnedChat, type SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { release } from "../composables/useTerminalConnections";
 import { dragSplitter } from "../composables/dragSplitter";
-import { clampPrimary, splitterKeySize, TERMINAL_COLLECTION } from "./splitterWidth";
+import { clampPrimary, maxPrimary, MIN_TERMINAL_HEIGHT, splitterKeySize, TERMINAL_COLLECTION } from "./splitterWidth";
 import { BUILTIN_AGENT_OPTIONS } from "./agentPicker";
 import { useGridActivity } from "../composables/useGridActivity";
 import { useSessionSummary } from "../composables/useSessionSummary";
@@ -61,11 +61,22 @@ const summary = useSessionSummary(computed(() => held.value?.id ?? null));
 
 const stored = Number(localStorage.getItem(HEIGHT_KEY));
 const height = ref(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_HEIGHT);
-// The overlay fills the viewport below the 40px toolbar; the pane's floor and the collection's come
+/** The toolbar above the overlay, which the viewport height has to be read net of. */
+const TOOLBAR_HEIGHT = 40;
+// Tracked rather than read on demand because the separator PUBLISHES its range (aria-valuemax), so
+// the bounds have to be a value the template can re-render from, not only one a handler can ask for.
+const viewportHeight = ref(window.innerHeight);
+const onViewportResize = (): void => {
+  viewportHeight.value = window.innerHeight;
+};
+window.addEventListener("resize", onViewportResize);
+onBeforeUnmount(() => window.removeEventListener("resize", onViewportResize));
+// The overlay fills the viewport below the toolbar; the pane's floor and the collection's come
 // from the shared geometry rules rather than from numbers invented here.
-const available = (): number => window.innerHeight - 40;
+const available = computed(() => viewportHeight.value - TOOLBAR_HEIGHT);
+const heightMax = computed(() => maxPrimary(available.value, TERMINAL_COLLECTION));
 const setHeight = (next: number): void => {
-  height.value = clampPrimary(next, available(), TERMINAL_COLLECTION);
+  height.value = clampPrimary(next, available.value, TERMINAL_COLLECTION);
   localStorage.setItem(HEIGHT_KEY, String(height.value));
 };
 
@@ -138,8 +149,11 @@ const tabLabel = (req: SpawnedChatRequest, index: number): string =>
   chats.value.sessions.filter((session) => session.agent === req.agent).length > 1 ? `${agentLabel(req.agent)} ${index + 1}` : agentLabel(req.agent);
 const label = computed(() => (held.value ? agentLabel(held.value.agent) : "Chat"));
 
-// The terminal the strip controls. One panel, not one per tab: only the selected chat is mounted.
+// The terminal the strip controls. One panel, not one per tab: only the selected chat is mounted,
+// so there is one thing for every tab to point at — and it names the tab whose chat it is showing,
+// which is the half that says WHICH of them you are looking at (Codex, PR #2002).
 const PANEL_ID = "collection-chat-panel";
+const tabId = (id: string): string => `collection-chat-tab-${id}`;
 // The grid's own vocabulary for a status, so the pane does not invent a second one.
 const STATUS_DOT: Record<AttentionStatus, string> = {
   blocked: "bg-amber",
@@ -167,7 +181,7 @@ const onSplitterDown = dragSplitter({
 });
 
 function onSplitterKey(e: KeyboardEvent): void {
-  const next = splitterKeySize(e.key, height.value, available(), TERMINAL_COLLECTION, "vertical", "after");
+  const next = splitterKeySize(e.key, height.value, available.value, TERMINAL_COLLECTION, "vertical", "after");
   if (next === null) return;
   e.preventDefault();
   setHeight(next);
@@ -181,6 +195,9 @@ function onSplitterKey(e: KeyboardEvent): void {
       role="separator"
       aria-orientation="horizontal"
       :aria-label="`Resize the ${label} pane`"
+      :aria-valuenow="height"
+      :aria-valuemin="MIN_TERMINAL_HEIGHT"
+      :aria-valuemax="heightMax"
       tabindex="0"
       @pointerdown="onSplitterDown"
       @keydown="onSplitterKey"
@@ -194,12 +211,13 @@ function onSplitterKey(e: KeyboardEvent): void {
            is the terminal you left rather than a reconnect. -->
       <button
         v-for="(session, index) in chats.sessions"
+        :id="tabId(session.id)"
         :key="session.id"
         ref="tabRefs"
         type="button"
         role="tab"
         :aria-selected="session.id === chats.activeId"
-        :aria-controls="session.id === chats.activeId ? PANEL_ID : undefined"
+        :aria-controls="PANEL_ID"
         :tabindex="session.id === chats.activeId ? 0 : -1"
         :title="`${agentLabel(session.agent)} — ${STATUS_WORD[statusOf(session.id)]} — session ${session.id}`"
         class="flex cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
@@ -229,7 +247,7 @@ function onSplitterKey(e: KeyboardEvent): void {
     <div v-if="summaryLine" class="flex-none truncate border-b border-border px-3 py-1 font-sans text-[12px] text-muted" :title="summaryLine">
       {{ summaryLine }}
     </div>
-    <div :id="PANEL_ID" role="tabpanel" :aria-label="`${label} terminal`" class="min-h-0 flex-1">
+    <div :id="PANEL_ID" role="tabpanel" :aria-labelledby="tabId(held.id)" class="min-h-0 flex-1">
       <!-- Keyed by the session so switching collections switches terminals; the durable slot of the
            same name is what each one comes back to. -->
       <Terminal
