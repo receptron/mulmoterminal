@@ -46,7 +46,7 @@ import { projectSessionsDir } from "../session/project-dir.js";
 import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
 import type { SessionRunning } from "../../common/sessionRunning.js";
-import { tmuxAttachedCounts, tmuxAvailable, tmuxHeldSessionIds } from "../infra/tmux.js";
+import { tmuxAttachedCounts, tmuxHeldSessionIds } from "../infra/tmux.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import { antigravityBrainRoot } from "../agents/antigravity-session.js";
@@ -59,7 +59,7 @@ import { conversationSessionKeys, type AgentConversation } from "../session/agen
 import { AGENT_SESSION_LIST_PATHS } from "../../common/agentSessionList.js";
 import { TERMINAL_AGENTS, type TerminalAgent } from "../../common/sessionAgent.js";
 import type { SessionMeta } from "../session/types.js";
-import { liveSessionIds } from "../session/live-sessions.js";
+import { liveSessionAnswer } from "../session/live-sessions.js";
 import { parseActivityIds, selectSessionRows } from "../session/session-list.js";
 import { agentBadges } from "../session/agent-badges.js";
 import { sessionDetailView } from "../session/session-detail-view.js";
@@ -478,14 +478,12 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
     // `asked` is what this answer is ABOUT: the ids left after validation and the cap above. A
     // caller retiring "everything I sent that is not in `live`" would otherwise retire a live
     // session it merely sent too many ids to ask about (Codex, PR #2002).
-    if (ids.length === 0) return res.json({ asked: [], live: [] });
     // One tmux call for the whole set rather than a `has-session` per id — and NULL when tmux could
-    // not answer, which is not the same as "tmux holds nothing". Answering `asked: []` there says
-    // "I considered nothing", so a caller retires nothing rather than retiring every persisted
-    // session it asked about (CodeRabbit, PR #2002).
-    const held = tmuxAvailable() ? tmuxHeldSessionIds() : [];
-    if (held === null) return res.json({ asked: [], live: [] });
-    res.json({ asked: ids, live: liveSessionIds(ids, (id) => ptys.has(id), held) });
+    // not answer, which is not the same as "tmux holds nothing". `tmuxAvailable()` is deliberately
+    // NOT consulted: it is probed once and cached, so a probe that failed at boot would turn every
+    // persisted session into "ended" for the life of the process. Asking outright costs one failed
+    // spawn on a host without tmux, and answers indeterminate there (CodeRabbit, PR #2002).
+    res.json(liveSessionAnswer(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxHeldSessionIds() : []));
   });
   // The four conversation listings are mounted FROM the shared map rather than from literals
   // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth

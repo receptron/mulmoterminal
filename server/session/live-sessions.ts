@@ -13,3 +13,19 @@ export function liveSessionIds(ids: readonly string[], hasPty: (id: string) => b
   const persisted = new Set(tmuxSessionIds);
   return ids.filter((id) => hasPty(id) || persisted.has(id));
 }
+
+/** The whole answer `GET /api/sessions/live` gives, from the two things it can observe.
+ *
+ *  `held` is null when tmux could not be ASKED. The answer then says it considered NOTHING —
+ *  `asked: []` — because a caller retires only within `asked`, so an unreadable tmux retires no
+ *  tabs rather than every persisted session's (CodeRabbit, PR #2002). The same shape covers a
+ *  request that named nothing usable.
+ */
+export function liveSessionAnswer(
+  ids: readonly string[],
+  hasPty: (id: string) => boolean,
+  held: readonly string[] | null,
+): { asked: string[]; live: string[] } {
+  if (ids.length === 0 || held === null) return { asked: [], live: [] };
+  return { asked: [...ids], live: liveSessionIds(ids, hasPty, held) };
+}
