@@ -25,6 +25,15 @@ const toolUse = (name: string) => line({ type: "assistant", message: { stop_reas
 const started = (turnId: string) => line({ type: "event_msg", payload: { type: "task_started", turn_id: turnId } });
 const turnContext = (turnId: string) => line({ type: "turn_context", payload: { turn_id: turnId, cwd: "/w" } });
 const userMessage = (message: string) => line({ type: "event_msg", payload: { type: "user_message", message } });
+// The shape codex writes since 2026-08 (#2011), and the preamble it puts in front of the prompt.
+const userItem = (...texts: string[]) =>
+  line({ type: "response_item", payload: { type: "message", role: "user", content: texts.map((text) => ({ type: "input_text", text })) } });
+const preamble = () =>
+  userItem(
+    "<recommended_plugins>\nAirtable\n</recommended_plugins>",
+    "# AGENTS.md instructions for /w\n\nbe nice",
+    "<environment_context>\n  <cwd>/w</cwd>\n</environment_context>",
+  );
 const agentMessage = (message: string) => line({ type: "event_msg", payload: { type: "agent_message", message } });
 const complete = (turnId: string, lastAgentMessage: string) =>
   line({ type: "event_msg", payload: { type: "task_complete", turn_id: turnId, last_agent_message: lastAgentMessage } });
@@ -139,6 +148,26 @@ describe("lastTurnFromCodexRollout", () => {
       complete("t2", "second answer\nwith a second line"),
     ].join("\n");
     expect(lastTurnFromCodexRollout(raw)).toEqual({ prompt: "second", reply: "second answer\nwith a second line" });
+  });
+
+  // #2011: codex moved the user's turn to a response_item during 2026-08, and the handoff's prompt
+  // half went null for every session started since — the receiving cell got an answer with no
+  // question in it.
+  it("takes a prompt written in the response_item shape codex uses now", () => {
+    const raw = [started("t1"), turnContext("t1"), preamble(), userItem("review the branch"), complete("t1", "reviewed it")].join("\n");
+    expect(lastTurnFromCodexRollout(raw)).toEqual({ prompt: "review the branch", reply: "reviewed it" });
+  });
+
+  it("does not hand over codex's own preamble as the prompt", () => {
+    const raw = [started("t1"), preamble(), complete("t1", "answered anyway")].join("\n");
+    expect(lastTurnFromCodexRollout(raw)).toEqual({ prompt: null, reply: "answered anyway" });
+  });
+
+  // The older rollouts on disk carry the prompt in BOTH shapes, back to back. Either half is the
+  // same text, so the turn reads the same whichever one it meets first.
+  it("reads a turn codex wrote in both shapes", () => {
+    const raw = [started("t1"), userItem("review the branch"), userMessage("review the branch"), complete("t1", "reviewed it")].join("\n");
+    expect(lastTurnFromCodexRollout(raw)).toEqual({ prompt: "review the branch", reply: "reviewed it" });
   });
 
   it("falls back to the previous turn while the newest one is still running", () => {
