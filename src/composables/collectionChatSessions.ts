@@ -87,6 +87,10 @@ export function dropCollectionChat(key: string, id: string): void {
   filedAt.delete(id);
   if (held.sessions.length === 0) {
     filed.delete(key);
+    // Nothing left to keep honest. The listener costs a callback on every session row the app ever
+    // publishes, and `holdCollectionChat` puts it back the moment there is a chat again (Codex,
+    // PR #2002).
+    if (filed.size === 0) stopWatchingEndings();
     return;
   }
   const next = held.sessions[index - 1] ?? held.sessions[0];
@@ -202,10 +206,15 @@ export function collectionChatCount(): number {
   return total;
 }
 
-/** Test seam: forget everything filed. Not used by the app. */
-export function resetCollectionChats(): void {
-  filed.clear();
+/** Stop listening and forget the schedule — there is nothing filed to keep honest. */
+function stopWatchingEndings(): void {
   filedAt.clear();
   stopListening?.();
   stopListening = null;
+}
+
+/** Test seam: forget everything filed. Not used by the app. */
+export function resetCollectionChats(): void {
+  filed.clear();
+  stopWatchingEndings();
 }

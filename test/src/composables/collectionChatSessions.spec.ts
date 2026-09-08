@@ -8,11 +8,11 @@ import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
 // The filing keeps itself honest off the server's own session channel, and tears a terminal slot
 // down when it does. Both are played by hand here.
-const silence = (): void => {};
-const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void; subscribed: number; released: string[] } => ({
+const bus = vi.hoisted((): { push: (data: unknown) => void; connect: () => void; subscribed: number; listening: number; released: string[] } => ({
   push: () => {},
   connect: () => {},
   subscribed: 0,
+  listening: 0,
   released: [],
 }));
 vi.mock("../../../src/composables/usePubSub", () => ({
@@ -20,11 +20,12 @@ vi.mock("../../../src/composables/usePubSub", () => ({
     subscribe: (_channel: string, callback: (data: unknown) => void) => {
       bus.push = callback;
       bus.subscribed += 1;
-      return silence;
+      bus.listening += 1;
+      return () => (bus.listening -= 1);
     },
     onConnect: (callback: () => void) => {
       bus.connect = callback;
-      return silence;
+      return () => {};
     },
   }),
 }));
@@ -96,6 +97,7 @@ describe("filing a collection's chats", () => {
     vi.useFakeTimers();
     resetCollectionChats();
     bus.subscribed = 0;
+    bus.listening = 0;
     bus.released = [];
     served = null;
     consider = null;
@@ -296,5 +298,20 @@ describe("filing a collection's chats", () => {
     await flush();
     expect(ids(works)).toEqual(["just-started"]);
     expect(fetch).not.toHaveBeenCalled(); // there was nothing it was allowed to ask about
+  });
+
+  // The listener costs a callback on every session row the app publishes. Nothing filed, nothing to
+  // keep honest (Codex, PR #2002).
+  it("stops listening when the last chat goes, and listens again for the next one", () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(todos, request("b"));
+    expect(bus.listening).toBe(1);
+    dropCollectionChat(works, "a");
+    expect(bus.listening).toBe(1); // one collection still holds a chat
+    dropCollectionChat(todos, "b");
+    expect(bus.listening).toBe(0);
+    holdCollectionChat(works, request("c"));
+    expect(bus.listening).toBe(1);
+    expect(bus.subscribed).toBe(2);
   });
 });
