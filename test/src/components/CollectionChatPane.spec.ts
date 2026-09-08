@@ -39,6 +39,7 @@ vi.mock("../../../src/components/Terminal.vue", () => ({
 const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draft: false });
 const at = (slug: string) => ({ mode: "detail", kind: "collection", slug });
 const shown = (wrapper: ReturnType<typeof mount>): string | undefined => wrapper.find("[data-session]").attributes("data-session");
+const tabs = (wrapper: ReturnType<typeof mount>) => wrapper.findAll("[role='tab']");
 
 describe("CollectionChatPane", () => {
   beforeEach(() => {
@@ -97,21 +98,49 @@ describe("CollectionChatPane", () => {
     const wrapper = mount(CollectionChatPane);
     offerCollectionChat(request("a"));
     await wrapper.vm.$nextTick();
-    await wrapper.get("button").trigger("click");
+    await wrapper.get("button[title*='Move this']").trigger("click");
     expect(placed.calls.map((c) => c.id)).toEqual(["a"]);
     expect(wrapper.find("[data-session]").exists()).toBe(false);
     expect(released.keys).toEqual(["collection-chat-a"]); // the durable slot goes with it
     wrapper.unmount();
   });
 
-  // A running agent is never left on no screen at all — the invariant that outlived the rewrite.
-  it("pushes the one it holds to the grid when a second chat starts in the same collection", async () => {
+  // A second question while the first is still working is the ordinary case. It used to cost the
+  // first one its screen; now they are tabs and both keep their terminal.
+  it("keeps both when a second chat starts in the same collection", async () => {
     const wrapper = mount(CollectionChatPane);
     offerCollectionChat(request("first"));
     offerCollectionChat(request("second"));
     await wrapper.vm.$nextTick();
-    expect(placed.calls.map((c) => c.id)).toEqual(["first"]);
-    expect(shown(wrapper)).toBe("second");
+    expect(placed.calls).toEqual([]); // nothing was pushed anywhere
+    expect(tabs(wrapper)).toHaveLength(2);
+    expect(shown(wrapper)).toBe("second"); // the new one is what you are looking at
+    wrapper.unmount();
+  });
+
+  it("switches terminals when another tab is pressed", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("first"));
+    offerCollectionChat(request("second"));
+    await wrapper.vm.$nextTick();
+    await tabs(wrapper)[0].trigger("click");
+    expect(shown(wrapper)).toBe("first");
+    expect(tabs(wrapper)[0].attributes("aria-selected")).toBe("true");
+    expect(tabs(wrapper)[1].attributes("aria-selected")).toBe("false");
+    wrapper.unmount();
+  });
+
+  // Moving one out leaves the rest alone — and lands you on its left neighbour, which is where you
+  // were before you opened it.
+  it("moves only the tab you are looking at", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("first"));
+    offerCollectionChat(request("second"));
+    await wrapper.vm.$nextTick();
+    await wrapper.get("button[title*='Move this']").trigger("click");
+    expect(placed.calls.map((c) => c.id)).toEqual(["second"]);
+    expect(tabs(wrapper)).toHaveLength(1);
+    expect(shown(wrapper)).toBe("first");
     wrapper.unmount();
   });
 

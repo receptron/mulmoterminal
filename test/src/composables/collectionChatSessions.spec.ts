@@ -6,8 +6,9 @@
 // left nothing to return to.
 import { describe, it, expect, beforeEach } from "vitest";
 import {
+  activateCollectionChat,
   collectionChatKey,
-  collectionChatFor,
+  collectionChatsFor,
   dropCollectionChat,
   holdCollectionChat,
   resetCollectionChats,
@@ -44,36 +45,70 @@ describe("collectionChatKey", () => {
   });
 });
 
-describe("filing a session", () => {
+describe("filing a collection's chats", () => {
+  const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";
+  const todos = collectionChatKey({ mode: "detail", kind: "collection", slug: "todos" }, null) ?? "";
+  const ids = (key: string): string[] => collectionChatsFor(key).sessions.map((session) => session.id);
+
   beforeEach(resetCollectionChats);
 
-  it("gives each collection its own session, and nothing to the others", () => {
-    const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";
-    const todos = collectionChatKey({ mode: "detail", kind: "collection", slug: "todos" }, null) ?? "";
+  it("gives each collection its own chats, and nothing to the others", () => {
     holdCollectionChat(works, request("a"));
-    expect(collectionChatFor(works)?.id).toBe("a");
-    expect(collectionChatFor(todos)).toBeNull();
+    expect(ids(works)).toEqual(["a"]);
+    expect(ids(todos)).toEqual([]);
+    expect(collectionChatsFor(todos).activeId).toBeNull();
   });
 
   // The session outlives the pane: that is what makes "go to the grid and come back" work.
   it("keeps what it was given until it is dropped", () => {
-    const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";
     holdCollectionChat(works, request("a"));
-    expect(collectionChatFor(works)?.id).toBe("a");
-    dropCollectionChat(works);
-    expect(collectionChatFor(works)).toBeNull();
+    dropCollectionChat(works, "a");
+    expect(ids(works)).toEqual([]);
   });
 
-  // The caller has to put the replaced one somewhere — it is a running agent, and answering it here
-  // is what stops it being dropped silently.
-  it("answers what a second chat in the same collection displaced", () => {
-    const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";
-    expect(holdCollectionChat(works, request("first"))).toBeNull();
-    expect(holdCollectionChat(works, request("second"))?.id).toBe("first");
-    expect(collectionChatFor(works)?.id).toBe("second");
+  // A second question while the first is still working is the ordinary case. The earlier version
+  // paid for it by pushing the first one to the grid; now they are tabs.
+  it("keeps them all, newest shown", () => {
+    holdCollectionChat(works, request("first"));
+    holdCollectionChat(works, request("second"));
+    expect(ids(works)).toEqual(["first", "second"]);
+    expect(collectionChatsFor(works).activeId).toBe("second");
   });
 
-  it("answers null for a view that cannot hold one", () => {
-    expect(collectionChatFor(null)).toBeNull();
+  it("shows the one asked for, and ignores an id it does not hold", () => {
+    holdCollectionChat(works, request("first"));
+    holdCollectionChat(works, request("second"));
+    activateCollectionChat(works, "first");
+    expect(collectionChatsFor(works).activeId).toBe("first");
+    activateCollectionChat(works, "gone");
+    expect(collectionChatsFor(works).activeId).toBe("first"); // not left pointing at nothing
+  });
+
+  it("files the same session once, however often it arrives", () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(works, request("a"));
+    expect(ids(works)).toEqual(["a"]);
+  });
+
+  // Closing the tab you are looking at lands you on the one to its LEFT — the one you were looking
+  // at before it — rather than on whichever happens to be first.
+  it("moves to the left neighbour when the shown one goes", () => {
+    ["a", "b", "c"].forEach((id) => holdCollectionChat(works, request(id)));
+    activateCollectionChat(works, "c");
+    dropCollectionChat(works, "c");
+    expect(collectionChatsFor(works).activeId).toBe("b");
+    dropCollectionChat(works, "a"); // ...and dropping one you are NOT looking at leaves you put
+    expect(collectionChatsFor(works).activeId).toBe("b");
+  });
+
+  it("falls back to the first when the shown one was leftmost", () => {
+    ["a", "b"].forEach((id) => holdCollectionChat(works, request(id)));
+    activateCollectionChat(works, "a");
+    dropCollectionChat(works, "a");
+    expect(collectionChatsFor(works).activeId).toBe("b");
+  });
+
+  it("answers empty for a view that cannot hold any", () => {
+    expect(collectionChatsFor(null).sessions).toEqual([]);
   });
 });

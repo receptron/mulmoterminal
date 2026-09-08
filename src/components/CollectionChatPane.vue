@@ -16,7 +16,7 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import Terminal from "./Terminal.vue";
 import { claimCollectionChat } from "../composables/collectionChatPane";
-import { collectionChatFor, collectionChatKey, dropCollectionChat, holdCollectionChat } from "../composables/collectionChatSessions";
+import { activateCollectionChat, collectionChatKey, collectionChatsFor, dropCollectionChat, holdCollectionChat } from "../composables/collectionChatSessions";
 import { useCollectionBrowse, browseRouteProjectId } from "../composables/useCollectionBrowse";
 import { placeSpawnedChat, type SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { release } from "../composables/useTerminalConnections";
@@ -32,7 +32,8 @@ const slotKey = (id: string): string => `collection-chat-${id}`;
 
 const { view } = useCollectionBrowse();
 const key = computed(() => collectionChatKey(view.value, browseRouteProjectId()));
-const held = computed(() => collectionChatFor(key.value));
+const chats = computed(() => collectionChatsFor(key.value));
+const held = computed(() => chats.value.sessions.find((session) => session.id === chats.value.activeId) ?? null);
 
 const stored = Number(localStorage.getItem(HEIGHT_KEY));
 const height = ref(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_HEIGHT);
@@ -46,27 +47,28 @@ const setHeight = (next: number): void => {
 
 /** Stop showing `req` here and tear its slot down. The caller decides where it goes instead. */
 function unfile(target: string, req: SpawnedChatRequest): void {
-  dropCollectionChat(target);
+  dropCollectionChat(target, req.id);
   release(slotKey(req.id));
 }
 
-// A chat started while a collection is open is filed under THAT collection. Whatever it replaces
-// goes to the grid rather than being dropped — it is a running agent, and a running agent must not
-// be left on no screen at all.
+// A chat started while a collection is open is filed under THAT collection, as another tab. The one
+// already running keeps its tab and its terminal — asking a second thing while the first is working
+// is the ordinary case, and the first version paid for it by pushing that one to the grid.
 const stopClaiming = claimCollectionChat((req) => {
   const target = key.value;
   if (!target) return false; // nothing open to file it under — the grid path takes it
-  const replaced = holdCollectionChat(target, req);
-  if (replaced) {
-    release(slotKey(replaced.id));
-    placeSpawnedChat(replaced);
-  }
+  holdCollectionChat(target, req);
   return true;
 });
 
 onBeforeUnmount(stopClaiming); // the sessions stay filed — that is what makes coming back work
 
-/** Hand this collection's session to the grid, where it becomes an ordinary cell. */
+/** Bring one of this collection's chats to the front. */
+function show(id: string): void {
+  if (key.value) activateCollectionChat(key.value, id);
+}
+
+/** Hand the chat you are looking at to the grid, where it becomes an ordinary cell. */
 function moveToGrid(): void {
   const target = key.value;
   const req = held.value;
@@ -82,8 +84,13 @@ function onExit(): void {
   if (target && req) unfile(target, req);
 }
 
-// The picker's own words for the agent, so the pane names it the way the dropdown above it does.
-const label = computed(() => BUILTIN_AGENT_OPTIONS.find((option) => option.agent === held.value?.agent)?.label ?? "Chat");
+// The picker's own words for the agent, so a tab names it the way the dropdown above it does. The
+// ordinal is what tells two of the same agent apart at a glance; the session id is in the tooltip,
+// where it is available to quote without being read every time.
+const agentLabel = (agent: string): string => BUILTIN_AGENT_OPTIONS.find((option) => option.agent === agent)?.label ?? "Chat";
+const tabLabel = (req: SpawnedChatRequest, index: number): string =>
+  chats.value.sessions.filter((session) => session.agent === req.agent).length > 1 ? `${agentLabel(req.agent)} ${index + 1}` : agentLabel(req.agent);
+const label = computed(() => (held.value ? agentLabel(held.value.agent) : "Chat"));
 
 // Dragging UP grows the terminal: it lies AFTER its separator.
 const onSplitterDown = dragSplitter({
@@ -113,16 +120,34 @@ function onSplitterKey(e: KeyboardEvent): void {
       @pointerdown="onSplitterDown"
       @keydown="onSplitterKey"
     />
-    <div class="flex flex-none items-center gap-2 border-b border-border px-3 py-1 font-sans text-[12px] text-dim">
-      <span class="material-symbols-outlined text-[15px] leading-none" aria-hidden="true">terminal</span>
-      <span>{{ label }}</span>
-      <!-- One button, not a close: the session is live, so "closing" it here can only mean sending
-           it where it lives — the grid. Saying that is better than an X that silently moves it.
-           Leaving the collection is NOT closing: the session stays filed and comes back. -->
+    <div
+      class="flex flex-none items-center gap-1 border-b border-border px-2 py-1 font-sans text-[12px] text-dim"
+      role="tablist"
+      aria-label="Chats in this collection"
+    >
+      <!-- One tab per chat this collection holds. Each keeps its own terminal alive, so switching
+           is the terminal you left rather than a reconnect. -->
+      <button
+        v-for="(session, index) in chats.sessions"
+        :key="session.id"
+        type="button"
+        role="tab"
+        :aria-selected="session.id === chats.activeId"
+        :title="`${agentLabel(session.agent)} — session ${session.id}`"
+        class="flex cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
+        :class="session.id === chats.activeId ? 'bg-selected text-fg' : 'bg-transparent text-dim hover:text-fg'"
+        @click="show(session.id)"
+      >
+        <span class="material-symbols-outlined text-[14px] leading-none" aria-hidden="true">terminal</span>
+        {{ tabLabel(session, index) }}
+      </button>
+      <!-- Acts on the tab you are looking at. Not a close: the session is live, so "closing" it here
+           can only mean sending it where it lives — the grid. Leaving the collection is NOT closing;
+           the tabs stay filed and come back. -->
       <button
         type="button"
-        class="ml-auto cursor-pointer rounded border border-border bg-transparent px-2 py-0.5 text-[12px] text-fg hover:bg-hover"
-        title="Move this session to the grid and close the pane"
+        class="ml-auto flex-none cursor-pointer rounded border border-border bg-transparent px-2 py-0.5 text-[12px] text-fg hover:bg-hover"
+        :title="`Move this ${label} session to the grid and close its tab`"
         @click="moveToGrid"
       >
         Move to the grid
