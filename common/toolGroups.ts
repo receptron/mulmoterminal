@@ -8,7 +8,12 @@
 // config already written against it.
 
 // The groups, ordered by how much damage a call can do.
-//   render   — draws into the Canvas panel and stops there. No side effect outside it.
+//   render   — draws a model or document for the user, and writes nothing but the
+//              artifact it just drew. It USED to mean "no side effect outside the
+//              Canvas panel"; presentShapeScript saves its `.shape` and
+//              renderShapeScript saves a PNG, so the honest line is that a render
+//              tool touches only its own output, never the workspace's data or
+//              anything off this machine.
 //   data     — reads/writes the workspace's structured data (collections, accounting).
 //   media    — generation that is slow, costly, and lands files on disk.
 //   external — reaches a third-party account or API.
@@ -85,6 +90,10 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   ["presentChart", "render"],
   ["presentHtml", "render"],
   ["presentShapeScript", "render"],
+  // Beside presentShapeScript deliberately: a cell that can show a 3D model should be
+  // able to CHECK one, and splitting the pair would leave an agent able to present a
+  // model it cannot look at first.
+  ["renderShapeScript", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -177,9 +186,33 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // keeps Claude Code's prompt (answer it once per project and the prompt stops).
 //
 // The four below save an artifact and draw it, and call nothing external.
-// `presentShapeScript` does not even save one — the ShapeScript source travels in
-// the result and is rendered client-side — so it clears the bar the others meet.
-export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript"];
+//
+// `presentShapeScript` was listed here on the grounds that it saved nothing at all —
+// the source travelled in the tool result and was rendered client-side. That stopped
+// being true at shapescript-plugin 1.1.0, which writes the model to
+// `artifacts/shapes/` and can open a `.shape` the caller names. It stays on the list,
+// but now for the same reason as the other three rather than a stronger one that no
+// longer holds.
+//
+// `renderShapeScript` is here too, and the reasoning is worth stating because the first
+// attempt got it wrong. It starts a PROCESS — a headless browser — which reads like the
+// far side of "calls nothing external", so it was left off. But this bar is about REACH
+// and COST, not about process creation: the tools kept off it spend money
+// (presentDocument's image fill), publish to the internet, or act in someone else's
+// account. A local Chromium rendering a page WE construct, with every request it makes
+// aborted unless it is one of our two assets, does none of that. It writes a PNG under
+// the workspace artifacts and burns CPU for at most the render budget.
+//
+// Leaving it off was also not the half-measure it looked like. This list governs GRID
+// cells; the workspace passes `allowedToolNames()`, which auto-approves everything not
+// in NEVER_AUTO_APPROVED_TOOLS — so the tool prompted in a cell and ran unattended in
+// the workspace, which is the worst of both and matches no stated policy (codex on
+// #2010). The two paths now agree.
+//
+// And the friction had no payoff: the tool exists so an agent can CHECK a model before
+// showing it, which is a render-look-fix loop. A prompt in the middle of that costs the
+// user attention to approve the agent looking at its own work.
+export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript"];
 
 /** Tools that must keep the agent's permission prompt on EVERY claude session, including the
  *  workspace.
