@@ -8,6 +8,9 @@ import { effectScope, nextTick, ref } from "vue";
 import { useSessionSummary } from "../../../src/composables/useSessionSummary";
 
 type Body = Record<string, unknown>;
+/** The composable's own interval. Not exported by it — a spec that waits out the poll has to name
+ *  the same number, and this is where it is said. */
+const POLL_MS = 4000;
 /** What the endpoint answers, per session id — and, when a test wants to control the timing, a
  *  promise it holds open. */
 let answers: Record<string, Body> = {};
@@ -63,16 +66,20 @@ describe("useSessionSummary", () => {
   // A transcript this build cannot find answers with nulls. Overwriting on that would blank a
   // summary already on screen, which reads as "the agent stopped" rather than "we did not hear".
   it("keeps what it had when the next answer knows less", async () => {
+    // Waited out on the poll, not re-triggered by moving the id: setting it away and back in one
+    // tick ends on the value it already had, so the watcher never runs and the "second" answer
+    // never arrives — the assertion would pass on the first one alone (CodeRabbit, PR #2002).
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     answers.a = { aiTitle: "Rewriting the parser" };
-    const id = ref<string | null>("a");
-    const { value: meta, stop } = inScope(() => useSessionSummary(id));
+    const { value: meta, stop } = inScope(() => useSessionSummary(ref("a")));
     await flush();
-    answers.a = {};
-    id.value = null; // re-triggering by hand rather than waiting out the poll interval
-    id.value = "a";
+    answers.a = {}; // the transcript can no longer be read
+    vi.advanceTimersByTime(POLL_MS);
     await flush();
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(2); // it really did ask again
     expect(meta.value.aiTitle).toBe("Rewriting the parser");
     stop();
+    vi.useRealTimers();
   });
 
   // Polls overlap. An older answer describes a moment that has already been overtaken, so applying
