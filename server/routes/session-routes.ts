@@ -46,7 +46,7 @@ import { projectSessionsDir } from "../session/project-dir.js";
 import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
 import type { SessionRunning } from "../../common/sessionRunning.js";
-import { tmuxAttachedCounts, tmuxHeldSessionIds } from "../infra/tmux.js";
+import { tmuxAttachedCounts, tmuxHeldSessionIdsAsync } from "../infra/tmux.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import { antigravityBrainRoot } from "../agents/antigravity-session.js";
@@ -473,7 +473,7 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   // comes back, and nothing else can answer it — `/api/activity` reports all-false for an id it has
   // never heard of, and `/api/sessions` is scoped to one cwd and capped at the most recent N, so
   // absence from either says nothing about whether a session is alive.
-  app.get("/api/sessions/live", (req, res) => {
+  app.get("/api/sessions/live", async (req, res) => {
     const ids = parseActivityIds(req.query.ids, (id) => SESSION_ID_RE.test(id), ACTIVITY_IDS_LIMIT);
     // `asked` is what this answer is ABOUT: the ids left after validation and the cap above. A
     // caller retiring "everything I sent that is not in `live`" would otherwise retire a live
@@ -483,7 +483,10 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
     // NOT consulted: it is probed once and cached, so a probe that failed at boot would turn every
     // persisted session into "ended" for the life of the process. Asking outright costs one failed
     // spawn on a host without tmux, and answers indeterminate there (CodeRabbit, PR #2002).
-    res.json(liveSessionAnswer(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxHeldSessionIds() : []));
+    // AWAITED, not `spawnSync`: this is a request handler, and a hung tmux under `spawnCapture`
+    // holds the whole event loop — every other request and every open terminal — until its timeout
+    // (Codex, PR #2002).
+    res.json(liveSessionAnswer(ids, (id) => ptys.has(id), ids.length > 0 ? await tmuxHeldSessionIdsAsync() : []));
   });
   // The four conversation listings are mounted FROM the shared map rather than from literals
   // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth

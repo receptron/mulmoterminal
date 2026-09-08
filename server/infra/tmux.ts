@@ -571,6 +571,16 @@ export function tmuxHeldSessionIds(): string[] | null {
   return tmuxSessionIdsFrom(tmux(["list-sessions", "-F", "#{session_name}"]));
 }
 
+/** The same answer, without blocking the event loop — the form a REQUEST must use.
+ *
+ *  `spawnSync` holds Node still until the child answers or its 15s timeout fires, so one hung tmux
+ *  in a handler stalls every other request AND every open terminal. The collection pane asks this
+ *  on every reconnect, which is exactly the traffic that must not be able to do that (Codex,
+ *  PR #2002). */
+export async function tmuxHeldSessionIdsAsync(): Promise<string[] | null> {
+  return tmuxSessionIdsFrom(await tmuxAsync(["list-sessions", "-F", "#{session_name}"]));
+}
+
 // Ids of sessions that survived (e.g. across a crash), for startup visibility. An unreadable tmux
 // reads as none here on purpose: this one only decides what to MENTION at boot.
 export function tmuxListSessionIds(): string[] {
