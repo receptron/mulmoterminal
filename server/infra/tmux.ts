@@ -549,14 +549,32 @@ export function tmuxPanePids(): Map<number, string> {
   return parseTmuxPanePids(r.stdout);
 }
 
-// Ids of sessions that survived (e.g. across a crash), for startup visibility.
-export function tmuxListSessionIds(): string[] {
-  const r = tmux(["list-sessions", "-F", "#{session_name}"]);
-  if (r.status !== 0) return [];
-  return r.stdout
+/** What `tmux list-sessions` reported, read as one of three answers rather than two.
+ *
+ *  `no server running` is not a failure: it is tmux saying, reliably, that it holds nothing. A
+ *  different non-zero status is tmux failing to ANSWER — the binary missing, the socket unreadable,
+ *  the call timing out (status null) — and reading that as "it holds nothing" is what turns a
+ *  broken tmux into "every persisted session has ended" (CodeRabbit, PR #2002).
+ *
+ *  Pure so the three-way rule can be tested without a tmux server. */
+export function tmuxSessionIdsFrom(result: { status: number | null; stdout: string; stderr: string }): string[] | null {
+  if (result.status !== 0) return /no server running|error connecting|no such file or directory/i.test(result.stderr) ? [] : null;
+  return result.stdout
     .split("\n")
     .filter((n) => n.startsWith(SESSION_PREFIX))
     .map((n) => n.slice(SESSION_PREFIX.length));
+}
+
+/** Ids tmux is holding, or null when tmux could not be ASKED — see `tmuxSessionIdsFrom`. A caller
+ *  deciding whether a session still exists must not read that null as "none". */
+export function tmuxHeldSessionIds(): string[] | null {
+  return tmuxSessionIdsFrom(tmux(["list-sessions", "-F", "#{session_name}"]));
+}
+
+// Ids of sessions that survived (e.g. across a crash), for startup visibility. An unreadable tmux
+// reads as none here on purpose: this one only decides what to MENTION at boot.
+export function tmuxListSessionIds(): string[] {
+  return tmuxHeldSessionIds() ?? [];
 }
 
 // Whether a tmux `mt-<id>` is worth OFFERING: it's live (an attached pty), a persisted grid

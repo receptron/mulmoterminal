@@ -113,21 +113,27 @@ function show(id: string): void {
 // rather than walking it (Codex, PR #2002). Focus follows selection, which is the pattern's
 // automatic-activation form — right here, where selecting only moves a terminal that is already
 // running and on screen somewhere.
-const tabRefs = ref<HTMLElement[]>([]);
 const KEY_STEPS: Record<string, number> = { ArrowRight: 1, ArrowLeft: -1 };
+/** The tab a key moves to, or null when the key is not ours — the handler must not preventDefault
+ *  then, or the strip would swallow Tab and Escape while focused. */
+function nextTabIndex(key: string, index: number, count: number): number | null {
+  const step = KEY_STEPS[key];
+  if (step !== undefined) return (index + step + count) % count;
+  if (key === "Home") return 0;
+  return key === "End" ? count - 1 : null;
+}
+
 function onTabKey(e: KeyboardEvent, index: number): void {
-  const last = chats.value.sessions.length - 1;
-  const step = KEY_STEPS[e.key];
-  let next = index;
-  if (step !== undefined) next = (index + step + last + 1) % (last + 1);
-  else if (e.key === "Home") next = 0;
-  else if (e.key === "End") next = last;
-  else return;
+  const next = nextTabIndex(e.key, index, chats.value.sessions.length);
+  if (next === null) return;
   e.preventDefault();
   const target = chats.value.sessions[next];
   if (!target) return;
   show(target.id);
-  void nextTick(() => tabRefs.value[next]?.focus());
+  // By id, not by the ref array's position: Vue does not promise that `v-for` template refs are
+  // collected in source order, so an index can select one session and focus another tab
+  // (CodeRabbit, PR #2002).
+  void nextTick(() => document.getElementById(tabId(target.id))?.focus());
 }
 
 // The picker's own words for the agent, so a tab names it the way the dropdown above it does. The
@@ -208,7 +214,6 @@ function onSplitterKey(e: KeyboardEvent): void {
         v-for="(session, index) in chats.sessions"
         :id="tabId(session.id)"
         :key="session.id"
-        ref="tabRefs"
         type="button"
         role="tab"
         :aria-selected="session.id === chats.activeId"

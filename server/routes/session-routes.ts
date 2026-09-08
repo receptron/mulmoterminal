@@ -46,7 +46,7 @@ import { projectSessionsDir } from "../session/project-dir.js";
 import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
 import type { SessionRunning } from "../../common/sessionRunning.js";
-import { tmuxAttachedCounts, tmuxListSessionIds } from "../infra/tmux.js";
+import { tmuxAttachedCounts, tmuxAvailable, tmuxHeldSessionIds } from "../infra/tmux.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import { antigravityBrainRoot } from "../agents/antigravity-session.js";
@@ -478,8 +478,14 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
     // `asked` is what this answer is ABOUT: the ids left after validation and the cap above. A
     // caller retiring "everything I sent that is not in `live`" would otherwise retire a live
     // session it merely sent too many ids to ask about (Codex, PR #2002).
-    // One tmux call for the whole set rather than a `has-session` per id.
-    res.json({ asked: ids, live: liveSessionIds(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxListSessionIds() : []) });
+    if (ids.length === 0) return res.json({ asked: [], live: [] });
+    // One tmux call for the whole set rather than a `has-session` per id — and NULL when tmux could
+    // not answer, which is not the same as "tmux holds nothing". Answering `asked: []` there says
+    // "I considered nothing", so a caller retires nothing rather than retiring every persisted
+    // session it asked about (CodeRabbit, PR #2002).
+    const held = tmuxAvailable() ? tmuxHeldSessionIds() : [];
+    if (held === null) return res.json({ asked: [], live: [] });
+    res.json({ asked: ids, live: liveSessionIds(ids, (id) => ptys.has(id), held) });
   });
   // The four conversation listings are mounted FROM the shared map rather than from literals
   // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth
