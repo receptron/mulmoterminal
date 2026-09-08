@@ -8,7 +8,12 @@
 // config already written against it.
 
 // The groups, ordered by how much damage a call can do.
-//   render   — draws into the Canvas panel and stops there. No side effect outside it.
+//   render   — draws a model or document for the user, and writes nothing but the
+//              artifact it just drew. It USED to mean "no side effect outside the
+//              Canvas panel"; presentShapeScript saves its `.shape` and
+//              renderShapeScript saves a PNG, so the honest line is that a render
+//              tool touches only its own output, never the workspace's data or
+//              anything off this machine.
 //   data     — reads/writes the workspace's structured data (collections, accounting).
 //   media    — generation that is slow, costly, and lands files on disk.
 //   external — reaches a third-party account or API.
@@ -85,6 +90,10 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   ["presentChart", "render"],
   ["presentHtml", "render"],
   ["presentShapeScript", "render"],
+  // Beside presentShapeScript deliberately: a cell that can show a 3D model should be
+  // able to CHECK one, and splitting the pair would leave an agent able to present a
+  // model it cannot look at first.
+  ["renderShapeScript", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -177,8 +186,19 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // keeps Claude Code's prompt (answer it once per project and the prompt stops).
 //
 // The four below save an artifact and draw it, and call nothing external.
-// `presentShapeScript` does not even save one — the ShapeScript source travels in
-// the result and is rendered client-side — so it clears the bar the others meet.
+//
+// `presentShapeScript` was listed here on the grounds that it saved nothing at all —
+// the source travelled in the tool result and was rendered client-side. That stopped
+// being true at shapescript-plugin 1.1.0, which writes the model to
+// `artifacts/shapes/` and can open a `.shape` the caller names. It stays on the list,
+// but now for the same reason as the other three rather than a stronger one that no
+// longer holds.
+//
+// `renderShapeScript` is deliberately ABSENT. It is the one tool here that starts an
+// external PROCESS — a headless browser — and can occupy a core for the length of its
+// render budget. The bar this list draws is "saves an artifact and draws it, and calls
+// nothing external"; spawning Chromium is the far side of it, and the prompt is
+// answered once per project.
 export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript"];
 
 /** Tools that must keep the agent's permission prompt on EVERY claude session, including the

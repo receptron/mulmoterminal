@@ -22,6 +22,10 @@ describe("tool groups", () => {
     expect(groupOfTool("presentForm")).toBe("render");
     expect(groupOfTool("presentChart")).toBe("render");
     expect(groupOfTool("presentHtml")).toBe("render");
+    expect(groupOfTool("presentShapeScript")).toBe("render");
+    // Beside presentShapeScript on purpose: a cell that can show a 3D model should be
+    // able to check one, and a directory enabling Canvas gets the pair or neither.
+    expect(groupOfTool("renderShapeScript")).toBe("render");
   });
 
   // The blast-radius split is the whole point of the grouping: only `render` is auto-allowed,
@@ -97,6 +101,10 @@ describe("tool groups", () => {
   it("auto-allows only tools that call nothing external", () => {
     expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript"]);
     expect(AUTO_ALLOWED_TOOLS).not.toContain("presentDocument");
+    // renderShapeScript is a render tool that starts a PROCESS — a headless browser —
+    // which is the far side of the "calls nothing external" bar this list draws. It is
+    // the one member of the group deliberately left off.
+    expect(AUTO_ALLOWED_TOOLS).not.toContain("renderShapeScript");
   });
 
   // They still have to BE render tools — a directory that enabled Canvas is what grants them.
