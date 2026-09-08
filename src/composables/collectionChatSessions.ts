@@ -83,6 +83,17 @@ export function dropCollectionChat(key: string, id: string): void {
   if (held.activeId === id && next) held.activeId = next.id;
 }
 
+/** How many chats are running under collections, across all of them.
+ *
+ *  The toolbar's Collections button wears this: a session in the pane is invisible from anywhere
+ *  else — that is the price of not putting it in the grid — so the door it lives behind is where
+ *  its existence has to be legible. */
+export function collectionChatCount(): number {
+  let total = 0;
+  filed.forEach((held) => (total += held.sessions.length));
+  return total;
+}
+
 /** Test seam: forget everything filed. Not used by the app. */
 export function resetCollectionChats(): void {
   filed.clear();

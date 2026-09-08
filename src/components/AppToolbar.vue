@@ -12,6 +12,7 @@ import { CONTENT_ROUTES } from "../composables/overlayOrigin";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useShortcuts } from "../composables/useShortcuts";
 import { toolbarPinKeys } from "../composables/toolbarPins";
+import { collectionChatCount } from "../composables/collectionChatSessions";
 import { resolveToolbarPins, toolbarPinKey } from "../../common/toolbarPins";
 import type { Shortcut } from "../../common/shortcuts";
 import { filesGotoIndex } from "../composables/useFilesView";
@@ -106,6 +107,17 @@ const onGridRoute = computed(() => route.name === "terminals");
 // would be lit either (Codex, PR #1201). The index/detail distinction belongs to the view, not to
 // which section you are in.
 const collectionsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "collection");
+// Chats running in the collection pane (#2001). They are not grid cells, so without this the only
+// way to find out one is still there is to go and look. The count is on the button rather than in
+// its own control because it is not a thing to press — it is a property of what is behind the door.
+// The accessible name carries it too: a badge is `aria-hidden`, and a screen reader that only hears
+// "Collections" is told less than the screen says.
+const chatCount = computed(() => collectionChatCount());
+const collectionsTitle = computed(() => {
+  if (!chatCount.value) return "Collections";
+  const chats = chatCount.value === 1 ? "1 chat" : `${chatCount.value} chats`;
+  return `Collections — ${chats} running here`;
+});
 const feedsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "feed");
 const filesActive = computed(() => route.name === "files");
 // Inside the content section — which is what reveals the siblings below. Answered from the ROUTE
@@ -169,7 +181,18 @@ function showRooms(): void {
              below once you are inside, so the row a terminal user sees does not grow by four.
              Same `database` icon as the cell header's collections pane (CellChromeButtons.vue), so
              the door and the pane read as one thing wherever you meet them. -->
-        <LauncherButton icon="database" title="Collections" label="Collections" :active="collectionsActive" @click="showCollections" />
+        <!-- The badge is how a chat running in the collection pane stays legible (#2001): it is not
+             a grid cell, so nothing else on this screen says it exists. The door it lives behind
+             wears the count, the way the bell wears its unread one. -->
+        <span class="relative inline-flex flex-none">
+          <LauncherButton icon="database" :title="collectionsTitle" :label="collectionsTitle" :active="collectionsActive" @click="showCollections" />
+          <span
+            v-if="chatCount"
+            class="pointer-events-none absolute right-px top-px box-border h-[14px] min-w-[14px] rounded-[7px] bg-accent px-[3px] font-sans text-[9px] font-bold leading-[14px] text-on-accent"
+            aria-hidden="true"
+            >{{ chatCount > 99 ? "99+" : chatCount }}</span
+          >
+        </span>
       </span>
       <!-- The promoted favourites, right of the door they used to hide behind (#1984). They belong on
            THIS side of the fence and not with the buttons after it: pressing one leaves the view you

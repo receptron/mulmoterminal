@@ -4,6 +4,8 @@ import AppToolbar from "../../../src/components/AppToolbar.vue";
 import { router } from "../../../src/router/index";
 import { githubGotoIndex } from "../../../src/composables/useGithubView";
 import { setToolbarPins } from "../../../src/composables/toolbarPins";
+import { collectionChatKey, holdCollectionChat, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
+import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 import type { Shortcut } from "../../../common/shortcuts";
 
 // The pinned favourites the toolbar draws from (#1984). Stubbed rather than fetched: the real store
@@ -210,6 +212,40 @@ describe("AppToolbar view-switch grouping", () => {
   it("leaves the revealed siblings out of the group", async () => {
     const group = switchGroup(await mountAt("/collections"));
     expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Grid view", "Collections"]);
+  });
+});
+
+// #2001: a chat running in the collection pane is not a grid cell, so nothing else on this screen
+// says it exists. The door it lives behind wears the count.
+describe("AppToolbar collection chat badge", () => {
+  const works = collectionChatKey({ mode: "detail", kind: "collection", slug: "works" }, null) ?? "";
+  const chat = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draft: false });
+  const badge = (wrapper: ReturnType<typeof mount>) => wrapper.findAll("nav[aria-label='Views'] span").filter((s) => /^\d+$|99\+/.test(s.text().trim()));
+  const door = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.findAll("nav[aria-label='Views'] button").find((b) => (b.attributes("aria-label") ?? "").startsWith("Collections"));
+
+  beforeEach(resetCollectionChats);
+  afterEach(resetCollectionChats);
+
+  it("wears nothing while no chat is running there", async () => {
+    const wrapper = await mountAt("/terminals");
+    expect(badge(wrapper)).toHaveLength(0);
+    expect(door(wrapper)?.attributes("aria-label")).toBe("Collections"); // ...and the name is unchanged
+  });
+
+  it("counts the chats filed under collections", async () => {
+    holdCollectionChat(works, chat("a"));
+    holdCollectionChat(works, chat("b"));
+    const wrapper = await mountAt("/terminals");
+    expect(badge(wrapper)[0].text()).toBe("2");
+  });
+
+  // The badge is aria-hidden, so the accessible name has to say it too — otherwise a screen reader
+  // is told less than the screen shows.
+  it("says it in the button's own name", async () => {
+    holdCollectionChat(works, chat("a"));
+    const wrapper = await mountAt("/terminals");
+    expect(door(wrapper)?.attributes("aria-label")).toBe("Collections — 1 chat running here");
   });
 });
 
