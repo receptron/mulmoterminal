@@ -810,6 +810,9 @@ const gridCellProps = (cell: Cell) => ({
   // own, where the button is rendered and where `rightPane` names that cell's pane rather than
   // the one the grid happens to be showing.
   collectionsAvailable: collectionsAvailable.value,
+  // Nothing to enlarge INTO while the collection pane is holding this cell: the pane wins over the
+  // zoom (cellTeleport.ts), so the button would set a state nobody sees until they leave (#2001).
+  hideExpand: placementOf(cell) === "collection",
   zoomed: zoomed.value,
   home: props.home,
   // Grid-wide, so it is bound here rather than per cell type: every cell compares its own cwd

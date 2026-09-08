@@ -34,6 +34,14 @@ const props = defineProps<{
   // launcher cells opt out without declaring anything: an ephemeral run and an empty launch slot
   // have nothing to come back to.
   parked?: boolean | undefined;
+  // Drop the expand button, because enlarging would do nothing anyone can SEE. True only in the
+  // collection pane, which is an overlay on top of the grid and wins over the zoom underneath it:
+  // the button would set a state nobody sees until they leave, which reads as a broken control.
+  //
+  // Stated negatively on purpose (`hideHeader` on Terminal is the same shape): Vue casts an absent
+  // boolean prop to `false` at EVERY level it passes through, so a positive "expandable" would have
+  // to survive being defaulted to false in each one (#2001).
+  hideExpand?: boolean;
 }>();
 const emit = defineEmits<{
   (
@@ -90,6 +98,7 @@ const parkTitle = computed(() => (props.parked ? "Wake this terminal" : "Set asi
 
 <template>
   <button
+    v-if="!hideExpand"
     class="cell-btn"
     :class="CELL_BTN"
     :title="expanded ? 'Restore' : 'Expand'"
