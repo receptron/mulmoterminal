@@ -87,7 +87,7 @@ const { described: dirDescribed, show: showDirTip, hide: hideDirTip } = useHover
 // Clicking the header background zooms (switches to) this cell, except the already-expanded one.
 // Buttons keep their action.
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, props.expanded, props.hideExpand)) emit("toggle-expand");
 }
 </script>
 

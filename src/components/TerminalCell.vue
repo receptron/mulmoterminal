@@ -87,7 +87,7 @@ const termRef = useTemplateRef<InstanceType<typeof TerminalView>>("termRef");
 // in the tiled grid and as a filmstrip thumbnail alike. Only the already-expanded cell
 // stays inert (restore via the restore button). Header buttons keep their action.
 function onHeaderClick(event: MouseEvent) {
-  if (shouldZoomOnHeaderClick(event.target, props.expanded)) emit("toggle-expand");
+  if (shouldZoomOnHeaderClick(event.target, props.expanded, props.hideExpand)) emit("toggle-expand");
 }
 
 // `expanded` reflects whether this cell is zoomed to fill the grid (parent owns

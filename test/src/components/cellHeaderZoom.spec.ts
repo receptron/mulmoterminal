@@ -37,4 +37,13 @@ describe("shouldZoomOnHeaderClick", () => {
   it("zooms on a null / non-element target of a non-expanded cell (no button in the path)", () => {
     expect(shouldZoomOnHeaderClick(null, false)).toBe(true);
   });
+
+  // Hiding the expand BUTTON is only half of it: the header background is the same gesture, and in
+  // the collection pane the zoom it would set is behind the overlay — invisible until you leave
+  // (CodeRabbit, PR #2002).
+  it("does not zoom while zooming is suppressed", () => {
+    expect(shouldZoomOnHeaderClick(document.createElement("div"), false, true)).toBe(false);
+    expect(shouldZoomOnHeaderClick(document.createElement("div"), false, false)).toBe(true);
+    expect(shouldZoomOnHeaderClick(document.createElement("div"), false)).toBe(true); // absent = allowed
+  });
 });
