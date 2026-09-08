@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### The agent can look at the 3D model it just wrote
+
+- **[#2010](https://github.com/receptron/mulmoterminal/pull/2010)** — an agent could write a
+  ShapeScript model and show it to you, but it could not SEE it: it was working from the source
+  text alone, so "the handle is inside the cup" was something only you found out. New
+  **`renderShapeScript`** draws the model to a PNG — four camera angles on one labelled sheet by
+  default, because one view cannot settle what is in front of what — and hands back the file for
+  the agent to read before showing you anything. It takes the same source as
+  `presentShapeScript`: inline, or a `.shape` you point it at. It lives in the same **Canvas
+  (render MCPs)** group, so a cell that can show a model can check one; unlike the other render
+  tools it asks permission the first time, because it starts a headless browser to do the drawing.
+
 ### A 3D model is a file you can edit
 
 - **[#2000](https://github.com/receptron/mulmoterminal/pull/2000)** — a ShapeScript model used to
