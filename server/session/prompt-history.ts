@@ -145,6 +145,12 @@ export interface CodexPromptScan extends PromptScan {
  *  tail window, and the largest would have shown 5 of its 9 prompts (#1749). */
 export const codexPromptScan = (limit: number = PROMPT_HISTORY_MAX): CodexPromptScan => ({ limit, found: [], previousTurn: null });
 
+/** Fold one rollout record into the scan, through the same rule the array reader below uses.
+ *
+ *  `previousTurn` is assigned on EVERY record, not only on the ones that are turns — that is the
+ *  mechanism, not bookkeeping. Moving the assignment inside the `turn !== null` branch would let a
+ *  reply sit between the two halves of a pair and still collapse them, and would collapse a person
+ *  who really did send the same text twice. */
 export function foldCodexPrompt(scan: CodexPromptScan, record: Record<string, unknown>): void {
   const turn = codexUserTurn(record);
   const duplicate = turn !== null && isDoubleWrite(turn, scan.previousTurn);
