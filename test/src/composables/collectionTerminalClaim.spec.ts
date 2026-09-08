@@ -51,8 +51,11 @@ describe("the collection terminal claim", () => {
 
 // The grid's half of the same conversation.
 describe("what the grid says it holds", () => {
+  // Null, not empty: "the grid has not answered" is what stops a restored filing being retired
+  // before the layout has been read, and an assertion that accepts [] would not notice the
+  // difference (CodeRabbit, PR #2002). Runs before the publish below, which is what sets it.
   it("says nothing until the grid has answered", () => {
-    expect(gridSessionIds.value === null || Array.isArray(gridSessionIds.value)).toBe(true);
+    expect(gridSessionIds.value).toBeNull();
   });
 
   it("reports the sessions it was given, including none", () => {
