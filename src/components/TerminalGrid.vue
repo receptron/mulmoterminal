@@ -12,8 +12,8 @@ import { dragSplitter } from "../composables/dragSplitter";
 import { flipKeyframes, flipPairs, onScreen, FLIP_MS, FLIP_EASING } from "./cellFlip";
 import { canMoveCell, type Cell } from "./gridTabs";
 import type { AttentionStatus } from "./attentionStatus";
+import { cellPlacement, teleportKey, type CellPlacement } from "./cellTeleport";
 import { collectionTerminalClaim } from "../composables/collectionTerminalClaim";
-import { cellPlacement, type CellPlacement } from "./cellTeleport";
 import type { RunCommand } from "./runCommand";
 import type { PrPhase, WorkPhase } from "./rosterPhase";
 import type { CwdPreset } from "./presets";
@@ -665,20 +665,15 @@ async function answerQuestion(picks: number[][]): Promise<void> {
 // Where the collection pane wants this cell, or null when it wants nothing to do with it. Read
 // straight from the claim rather than passed down as a prop: the pane is in another component tree
 // (an overlay App.vue renders over this one), and what it hands over is a DOM node.
+/** Where this cell belongs right now — the pane it was claimed by, the zoom area, or its tile. */
 function placementOf(cell: { uid: number; session: string | null }): CellPlacement {
-  const claim = collectionTerminalClaim.value;
-  return cellPlacement({
-    claimedByCollection: claim !== null && cell.session === claim.sessionId,
-    zoomed: zoomed.value,
-    expanded: cell.uid === props.expandedUid,
-  });
+  return cellPlacement({ claimedByCollection: paneTargetFor(cell) !== null, zoomed: zoomed.value, expanded: cell.uid === props.expandedUid });
 }
 
-/** The element a moved cell lands in. Null for a cell that stays in its tile. */
-function teleportTargetFor(cell: { uid: number; session: string | null }): HTMLElement | null {
-  const placement = placementOf(cell);
-  if (placement === "collection") return collectionTerminalClaim.value?.el ?? null;
-  return placement === "zoom" ? zoomMain.value : null;
+/** The pane's receptacle for this cell, when the collection pane is showing it. */
+function paneTargetFor(cell: { session: string | null }): HTMLElement | null {
+  const claim = collectionTerminalClaim.value;
+  return claim && cell.session === claim.sessionId ? claim.el : null;
 }
 
 // GUI -> LLM for the enlarged cell (a submitted form's answer). App.vue routes this through the
@@ -1488,7 +1483,19 @@ watch(
            open — it is an overlay ON TOP of the grid, so the zoom underneath is not on screen
            (#2001). Same mechanism either way: the cell is MOVED, never re-created, so its socket,
            its xterm and its scrollback carry across untouched. -->
-      <Teleport v-for="cell in cells" :key="cell.uid" :to="teleportTargetFor(cell) ?? zoomMain" :disabled="teleportTargetFor(cell) === null">
+      <!-- Keyed by WHERE it is going, not only by which cell it is. A `<Teleport>` that changes
+           target while it is DISABLED keeps the old one, and re-enabling it later moves the cell
+           into that stale node — it leaves the document and nothing brings it back (enlarging a
+           chat's cell after visiting a collection lost the terminal, PR #2002). Re-keying gives the
+           pane trip its own teleport; the zoom keeps the same one, so its FLIP animation still has
+           the elements it measured. The cell's TERMINAL survives the remount either way: its slot
+           is durable, so `attach` re-parents the same xterm rather than reconnecting. -->
+      <Teleport
+        v-for="cell in cells"
+        :key="teleportKey(cell.uid, placementOf(cell))"
+        :to="paneTargetFor(cell) ?? zoomMain"
+        :disabled="placementOf(cell) === 'tile'"
+      >
         <CommandCell v-if="cell.command" v-bind="gridCellProps(cell)" :command="cell.command" v-on="gridCellEvents(cell)" />
         <LauncherCell
           v-else-if="cell.launcher"
