@@ -3,6 +3,9 @@ import type { SpawnedChatRequest } from "./useSpawnedChat";
 import { usePubSub } from "./usePubSub";
 import { parseSessionActivityPayload } from "./sessionActivity";
 import { release } from "./useTerminalConnections";
+import { isUnknownArray } from "../../common/isUnknownArray";
+import { jsonBody } from "../jsonBody";
+import { fetchWithTimeout } from "../utils/fetchWithTimeout";
 
 // Which chats belong to which collection (#2001).
 //
@@ -109,10 +112,38 @@ export const collectionChatSlotKey = (id: string): string => `collection-chat-${
 let stopListening: (() => void) | null = null;
 function listenForEndings(): void {
   if (stopListening) return;
-  stopListening = usePubSub().subscribe("sessions", (data) => {
+  const { subscribe, onReconnect } = usePubSub();
+  const off = subscribe("sessions", (data) => {
     const update = parseSessionActivityPayload(data);
     if (update && "closed" in update) forgetEndedChat(update.id);
   });
+  // A push that happened while the socket was down is not replayed when it comes back — pub/sub
+  // restores room membership, not the events missed (Codex, PR #2002). So a reconnect asks the
+  // server outright which of these are still running. The same shape `useSessions` and
+  // `useGridActivity` use for their own re-syncs, for the same reason.
+  const offReconnect = onReconnect(() => void reconcileWithServer());
+  stopListening = () => {
+    off();
+    offReconnect();
+  };
+}
+
+/** Ask which filed chats the server still has, and retire the rest. Silent on failure and on a
+ *  malformed answer: the tabs are of running agents, so "we could not check" must leave them
+ *  standing rather than close them. */
+async function reconcileWithServer(): Promise<void> {
+  const ids = [...new Set([...filed.values()].flatMap((held) => held.sessions.map((session) => session.id)))];
+  if (ids.length === 0) return;
+  try {
+    const res = await fetchWithTimeout(`/api/sessions/live?ids=${encodeURIComponent(ids.join(","))}`);
+    if (!res.ok) return;
+    const body = await jsonBody(res);
+    if (!isUnknownArray(body.live)) return;
+    const live = new Set(body.live.filter((id): id is string => typeof id === "string"));
+    ids.filter((id) => !live.has(id)).forEach(forgetEndedChat);
+  } catch {
+    // best-effort — the next reconnect asks again
+  }
 }
 
 /** Forget a session wherever it is filed — it has ended, so there is nothing to move and nothing

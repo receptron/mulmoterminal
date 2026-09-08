@@ -9,8 +9,9 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 // The filing keeps itself honest off the server's own session channel, and tears a terminal slot
 // down when it does. Both are played by hand here.
 const silence = (): void => {};
-const bus = vi.hoisted((): { push: (data: unknown) => void; subscribed: number; released: string[] } => ({
+const bus = vi.hoisted((): { push: (data: unknown) => void; reconnect: () => void; subscribed: number; released: string[] } => ({
   push: () => {},
+  reconnect: () => {},
   subscribed: 0,
   released: [],
 }));
@@ -19,6 +20,10 @@ vi.mock("../../../src/composables/usePubSub", () => ({
     subscribe: (_channel: string, callback: (data: unknown) => void) => {
       bus.push = callback;
       bus.subscribed += 1;
+      return silence;
+    },
+    onReconnect: (callback: () => void) => {
+      bus.reconnect = callback;
       return silence;
     },
   }),
@@ -39,6 +44,13 @@ import {
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
 const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draft: false });
+
+/** What `/api/sessions/live` answers, or null for a request that fails outright. */
+let served: unknown = null;
+const flush = async (): Promise<void> => {
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+};
 
 describe("collectionChatKey", () => {
   it("files a collection and a feed of the same slug apart", () => {
@@ -77,6 +89,11 @@ describe("filing a collection's chats", () => {
     resetCollectionChats();
     bus.subscribed = 0;
     bus.released = [];
+    served = null;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => (served === null ? Promise.reject(new Error("offline")) : Promise.resolve({ ok: true, json: () => Promise.resolve({ live: served }) }))),
+    );
   });
 
   it("gives each collection its own chats, and nothing to the others", () => {
@@ -173,5 +190,47 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(todos, request("b"));
     forgetEndedChat("a");
     expect(collectionChatCount()).toBe(1);
+  });
+
+  // Pub/sub replays room membership on reconnect, not the events missed while it was down — so an
+  // ending that happened in that window is never pushed (Codex, PR #2002). The reconnect asks.
+  it("retires what the server no longer runs, after the socket comes back", async () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(todos, request("gone"));
+    served = ["a"];
+    bus.reconnect();
+    await flush();
+    expect(ids(works)).toEqual(["a"]);
+    expect(ids(todos)).toEqual([]);
+    expect(bus.released).toEqual([collectionChatSlotKey("gone")]);
+  });
+
+  // These are running agents. "We could not check" is not "it ended", and closing a live chat's
+  // tab is worse than leaving a stale one.
+  it("leaves every tab standing when the check fails or makes no sense", async () => {
+    holdCollectionChat(works, request("a"));
+    served = null; // the request throws
+    bus.reconnect();
+    await flush();
+    expect(ids(works)).toEqual(["a"]);
+    served = "not a list";
+    bus.reconnect();
+    await flush();
+    expect(ids(works)).toEqual(["a"]);
+    expect(bus.released).toEqual([]);
+  });
+
+  it("asks about every collection's chats at once, and asks nothing when there are none", async () => {
+    holdCollectionChat(works, request("a"));
+    holdCollectionChat(todos, request("b"));
+    served = ["a", "b"];
+    bus.reconnect();
+    await flush();
+    expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain("ids=a%2Cb");
+    resetCollectionChats();
+    vi.mocked(fetch).mockClear();
+    bus.reconnect();
+    await flush();
+    expect(fetch).not.toHaveBeenCalled();
   });
 });

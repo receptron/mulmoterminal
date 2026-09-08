@@ -46,7 +46,7 @@ import { projectSessionsDir } from "../session/project-dir.js";
 import { runningKeyOf, runningSessionKeys, sessionAttached, survivorSnapshot } from "../session/dir-session.js";
 import type { SessionOccupancy } from "../../common/sessionOccupancy.js";
 import type { SessionRunning } from "../../common/sessionRunning.js";
-import { tmuxAttachedCounts } from "../infra/tmux.js";
+import { tmuxAttachedCounts, tmuxListSessionIds } from "../infra/tmux.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import { antigravityBrainRoot } from "../agents/antigravity-session.js";
@@ -59,6 +59,7 @@ import { conversationSessionKeys, type AgentConversation } from "../session/agen
 import { AGENT_SESSION_LIST_PATHS } from "../../common/agentSessionList.js";
 import { TERMINAL_AGENTS, type TerminalAgent } from "../../common/sessionAgent.js";
 import type { SessionMeta } from "../session/types.js";
+import { liveSessionIds } from "../session/live-sessions.js";
 import { parseActivityIds, selectSessionRows } from "../session/session-list.js";
 import { agentBadges } from "../session/agent-badges.js";
 import { sessionDetailView } from "../session/session-detail-view.js";
@@ -466,6 +467,16 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
       return { id, agent: entry?.agent ?? agent, cwd: entry?.cwd ?? null };
     });
     res.json({ sessions });
+  });
+  // Which of these sessions still has something running. The collection pane asks after a dropped
+  // pub/sub connection: the `closed` push that retires a chat's tab is not replayed when the socket
+  // comes back, and nothing else can answer it — `/api/activity` reports all-false for an id it has
+  // never heard of, and `/api/sessions` is scoped to one cwd and capped at the most recent N, so
+  // absence from either says nothing about whether a session is alive.
+  app.get("/api/sessions/live", (req, res) => {
+    const ids = parseActivityIds(req.query.ids, (id) => SESSION_ID_RE.test(id), ACTIVITY_IDS_LIMIT);
+    // One tmux call for the whole set rather than a `has-session` per id.
+    res.json({ live: liveSessionIds(ids, (id) => ptys.has(id), ids.length > 0 ? tmuxListSessionIds() : []) });
   });
   // The four conversation listings are mounted FROM the shared map rather than from literals
   // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth

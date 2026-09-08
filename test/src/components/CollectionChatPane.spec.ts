@@ -46,6 +46,7 @@ vi.mock("../../../src/composables/usePubSub", () => ({
       feed.push = callback;
       return () => {};
     },
+    onReconnect: () => () => {},
   }),
 }));
 vi.mock("../../../src/composables/useSessionSummary", async () => {
