@@ -29,11 +29,16 @@ const props = defineProps<{
   // manageCollection is served under. False REMOVES the button, where canvasAvailable only
   // disables its own: a pane the agent cannot act on is not worth a control to explain.
   collectionsAvailable?: boolean;
-  // Whether this cell is set aside (#992). Present ONLY on a cell that can be parked — a session
-  // terminal. Left undefined, the button is not rendered at all, which is how the command and
-  // launcher cells opt out without declaring anything: an ephemeral run and an empty launch slot
-  // have nothing to come back to.
-  parked?: boolean | undefined;
+  // Whether this cell can be set aside at all (#992) — only a session terminal can, and it is the
+  // only caller that passes this. It is a prop of its own rather than the absence of `parked`
+  // below, because Vue casts an ABSENT boolean prop to `false`: `parked === undefined` is never
+  // true, so a guard written that way rendered the button on every cell type, including the
+  // command and launcher cells, whose event binding deliberately omits `toggle-park` — so it
+  // clicked and did nothing (#2007).
+  canPark?: boolean;
+  // Whether this cell is currently set aside, i.e. the button's pressed state. Only read where
+  // `canPark` is true.
+  parked?: boolean;
 }>();
 const emit = defineEmits<{
   (
@@ -200,11 +205,11 @@ const parkTitle = computed(() => (props.parked ? "Wake this terminal" : "Set asi
   <!-- Before close on purpose: the two are the choice the user is making — set it aside, or end
        it — and the reversible one should not sit past the one that tears a session down. -->
   <button
-    v-if="parked !== undefined"
+    v-if="canPark"
     data-testid="cell-park-btn"
     class="cell-btn"
     :class="parkClass"
-    :aria-pressed="parked"
+    :aria-pressed="!!parked"
     :title="parkTitle"
     :aria-label="parkTitle"
     @click="emit('toggle-park')"

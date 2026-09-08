@@ -63,4 +63,14 @@ describe("LauncherCell header zoom", () => {
     await w.find(".cell-header").trigger("click");
     expect(w.emitted("toggle-expand")).toBeUndefined();
   });
+
+  // #2007. A launcher cell has no `toggle-park` in its event binding (cellShellEvents), so a park
+  // button here is one that clicks and does nothing. It shipped that way for eleven releases: the
+  // guard in CellChromeButtons asked whether `parked` was undefined, and Vue casts an absent
+  // boolean prop to `false`. Mounted here rather than only on the buttons because this — a cell
+  // the user actually opens — is where it was visible.
+  it("offers no park button: a launched program is not a session to set aside", () => {
+    expect(mountCell().find('[data-testid="cell-park-btn"]').exists()).toBe(false);
+    expect(mountCell({ expanded: true }).find('[data-testid="cell-park-btn"]').exists()).toBe(false);
+  });
 });

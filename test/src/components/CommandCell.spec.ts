@@ -222,4 +222,10 @@ describe("CommandCell summarize", () => {
     await w.find('[aria-label="Dismiss summary"]').trigger("click");
     expect(w.find('[data-testid="cell-summary"]').exists()).toBe(false);
   });
+
+  // #2007, the other half: the command cell reaches the shared chrome the same way the launcher
+  // does and binds no `toggle-park` either, so the button was equally dead here.
+  it("offers no park button: an ephemeral run has nothing to come back to", () => {
+    expect(mountCell().find('[data-testid="cell-park-btn"]').exists()).toBe(false);
+  });
 });
