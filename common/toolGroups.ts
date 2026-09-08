@@ -194,12 +194,25 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // but now for the same reason as the other three rather than a stronger one that no
 // longer holds.
 //
-// `renderShapeScript` is deliberately ABSENT. It is the one tool here that starts an
-// external PROCESS — a headless browser — and can occupy a core for the length of its
-// render budget. The bar this list draws is "saves an artifact and draws it, and calls
-// nothing external"; spawning Chromium is the far side of it, and the prompt is
-// answered once per project.
-export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript"];
+// `renderShapeScript` is here too, and the reasoning is worth stating because the first
+// attempt got it wrong. It starts a PROCESS — a headless browser — which reads like the
+// far side of "calls nothing external", so it was left off. But this bar is about REACH
+// and COST, not about process creation: the tools kept off it spend money
+// (presentDocument's image fill), publish to the internet, or act in someone else's
+// account. A local Chromium rendering a page WE construct, with every request it makes
+// aborted unless it is one of our two assets, does none of that. It writes a PNG under
+// the workspace artifacts and burns CPU for at most the render budget.
+//
+// Leaving it off was also not the half-measure it looked like. This list governs GRID
+// cells; the workspace passes `allowedToolNames()`, which auto-approves everything not
+// in NEVER_AUTO_APPROVED_TOOLS — so the tool prompted in a cell and ran unattended in
+// the workspace, which is the worst of both and matches no stated policy (codex on
+// #2010). The two paths now agree.
+//
+// And the friction had no payoff: the tool exists so an agent can CHECK a model before
+// showing it, which is a render-look-fix loop. A prompt in the middle of that costs the
+// user attention to approve the agent looking at its own work.
+export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript"];
 
 /** Tools that must keep the agent's permission prompt on EVERY claude session, including the
  *  workspace.
