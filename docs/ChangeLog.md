@@ -21,6 +21,16 @@ Entries here are folded into the next release's heading when it ships.
   (100,000 objects, 5,000,000 vertices, a 30-second wall clock), which is what lets a genuinely
   large procedural model through: the old object cap refused a 150×150 grid of cubes while using
   barely a quarter of its vertex budget.
+- **[#2006](https://github.com/receptron/mulmoterminal/pull/2006)** — and then a model with one
+  brace too many took the whole server down. `presentShapeScript` on a script whose braces do not
+  balance never returned: the plugin's top-level parse loop spun on the unmatched `}` forever, and
+  because that parse is synchronous and runs inside this server, it did not fail one tool call — it
+  pinned the process. Still listening on its port, 100% CPU, accepting nothing, every `/api/*`
+  request and websocket timing out until it was restarted. An agent writing a 130-line model is
+  exactly who trips this. Fixed upstream in
+  [mulmoclaude#3058](https://github.com/receptron/mulmoclaude/pull/3058) and taken here as
+  shapescript-plugin **1.1.1**: an unmatched brace is now a parse error naming its line and column,
+  like every other diagnostic the tool returns.
 
 ## mulmoterminal@4.17.0 — 2026-09-08
 
