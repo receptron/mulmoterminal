@@ -8,6 +8,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { CollectionsIndexView, CollectionView, FeedsView } from "@mulmoclaude/collection-plugin/vue";
 import PluginFrame from "./PluginFrame.vue";
+import CollectionChatPane from "./CollectionChatPane.vue";
 import { collectionShadowCss } from "../collectionShadowCss";
 import { useCollectionBrowse, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
@@ -156,5 +157,9 @@ useEscapeToClose(isOpen, close);
         </div>
       </PluginFrame>
     </div>
+    <!-- A chat started from a card runs HERE rather than taking the screen to the grid (#2001).
+         The pane claims that placement only while this overlay is open, and hands the session on
+         to the grid when it lets go — so nothing is stranded and nothing is owned twice. -->
+    <CollectionChatPane />
   </div>
 </template>

@@ -5,8 +5,9 @@
 // other side gives up its own, because a terminal below its minimum reflows xterm into garbage
 // while a squeezed panel is merely cramped.
 //
-// Four splitters now answer to this: terminal|GUI in the single view, and — beside an enlarged
-// grid cell — terminal|file-pane, roster|terminal, and terminal/thumbnail-strip. Stated once
+// Five splitters now answer to this: terminal|GUI in the single view, — beside an enlarged
+// grid cell — terminal|file-pane, roster|terminal, and terminal/thumbnail-strip, and the chat pane
+// under a collection (#2001). Stated once
 // because four copies of a tie-break drift apart, and the drift only shows on the narrow window
 // nobody develops on.
 
@@ -43,6 +44,10 @@ export type PrimarySide = "before" | "after";
 export const TERMINAL_GUI: SplitFloors = { primary: MIN_TERMINAL, secondary: MIN_GUI };
 export const TERMINAL_ROSTER: SplitFloors = { primary: MIN_TERMINAL, secondary: MIN_ROSTER };
 export const TERMINAL_STRIP: SplitFloors = { primary: MIN_TERMINAL_HEIGHT, secondary: MIN_STRIP };
+// The collection above the chat pane (#2001). Enough for a card's title row and the one under it —
+// less than that and the collection stops being readable, which is the half you are keeping.
+export const MIN_COLLECTION = 240;
+export const TERMINAL_COLLECTION: SplitFloors = { primary: MIN_TERMINAL_HEIGHT, secondary: MIN_COLLECTION };
 
 export function maxPrimary(available: number, floors: SplitFloors): number {
   return Math.max(floors.primary, available - floors.secondary);

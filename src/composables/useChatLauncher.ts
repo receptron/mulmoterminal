@@ -22,6 +22,7 @@ import { ref, watch } from "vue";
 import { activeCollectionProjectId } from "./collectionSurface";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { placeSpawnedChat } from "./useSpawnedChat";
+import { offerCollectionChat } from "./collectionChatPane";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
@@ -96,7 +97,12 @@ export async function startCollectionChat(
     // against a session that already exists. Seeded here for the SAME reason placement is —
     // every collection entry point passes through this one function.
     const canvas = await seedCollectionCanvas(chatId, message);
-    placeSpawnedChat({ id: chatId, agent, draft, canvas });
+    const request = { id: chatId, agent, draft, canvas };
+    // The Collections overlay gets first refusal (#2001): a chat started from a card can then run
+    // in a pane UNDER the collection instead of taking the screen to the grid. Nothing is claimed
+    // unless that pane is open, and the pane hands the same request on to `placeSpawnedChat` when
+    // it lets go — so the session still becomes a grid cell, later rather than instead.
+    if (!offerCollectionChat(request)) placeSpawnedChat(request);
   }
   // `agent` is what the route was ASKED for, and the route echoes it back in jsonData — so this is
   // the agent the PTY actually runs, not a second reading of the toggle.
