@@ -4,7 +4,7 @@
 // The key is the whole design: the first version filed nothing and tied the session to the OVERLAY,
 // which is why the pane stayed open after switching collections and why going to the grid and back
 // left nothing to return to.
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 
 // The filing keeps itself honest off the server's own session channel, and tears a terminal slot
 // down when it does. Both are played by hand here.
@@ -49,9 +49,14 @@ const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draf
 let served: unknown = null;
 /** What the route says it CONSIDERED — null to echo everything it was sent. */
 let consider: unknown = null;
+/** A chat is not checked until it has had time to register server-side; see SPAWN_SETTLE_MS. */
+const SETTLE_MS = 10_000;
 const flush = async (): Promise<void> => {
-  await new Promise((r) => setTimeout(r, 0));
-  await new Promise((r) => setTimeout(r, 0));
+  await vi.advanceTimersByTimeAsync(1);
+};
+/** Move past the grace, which also fires the settle check the filing schedules for itself. */
+const settle = async (): Promise<void> => {
+  await vi.advanceTimersByTimeAsync(SETTLE_MS + 1);
 };
 
 describe("collectionChatKey", () => {
@@ -88,6 +93,7 @@ describe("filing a collection's chats", () => {
   const ids = (key: string): string[] => collectionChatsFor(key).sessions.map((session) => session.id);
 
   beforeEach(() => {
+    vi.useFakeTimers();
     resetCollectionChats();
     bus.subscribed = 0;
     bus.released = [];
@@ -103,6 +109,8 @@ describe("filing a collection's chats", () => {
       }),
     );
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("gives each collection its own chats, and nothing to the others", () => {
     holdCollectionChat(works, request("a"));
@@ -206,6 +214,7 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(works, request("a"));
     holdCollectionChat(todos, request("gone"));
     served = ["a"];
+    await settle();
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
@@ -218,6 +227,7 @@ describe("filing a collection's chats", () => {
   it("leaves every tab standing when the check fails or makes no sense", async () => {
     holdCollectionChat(works, request("a"));
     served = null; // the request throws
+    await settle();
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
@@ -237,6 +247,8 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(works, request("a"));
     holdCollectionChat(todos, request("b"));
     served = ["a", "b"];
+    await settle();
+    vi.mocked(fetch).mockClear();
     bus.connect();
     await flush();
     expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toContain("ids=a%2Cb");
@@ -254,9 +266,35 @@ describe("filing a collection's chats", () => {
     holdCollectionChat(works, request("over-the-cap"));
     consider = ["asked-about"]; // the route dropped the rest
     served = [];
+    await settle();
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["over-the-cap"]);
     expect(bus.released).toEqual([collectionChatSlotKey("asked-about")]);
+  });
+
+  // Subscribing does not close the window on its own: on an already-connected socket the room join
+  // is emitted and the server can publish `closed` before it processes it, so nothing would ask
+  // again until a connect that may never come (Codex, PR #2002).
+  it("checks by itself once a new chat has settled, with no connect at all", async () => {
+    holdCollectionChat(works, request("died-instantly"));
+    served = [];
+    await flush();
+    expect(ids(works)).toEqual(["died-instantly"]); // ...but not before it could have registered
+    expect(fetch).not.toHaveBeenCalled();
+    await settle();
+    expect(ids(works)).toEqual([]);
+    expect(bus.released).toEqual([collectionChatSlotKey("died-instantly")]);
+  });
+
+  // The other half of that grace: the spawn route answers before the session is registered, so a
+  // chat filed a moment ago is legitimately absent from the live list.
+  it("never retires a chat that was just started", async () => {
+    holdCollectionChat(works, request("just-started"));
+    served = [];
+    bus.connect();
+    await flush();
+    expect(ids(works)).toEqual(["just-started"]);
+    expect(fetch).not.toHaveBeenCalled(); // there was nothing it was allowed to ask about
   });
 });

@@ -58,6 +58,8 @@ export function collectionChatsFor(key: string | null): CollectionChats {
  *  running is still running, and taking its screen away to make room is what the tabs are for. */
 export function holdCollectionChat(key: string, req: SpawnedChatRequest): void {
   listenForEndings();
+  if (!filedAt.has(req.id)) filedAt.set(req.id, Date.now());
+  scheduleSettleCheck();
   const held = filed.get(key) ?? { sessions: [], activeId: null };
   if (!held.sessions.some((session) => session.id === req.id)) held.sessions.push(req);
   held.activeId = req.id;
@@ -82,6 +84,7 @@ export function dropCollectionChat(key: string, id: string): void {
   const index = held.sessions.findIndex((session) => session.id === id);
   if (index < 0) return;
   held.sessions.splice(index, 1);
+  filedAt.delete(id);
   if (held.sessions.length === 0) {
     filed.delete(key);
     return;
@@ -126,7 +129,33 @@ function listenForEndings(): void {
   stopListening = () => {
     off();
     offConnect();
+    if (settleTimer) clearTimeout(settleTimer);
+    settleTimer = null;
   };
+}
+
+/** How long after a chat is filed before its absence from the server means anything.
+ *
+ *  The spawn route answers with the session id and registers the session AFTER that (the spawn is
+ *  not awaited), so a chat filed a moment ago can be legitimately missing from the live list — and
+ *  retiring on that would close the tab of the chat that was just started. */
+const SPAWN_SETTLE_MS = 10_000;
+const filedAt = new Map<string, number>();
+let settleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Check once the newest chat has had time to register.
+ *
+ *  Subscribing does not close the window on its own: when the socket is ALREADY connected the room
+ *  join is emitted and the server may publish `closed` before it processes it, so a chat that ends
+ *  in those milliseconds is announced to nobody (Codex, PR #2002). Nothing else would ask again
+ *  until the next connect, which may never come. */
+function scheduleSettleCheck(): void {
+  if (settleTimer) return;
+  settleTimer = setTimeout(() => {
+    settleTimer = null;
+    void reconcileWithServer();
+    if ([...filedAt.values()].some((at) => Date.now() - at < SPAWN_SETTLE_MS)) scheduleSettleCheck();
+  }, SPAWN_SETTLE_MS);
 }
 
 /** Ask which filed chats the server still has, and retire the rest. Silent on failure and on a
@@ -138,7 +167,8 @@ function listenForEndings(): void {
  *  absent would close a live chat's tab (Codex, PR #2002). Whatever it did not consider is simply
  *  left for the next connect. */
 async function reconcileWithServer(): Promise<void> {
-  const ids = [...new Set([...filed.values()].flatMap((held) => held.sessions.map((session) => session.id)))];
+  const settled = Date.now() - SPAWN_SETTLE_MS;
+  const ids = [...new Set([...filed.values()].flatMap((held) => held.sessions.map((session) => session.id)))].filter((id) => (filedAt.get(id) ?? 0) <= settled);
   if (ids.length === 0) return;
   try {
     const res = await fetchWithTimeout(`/api/sessions/live?ids=${encodeURIComponent(ids.join(","))}`);
@@ -175,6 +205,7 @@ export function collectionChatCount(): number {
 /** Test seam: forget everything filed. Not used by the app. */
 export function resetCollectionChats(): void {
   filed.clear();
+  filedAt.clear();
   stopListening?.();
   stopListening = null;
 }
