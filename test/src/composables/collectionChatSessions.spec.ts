@@ -314,4 +314,22 @@ describe("filing a collection's chats", () => {
     expect(bus.listening).toBe(1);
     expect(bus.subscribed).toBe(2);
   });
+
+  // The route considers only the first 200 ids it is given, so one request for everything leaves
+  // the rest unasked for as long as the filing stands (Codex, PR #2002).
+  it("asks about every filed chat, in batches the route will actually consider", async () => {
+    const many = Array.from({ length: 250 }, (_, i) => `s${i}`);
+    many.forEach((id) => holdCollectionChat(works, request(id)));
+    served = many; // all of them running while the grace passes
+    await settle();
+    served = many.filter((id) => id !== "s240"); // ...then one ends while the socket is down
+    vi.mocked(fetch).mockClear();
+    bus.connect();
+    await flush();
+    const asked = vi.mocked(fetch).mock.calls.flatMap((call) => new URL(String(call[0]), "https://spec.invalid").searchParams.get("ids")?.split(",") ?? []);
+    expect(asked).toHaveLength(250);
+    expect(asked).toContain("s240");
+    expect(ids(works)).toHaveLength(249);
+    expect(bus.released).toEqual([collectionChatSlotKey("s240")]);
+  });
 });

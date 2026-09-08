@@ -68,6 +68,10 @@ const TOOLBAR_HEIGHT = 40;
 const viewportHeight = ref(window.innerHeight);
 const onViewportResize = (): void => {
   viewportHeight.value = window.innerHeight;
+  // The stored height was clamped against the viewport it was set in. On a shorter one it is out
+  // of range — the pane eats the collection, and the separator publishes a position past its own
+  // maximum (Codex, PR #2002).
+  setHeight(height.value);
 };
 window.addEventListener("resize", onViewportResize);
 onBeforeUnmount(() => window.removeEventListener("resize", onViewportResize));
@@ -79,6 +83,7 @@ const setHeight = (next: number): void => {
   height.value = clampPrimary(next, available.value, TERMINAL_COLLECTION);
   localStorage.setItem(HEIGHT_KEY, String(height.value));
 };
+setHeight(height.value); // what was restored was clamped against another viewport, not this one
 
 /** Stop showing `req` here and tear its slot down. The caller decides where it goes instead. */
 function unfile(target: string, req: SpawnedChatRequest): void {

@@ -173,7 +173,16 @@ function scheduleSettleCheck(): void {
 async function reconcileWithServer(): Promise<void> {
   const settled = Date.now() - SPAWN_SETTLE_MS;
   const ids = [...new Set([...filed.values()].flatMap((held) => held.sessions.map((session) => session.id)))].filter((id) => (filedAt.get(id) ?? 0) <= settled);
-  if (ids.length === 0) return;
+  for (let from = 0; from < ids.length; from += LIVE_QUERY_CHUNK) await askAbout(ids.slice(from, from + LIVE_QUERY_CHUNK));
+}
+
+/** How many ids one request carries. The route considers only the first `ACTIVITY_IDS_LIMIT` (200)
+ *  it is given, so a single request for everything would leave the rest unasked for as long as the
+ *  filing stands (Codex, PR #2002). Comfortably under that, in sequence, so every filed chat is
+ *  actually asked about. */
+const LIVE_QUERY_CHUNK = 100;
+
+async function askAbout(ids: readonly string[]): Promise<void> {
   try {
     const res = await fetchWithTimeout(`/api/sessions/live?ids=${encodeURIComponent(ids.join(","))}`);
     if (!res.ok) return;
@@ -182,7 +191,7 @@ async function reconcileWithServer(): Promise<void> {
     const live = new Set(body.live.filter((id): id is string => typeof id === "string"));
     body.asked.filter((id): id is string => typeof id === "string" && !live.has(id)).forEach(forgetEndedChat);
   } catch {
-    // best-effort — the next reconnect asks again
+    // best-effort — the next connect asks again
   }
 }
 

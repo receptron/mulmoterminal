@@ -267,6 +267,28 @@ describe("CollectionChatPane", () => {
     wrapper.unmount();
   });
 
+  // A height saved on a taller window is out of range on this one: the pane would eat the
+  // collection, and the separator would publish a position past its own maximum.
+  it("brings a height saved on another viewport back into range", async () => {
+    const viewport = window.innerHeight;
+    localStorage.setItem("mt-collection-chat-height", "5000");
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("a"));
+    await wrapper.vm.$nextTick();
+    const separator = () => wrapper.get("[role='separator']");
+    expect(Number(separator().attributes("aria-valuenow"))).toBeLessThanOrEqual(Number(separator().attributes("aria-valuemax")));
+
+    const tall = Number(separator().attributes("aria-valuenow"));
+    window.innerHeight = 400; // the window shrank under it
+    window.dispatchEvent(new Event("resize"));
+    await wrapper.vm.$nextTick();
+    expect(Number(separator().attributes("aria-valuenow"))).toBeLessThan(tall);
+    expect(Number(separator().attributes("aria-valuenow"))).toBeLessThanOrEqual(Number(separator().attributes("aria-valuemax")));
+    wrapper.unmount();
+    localStorage.removeItem("mt-collection-chat-height");
+    window.innerHeight = viewport;
+  });
+
   // A separator a keyboard can move has to say where it is and how far it goes, or it can be
   // operated without being understood.
   it("publishes the separator's position and its range", async () => {
