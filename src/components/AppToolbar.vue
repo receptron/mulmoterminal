@@ -116,7 +116,9 @@ const chatCount = computed(() => collectionChatCount());
 const collectionsTitle = computed(() => {
   if (!chatCount.value) return "Collections";
   const chats = chatCount.value === 1 ? "1 chat" : `${chatCount.value} chats`;
-  return `Collections — ${chats} running here`;
+  // "open here", not "running": a chat started as a DRAFT has its prompt typed and not submitted,
+  // so calling it running says something the screen cannot back up (Codex, PR #2002).
+  return `Collections — ${chats} open here`;
 });
 const feedsActive = computed(() => browseView.value.mode !== "closed" && browseView.value.kind === "feed");
 const filesActive = computed(() => route.name === "files");

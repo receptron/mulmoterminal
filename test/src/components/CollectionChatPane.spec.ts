@@ -64,7 +64,7 @@ vi.mock("../../../src/components/Terminal.vue", () => ({
   },
 }));
 
-const request = (id: string): SpawnedChatRequest => ({ id, agent: "claude", draft: false });
+const request = (id: string, agent: SpawnedChatRequest["agent"] = "claude"): SpawnedChatRequest => ({ id, agent, draft: false });
 const at = (slug: string) => ({ mode: "detail", kind: "collection", slug });
 const shown = (wrapper: ReturnType<typeof mount>): string | undefined => wrapper.find("[data-session]").attributes("data-session");
 const tabs = (wrapper: ReturnType<typeof mount>) => wrapper.findAll("[role='tab']");
@@ -304,6 +304,18 @@ describe("CollectionChatPane", () => {
     expect(now).toBeGreaterThanOrEqual(min);
     await separator.trigger("keydown", { key: "ArrowUp" }); // dragging up grows the terminal
     expect(Number(wrapper.get("[role='separator']").attributes("aria-valuenow"))).toBeGreaterThan(now);
+    wrapper.unmount();
+  });
+
+  // Numbered among its own kind: the strip's position would call the second Claude "Claude 3"
+  // whenever another agent sits between them (Codex, PR #2002).
+  it("numbers two of the same agent, and leaves a lone one unnumbered", async () => {
+    const wrapper = mount(CollectionChatPane);
+    offerCollectionChat(request("c1", "claude"));
+    offerCollectionChat(request("x", "codex"));
+    offerCollectionChat(request("c2", "claude"));
+    await wrapper.vm.$nextTick();
+    expect(tabs(wrapper).map((t) => t.text())).toEqual(["Claude 1", "Codex", "Claude 2"]);
     wrapper.unmount();
   });
 });

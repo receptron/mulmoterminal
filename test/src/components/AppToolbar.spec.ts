@@ -245,7 +245,7 @@ describe("AppToolbar collection chat badge", () => {
   it("says it in the button's own name", async () => {
     holdCollectionChat(works, chat("a"));
     const wrapper = await mountAt("/terminals");
-    expect(door(wrapper)?.attributes("aria-label")).toBe("Collections — 1 chat running here");
+    expect(door(wrapper)?.attributes("aria-label")).toBe("Collections — 1 chat open here");
   });
 });
 

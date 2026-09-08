@@ -215,12 +215,14 @@ describe("filing a collection's chats", () => {
   it("retires what the server no longer runs, after the socket comes back", async () => {
     holdCollectionChat(works, request("a"));
     holdCollectionChat(todos, request("gone"));
-    served = ["a"];
+    served = ["a", "gone"]; // both alive while the settle check passes over them
     await settle();
+    expect(ids(todos)).toEqual(["gone"]); // ...so nothing has retired it yet
+    served = ["a"]; // it ends while the socket is down
     bus.connect();
     await flush();
     expect(ids(works)).toEqual(["a"]);
-    expect(ids(todos)).toEqual([]);
+    expect(ids(todos)).toEqual([]); // and only the reconnect could have found that out
     expect(bus.released).toEqual([collectionChatSlotKey("gone")]);
   });
 

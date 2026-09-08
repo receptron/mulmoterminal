@@ -150,8 +150,14 @@ function onExit(): void {
 // ordinal is what tells two of the same agent apart at a glance; the session id is in the tooltip,
 // where it is available to quote without being read every time.
 const agentLabel = (agent: string): string => BUILTIN_AGENT_OPTIONS.find((option) => option.agent === agent)?.label ?? "Chat";
-const tabLabel = (req: SpawnedChatRequest, index: number): string =>
-  chats.value.sessions.filter((session) => session.agent === req.agent).length > 1 ? `${agentLabel(req.agent)} ${index + 1}` : agentLabel(req.agent);
+const tabLabel = (req: SpawnedChatRequest): string => {
+  // Numbered among its OWN kind, not by position in the strip: `Claude, Codex, Claude` reads as
+  // "Claude 1 / Codex / Claude 2", and the strip's index would have called the last one Claude 3
+  // (Codex, PR #2002).
+  const sameAgent = chats.value.sessions.filter((session) => session.agent === req.agent);
+  if (sameAgent.length < 2) return agentLabel(req.agent);
+  return `${agentLabel(req.agent)} ${sameAgent.findIndex((session) => session.id === req.id) + 1}`;
+};
 const label = computed(() => (held.value ? agentLabel(held.value.agent) : "Chat"));
 
 // The terminal the strip controls. One panel, not one per tab: only the selected chat is mounted,
@@ -233,7 +239,7 @@ function onSplitterKey(e: KeyboardEvent): void {
         <!-- Whose turn it is, in the grid's own colours. The word is in the title rather than
              beside it: the strip has to stay narrow enough for several tabs. -->
         <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
-        {{ tabLabel(session, index) }}
+        {{ tabLabel(session) }}
       </button>
       <!-- Acts on the tab you are looking at. Not a close: the session is live, so "closing" it here
            can only mean sending it where it lives — the grid. Leaving the collection is NOT closing;
