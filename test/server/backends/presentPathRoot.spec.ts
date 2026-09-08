@@ -94,6 +94,9 @@ describe("the /api/plugin middleware", () => {
     // Without this mapping a model named relatively resolves from the global workspace,
     // so an agent in one project silently opens another project's same-named file.
     expect((await call("presentShapeScript", { path: "models/lamp.shape" }, SESSION)).path).toBe(path.resolve(CWD, "models/lamp.shape"));
+    // The pair has to agree: presenting and RENDERING the same relative path must
+    // name the same file, or an agent checks one model and shows another.
+    expect((await call("renderShapeScript", { path: "models/lamp.shape" }, SESSION)).path).toBe(path.resolve(CWD, "models/lamp.shape"));
   });
 
   // Byte-identical, NOT "resolved to the same file": an absolute document path breaks the
