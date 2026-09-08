@@ -255,10 +255,19 @@ export function resetCollectionChats(): void {
   saveFiled();
 }
 
-// A filing restored from storage has had none of this arranged for it — nothing called
-// `holdCollectionChat` this time round. Without it a reloaded tab would never be retired: no
-// listener for the server's `closed`, and no settle check to notice a cell that is gone.
-if (filed.size > 0) {
+/** Arm the watchers for a filing that came back from storage.
+ *
+ *  Everything below is normally set up by `holdCollectionChat`, and on a reload nothing calls it:
+ *  the chats are simply there. Without this a restored tab could never be retired — no listener for
+ *  the server's `closed`, and no settle check to notice a cell that is gone — so a session that
+ *  ended would sit in the pane as a dead, still-actionable tab (Codex, PR #2002).
+ *
+ *  At module scope on purpose: it must run whether or not the pane is ever opened, since the
+ *  toolbar counts these chats too. Covered by `collectionChatRestore.spec.ts`. */
+function watchRestoredChats(): void {
+  if (filed.size === 0) return;
   listenForEndings();
   scheduleSettleCheck();
 }
+
+watchRestoredChats();
