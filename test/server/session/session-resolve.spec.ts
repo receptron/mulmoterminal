@@ -32,13 +32,14 @@ describe("resolveSession", () => {
     expect(resolveSession("s1", facts({ onDisk: true, cleared: true }), mint)).toEqual({ reattachId: null, resume: null, sessionId: FIXED });
   });
 
-  // With tmux holding the session, the claude that attaches is the POST-clear one and the resume
-  // arg only covers the window where that tmux session died since we looked. Dropping it there
-  // would spawn `--session-id` against an id that is on disk, which claude refuses outright.
-  it("still resumes a cleared transcript while tmux is holding the session", () => {
+  // Not even while tmux says it is holding the session. The id is kept — tmux attaches the running
+  // (post-clear) claude — but the fallback command carries no `--resume`, so the window where that
+  // tmux session died since the probe fails loudly instead of resurrecting the frozen conversation
+  // (Codex, PR #2014).
+  it("keeps the id but refuses to resume a cleared transcript, tmux or not", () => {
     expect(resolveSession("s1", facts({ onDisk: true, cleared: true, tmuxAlive: true }), mint)).toEqual({
       reattachId: null,
-      resume: "s1",
+      resume: null,
       sessionId: "s1",
     });
   });

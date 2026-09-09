@@ -32,14 +32,17 @@ export interface SessionResolution {
 // (the old behavior) left that window fatal.
 export function resolveSession(requested: string | null, facts: SessionFacts, mintId: () => string): SessionResolution {
   const reattachId = requested && facts.hasLivePty ? requested : null;
-  // A cleared transcript is not something to resume — it is the conversation the user ended. Only
-  // when tmux is NOT holding this session, though: with a live tmux session the claude that
-  // attaches is the POST-clear one, and `resume` there is only the fallback for the window the
-  // paragraph above describes. Dropping it in that window would spawn `--session-id <id>` against
-  // an id that IS on disk, which claude refuses outright — the regression that paragraph exists to
-  // prevent, traded for a bug it does not have (#2013).
-  const frozen = facts.cleared && !facts.tmuxAlive;
-  const resume = !reattachId && requested && facts.onDisk && !frozen ? requested : null;
+  // A cleared transcript is never resumed — it is the conversation the user ENDED, and `--resume`
+  // brings it back into the next turn's request (#2013).
+  //
+  // Including while tmux says it is holding the session, which costs something and is still right.
+  // `tmuxAlive` is a probe: if that session dies before the spawn, `tmux new-session -A` runs the
+  // command, and there `--session-id <id>` against an id that is on disk makes claude refuse
+  // outright ("Session ID is already in use"). Keeping `--resume` for that window would instead
+  // resurrect the frozen conversation silently — the exact thing this decision exists to stop
+  // (Codex, PR #2014). A spawn that fails loudly is the better half of that trade: the next
+  // connect finds no tmux session, and mints a fresh id.
+  const resume = !reattachId && requested && facts.onDisk && !facts.cleared ? requested : null;
   // Reuse the requested id when we can actually serve it (reattach, a live tmux
   // session, or an on-disk transcript to resume); otherwise it can't be reused —
   // mint a fresh one.

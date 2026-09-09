@@ -16,7 +16,7 @@
 
 ## 原因（コードを辿って確認）
 
-```
+```text
 /ws 接続 → resolveClaudeSession()            server/routes/ws-routes.ts:119
         → facts { hasLivePty, tmuxAlive, onDisk }   ← onDisk は sessionExistsOnDisk() だけ
         → resolveSession()                    server/session/session-resolve.ts:29
@@ -42,14 +42,13 @@ hydrate される）が持っているのに、**resume の判定はそれを見
 | | 決定 | 理由 |
 |---|---|---|
 | どこで弾くか | `resolveSession`（純関数）に `cleared` を足す | `canResume`（spawn-claude）だけ直すと、`resolveSession` はキーを再利用したまま `--session-id <id>` で起動し、**claude が "Session ID is already in use" で落ちる**（同ファイルのコメントが警告している通り）。id を振り直すところまで含めて 1 つの決定 |
-| tmux が生きている場合 | **従来どおり resume を渡す** | tmux が生きているなら attach されるのは*クリア後*の claude で、resume 引数は「その tmux が死んでいた場合」のフォールバックとしてしか効かない。そこで resume を外すと `--session-id` になり、上記の "already in use" で落ちる（同コメントが直した回帰そのもの） |
+| tmux が生きている場合 | **id は維持するが resume は渡さない**（改訂: Codex #2014） | 当初は「従来どおり resume」にしていたが、`tmuxAlive` は probe でしかない。spawn までにその tmux が死ぬと `tmux new-session -A` がコマンドを実行し、そこで `--resume` は**凍結された会話を黙って復活させる** — この PR が止めようとしているものそのもの。`--session-id` で claude が拒否して落ちる方を選ぶ: 次の接続では tmux が無いので新しい id になり、素の状態で立ち上がる |
 | tmux が無い / 死んでいる場合 | resume しない → `sessionId` は新しい id | 報告のケース。素の状態で立ち上がる |
 | 凍結 transcript | **消さない** | 消すのは別の話。#1085 のサマリー等はこの印と凍結ファイルを読んでいる |
 
 ```ts
 // session-resolve.ts
-const frozen = facts.cleared && !facts.tmuxAlive;
-const resume = !reattachId && requested && facts.onDisk && !frozen ? requested : null;
+const resume = !reattachId && requested && facts.onDisk && !facts.cleared ? requested : null;
 ```
 
 呼び出し側（ws-routes）は `cleared: clearedTranscripts.has(requested)` を足すだけ。
