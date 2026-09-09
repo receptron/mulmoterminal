@@ -10,6 +10,10 @@ export interface SessionFacts {
   // An on-disk transcript exists in the target workspace (claude writes it after the
   // first prompt) — the only id claude will `--resume`.
   onDisk: boolean;
+  // That transcript is FROZEN: the user ran `/clear`, so claude minted itself a new id and this
+  // file is the conversation they ended (`cleared-transcripts.ts`, #1085). Resuming it brings the
+  // cleared conversation back — and puts it in the next turn's request (#2013).
+  cleared: boolean;
 }
 
 export interface SessionResolution {
@@ -28,7 +32,14 @@ export interface SessionResolution {
 // (the old behavior) left that window fatal.
 export function resolveSession(requested: string | null, facts: SessionFacts, mintId: () => string): SessionResolution {
   const reattachId = requested && facts.hasLivePty ? requested : null;
-  const resume = !reattachId && requested && facts.onDisk ? requested : null;
+  // A cleared transcript is not something to resume — it is the conversation the user ended. Only
+  // when tmux is NOT holding this session, though: with a live tmux session the claude that
+  // attaches is the POST-clear one, and `resume` there is only the fallback for the window the
+  // paragraph above describes. Dropping it in that window would spawn `--session-id <id>` against
+  // an id that IS on disk, which claude refuses outright — the regression that paragraph exists to
+  // prevent, traded for a bug it does not have (#2013).
+  const frozen = facts.cleared && !facts.tmuxAlive;
+  const resume = !reattachId && requested && facts.onDisk && !frozen ? requested : null;
   // Reuse the requested id when we can actually serve it (reattach, a live tmux
   // session, or an on-disk transcript to resume); otherwise it can't be reused —
   // mint a fresh one.

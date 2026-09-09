@@ -4,7 +4,7 @@ import { resolveSession, type SessionFacts, resolveReattachableId, canStartLaunc
 
 const FIXED = "fresh-minted-id";
 const mint = () => FIXED;
-const facts = (over: Partial<SessionFacts> = {}): SessionFacts => ({ hasLivePty: false, tmuxAlive: false, onDisk: false, ...over });
+const facts = (over: Partial<SessionFacts> = {}): SessionFacts => ({ hasLivePty: false, tmuxAlive: false, onDisk: false, cleared: false, ...over });
 
 describe("resolveSession", () => {
   it("mints a fresh id when nothing is requested", () => {
@@ -23,6 +23,34 @@ describe("resolveSession", () => {
 
   it("resumes an on-disk transcript", () => {
     expect(resolveSession("s1", facts({ onDisk: true }), mint)).toEqual({ reattachId: null, resume: "s1", sessionId: "s1" });
+  });
+
+  // `/clear` leaves OUR key's transcript holding the conversation the user ended (claude took a new
+  // id for itself). Resuming it brings that conversation back — and into the next turn's request,
+  // which is what made a reboot cost 478k tokens on the first prompt (#2013).
+  it("does not resume a transcript the user cleared — it starts fresh", () => {
+    expect(resolveSession("s1", facts({ onDisk: true, cleared: true }), mint)).toEqual({ reattachId: null, resume: null, sessionId: FIXED });
+  });
+
+  // With tmux holding the session, the claude that attaches is the POST-clear one and the resume
+  // arg only covers the window where that tmux session died since we looked. Dropping it there
+  // would spawn `--session-id` against an id that is on disk, which claude refuses outright.
+  it("still resumes a cleared transcript while tmux is holding the session", () => {
+    expect(resolveSession("s1", facts({ onDisk: true, cleared: true, tmuxAlive: true }), mint)).toEqual({
+      reattachId: null,
+      resume: "s1",
+      sessionId: "s1",
+    });
+  });
+
+  // The mark says nothing about a session this process is already running: that pty IS the
+  // post-clear conversation, and reattaching it reads no transcript at all.
+  it("reattaches a live pty whether or not the transcript was cleared", () => {
+    expect(resolveSession("s1", facts({ hasLivePty: true, onDisk: true, cleared: true }), mint)).toEqual({
+      reattachId: "s1",
+      resume: null,
+      sessionId: "s1",
+    });
   });
 
   it("reuses the id for a live tmux session with no transcript yet (idle, --session-id attaches)", () => {
