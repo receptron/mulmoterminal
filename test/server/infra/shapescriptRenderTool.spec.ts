@@ -48,6 +48,16 @@ const probe = await runRenderShapeScript({ script: CUBE, views: "single", width:
 const canRender = probe.rendered;
 if (!canRender) console.warn(`[shapescriptRenderTool.spec] cannot rasterise here — skipping the pixel cases: ${probe.message}`);
 
+/** What ONE rasterising case is allowed to take.
+ *
+ *  The plugin launches a fresh Chromium per call and closes it again (`render.js`: `launch(...)`
+ *  … `finally { close() }`), so each of these pays a cold start plus a software-GL render. That is
+ *  ~1s on a developer machine and **over the suite's 15s default on a Windows CI runner**, where
+ *  the job then failed about half the time — the same four cases, each at exactly 15,000ms
+ *  (#2013's release CI). Elsewhere the probe finds no browser and they never run at all, so this
+ *  budget is only ever spent where a render genuinely happens. */
+const RENDER_TIMEOUT_MS = 60_000;
+
 const savedPath = (message: string): string => {
   const match = /Saved render to (\S+)/.exec(message);
   if (!match?.[1]) throw new Error(`no saved path in: ${message}`);
@@ -65,32 +75,42 @@ describe("renderShapeScript host tool", () => {
     );
   });
 
-  it.runIf(canRender)("renders an inline script and saves it under the workspace artifacts", async () => {
-    const { message, rendered } = await runRenderShapeScript({ script: CUBE, views: "single", width: 200, height: 200 });
-    expect(rendered).toBe(true);
-    const file = savedPath(message);
-    expect(file.startsWith(path.join(ws, "artifacts", "renders"))).toBe(true);
-    expect(statSync(file).size).toBeGreaterThan(0);
-  });
+  // Everything this one render can settle, settled here: a second case asking the same question of
+  // a second render costs another whole Chromium (see RENDER_TIMEOUT_MS), and answers nothing the
+  // first could not. ABSOLUTE is the point of the path assertion — MulmoTerminal's sessions run in
+  // per-project directories, so a workspace-relative answer resolves to nothing from the cwd the
+  // agent is in, or worse to a different file that happens to share the name.
+  it.runIf(canRender)(
+    "renders an inline script and answers with an absolute path under the workspace artifacts",
+    async () => {
+      const { message, rendered } = await runRenderShapeScript({ script: CUBE, views: "single", width: 200, height: 200 });
+      expect(rendered).toBe(true);
+      const file = savedPath(message);
+      expect(path.isAbsolute(file)).toBe(true);
+      expect(file.startsWith(path.join(ws, "artifacts", "renders"))).toBe(true);
+      expect(statSync(file).size).toBeGreaterThan(0);
+    },
+    RENDER_TIMEOUT_MS,
+  );
 
-  // ABSOLUTE is the point: MulmoTerminal's sessions run in per-project directories,
-  // so a workspace-relative path resolves to nothing from the cwd the agent is in —
-  // or, worse, to a different file that happens to share the name.
-  it.runIf(canRender)("answers with an absolute path, because sessions do not run in the workspace", async () => {
-    const { message } = await runRenderShapeScript({ script: CUBE, views: "single", width: 200, height: 200 });
-    expect(path.isAbsolute(savedPath(message))).toBe(true);
-  });
+  it.runIf(canRender)(
+    "renders a saved model by its artifact path",
+    async () => {
+      const { rendered, message } = await runRenderShapeScript({ path: ARTIFACT, views: "single", width: 200, height: 200 });
+      expect(rendered).toBe(true);
+      expect(existsSync(savedPath(message))).toBe(true);
+    },
+    RENDER_TIMEOUT_MS,
+  );
 
-  it.runIf(canRender)("renders a saved model by its artifact path", async () => {
-    const { rendered, message } = await runRenderShapeScript({ path: ARTIFACT, views: "single", width: 200, height: 200 });
-    expect(rendered).toBe(true);
-    expect(existsSync(savedPath(message))).toBe(true);
-  });
-
-  it.runIf(canRender)("renders a .shape outside the artifacts root through byPath", async () => {
-    const { rendered } = await runRenderShapeScript({ path: REPO_REL, views: "single", width: 200, height: 200 });
-    expect(rendered).toBe(true);
-  });
+  it.runIf(canRender)(
+    "renders a .shape outside the artifacts root through byPath",
+    async () => {
+      const { rendered } = await runRenderShapeScript({ path: REPO_REL, views: "single", width: 200, height: 200 });
+      expect(rendered).toBe(true);
+    },
+    RENDER_TIMEOUT_MS,
+  );
 
   it("refuses a path that is not a .shape file", async () => {
     await expect(runRenderShapeScript({ path: "notes.txt" })).rejects.toThrow(/must name a .shape file/);
