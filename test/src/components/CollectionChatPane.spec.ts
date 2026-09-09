@@ -247,4 +247,19 @@ describe("CollectionChatPane", () => {
     expect(Number(wrapper.get("[role='separator']").attributes("aria-valuenow"))).toBeGreaterThan(now);
     wrapper.unmount();
   });
+
+  // A cell is sized by whatever holds it — the CSS grid in a tile, `.zoom-main > *` when enlarged.
+  // A teleported cell told nothing grows to its CONTENT: measured in the running app, the cell came
+  // out 701px tall inside a 286px pane and ran 426px past the bottom of the window, taking the
+  // input line with it (reported in use). jsdom lays nothing out, so what can be pinned here is
+  // that the receptacle still SAYS it — the three properties `.zoom-main` gives its own child.
+  it("tells the cell it teleports in to fit, rather than to grow", async () => {
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
+    await wrapper.vm.$nextTick();
+    const panel = wrapper.get("[role='tabpanel']");
+    expect(panel.classes()).toEqual(expect.arrayContaining(["flex", "min-h-0", "flex-1"]));
+    expect(panel.classes()).toEqual(expect.arrayContaining(["[&>*]:flex-1", "[&>*]:min-h-0", "[&>*]:min-w-0"]));
+    wrapper.unmount();
+  });
 });

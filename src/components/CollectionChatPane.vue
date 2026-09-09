@@ -239,7 +239,12 @@ function onSplitterKey(e: KeyboardEvent): void {
       {{ summaryLine }}
     </div>
     <!-- Empty on purpose: the grid teleports this chat's own cell in here, so nothing this
-         component renders is remounted when the view changes. -->
-    <div :id="PANEL_ID" ref="slot" role="tabpanel" :aria-labelledby="tabId(held.id)" class="min-h-0 flex-1" />
+         component renders is remounted when the view changes.
+         The child rules are the receptacle's whole job. A cell is given its size by whatever holds
+         it — the CSS grid in a tile, `.zoom-main > *` when enlarged — and a teleported cell that is
+         told nothing grows to its CONTENT instead: the terminal ran past the bottom of the window,
+         taking the input line with it (reported in use). Same three properties `.zoom-main` gives
+         its own child, as utilities. -->
+    <div :id="PANEL_ID" ref="slot" role="tabpanel" :aria-labelledby="tabId(held.id)" class="flex min-h-0 flex-1 [&>*]:min-h-0 [&>*]:min-w-0 [&>*]:flex-1" />
   </div>
 </template>
