@@ -8,6 +8,10 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.18.0 — 2026-09-09
+
+> **Setup guide:** [4.18.0 — Let the agent look at what it built](https://receptron.github.io/mulmoterminal/guide/en/v4.18.0.html)
+
 ### The agent can look at the 3D model it just wrote
 
 - **[#2010](https://github.com/receptron/mulmoterminal/pull/2010)** — an agent could write a
@@ -45,6 +49,44 @@ Entries here are folded into the next release's heading when it ships.
   [mulmoclaude#3058](https://github.com/receptron/mulmoclaude/pull/3058) and taken here as
   shapescript-plugin **1.1.1**: an unmatched brace is now a parse error naming its line and column,
   like every other diagnostic the tool returns.
+
+### A conversation you cleared came back — and was re-sent on the next turn
+
+- **[#2014](https://github.com/receptron/mulmoterminal/pull/2014)** — `/clear` makes claude take a
+  new id for itself and freezes the transcript under the cell's own key, so that file holds the
+  conversation you just ended. The reconnect only asked "does that file exist" and resumed it. On a
+  host with no tmux — Windows — that happened at **every reboot**: the cell came back with the
+  cleared conversation in it, and the first thing you typed re-sent the whole of it. The reporter
+  measured **478,237 tokens** on one such turn, and found eleven days of the same frozen transcript
+  appended into a single 9.7MB file, because each reboot resumed it again
+  ([#2013](https://github.com/receptron/mulmoterminal/issues/2013), with the repro and the numbers).
+  The resume decision now reads the cleared mark the app already keeps on disk, and starts a fresh
+  session instead. A session tmux is still holding is untouched — that claude is the conversation
+  you have *after* the clear.
+
+### Smaller things that were wrong
+
+- **[#2008](https://github.com/receptron/mulmoterminal/pull/2008)** — the park button (🌙) sat on
+  launcher and command cells, where pressing it did nothing at all. It was meant to appear only on
+  a session terminal, and the guard could never be true: Vue casts an absent boolean prop to
+  `false`, so "opt out by not passing it" opted nothing out. Present since parking shipped
+  ([#2007](https://github.com/receptron/mulmoterminal/issues/2007)).
+- **[#2009](https://github.com/receptron/mulmoterminal/pull/2009)** — codex's resume list showed the
+  wrong title for the session you were in, and `/rename` never reached it: codex moved a user turn
+  from `event_msg/user_message` to `response_item/message`, and the reader was still looking for
+  the old shape ([#1962](https://github.com/receptron/mulmoterminal/issues/1962)).
+- **[#2012](https://github.com/receptron/mulmoterminal/pull/2012)** — the same record is read in two
+  more places, the prompts pane and the handoff text, and #2009 had not covered them
+  ([#2011](https://github.com/receptron/mulmoterminal/issues/2011)).
+
+### Under the hood
+
+- **[#2019](https://github.com/receptron/mulmoterminal/pull/2019)** — the Windows CI job had started
+  failing about half the time. The rasterising tests are the only ones that launch a real Chromium
+  — one per call, closed again after — which costs about a second on a developer machine and more
+  than the suite's 15-second default on a Windows runner. They carry a budget that matches now, and
+  one of them was folded into another so there is one launch fewer
+  ([#2018](https://github.com/receptron/mulmoterminal/issues/2018)).
 
 ## mulmoterminal@4.17.0 — 2026-09-08
 

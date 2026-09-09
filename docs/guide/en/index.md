@@ -8,11 +8,11 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.17.0 is out.** A few of your pinned collections can now sit in **the toolbar itself**, one
-> press from anywhere — the one thing here to turn on (**Settings → Toolbar pins**). If you also run
-> MulmoClaude: pinning anything here no longer **wipes the colours** it stored in the shared
-> favourites file. And a deck outside a stories root opens in Canvas — [how to set it up, and what
-> was fixed](v4.17.0.html).
+> **4.18.0 is out.** An agent can now **look at the 3D model it wrote** before showing it to you —
+> nothing to turn on, though rasterising needs a browser on the machine. And a conversation you had
+> `/clear`ed **came back after a reboot** on hosts without tmux, then got re-sent on the next turn
+> (one user measured 478,000 tokens) — that is fixed; here is [how to tell you have
+> it](v4.18.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching
