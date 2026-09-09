@@ -23,12 +23,19 @@ const historyLine = (over: Record<string, unknown> = {}): Record<string, unknown
   ...over,
 });
 
-// A codex rollout row: the payload type is what identifies it, and the outer type must be
-// event_msg — a response_item carrying the same payload type is a different record.
+// A codex rollout row in the shape codex wrote until 2026-08: the payload type identifies it and
+// the outer type must be event_msg — a response_item carrying the same payload type is a
+// different record.
 const codexLine = (message: unknown, ts = "2026-08-16T02:31:02.318Z"): Record<string, unknown> => ({
   type: "event_msg",
   timestamp: ts,
   payload: { type: "user_message", message },
+});
+// The shape codex writes now (#2011): a response_item message with role "user".
+const codexItemLine = (text: string, ts = "2026-08-16T02:31:02.318Z"): Record<string, unknown> => ({
+  type: "response_item",
+  timestamp: ts,
+  payload: { type: "message", role: "user", content: [{ type: "input_text", text }] },
 });
 
 describe("claudeHistoryPrompt", () => {
@@ -191,6 +198,51 @@ describe("codexPrompts", () => {
     const notAnEvent = { type: "response_item", timestamp: "2026-08-16T02:31:02.318Z", payload: { type: "user_message", message: "no" } };
     const otherEvent = { type: "event_msg", payload: { type: "agent_message", message: "no" } };
     expect(codexPrompts([notAnEvent, otherEvent, {}, { payload: null }])).toEqual([]);
+  });
+
+  // #2011: codex moved the user's turn to a response_item during 2026-08. Reading only the old
+  // record left the pane empty for every session started since — 171 of 171 September rollouts on
+  // the maintainer's machine.
+  it("reads the response_item shape codex writes now", () => {
+    expect(codexPrompts([codexItemLine("review the branch")])).toEqual([{ at: Date.parse("2026-08-16T02:31:02.318Z"), text: "review the branch" }]);
+  });
+
+  it("skips codex's own preamble rather than listing it as a prompt", () => {
+    const preamble = {
+      type: "response_item",
+      timestamp: "2026-08-16T02:31:02.318Z",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [
+          { type: "input_text", text: "<recommended_plugins>\nAirtable\n</recommended_plugins>" },
+          { type: "input_text", text: "# AGENTS.md instructions for /work\n\nbe nice" },
+          { type: "input_text", text: "<environment_context>\n  <cwd>/work</cwd>\n</environment_context>" },
+        ],
+      },
+    };
+    expect(codexPrompts([preamble, codexItemLine("the real prompt")]).map((p) => p.text)).toEqual(["the real prompt"]);
+  });
+
+  // codex wrote each prompt TWICE for a year — the response_item, then the very next record an
+  // event_msg with the identical text (924 such pairs measured, every one adjacent and in that
+  // order). Reading both shapes is what makes recent rollouts readable, so the pair has to collapse
+  // or every prompt in the 748 older rollouts is listed twice.
+  it("lists a prompt once when codex wrote it in both shapes back to back", () => {
+    const records = [codexItemLine("review the branch"), codexLine("review the branch")];
+    expect(codexPrompts(records).map((p) => p.text)).toEqual(["review the branch"]);
+  });
+
+  // 28 prompts in the store exist ONLY as an event_msg, so the pair is recognised by adjacency and
+  // shape — never by dropping the old record wholesale.
+  it("keeps an event_msg prompt that no response_item precedes", () => {
+    const records = [codexItemLine("first"), { type: "event_msg", payload: { type: "agent_message", message: "x" } }, codexLine("second")];
+    expect(codexPrompts(records).map((p) => p.text)).toEqual(["first", "second"]);
+  });
+
+  it("keeps a prompt a person really did send twice", () => {
+    const records = [codexItemLine("続けて"), { type: "response_item", payload: { type: "reasoning" } }, codexItemLine("続けて")];
+    expect(codexPrompts(records).map((p) => p.text)).toEqual(["続けて", "続けて"]);
   });
 
   it("drops a message that is blank or not a string, and keeps the newest within the limit", () => {

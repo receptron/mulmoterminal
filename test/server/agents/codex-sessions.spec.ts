@@ -11,6 +11,7 @@ import {
   codexRolloutExists,
   metaCacheSize,
 } from "../../../server/agents/codex-sessions.js";
+import { resetThreadNameCache } from "../../../server/agents/codex-thread-names.js";
 
 const UUID_A = "019f251d-001c-7542-b13e-9a627effce52";
 const UUID_B = "019db01d-aaa3-7ba2-b597-b29a7fca488f";
@@ -20,14 +21,23 @@ const metaLine = (id: string, cwd: string | null, threadSource?: string): string
     type: "session_meta",
     payload: { id, cwd, originator: "codex-tui", ...(threadSource === undefined ? {} : { thread_source: threadSource }) },
   });
+// The shape codex wrote until 2026-08. Kept because the store still holds thousands of them.
 const userMsgLine = (message: string): string => JSON.stringify({ type: "event_msg", payload: { type: "user_message", message } });
-// The environment context codex injects first is a response_item/message (role user), NOT an
-// event_msg/user_message — the parser must skip it and use the real prompt.
-const envContextLine = (): string =>
+// The shape codex writes now: a response_item message with role "user", one content part per text.
+const responseItemUserLine = (...texts: string[]): string =>
   JSON.stringify({
     type: "response_item",
-    payload: { type: "message", role: "user", content: [{ type: "input_text", text: "<environment_context>…</environment_context>" }] },
+    payload: { type: "message", role: "user", content: texts.map((text) => ({ type: "input_text", text })) },
   });
+// codex's own preamble: ONE user message carrying the plugin list, the repo's AGENTS.md and the
+// environment context together. The person's prompt is the message after it.
+const preambleLine = (): string =>
+  responseItemUserLine(
+    "<recommended_plugins>\nAirtable (airtable@openai-curated-remote)\n</recommended_plugins>",
+    "# AGENTS.md instructions for /work\n\n<INSTRUCTIONS>\nbe nice\n</INSTRUCTIONS>",
+    "<environment_context>\n  <cwd>/work</cwd>\n</environment_context>",
+  );
+const envContextLine = (): string => responseItemUserLine("<environment_context>…</environment_context>");
 
 describe("parseCodexRolloutHead", () => {
   it("extracts id, cwd, and the first real user message as title", () => {
@@ -44,6 +54,61 @@ describe("parseCodexRolloutHead", () => {
     const head = `${metaLine(UUID_A, "/work")}\n${userMsgLine("do a thing")}\n{"type":"event_ms`;
     expect(parseCodexRolloutHead(head)?.title).toBe("do a thing");
   });
+  // #1962: codex moved the user's turn from event_msg/user_message to a response_item message with
+  // role "user" during 2026-08. Reading only the old record left every recent row as "Codex
+  // session" — 15 of 15 rows on the reporter's machine and on this one.
+  it("reads a title from the response_item shape codex writes now", () => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("fix the login bug")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("fix the login bug");
+  });
+  // The preamble is one message with several parts, and the AGENTS.md part carries no wrapper tag
+  // of its own — so a reader that skipped PARTS rather than the whole message would title every
+  // session in a repo that has an AGENTS.md after it.
+  it("skips the whole synthetic preamble, including its untagged AGENTS.md part", () => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("the real prompt")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("the real prompt");
+  });
+  // Both review bots on #2009: the first version treated ANY tag-prefixed turn as codex's own, so a
+  // person whose prompt opens with markup lost their row's title. codex's own wrappers are a named
+  // set of four — every leading tag in the 6,325 rollouts measured — and none of the 6,330 first
+  // prompts codex itself recorded starts with "<".
+  it.each(["<div>fix the login bug</div>", "<task> explain this file", "<foo/> and then some"])("titles a real prompt that opens with markup: %s", (prompt) => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine(prompt)].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe(prompt);
+  });
+  it("keeps a multi-part prompt whose second part opens with an unknown tag", () => {
+    const head = [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("explain this", "<foo>bar</foo>")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("explain this");
+  });
+  it.each(["environment_context", "recommended_plugins", "user_action", "turn_aborted"])("skips codex's own <%s> block", (tag) => {
+    const head = [metaLine(UUID_A, "/work"), responseItemUserLine(`<${tag}>\n  something\n</${tag}>`), responseItemUserLine("the real prompt")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("the real prompt");
+  });
+  it("still reads the old event_msg shape, so sessions already on disk keep their titles", () => {
+    const head = [metaLine(UUID_A, "/work"), envContextLine(), userMsgLine("an older session")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("an older session");
+  });
+  it("takes whichever shape comes first when a rollout carries both", () => {
+    const head = [metaLine(UUID_A, "/work"), responseItemUserLine("newer record first"), userMsgLine("older record after")].join("\n");
+    expect(parseCodexRolloutHead(head)?.title).toBe("newer record first");
+  });
+  it("accepts a message whose content is a bare string", () => {
+    const line = JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: "plain string content" } });
+    expect(parseCodexRolloutHead([metaLine(UUID_A, "/work"), line].join("\n"))?.title).toBe("plain string content");
+  });
+  it.each([
+    ["an assistant message", JSON.stringify({ type: "response_item", payload: { type: "message", role: "assistant", content: [{ text: "hi" }] } })],
+    [
+      "a developer message",
+      JSON.stringify({ type: "response_item", payload: { type: "message", role: "developer", content: [{ text: "<skills_instructions>x" }] } }),
+    ],
+    ["a reasoning item", JSON.stringify({ type: "response_item", payload: { type: "reasoning", content: [{ text: "thinking" }] } })],
+    ["a user_message payload that is not an event_msg", JSON.stringify({ type: "response_item", payload: { type: "user_message", message: "no" } })],
+    ["a message with no text parts", JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: [{ type: "input_image" }] } })],
+    ["a message whose parts are all blank", JSON.stringify({ type: "response_item", payload: { type: "message", role: "user", content: [{ text: "   " }] } })],
+  ])("does not take a title from %s", (_label, line) => {
+    expect(parseCodexRolloutHead([metaLine(UUID_A, "/work"), line].join("\n"))?.title).toBe("Codex session");
+  });
   it("collapses whitespace and caps the title length", () => {
     const long = "a".repeat(200);
     const head = [metaLine(UUID_A, "/work"), userMsgLine(`  multi\n  line\t${long}`)].join("\n");
@@ -54,6 +119,10 @@ describe("parseCodexRolloutHead", () => {
 });
 
 describe("listCodexSessions", () => {
+  // The listing takes the SESSIONS root and finds the rename index one level up, so the fixture is
+  // a real `<home>/sessions` rather than a bare temp directory — otherwise `session_index.jsonl`
+  // would be looked for in the shared tmpdir.
+  let home: string;
   let root: string;
   const dayDir = (r: string): string => path.join(r, "2026", "07", "08");
   // `stamp` is the ISO-ish timestamp the filename carries, which is what the scan orders by — kept
@@ -76,11 +145,19 @@ describe("listCodexSessions", () => {
   function writeSession(id: string, cwd: string, msg: string, mtime: Date): void {
     writeSessionOn({ id, cwd, msg, mtime });
   }
+  const writeRenameIndex = (entries: { id: string; name: string }[]): void =>
+    writeFileSync(
+      path.join(home, "session_index.jsonl"),
+      entries.map((e) => JSON.stringify({ id: e.id, thread_name: e.name, updated_at: "2026-07-08T00:00:00Z" })).join("\n") + "\n",
+    );
   beforeEach(() => {
-    root = mkdtempSync(path.join(tmpdir(), "mt-codex-sess-"));
+    home = mkdtempSync(path.join(tmpdir(), "mt-codex-sess-"));
+    root = path.join(home, "sessions");
+    mkdirSync(root, { recursive: true });
+    resetThreadNameCache();
   });
   afterEach(() => {
-    rmSync(root, { recursive: true, force: true });
+    rmSync(home, { recursive: true, force: true });
   });
 
   it("lists sessions for the cwd, newest first", async () => {
@@ -169,6 +246,59 @@ describe("listCodexSessions", () => {
     writeFileSync(file, [metaLine(UUID_A, "/work"), ...filler, userMsgLine("buried prompt")].join("\n") + "\n");
     expect(statSync(file).size).toBeGreaterThan(64 * 1024);
     expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["buried prompt"]);
+  });
+
+  // #1962: `/rename` is not written into the rollout at all. codex appends it to
+  // $CODEX_HOME/session_index.jsonl, which this never read — so a renamed session kept showing its
+  // first prompt, or "Codex session" when there was none to read.
+  it("shows the name a user set with /rename instead of the first prompt", async () => {
+    writeSession(UUID_A, "/work", "the first prompt", new Date(2026, 6, 8, 10));
+    writeRenameIndex([{ id: UUID_A, name: "example-name" }]);
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["example-name"]);
+  });
+  it("names only the session that was renamed", async () => {
+    writeSession(UUID_A, "/work", "untouched", new Date(2026, 6, 8, 10));
+    writeSession(UUID_B, "/work", "also untouched", new Date(2026, 6, 8, 11));
+    writeRenameIndex([{ id: UUID_A, name: "example-name" }]);
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["also untouched", "example-name"]);
+  });
+  it("takes the latest of several renames of one session", async () => {
+    writeSession(UUID_A, "/work", "the first prompt", new Date(2026, 6, 8, 10));
+    writeRenameIndex([
+      { id: UUID_A, name: "first-name" },
+      { id: UUID_A, name: "second-name" },
+    ]);
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["second-name"]);
+  });
+  it("falls back to the prompt when the recorded name is blank", async () => {
+    writeSession(UUID_A, "/work", "the first prompt", new Date(2026, 6, 8, 10));
+    writeRenameIndex([{ id: UUID_A, name: "   " }]);
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["the first prompt"]);
+  });
+  it("collapses and caps a long name the same way a prompt is", async () => {
+    writeSession(UUID_A, "/work", "the first prompt", new Date(2026, 6, 8, 10));
+    writeRenameIndex([{ id: UUID_A, name: `wordy\n${"n".repeat(200)}` }]);
+    const [title] = (await listCodexSessions(root, "/work", 10)).map((s) => s.title);
+    expect(title).toHaveLength(60);
+    expect(title.startsWith("wordy n")).toBe(true);
+  });
+
+  // The whole listing must survive a codex that has never renamed anything, which is most of them.
+  it("lists normally when there is no rename index at all", async () => {
+    writeSession(UUID_A, "/work", "no index here", new Date(2026, 6, 8, 10));
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["no index here"]);
+  });
+
+  // The listing is what a user reads while codex is running, so it has to show a rollout written in
+  // the shape codex uses NOW — not only the one it used before 2026-08.
+  it("titles a rollout written in the response_item shape", async () => {
+    const dir = dayDir(root);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      path.join(dir, `rollout-2026-07-08T00-00-00-${UUID_A}.jsonl`),
+      [metaLine(UUID_A, "/work"), preambleLine(), responseItemUserLine("a prompt in the new shape")].join("\n") + "\n",
+    );
+    expect((await listCodexSessions(root, "/work", 10)).map((s) => s.title)).toEqual(["a prompt in the new shape"]);
   });
 
   it("honours the limit, keeping the most recently written", async () => {

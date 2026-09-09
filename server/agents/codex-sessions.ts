@@ -3,6 +3,8 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { isRecord } from "../../common/isRecord.js";
 import { cleanTitle, parseJsonRecord, readFirstLine, readTranscriptHead } from "./transcript-head.js";
+import { codexHomeOf, readThreadNames } from "./codex-thread-names.js";
+import { codexUserPrompt } from "./codex-user-turn.js";
 import { byCodeUnit } from "../../common/byCodeUnit.js";
 import { mapConcurrent } from "../infra/mapConcurrent.js";
 
@@ -54,11 +56,6 @@ export interface RolloutMeta {
 const isSessionMeta = (d: Record<string, unknown>): boolean =>
   d.type === "session_meta" && isRecord(d.payload) && typeof d.payload.id === "string" && UUID_RE.test(d.payload.id);
 
-// codex records the first real prompt as an event_msg/user_message — distinct from the
-// environment_context it injects first (a response_item/message).
-const isUserMessage = (d: Record<string, unknown>): boolean =>
-  d.type === "event_msg" && isRecord(d.payload) && d.payload.type === "user_message" && typeof d.payload.message === "string";
-
 function stringField(doc: Record<string, unknown> | undefined, key: string): string | null {
   const payload = doc?.payload;
   return isRecord(payload) && typeof payload[key] === "string" ? payload[key] : null;
@@ -74,7 +71,8 @@ export function parseCodexRolloutHead(head: string): RolloutHead | null {
   const meta = docs.find(isSessionMeta);
   const id = stringField(meta, "id");
   if (!id) return null;
-  return { id, cwd: stringField(meta, "cwd"), title: cleanTitle(stringField(docs.find(isUserMessage), "message"), DEFAULT_TITLE) };
+  const prompt = docs.map(codexUserPrompt).find((t): t is string => t !== null) ?? null;
+  return { id, cwd: stringField(meta, "cwd"), title: cleanTitle(prompt, DEFAULT_TITLE) };
 }
 
 /** Line 1 of a rollout as the routing facts, or null when it is not a session_meta. */
@@ -237,8 +235,10 @@ async function matchingRollouts(root: string, cwd: string): Promise<MatchedRollo
 // one where a global cap costs accuracy rather than just work — see the note in grok-sessions.ts.
 export async function listCodexSessions(root: string, cwd: string, limit: number): Promise<CodexSessionSummary[]> {
   const matches = (await matchingRollouts(root, cwd)).slice(0, limit);
+  // A name the user typed beats a prompt we guessed at, which is the whole point of `/rename`.
+  const names = await readThreadNames(codexHomeOf(root));
   return mapConcurrent(matches, READ_CONCURRENCY, async ({ file, meta, mtime }) => {
     const summary = await readRolloutSummary(file);
-    return { id: meta.id, title: summary?.title ?? DEFAULT_TITLE, mtime: summary?.mtime ?? mtime };
+    return { id: meta.id, title: cleanTitle(names.get(meta.id) ?? null, summary?.title ?? DEFAULT_TITLE), mtime: summary?.mtime ?? mtime };
   });
 }

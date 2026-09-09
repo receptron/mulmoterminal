@@ -4,6 +4,7 @@ import CellChromeButtons from "../../../src/components/CellChromeButtons.vue";
 import { CELL_BTN, CELL_CLOSE_BTN } from "../../../src/components/cellChromeClasses";
 
 const mountButtons = (expanded = false) => mount(CellChromeButtons, { props: { expanded } });
+const PARK = '[data-testid="cell-park-btn"]';
 
 describe("CellChromeButtons", () => {
   // Both buttons must carry their styling as utilities. As scoped CSS it reached neither: this
@@ -233,5 +234,57 @@ describe("the open pane's button, seen", () => {
         .find('[aria-label="Expand terminal"]')
         .exists(),
     ).toBe(true);
+  });
+});
+
+// #2007. The button belongs to a session terminal — the only cell that can be set aside — and the
+// command and launcher cells reach these buttons through a binding that deliberately has no
+// `toggle-park` key, so one rendered there clicks and does nothing.
+//
+// It was guarded on `parked !== undefined`, which cannot express "opt out by not passing it": Vue
+// casts an ABSENT boolean prop to `false`, so the guard was true on every cell and the button
+// shipped on all three from the day parking landed. Hence a prop of its own, and hence the first
+// test here mounts with the prop MISSING rather than with `canPark: false` — false is what the
+// broken version already had.
+describe("the park button", () => {
+  const parkButton = (props: Record<string, unknown>) => mount(CellChromeButtons, { props: { expanded: true, ...props } }).find(PARK);
+
+  it("is absent when the caller says nothing about parking", () => {
+    expect(parkButton({}).exists()).toBe(false);
+    expect(parkButton({ canPark: false }).exists()).toBe(false);
+  });
+
+  // `parked` is the pressed state, not the permission: a cell that cannot park is not given the
+  // button by being handed one.
+  it("stays absent even if a parked flag arrives without it", () => {
+    expect(parkButton({ parked: true }).exists()).toBe(false);
+  });
+
+  it("is there for a session terminal, on a tile as well as enlarged", () => {
+    for (const expanded of [false, true]) expect(parkButton({ expanded, canPark: true }).exists()).toBe(true);
+  });
+
+  it("reads as pressed, and offers the way back, while the cell is set aside", () => {
+    const awake = parkButton({ canPark: true, parked: false });
+    expect(awake.attributes("aria-pressed")).toBe("false");
+    expect(awake.attributes("title")).toBe("Set aside (stays open, keeps its history)");
+
+    const asleep = parkButton({ canPark: true, parked: true });
+    expect(asleep.attributes("aria-pressed")).toBe("true");
+    expect(asleep.attributes("title")).toBe("Wake this terminal");
+  });
+
+  it("emits the intent and never acts on it, like its neighbours", async () => {
+    const w = mount(CellChromeButtons, { props: { expanded: true, canPark: true } });
+    await w.find(PARK).trigger("click");
+    expect(w.emitted("toggle-park")).toHaveLength(1);
+    expect(w.emitted("close")).toBeUndefined();
+  });
+
+  // Set aside, or end it — the reversible one must not sit past the one that tears a session down.
+  it("sits immediately before close", () => {
+    const buttons = mount(CellChromeButtons, { props: { expanded: true, canPark: true } }).findAll(".cell-btn");
+    expect(buttons[buttons.length - 2].attributes("data-testid")).toBe("cell-park-btn");
+    expect(buttons[buttons.length - 1].attributes("aria-label")).toBe("Close terminal");
   });
 });

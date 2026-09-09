@@ -1348,7 +1348,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           @click="onHeaderClick"
         >
           <span class="cell-actions" :class="CELL_ACTIONS">
-            <CellChromeButtons v-bind="chromeProps" :parked="parked" v-on="chromeEvents" @toggle-park="togglePark" />
+            <CellChromeButtons v-bind="chromeProps" :can-park="true" :parked="parked" v-on="chromeEvents" @toggle-park="togglePark" />
           </span>
         </CockpitHeader>
         <!-- Row 1 — the CELL (normal grid / expanded): what it is (dir + git + model/token + what
@@ -1506,7 +1506,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
             <button v-if="reorderable" class="cell-btn" :class="CELL_BTN" title="Move right" aria-label="Move terminal right" @click="emit('move', 1)">
               <span class="material-symbols-outlined" aria-hidden="true">chevron_right</span>
             </button>
-            <CellChromeButtons v-bind="chromeProps" :parked="parked" v-on="chromeEvents" @toggle-park="togglePark" />
+            <CellChromeButtons v-bind="chromeProps" :can-park="true" :parked="parked" v-on="chromeEvents" @toggle-park="togglePark" />
           </span>
         </div>
         <TimelineOverlay :session-id="sessionId" :cwd="cwd" :open="timelineOpen" @close="timelineOpen = false" />
