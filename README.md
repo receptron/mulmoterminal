@@ -1440,7 +1440,9 @@ the same terminal is driven from whichever view you have open — no hand-off, n
 nothing to move back. Several chats under one collection become tabs, each with the grid's own
 attention dot and a line of what the shown one is doing; the **Collections** button carries how
 many are running behind it. Which collection a chat belongs to survives a reload, and a chat
-whose cell is gone drops out rather than sitting over an empty pane.
+whose cell is gone drops out rather than sitting over an empty pane. A button in the tab strip
+moves the pane **under the collection or beside it** — wide and short for a list you are scanning,
+narrow and tall for one record you are discussing — and each position keeps its own size.
 
 ---
 

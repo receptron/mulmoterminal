@@ -20,14 +20,19 @@ import { claimCollectionTerminal, releaseCollectionTerminal } from "../composabl
 import { currentCollectionChatKey } from "../composables/useCollectionBrowse";
 import type { SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { dragSplitter } from "../composables/dragSplitter";
-import { clampPrimary, maxPrimary, MIN_TERMINAL_HEIGHT, splitterKeySize, TERMINAL_COLLECTION } from "./splitterWidth";
+import { clampPrimary, maxPrimary, splitterKeySize, TERMINAL_COLLECTION, TERMINAL_COLLECTION_SIDE } from "./splitterWidth";
+import { collectionChatDock, toggleCollectionChatDock } from "../composables/collectionChatDock";
 import { BUILTIN_AGENT_OPTIONS } from "./agentPicker";
 import { useGridActivity } from "../composables/useGridActivity";
 import { useSessionSummary } from "../composables/useSessionSummary";
 import { activityStatus, type AttentionStatus } from "./attentionStatus";
 
+// One size per DOCK, not one shared number: a good height under the collection is not a good width
+// beside it, so switching would otherwise re-clamp whatever you had set into the other axis' range.
 const HEIGHT_KEY = "mt-collection-chat-height";
+const WIDTH_KEY = "mt-collection-chat-width";
 const DEFAULT_HEIGHT = 320;
+const DEFAULT_WIDTH = 420;
 
 // The collection on screen, as the filing key — the same answer `startCollectionChat` captures
 // when a chat begins, so the pane looks under exactly where the launcher filed it.
@@ -52,31 +57,46 @@ const summary = useSessionSummary(computed(() => held.value?.id ?? null));
 // listens for the server's own "closed" push — see collectionChatSessions.ts. Not here: the case
 // it covers is mostly a session that ends while this pane is not on screen at all.
 
-const stored = Number(localStorage.getItem(HEIGHT_KEY));
-const height = ref(Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_HEIGHT);
+const storedSize = (key: string, fallback: number): number => {
+  const raw = Number(localStorage.getItem(key));
+  return Number.isFinite(raw) && raw > 0 ? raw : fallback;
+};
+const height = ref(storedSize(HEIGHT_KEY, DEFAULT_HEIGHT));
+const width = ref(storedSize(WIDTH_KEY, DEFAULT_WIDTH));
 /** The toolbar above the overlay, which the viewport height has to be read net of. */
 const TOOLBAR_HEIGHT = 40;
 // Tracked rather than read on demand because the separator PUBLISHES its range (aria-valuemax), so
 // the bounds have to be a value the template can re-render from, not only one a handler can ask for.
-const viewportHeight = ref(window.innerHeight);
+const viewport = ref({ width: window.innerWidth, height: window.innerHeight });
+// One splitter, read along whichever axis the pane is docked on. The rule, the floors and the clamp
+// are the shared ones (splitterWidth.ts); all that changes is which number they are about.
+const dockedRight = computed(() => collectionChatDock.value === "right");
+const size = computed(() => (dockedRight.value ? width.value : height.value));
+const floors = computed(() => (dockedRight.value ? TERMINAL_COLLECTION_SIDE : TERMINAL_COLLECTION));
+const sizeKey = computed(() => (dockedRight.value ? WIDTH_KEY : HEIGHT_KEY));
+// Docked right the pane spans the whole width; docked under it, the overlay fills what the toolbar
+// leaves. The pane's floor and the collection's come from the shared geometry rather than from
+// numbers invented here.
+const available = computed(() => (dockedRight.value ? viewport.value.width : viewport.value.height - TOOLBAR_HEIGHT));
+const sizeMax = computed(() => maxPrimary(available.value, floors.value));
+const setSize = (next: number): void => {
+  const clamped = clampPrimary(next, available.value, floors.value);
+  if (dockedRight.value) width.value = clamped;
+  else height.value = clamped;
+  localStorage.setItem(sizeKey.value, String(clamped));
+};
 const onViewportResize = (): void => {
-  viewportHeight.value = window.innerHeight;
-  // The stored height was clamped against the viewport it was set in. On a shorter one it is out
-  // of range — the pane eats the collection, and the separator publishes a position past its own
+  viewport.value = { width: window.innerWidth, height: window.innerHeight };
+  // The stored size was clamped against the viewport it was set in. On a smaller one it is out of
+  // range — the pane eats the collection, and the separator publishes a position past its own
   // maximum (Codex, PR #2002).
-  setHeight(height.value);
+  setSize(size.value);
 };
 window.addEventListener("resize", onViewportResize);
 onBeforeUnmount(() => window.removeEventListener("resize", onViewportResize));
-// The overlay fills the viewport below the toolbar; the pane's floor and the collection's come
-// from the shared geometry rules rather than from numbers invented here.
-const available = computed(() => viewportHeight.value - TOOLBAR_HEIGHT);
-const heightMax = computed(() => maxPrimary(available.value, TERMINAL_COLLECTION));
-const setHeight = (next: number): void => {
-  height.value = clampPrimary(next, available.value, TERMINAL_COLLECTION);
-  localStorage.setItem(HEIGHT_KEY, String(height.value));
-};
-setHeight(height.value); // what was restored was clamped against another viewport, not this one
+// Immediate: what was restored was clamped against another viewport. And on every switch after
+// that, because the size being switched TO was last clamped against the other axis entirely.
+watch(collectionChatDock, () => setSize(size.value), { immediate: true });
 
 // The receptacle the grid teleports the shown chat's cell into. Claimed by SESSION rather than by
 // cell uid: uids are positional and are renumbered whenever the grid is re-parsed, so a number held
@@ -172,79 +192,111 @@ const STATUS_WORD: Record<AttentionStatus, string> = {
 // the most specific thing available: what the agent is doing, else what it was asked.
 const summaryLine = computed(() => summary.value.aiTitle ?? summary.value.lastPrompt ?? null);
 
-// Dragging UP grows the terminal: it lies AFTER its separator.
+// Dragging toward the start grows the terminal: it lies AFTER its separator, on either dock.
 const onSplitterDown = dragSplitter({
-  axis: (e) => e.clientY,
-  size: () => height.value,
-  resize: (start, travel) => setHeight(start - travel),
-  key: HEIGHT_KEY,
+  axis: (e) => (dockedRight.value ? e.clientX : e.clientY),
+  size: () => size.value,
+  resize: (start, travel) => setSize(start - travel),
+  // Read at the END of a drag, and the dock cannot change during one — so the two keys share a
+  // splitter instead of the pane carrying two of everything.
+  get key() {
+    return sizeKey.value;
+  },
   remember: (key, value) => localStorage.setItem(key, value),
 });
 
 function onSplitterKey(e: KeyboardEvent): void {
-  const next = splitterKeySize(e.key, height.value, available.value, TERMINAL_COLLECTION, "vertical", "after");
+  // Docked right the bar is VERTICAL, and a vertical separator is driven by Left/Right — the axis
+  // argument names the keys rather than the bar (splitterWidth.ts).
+  const axis = dockedRight.value ? "horizontal" : "vertical";
+  const next = splitterKeySize(e.key, size.value, available.value, floors.value, axis, "after");
   if (next === null) return;
   e.preventDefault();
-  setHeight(next);
+  setSize(next);
 }
+
+// The button says what pressing it DOES, because a toggle showing the state it is already in is
+// the one thing nobody can read from an icon.
+const dockAction = computed(() => (dockedRight.value ? "Move the chat under the collection" : "Move the chat beside the collection"));
 </script>
 
 <template>
-  <div v-if="held" class="flex flex-none flex-col border-t border-border" :style="{ height: `${height}px` }">
+  <!-- Under the collection or beside it, chosen by the button in the strip. The two are the same
+       pane read along a different axis: the separator is the leading edge either way, so the border,
+       the cursor and the direction all follow the dock rather than being written twice. -->
+  <div
+    v-if="held"
+    class="flex flex-none"
+    :class="dockedRight ? 'flex-row border-l border-border' : 'flex-col border-t border-border'"
+    :style="dockedRight ? { width: `${size}px` } : { height: `${size}px` }"
+  >
     <div
-      class="h-1.5 flex-none cursor-row-resize bg-border/40 hover:bg-accent"
+      class="flex-none bg-border/40 hover:bg-accent"
+      :class="dockedRight ? 'w-1.5 cursor-col-resize' : 'h-1.5 cursor-row-resize'"
       role="separator"
-      aria-orientation="horizontal"
+      :aria-orientation="dockedRight ? 'vertical' : 'horizontal'"
       :aria-label="`Resize the ${label} pane`"
-      :aria-valuenow="height"
-      :aria-valuemin="MIN_TERMINAL_HEIGHT"
-      :aria-valuemax="heightMax"
+      :aria-valuenow="size"
+      :aria-valuemin="floors.primary"
+      :aria-valuemax="sizeMax"
       tabindex="0"
       @pointerdown="onSplitterDown"
       @keydown="onSplitterKey"
     />
-    <div
-      class="flex flex-none items-center gap-1 border-b border-border px-2 py-1 font-sans text-[12px] text-dim"
-      role="tablist"
-      aria-label="Chats in this collection"
-    >
-      <!-- One tab per chat this collection holds. Each keeps its own terminal alive, so switching
-           is the terminal you left rather than a reconnect. -->
-      <button
-        v-for="(session, index) in chats.sessions"
-        :id="tabId(session.id)"
-        :key="session.id"
-        type="button"
-        role="tab"
-        :aria-selected="session.id === chats.activeId"
-        :aria-controls="PANEL_ID"
-        :tabindex="session.id === chats.activeId ? 0 : -1"
-        :title="`${agentLabel(session.agent)} — ${STATUS_WORD[statusOf(session.id)]} — session ${session.id}`"
-        class="flex cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
-        :class="session.id === chats.activeId ? 'bg-selected text-fg' : 'bg-transparent text-dim hover:text-fg'"
-        @click="show(session.id)"
-        @keydown="onTabKey($event, index)"
+    <div class="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div
+        class="flex flex-none items-center gap-1 border-b border-border px-2 py-1 font-sans text-[12px] text-dim"
+        role="tablist"
+        aria-label="Chats in this collection"
       >
-        <!-- Whose turn it is, in the grid's own colours. The word is in the title rather than
-             beside it: the strip has to stay narrow enough for several tabs. -->
-        <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
-        {{ tabLabel(session) }}
-      </button>
-      <!-- No "move to the grid": it is ALREADY a grid cell. Closing it is the cell's own business,
-           in the grid, where closing a terminal has always lived. -->
+        <!-- One tab per chat this collection holds. Each keeps its own terminal alive, so switching
+             is the terminal you left rather than a reconnect. -->
+        <button
+          v-for="(session, index) in chats.sessions"
+          :id="tabId(session.id)"
+          :key="session.id"
+          type="button"
+          role="tab"
+          :aria-selected="session.id === chats.activeId"
+          :aria-controls="PANEL_ID"
+          :tabindex="session.id === chats.activeId ? 0 : -1"
+          :title="`${agentLabel(session.agent)} — ${STATUS_WORD[statusOf(session.id)]} — session ${session.id}`"
+          class="flex cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
+          :class="session.id === chats.activeId ? 'bg-selected text-fg' : 'bg-transparent text-dim hover:text-fg'"
+          @click="show(session.id)"
+          @keydown="onTabKey($event, index)"
+        >
+          <!-- Whose turn it is, in the grid's own colours. The word is in the title rather than
+               beside it: the strip has to stay narrow enough for several tabs. -->
+          <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
+          {{ tabLabel(session) }}
+        </button>
+        <!-- Outside the tablist's roles: it moves the whole pane, not the chat the tabs select. -->
+        <button
+          type="button"
+          class="ml-auto flex flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-dim hover:text-fg"
+          :aria-label="dockAction"
+          :title="dockAction"
+          @click="toggleCollectionChatDock"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">{{ dockedRight ? "dock_to_bottom" : "dock_to_right" }}</span>
+        </button>
+        <!-- No "move to the grid": it is ALREADY a grid cell. Closing it is the cell's own business,
+             in the grid, where closing a terminal has always lived. -->
+      </div>
+      <!-- What this agent is doing, in the words the cockpit roster uses. Without it a tab says only
+           that something is running, which is the half a terminal in the grid never had to say. -->
+      <div v-if="summaryLine" class="flex-none truncate border-b border-border px-3 py-1 font-sans text-[12px] text-muted" :title="summaryLine">
+        {{ summaryLine }}
+      </div>
+      <!-- Empty on purpose: the grid teleports this chat's own cell in here, so nothing this
+           component renders is remounted when the view changes.
+           The child rules are the receptacle's whole job. A cell is given its size by whatever holds
+           it — the CSS grid in a tile, `.zoom-main > *` when enlarged — and a teleported cell that is
+           told nothing grows to its CONTENT instead: the terminal ran past the bottom of the window,
+           taking the input line with it (reported in use). Same three properties `.zoom-main` gives
+           its own child, as utilities. -->
+      <div :id="PANEL_ID" ref="slot" role="tabpanel" :aria-labelledby="tabId(held.id)" class="flex min-h-0 flex-1 [&>*]:min-h-0 [&>*]:min-w-0 [&>*]:flex-1" />
     </div>
-    <!-- What this agent is doing, in the words the cockpit roster uses. Without it a tab says only
-         that something is running, which is the half a terminal in the grid never had to say. -->
-    <div v-if="summaryLine" class="flex-none truncate border-b border-border px-3 py-1 font-sans text-[12px] text-muted" :title="summaryLine">
-      {{ summaryLine }}
-    </div>
-    <!-- Empty on purpose: the grid teleports this chat's own cell in here, so nothing this
-         component renders is remounted when the view changes.
-         The child rules are the receptacle's whole job. A cell is given its size by whatever holds
-         it — the CSS grid in a tile, `.zoom-main > *` when enlarged — and a teleported cell that is
-         told nothing grows to its CONTENT instead: the terminal ran past the bottom of the window,
-         taking the input line with it (reported in use). Same three properties `.zoom-main` gives
-         its own child, as utilities. -->
-    <div :id="PANEL_ID" ref="slot" role="tabpanel" :aria-labelledby="tabId(held.id)" class="flex min-h-0 flex-1 [&>*]:min-h-0 [&>*]:min-w-0 [&>*]:flex-1" />
   </div>
 </template>

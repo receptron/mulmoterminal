@@ -77,8 +77,12 @@ left.
   grey while it works — and the one you are looking at shows a line of what it is doing.
 - **The Collections button counts them**, so a chat running behind that door is visible from the
   grid.
-- **Drag the divider** to give the terminal more or less room; the height is remembered. Arrow keys
-  work on it too.
+- **Under the collection or beside it.** The button at the right of the tab strip moves the
+  terminal between the two: under it when the collection is a list you are scanning, beside it when
+  you are reading one record and talking about it. The choice is remembered, and each position keeps
+  its own size.
+- **Drag the divider** to give the terminal more or less room; the size is remembered per position.
+  Arrow keys work on it too — up and down under the collection, left and right beside it.
 - **Closing** is the cell's own ×, in the pane or in the grid — the same terminal, so the same
   button.
 - **A reload keeps them.** The chats are grid cells and survive it anyway; the collection they
