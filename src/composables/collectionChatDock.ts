@@ -1,4 +1,5 @@
 import { ref, watch } from "vue";
+import { readStored, writeStored } from "../utils/localStore";
 
 // Where the chat sits relative to the collection it is about (#2001): UNDER it, wide and short, or
 // BESIDE it, narrow and tall. Which one reads better is a property of the window and of what is
@@ -15,8 +16,11 @@ const DOCK_KEY = "mt-collection-chat-dock";
  *  value neither layout describes would leave the pane sized along an axis it is not on. */
 export const parseChatDock = (raw: string | null): ChatDock => (raw === "right" ? "right" : "bottom");
 
-export const collectionChatDock = ref<ChatDock>(parseChatDock(localStorage.getItem(DOCK_KEY)));
-watch(collectionChatDock, (dock) => localStorage.setItem(DOCK_KEY, dock));
+// Best-effort on both sides: this is read at module scope, and a browser with site data blocked
+// throws on the access rather than answering null — which would take the whole feature down for a
+// preference nobody would miss (Codex, PR #2016).
+export const collectionChatDock = ref<ChatDock>(parseChatDock(readStored(DOCK_KEY)));
+watch(collectionChatDock, (dock) => writeStored(DOCK_KEY, dock));
 
 export const toggleCollectionChatDock = (): void => {
   collectionChatDock.value = collectionChatDock.value === "bottom" ? "right" : "bottom";

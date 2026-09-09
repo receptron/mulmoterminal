@@ -14,7 +14,7 @@
 // What it shows is THIS COLLECTION's chats (collectionChatSessions.ts), not "whatever was started
 // last": switching to another collection switches the strip with it, and the cells of the one you
 // left keep running in the grid.
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { activateCollectionChat, collectionChatsFor } from "../composables/collectionChatSessions";
 import { claimCollectionTerminal, releaseCollectionTerminal } from "../composables/collectionTerminalClaim";
 import { currentCollectionChatKey } from "../composables/useCollectionBrowse";
@@ -22,6 +22,7 @@ import type { SpawnedChatRequest } from "../composables/useSpawnedChat";
 import { dragSplitter } from "../composables/dragSplitter";
 import { clampPrimary, maxPrimary, splitterKeySize, TERMINAL_COLLECTION, TERMINAL_COLLECTION_SIDE } from "./splitterWidth";
 import { collectionChatDock, toggleCollectionChatDock } from "../composables/collectionChatDock";
+import { readStored, writeStored } from "../utils/localStore";
 import { BUILTIN_AGENT_OPTIONS } from "./agentPicker";
 import { useGridActivity } from "../composables/useGridActivity";
 import { useSessionSummary } from "../composables/useSessionSummary";
@@ -57,13 +58,16 @@ const summary = useSessionSummary(computed(() => held.value?.id ?? null));
 // listens for the server's own "closed" push — see collectionChatSessions.ts. Not here: the case
 // it covers is mostly a session that ends while this pane is not on screen at all.
 
+// Best-effort, like the filing itself: a store that refuses must cost the pane its remembered
+// size and nothing else (Codex, PR #2016).
 const storedSize = (key: string, fallback: number): number => {
-  const raw = Number(localStorage.getItem(key));
+  const raw = Number(readStored(key));
   return Number.isFinite(raw) && raw > 0 ? raw : fallback;
 };
 const height = ref(storedSize(HEIGHT_KEY, DEFAULT_HEIGHT));
 const width = ref(storedSize(WIDTH_KEY, DEFAULT_WIDTH));
-/** The toolbar above the overlay, which the viewport height has to be read net of. */
+/** The app toolbar above the overlay — only ever an ESTIMATE of what the overlay gets, used until
+ *  the container it shares with the collection can be measured (see `available`). */
 const TOOLBAR_HEIGHT = 40;
 // Tracked rather than read on demand because the separator PUBLISHES its range (aria-valuemax), so
 // the bounds have to be a value the template can re-render from, not only one a handler can ask for.
@@ -74,29 +78,48 @@ const dockedRight = computed(() => collectionChatDock.value === "right");
 const size = computed(() => (dockedRight.value ? width.value : height.value));
 const floors = computed(() => (dockedRight.value ? TERMINAL_COLLECTION_SIDE : TERMINAL_COLLECTION));
 const sizeKey = computed(() => (dockedRight.value ? WIDTH_KEY : HEIGHT_KEY));
-// Docked right the pane spans the whole width; docked under it, the overlay fills what the toolbar
-// leaves. The pane's floor and the collection's come from the shared geometry rather than from
-// numbers invented here.
-const available = computed(() => (dockedRight.value ? viewport.value.width : viewport.value.height - TOOLBAR_HEIGHT));
+// MEASURED from the box the collection and the pane actually share, not computed from the window.
+// The overlay carries a row of its own above that box (the pins and the launch picker), so the
+// window minus the app toolbar is ~38px more than there is — enough for the pane at its maximum to
+// push the collection under `MIN_COLLECTION`, which flex then takes out of the collection silently
+// (CodeRabbit, PR #2016).
+const container = ref({ width: 0, height: 0 });
+// The window is the fall-back for the moment before the first measurement, and for a host that
+// lays nothing out (jsdom): an estimate that is a little generous beats a floor of zero.
+const available = computed(() => {
+  const measured = dockedRight.value ? container.value.width : container.value.height;
+  if (measured > 0) return measured;
+  return dockedRight.value ? viewport.value.width : viewport.value.height - TOOLBAR_HEIGHT;
+});
 const sizeMax = computed(() => maxPrimary(available.value, floors.value));
 const setSize = (next: number): void => {
   const clamped = clampPrimary(next, available.value, floors.value);
   if (dockedRight.value) width.value = clamped;
   else height.value = clamped;
-  localStorage.setItem(sizeKey.value, String(clamped));
+  writeStored(sizeKey.value, String(clamped));
+};
+/** The pane's own root, so the box it shares with the collection is its parent. */
+const root = ref<HTMLElement | null>(null);
+const remeasure = (): void => {
+  const box = root.value?.parentElement?.getBoundingClientRect();
+  container.value = { width: Math.round(box?.width ?? 0), height: Math.round(box?.height ?? 0) };
+  // The stored size was clamped against the box it was set in. In a smaller one it is out of range
+  // — the pane eats the collection, and the separator publishes a position past its own maximum
+  // (Codex, PR #2002).
+  setSize(size.value);
 };
 const onViewportResize = (): void => {
   viewport.value = { width: window.innerWidth, height: window.innerHeight };
-  // The stored size was clamped against the viewport it was set in. On a smaller one it is out of
-  // range — the pane eats the collection, and the separator publishes a position past its own
-  // maximum (Codex, PR #2002).
-  setSize(size.value);
+  remeasure();
 };
 window.addEventListener("resize", onViewportResize);
 onBeforeUnmount(() => window.removeEventListener("resize", onViewportResize));
-// Immediate: what was restored was clamped against another viewport. And on every switch after
-// that, because the size being switched TO was last clamped against the other axis entirely.
-watch(collectionChatDock, () => setSize(size.value), { immediate: true });
+setSize(size.value); // what was restored was clamped against another window, not this one
+// Post-flush, because the box to measure is one the pane has just been put into: appearing at all
+// (`held`), and the dock switch, which turns the container's axis over. A switch also brings a size
+// that was last clamped against the other axis entirely.
+onMounted(remeasure);
+watch([held, collectionChatDock], remeasure, { flush: "post" });
 
 // The receptacle the grid teleports the shown chat's cell into. Claimed by SESSION rather than by
 // cell uid: uids are positional and are renumbered whenever the grid is re-parsed, so a number held
@@ -202,7 +225,7 @@ const onSplitterDown = dragSplitter({
   get key() {
     return sizeKey.value;
   },
-  remember: (key, value) => localStorage.setItem(key, value),
+  remember: writeStored,
 });
 
 function onSplitterKey(e: KeyboardEvent): void {
@@ -226,6 +249,7 @@ const dockAction = computed(() => (dockedRight.value ? "Move the chat under the 
        the cursor and the direction all follow the dock rather than being written twice. -->
   <div
     v-if="held"
+    ref="root"
     class="flex flex-none"
     :class="dockedRight ? 'flex-row border-l border-border' : 'flex-col border-t border-border'"
     :style="dockedRight ? { width: `${size}px` } : { height: `${size}px` }"
@@ -244,34 +268,33 @@ const dockAction = computed(() => (dockedRight.value ? "Move the chat under the 
       @keydown="onSplitterKey"
     />
     <div class="flex min-h-0 min-w-0 flex-1 flex-col">
-      <div
-        class="flex flex-none items-center gap-1 border-b border-border px-2 py-1 font-sans text-[12px] text-dim"
-        role="tablist"
-        aria-label="Chats in this collection"
-      >
+      <div class="flex flex-none items-center gap-1 border-b border-border px-2 py-1 font-sans text-[12px] text-dim">
         <!-- One tab per chat this collection holds. Each keeps its own terminal alive, so switching
              is the terminal you left rather than a reconnect. -->
-        <button
-          v-for="(session, index) in chats.sessions"
-          :id="tabId(session.id)"
-          :key="session.id"
-          type="button"
-          role="tab"
-          :aria-selected="session.id === chats.activeId"
-          :aria-controls="PANEL_ID"
-          :tabindex="session.id === chats.activeId ? 0 : -1"
-          :title="`${agentLabel(session.agent)} — ${STATUS_WORD[statusOf(session.id)]} — session ${session.id}`"
-          class="flex cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
-          :class="session.id === chats.activeId ? 'bg-selected text-fg' : 'bg-transparent text-dim hover:text-fg'"
-          @click="show(session.id)"
-          @keydown="onTabKey($event, index)"
-        >
-          <!-- Whose turn it is, in the grid's own colours. The word is in the title rather than
-               beside it: the strip has to stay narrow enough for several tabs. -->
-          <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
-          {{ tabLabel(session) }}
-        </button>
-        <!-- Outside the tablist's roles: it moves the whole pane, not the chat the tabs select. -->
+        <div class="flex min-w-0 items-center gap-1 overflow-x-auto" role="tablist" aria-label="Chats in this collection">
+          <button
+            v-for="(session, index) in chats.sessions"
+            :id="tabId(session.id)"
+            :key="session.id"
+            type="button"
+            role="tab"
+            :aria-selected="session.id === chats.activeId"
+            :aria-controls="PANEL_ID"
+            :tabindex="session.id === chats.activeId ? 0 : -1"
+            :title="`${agentLabel(session.agent)} — ${STATUS_WORD[statusOf(session.id)]} — session ${session.id}`"
+            class="flex flex-none cursor-pointer items-center gap-1 rounded border-0 px-2 py-0.5 text-[12px]"
+            :class="session.id === chats.activeId ? 'bg-selected text-fg' : 'bg-transparent text-dim hover:text-fg'"
+            @click="show(session.id)"
+            @keydown="onTabKey($event, index)"
+          >
+            <!-- Whose turn it is, in the grid's own colours. The word is in the title rather than
+                 beside it: the strip has to stay narrow enough for several tabs. -->
+            <span class="h-2 w-2 flex-none rounded-full" :class="STATUS_DOT[statusOf(session.id)]" aria-hidden="true" />
+            {{ tabLabel(session) }}
+          </button>
+        </div>
+        <!-- A SIBLING of the tablist, not a child of it: a tablist owns tabs, and this moves the
+             whole pane rather than selecting one of the chats (CodeRabbit, PR #2016). -->
         <button
           type="button"
           class="ml-auto flex flex-none cursor-pointer items-center justify-center rounded border-0 bg-transparent px-1 py-0.5 text-[15px] leading-none text-dim hover:text-fg"

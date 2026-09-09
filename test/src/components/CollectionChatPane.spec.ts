@@ -10,6 +10,7 @@ import CollectionChatPane from "../../../src/components/CollectionChatPane.vue";
 import { holdCollectionChat, resetCollectionChats } from "../../../src/composables/collectionChatSessions";
 import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import { collectionChatDock } from "../../../src/composables/collectionChatDock";
+import { MIN_COLLECTION } from "../../../src/components/splitterWidth";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 
 // Which collection is on screen. The pane reads it through useCollectionBrowse, so moving the view
@@ -339,13 +340,64 @@ describe("CollectionChatPane", () => {
     wrapper.unmount();
   });
 
-  // It moves the whole pane rather than selecting a chat, so it must not be one of the tabs.
-  it("keeps the dock button out of the tab strip's roles", async () => {
+  // A tablist owns tabs. The dock button moves the whole pane rather than selecting a chat, so it
+  // is a SIBLING of the strip rather than an unlabelled member of it (CodeRabbit, PR #2016).
+  it("keeps the dock button outside the tablist", async () => {
     const wrapper = mount(CollectionChatPane, { attachTo: document.body });
     file("works", "a");
     await wrapper.vm.$nextTick();
     expect(tabs(wrapper)).toHaveLength(1);
-    expect(wrapper.get("button[title*='beside']").attributes("role")).toBeUndefined();
+    const button = wrapper.get("button[title*='beside']");
+    expect(button.attributes("role")).toBeUndefined();
+    expect(wrapper.get("[role='tablist']").element.contains(button.element)).toBe(false);
     wrapper.unmount();
+  });
+
+  // The bounds come from the box the collection and the pane SHARE, not from the window: the
+  // overlay carries a row of its own above that box, so a window-derived figure is ~38px too
+  // generous and the pane at its maximum pushes the collection under its floor (CodeRabbit, #2016).
+  it("leaves the collection its floor at the separator's maximum", async () => {
+    const CONTAINER = 700;
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
+    await wrapper.vm.$nextTick();
+    // jsdom lays nothing out, so the box the pane shares with the collection is the one this stub
+    // reports; the resize is what sends the pane back to measure it. Reached from the separator
+    // because the pane's own root is what `v-if` renders, and the box is its parent.
+    const pane = wrapper.get("[role='separator']").element.parentElement as HTMLElement;
+    const box = pane.parentElement as HTMLElement;
+    box.getBoundingClientRect = (): DOMRect => ({ width: 1200, height: CONTAINER }) as DOMRect;
+    window.dispatchEvent(new Event("resize"));
+    await wrapper.vm.$nextTick();
+
+    const separator = () => wrapper.get("[role='separator']");
+    await separator().trigger("keydown", { key: "Home" }); // all the way to the pane's maximum
+    const max = Number(separator().attributes("aria-valuemax"));
+    expect(max).toBe(CONTAINER - MIN_COLLECTION);
+    expect(Number(separator().attributes("aria-valuenow"))).toBe(max);
+    expect(CONTAINER - Number(separator().attributes("aria-valuenow"))).toBeGreaterThanOrEqual(MIN_COLLECTION);
+    wrapper.unmount();
+  });
+
+  // Site data blocked (Safari private, a locked-down profile) throws on the ACCESS. The pane must
+  // still open — the remembered size is the only thing that may be lost (Codex, PR #2016).
+  it("opens where storage refuses to answer", async () => {
+    vi.stubGlobal("localStorage", {
+      getItem: () => {
+        throw new Error("The operation is insecure.");
+      },
+      setItem: () => {
+        throw new Error("The operation is insecure.");
+      },
+      removeItem: () => {},
+    });
+    const wrapper = mount(CollectionChatPane, { attachTo: document.body });
+    file("works", "a");
+    await wrapper.vm.$nextTick();
+    expect(shown()).toBe("a");
+    await wrapper.get("[role='separator']").trigger("keydown", { key: "ArrowUp" });
+    expect(Number(wrapper.get("[role='separator']").attributes("aria-valuenow"))).toBeGreaterThan(0);
+    wrapper.unmount();
+    vi.unstubAllGlobals();
   });
 });

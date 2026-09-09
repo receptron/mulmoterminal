@@ -551,14 +551,20 @@ export function tmuxPanePids(): Map<number, string> {
 
 /** What `tmux list-sessions` reported, read as one of three answers rather than two.
  *
- *  `no server running` is not a failure: it is tmux saying, reliably, that it holds nothing. A
- *  different non-zero status is tmux failing to ANSWER — the binary missing, the socket unreadable,
- *  the call timing out (status null) — and reading that as "it holds nothing" is what turns a
- *  broken tmux into "every persisted session has ended" (CodeRabbit, PR #2002).
+ *  `no server running` is not a failure: it is tmux saying, reliably, that it holds nothing. So is
+ *  a missing socket, which is how a named socket (`-L mulmoterminal`) says the same thing:
+ *  `error connecting to /tmp/tmux-501/mulmoterminal (No such file or directory)`. A different
+ *  non-zero status is tmux failing to ANSWER — the binary missing, the socket unreadable, the call
+ *  timing out (status null) — and reading that as "it holds nothing" is what turns a broken tmux
+ *  into "every persisted session has ended" (CodeRabbit, PR #2002).
+ *
+ *  It is the MISSING FILE that means empty, never the words "error connecting" on their own: the
+ *  same prefix carries `(Permission denied)` and `(Connection refused)`, which are a socket that
+ *  exists and cannot be read — the case above, not this one (Codex, PR #2016).
  *
  *  Pure so the three-way rule can be tested without a tmux server. */
 export function tmuxSessionIdsFrom(result: { status: number | null; stdout: string; stderr: string }): string[] | null {
-  if (result.status !== 0) return /no server running|error connecting|no such file or directory/i.test(result.stderr) ? [] : null;
+  if (result.status !== 0) return /no server running|no such file or directory/i.test(result.stderr) ? [] : null;
   return result.stdout
     .split("\n")
     .filter((n) => n.startsWith(SESSION_PREFIX))
