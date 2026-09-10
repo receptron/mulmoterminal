@@ -114,12 +114,14 @@ describe("the button's gate and the card's gate agree on the same path", () => {
   });
 });
 
-// mulmoScript, the one tool here that cannot be handed an absolute path — `normalizeStoryPath`
-// refuses those outright. So the question is not "does the extension match" but "is this file in
-// the WORKSPACE's story directory", and the answer is the wire path the plugin wants.
-// A deck kept beside the notes it was written from (#1933). The workspace subtree is registered
-// with the plugin under an id the server mints, and a story anywhere under it is addressable as
-// `(root, stories/<rel>)` — which is what makes "put the deck in the repository" work at all.
+// mulmoScript asks WHERE the file is rather than "does the extension match", and answers with the
+// spelling the plugin wants for that place: the workspace's own `artifacts/stories` stays
+// `stories/<tail>` with no root, and a deck anywhere else — a repository under the workspace
+// included (#1933) — is addressed by its own absolute path, spelled with the root's server-sent
+// `canonical` where there is one.
+//
+// It read `(root, stories/<rel>)` until #1970, and before plugin 4.6.0 an absolute path was refused
+// outright. Both are history: the rooted spelling opened the deck and broke every dispatch after it.
 describe("storyWirePath — the workspace subtree", () => {
   const WS = "/work/ws";
   // `canonical` is present because a real root always has one — `registeredStoriesRoots()` types it
