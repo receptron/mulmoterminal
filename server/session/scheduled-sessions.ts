@@ -16,8 +16,8 @@
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createHash } from "node:crypto";
 import { writeFileAtomic } from "../files/atomic-write.js";
+import { workspaceKey } from "../infra/workspace-key.js";
 import { isRecord } from "../../common/isRecord.js";
 
 export interface ScheduledSessionRecord {
@@ -82,22 +82,10 @@ export function scheduledSessionInUse(local: { hasViewer: boolean; weHoldAPty: b
   return heldByAnotherProcess(attachedClients(), local.weHoldAPty);
 }
 
-// A path can't be used as a filename raw: on Windows it carries `\` and `:`, which are a
-// separator and a stream marker, so the write would fail (or land somewhere unintended)
-// and Windows would silently lose restart-time cleanup. Fold everything unsafe to "-" and
-// keep a digest of the real path, since folding alone would let two workspaces collide.
-const SLUG_MAX = 60;
-
 /** The directory holding this workspace's scheduled-session entries. Per workspace so a
  *  server only ever reaps sessions from the workspace it owns. */
 export function scheduledSessionsDir(workspace: string, home: string = path.join(os.homedir(), ".mulmoterminal")): string {
-  const resolved = path.resolve(workspace);
-  const slug = resolved
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, SLUG_MAX);
-  const digest = createHash("sha256").update(resolved).digest("hex").slice(0, 8);
-  return path.join(home, "scheduled-sessions", `${slug}-${digest}`);
+  return path.join(home, "scheduled-sessions", workspaceKey(workspace));
 }
 
 export interface ScheduledSessionRegistryDeps {
