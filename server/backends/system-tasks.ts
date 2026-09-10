@@ -16,7 +16,21 @@ export interface SystemTaskDeps {
    *  and it is the host's decision. */
   feedRoots?: string[];
   worklog: { enabled: boolean; intervalHours: number };
+  /** Which of the two always-on system tasks the user still wants. Both default ON — they are
+   *  existing behaviour, and a default that silently stopped refreshing someone's feeds would
+   *  be a worse bug than the one the switch exists for (#2015).
+   *
+   *  This mirrors what a USER task already gets: `buildUserTaskDefinitions` honours
+   *  `enabled: false` on every entry in `tasks.json`, and the asymmetry — a task the user wrote
+   *  can be switched off, one the app registered cannot — is the whole of that issue. */
+  enabled: SystemTaskSwitches;
   spawnChat: ScheduledChatSpawn;
+}
+
+/** The per-task switches, as the config serves them. */
+export interface SystemTaskSwitches {
+  feedRefresh: boolean;
+  calendarSync: boolean;
 }
 
 // The system tasks a standalone MulmoTerminal registers — the ones that must keep running with no
@@ -45,12 +59,12 @@ export function buildSystemTasks(deps: SystemTaskDeps): SystemTaskDef[] {
     // from the root, so N roots register N tasks instead of overwriting each other down to the
     // last one. Deduped by RESOLVED path: core canonicalises the root into the id, so two
     // spellings of one directory would collapse to a single id and silently drop a registration.
-    ...feedRootsOf(deps).map((root) => feedRefreshTaskDef({ workspaceRoot: root })),
+    ...(deps.enabled.feedRefresh ? feedRootsOf(deps).map((root) => feedRefreshTaskDef({ workspaceRoot: root })) : []),
     // The calendar stays WORKSPACE-ONLY, deliberately. A Google grant is user-scope and its sync
     // state (`lastSyncedAt`) is workspace state, so a per-project sync would need a per-project
     // answer to "which account" that nothing in this app has. A project's calendar collections
     // still sync on demand.
-    googleCalendarSyncTaskDef({ workspaceRoot: deps.workspaceRoot }),
+    deps.enabled.calendarSync ? googleCalendarSyncTaskDef({ workspaceRoot: deps.workspaceRoot }) : null,
     worklogSystemTask({ ...deps.worklog, spawnChat: deps.spawnChat }),
   ].filter((task): task is SystemTaskDef => task !== null);
 }

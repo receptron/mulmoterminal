@@ -215,6 +215,13 @@ export const en = {
       worklogHint: "summarizes recent work across your saved working directories into weekly wiki pages. Each run spawns an LLM session, so it costs tokens.",
       worklogInterval: "How often it runs:",
       worklogStepper: "dev-work log interval",
+      systemTasks: "Built-in scheduled tasks",
+      systemTasksHint: "Both run hourly and are on unless you turn them off. Switching one off takes effect the next time the server starts.",
+      feedRefresh: "Refresh collections and feeds",
+      feedRefreshHint:
+        "fetches your RSS/JSON feeds and dispatches skill-backed collection updates, for the workspace and every saved project directory. With no feeds registered it does nothing.",
+      calendarSync: "Sync Google Calendar",
+      calendarSyncHint: "pulls changed events into any collection that declares a Google calendar. Does nothing until you connect an account.",
     },
 
     launchers: {

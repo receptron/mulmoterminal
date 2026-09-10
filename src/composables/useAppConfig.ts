@@ -28,6 +28,7 @@ import { setPrWorkdirFooter } from "./prWorkdirFooter";
 import { setAppendSystemPrompt } from "./appendSystemPrompt";
 import { setDecisionDigest } from "./decisionDigest";
 import { setWorklogEnabled, setWorklogIntervalHours } from "./worklog";
+import { setFeedRefreshEnabled, setCalendarSyncEnabled } from "./systemTasks";
 import { setSessionIdleReapDays } from "./sessionReap";
 import { setHeaderConfigSummary } from "./headerConfigSummary";
 import { postConfigField } from "./postConfigField";
@@ -487,6 +488,8 @@ function adoptServerSideSettings(c: Record<string, unknown>): void {
   setDecisionDigest(c.decisionDigest);
   setWorklogEnabled(c.worklogEnabled);
   setWorklogIntervalHours(c.worklogIntervalHours);
+  setFeedRefreshEnabled(c.feedRefreshEnabled);
+  setCalendarSyncEnabled(c.calendarSyncEnabled);
   setSessionIdleReapDays(c.sessionIdleReapDays);
 }
 
