@@ -17,6 +17,76 @@ const render = (targets: HandoffTarget[], running = false, busy = running) =>
 const seats = (w: ReturnType<typeof render>) => w.findAll('[data-testid="round-table-seat"]');
 
 describe("RoundTableMenu", () => {
+  // #2003: one seat per other terminal, so on a 20-cell grid this block was 938px of a menu that
+  // had no bound and nothing scrollable — Start ended up a thousand pixels below the window.
+  // jsdom has no layout, so what a spec CAN hold is the structure the CSS needs: the seats sit in
+  // their own scroll box, and the controls that act on them sit OUTSIDE it.
+  describe("staying reachable on a big grid (#2003)", () => {
+    const many = Array.from({ length: 19 }, (_, i) => target(i + 2));
+
+    it("puts every seat inside the scrollable box", () => {
+      const w = render(many);
+      const box = w.find('[data-testid="round-table-seats"]');
+      expect(box.exists()).toBe(true);
+      expect(box.findAll('[data-testid="round-table-seat"]')).toHaveLength(19);
+    });
+
+    // Stated as what is PERMITTED rather than as a list of controls to check, because a list of
+    // controls is a list someone adds to. Codex round 3 found exactly that: `flex-none` was the
+    // documented invariant, and Start and the room-error row had been missed while stop and watch
+    // had it — one fix applied at some of its sites.
+    //
+    // Run over EVERY render state that puts a different child in the column. Codex round 4
+    // reopened this because the first version checked the default branch alone, where stop,
+    // watch and the room error do not exist — a guard that passes because it matched nothing.
+    const shrinkableChildren = (w: ReturnType<typeof render>) =>
+      Array.from(w.find('[data-testid="round-table"]').element.children)
+        .filter((el) => el.getAttribute("data-testid") !== "round-table-seats")
+        .filter((el) => !el.classList.contains("flex-none"))
+        .map((el) => el.getAttribute("data-testid") ?? el.tagName.toLowerCase());
+
+    const withRoom = (room: string | null, running = false) =>
+      mount(RoundTableMenu, { props: { targets: many, selfLabel: "#1", running, busy: running, room } });
+
+    it("lets only the seat box shrink — every other direct child is flex-none", () => {
+      expect(shrinkableChildren(render(many))).toEqual([]);
+    });
+
+    it("holds that invariant in every state that renders a different child", async () => {
+      // running -> stop replaces Start; room set -> the watch button appears.
+      expect(shrinkableChildren(withRoom(null, true))).toEqual([]);
+      expect(shrinkableChildren(withRoom("standup"))).toEqual([]);
+      expect(shrinkableChildren(withRoom("standup", true))).toEqual([]);
+
+      // An unusable room name renders the error row, which is a direct child too.
+      const w = render(many);
+      await w.find('[data-testid="round-table-room"]').setValue("NOT A ROOM");
+      expect(w.find('[data-testid="round-table-room-error"]').exists()).toBe(true);
+      expect(shrinkableChildren(w)).toEqual([]);
+    });
+
+    it("keeps Start, turns and room OUT of that box, so they cannot scroll away", () => {
+      const w = render(many);
+      const box = w.find('[data-testid="round-table-seats"]');
+      ["round-table-start", "round-table-budget", "round-table-room"].forEach((id) => {
+        const el = w.find(`[data-testid="${id}"]`);
+        expect(el.exists()).toBe(true);
+        expect(box.element.contains(el.element)).toBe(false);
+      });
+    });
+
+    // The box has to give way inside a bounded menu, but not all the way: measured at
+    // max-height 120-260px, `min-h-0` let it collapse to 0px, and a seat list with no height is a
+    // list nobody can tick — which leaves Start disabled however reachable it is (Codex round 1).
+    // So it scrolls, and it keeps a floor of about one row.
+    it("scrolls, but keeps a floor so the seats stay clickable", () => {
+      const cls = render(many).find('[data-testid="round-table-seats"]').classes();
+      expect(cls).toContain("overflow-y-auto");
+      expect(cls).toContain("min-h-[2.5rem]");
+      expect(cls).not.toContain("min-h-0");
+    });
+  });
+
   // This picker IS the admission control: agents cannot see each other or join anything, so a
   // table exists only because a human ticked these boxes.
   it("offers a seat for every readable terminal", () => {
