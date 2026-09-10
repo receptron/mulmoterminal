@@ -52,6 +52,29 @@ describe("resolveSpawnCollection", () => {
     expect(await resolveSpawnCollection("deep-research", CWD)).toBeNull();
   });
 
+  // A FEED is not a collection, and `loadCollection` answers for both — measured:
+  // `loadCollection("hacker-news")` returns `source: "feed"` on a workspace that has that feed.
+  // The client half already refuses one (`currentCollectionSlug` is null on a feed route), so
+  // accepting it here would make a `/hacker-news …` seed mark what browsing to it does not.
+  it("records nothing for a feed that shares the name", async () => {
+    loadCollection.mockResolvedValue({ ...loadedAs("hacker-news", { title: "Hacker News", icon: "newspaper" }), source: "feed" });
+    expect(await resolveSpawnCollection("hacker-news", CWD)).toBeNull();
+  });
+
+  // A source this build has never heard of is a miss, not a mark. The rule names what is
+  // PERMITTED, so an upstream addition fails closed rather than marking something nobody has
+  // decided is a collection.
+  it("records nothing for a source it does not recognise", async () => {
+    loadCollection.mockResolvedValue({ ...loadedAs("mystery", { title: "Mystery" }), source: "marketplace" });
+    expect(await resolveSpawnCollection("mystery", CWD)).toBeNull();
+  });
+
+  // Both sources that ARE collections keep working — a user-scope one is as real as a project one.
+  it("keeps a user-scope collection", async () => {
+    loadCollection.mockResolvedValue({ ...loadedAs("notes", { title: "Notes", icon: "task" }), source: "user" });
+    expect(await resolveSpawnCollection("notes", CWD)).toEqual({ slug: "notes", title: "Notes", icon: "task" });
+  });
+
   it("records nothing when no collection was named", async () => {
     expect(await resolveSpawnCollection(null, CWD)).toBeNull();
     expect(await resolveSpawnCollection("", CWD)).toBeNull();

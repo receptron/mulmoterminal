@@ -58,6 +58,22 @@ describe("CockpitHeader", () => {
     expect(mark.find("span").attributes("aria-hidden")).toBe("true");
   });
 
+  // The other end of round 2's fix. `toSummary` omits the key for a schema naming no icon, and the
+  // resolver normalizes that to "" so the record survives the two string guards it used to be
+  // dropped by — which is only worth anything if "" then DRAWS. It resolves to the collection
+  // default (`dataset`), so the cell still says "this one is about a collection".
+  it("still draws a mark for a collection whose schema names no icon", () => {
+    const mark = mountH({ collection: { slug: "notes", icon: "", title: "Notes" } }).get('[data-testid="cell-collection-mark"]');
+    expect(mark.text()).toBe("dataset");
+    expect(mark.attributes("aria-label")).toBe("Started from Notes");
+  });
+
+  // And the title falls back to the slug, so the mark is never announced as "Started from ".
+  it("names the collection by its slug when the schema has no title", () => {
+    const mark = mountH({ collection: { slug: "notes", icon: "task", title: "notes" } }).get('[data-testid="cell-collection-mark"]');
+    expect(mark.attributes("aria-label")).toBe("Started from notes");
+  });
+
   it("shows the PR phase pill only when there is a phase", () => {
     expect(mountH({ phase: "none" }).find('[data-testid="cockpit-phase"]').exists()).toBe(false);
     expect(mountH({ phase: "ready" }).find('[data-testid="cockpit-phase"]').exists()).toBe(true);

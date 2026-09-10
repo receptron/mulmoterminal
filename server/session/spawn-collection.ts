@@ -5,7 +5,8 @@
 // client chose. The caller sends a slug and nothing else; what reaches the store is what this
 // server found on disk under that slug, in the project the session runs in. A slug naming no
 // collection — a non-collection slash command such as `/deep-research`, a typo, a collection in
-// another project — resolves to null and is simply not recorded.
+// another project, or a FEED that happens to share the name — resolves to null and is simply not
+// recorded.
 import { loadCollection, toSummary } from "@mulmoclaude/core/collection/server";
 import { isSafeSlug } from "@mulmoclaude/core/collection";
 import { projectScopeForCwd } from "../infra/project-root.js";
@@ -29,6 +30,19 @@ import { messageOf } from "../errors.js";
  *  away as unreachable, which is exactly the reasoning that let this through the first time. */
 const asText = (value: unknown): string => (typeof value === "string" ? value : "");
 
+/** Which discovery sources are COLLECTIONS.
+ *
+ *  `loadCollection` also answers for FEEDS — measured on this workspace,
+ *  `loadCollection("hacker-news")` comes back with `source: "feed"` — and a feed is not what this
+ *  mark means. The client half of the same feature already refuses one (`currentCollectionSlug`
+ *  answers null on a feed route), so without this the two paths into one field disagree: browsing
+ *  to a feed and pressing its button marks nothing, while a `/hacker-news …` seed marks it as a
+ *  collection.
+ *
+ *  Written as what is PERMITTED rather than as `!== "feed"`, so a source added upstream arrives as
+ *  "no mark" rather than as a mark for something nobody has decided is a collection. */
+const COLLECTION_SOURCES = new Set(["user", "project"]);
+
 /**
  * What to record for a chat started from `slug` in `cwd`, or null when there is nothing to record.
  *
@@ -38,7 +52,7 @@ export async function resolveSpawnCollection(slug: string | null, cwd: string): 
   if (!slug || !isSafeSlug(slug)) return null;
   try {
     const loaded = await loadCollection(slug, projectScopeForCwd(cwd));
-    if (!loaded) return null;
+    if (!loaded || !COLLECTION_SOURCES.has(loaded.source)) return null;
     const summary = toSummary(loaded);
     // The SLUG when there is no title: it is the only thing that always names the collection, and
     // it is what the user typed to reach it. "Started from notes" beats no mark at all.

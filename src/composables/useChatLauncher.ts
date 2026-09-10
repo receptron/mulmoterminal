@@ -74,8 +74,9 @@ function placeChat(request: SpawnedChatRequest, filingKey: string | null): void 
  *  being looked at is the answer.
  *
  *  Neither source is trusted to name a real collection: `/deep-research` parses exactly like a
- *  collection seed. The server resolves the slug against the project's own collections and records
- *  nothing when it finds none, so a miss costs a mark rather than showing a wrong one. */
+ *  collection seed, and so does a FEED's slug. The server resolves the slug against the project's
+ *  own collections — refusing anything whose source is not one (`resolveSpawnCollection`) — and
+ *  records nothing when it finds none, so a miss costs a mark rather than showing a wrong one. */
 function chatCollectionSlug(message: string): string | null {
   return parseCollectionSlashSeed(message)?.slug ?? currentCollectionSlug();
 }

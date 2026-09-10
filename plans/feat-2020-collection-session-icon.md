@@ -75,7 +75,12 @@ cwd がワークスペースなので **全部おなじ絵**になる。グリ�
 2. `currentCollectionSlug()` — いま開いているコレクション詳細（feed は除く）。
 
 どちらもサーバが実在確認するので、`/deep-research` のような slash command が紛れ込んでも
-記録されない。
+記録されない。**feed も同様に落とす** — `loadCollection` は feed にも答える（実測:
+`loadCollection("hacker-news")` は `source: "feed"` を返す）ので、resolver が
+「コレクションである source（`user` / `project`）」だけを通す。禁止リスト（`!== "feed"`）ではなく
+許可リストなのは、上流が source を増やしたときに「マークが付かない」側に倒れるようにするため。
+これを入れないと、feed をブラウズして押すと付かないのに `/hacker-news …` の seed では付く、という
+PR 内部での食い違いになる（Codex round 3）。
 
 ## 入れないもの（意図的に）
 
