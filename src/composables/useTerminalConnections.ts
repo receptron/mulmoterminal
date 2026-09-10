@@ -36,8 +36,9 @@ import { getTerminalScrollSpeed } from "./useTerminalScrollSpeed";
 import { scrollsToBottomOnSubmit } from "./useScrollToBottomOnSubmit";
 import { isTypedInput } from "./terminalUserInput";
 import { bufferIsShort, readBufferShape } from "./terminalBufferHealth";
+import { disposeTerminal, loadCanvasRenderer } from "./terminalRenderer";
 import { initialFitGate, reportOnScreen, requestFit, type FitGate } from "./terminalFitGate";
-import { CanvasAddon } from "@xterm/addon-canvas";
+import type { CanvasAddon } from "@xterm/addon-canvas";
 import "@xterm/xterm/css/xterm.css";
 import { connWsUrl, type LaunchChoice } from "../components/wsUrl";
 import { connectionWillReturn, reconnectDelayMs, shouldReconnect } from "./reconnectPolicy";
@@ -143,6 +144,9 @@ interface Conn {
   key: string;
   term: Terminal;
   fitAddon: FitAddon;
+  // The canvas renderer, kept so it can be disposed BEFORE its terminal — see terminalTeardown.ts.
+  // Null where it could not initialise, which is the DOM-renderer fallback below.
+  canvas: CanvasAddon | null;
   host: HTMLDivElement; // term.open()'d into this ONCE; re-parented on attach/detach
   ws: WebSocket | null;
   knownSessionId: string | null;
@@ -440,6 +444,7 @@ function registerFilePathLinks(term: Terminal, c: Conn): void {
 interface TerminalRuntime {
   term: Terminal;
   fitAddon: FitAddon;
+  canvas: CanvasAddon | null;
   host: HTMLDivElement;
   wheel: WheelScrollControl;
 }
@@ -490,29 +495,7 @@ function buildTerminal(swallowedMouseModes: Set<number>, font: TerminalFont): Te
   guardMouseClicks(term, swallowedMouseModes);
   // After open(), so the helper textarea the clipboard fallback looks for exists in `host`.
   wireCopyOnSelect(term, host);
-  // Render each glyph in its own cell (canvas) instead of the default DOM renderer, which flows text
-  // as inline runs: a full-width CJK glyph that isn't exactly 2× the Latin cell lets a long Japanese
-  // line drift right and spill its tail past the terminal's edge (the reason this was added, b12cc48).
-  // A fixed-grid renderer makes that structurally impossible.
-  //
-  // CAVEAT — version mismatch: @xterm/addon-canvas is xterm-5 era (its peerDependency is
-  // `@xterm/xterm@^5`, and there is no xterm-6 build — even 0.8.0-beta still peers ^5), but the app
-  // runs @xterm/xterm@6. It renders, and it is NOT known to break anything: an earlier version of
-  // this comment named it the suspected cause of #782 (selection auto-scroll + scrollbar) and #783
-  // (OSC 8 links), and measurement disproved both. #782 is tmux owning the scrollback — the outer
-  // xterm only ever receives the visible screen — and reproduced identically with the addon off.
-  // #783 was tmux stripping hyperlinks (fixed in #785). Neither is a reason to change renderer.
-  //
-  // What the mismatch DOES mean is that a future xterm bump cannot be repaired by bumping this
-  // addon, because no such release exists — see the Renderer section of docs/terminal-notes.md for
-  // what to move to on the day it breaks, and what to settle before moving.
-  // Best-effort: if the canvas renderer can't initialise, xterm keeps the DOM renderer.
-  try {
-    term.loadAddon(new CanvasAddon());
-  } catch (err) {
-    console.warn("[terminal] canvas renderer unavailable — falling back to the DOM renderer", err);
-  }
-  return { term, fitAddon, host, wheel };
+  return { term, fitAddon, canvas: loadCanvasRenderer(term), host, wheel };
 }
 
 // The wiring that needs the connection itself, so it is re-applied to every terminal a slot owns.
@@ -529,11 +512,12 @@ function ensure(key: string, target: ConnTarget, font: TerminalFont): Conn {
     return existing;
   }
   const swallowedMouseModes = new Set<number>();
-  const { term, fitAddon, host, wheel } = buildTerminal(swallowedMouseModes, font);
+  const { term, fitAddon, canvas, host, wheel } = buildTerminal(swallowedMouseModes, font);
   const c: Conn = {
     key,
     term,
     fitAddon,
+    canvas,
     host,
     ws: null,
     knownSessionId: target.sessionId,
@@ -569,12 +553,14 @@ function ensure(key: string, target: ConnTarget, font: TerminalFont): Conn {
 // into the fresh terminal, so the user sees the cell blink rather than a dead panel.
 function rebuildTerminal(c: Conn): void {
   const deadTerm = c.term;
+  const deadCanvas = c.canvas;
   const deadHost = c.host;
   const hadFocus = deadHost.contains(document.activeElement);
   console.warn(`[terminal] slot ${c.key}: xterm buffer corrupted (xtermjs/xterm.js#6063) — rebuilding the terminal and re-attaching`);
-  const { term, fitAddon, host, wheel } = buildTerminal(c.swallowedMouseModes, c.font);
+  const { term, fitAddon, canvas, host, wheel } = buildTerminal(c.swallowedMouseModes, c.font);
   c.term = term;
   c.fitAddon = fitAddon;
+  c.canvas = canvas;
   c.host = host;
   c.wheel = wheel;
   c.lastRebuildMs = Date.now();
@@ -582,7 +568,10 @@ function rebuildTerminal(c: Conn): void {
   watchOnScreen(c);
   c.attachedEl?.appendChild(host);
   deadHost.remove();
-  deadTerm.dispose();
+  // Renderer first, and never throwing: the lines below are the half that makes the new terminal
+  // usable, and disposing in the other order threw right here — leaving the replacement attached
+  // to nothing (#2021).
+  disposeTerminal(deadTerm, deadCanvas);
   connect(c);
   fitAndSyncSize(c);
   if (hadFocus) term.focus();
@@ -820,11 +809,8 @@ export function release(key: string) {
   } catch {
     // not in the DOM
   }
-  try {
-    c.term.dispose();
-  } catch {
-    // already disposed
-  }
+  disposeTerminal(c.term, c.canvas);
+  c.canvas = null;
   conns.delete(key);
   connView.delete(key);
 }

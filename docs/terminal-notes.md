@@ -239,6 +239,16 @@ forced rather than chosen. What to know before that day:
 | Settle first | The WebGL **context limit** — browsers cap concurrent contexts and evict the oldest (order of ten; not measured here, so measure before relying on a number). This app is unusually exposed: a persisted slot **deliberately keeps its connection alive** when its view goes away (`Terminal.vue` calls `detach`, not `release` — that IS the persistence), so live terminals accumulate across tabs rather than tracking what is on screen. #965's reporter ran 22 cells. Needs `onContextLoss` handling and a decision about disposing off-screen terminals. |
 | Also | WebGL is unavailable on GPU blocklists / GPU-less VMs / some remote desktops. Keep the same best-effort load + DOM fallback this site already has. |
 
+**Disposal order (#2021).** The addon must be disposed BEFORE its terminal, and
+`src/composables/terminalRenderer.ts` is the only place that does either. On dispose the addon
+restores the DOM renderer through the core's `_createRenderer()`, which xterm 6 builds out of
+`this.linkifier` — a `MutableDisposable` the terminal's own dispose has already cleared, so the DOM
+renderer subscribes to `undefined` and throws
+(`Cannot read properties of undefined (reading 'onShowLinkUnderline')`). Measured in a real browser
+on the shipped pair: terminal-first throws 10/10, addon-first 0/10. It is not cosmetic — the throw
+escapes `dispose()`, and in the #846 rebuild path it skipped the `connect()` that gives the
+replacement terminal its socket, so the repair for a frozen cell left the cell dead.
+
 **Debugging note:** the canvas renderer
 paints to `<canvas>`, so terminal text and link decorations are **not in the DOM** — headless
 inspection (`.xterm-rows`, `elementFromPoint`) sees nothing. To debug links/selection headlessly,
