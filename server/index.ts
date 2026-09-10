@@ -10,10 +10,10 @@ import { toolSummaries } from "./infra/plugins-registry.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initOpenPathBackend } from "./backends/openPath.js";
-import { getUserMcpServers, getWorklogConfig, getTerminalSubmit, getQuickCommands, getSessionIdleReapDays, APP_CONFIG_FILE } from "./config/config-routes.js";
+import { getUserMcpServers, getTerminalSubmit, getQuickCommands, getSessionIdleReapDays, APP_CONFIG_FILE } from "./config/config-routes.js";
 // Its own line: folding it into the import above pushes that line past the print width, and the
 // eight-line import prettier then writes is seven code lines this file has no room for.
-import { getCwdPresets, getSystemTaskSwitches } from "./config/config-routes.js";
+import { getCwdPresets } from "./config/config-routes.js";
 import { enforceKeymap } from "./config/keymap-check.js";
 import { readFileSync } from "node:fs";
 import { submitSequenceForAgent } from "../common/terminalSubmit.js";
@@ -135,8 +135,7 @@ import { initFileChangePublisher } from "./backends/fileChange.js";
 import { initNotifier } from "./backends/notifier.js";
 import { installShutdownHandlers } from "./infra/shutdown.js";
 import { startCollectionCompletionWatchers } from "./backends/collectionWatchers.js";
-import { initUserTaskScheduler } from "./backends/scheduler.js";
-import { buildSystemTasks } from "./backends/system-tasks.js";
+import { initScheduling } from "./backends/scheduler-boot.js";
 import { feedWorkerSpawnOptions } from "./backends/feed-worker-options.js";
 // The projects a request may name — and, at boot, the roots whose feeds refresh on schedule.
 import { listProjectRoots } from "./infra/project-root.js";
@@ -628,7 +627,7 @@ initAccountingBackend({ workspace: CLAUDE_CWD, pubsub });
 // waiting for it to finish and nothing else would ever end it. And it carries the engine's
 // completion hook (#1070), which is what turns a failed refresh into a bell instead of silence.
 // `scheduledSessions` is defined further down, which is safe because the system task that calls
-// this is registered later still (initUserTaskScheduler).
+// this is registered later still (initScheduling, backends/scheduler-boot.ts).
 const feedsSpawnWorker: AgentWorkerRunner = async ({ message, hidden, onComplete, workspaceRoot }) => {
   const sessionId = randomUUID();
   try {
@@ -913,37 +912,7 @@ function spawnScheduledChat(message: string, onComplete?: (outcome: { didError: 
   });
   return sessionId;
 }
-try {
-  // Which tasks and why: system-tasks.ts. Both hosts are already configured above
-  // (initFeedsBackend, initGoogleBackend, initCollectionsBackend), so both engines can run.
-  const systemTasks = buildSystemTasks({
-    workspaceRoot: CLAUDE_CWD,
-    // Every project the server serves gets its feeds refreshed on schedule, not just the
-    // workspace — the same set the collection watchers mount for. Read HERE, at boot, because the
-    // scheduler registers once: a directory saved later starts refreshing after the next restart,
-    // and its feeds still update on demand meanwhile.
-    //
-    // This waited on core 3.2.0. An `ingest.kind: "agent"` collection refreshes by dispatching a
-    // worker whose seed prompt addresses records ROOT-RELATIVELY, and the runner used to be handed
-    // no root — so a project's scheduled refresh resolved `data/collections/<slug>/items` against
-    // the WORKSPACE and wrote there instead. It shipped once and was reverted for exactly that
-    // (#1582); `feedsSpawnWorker` now spawns in the root core gives it.
-    feedRoots: listProjectRoots().map((project) => project.cwd),
-    worklog: getWorklogConfig(),
-    // Read HERE, at boot, for the same reason `feedRoots` is: the scheduler registers once, so
-    // turning one off takes effect at the next start.
-    enabled: getSystemTaskSwitches(),
-    spawnChat: spawnScheduledChat,
-  });
-  initUserTaskScheduler({
-    workspace: CLAUDE_CWD,
-    spawnChat: spawnScheduledChat,
-    systemTasks,
-    home: MULMOTERMINAL_HOME,
-  });
-} catch (err) {
-  console.error("[scheduler] init failed (non-fatal)", err);
-}
+initScheduling({ spawnChat: spawnScheduledChat, projectRoots: listProjectRoots().map((project) => project.cwd) });
 
 // The terminal WebSocket endpoints (routes/ws-routes.ts).
 mountTerminalWebSockets({
