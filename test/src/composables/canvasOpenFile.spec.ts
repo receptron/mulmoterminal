@@ -122,7 +122,9 @@ describe("the button's gate and the card's gate agree on the same path", () => {
 // `(root, stories/<rel>)` — which is what makes "put the deck in the repository" work at all.
 describe("storyWirePath — the workspace subtree", () => {
   const WS = "/work/ws";
-  const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] };
+  // `canonical` is present because a real root always has one — `registeredStoriesRoots()` types it
+  // as required. A fixture without it measures the fallback, not the branch the server takes.
+  const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS], canonical: WS }] };
 
   // By its own absolute path, NOT `stories/<tail>` + the root's id. #1970: the rooted spelling
   // opened the deck and then broke everything after — the View's dispatches carry no root, so each
@@ -188,6 +190,17 @@ describe("storyWirePath — the workspace subtree", () => {
     expect(storyWirePath("//server/share/myrepo/talk.json", { workspaces: ["//server/share"], roots: [{ id: "abc123", paths: ["//server/share"] }] })).toEqual({
       filePath: "//server/share/myrepo/talk.json",
     });
+    // The same two through the CANONICAL branch, which is what a real server takes. A drive or share
+    // root already ends in a separator, so nothing doubles it.
+    expect(storyWirePath("C:\\myrepo\\decks\\talk.json", { workspaces: ["C:\\"], roots: [{ id: "abc123", paths: ["C:\\"], canonical: "C:\\" }] })).toEqual({
+      filePath: "C:\\myrepo/decks/talk.json",
+    });
+    expect(
+      storyWirePath("//server/share/myrepo/talk.json", {
+        workspaces: ["//server/share"],
+        roots: [{ id: "abc123", paths: ["//server/share"], canonical: "//server/share" }],
+      }),
+    ).toEqual({ filePath: "//server/share/myrepo/talk.json" });
     // Both roots' own stories directories still key rather than pass through.
     expect(storyWirePath("C:\\artifacts\\stories\\x.json", { workspaces: ["C:\\"], roots: [] })).toEqual({ filePath: "stories/x.json" });
   });
@@ -314,7 +327,9 @@ describe("storyWirePath", () => {
 // and the entry can be offered.
 describe("storyWirePath — a deck outside every root", () => {
   const WS = "/work/ws";
-  const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] };
+  // `canonical` is present because a real root always has one — `registeredStoriesRoots()` types it
+  // as required. A fixture without it measures the fallback, not the branch the server takes.
+  const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS], canonical: WS }] };
 
   // The issue's own example: a deck in a directory the user never launched in.
   it("names it by its absolute path, with no root", () => {
