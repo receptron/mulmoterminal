@@ -34,15 +34,35 @@ describe("RoundTableMenu", () => {
     // Stated as what is PERMITTED rather than as a list of controls to check, because a list of
     // controls is a list someone adds to. Codex round 3 found exactly that: `flex-none` was the
     // documented invariant, and Start and the room-error row had been missed while stop and watch
-    // had it — one fix applied at some of its sites. Every direct child of the bounded column is
-    // now either THE scroll box or non-shrinking; anything else fails here the moment it is added.
-    it("lets only the seat box shrink — every other direct child is flex-none", () => {
-      const column = render(many).find('[data-testid="round-table"]');
-      const offenders = Array.from(column.element.children)
+    // had it — one fix applied at some of its sites.
+    //
+    // Run over EVERY render state that puts a different child in the column. Codex round 4
+    // reopened this because the first version checked the default branch alone, where stop,
+    // watch and the room error do not exist — a guard that passes because it matched nothing.
+    const shrinkableChildren = (w: ReturnType<typeof render>) =>
+      Array.from(w.find('[data-testid="round-table"]').element.children)
         .filter((el) => el.getAttribute("data-testid") !== "round-table-seats")
         .filter((el) => !el.classList.contains("flex-none"))
         .map((el) => el.getAttribute("data-testid") ?? el.tagName.toLowerCase());
-      expect(offenders).toEqual([]);
+
+    const withRoom = (room: string | null, running = false) =>
+      mount(RoundTableMenu, { props: { targets: many, selfLabel: "#1", running, busy: running, room } });
+
+    it("lets only the seat box shrink — every other direct child is flex-none", () => {
+      expect(shrinkableChildren(render(many))).toEqual([]);
+    });
+
+    it("holds that invariant in every state that renders a different child", async () => {
+      // running -> stop replaces Start; room set -> the watch button appears.
+      expect(shrinkableChildren(withRoom(null, true))).toEqual([]);
+      expect(shrinkableChildren(withRoom("standup"))).toEqual([]);
+      expect(shrinkableChildren(withRoom("standup", true))).toEqual([]);
+
+      // An unusable room name renders the error row, which is a direct child too.
+      const w = render(many);
+      await w.find('[data-testid="round-table-room"]').setValue("NOT A ROOM");
+      expect(w.find('[data-testid="round-table-room-error"]').exists()).toBe(true);
+      expect(shrinkableChildren(w)).toEqual([]);
     });
 
     it("keeps Start, turns and room OUT of that box, so they cannot scroll away", () => {
