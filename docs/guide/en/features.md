@@ -81,6 +81,9 @@ left.
   terminal between the two: under it when the collection is a list you are scanning, beside it when
   you are reading one record and talking about it. The choice is remembered, and each position keeps
   its own size.
+
+  ![The same Errands collection with the chat docked to the right instead: the records keep the left two thirds of the window and the terminal runs full height down the right, answering which errand is due first](../images/collection-chat-pane-side.png)
+
 - **Drag the divider** to give the terminal more or less room; the size is remembered per position.
   Arrow keys work on it too — up and down under the collection, left and right beside it.
 - **Closing** is the cell's own ×, in the pane or in the grid — the same terminal, so the same
