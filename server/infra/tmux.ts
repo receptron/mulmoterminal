@@ -549,14 +549,48 @@ export function tmuxPanePids(): Map<number, string> {
   return parseTmuxPanePids(r.stdout);
 }
 
-// Ids of sessions that survived (e.g. across a crash), for startup visibility.
-export function tmuxListSessionIds(): string[] {
-  const r = tmux(["list-sessions", "-F", "#{session_name}"]);
-  if (r.status !== 0) return [];
-  return r.stdout
+/** What `tmux list-sessions` reported, read as one of three answers rather than two.
+ *
+ *  `no server running` is not a failure: it is tmux saying, reliably, that it holds nothing. So is
+ *  a missing socket, which is how a named socket (`-L mulmoterminal`) says the same thing:
+ *  `error connecting to /tmp/tmux-501/mulmoterminal (No such file or directory)`. A different
+ *  non-zero status is tmux failing to ANSWER — the binary missing, the socket unreadable, the call
+ *  timing out (status null) — and reading that as "it holds nothing" is what turns a broken tmux
+ *  into "every persisted session has ended" (CodeRabbit, PR #2002).
+ *
+ *  It is the MISSING FILE that means empty, never the words "error connecting" on their own: the
+ *  same prefix carries `(Permission denied)` and `(Connection refused)`, which are a socket that
+ *  exists and cannot be read — the case above, not this one (Codex, PR #2016).
+ *
+ *  Pure so the three-way rule can be tested without a tmux server. */
+export function tmuxSessionIdsFrom(result: { status: number | null; stdout: string; stderr: string }): string[] | null {
+  if (result.status !== 0) return /no server running|no such file or directory/i.test(result.stderr) ? [] : null;
+  return result.stdout
     .split("\n")
     .filter((n) => n.startsWith(SESSION_PREFIX))
     .map((n) => n.slice(SESSION_PREFIX.length));
+}
+
+/** Ids tmux is holding, or null when tmux could not be ASKED — see `tmuxSessionIdsFrom`. A caller
+ *  deciding whether a session still exists must not read that null as "none". */
+export function tmuxHeldSessionIds(): string[] | null {
+  return tmuxSessionIdsFrom(tmux(["list-sessions", "-F", "#{session_name}"]));
+}
+
+/** The same answer, without blocking the event loop — the form a REQUEST must use.
+ *
+ *  `spawnSync` holds Node still until the child answers or its 15s timeout fires, so one hung tmux
+ *  in a handler stalls every other request AND every open terminal. The collection pane asks this
+ *  on every reconnect, which is exactly the traffic that must not be able to do that (Codex,
+ *  PR #2002). */
+export async function tmuxHeldSessionIdsAsync(): Promise<string[] | null> {
+  return tmuxSessionIdsFrom(await tmuxAsync(["list-sessions", "-F", "#{session_name}"]));
+}
+
+// Ids of sessions that survived (e.g. across a crash), for startup visibility. An unreadable tmux
+// reads as none here on purpose: this one only decides what to MENTION at boot.
+export function tmuxListSessionIds(): string[] {
+  return tmuxHeldSessionIds() ?? [];
 }
 
 // Whether a tmux `mt-<id>` is worth OFFERING: it's live (an attached pty), a persisted grid

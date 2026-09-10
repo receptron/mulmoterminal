@@ -215,6 +215,26 @@ describe("the open pane's button, seen", () => {
     expect(button({ rightPane: "tools" }, TOOLS).classes()).not.toContain("bg-transparent");
     expect(button({ rightPane: "files" }, TOOLS).classes()).toContain("bg-transparent");
   });
+
+  // The collection pane wins over the zoom (it is an overlay on top of the grid), so enlarging
+  // from there sets a state nobody can see until they leave — a control that looks broken (#2001).
+  it("drops the expand button where enlarging would do nothing visible", () => {
+    const w = mount(CellChromeButtons, { props: { expanded: false, hideExpand: true } });
+    expect(w.find('[aria-label="Expand terminal"]').exists()).toBe(false);
+    expect(w.find('[aria-label="Close terminal"]').exists()).toBe(true); // and nothing else goes
+  });
+
+  // The flag is negative because Vue casts an absent boolean prop to `false` at every level it
+  // passes through — a positive "expandable" was hidden for every caller that never mentions it,
+  // which is most of them.
+  it("keeps the expand button for a caller that says nothing", () => {
+    expect(mountButtons().find('[aria-label="Expand terminal"]').exists()).toBe(true);
+    expect(
+      mount(CellChromeButtons, { props: { expanded: false, hideExpand: false } })
+        .find('[aria-label="Expand terminal"]')
+        .exists(),
+    ).toBe(true);
+  });
 });
 
 // #2007. The button belongs to a session terminal — the only cell that can be set aside — and the

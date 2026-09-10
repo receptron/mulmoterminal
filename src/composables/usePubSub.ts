@@ -16,6 +16,12 @@ const listeners = new Map<string, Set<Callback>>();
 // state — e.g. the notification list — re-syncs here, since pubsub only replays room
 // membership on reconnect, not the events missed while disconnected.
 const reconnectListeners = new Set<() => void>();
+// Fired on EVERY connect, the FIRST one included. `onReconnect` deliberately skips the first —
+// state derived from the stream has nothing to re-sync before the stream has ever run — but a
+// consumer whose state predates the socket does have something to check: the collection pane files
+// a chat the moment it is spawned, which can be before this socket has ever come up, and an ending
+// in that window is pushed to nobody (#2001).
+const connectListeners = new Set<() => void>();
 let hasConnected = false;
 
 function connect(): Socket {
@@ -27,6 +33,7 @@ function connect(): Socket {
   sock.on("connect", () => {
     for (const channel of listeners.keys()) sock.emit("subscribe", channel);
     if (hasConnected) for (const cb of reconnectListeners) cb();
+    for (const cb of connectListeners) cb();
     hasConnected = true;
   });
 
@@ -70,5 +77,13 @@ export function usePubSub() {
     return () => reconnectListeners.delete(callback);
   }
 
-  return { subscribe, onReconnect };
+  /** Register a callback fired on every connect, the first included. Returns an unsubscribe.
+   *  For state that exists BEFORE the socket does and has to be checked once it is up. */
+  function onConnect(callback: () => void): Unsubscribe {
+    connectListeners.add(callback);
+    connect();
+    return () => connectListeners.delete(callback);
+  }
+
+  return { subscribe, onReconnect, onConnect };
 }

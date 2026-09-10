@@ -8,6 +8,8 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { CollectionsIndexView, CollectionView, FeedsView } from "@mulmoclaude/collection-plugin/vue";
 import PluginFrame from "./PluginFrame.vue";
+import CollectionChatPane from "./CollectionChatPane.vue";
+import { collectionChatDock } from "../composables/collectionChatDock";
 import { collectionShadowCss } from "../collectionShadowCss";
 import { useCollectionBrowse, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useEscapeToClose } from "../composables/useEscapeToClose";
@@ -131,30 +133,39 @@ useEscapeToClose(isOpen, close);
         <LaunchAgentPicker label="Launch with" description="Agent that chats started from collections run" />
       </div>
     </div>
-    <div class="min-h-0 flex-1">
-      <PluginFrame :css="collectionShadowCss" height="100%">
-        <div ref="probe" style="height: 100%">
-          <!-- The FEEDS index is its own component. CollectionsIndexView lists collections and
+    <!-- The collection and the chat under it, or beside it — the pane's dock button chooses, and
+         this is the direction that choice means. The pane sizes ITSELF along the same axis
+         (CollectionChatPane), so the two have to read the one preference. -->
+    <div class="flex min-h-0 flex-1" :class="collectionChatDock === 'right' ? 'flex-row' : 'flex-col'">
+      <div class="min-h-0 min-w-0 flex-1">
+        <PluginFrame :css="collectionShadowCss" height="100%">
+          <div ref="probe" style="height: 100%">
+            <!-- The FEEDS index is its own component. CollectionsIndexView lists collections and
                explicitly filters feeds OUT (`source !== "feed"`), so rendering it for /feeds showed
                the collection list under the Feeds button — the plugin ships FeedsView for exactly
                this and nothing here was using it. Detail is shared: CollectionView asks the binding
                (`isFeedRoute`) which kind it is showing. -->
-          <!-- KEYED BY PROJECT. The views fetch on mount and follow the route's SLUG; switching
+            <!-- KEYED BY PROJECT. The views fetch on mount and follow the route's SLUG; switching
                project changes only the query, so without this a bell for another project's
                `tasks` while the workspace's `tasks` is open would re-scope the requests and
                render none of them. -->
-          <FeedsView v-if="view.mode === 'index' && view.kind === 'feed'" :key="projectKey" />
-          <CollectionsIndexView v-else-if="view.mode === 'index'" :key="projectKey" />
-          <!-- The plugin's "Start chat" modal covers the whole page (`fixed inset-0` +
+            <FeedsView v-if="view.mode === 'index' && view.kind === 'feed'" :key="projectKey" />
+            <CollectionsIndexView v-else-if="view.mode === 'index'" :key="projectKey" />
+            <!-- The plugin's "Start chat" modal covers the whole page (`fixed inset-0` +
                `backdrop-blur-sm`), so the toolbar picker above is blurred out at exactly the
                moment the button is pressed — which is why the plugin grew a footer slot for us
                (#1945, @mulmoclaude/collection-plugin 4.6.0). The plugin withholds it on the
                embedded path, where the seed goes into a session that is already running. -->
-          <CollectionView v-else-if="view.mode === 'detail'" :key="projectKey">
-            <template #chat-modal-options><ChatModalAgentPicker /></template>
-          </CollectionView>
-        </div>
-      </PluginFrame>
+            <CollectionView v-else-if="view.mode === 'detail'" :key="projectKey">
+              <template #chat-modal-options><ChatModalAgentPicker /></template>
+            </CollectionView>
+          </div>
+        </PluginFrame>
+      </div>
+      <!-- A chat started from a card runs HERE rather than taking the screen to the grid (#2001).
+           The pane claims that placement only while this overlay is open, and hands the session on
+           to the grid when it lets go — so nothing is stranded and nothing is owned twice. -->
+      <CollectionChatPane />
     </div>
   </div>
 </template>

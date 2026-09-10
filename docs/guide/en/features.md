@@ -52,10 +52,41 @@ MulmoTerminal — a browser terminal for parallel Claude Code and Codex agents �
 | Clickable file paths | A **file path an agent prints** in the terminal becomes a link, and **what it opens is chosen by extension**: `.md` renders, `.json` is indented, `.csv` / `.tsv` become a table (each in a new tab), source and `.txt` open in the app's own **Files** view for editing, and images / PDF / video open as-is. **While a grid cell is enlarged the file pane beside it takes the click instead**, so the file opens next to the terminal that printed it — everything but the images / PDF / video row, and only for files under that cell's own directory. Files within the session's working directory ([routing table](https://github.com/receptron/mulmoterminal#clicking-a-file-path)) |
 | Cross-repo PRs / Issues view | All registered repos' **open PRs and issues** — in the pane beside an enlarged cell, led by that cell's repository, or in the toolbar's full-screen Pull requests view |
 | Wiki / Collections / Accounting / Files | In-app views from the toolbar: a Wiki (with a graph view), collections, accounting, and a **file explorer + editor** |
+| Work from a collection | A chat started from a collection card runs **under the collection** instead of taking the screen to the grid. It is the same terminal either way — whichever view you have open drives it → [working from a collection](#collection-chat) |
 | Summary when it hands back | A Claude session ends its reply with **what was asked, what it achieved, and what it left** whenever it finishes or stops to ask. Coming back to a cell later, that is the current state without scrolling back |
 | See why a setting isn't working | Settings' **Directory settings** shows what each directory's `.mulmoterminal.json` actually puts in force, which file it came from, and **the keys dropped or never read** ([config](config.html#dir-settings-preview)) |
 | Update notice | When a new version ships, the header shows an **update badge**; click it for the update command that fits your install (npm / git clone) |
 | Question pane (opt-in) | When a Claude session stops to ask you something, its choices appear as **buttons in a pane** beside the enlarged terminal → [answering a question from the pane](#question-pane) |
+
+### Working from a collection
+{: #collection-chat }
+
+Pressing a collection's card action or a template used to start the chat **and take you to the
+grid**, closing the collection you were reading. Now it opens in a pane under the collection, and
+you stay where you were.
+
+It is not a copy. The chat is an ordinary grid cell, and the pane borrows it: whichever view you
+have open is the one you type into, and switching between them keeps the scrollback, the input line
+and everything else exactly as you left it. There is no "move it back" button because it never
+left.
+
+![The Errands collection listing three records, with a terminal in a pane below it: a tab strip naming two chats — one with an amber dot, waiting — a line of what the shown one is doing, and the cell's own header and terminal underneath](../images/collection-chat-pane.png)
+
+- **Several chats per collection.** Asking a second thing while the first is still working adds a
+  tab. Each tab carries a dot in the grid's own colours — amber when the agent is waiting on you,
+  grey while it works — and the one you are looking at shows a line of what it is doing.
+- **The Collections button counts them**, so a chat running behind that door is visible from the
+  grid.
+- **Under the collection or beside it.** The button at the right of the tab strip moves the
+  terminal between the two: under it when the collection is a list you are scanning, beside it when
+  you are reading one record and talking about it. The choice is remembered, and each position keeps
+  its own size.
+- **Drag the divider** to give the terminal more or less room; the size is remembered per position.
+  Arrow keys work on it too — up and down under the collection, left and right beside it.
+- **Closing** is the cell's own ×, in the pane or in the grid — the same terminal, so the same
+  button.
+- **A reload keeps them.** The chats are grid cells and survive it anyway; the collection they
+  belong to is remembered alongside.
 
 ### Answering a question from the pane
 {: #question-pane }

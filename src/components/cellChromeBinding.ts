@@ -9,6 +9,7 @@ export interface CellChromeSource {
   rightPane?: RightPane | null | undefined;
   canvasAvailable?: boolean | undefined;
   collectionsAvailable?: boolean | undefined;
+  hideExpand?: boolean | undefined;
 }
 
 // The two booleans are resolved rather than passed through as `boolean | undefined`: under
@@ -21,6 +22,7 @@ export interface CellChromeProps {
   rightPane: RightPane | null;
   canvasAvailable: boolean;
   collectionsAvailable: boolean;
+  hideExpand: boolean;
 }
 
 // EVERY event CellChromeButtons can raise, minus the ones a cell binds itself (`toggle-park`,
@@ -71,6 +73,9 @@ export function cellChromeBinding(
       // Absent means NOT available, so a cell type that forgets to forward it hides the button
       // rather than offering one onto a store its agent cannot reach.
       collectionsAvailable: source.collectionsAvailable ?? false,
+      // Absent means the button STAYS, which is why the flag is negative: enlarging is what a cell
+      // can always do, and only the collection pane takes it away (#2001).
+      hideExpand: source.hideExpand ?? false,
     })),
     chromeEvents: {
       ...toggleForwards(emit),

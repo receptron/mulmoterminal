@@ -15,11 +15,13 @@ layout). `listMode` defaults to **true**, so the roster is what you get when you
 | **Cockpit roster** | `zoomed && listMode` | absolutely positioned **off-screen** (`left:-99999px`, 900x600) | teleported to `.zoom-main`, right of the roster | a **separate text row** in the `<aside>` |
 | **Filmstrip** | `zoomed && !listMode` | horizontal flex strip (`flex: 0 0 150px`, user-resizable) | teleported to `.zoom-main`, above the strip | 260px-wide thumbnails |
 
-## The four facts that keep being re-derived wrong
+## The five facts that keep being re-derived wrong
 
-**1. There is one component instance per cell, and it is always mounted.**
-The `.grid` div renders every cell in `props.cells` unconditionally. `<Teleport :disabled="!(zoomed
-&& cell.uid === expandedUid)">` moves **only the enlarged one** into `.zoom-main`. So a single
+**1. There is one component instance per cell, and the grid's own modes never remount it.**
+The `.grid` div renders every cell in `props.cells` unconditionally. A `<Teleport>` moves the
+enlarged one into `.zoom-main`, and a chat's cell into the pane under an open collection. Tile,
+thumbnail, enlarged and parked-off-screen are the same instance throughout — **the one exception is
+the collection trip, which re-keys deliberately (fact 5)**. So a single
 `TerminalCell` is, over its life, a tile / a thumbnail / the enlarged terminal / an off-screen box —
 without ever being remounted. Anything a cell renders must therefore make sense in all four
 positions, or be conditioned on the mode.
@@ -44,6 +46,27 @@ driven by `listRows: CockpitRow[]` (`GridView.vue`: `orderedCells.map(rosterRow)
 `rosterAlertClass()`. Cell chrome (`CELL_STATUS`, `HEADER_STATUS`, `DOT_STATUS` in `TerminalCell`)
 does not reach it, and roster chrome does not reach the cells. Two places, deliberately kept in
 step by the shared `activityStatus()` — not one.
+
+**5. A cell's teleport is keyed by WHERE it is going, not only by which cell it is.**
+`<Teleport>` keeps the target it had when it was last enabled: change `to` while it is **disabled**
+and re-enable it later, and the children are moved into a node that has since left the document —
+they are then in no view at all. That is not hypothetical. The grid has three destinations now
+(tile / `.zoom-main` / the collection pane), and moving a cell pane → tile → zoom lost the terminal
+entirely until the `v-for` key carried the placement (`cellTeleport.ts`, #2001).
+
+Two consequences worth keeping:
+
+- **Tile ↔ zoom deliberately shares one key.** The zoom's FLIP animation measures elements before
+  the switch and moves them after; a re-key there would hand it different elements.
+- **A re-key remounts the cell, and that is safe *because the slot is durable*.** `attach`
+  re-parents the same xterm instead of reconnecting, which is the same mechanism paging already
+  relies on. What it does NOT preserve is anything the cell holds in its own state — an open menu,
+  a half-typed memo — so fact 1's "never remounted" holds for the grid's modes and not for this
+  trip. It is also why a **command** cell is never claimed: its terminal has no `persist-key`, so a
+  remount would release the slot and kill the process (`paneTargetFor` refuses one outright).
+
+`PluginFrame.vue` reaches the same place from the other side (`<Teleport v-if="target" :to="target">`):
+a teleport that exists only while its target does.
 
 ## How a cell knows where it is
 

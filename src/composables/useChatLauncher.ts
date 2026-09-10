@@ -21,7 +21,9 @@
 import { ref, watch } from "vue";
 import { activeCollectionProjectId } from "./collectionSurface";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
-import { placeSpawnedChat } from "./useSpawnedChat";
+import { placeSpawnedChat, type SpawnedChatRequest } from "./useSpawnedChat";
+import { currentCollectionChatKey } from "./useCollectionBrowse";
+import { dropCollectionChat, holdCollectionChat } from "./collectionChatSessions";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
@@ -49,12 +51,28 @@ export interface SpawnedChat {
  *  `draft`, the prompt is prefilled in the input box but NOT submitted. Returns what was spawned
  *  (null if nothing was) — `hidden` callers need it to put the session somewhere of their own,
  *  since suppressing the opener otherwise leaves them no handle on what they started. */
+/** Place a spawned chat as a grid cell, and file it under the collection it was started from.
+ *
+ *  It is an ordinary cell either way; the collection is a second place to SEE it from (the pane
+ *  there shows it by having the grid teleport that cell). What the collection changes is where the
+ *  reader is left: `reveal: false` places the cell without taking the screen to the grid (#2001).
+ *
+ *  Unfiled again if the grid could not take it — a full grid leaves the session waiting with no
+ *  cell, and a tab pointing at a cell that does not exist is worse than no tab. */
+function placeChat(request: SpawnedChatRequest, filingKey: string | null): void {
+  if (filingKey) holdCollectionChat(filingKey, request);
+  if (!placeSpawnedChat(request, { reveal: !filingKey }) && filingKey) dropCollectionChat(filingKey, request.id);
+}
+
 export async function startCollectionChat(
   prompt: string,
   opts: { hidden?: boolean; draft?: boolean; project?: string | null } = {},
 ): Promise<SpawnedChat | null> {
   const message = prompt.trim();
   if (!message) return null;
+  // Where this was asked from, read now rather than after the spawn: the request below is awaited,
+  // and moving to another collection meanwhile must not file the chat where you landed.
+  const filingKey = currentCollectionChatKey();
   const agent = launchAgent.value;
   // codex has no editable-draft path (it auto-runs the seed), so a draft only applies to claude.
   const draft = agent === "claude" && opts.draft === true;
@@ -96,7 +114,8 @@ export async function startCollectionChat(
     // against a session that already exists. Seeded here for the SAME reason placement is —
     // every collection entry point passes through this one function.
     const canvas = await seedCollectionCanvas(chatId, message);
-    placeSpawnedChat({ id: chatId, agent, draft, canvas });
+    const request = { id: chatId, agent, draft, canvas };
+    placeChat(request, filingKey);
   }
   // `agent` is what the route was ASKED for, and the route echoes it back in jsonData — so this is
   // the agent the PTY actually runs, not a second reading of the toggle.

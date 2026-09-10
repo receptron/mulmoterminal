@@ -48,6 +48,10 @@ export interface GridCellProps {
   // is nothing for a disabled button to explain. See TerminalGrid's `collectionsOpenable` for
   // the one case that keeps it visible anyway (the pane is open and this is its only close).
   collectionsAvailable?: boolean;
+  // Drop this cell's expand button. True only while the collection pane is holding it: the pane is
+  // an overlay ON TOP of the grid, so the zoom it would set is behind it and the button would look
+  // broken (#2001).
+  hideExpand?: boolean;
   home: string | null;
   // The server's workspace directory. Grid state, not the cell's: a cell compares its OWN cwd
   // against it to know whether it is the workspace, and then says so in its header badge — the

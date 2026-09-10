@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import {
   tmuxSessionName,
+  tmuxSessionIdsFrom,
   tmuxNewSessionArgs,
   TMUX_CONF_LINES,
   isResumableTmuxSession,
@@ -446,5 +447,45 @@ describe("parseTmuxPanePids", () => {
 
   it("ignores a row it cannot read rather than inventing a pid", () => {
     expect(parseTmuxPanePids(["", "not-a-pid mt-aaaa", "0 mt-bbbb", "-3 mt-cccc", "2220"].join("\n"))).toEqual(new Map());
+  });
+});
+
+// Three answers, not two: tmux holding nothing and tmux unable to answer are different facts, and
+// a caller deciding whether a session still exists must not read the second as the first
+// (CodeRabbit, PR #2002).
+describe("tmuxSessionIdsFrom", () => {
+  it("reads the ids it was given", () => {
+    expect(tmuxSessionIdsFrom({ status: 0, stdout: "mt-a\nmt-b\nother\n", stderr: "" })).toEqual(["a", "b"]);
+  });
+
+  it("reads an empty list as an empty list", () => {
+    expect(tmuxSessionIdsFrom({ status: 0, stdout: "", stderr: "" })).toEqual([]);
+  });
+
+  // The ordinary case on a machine with nothing running: tmux exits non-zero and says so.
+  it("reads 'no server running' as nothing held", () => {
+    expect(tmuxSessionIdsFrom({ status: 1, stdout: "", stderr: "no server running on /tmp/tmux-501/mulmoterminal\n" })).toEqual([]);
+  });
+
+  // How a NAMED socket says the same thing: there is no socket file, so there is no server.
+  it("reads a missing socket as nothing held", () => {
+    const stderr = "error connecting to /tmp/tmux-501/mulmoterminal (No such file or directory)\n";
+    expect(tmuxSessionIdsFrom({ status: 1, stdout: "", stderr })).toEqual([]);
+  });
+
+  // The binary missing, the socket unreadable, the call timing out (status null) — tmux did not
+  // answer, and "nothing held" would be a claim nobody made.
+  it("answers null when tmux could not be asked", () => {
+    expect(tmuxSessionIdsFrom({ status: 1, stdout: "", stderr: "tmux: unknown option\n" })).toBeNull();
+    expect(tmuxSessionIdsFrom({ status: null, stdout: "", stderr: "" })).toBeNull();
+    expect(tmuxSessionIdsFrom({ status: 127, stdout: "", stderr: "command not found\n" })).toBeNull();
+  });
+
+  // A socket that EXISTS and cannot be read is the indeterminate case, whatever the prefix says.
+  // Reading it as empty retires every filed chat on a machine whose tmux is simply not ours to
+  // talk to (Codex, PR #2016).
+  it("answers null when the socket is there but refuses", () => {
+    expect(tmuxSessionIdsFrom({ status: 1, stdout: "", stderr: "error connecting to /tmp/tmux-501/mulmoterminal (Permission denied)\n" })).toBeNull();
+    expect(tmuxSessionIdsFrom({ status: 1, stdout: "", stderr: "error connecting to /tmp/tmux-501/mulmoterminal (Connection refused)\n" })).toBeNull();
   });
 });
