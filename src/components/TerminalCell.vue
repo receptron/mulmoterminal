@@ -69,6 +69,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, slotLabel, type HandoffTarget } from "../composables/useHandoff";
+import { menuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
 import { roundTableMessage } from "../composables/roundTableRules";
@@ -696,9 +697,27 @@ const askTargets = ref<HandoffTarget[]>([]);
 const askMsg = ref<string | null>(null);
 let askMsgTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Measured at OPEN, not bound to a CSS length: the menu hangs off a button partway down the
+// screen, so "how tall may it be" is the space left beside that button, which no viewport unit
+// knows (#2003 — a `100vh` cap still left Start below the fold on a bottom-row cell).
+const askMenuUp = ref(false);
+const askMenuMaxH = ref<number | null>(null);
+
 function openAskMenu() {
   askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
   askMenuOpen.value = !askMenuOpen.value;
+  if (!askMenuOpen.value) return;
+  const rect = askWrap.value?.getBoundingClientRect();
+  // No rect (not laid out yet, or jsdom) leaves both unset, which is the pre-#2003 behaviour:
+  // an unbounded menu is wrong, but a menu clamped to a height invented from nothing is worse.
+  if (!rect) {
+    askMenuUp.value = false;
+    askMenuMaxH.value = null;
+    return;
+  }
+  const placement = menuPlacement(rect, window.innerHeight);
+  askMenuUp.value = placement.up;
+  askMenuMaxH.value = placement.maxHeightPx;
 }
 
 function showAskMsg(msg: string) {
@@ -1633,34 +1652,48 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               >
                 <span class="material-symbols-outlined" aria-hidden="true">forum</span>
               </button>
+              <!-- Bounded and scrollable, like every other dropdown here (MulmoMenu / RunMenu /
+                   SkillMenu). This one was the exception, and it holds TWO lists that grow with the
+                   grid — one row per other terminal here, and one seat per terminal in the round
+                   table below — so at 20 cells it stood 1750px tall with nothing scrollable, and
+                   Start sat a thousand pixels below the window (#2003).
+                   `overflow-hidden` rather than `overflow-y-auto`: the lists inside do the
+                   scrolling, so the fixed controls under them (turns, room, Start) stay put
+                   instead of scrolling away with the rows they act on. -->
               <div
                 v-if="askMenuOpen"
                 data-testid="cell-ask-menu"
-                class="absolute right-0 top-full z-20 mt-1 flex min-w-[180px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute right-0 z-20 flex min-w-[180px] flex-col overflow-hidden rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                :class="askMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+                :style="askMenuMaxH === null ? undefined : { maxHeight: `${askMenuMaxH}px` }"
                 @keydown.escape="askMenuOpen = false"
               >
-                <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    data-testid="cell-ask-item"
-                    class="flex-1"
-                    :class="CELL_MENU_ITEM"
-                    :title="`Bring ${target.label}'s last turn here`"
-                    @click="askCell(target)"
-                  >
-                    {{ target.label }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="cell-exchange-item"
-                    :aria-label="`Exchange one turn with ${target.label}`"
-                    class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
-                    :disabled="automating"
-                    title="Send this cell's turn there and bring the answer back, both submitted"
-                    @click="exchangeWith(target)"
-                  >
-                    <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
-                  </button>
+                <!-- `min-h-0` is what lets a flex child shrink below its content: without it this
+                     keeps its full height and the max-height above has nothing to give. -->
+                <div data-testid="cell-ask-list" class="flex min-h-0 flex-col overflow-y-auto">
+                  <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="cell-ask-item"
+                      class="flex-1"
+                      :class="CELL_MENU_ITEM"
+                      :title="`Bring ${target.label}'s last turn here`"
+                      @click="askCell(target)"
+                    >
+                      {{ target.label }}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cell-exchange-item"
+                      :aria-label="`Exchange one turn with ${target.label}`"
+                      class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
+                      :disabled="automating"
+                      title="Send this cell's turn there and bring the answer back, both submitted"
+                      @click="exchangeWith(target)"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
+                    </button>
+                  </div>
                 </div>
                 <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
                 <RoundTableMenu

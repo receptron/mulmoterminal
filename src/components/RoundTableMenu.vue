@@ -73,28 +73,34 @@ function start(): void {
 </script>
 
 <template>
-  <div data-testid="round-table" class="mt-1 flex flex-col gap-1 border-t border-border pt-1">
-    <p class="m-0 px-2 py-0.5 font-sans text-[11px] uppercase tracking-[0.04em] text-dim">Round table</p>
+  <!-- `min-h-0` so this whole block can shrink inside the bounded menu that holds it; the seat
+       list below is what actually gives way, and the controls under it never do (#2003). -->
+  <div data-testid="round-table" class="mt-1 flex min-h-0 flex-col gap-1 border-t border-border pt-1">
+    <p class="m-0 flex-none px-2 py-0.5 font-sans text-[11px] uppercase tracking-[0.04em] text-dim">Round table</p>
 
-    <label
-      v-for="target in targets"
-      :key="target.key"
-      class="flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
-      :class="{ 'cursor-default opacity-40': busy || (full && !isPicked(target.key)) }"
-    >
-      <input
-        type="checkbox"
-        data-testid="round-table-seat"
-        class="m-0 cursor-pointer"
-        :value="target.key"
-        :checked="isPicked(target.key)"
-        :disabled="busy || (full && !isPicked(target.key))"
-        @change="toggle(target.key)"
-      />
-      {{ target.label }}
-    </label>
+    <!-- One seat per other terminal, so this grows with the grid exactly as the list above it
+         does — 19 of them on a 20-cell grid. It scrolls; turns, room and Start do not. -->
+    <div data-testid="round-table-seats" class="flex min-h-0 flex-col gap-1 overflow-y-auto">
+      <label
+        v-for="target in targets"
+        :key="target.key"
+        class="flex cursor-pointer items-center gap-1.5 rounded-[4px] px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+        :class="{ 'cursor-default opacity-40': busy || (full && !isPicked(target.key)) }"
+      >
+        <input
+          type="checkbox"
+          data-testid="round-table-seat"
+          class="m-0 cursor-pointer"
+          :value="target.key"
+          :checked="isPicked(target.key)"
+          :disabled="busy || (full && !isPicked(target.key))"
+          @change="toggle(target.key)"
+        />
+        {{ target.label }}
+      </label>
+    </div>
 
-    <label class="flex items-center gap-1.5 px-2 py-1 font-sans text-[12px] text-secondary">
+    <label class="flex flex-none items-center gap-1.5 px-2 py-1 font-sans text-[12px] text-secondary">
       turns
       <select
         v-model.number="budget"
@@ -109,7 +115,7 @@ function start(): void {
       <span class="text-dim">· {{ seats }} seats, one turn each in order</span>
     </label>
 
-    <label class="flex items-center gap-1.5 px-2 py-1 font-sans text-[12px] text-secondary">
+    <label class="flex flex-none items-center gap-1.5 px-2 py-1 font-sans text-[12px] text-secondary">
       room
       <input
         v-model="roomName"
@@ -145,7 +151,7 @@ function start(): void {
       v-else
       type="button"
       data-testid="round-table-stop"
-      class="mx-1 cursor-pointer rounded-[4px] border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
+      class="mx-1 flex-none cursor-pointer rounded-[4px] border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg"
       @click="emit('stop')"
     >
       <span class="material-symbols-outlined align-middle" aria-hidden="true">groups</span>
@@ -160,7 +166,7 @@ function start(): void {
       v-if="room"
       type="button"
       data-testid="round-table-watch"
-      class="mx-1 mb-1 cursor-pointer truncate rounded-[4px] border-none bg-transparent px-2 py-1 text-left font-sans text-[12px] text-dim hover:text-fg"
+      class="mx-1 mb-1 flex-none cursor-pointer truncate rounded-[4px] border-none bg-transparent px-2 py-1 text-left font-sans text-[12px] text-dim hover:text-fg"
       :title="`Read ${room}`"
       @click="roomsViewOpen(room)"
     >

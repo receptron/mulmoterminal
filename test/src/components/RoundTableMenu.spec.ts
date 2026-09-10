@@ -17,6 +17,39 @@ const render = (targets: HandoffTarget[], running = false, busy = running) =>
 const seats = (w: ReturnType<typeof render>) => w.findAll('[data-testid="round-table-seat"]');
 
 describe("RoundTableMenu", () => {
+  // #2003: one seat per other terminal, so on a 20-cell grid this block was 938px of a menu that
+  // had no bound and nothing scrollable — Start ended up a thousand pixels below the window.
+  // jsdom has no layout, so what a spec CAN hold is the structure the CSS needs: the seats sit in
+  // their own scroll box, and the controls that act on them sit OUTSIDE it.
+  describe("staying reachable on a big grid (#2003)", () => {
+    const many = Array.from({ length: 19 }, (_, i) => target(i + 2));
+
+    it("puts every seat inside the scrollable box", () => {
+      const w = render(many);
+      const box = w.find('[data-testid="round-table-seats"]');
+      expect(box.exists()).toBe(true);
+      expect(box.findAll('[data-testid="round-table-seat"]')).toHaveLength(19);
+    });
+
+    it("keeps Start, turns and room OUT of that box, so they cannot scroll away", () => {
+      const w = render(many);
+      const box = w.find('[data-testid="round-table-seats"]');
+      ["round-table-start", "round-table-budget", "round-table-room"].forEach((id) => {
+        const el = w.find(`[data-testid="${id}"]`);
+        expect(el.exists()).toBe(true);
+        expect(box.element.contains(el.element)).toBe(false);
+      });
+    });
+
+    // The scroll box is a flex child of a bounded parent; without `min-h-0` a flex item refuses to
+    // shrink below its content and the parent's max-height has nothing to give.
+    it("marks the seat box shrinkable and scrollable", () => {
+      const cls = render(many).find('[data-testid="round-table-seats"]').classes();
+      expect(cls).toContain("min-h-0");
+      expect(cls).toContain("overflow-y-auto");
+    });
+  });
+
   // This picker IS the admission control: agents cannot see each other or join anything, so a
   // table exists only because a human ticked these boxes.
   it("offers a seat for every readable terminal", () => {
