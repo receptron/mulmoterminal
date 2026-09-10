@@ -4,6 +4,7 @@ import { appendSystemPrompt, saveAppendSystemPrompt } from "../../composables/ap
 import { decisionDigest, saveDecisionDigest } from "../../composables/decisionDigest";
 import { worklogEnabled, saveWorklogEnabled, worklogIntervalHours, saveWorklogIntervalHours } from "../../composables/worklog";
 import { MIN_WORKLOG_INTERVAL_HOURS, MAX_WORKLOG_INTERVAL_HOURS } from "../../../common/worklogInterval";
+import { feedRefreshEnabled, saveFeedRefreshEnabled, calendarSyncEnabled, saveCalendarSyncEnabled } from "../../composables/systemTasks";
 import SettingsStepper from "./SettingsStepper.vue";
 
 // What a spawned session carries, and what runs on its own in the background. All three are
@@ -23,6 +24,12 @@ function onWorklogToggle(e: Event) {
 }
 function nudgeInterval(delta: number) {
   void saveWorklogIntervalHours(worklogIntervalHours.value + delta);
+}
+function onFeedRefreshToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) void saveFeedRefreshEnabled(e.target.checked);
+}
+function onCalendarSyncToggle(e: Event) {
+  if (e.target instanceof HTMLInputElement) void saveCalendarSyncEnabled(e.target.checked);
 }
 </script>
 
@@ -66,4 +73,33 @@ function nudgeInterval(delta: number) {
       @nudge="nudgeInterval"
     />
   </div>
+
+  <p class="mb-1.5 mt-4 text-[12px] font-semibold">{{ t("settings.sessions.systemTasks") }}</p>
+  <p class="mb-2 text-[12px] text-dim">{{ t("settings.sessions.systemTasksHint") }}</p>
+
+  <label class="flex cursor-pointer items-start gap-2">
+    <input
+      type="checkbox"
+      class="mt-1 cursor-pointer"
+      :checked="feedRefreshEnabled"
+      :aria-label="t('settings.sessions.feedRefresh')"
+      @change="onFeedRefreshToggle"
+    />
+    <span class="text-[12px]">
+      <strong>{{ t("settings.sessions.feedRefresh") }}</strong> — {{ t("settings.sessions.feedRefreshHint") }}
+    </span>
+  </label>
+
+  <label class="mb-3 mt-2 flex cursor-pointer items-start gap-2">
+    <input
+      type="checkbox"
+      class="mt-1 cursor-pointer"
+      :checked="calendarSyncEnabled"
+      :aria-label="t('settings.sessions.calendarSync')"
+      @change="onCalendarSyncToggle"
+    />
+    <span class="text-[12px]">
+      <strong>{{ t("settings.sessions.calendarSync") }}</strong> — {{ t("settings.sessions.calendarSyncHint") }}
+    </span>
+  </label>
 </template>

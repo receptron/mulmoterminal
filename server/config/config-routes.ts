@@ -23,6 +23,7 @@ import { type HeaderConfig } from "./header-config.js";
 import { type CwdPreset, type Launcher, type Provider, type UserMcpServer } from "./config-schema.js";
 import type { QuickCommand } from "../../common/quickCommands.js";
 import type { CustomAgent } from "../../common/customAgents.js";
+import type { SystemTaskSwitches } from "../backends/system-tasks.js";
 import type { PushKind } from "../../common/pushKinds.js";
 import { type TerminalSubmitMode } from "../../common/terminalSubmit.js";
 import { launchOptions } from "./launch-options.js";
@@ -160,6 +161,13 @@ export function getPushKinds(): PushKind[] {
 // scheduler wiring (a restart, currently). Off by default.
 export function getWorklogConfig(): { enabled: boolean; intervalHours: number } {
   return { enabled: config.worklogEnabled, intervalHours: config.worklogIntervalHours };
+}
+
+// Which built-in system tasks to register (#2015). Read at boot only: the scheduler registers
+// once, so switching one off takes effect at the next start — the same "currently, a restart"
+// the worklog getter above already has.
+export function getSystemTaskSwitches(): SystemTaskSwitches {
+  return { feedRefresh: config.feedRefreshEnabled, calendarSync: config.calendarSyncEnabled };
 }
 
 // How long a session may sit unused before the boot sweep ends it (#1467). Read live like the rest,
