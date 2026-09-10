@@ -2866,4 +2866,16 @@ describe("TerminalCell launch target — the OS default shell (#1114)", () => {
     await pick(w, "claude");
     expect(w.find('[data-testid="cell-model-help"]').exists()).toBe(true);
   });
+
+  // #2003 gave both lists in the forum menu a min-height, so a short menu cannot shrink them to
+  // nothing and leave the seats unclickable. An EMPTY list has no rows to protect, though, and
+  // the floor showed up as 40px of blank space above "No other terminal to read" — measured in a
+  // browser — which is the common case of a grid with one cell in it.
+  it("renders no ask list at all when there is no other terminal to read", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111");
+    await w.find('[data-testid="cell-ask"]').trigger("click");
+    expect(w.find('[data-testid="cell-ask-menu"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-ask-list"]').exists()).toBe(false);
+    expect(w.find('[data-testid="cell-ask-menu"]').text()).toContain("No other terminal to read");
+  });
 });

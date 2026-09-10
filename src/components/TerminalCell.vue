@@ -1678,7 +1678,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                      content will shrink to ZERO in a short menu, and a list with no height is a list
                      nobody can click. Shrinking is still what gives the max-height its room — this
                      only stops it going all the way. -->
-                <div data-testid="cell-ask-list" class="flex min-h-[2.5rem] flex-col overflow-y-auto">
+                <div v-if="askTargets.length" data-testid="cell-ask-list" class="flex min-h-[2.5rem] flex-col overflow-y-auto">
                   <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
                     <button
                       type="button"
