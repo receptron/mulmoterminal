@@ -10,8 +10,8 @@ Entries here are folded into the next release's heading when it ships.
 
 ### Take a 3D model out of the chat as a USDZ file
 
-- A ShapeScript model can now leave MulmoTerminal as a **USDZ** file — Apple's AR format, which
-  AR Quick Look opens on iPhone, iPad and Mac. New host tool **`exportShapeScriptUsdz`** takes
+- A ShapeScript model can now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
+  Quick Look places it in the room on iPhone and iPad, and Quick Look previews it on a Mac. New host tool **`exportShapeScriptUsdz`** takes
   the same source as `presentShapeScript` (inline, or a `.shape` you point it at), writes the
   file beside the model under the workspace `artifacts/shapes/`, and answers with the absolute
   path. It sits in the **Canvas (render MCPs)** group with the other two ShapeScript tools and

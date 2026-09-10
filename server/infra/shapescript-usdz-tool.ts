@@ -1,5 +1,6 @@
 // Host tool: `exportShapeScriptUsdz` — write a ShapeScript model out as a USDZ
-// file (AR Quick Look on iPhone / iPad / Mac, or any USD viewer).
+// file (AR Quick Look on iPhone / iPad, Quick Look preview on a Mac, or any USD
+// viewer).
 //
 // Everything about the tool lives in `@mulmoclaude/shapescript-plugin`: the
 // schema, the description, the export itself, and where under `artifacts/shapes/`
