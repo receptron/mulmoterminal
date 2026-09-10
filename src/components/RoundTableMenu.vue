@@ -80,7 +80,12 @@ function start(): void {
 
     <!-- One seat per other terminal, so this grows with the grid exactly as the list above it
          does — 19 of them on a 20-cell grid. It scrolls; turns, room and Start do not. -->
-    <div data-testid="round-table-seats" class="flex min-h-0 flex-col gap-1 overflow-y-auto">
+    <!-- `min-h-[2.5rem]` (about one row) so this cannot shrink to nothing. `min-h-0` alone let it
+         collapse to 0px in a short menu — measured — and a seat list with no height means no seat
+         can be ticked, which leaves Start disabled however reachable it is. Codex caught that the
+         first sweep only checked Start. The floor makes the menu overflow sooner instead, and the
+         container scrolls. -->
+    <div data-testid="round-table-seats" class="flex min-h-[2.5rem] flex-col gap-1 overflow-y-auto">
       <label
         v-for="target in targets"
         :key="target.key"

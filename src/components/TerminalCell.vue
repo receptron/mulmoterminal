@@ -707,6 +707,9 @@ function openAskMenu() {
   askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
   askMenuOpen.value = !askMenuOpen.value;
   if (!askMenuOpen.value) return;
+  // `askWrap` wraps the button AND the menu, but the menu is absolutely positioned and so adds
+  // nothing to the wrapper's box — measured. That is what makes this safe to read here rather
+  // than after a re-render: the number is the trigger's either way.
   const rect = askWrap.value?.getBoundingClientRect();
   // No rect (not laid out yet, or jsdom) leaves both unset, which is the pre-#2003 behaviour:
   // an unbounded menu is wrong, but a menu clamped to a height invented from nothing is worse.
@@ -1657,20 +1660,25 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                    grid — one row per other terminal here, and one seat per terminal in the round
                    table below — so at 20 cells it stood 1750px tall with nothing scrollable, and
                    Start sat a thousand pixels below the window (#2003).
-                   `overflow-hidden` rather than `overflow-y-auto`: the lists inside do the
-                   scrolling, so the fixed controls under them (turns, room, Start) stay put
-                   instead of scrolling away with the rows they act on. -->
+                   The lists inside do the scrolling, so the controls under them (turns, room,
+                   Start) stay put instead of scrolling away with the rows they act on. The
+                   container scrolls too — `overflow-y-auto`, not `overflow-hidden` — because the
+                   controls are `flex-none` and a short enough menu cannot shrink to hold them:
+                   with `hidden` they were CLIPPED, which is the reported bug again at any height
+                   under ~250px. Scrolling is the graceful failure; clipping is the original one. -->
               <div
                 v-if="askMenuOpen"
                 data-testid="cell-ask-menu"
-                class="absolute right-0 z-20 flex min-w-[180px] flex-col overflow-hidden rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute right-0 z-20 flex min-w-[180px] flex-col overflow-y-auto rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
                 :class="askMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
                 :style="askMenuMaxH === null ? undefined : { maxHeight: `${askMenuMaxH}px` }"
                 @keydown.escape="askMenuOpen = false"
               >
-                <!-- `min-h-0` is what lets a flex child shrink below its content: without it this
-                     keeps its full height and the max-height above has nothing to give. -->
-                <div data-testid="cell-ask-list" class="flex min-h-0 flex-col overflow-y-auto">
+                <!-- A floor of about one row, not `min-h-0`: a flex child that may shrink below its
+                     content will shrink to ZERO in a short menu, and a list with no height is a list
+                     nobody can click. Shrinking is still what gives the max-height its room — this
+                     only stops it going all the way. -->
+                <div data-testid="cell-ask-list" class="flex min-h-[2.5rem] flex-col overflow-y-auto">
                   <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
                     <button
                       type="button"

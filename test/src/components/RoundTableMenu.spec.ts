@@ -41,12 +41,15 @@ describe("RoundTableMenu", () => {
       });
     });
 
-    // The scroll box is a flex child of a bounded parent; without `min-h-0` a flex item refuses to
-    // shrink below its content and the parent's max-height has nothing to give.
-    it("marks the seat box shrinkable and scrollable", () => {
+    // The box has to give way inside a bounded menu, but not all the way: measured at
+    // max-height 120-260px, `min-h-0` let it collapse to 0px, and a seat list with no height is a
+    // list nobody can tick — which leaves Start disabled however reachable it is (Codex round 1).
+    // So it scrolls, and it keeps a floor of about one row.
+    it("scrolls, but keeps a floor so the seats stay clickable", () => {
       const cls = render(many).find('[data-testid="round-table-seats"]').classes();
-      expect(cls).toContain("min-h-0");
       expect(cls).toContain("overflow-y-auto");
+      expect(cls).toContain("min-h-[2.5rem]");
+      expect(cls).not.toContain("min-h-0");
     });
   });
 

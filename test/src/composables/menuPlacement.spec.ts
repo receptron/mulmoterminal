@@ -27,6 +27,17 @@ describe("menuPlacement", () => {
     expect(p.up).toBe(false);
   });
 
+  // Codex round 1, P2: the old minimum (220) sat BELOW the menu's own non-scrollable chrome
+  // (~216px of round-table controls before either list shows a row), so a trigger with 220-260px
+  // under it stayed downward and the controls were clipped — the reported bug, at the very
+  // positions the threshold existed to protect. Measured in a browser at 180/220px: Start's
+  // bottom fell past the menu's.
+  it("flips when the space below cannot hold the controls that never scroll", () => {
+    const chromeOnlyBelow = 240; // fits the ~216px chrome and nothing else
+    const trig = trigger(VIEWPORT - chromeOnlyBelow - MENU_VIEWPORT_GAP_PX - 24);
+    expect(menuPlacement(trig, VIEWPORT).up).toBe(true);
+  });
+
   it("does not flip for a few pixels — below has to be under the minimum", () => {
     const justEnough = VIEWPORT - MENU_VIEWPORT_GAP_PX - MIN_MENU_HEIGHT_PX - 24;
     expect(menuPlacement(trigger(justEnough), VIEWPORT).up).toBe(false);

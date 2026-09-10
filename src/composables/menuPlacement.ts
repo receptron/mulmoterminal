@@ -8,9 +8,18 @@
 // Its own file, and pure: the decision is arithmetic on a rectangle, so it is worth testing
 // without a browser. The caller supplies the rect and the viewport; nothing here touches the DOM.
 
-/** Never offer less than this. Below it a menu is a scrollbar with a hint of content, and the
- *  caller is better off flipping to the other side even if that side is also tight. */
-export const MIN_MENU_HEIGHT_PX = 220;
+/** Below this, prefer the roomier side: a menu this short is almost entirely the controls that
+ *  never scroll, with nothing left to show of the lists above them.
+ *
+ *  Measured in a browser against the real stylesheet: the round-table chrome that cannot shrink —
+ *  heading, turns, room, Start — is ~216px by itself, before the watch button that appears once a
+ *  table has run, and before either list has shown a single row.
+ *
+ *  It is a PREFERENCE, not a guarantee. Getting it wrong makes the menu cramped, never unusable:
+ *  the container scrolls rather than clips, so the controls stay reachable at any height. That
+ *  split is deliberate — the first version of this fix hard-clipped below ~250px and put Start
+ *  back out of reach at exactly the positions the threshold was meant to protect. */
+export const MIN_MENU_HEIGHT_PX = 320;
 
 /** Breathing room between the menu and the window edge, so the last row is not flush. */
 export const MENU_VIEWPORT_GAP_PX = 12;
