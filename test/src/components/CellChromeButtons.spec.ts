@@ -287,16 +287,4 @@ describe("the park button", () => {
     expect(buttons[buttons.length - 2].attributes("data-testid")).toBe("cell-park-btn");
     expect(buttons[buttons.length - 1].attributes("aria-label")).toBe("Close terminal");
   });
-
-  // #2004: one glyph meant four different things, and two of them sat in this header — the pane
-  // of prompts YOU sent, beside the menu for talking to another terminal. Stated as a count
-  // rather than as "the prompts button is `outbox`", because the failure was never one button's
-  // icon: it was a second button quietly reusing a glyph that already meant something here.
-  it("uses the conversation glyph at most once in this header", () => {
-    const icons = mountButtons(true)
-      .findAll("span.material-symbols-outlined")
-      .map((s) => s.text());
-    expect(icons.filter((name) => name === "forum").length).toBeLessThanOrEqual(1);
-    expect(icons).toContain("outbox"); // the prompts pane, which is not a conversation
-  });
 });

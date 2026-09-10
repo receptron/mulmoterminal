@@ -2878,4 +2878,33 @@ describe("TerminalCell launch target — the OS default shell (#1114)", () => {
     expect(w.find('[data-testid="cell-ask-list"]').exists()).toBe(false);
     expect(w.find('[data-testid="cell-ask-menu"]').text()).toContain("No other terminal to read");
   });
+
+  // #2004: one glyph meant four things, and TWO of them were in this header — the pane of prompts
+  // YOU sent, and the menu for talking to another terminal. Nothing said which was which.
+  //
+  // It has to be asserted HERE. The header is assembled from several components — the prompts
+  // button comes from CellChromeButtons, the talk menu from this file's own `#header-actions`,
+  // the copy button from CopyCodeBlock — so a spec mounting any one of them sees one side of the
+  // collision and passes. That is what the first version of this test did.
+  //
+  // Stated as "every glyph is unique" rather than "forum appears once", because the failure was
+  // never about `forum`: it was two controls reaching for the same picture. Measured today: 14
+  // buttons, 14 distinct glyphs.
+  it("gives every button in an enlarged cell's header its own glyph", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { expanded: true });
+    await w.vm.$nextTick();
+    const glyphs = w.findAll("button span.material-symbols-outlined").map((s) => s.text());
+    const duplicated = glyphs.filter((g, i) => glyphs.indexOf(g) !== i);
+    expect(duplicated).toEqual([]);
+    expect(glyphs.length).toBeGreaterThan(5); // the assertion above is vacuous on an empty header
+  });
+
+  // The two the issue was actually about, pinned by name so a failure says which button moved.
+  it("keeps the prompts pane off the conversation glyph", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { expanded: true });
+    await w.vm.$nextTick();
+    const glyph = (id: string) => w.find(`[data-testid="${id}"] span.material-symbols-outlined`).text();
+    expect(glyph("cell-prompts-btn")).toBe("outbox");
+    expect(glyph("cell-ask")).toBe("forum");
+  });
 });
