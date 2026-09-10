@@ -151,6 +151,10 @@ describe("storyWirePath — the workspace subtree", () => {
   // read back as a UNC share root — so nothing under such a workspace was a story at all
   // (Codex P1 on #1934). The default-root half of that predates the named root.
   it("recognises a workspace that is a filesystem root", () => {
+    expect(storyWirePath("/myrepo/decks/talk.json", { workspaces: ["/"], roots: [{ id: "abc123", paths: ["/"], canonical: "/" }] })).toEqual({
+      filePath: "/myrepo/decks/talk.json",
+    });
+    // Without a canonical, through the pane-spelling fallback: the same answer by a different route.
     expect(storyWirePath("/myrepo/decks/talk.json", { workspaces: ["/"], roots: [{ id: "abc123", paths: ["/"] }] })).toEqual({
       filePath: "/myrepo/decks/talk.json",
     });
@@ -164,6 +168,11 @@ describe("storyWirePath — the workspace subtree", () => {
   // because one rule now answers for both.
   it("recognises a workspace whose last component ends in a space", () => {
     const WS_SPACE = "/work/ws ";
+    expect(storyWirePath("/work/ws /myrepo/deck.json", { workspaces: [WS_SPACE], roots: [{ id: "abc123", paths: [WS_SPACE], canonical: WS_SPACE }] })).toEqual({
+      filePath: "/work/ws /myrepo/deck.json",
+    });
+    // The space survives the CANONICAL branch too, which is the one a real server takes: the tail
+    // is keyed (and so trimmed) but it is joined back onto the root's own untrimmed spelling.
     expect(storyWirePath("/work/ws /myrepo/deck.json", { workspaces: [WS_SPACE], roots: [{ id: "abc123", paths: [WS_SPACE] }] })).toEqual({
       filePath: "/work/ws /myrepo/deck.json",
     });
@@ -181,6 +190,20 @@ describe("storyWirePath — the workspace subtree", () => {
     });
     // Both roots' own stories directories still key rather than pass through.
     expect(storyWirePath("C:\\artifacts\\stories\\x.json", { workspaces: ["C:\\"], roots: [] })).toEqual({ filePath: "stories/x.json" });
+  });
+
+  // On Windows the canonical branch MIXES separators — the root keeps its backslashes and the tail
+  // is rejoined with `/`, because the tail comes from the key and the key joins with `/`. It is
+  // pinned rather than tidied: `dirPathKey` folds both separators, so the mixed spelling keys the
+  // same as the pane's own and the card still collapses; `path.resolve` on the server folds them
+  // too, and `expectPath` travels as the pane spelled it either way. Normalising it here would be a
+  // second spelling rule for one file, which is the thing this whole branch exists to avoid.
+  it("mixes separators under a Windows root, and the card is still one card", () => {
+    const WIN = { workspaces: ["C:\\work\\ws"], roots: [{ id: "abc123", paths: ["C:\\work\\ws"], canonical: "C:\\work\\ws" }] };
+    const dirs = { workspace: "C:\\work\\ws", byId: { abc123: "C:\\work\\ws" } };
+    const wire = storyWirePath("C:\\work\\ws\\myrepo\\deck.json", WIN);
+    expect(wire).toEqual({ filePath: "C:\\work\\ws/myrepo/deck.json" });
+    expect(filePathIdentity({ data: { ...wire } }, dirs)).toBe(filePathIdentity({ data: { filePath: "stories/myrepo/deck.json", root: "abc123" } }, dirs));
   });
 
   // Launched through a symlink, the Files pane can hand either spelling: a cell from the launcher

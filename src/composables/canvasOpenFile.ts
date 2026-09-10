@@ -215,39 +215,19 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
   // for one deck. Deciding the narrower one first means only one spelling is ever minted.
   const inDefault = underAny(workspaces, (workspace) => joinPath(workspace, STORY_DIR));
   if (inDefault) return { filePath: `${STORY_WIRE_PREFIX}${inDefault}` };
-  // ANYWHERE ELSE: the file's own absolute path, whether or not a registered root contains it.
+  // ANYWHERE ELSE: an absolute path, which cannot lose a root because it has none — the whole of
+  // #1970, argued in the header above.
   //
-  // A registered root used to answer `stories/<tail>` plus the root's id here, and that is what
-  // #1970 was: opening worked, because the reopen carries the root — but the View's own dispatches
-  // (`updateScript`, `updateBeat`, `beatImage`, the movie/PDF status polls) pass `filePath` through
-  // and send NO root, so every one of them resolved the tail against the DEFAULT stories root and
-  // answered `File not found`. A deck in a repository opened, showed a red error on every beat, and
-  // silently failed to save. Measured against a running server: the wire form 404s on
-  // `updateScript` where the absolute form writes the file.
-  //
-  // An absolute path cannot lose a root because it does not have one, so it survives a dispatch
-  // that forgets to carry it. That is the same reason the deck-outside-every-root case already used
-  // it (#1976); this only stops treating a registered root as the exception. Identity survives the
-  // change because the spelling minted here is the root's CANONICAL one, which is what
-  // `canonicalCardPath` resolves an agent's `stories/…`-plus-root card to — see below for the
-  // symlink case that makes the choice of spelling load-bearing.
-  //
-  // As the pane spelled it rather than as `key`: `dirPathKey` TRIMS, so a name ending in a space
-  // would name a different file, and the server is handed this same string as `expectPath` to
-  // compare its realpath against. A `.` or `..` segment the plugin refuses is the one thing the key
-  // would have folded, and neither the tree's rows nor a cell's cwd produces one.
-  // Spelled CANONICALLY where the server told us what canonical is. A workspace reached through a
-  // symlink has two spellings, the pane shows whichever the cell was launched with, and identity is
-  // resolved LEXICALLY — a browser cannot realpath. So without this, one file opened through
-  // `/tmp/ws-link/…` and through `/srv/real-ws/…` mints two paths, two identities, two cards for
-  // one deck. Measured: `/tmp/ws-link/decks/talk.json` and `/srv/real-ws/decks/talk.json` resolved
-  // to two different identities, and neither matched a card minted before this change.
+  // Built on the root's CANONICAL prefix rather than the pane's spelling. A workspace reached
+  // through a symlink has two spellings, the pane shows whichever the cell was launched with, and
+  // card identity is resolved LEXICALLY, because a browser cannot realpath. So the pane's spelling
+  // would mint two paths for one deck — and neither would match a card minted before this change,
+  // which resolves through the same canonical (Codex P2; measured both ways).
   //
   // The MOST SPECIFIC root wins, as it did when this branch minted a root id. Usually every root
-  // containing the file rebuilds the same absolute path, so the choice does not matter — but a
-  // nested root that is ITSELF a symlink has a canonical outside its parent, and then it does. The
-  // shortest tail is the only pick that does not depend on the order the server listed them in
-  // (#1951).
+  // containing the file rebuilds the same absolute path — but a nested root that is ITSELF a
+  // symlink has a canonical outside its parent, and then the pick shows. The shortest tail is the
+  // only one that does not depend on the order the server listed the roots in (#1951).
   const best = named.reduce<{ canonical: string; tail: string } | null>((shortest, root) => {
     const tail = root.canonical === undefined ? null : underAny(root.paths, (dir) => dir);
     if (tail === null || root.canonical === undefined) return shortest;
@@ -255,7 +235,9 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
   }, null);
   if (best !== null) return { filePath: joinPath(best.canonical, best.tail) };
   // Under no root the server named, or a server that reported no canonical: the spelling the pane
-  // showed, which is all there is (#1976).
+  // showed, which is all there is (#1976). Verbatim rather than keyed — `dirPathKey` TRIMS, so a
+  // name ending in a space would name a different file, and this same string is handed to the
+  // server as `expectPath` to realpath against.
   //
   // Not a path this server can place at all: the pane falls back to the row's RELATIVE spelling
   // when it has no cwd (`absoluteUnder`), and a relative `filePath` is not "the file over there" —
