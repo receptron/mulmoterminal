@@ -12,16 +12,22 @@
 // logged stack is also what lets us find and fix the real emitter (Step B). A genuinely
 // fatal bind failure still exits, because server.on("error") in index.ts runs its own
 // process.exit before anything reaches here.
-import type { ProcessEventMap } from "node:process";
 import { messageOf } from "../errors.js";
 
-// The listener signatures come from ProcessEventMap rather than the NodeJS.*Listener aliases:
-// @types/node deprecated those and names this as the replacement.
-const onUnhandledRejection = (...[reason]: ProcessEventMap["unhandledRejection"]) => {
+// The listener parameters are written out rather than taken from a node type. `ProcessEventMap`
+// was the named replacement for the deprecated NodeJS.*Listener aliases, but it does not exist in
+// every @types/node this repo builds against — it is absent in 22 and present in 26 — so importing
+// it makes a dependency bump a build break in a file that has nothing to do with the bump.
+//
+// `unknown` is deliberate on both, and not just for portability: node hands `uncaughtException`
+// whatever was thrown, and `throw "boom"` is not an Error. Node's own declaration says `Error`, so
+// typing it that way would delete the `instanceof` check below as provably-true and lose the
+// non-Error case. A wider parameter is still assignable to node's narrower listener type.
+const onUnhandledRejection = (reason: unknown) => {
   console.error("[fatal] unhandledRejection — process kept alive:", reason instanceof Error ? (reason.stack ?? reason) : reason);
 };
 
-const onUncaughtException = (...[err]: ProcessEventMap["uncaughtException"]) => {
+const onUncaughtException = (err: unknown) => {
   console.error(`[fatal] uncaughtException — process kept alive: ${messageOf(err)}`);
   if (err instanceof Error && err.stack) console.error(err.stack);
 };
