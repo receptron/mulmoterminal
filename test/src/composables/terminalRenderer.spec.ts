@@ -1,7 +1,7 @@
 // The disposal order xterm 6 + the xterm-5-era canvas addon require, and the promise that neither
 // side can stop the caller (#2021).
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { disposeTerminal, type Disposes } from "../../../src/composables/terminalRenderer";
+import { attachRenderer, disposeTerminal, type Disposes } from "../../../src/composables/terminalRenderer";
 
 const recorder = () => {
   const order: string[] = [];
@@ -64,5 +64,48 @@ describe("disposeTerminal", () => {
     disposeTerminal(term, renderer);
     expect(term.dispose).toHaveBeenCalledTimes(1);
     expect(renderer.dispose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("attachRenderer", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("hands back the renderer it loaded", () => {
+    const renderer = { dispose: vi.fn() };
+    const term = { loadAddon: vi.fn() };
+    expect(attachRenderer(term, renderer)).toBe(renderer);
+    expect(term.loadAddon).toHaveBeenCalledWith(renderer);
+    expect(renderer.dispose).not.toHaveBeenCalled();
+  });
+
+  // xterm registers an addon BEFORE it activates it, so a throw out of activate() leaves it in the
+  // addon list — where the terminal's own dispose would reach it at the moment this module exists
+  // to avoid (CodeRabbit, PR #2026).
+  it("disposes a renderer whose activation threw, while the terminal is still whole", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const renderer = { dispose: vi.fn() };
+    const term = {
+      loadAddon: () => {
+        throw new Error("no 2d context");
+      },
+    };
+    expect(attachRenderer(term, renderer)).toBeNull();
+    expect(renderer.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives a half-loaded renderer that will not let go either", () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const renderer: Disposes = {
+      dispose: () => {
+        throw new Error("half-built");
+      },
+    };
+    const term = {
+      loadAddon: () => {
+        throw new Error("no 2d context");
+      },
+    };
+    expect(() => attachRenderer(term, renderer)).not.toThrow();
+    expect(attachRenderer(term, renderer)).toBeNull();
   });
 });

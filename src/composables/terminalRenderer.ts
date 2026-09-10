@@ -33,35 +33,55 @@ import type { Terminal } from "@xterm/xterm";
 // meant to do next does not run. In the #846 rebuild path that is `connect()` — the repair for a
 // frozen cell would leave the replacement terminal attached to no socket at all.
 
-/** The canvas renderer, or null where it could not initialise — xterm keeps its own DOM renderer
- *  then, and there is nothing of ours to dispose first. */
-export function loadCanvasRenderer(term: Terminal): CanvasAddon | null {
-  try {
-    const canvas = new CanvasAddon();
-    term.loadAddon(canvas);
-    return canvas;
-  } catch (err) {
-    console.warn("[terminal] canvas renderer unavailable — falling back to the DOM renderer", err);
-    return null;
-  }
-}
-
-/** Just the part of a terminal / addon the teardown needs. Structural so a spec can drive it with
+/** Just the part of a terminal / addon this file needs. Structural so a spec can drive it with
  *  fakes — the real pairing needs a canvas, which jsdom does not have. */
 export interface Disposes {
   dispose(): void;
 }
 
+/** Dispose without letting the failure travel: everything here is called by someone with cleanup
+ *  still to do. */
+function disposeQuietly(target: Disposes | null, whatFailed: string): void {
+  try {
+    target?.dispose();
+  } catch (err) {
+    console.warn(`[terminal] ${whatFailed}`, err);
+  }
+}
+
+/** Load a renderer addon onto a terminal, and clean up after a load that fails HALFWAY.
+ *
+ *  `loadAddon` registers the addon before it activates it
+ *  (`@xterm/xterm/src/common/public/AddonManager.ts:29-31`), so a throw out of `activate()` leaves
+ *  it in xterm's addon list — where the terminal's own dispose would reach it at exactly the moment
+ *  this file exists to avoid. Disposing it here happens while the terminal is still whole, which is
+ *  the safe side of that rule (CodeRabbit, PR #2026).
+ *
+ *  Generic and structural so a spec can fail the load on purpose. */
+export function attachRenderer<T extends Disposes>(term: { loadAddon: (addon: T) => void }, renderer: T): T | null {
+  try {
+    term.loadAddon(renderer);
+    return renderer;
+  } catch (err) {
+    console.warn("[terminal] canvas renderer unavailable — falling back to the DOM renderer", err);
+    disposeQuietly(renderer, "the half-loaded canvas renderer would not let go either");
+    return null;
+  }
+}
+
+/** The canvas renderer, or null where it could not initialise — xterm keeps its own DOM renderer
+ *  then, and there is nothing of ours to dispose first. */
+export function loadCanvasRenderer(term: Terminal): CanvasAddon | null {
+  try {
+    return attachRenderer(term, new CanvasAddon());
+  } catch (err) {
+    console.warn("[terminal] canvas renderer could not be constructed — using the DOM renderer", err);
+    return null;
+  }
+}
+
 /** Dispose a terminal and its renderer addon, renderer FIRST, and never throw at the caller. */
 export function disposeTerminal(term: Disposes, renderer: Disposes | null): void {
-  try {
-    renderer?.dispose();
-  } catch (err) {
-    console.warn("[terminal] the canvas renderer would not let go — disposing the terminal anyway", err);
-  }
-  try {
-    term.dispose();
-  } catch (err) {
-    console.warn("[terminal] dispose threw; the slot is being torn down regardless", err);
-  }
+  disposeQuietly(renderer, "the canvas renderer would not let go — disposing the terminal anyway");
+  disposeQuietly(term, "dispose threw; the slot is being torn down regardless");
 }
