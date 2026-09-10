@@ -49,7 +49,13 @@ describe("CockpitHeader", () => {
     expect(mark.text()).toBe("receipt_long"); // the ligature, which the icon font draws as a glyph
     // The COLLECTION's name, not the ligature's: a reader hearing "receipt_long" learns nothing.
     expect(mark.attributes("title")).toBe("Started from Invoices");
-    expect(marked.get('[role="img"]').attributes("aria-label")).toBe("Started from Invoices");
+    expect(mark.attributes("role")).toBe("img");
+    expect(mark.attributes("aria-label")).toBe("Started from Invoices");
+    // The label is on THAT element and on nothing inside it. The glyph within is a Material Symbols
+    // LIGATURE, so a second label there makes a screen reader announce "receipt_long" as well as the
+    // collection's name — which is why the roster's agent mark is built the same way.
+    expect(mark.findAll('[role="img"], [aria-label]')).toHaveLength(0);
+    expect(mark.find("span").attributes("aria-hidden")).toBe("true");
   });
 
   it("shows the PR phase pill only when there is a phase", () => {

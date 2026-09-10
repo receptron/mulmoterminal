@@ -120,10 +120,12 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
     const cwd = spawnCwdFor(project);
     if (cwd === null) return res.json({ message: `spawnBackgroundChat: unknown project '${project?.replace(/[\r\n]/g, " ") ?? ""}'.` });
     const sessionId = randomUUID();
-    // Resolved alongside the MCP-group read that was already being awaited here, and AWAITED
-    // rather than left to land later: the browser places the cell the moment the id comes back and
-    // reads /api/session/:id exactly ONCE at mount, so a record that arrives a tick afterwards
-    // leaves that cell unmarked until some later turn happens to refresh it (#2020).
+    // Resolved alongside the MCP-group read that was already being awaited here. What this await
+    // buys is that the record is IN MEMORY before the id goes back: the browser places the cell the
+    // moment it arrives and reads /api/session/:id exactly ONCE at mount, so a record that lands a
+    // tick afterwards leaves that cell unmarked until some later turn happens to refresh it (#2020).
+    // The DISK append is deliberately not awaited — see rememberSessionCollection for why a lost
+    // one costs a glyph after a restart and nothing the caller could act on.
     const [mcpGroups, startedFrom] = await Promise.all([groupsForSpawn(agent, cwd), resolveSpawnCollection(collection, cwd)]);
     try {
       runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () =>

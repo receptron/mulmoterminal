@@ -16,10 +16,13 @@ import { routeCall, jsonPost } from "../../helpers/routeCall";
 // Same reason as seeded-spawn-prompt.spec.ts: process.env is shared across a vitest worker, so
 // pointing HOME at a temp dir reaches unrelated specs. What is under test is the in-memory
 // decision; the log's own format has its own spec.
+// Typed with the two arguments the assertions read — a bare `vi.fn(async () => …)` gives
+// `mock.calls` an empty tuple type, so `call[0]` is a compile error rather than the path.
+const appendFile = vi.fn<(file: string, line: string) => Promise<undefined>>(async () => undefined);
 vi.mock("node:fs", () => {
   const promises = {
     readFile: vi.fn(async () => ""),
-    appendFile: vi.fn(async () => undefined),
+    appendFile: (file: string, line: string) => appendFile(file, line),
     mkdir: vi.fn(async () => undefined),
     writeFile: vi.fn(async () => undefined),
   };
@@ -67,7 +70,16 @@ async function spawn(body: Record<string, unknown>): Promise<string> {
 beforeEach(() => {
   asked.length = 0;
   answer = null;
+  appendFile.mockClear();
 });
+
+/** Let the append chain (mkdir -> appendFile) run. It is deliberately not awaited by the route,
+ *  so a test that asserts on it has to yield rather than expect it to have happened already. */
+const settleAppends = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+/** The session-collections lines this run appended, as parsed objects. */
+const appendedCollectionLines = (): Array<Record<string, unknown>> =>
+  appendFile.mock.calls.filter((call) => String(call[0]).endsWith("session-collections.jsonl")).map((call) => JSON.parse(String(call[1])));
 
 describe("recording the collection a spawn was started from", () => {
   it("records what the resolver answered, under the id it hands back", async () => {
@@ -94,5 +106,61 @@ describe("recording the collection a spawn was started from", () => {
     const chatId = await spawn({});
     expect(sessionCollections.has(chatId)).toBe(false);
     expect(asked[0]?.slug).toBeNull();
+    await settleAppends();
+    expect(appendedCollectionLines()).toEqual([]);
+  });
+
+  // The record has to reach the LOG, not only the map — the map dies with the process and the cell
+  // does not (Codex round 1, P2). The line is asserted whole because it is a shared on-disk format:
+  // a field renamed here is a field an older build's parser drops.
+  it("appends the record to the session-collections log", async () => {
+    answer = { slug: "invoices", icon: "receipt_long", title: "Invoices" };
+
+    const chatId = await spawn({ collection: "invoices" });
+    await settleAppends();
+
+    expect(appendedCollectionLines()).toEqual([{ id: chatId, slug: "invoices", icon: "receipt_long", title: "Invoices" }]);
+  });
+
+  // The other half of that finding, stated as the property it actually is: the response does NOT
+  // wait on the disk. A write that never settles must still leave a served spawn and a correct
+  // mark — because the mark is answered from memory for the whole life of the cell, and the only
+  // thing a lost line costs is the glyph after a restart.
+  //
+  // A hang, not a delay: with `appendFile` mocked to resolve instantly the append lands within a
+  // microtask or two either way, so timing alone cannot tell an awaited write from a fire-and-
+  // forget one. Never settling is what makes the difference observable.
+  it("answers the spawn even while the write never settles", async () => {
+    let release!: () => void;
+    appendFile.mockReturnValueOnce(new Promise<undefined>((resolve) => (release = () => resolve(undefined))));
+    answer = { slug: "invoices", icon: "receipt_long", title: "Invoices" };
+
+    const chatId = await spawn({ collection: "invoices" });
+
+    expect(sessionCollections.get(chatId)).toEqual({ slug: "invoices", icon: "receipt_long", title: "Invoices" });
+    // RELEASED before the test ends, and not merely for tidiness: the appends run on one serial
+    // chain, so a write left hanging blocks every later one in this module — which is a real
+    // property of the store, and leaving it stuck would make the next test's result about this one.
+    release();
+    await settleAppends();
+  });
+
+  // A failed write must not take the NEXT one with it. The catch sits at the END of the chain for
+  // that reason; moved inside, one rejection would poison every append made afterwards.
+  it("keeps appending after a write fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    appendFile.mockRejectedValueOnce(new Error("disk full"));
+
+    answer = { slug: "invoices", icon: "receipt_long", title: "Invoices" };
+    const failed = await spawn({ collection: "invoices" });
+    await settleAppends();
+    expect(sessionCollections.get(failed)).toMatchObject({ slug: "invoices" }); // still right in memory
+    expect(logged).toHaveBeenCalled(); // and the failure was reported, not swallowed
+
+    answer = { slug: "tasks", icon: "task", title: "Tasks" };
+    const next = await spawn({ collection: "tasks" });
+    await settleAppends();
+    expect(appendedCollectionLines()).toContainEqual({ id: next, slug: "tasks", icon: "task", title: "Tasks" });
+    logged.mockRestore();
   });
 });

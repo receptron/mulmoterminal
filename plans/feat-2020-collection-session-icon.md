@@ -33,9 +33,16 @@ cwd がワークスペースなので **全部おなじ絵**になる。グリ�
      あとから変わらない。あとで icon を引き直すには毎リクエスト collection の discovery が要る
      （`/api/session/:id` はセルごとに叩かれる）ので、値段に見合わない。schema の icon を変えても
      過去のセッションは古いグリフのまま — それは受け入れる。
-   - **spawn の応答前に await する**: クライアントはセルを置いた直後に `/api/session/:id` を
-     一度だけ読む（`loadInitial`）。記録が遅れて着くと、そのセルは次のターンが終わるまでアイコンが
-     出ない。`groupsForSpawn` と `Promise.all` で並列にして待つ。
+   - **spawn の応答前に await するのは「解決」と「メモリ上の記録」まで**: クライアントはセルを
+     置いた直後に `/api/session/:id` を一度だけ読む（`loadInitial`）。記録が遅れて着くと、その
+     セルは次のターンが終わるまでアイコンが出ない。`groupsForSpawn` と `Promise.all` で並列にして待つ。
+   - **ディスクへの append は意図的に await しない**。`registry.ts` の appender 10 本のうち
+     await するのは `setSessionMemo` 1本だけで、その docblock が線引きを書いている
+     （「ユーザが打った文で復元できないもの」は await、「サーバが導出できるもの」はしない）。
+     ここは後者。append が落ちても失うのは**再起動後のグリフ**だけで、プロセスが生きている間は
+     メモリ上の map が答える。失敗を呼び出し側に返しても spawn を失敗させる気は無いので、
+     await は「rejection を握りつぶす遅い fire-and-forget」にしかならない
+     （Codex round 1 の P2 に対する反論。Codex 同意済み）。
 
 3. **一覧** — `/api/session/:id` の応答に `collection: { slug, icon, title } | null` を足す。
    これ**一本**でセル header と cockpit roster の両方が賄える（roster も同じ endpoint を叩いている）。

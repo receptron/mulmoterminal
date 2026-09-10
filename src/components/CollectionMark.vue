@@ -10,6 +10,7 @@
 // is a Material Symbols LIGATURE NAME or a single emoji, and a name the font cannot resolve is laid
 // out as ordinary text — 11x over the icon box, painting over the controls beside it. IconGlyph
 // classifies the two and contains both. Never inline a `material-symbols-outlined` span for one.
+import { computed } from "vue";
 import { IconGlyph } from "@mulmoclaude/core/plugin-vue";
 import type { SessionCollection } from "../../common/sessionCollection";
 
@@ -23,12 +24,16 @@ const props = defineProps<{
 const DEFAULT_SIZE_CLASS = "text-[13px]";
 
 // The collection's own name, not the glyph's: a Material Symbols ligature would make a screen
-// reader announce "checkbook" where the screen shows a picture of one.
-const label = () => (props.collection ? `Started from ${props.collection.title}` : "");
+// reader announce "menu_book" where the screen shows a picture of one.
+const label = computed(() => (props.collection ? `Started from ${props.collection.title}` : ""));
 </script>
 
 <template>
-  <span v-if="collection" data-testid="cell-collection-mark" class="flex-none leading-none text-secondary" :title="label()"
-    ><IconGlyph :icon="collection.icon" :size-class="sizeClass ?? DEFAULT_SIZE_CLASS" :aria-label="label()"
+  <!-- Labelled on ONE element — role + title + aria-label together — with the glyph inside it
+       decorative. Same shape as the roster's agent mark (CockpitHeader), and for the same reason:
+       a title on a wrapper and an aria-label on the child are two labels for one picture, and a
+       Material Symbol is a LIGATURE, so the un-hidden child would read its own NAME aloud. -->
+  <span v-if="collection" data-testid="cell-collection-mark" class="flex-none leading-none text-secondary" role="img" :title="label" :aria-label="label"
+    ><IconGlyph :icon="collection.icon" :size-class="sizeClass ?? DEFAULT_SIZE_CLASS"
   /></span>
 </template>

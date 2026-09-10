@@ -770,10 +770,15 @@ let collectionPersist: Promise<void> = Promise.resolve();
 
 /** Record which collection a session was started from, and persist it.
  *
- *  Fire-and-forget on the DISK side, unlike the memo: this is derived from the collection the
- *  server itself resolved at spawn, so a failed append costs a decoration on the next restart
- *  rather than words nothing can reconstruct. The in-memory map is set synchronously, which is what
- *  the spawning client reads a moment later.
+ *  Fire-and-forget on the DISK side, unlike the memo, and that is the line `setSessionMemo`'s own
+ *  docblock draws: a memo is a sentence the user typed and nothing can reconstruct, while this is
+ *  derived state the server produced from a collection still sitting on disk under that slug. So a
+ *  failed append costs a GLYPH after a restart — never a session, never anything the user wrote —
+ *  and there is nothing the caller could do with the failure that is better than logging it.
+ *
+ *  The in-memory map is set SYNCHRONOUSLY, and that is the half the spawn route depends on: it is
+ *  what `/api/session/:id` answers from a moment later, so the mark is right for the whole life of
+ *  the cell whether or not the line ever reached disk.
  *
  *  The slug is re-checked here rather than trusted from the caller — this is the one door into the
  *  map, and a value that reached it another way still may not name a path. */
