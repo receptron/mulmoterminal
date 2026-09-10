@@ -123,8 +123,11 @@ describe("storyWirePath — the workspace subtree", () => {
   const WS = "/work/ws";
   const ROOTS = { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] };
 
-  it("names a deck kept anywhere under the workspace", () => {
-    expect(storyWirePath(`${WS}/myrepo/decks/talk.json`, ROOTS)).toEqual({ filePath: "stories/myrepo/decks/talk.json", root: "abc123" });
+  // By its own absolute path, NOT `stories/<tail>` + the root's id. #1970: the rooted spelling
+  // opened the deck and then broke everything after — the View's dispatches carry no root, so each
+  // one resolved the tail against the default stories root and answered `File not found`.
+  it("names a deck kept anywhere under the workspace by its absolute path", () => {
+    expect(storyWirePath(`${WS}/myrepo/decks/talk.json`, ROOTS)).toEqual({ filePath: `${WS}/myrepo/decks/talk.json` });
   });
 
   // The workspace's own stories directory sits INSIDE the subtree, so both could name one file —
@@ -148,9 +151,9 @@ describe("storyWirePath — the workspace subtree", () => {
   // (Codex P1 on #1934). The default-root half of that predates the named root.
   it("recognises a workspace that is a filesystem root", () => {
     expect(storyWirePath("/myrepo/decks/talk.json", { workspaces: ["/"], roots: [{ id: "abc123", paths: ["/"] }] })).toEqual({
-      filePath: "stories/myrepo/decks/talk.json",
-      root: "abc123",
+      filePath: "/myrepo/decks/talk.json",
     });
+    // The half the Codex P1 was about, and the one still keyed rather than passed through.
     expect(storyWirePath("/artifacts/stories/x.json", { workspaces: ["/"], roots: [{ id: "abc123", paths: ["/"] }] })).toEqual({ filePath: "stories/x.json" });
   });
 
@@ -161,8 +164,7 @@ describe("storyWirePath — the workspace subtree", () => {
   it("recognises a workspace whose last component ends in a space", () => {
     const WS_SPACE = "/work/ws ";
     expect(storyWirePath("/work/ws /myrepo/deck.json", { workspaces: [WS_SPACE], roots: [{ id: "abc123", paths: [WS_SPACE] }] })).toEqual({
-      filePath: "stories/myrepo/deck.json",
-      root: "abc123",
+      filePath: "/work/ws /myrepo/deck.json",
     });
     expect(storyWirePath("/work/ws /artifacts/stories/x.json", { workspaces: [WS_SPACE], roots: [{ id: "abc123", paths: [WS_SPACE] }] })).toEqual({
       filePath: "stories/x.json",
@@ -171,13 +173,13 @@ describe("storyWirePath — the workspace subtree", () => {
 
   it("recognises a Windows drive root and a UNC share root", () => {
     expect(storyWirePath("C:\\myrepo\\decks\\talk.json", { workspaces: ["C:\\"], roots: [{ id: "abc123", paths: ["C:\\"] }] })).toEqual({
-      filePath: "stories/myrepo/decks/talk.json",
-      root: "abc123",
+      filePath: "C:\\myrepo\\decks\\talk.json",
     });
     expect(storyWirePath("//server/share/myrepo/talk.json", { workspaces: ["//server/share"], roots: [{ id: "abc123", paths: ["//server/share"] }] })).toEqual({
-      filePath: "stories/myrepo/talk.json",
-      root: "abc123",
+      filePath: "//server/share/myrepo/talk.json",
     });
+    // Both roots' own stories directories still key rather than pass through.
+    expect(storyWirePath("C:\\artifacts\\stories\\x.json", { workspaces: ["C:\\"], roots: [] })).toEqual({ filePath: "stories/x.json" });
   });
 
   // Launched through a symlink, the Files pane can hand either spelling: a cell from the launcher
@@ -185,8 +187,8 @@ describe("storyWirePath — the workspace subtree", () => {
   // the canonical spelling hid the Canvas entry for every deck under the link (Codex P1 iter-5).
   it("recognises a file under either spelling of the workspace", () => {
     const BOTH = { workspaces: ["/tmp/ws-link", "/srv/real-ws"], roots: [{ id: "abc123", paths: ["/tmp/ws-link", "/srv/real-ws"] }] };
-    expect(storyWirePath("/tmp/ws-link/decks/talk.json", BOTH)).toEqual({ filePath: "stories/decks/talk.json", root: "abc123" });
-    expect(storyWirePath("/srv/real-ws/decks/talk.json", BOTH)).toEqual({ filePath: "stories/decks/talk.json", root: "abc123" });
+    expect(storyWirePath("/tmp/ws-link/decks/talk.json", BOTH)).toEqual({ filePath: "/tmp/ws-link/decks/talk.json" });
+    expect(storyWirePath("/srv/real-ws/decks/talk.json", BOTH)).toEqual({ filePath: "/srv/real-ws/decks/talk.json" });
     // The default root too — it is the half that worked before the named root existed.
     expect(storyWirePath("/tmp/ws-link/artifacts/stories/x.json", BOTH)).toEqual({ filePath: "stories/x.json" });
     expect(storyWirePath("/srv/real-ws/artifacts/stories/x.json", BOTH)).toEqual({ filePath: "stories/x.json" });
@@ -313,10 +315,10 @@ describe("storyWirePath — a deck outside every root", () => {
     expect(storyWirePath("C:\\decks\\keynote.json", ROOTS)).toEqual({ filePath: "C:\\decks\\keynote.json" });
   });
 
-  // The root-relative form still wins where there is one: it is the shorter, readable spelling, and
-  // it keeps the root a card names true.
-  it("prefers the root-relative spelling where the file has one", () => {
-    expect(storyWirePath(`${WS}/decks/keynote.json`, ROOTS)).toEqual({ filePath: "stories/decks/keynote.json", root: "abc123" });
+  // Only the DEFAULT stories directory keeps a relative spelling. A registered root does not: that
+  // spelling needs a root to read it against, and the View's dispatches send none (#1970).
+  it("keeps the relative spelling for the default stories directory alone", () => {
+    expect(storyWirePath(`${WS}/decks/keynote.json`, ROOTS)).toEqual({ filePath: `${WS}/decks/keynote.json` });
     expect(storyWirePath(`${WS}/artifacts/stories/keynote.json`, ROOTS)).toEqual({ filePath: "stories/keynote.json" });
   });
 });
@@ -389,20 +391,38 @@ describe("buildCanvasCard", () => {
     });
   });
 
-  // The root travels on the card, because that is what keeps two roots' identically-named decks on
-  // two cards (canvasIdentity.filePathIdentity) rather than folding them into one.
-  it("carries the root onto the card, and asks for it by name", async () => {
-    const fetchMock = mockReopen({ ok: true, script: { title: "Deck" }, filePath: "stories/myrepo/decks/talk.json", root: "abc123" });
+  // #1970. A deck under a registered root is asked for by its own ABSOLUTE path, not by
+  // `stories/<tail>` + the root's id. The rooted spelling opened it and broke everything after: the
+  // View's dispatches pass `filePath` through and send no root, so each resolved the tail against
+  // the default stories root and answered `File not found` — a red error on every beat, and a save
+  // that failed in silence. Measured against a running server: the wire form 404s on
+  // `updateScript` where the absolute form writes the file.
+  //
+  // The root a response still echoes is carried onto the card unchanged (the test below); it is no
+  // longer what identity rests on, because `canonicalCardPath` resolves either spelling to the same
+  // absolute path.
+  it("asks for a deck under a registered root by its absolute path, with no root", async () => {
+    const fetchMock = mockReopen({ ok: true, script: { title: "Deck" }, filePath: `${WS}/myrepo/decks/talk.json` });
     expect(await buildCanvasCard(`${WS}/myrepo/decks/talk.json`, { workspaces: [WS], roots: [{ id: "abc123", paths: [WS] }] })).toEqual({
       kind: "card",
-      card: { toolName: "presentMulmoScript", data: { script: { title: "Deck" }, filePath: "stories/myrepo/decks/talk.json", root: "abc123" } },
+      card: { toolName: "presentMulmoScript", data: { script: { title: "Deck" }, filePath: `${WS}/myrepo/decks/talk.json` } },
     });
     const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       kind: "save",
-      filePath: "stories/myrepo/decks/talk.json",
-      root: "abc123",
+      filePath: `${WS}/myrepo/decks/talk.json`,
       expectPath: `${WS}/myrepo/decks/talk.json`,
+    });
+  });
+
+  // A root the SERVER echoes still reaches the card. Nothing this file mints asks for one any
+  // more, but the field is the server's to send and dropping it here would lose a card's root for
+  // whatever does.
+  it("still carries a root the server echoes onto the card", async () => {
+    mockReopen({ ok: true, script: { title: "Tale" }, filePath: "stories/tale.json", root: "abc123" });
+    expect(await buildCanvasCard(`${WS}/artifacts/stories/tale.json`, { workspaces: [WS], roots: [] })).toEqual({
+      kind: "card",
+      card: { toolName: "presentMulmoScript", data: { script: { title: "Tale" }, filePath: "stories/tale.json", root: "abc123" } },
     });
   });
 
@@ -565,18 +585,20 @@ describe("storyWirePath across several roots", () => {
 
   it("addresses a deck in a root that is not the workspace", () => {
     expect(storyWirePath("/elsewhere/repo/decks/talk.json", { workspaces: ["/work/ws"], roots: [WS_ROOT, OTHER] })).toEqual({
-      filePath: "stories/decks/talk.json",
-      root: "other-id",
+      filePath: "/elsewhere/repo/decks/talk.json",
     });
   });
 
   // Roots nest: a saved project inside the workspace is under both. The LONGEST match wins, so one
   // file has one identity — and it does not change when the server lists the roots in another
   // order, which would otherwise give the same deck two Canvas cards on two machines.
-  it("takes the most specific root when they nest, whichever order they arrive in", () => {
+  // The determinism this protected is now free: the answer is the file's own path, so no ordering
+  // of the roots can change it. The "most specific root" rule it named is gone with the rooted
+  // spelling (#1970) — this keeps asserting the property, by the mechanism that replaced it.
+  it("answers the same however the roots are ordered", () => {
     const nestedFirst = { workspaces: ["/work/ws"], roots: [NESTED, WS_ROOT] };
     const nestedLast = { workspaces: ["/work/ws"], roots: [WS_ROOT, NESTED] };
-    const expected = { filePath: "stories/decks/talk.json", root: "nested-id" };
+    const expected = { filePath: "/work/ws/inner/decks/talk.json" };
     expect(storyWirePath("/work/ws/inner/decks/talk.json", nestedFirst)).toEqual(expected);
     expect(storyWirePath("/work/ws/inner/decks/talk.json", nestedLast)).toEqual(expected);
   });

@@ -13,9 +13,12 @@
 //   markdown, html   a lexical guard their executors already run (`isDocumentPath` refuses a
 //                    prefixed traversal; `isPresentableHtmlPath` refuses a dotfile the iframe
 //                    mount would deny). The card carries a path and the View self-fetches.
-//   mulmoScript      no absolute path is accepted at all, and the card needs the parsed script
-//                    rather than a path — so the question is WHERE the file is, and the card
-//                    comes from the plugin's own reopen. See storyWirePath / reopenStory.
+//   mulmoScript      the card needs the parsed script rather than a path, so the card comes from
+//                    the plugin's own reopen. See storyWirePath / reopenStory. (Absolute paths
+//                    WERE refused outright, through plugin 4.5.2; 4.6.0 added the `byPath` form
+//                    and this host opts into it — server/backends/mulmoscript.ts. Reading the old
+//                    sentence as still true is what kept a repository deck on the rooted wire
+//                    path, which is #1970.)
 import { TOOL_NAME as DOCUMENT_TOOL, isDocumentPath } from "@mulmoclaude/markdown-plugin/vue";
 import { TOOL_NAME as HTML_TOOL, isPresentableHtmlPath, isHtmlArtifactPath, htmlArtifactPreviewUrl, htmlFileUrl } from "@mulmoclaude/html-plugin";
 import { TOOL_NAME as STORY_TOOL } from "@mulmoclaude/mulmoscript-plugin";
@@ -134,15 +137,27 @@ export function absoluteUnder(cwd: string | null, relative: string): string {
  * The wire path a mulmoScript card carries for `absolutePath`, or null when it is not a `.json`.
  *
  * Where markdown and html are asked "can you render this file", this asks WHERE the file is, and
- * answers with the spelling the plugin wants for that place: a deck under a registered root
- * travels as `stories/<tail>` plus the root's id, and a deck anywhere else travels as its own
- * absolute path (the form the plugin has taken since 4.6.0, which this host opts into with
- * `byPath` — see server/backends/mulmoscript.ts).
+ * answers with the spelling the plugin wants for that place. Two cases, in this order:
  *
- * The root-relative forms are decided FIRST, and that order is the whole rule: one deck reachable
- * both ways must mint one spelling, not two. It stopped being load-bearing in #1976 — identity is
- * now the resolved path either way (utils/canvasCardPath.ts), so the two forms collapse onto one
- * card — but minting the narrower form keeps a card readable and keeps the root a card names true.
+ *   1. under the workspace's own `artifacts/stories/` — `stories/<tail>`, no root. That IS the
+ *      plugin's default root, so a dispatch carrying no root still resolves it.
+ *   2. anywhere else — the file's own absolute path (the `byPath` form the plugin has taken since
+ *      4.6.0, which this host opts into; see server/backends/mulmoscript.ts).
+ *
+ * A REGISTERED ROOT used to be its own case between those two, answering `stories/<tail>` plus the
+ * root's id, and that was #1970. The reopen carries a root, so the deck OPENED — but the View's own
+ * dispatches (`updateScript`, `updateBeat`, `beatImage`, the movie/PDF polls) pass `filePath`
+ * through and send no root, so every one of them resolved the tail against the DEFAULT root and
+ * answered `File not found`. A deck kept in a repository showed a red error on each beat and failed
+ * to save in silence. An absolute path cannot lose a root, because it has none.
+ *
+ * Case 1 stays relative because it is already right under a root-less dispatch, and it is decided
+ * FIRST because the default stories directory sits inside the workspace's own subtree — one file
+ * reachable both ways must mint one spelling, not two.
+ *
+ * Identity is unharmed by any of this: `canonicalCardPath` resolves all three to the same absolute
+ * path (utils/canvasCardPath.ts), so an agent's `stories/…` card and a pane-minted one collapse
+ * onto one card.
  *
  * Until #1976 the absolute case answered null, and a deck outside every root had no Canvas entry at
  * all: the plugin would have opened it, but the card's identity was the wire string, so the same
@@ -160,7 +175,7 @@ export function absoluteUnder(cwd: string | null, relative: string): string {
  * lets through still yields no card.
  */
 export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryRef | null {
-  const { workspaces, roots: named } = roots;
+  const { workspaces } = roots;
   const key = dirPathKey(absolutePath);
   if (!key.endsWith(".json")) return null;
   // ONE rule for what "under this directory" means, because two goes wrong twice: `dirPathKey`
@@ -190,25 +205,32 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
   // for one deck. Deciding the narrower one first means only one spelling is ever minted.
   const inDefault = underAny(workspaces, (workspace) => joinPath(workspace, STORY_DIR));
   if (inDefault) return { filePath: `${STORY_WIRE_PREFIX}${inDefault}` };
-  // Otherwise the most SPECIFIC registered root that contains it. Roots nest — a saved project
-  // under the workspace is both — and the longest prefix is the only choice that does not depend
-  // on the order the server happened to list them in, which would make one file's card identity
-  // vary between two servers serving the same disk (#1951).
-  let best: { root: string; tail: string } | null = null;
-  for (const root of named) {
-    const tail = underAny(root.paths, (dir) => dir);
-    if (tail !== null && (best === null || tail.length < best.tail.length)) best = { root: root.id, tail };
-  }
-  if (best !== null) return { filePath: `${STORY_WIRE_PREFIX}${best.tail}`, root: best.root };
-  // Outside every registered root: the file's own absolute path — but ONLY if it is one. The pane
-  // falls back to the row's RELATIVE path when it has no cwd (`absoluteUnder`), and a relative
-  // `filePath` is not "the file over there", it is the default stories root's own `design.json`.
-  if (!isRootedPath(absolutePath)) return null;
+  // ANYWHERE ELSE: the file's own absolute path, whether or not a registered root contains it.
+  //
+  // A registered root used to answer `stories/<tail>` plus the root's id here, and that is what
+  // #1970 was: opening worked, because the reopen carries the root — but the View's own dispatches
+  // (`updateScript`, `updateBeat`, `beatImage`, the movie/PDF status polls) pass `filePath` through
+  // and send NO root, so every one of them resolved the tail against the DEFAULT stories root and
+  // answered `File not found`. A deck in a repository opened, showed a red error on every beat, and
+  // silently failed to save. Measured against a running server: the wire form 404s on
+  // `updateScript` where the absolute form writes the file.
+  //
+  // An absolute path cannot lose a root because it does not have one, so it survives a dispatch
+  // that forgets to carry it. That is the same reason the deck-outside-every-root case already used
+  // it (#1976); this only stops treating a registered root as the exception. Identity is unharmed —
+  // `canonicalCardPath` resolves both spellings to the same absolute path, so an agent's
+  // `stories/…` card and this one still collapse into one.
+  //
   // As the pane spelled it rather than as `key`: `dirPathKey` TRIMS, so a name ending in a space
   // would name a different file, and the server is handed this same string as `expectPath` to
   // compare its realpath against. A `.` or `..` segment the plugin refuses is the one thing the key
   // would have folded, and neither the tree's rows nor a cell's cwd produces one.
-  return { filePath: absolutePath };
+  // Not a path this server can place: the pane falls back to the row's RELATIVE spelling when it
+  // has no cwd (`absoluteUnder`), and a relative `filePath` is not "the file over there" — it is
+  // the default stories root's own `design.json`. Measured: every relative input answers null here,
+  // through the default-stories branch above as well, so there is no reachable case left in which a
+  // registered root could offer a spelling this does not.
+  return isRootedPath(absolutePath) ? { filePath: absolutePath } : null;
 }
 
 /**
