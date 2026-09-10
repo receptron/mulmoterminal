@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import express from "express";
-import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { appRequest } from "../../helpers/appRequest.js";
 import { publish, resetNotifier } from "@mulmoclaude/core/notifier";
 import { initNotifier, mountNotificationRoutes, NOTIFIER_CHANNEL } from "../../../server/backends/notifier.js";
+import { hostStateRoot } from "../../../server/infra/host-state-root.js";
 
 interface Published {
   channel: string;
@@ -14,20 +15,26 @@ interface Published {
 }
 let events: Published[] = [];
 let workspace: string;
+// A disposable home: these files hang off the HOST STATE ROOT, and the workspace here is a
+// throwaway temp dir rather than the managed one — so letting it default would write into the
+// home of whoever runs the suite.
+let home: string;
 let request: ReturnType<typeof appRequest>;
 const tempDirs: string[] = [];
 
 function activeFile(): string {
-  return path.join(workspace, "data", "notifier", "active.json");
+  return path.join(hostStateRoot(workspace, home), "data", "notifier", "active.json");
 }
 
 beforeEach(async () => {
   resetNotifier();
   workspace = mkdtempSync(path.join(tmpdir(), "mt-notif-"));
-  tempDirs.push(workspace);
+  home = mkdtempSync(path.join(tmpdir(), "mt-notif-home-"));
+  tempDirs.push(workspace, home);
   events = [];
   await initNotifier({
     workspace,
+    home,
     pubsub: { publish: (channel, data) => events.push({ channel, data }) },
   });
 
@@ -43,6 +50,16 @@ afterEach(() => {
 });
 
 describe("notifier backend", () => {
+  // The property #2024 is about, asserted against the workspace directly rather than through
+  // `hostStateRoot` — routing the expectation through the same function that decides the path
+  // would pass however that function answered.
+  it("writes nothing into a workspace that is not the managed one", async () => {
+    await publish({ pluginPkg: "test", severity: "nudge", title: "Heads up", body: "something happened" });
+    expect(existsSync(path.join(workspace, "data"))).toBe(false);
+    expect(existsSync(path.join(workspace, "config"))).toBe(false);
+    expect(readdirSync(workspace)).toEqual([]);
+  });
+
   it("publishes → lists → fans out an event → persists active.json → clears", async () => {
     const { id } = await publish({ pluginPkg: "test", severity: "nudge", title: "Heads up", body: "something happened" });
 
@@ -58,7 +75,7 @@ describe("notifier backend", () => {
     expect(active).toHaveLength(1);
     expect(active[0]).toMatchObject({ id, title: "Heads up" });
 
-    // Persisted to the shared workspace file.
+    // Persisted under the host state root (#2024) — not into the launch directory.
     expect(existsSync(activeFile())).toBe(true);
     const onDisk = JSON.parse(readFileSync(activeFile(), "utf8")) as { entries: Record<string, unknown> };
     expect(Object.keys(onDisk.entries)).toContain(id);

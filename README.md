@@ -598,7 +598,7 @@ the `claude` / `codex` sessions themselves.
 | `PORT`        | `34567`        | Backend HTTP/WebSocket port (prod: the URL you open). |
 | `CLIENT_PORT` | `6856`         | Vite dev-server port (dev only: the URL you open with `yarn dev`). |
 | `CLAUDE_BIN` | `claude`       | The Claude Code binary to spawn. On Windows a bare name is resolved on `PATH` before it reaches the PTY layer (which matches file names exactly): to the `.exe` when there is one, otherwise to the `.cmd` shim an npm-global install leaves, run through `cmd.exe`. |
-| `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions are listed. Via `npx mulmoterminal@latest` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). |
+| `CLAUDE_CWD` | current dir    | Working directory each `claude` PTY runs in; determines which project's sessions are listed. Via `npx mulmoterminal@latest` it defaults to the directory you ran the command from (override with `--cwd <dir>`, relative allowed); when the server is run directly it falls back to `~/mulmoclaude`. A value read from `.env` must be an absolute path (`~` is not expanded). Running in one of your own project directories does **not** litter it — see the note under the table. |
 | `CLAUDE_PERMISSION_MODE` | `auto` | Permission mode passed to each `claude` spawn. |
 | `MT_TITLE_SOURCE` | `transcript` | Where the cell header's AI title comes from. `transcript` reads the title Claude Code writes into its own transcript — no extra process. `headless` restores the old behaviour of summarizing the recent turns with `claude -p`, which costs a model call but follows a session whose topic drifts (Claude's own title is written once and never revised). |
 | `MT_TITLE_MODEL` | `haiku` | Model used for the cell header's AI title. Only read when `MT_TITLE_SOURCE=headless`. Accepts a `--model` alias or a full model id. |
@@ -613,10 +613,24 @@ the `claude` / `codex` sessions themselves.
 | `GROK_HOME` | `~/.grok` | Grok home directory containing its per-directory session store. |
 | `MULMOTERMINAL_HOME` | `~/.mulmoterminal` | Root for managed **git worktrees**. |
 | `CLAUDE_CONFIG_DIR` | `~` | Claude Code's own config directory. `.claude.json` lives **inside** it, so relocating your Claude Code config moves that file too — MulmoTerminal reads it to tell whether the per-project GUI MCP server is registered (`server/infra/gui-mcp-registration.ts`). Leave it unset and `~/.claude.json` is used. |
-| `MULMOCLAUDE_WORKSPACE_PATH` | `~/mulmoclaude` | Where the managed MulmoClaude workspace lives. MulmoTerminal seeds presets/helps **only** into this directory, so launching in an arbitrary project never writes them there (`server/backends/workspaceSetup.ts`). Set it to the same value MulmoClaude uses. |
+| `MULMOCLAUDE_WORKSPACE_PATH` | `~/mulmoclaude` | Where the managed MulmoClaude workspace lives. MulmoTerminal seeds presets/helps **only** into this directory, so launching in an arbitrary project never writes them there (`server/backends/workspaceSetup.ts`), and it is what decides where MulmoTerminal's own runtime state goes — see the note under the table. Set it to the same value MulmoClaude uses. |
 | `MULMOTERMINAL_NO_SKILL_INSTALL` | unset | Set to any value to skip installing the bundled skills (`mulmoterminal-config` and the `-dirs` / `-theme` / `-header` / `-keys` / `-model` / `-notify` / `-bug-report` / `-decisions` family) into `~/.claude/skills/` and the Codex skills root on startup. |
 | `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image-preview` | Model used for image generation (needs `GEMINI_API_KEY`). The default is a **preview** model Google schedules for retirement around mid-2026, so pin a stable one here (e.g. `gemini-2.5-flash-image`) rather than waiting for a code change. |
 | `WAIT_REAP_GRACE_MS` | `1800000` | How long a **waiting** background session is kept before it's auto-reaped (`0` or negative = never). |
+
+**Where MulmoTerminal's own runtime state goes.** The launcher defaults the workspace to the
+directory you ran it from, which is usually one of your own projects — so the state MulmoTerminal
+keeps for itself does not go there. The scheduler's execution state and logs
+(`config/scheduler/state.json`, `data/scheduler/logs/`) and the notifier's
+(`data/notifier/`) live under `~/.mulmoterminal/workspaces/<workspace>/` instead, one directory
+per workspace. What you made stays in the workspace either way: collections, feeds, and the
+scheduled tasks you write in `config/scheduler/tasks.json`.
+
+The one exception is the **managed** workspace named by `MULMOCLAUDE_WORKSPACE_PATH`
+(`~/mulmoclaude` by default), where that state stays in the workspace — MulmoClaude reads the
+same files there, and splitting them would give the two apps different answers. If you ran an
+older version in a project directory, the `config/scheduler/` and `data/` it left behind are
+inert and safe to delete; nothing recreates them.
 
 The update-check opt-outs (`MULMOTERMINAL_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`) are
 covered in [Install & run](#install--run).
