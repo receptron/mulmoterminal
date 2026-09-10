@@ -8,6 +8,28 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### ShapeScript follows the upstream language now — `@mulmoclaude/shapescript-plugin@2.0.0`
+
+- `presentShapeScript`, `renderShapeScript` and `exportShapeScriptUsdz` now read a script the way
+  the upstream [ShapeScript](https://shapescript.info/mac/) app does: `size` is the **diameter** of
+  a sphere, cylinder, cone, circle or polygon; `orientation` (alias `rotation`) and `rotate` take
+  **half-turns** as `roll yaw pitch` (0.5 = 90°); path `point` / `curve` coordinates are
+  **absolute** in the path's frame, with `curve` a Bézier control point; a `path` may carry its own
+  `position` / `orientation` / `size`; `seed N` reseeds `rnd` for its block; and function arguments
+  may be space-separated (`max(0 (j - 1))`) as upstream writes them, with `.first` … `.last` ordinal
+  members. A script written against the upstream docs renders the same here, and a script written
+  here opens in the upstream app.
+- **Breaking for `.shape` files saved under the old conventions** (radius sizes, radian rotations,
+  relative path points). They still parse but render at half size or rotated wrong — convert them:
+  the `size` of every `sphere`, `cylinder`, `cone`, `circle`, `polygon` and `torus` ×2 (the first
+  component for a cylinder or cone, all of them for a sphere); a `rotation X Y Z` property in
+  radians → `orientation roll yaw pitch` in half-turns, each axis negated and divided by pi (the old
+  X value becomes the new third component, the old Z the first); a `rotate` command in full turns →
+  half-turns, negated and doubled; path `point` / `curve` deltas → absolute points, and the old
+  four-argument `curve x y cx cy` → a `curve cx cy` control point between two `point`s; `tau` → `2 * pi`
+  if the file must also open in the upstream app. MulmoClaude shares these files, so both hosts
+  moved to 2.0.0 together (mulmoclaude#3069).
+
 ### Take a 3D model out of the chat as a USDZ file
 
 - A ShapeScript model can now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
