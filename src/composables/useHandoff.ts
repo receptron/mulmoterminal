@@ -28,8 +28,9 @@ export interface HandoffSource {
   agent: TerminalAgent;
 }
 
-// Slot keys are `cell-<uid>`; the uid is what the user sees on the cell, so a menu
-// entry reads the same way the grid does.
+// Slot keys are `cell-<uid>`, and the uid is an ARRAY POSITION — renumbered on every grid parse
+// (useTerminalConnections.ts, `attach`) and shown on no cell. `#3` therefore names nothing the
+// reader can point at, and two terminals in one directory differ here by that number alone (#2005).
 export const slotLabel = (slot: SlotInfo, home: string | null): string => {
   const cell = slot.key.startsWith("cell-") ? `#${slot.key.slice("cell-".length)}` : slot.key;
   return slot.cwd ? `${cell} · ${slot.agent} · ${formatCwd(slot.cwd, home, 24)}` : `${cell} · ${slot.agent}`;
