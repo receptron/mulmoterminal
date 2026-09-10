@@ -21,9 +21,14 @@ Entries here are folded into the next release's heading when it ships.
   here opens in the upstream app.
 - **Breaking for `.shape` files saved under the old conventions** (radius sizes, radian rotations,
   relative path points). They still parse but render at half size or rotated wrong — convert them:
-  sphere/cylinder sizes ×2, `rotation X Y Z` radians → `orientation` in half-turns with the sign
-  flipped, path deltas → absolute points. MulmoClaude shares these files, so both hosts moved to
-  2.0.0 together (mulmoclaude#3069).
+  the `size` of every `sphere`, `cylinder`, `cone`, `circle`, `polygon` and `torus` ×2 (the first
+  component for a cylinder or cone, all of them for a sphere); a `rotation X Y Z` property in
+  radians → `orientation roll yaw pitch` in half-turns, each axis negated and divided by pi (the old
+  X value becomes the new third component, the old Z the first); a `rotate` command in full turns →
+  half-turns, negated and doubled; path `point` / `curve` deltas → absolute points, and the old
+  four-argument `curve x y cx cy` → a `curve cx cy` control point between two `point`s; `tau` → `2 * pi`
+  if the file must also open in the upstream app. MulmoClaude shares these files, so both hosts
+  moved to 2.0.0 together (mulmoclaude#3069).
 
 ### Take a 3D model out of the chat as a USDZ file
 
