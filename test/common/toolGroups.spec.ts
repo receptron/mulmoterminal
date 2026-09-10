@@ -27,6 +27,7 @@ describe("tool groups", () => {
     // Beside presentShapeScript on purpose: a cell that can show a 3D model should be
     // able to check one, and a directory enabling Canvas gets the pair or neither.
     expect(groupOfTool("renderShapeScript")).toBe("render");
+    expect(groupOfTool("exportShapeScriptUsdz")).toBe("render");
   });
 
   // The blast-radius split is the whole point of the grouping: only `render` is auto-allowed,
@@ -100,7 +101,7 @@ describe("tool groups", () => {
   // its execute resolves image placeholders through the image backend, a PAID call. Auto-
   // allowing it would let a model spend money under a switch labelled "let the agent draw".
   it("auto-allows only tools that call nothing external", () => {
-    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript"]);
+    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript", "exportShapeScriptUsdz"]);
     expect(AUTO_ALLOWED_TOOLS).not.toContain("presentDocument");
   });
 

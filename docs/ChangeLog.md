@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### Take a 3D model out of the chat as a USDZ file
+
+- A ShapeScript model can now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
+  Quick Look places it in the room on iPhone and iPad, and Quick Look previews it on a Mac. New host tool **`exportShapeScriptUsdz`** takes
+  the same source as `presentShapeScript` (inline, or a `.shape` you point it at), writes the
+  file beside the model under the workspace `artifacts/shapes/`, and answers with the absolute
+  path. It sits in the **Canvas (render MCPs)** group with the other two ShapeScript tools and
+  runs without asking: it serialises geometry to one local file and reaches nothing outside the
+  workspace. The `presentShapeScript` view also gains a **Download USDZ** button that builds the
+  same file in the browser. Both come from `@mulmoclaude/shapescript-plugin@1.4.0`; the tool's
+  contract, the exporter, and the file's location are the package's, shared with MulmoClaude.
+
 ## mulmoterminal@4.19.0 — 2026-09-10
 
 > **Setup guide:** [4.19.0 — Read a collection and drive its chat without leaving it](https://receptron.github.io/mulmoterminal/guide/en/v4.19.0.html)
