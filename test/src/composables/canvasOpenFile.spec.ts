@@ -6,6 +6,7 @@
 // wave through.
 import { describe, it, expect, vi, afterEach } from "vitest";
 
+import { filePathIdentity } from "../../../src/utils/canvasIdentity";
 import {
   canvasCardForFile,
   canOpenInCanvas,
@@ -185,9 +186,16 @@ describe("storyWirePath — the workspace subtree", () => {
   // Launched through a symlink, the Files pane can hand either spelling: a cell from the launcher
   // carries the one the user typed, one in a git worktree carries the resolved one. Knowing only
   // the canonical spelling hid the Canvas entry for every deck under the link (Codex P1 iter-5).
-  it("recognises a file under either spelling of the workspace", () => {
-    const BOTH = { workspaces: ["/tmp/ws-link", "/srv/real-ws"], roots: [{ id: "abc123", paths: ["/tmp/ws-link", "/srv/real-ws"] }] };
-    expect(storyWirePath("/tmp/ws-link/decks/talk.json", BOTH)).toEqual({ filePath: "/tmp/ws-link/decks/talk.json" });
+  // BOTH spellings mint the CANONICAL one. Identity is resolved lexically — a browser cannot
+  // realpath — so minting what the pane happened to show would give one deck two identities and
+  // two cards, which is what the rooted spelling this replaced was protecting against (Codex P2,
+  // round 1: measured, `/tmp/ws-link/…` and `/srv/real-ws/…` resolved differently).
+  it("mints the canonical spelling for a file under either spelling of the workspace", () => {
+    const BOTH = {
+      workspaces: ["/tmp/ws-link", "/srv/real-ws"],
+      roots: [{ id: "abc123", paths: ["/tmp/ws-link", "/srv/real-ws"], canonical: "/srv/real-ws" }],
+    };
+    expect(storyWirePath("/tmp/ws-link/decks/talk.json", BOTH)).toEqual({ filePath: "/srv/real-ws/decks/talk.json" });
     expect(storyWirePath("/srv/real-ws/decks/talk.json", BOTH)).toEqual({ filePath: "/srv/real-ws/decks/talk.json" });
     // The default root too — it is the half that worked before the named root existed.
     expect(storyWirePath("/tmp/ws-link/artifacts/stories/x.json", BOTH)).toEqual({ filePath: "stories/x.json" });
@@ -621,5 +629,62 @@ describe("storyWirePath across several roots", () => {
   // resolving to the same identity the root-relative card gets once the config lands.
   it("uses the absolute form before the config arrives", () => {
     expect(storyWirePath("/work/ws/decks/talk.json", { workspaces: [], roots: [] })).toEqual({ filePath: "/work/ws/decks/talk.json" });
+  });
+});
+
+// The property the rooted spelling used to hold, now held by minting canonically. Asserted across
+// the TWO modules that have to agree — `storyWirePath` mints, `filePathIdentity` resolves — because
+// the regression Codex found in round 1 lived exactly in the gap between them: each was
+// self-consistent and together they gave one deck two cards.
+describe("a deck reached two ways is one card", () => {
+  const dirs = { workspace: "/srv/real-ws", byId: { abc123: "/srv/real-ws" } };
+  const ROOTS = {
+    workspaces: ["/tmp/ws-link", "/srv/real-ws"],
+    roots: [{ id: "abc123", paths: ["/tmp/ws-link", "/srv/real-ws"], canonical: "/srv/real-ws" }],
+  };
+  const identityOf = (filePath: string, root?: string) => filePathIdentity({ data: { filePath, ...(root ? { root } : {}) } }, dirs);
+  const mintedIdentity = (panePath: string) => {
+    const wire = storyWirePath(panePath, ROOTS);
+    if (wire === null) throw new Error(`storyWirePath minted nothing for ${panePath}`);
+    return identityOf(wire.filePath);
+  };
+
+  // A card persisted BEFORE this change carries `stories/<tail>` + root. Reopening the same deck
+  // now mints an absolute path, and the two have to collapse or the old card never goes away.
+  it("collapses a pre-change rooted card with a newly minted one", () => {
+    expect(mintedIdentity("/srv/real-ws/decks/talk.json")).toBe(identityOf("stories/decks/talk.json", "abc123"));
+  });
+
+  it("collapses the symlink spelling with the real one", () => {
+    expect(mintedIdentity("/tmp/ws-link/decks/talk.json")).toBe(mintedIdentity("/srv/real-ws/decks/talk.json"));
+  });
+
+  // And with the agent's own card, which is minted root-blind under the default stories directory.
+  it("collapses with an agent-minted default-root card", () => {
+    expect(mintedIdentity("/srv/real-ws/artifacts/stories/tale.json")).toBe(identityOf("stories/tale.json"));
+  });
+});
+
+// The most-specific root wins, and it is only OBSERVABLE when a nested root is itself a symlink:
+// otherwise every root containing the file rebuilds the same absolute path. Here the inner root's
+// real location is outside its parent, so picking the outer one would mint a path that names the
+// deck through the link — a second identity for the file the server writes at `/opt/real-vendor`.
+describe("a root nested inside another", () => {
+  const NESTED = {
+    workspaces: ["/srv/ws"],
+    roots: [
+      { id: "outer", paths: ["/srv/ws"], canonical: "/srv/ws" },
+      { id: "inner", paths: ["/srv/ws/vendor/link"], canonical: "/opt/real-vendor" },
+    ],
+  };
+  const deck = "/srv/ws/vendor/link/decks/talk.json";
+
+  it("mints through the innermost root, not the enclosing one", () => {
+    expect(storyWirePath(deck, NESTED)).toEqual({ filePath: "/opt/real-vendor/decks/talk.json" });
+  });
+
+  // The server lists roots in registration order, which is not a promise about nesting.
+  it("does not depend on the order the roots were listed in", () => {
+    expect(storyWirePath(deck, { ...NESTED, roots: [...NESTED.roots].reverse() })).toEqual(storyWirePath(deck, NESTED));
   });
 });

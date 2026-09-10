@@ -51,8 +51,14 @@ movieStatus / pdfStatus / pendingGenerations / save → { filePath }
 ## 影響しないこと
 
 - **開けるファイルの範囲**: `canOpenInCanvas` のゲートは変わらない。任意の `.json` は #1976 以降すでに対象。
-- **カードの同一視**: `canonicalCardPath` が絶対・相対+root の**どちらも同じ絶対パスに正規化**するので、
-  エージェントが作った `stories/…` のカードと 1 枚に畳まれる（実装を読んで確認）。
+- **カードの同一視（登録済み root 配下）**: 綴りは **その root の canonical**（サーバが realpath した綴り）
+  で mint する。`canonicalCardPath` が `stories/…`+root を解決する先と同じ綴りなので、エージェントが
+  作ったカードと 1 枚に畳まれる。ブラウザは realpath できないので、**canonical を使わずペインの綴りを
+  そのまま出すと symlink 経由の workspace で 2 枚に割れる**（Codex round 1 の P2。実測して修正済み、
+  `test/src/composables/canvasOpenFile.spec.ts` の「a deck reached two ways is one card」）。
+- **どの root にも属さないデッキ**: canonical が無いのでペインの綴りをそのまま出す。同じファイルを
+  別綴り（symlink）で開けば 2 枚になる — #1976 以前と同じで、この修正は改善も悪化もさせない。
+  閉じられるのはサーバが解決済みパスをカードに載せたときだけ。
 - **既定 stories 配下**: 相対のまま。root 無しの dispatch でも正しく解決でき、
   ワークスペース subtree との二重綴りを避けるため先に判定する必要がある。
 
@@ -76,4 +82,6 @@ root 付き相対を残したが、**実測すると相対入力は全ケース�
 - 既存 spec のうち 9 件は旧規則（root 相対を優先）を固定しているので、新規則に書き直す。
   **既定 stories 配下の難所**（ワークスペースが `/`、末尾が空白、symlink の両綴り）は
   そのまま残すことが肝。動くのは root 配下の綴りだけ。
+- **新規則を break-verify する**: canonical 綴りの mint を元（ペインの綴り）に戻すと 2 件、
+  最長 tail 優先に反転すると 1 件が赤になることを実測する（mutation の前後で pristine 一致を確認）。
 - `yarn format` → `lint` → `typecheck` → `build` → `test`。

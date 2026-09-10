@@ -59,6 +59,12 @@ export interface StoriesRoot {
    *  Only a GATE: the server re-checks containment with a realpath when the card is built, so a
    *  spelling accepted here that names something else still opens nothing. */
   paths: readonly string[];
+  /** The server's own realpathed spelling of this root, never re-derived here — a browser cannot
+   *  realpath. It is what an absolute `filePath` is rewritten onto, so a file reached through a
+   *  symlinked spelling and through the real one mint ONE path and therefore one card. Absent
+   *  where the server did not say (an older server, or a root it could not resolve), and then the
+   *  spelling the pane showed travels as-is. */
+  canonical?: string;
 }
 
 /** Where stories can live, as this server serves them.
@@ -78,9 +84,11 @@ export interface StoriesRoots {
  *  registers it first — and its own `artifacts/stories` is the one place addressed without a root.
  *  One derivation, so the Files pane, the Mulmo menu and the grid cannot disagree about which
  *  directory that is (#1951). */
-export const storiesRootsFrom = (registered: ReadonlyArray<{ id: string; paths: readonly string[] }>): StoriesRoots => ({
+export const storiesRootsFrom = (registered: ReadonlyArray<{ id: string; paths: readonly string[]; canonical?: string }>): StoriesRoots => ({
   workspaces: registered[0]?.paths ?? [],
-  roots: registered.map((root) => ({ id: root.id, paths: root.paths })),
+  // Spread rather than assigned: `exactOptionalPropertyTypes` makes an explicit `undefined`
+  // different from an absent key, and a root the server could not resolve has no canonical at all.
+  roots: registered.map((root) => ({ id: root.id, paths: root.paths, ...(root.canonical ? { canonical: root.canonical } : {}) })),
 });
 
 /** A story as the wire addresses it: the path, plus which root it is relative to (absent = the
@@ -155,9 +163,11 @@ export function absoluteUnder(cwd: string | null, relative: string): string {
  * FIRST because the default stories directory sits inside the workspace's own subtree — one file
  * reachable both ways must mint one spelling, not two.
  *
- * Identity is unharmed by any of this: `canonicalCardPath` resolves all three to the same absolute
- * path (utils/canvasCardPath.ts), so an agent's `stories/…` card and a pane-minted one collapse
- * onto one card.
+ * Identity holds UNDER A ROOT THE SERVER NAMED: case 2 mints that root's canonical spelling, which
+ * is what `canonicalCardPath` resolves an agent's `stories/…`-plus-root card to as well
+ * (utils/canvasCardPath.ts), so the two collapse onto one card. Outside every registered root there
+ * is no canonical to mint and the pane's own spelling is all there is — a symlinked second spelling
+ * of that file is a second card, as it was before #1976, and only the server can close that.
  *
  * Until #1976 the absolute case answered null, and a deck outside every root had no Canvas entry at
  * all: the plugin would have opened it, but the card's identity was the wire string, so the same
@@ -175,7 +185,7 @@ export function absoluteUnder(cwd: string | null, relative: string): string {
  * lets through still yields no card.
  */
 export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryRef | null {
-  const { workspaces } = roots;
+  const { workspaces, roots: named } = roots;
   const key = dirPathKey(absolutePath);
   if (!key.endsWith(".json")) return null;
   // ONE rule for what "under this directory" means, because two goes wrong twice: `dirPathKey`
@@ -217,19 +227,40 @@ export function storyWirePath(absolutePath: string, roots: StoriesRoots): StoryR
   //
   // An absolute path cannot lose a root because it does not have one, so it survives a dispatch
   // that forgets to carry it. That is the same reason the deck-outside-every-root case already used
-  // it (#1976); this only stops treating a registered root as the exception. Identity is unharmed —
-  // `canonicalCardPath` resolves both spellings to the same absolute path, so an agent's
-  // `stories/…` card and this one still collapse into one.
+  // it (#1976); this only stops treating a registered root as the exception. Identity survives the
+  // change because the spelling minted here is the root's CANONICAL one, which is what
+  // `canonicalCardPath` resolves an agent's `stories/…`-plus-root card to — see below for the
+  // symlink case that makes the choice of spelling load-bearing.
   //
   // As the pane spelled it rather than as `key`: `dirPathKey` TRIMS, so a name ending in a space
   // would name a different file, and the server is handed this same string as `expectPath` to
   // compare its realpath against. A `.` or `..` segment the plugin refuses is the one thing the key
   // would have folded, and neither the tree's rows nor a cell's cwd produces one.
-  // Not a path this server can place: the pane falls back to the row's RELATIVE spelling when it
-  // has no cwd (`absoluteUnder`), and a relative `filePath` is not "the file over there" — it is
-  // the default stories root's own `design.json`. Measured: every relative input answers null here,
-  // through the default-stories branch above as well, so there is no reachable case left in which a
-  // registered root could offer a spelling this does not.
+  // Spelled CANONICALLY where the server told us what canonical is. A workspace reached through a
+  // symlink has two spellings, the pane shows whichever the cell was launched with, and identity is
+  // resolved LEXICALLY — a browser cannot realpath. So without this, one file opened through
+  // `/tmp/ws-link/…` and through `/srv/real-ws/…` mints two paths, two identities, two cards for
+  // one deck. Measured: `/tmp/ws-link/decks/talk.json` and `/srv/real-ws/decks/talk.json` resolved
+  // to two different identities, and neither matched a card minted before this change.
+  //
+  // The MOST SPECIFIC root wins, as it did when this branch minted a root id. Usually every root
+  // containing the file rebuilds the same absolute path, so the choice does not matter — but a
+  // nested root that is ITSELF a symlink has a canonical outside its parent, and then it does. The
+  // shortest tail is the only pick that does not depend on the order the server listed them in
+  // (#1951).
+  const best = named.reduce<{ canonical: string; tail: string } | null>((shortest, root) => {
+    const tail = root.canonical === undefined ? null : underAny(root.paths, (dir) => dir);
+    if (tail === null || root.canonical === undefined) return shortest;
+    return shortest !== null && shortest.tail.length <= tail.length ? shortest : { canonical: root.canonical, tail };
+  }, null);
+  if (best !== null) return { filePath: joinPath(best.canonical, best.tail) };
+  // Under no root the server named, or a server that reported no canonical: the spelling the pane
+  // showed, which is all there is (#1976).
+  //
+  // Not a path this server can place at all: the pane falls back to the row's RELATIVE spelling
+  // when it has no cwd (`absoluteUnder`), and a relative `filePath` is not "the file over there" —
+  // it is the default stories root's own `design.json`. Measured: every relative input answers null
+  // here, through the default-stories branch above as well.
   return isRootedPath(absolutePath) ? { filePath: absolutePath } : null;
 }
 
