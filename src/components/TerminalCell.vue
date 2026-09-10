@@ -13,6 +13,7 @@ import { worktreeLabel } from "../../common/worktreePath";
 import { isSameDirPath } from "../../common/dirPathKey";
 import DirBadge from "./DirBadge.vue";
 import DirIcon from "./DirIcon.vue";
+import CollectionMark from "./CollectionMark.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { customAgentIdOf, customAgentPick, isCustomAgentId, type AgentPick, type CustomAgent } from "../../common/customAgents";
@@ -21,6 +22,7 @@ import { shouldPromptTidy } from "./mergedTidy";
 import { usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText, type ActivityPush } from "./cellActivity";
 import { MEMO_MAX_LENGTH, normalizeMemo } from "../../common/sessionMemo";
+import { asSessionCollection, type SessionCollection } from "../../common/sessionCollection";
 import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import CellLaunchForm from "./CellLaunchForm.vue";
 import GitBranchChip from "./GitBranchChip.vue";
@@ -239,6 +241,10 @@ const aiTitle = ref<string | null>(null);
 const memo = ref<string | null>(null);
 const memoEditing = ref(false);
 const memoDraft = ref("");
+// Which collection this chat was opened FROM (#2020), or null for every cell that was not. Read
+// from the same /api/session/:id seed as the fields above rather than from the browser's own
+// filing, so a reload, a second tab and a phone all show the same mark.
+const collection = ref<SessionCollection | null>(null);
 
 // Cumulative token usage for this session (from /api/session/:id, refreshed when a
 // turn finishes). Null until first fetched.
@@ -399,6 +405,9 @@ async function loadInitial(id: string) {
   // always refresh — unless a newer badge fetch has since superseded this one.
   if (activityGen === genBeforeFetch) applyActivity(activityPushOf(data));
   if (badgeReq === latestBadgeReq) applyBadges(data);
+  // Not guarded by either token: it is a fact about how the session began, so every answer for
+  // this id carries the same one and there is no older-vs-newer to lose.
+  collection.value = asSessionCollection(data.collection);
 }
 
 // Refresh ONLY the token usage (not the live activity — that's pub/sub's job). Called
@@ -814,6 +823,7 @@ function teardown() {
   // session is resumed. What must not survive is showing it against whatever this cell runs next.
   memo.value = null;
   memoEditing.value = false;
+  collection.value = null;
   usage.value = null;
   context.value = null;
   cwd.value = props.defaultCwd;
@@ -1345,6 +1355,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           :header-color="dirConfig.headerColor"
           :header-text-color="dirConfig.headerTextColor"
           :icon-url="dirConfig.iconUrl"
+          :collection="collection"
           @click="onHeaderClick"
         >
           <span class="cell-actions" :class="CELL_ACTIONS">
@@ -1379,6 +1390,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                  which project it is, and that is the first question. -->
             <DirIcon :src="dirConfig.iconUrl" />
             <span class="cell-dot" :class="[CELL_DOT, statusClass, dotStatusClass, dotMissedClass]" :title="statusLabel" />
+            <!-- After the dot, not instead of the picture before it: the icon says which PROJECT,
+                 this says which COLLECTION, and a chat started from one runs in the workspace — so
+                 replacing it would leave the row unable to say where the agent is standing. Kept
+                 on the filmstrip thumbnail too (the CockpitHeader above), unlike the info chips
+                 below, because it is identity rather than status. -->
+            <CollectionMark :collection="collection" />
             <!-- The path is NOT here any more — it is the lead item on row 2 (see the
                `header-lead` template below). It had `min-w-[16ch]`, a floor of roughly a third of
                this track, and once it hit that floor the only thing left that could shrink was the

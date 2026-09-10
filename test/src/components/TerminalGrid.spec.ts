@@ -100,6 +100,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   fallback: null,
   phase: "none",
   workPhase: null,
+  collection: null,
   headerColor: null,
   headerTextColor: null,
   iconUrl: null,

@@ -22,9 +22,10 @@ import { ref, watch } from "vue";
 import { activeCollectionProjectId } from "./collectionSurface";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { placeSpawnedChat, type SpawnedChatRequest } from "./useSpawnedChat";
-import { currentCollectionChatKey } from "./useCollectionBrowse";
+import { currentCollectionChatKey, currentCollectionSlug } from "./useCollectionBrowse";
 import { dropCollectionChat, holdCollectionChat } from "./collectionChatSessions";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
+import { parseCollectionSlashSeed } from "../../common/collectionSeed";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 
@@ -64,6 +65,39 @@ function placeChat(request: SpawnedChatRequest, filingKey: string | null): void 
   if (!placeSpawnedChat(request, { reveal: !filingKey }) && filingKey) dropCollectionChat(filingKey, request.id);
 }
 
+/** Which collection a chat is ABOUT, for the mark its cell wears (#2020).
+ *
+ *  The SEED first, and that is what reaches the cases the route cannot see: a collection or record
+ *  ACTION builds `/<slug> …` (buildCollectionActionSeedPrompt), and those are pressed from a Canvas
+ *  card as often as from the open browser — where the path is /terminals and
+ *  `currentCollectionSlug()` is null. Where there is no slash seed, the collection on screen is the
+ *  answer.
+ *
+ *  WHAT THIS DOES NOT REACH, stated because the two sources above look exhaustive and are not: the
+ *  plugin's `startChat(prompt)` capability carries ONLY the prompt, so a view calling it with prose
+ *  of its own gives the host no slug at all (collectionUi.ts). The full-screen browser is fine —
+ *  the route answers — but the two NON-ROUTER surfaces are not:
+ *
+ *   - the Collections PANE beside a cell knows its collection (it registers a nav surface whose
+ *     `routeSlug()` reads its own state) and this function does not ask it. Wiring that is not the
+ *     one-liner it looks like: `activeCollectionNavSurface()` deliberately falls THROUGH a
+ *     scope-only surface to the nav beneath it, so a Canvas card open over a pane would be marked
+ *     with the PANE's collection — a wrong mark, which is worse than none. It needs an accessor
+ *     with different semantics from the one navigation wants.
+ *   - a CANVAS card genuinely cannot answer: it registers a scope-only surface on purpose, because
+ *     a canvas that took navigation would swallow the links inside its cards.
+ *
+ *  Neither is closed here; both cost a MISSING mark, never a wrong one, which is the same bargain
+ *  every other miss in this function makes.
+ *
+ *  Neither source is trusted to name a real collection: `/deep-research` parses exactly like a
+ *  collection seed, and so does a FEED's slug. The server resolves the slug against the project's
+ *  own collections — refusing anything whose source is not one (`resolveSpawnCollection`) — and
+ *  records nothing when it finds none, so a miss costs a mark rather than showing a wrong one. */
+function chatCollectionSlug(message: string): string | null {
+  return parseCollectionSlashSeed(message)?.slug ?? currentCollectionSlug();
+}
+
 export async function startCollectionChat(
   prompt: string,
   opts: { hidden?: boolean; draft?: boolean; project?: string | null } = {},
@@ -89,7 +123,13 @@ export async function startCollectionChat(
         // The CALLER's project when it has one — a chat started from a card belongs to the
         // project that card was made in, not to whatever surface is on screen when the button is
         // pressed. Only the ambient answer is a default, for every caller that is the surface.
-        body: JSON.stringify({ message, draft, agent, project: opts.project === undefined ? activeCollectionProjectId() : opts.project }),
+        body: JSON.stringify({
+          message,
+          draft,
+          agent,
+          project: opts.project === undefined ? activeCollectionProjectId() : opts.project,
+          collection: chatCollectionSlug(message),
+        }),
       },
       SLOW_COMMAND_TIMEOUT_MS,
     );

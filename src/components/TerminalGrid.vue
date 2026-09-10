@@ -16,6 +16,7 @@ import { cellPlacement, teleportKey, type CellPlacement } from "./cellTeleport";
 import { collectionTerminalClaim } from "../composables/collectionTerminalClaim";
 import type { RunCommand } from "./runCommand";
 import type { PrPhase, WorkPhase } from "./rosterPhase";
+import type { SessionCollection } from "../../common/sessionCollection";
 import type { CwdPreset } from "./presets";
 import type { Launcher, LaunchPick } from "./launchers";
 import type { CustomAgent } from "../../common/customAgents";
@@ -85,6 +86,7 @@ export interface CockpitRow {
   fallback: string | null; // label when there's no prompt/summary yet (launcher/command name)
   phase: PrPhase; // the branch's PR workflow phase (`none` until a PR exists)
   workPhase: WorkPhase | null; // planning vs editing while working; null when unknown / not working
+  collection: SessionCollection | null; // the collection this chat was started from (#2020), or null
   headerColor: string | null; // the directory's configured header background, tinting the row
   headerTextColor: string | null; // and its text colour, so the row stays legible on that tint
   iconUrl: string | null; // the directory's `icon` image (#1421), or null when it sets none
@@ -1273,6 +1275,7 @@ watch(
           :header-color="row.headerColor"
           :header-text-color="row.headerTextColor"
           :icon-url="row.iconUrl"
+          :collection="row.collection"
           :work-phase="row.workPhase"
           :phase="row.phase"
         >
