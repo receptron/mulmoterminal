@@ -554,9 +554,10 @@ pubsub = createPubSub(listeners, isAllowedOrigin);
 // is a no-op until configured).
 initFileChangePublisher({ workspace: CLAUDE_CWD, pubsub });
 
-// Wire the notification engine against pubsub + the shared workspace files. Must run
-// before any publish/clear and before the collection watchers start.
-await initNotifier({ workspace: CLAUDE_CWD, pubsub });
+// Wire the notification engine against pubsub + its state files (shared with MulmoClaude on
+// the managed workspace only — see host-state-root.ts). Must run before any publish/clear and
+// before the collection watchers start.
+await initNotifier({ workspace: CLAUDE_CWD, pubsub, home: MULMOTERMINAL_HOME });
 
 // Which sessions were `/clear`ed before this process started: tmux keeps their claude running
 // across a restart, so the mark that stops us reading their frozen transcript has to come back
@@ -935,6 +936,7 @@ try {
     workspace: CLAUDE_CWD,
     spawnChat: spawnScheduledChat,
     systemTasks,
+    home: MULMOTERMINAL_HOME,
   });
 } catch (err) {
   console.error("[scheduler] init failed (non-fatal)", err);

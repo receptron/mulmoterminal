@@ -23,6 +23,7 @@ import type { ITaskManager, SystemTaskDef, TaskDefinition, TaskSchedule } from "
 import { readTextFile } from "../infra/read-text-file.js";
 import { isRecord } from "../../common/isRecord.js";
 import { configureSchedulerAdapter, startSystemTaskScheduler } from "./scheduler-adapter.js";
+import { hostStateRoot } from "../infra/host-state-root.js";
 import { fireScheduledChat, type ScheduledChatSpawn } from "./scheduled-run.js";
 
 const log = {
@@ -152,14 +153,25 @@ export function buildUserTaskDefinitions(tasks: readonly unknown[], spawnChat: S
  *
  *  Nothing waits on the adapter: its catch-up runs every window missed while the server was off,
  *  which for a caught-up feed refresh is real work — see startTicking for what that costs. */
-export function initUserTaskScheduler(deps: { workspace: string; spawnChat: ScheduledChatSpawn; systemTasks?: SystemTaskDef[] }): number {
+export function initUserTaskScheduler(deps: {
+  workspace: string;
+  spawnChat: ScheduledChatSpawn;
+  systemTasks?: SystemTaskDef[];
+  /** MulmoTerminal's home (`~/.mulmoterminal`). Injectable so a test can file its state
+   *  somewhere disposable instead of in the home of whoever runs the suite. */
+  home?: string;
+}): number {
+  // Two different roots, deliberately. `tasks.json` is a file the user (or the agent) WRITES,
+  // so it is workspace content and is read from the workspace. State and logs are ours, and on
+  // a launch directory that is someone's project they do not belong there — host-state-root.ts.
+  const stateRoot = hostStateRoot(deps.workspace, deps.home);
   const userDefs = buildUserTaskDefinitions(loadUserTasks(deps.workspace), deps.spawnChat);
   const systemTasks = deps.systemTasks ?? [];
   const taskManager = createTaskManager({ log });
   // Before anything can record a run — including a user task, which reaches the same state file.
-  configureSchedulerAdapter(deps.workspace, log);
+  configureSchedulerAdapter(stateRoot, log);
   for (const definition of userDefs) taskManager.registerTask(definition);
-  startTicking(taskManager, { workspace: deps.workspace, systemTasks, userTaskCount: userDefs.length });
+  startTicking(taskManager, { stateRoot, systemTasks, userTaskCount: userDefs.length });
   log.info("scheduler started", { userTasks: userDefs.length, systemTasks: systemTasks.length });
   return userDefs.length;
 }
@@ -176,11 +188,11 @@ export function initUserTaskScheduler(deps: { workspace: string; spawnChat: Sche
  *  file, and the feed / calendar engines re-derive what is due from their own markers. So the
  *  loop starts now, and a window landing inside a slow catch-up costs a system task one run
  *  rather than costing someone a reminder. */
-function startTicking(taskManager: ITaskManager, deps: { workspace: string; systemTasks: SystemTaskDef[]; userTaskCount: number }): void {
+function startTicking(taskManager: ITaskManager, deps: { stateRoot: string; systemTasks: SystemTaskDef[]; userTaskCount: number }): void {
   if (deps.systemTasks.length + deps.userTaskCount === 0) return;
   taskManager.start();
   if (deps.systemTasks.length === 0) return;
-  void startSystemTaskScheduler({ taskManager, workspace: deps.workspace, tasks: deps.systemTasks, log }).catch((err: unknown) =>
+  void startSystemTaskScheduler({ taskManager, stateRoot: deps.stateRoot, tasks: deps.systemTasks, log }).catch((err: unknown) =>
     log.error("system task scheduler failed to start", { error: String(err) }),
   );
 }
