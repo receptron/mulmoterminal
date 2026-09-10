@@ -622,15 +622,20 @@ the `claude` / `codex` sessions themselves.
 directory you ran it from, which is usually one of your own projects — so the state MulmoTerminal
 keeps for itself does not go there. The scheduler's execution state and logs
 (`config/scheduler/state.json`, `data/scheduler/logs/`) and the notifier's
-(`data/notifier/`) live under `~/.mulmoterminal/workspaces/<workspace>/` instead, one directory
-per workspace. What you made stays in the workspace either way: collections, feeds, and the
+(`data/notifier/`) live under `~/.mulmoterminal/workspaces/<workspace-key>/` instead, one
+directory per workspace — `<workspace-key>` is the workspace's path folded to a safe name plus a
+short digest of it, so two workspaces never share one. What you made stays in the workspace either way: collections, feeds, and the
 scheduled tasks you write in `config/scheduler/tasks.json`.
 
 The one exception is the **managed** workspace named by `MULMOCLAUDE_WORKSPACE_PATH`
 (`~/mulmoclaude` by default), where that state stays in the workspace — MulmoClaude reads the
-same files there, and splitting them would give the two apps different answers. If you ran an
-older version in a project directory, the `config/scheduler/` and `data/` it left behind are
-inert and safe to delete; nothing recreates them.
+same files there, and splitting them would give the two apps different answers.
+
+If you ran an older version in a project directory, what it left behind is inert and nothing
+recreates it — but delete the generated files, **not** the whole directory:
+`config/scheduler/state.json`, `data/scheduler/`, `data/notifier/`. Leave
+`config/scheduler/tasks.json` alone; that one is yours, it is still read from the workspace, and
+deleting it deletes your scheduled tasks.
 
 The update-check opt-outs (`MULMOTERMINAL_NO_UPDATE_CHECK`, `NO_UPDATE_NOTIFIER`) are
 covered in [Install & run](#install--run).

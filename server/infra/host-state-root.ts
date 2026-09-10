@@ -21,11 +21,19 @@
 import os from "node:os";
 import path from "node:path";
 import { isManagedWorkspace } from "../backends/workspaceSetup.js";
+import { canonicalPath } from "./canonical-path.js";
 import { workspaceKey } from "./workspace-key.js";
 
 /** The root MulmoTerminal's own runtime state hangs off for this workspace: the workspace
- *  itself when it is the managed one, else this workspace's directory under the home. */
+ *  itself when it is the managed one, else this workspace's directory under the home.
+ *
+ *  Keyed on the CANONICAL path, not merely the resolved one, so a workspace reached through a
+ *  symlink answers the same directory as the workspace reached directly. Two keys for one
+ *  directory would give it two scheduler histories, and a task whose last-run marker sits in
+ *  the half the server did not read runs again — the same aliasing `isManagedWorkspace` resolves
+ *  one line above, which is why they must agree. `canonicalPath` resolves the deepest existing
+ *  ancestor, so a workspace that does not exist yet still answers a stable key. */
 export function hostStateRoot(workspace: string, home: string = path.join(os.homedir(), ".mulmoterminal")): string {
   if (isManagedWorkspace(workspace)) return workspace;
-  return path.join(home, "workspaces", workspaceKey(workspace));
+  return path.join(home, "workspaces", workspaceKey(canonicalPath(workspace)));
 }
