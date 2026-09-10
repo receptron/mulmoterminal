@@ -179,7 +179,11 @@ const parkTitle = computed(() => (props.parked ? "Wake this terminal" : "Set asi
     :aria-label="promptsTitle"
     @click="emit('toggle-prompts')"
   >
-    <span class="material-symbols-outlined" aria-hidden="true">forum</span>
+    <!-- NOT `forum`: this pane is the only one of the four that is not about talking to anything,
+         and it sat in the same header as the one that is (#2004). `outbox` pairs against the
+         Activity timeline's `history` the way the panes themselves do — what ran, versus what it
+         was asked for. -->
+    <span class="material-symbols-outlined" aria-hidden="true">outbox</span>
   </button>
   <!-- Scoped to THIS cell's directory — a Project is a directory, so the cell is the picker.
        Only where the directory HAS the collection tools — OR where the pane is already open,
