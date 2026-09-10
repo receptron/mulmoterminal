@@ -73,14 +73,22 @@ function placeChat(request: SpawnedChatRequest, filingKey: string | null): void 
  *  `currentCollectionSlug()` is null. Where there is no slash seed, the collection on screen is the
  *  answer.
  *
- *  WHAT THIS DOES NOT REACH, stated because the two sources above look exhaustive and are not: a
- *  CUSTOM VIEW calls `startChat(prompt)` with whatever prose its author wrote, and the plugin's
- *  capability carries only the prompt — the slug the iframe was verified against is not passed to
- *  the host (collectionUi.ts). Inside the browser that costs nothing, because the route answers;
- *  inside a Canvas card it means no mark. Closing it needs the collection threaded through
- *  `CollectionSurface`, which deliberately gives a canvas no navigation identity of its own — a
- *  change to that seam, not to this function. The cost of the gap is a MISSING mark, never a wrong
- *  one, which is the same bargain every other miss here makes.
+ *  WHAT THIS DOES NOT REACH, stated because the two sources above look exhaustive and are not: the
+ *  plugin's `startChat(prompt)` capability carries ONLY the prompt, so a view calling it with prose
+ *  of its own gives the host no slug at all (collectionUi.ts). The full-screen browser is fine —
+ *  the route answers — but the two NON-ROUTER surfaces are not:
+ *
+ *   - the Collections PANE beside a cell knows its collection (it registers a nav surface whose
+ *     `routeSlug()` reads its own state) and this function does not ask it. Wiring that is not the
+ *     one-liner it looks like: `activeCollectionNavSurface()` deliberately falls THROUGH a
+ *     scope-only surface to the nav beneath it, so a Canvas card open over a pane would be marked
+ *     with the PANE's collection — a wrong mark, which is worse than none. It needs an accessor
+ *     with different semantics from the one navigation wants.
+ *   - a CANVAS card genuinely cannot answer: it registers a scope-only surface on purpose, because
+ *     a canvas that took navigation would swallow the links inside its cards.
+ *
+ *  Neither is closed here; both cost a MISSING mark, never a wrong one, which is the same bargain
+ *  every other miss in this function makes.
  *
  *  Neither source is trusted to name a real collection: `/deep-research` parses exactly like a
  *  collection seed, and so does a FEED's slug. The server resolves the slug against the project's

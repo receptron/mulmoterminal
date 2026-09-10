@@ -93,13 +93,20 @@ PR 内部での食い違いになる（Codex round 3）。
 
 ## 届かない経路（既知の限界）
 
-**カスタムビューが `startChat(prompt)` を素のプロンプトで呼ぶ場合**、マークは付かない。
-plugin の capability は prompt しか運ばず、iframe が検証された slug はホストに渡ってこない
-（`collectionUi.ts`）。browse overlay の中ならルートが答えるので問題ないが、**Canvas カードの中**
-だとルートは `/terminals` なので付かない。塞ぐには `CollectionSurface` にコレクションを通す必要が
-あるが、canvas に nav の identity を持たせないのはあの seam の意図的な設計なので、この PR の
-範囲外とした。失うのは**マークが出ないこと**だけで、間違ったマークが出ることはない
-（CI の codex-review が指摘、round 7 時点）。
+plugin の `startChat(prompt)` capability は **prompt しか運ばない**ので、ビューが独自の散文で
+呼ぶと slug がホストに届かない（`collectionUi.ts`）。全画面 browse overlay はルートが答えるので
+問題ないが、**ルートを持たない2つの surface** は答えられない:
+
+- **セル横の Collections ペイン**は自分のコレクションを知っている（`routeSlug()` を持つ nav
+  surface を登録している）が、この関数は聞いていない。ただし配線は見た目ほど単純ではない —
+  `activeCollectionNavSurface()` は scope 専用 surface を**貫通して**下の nav を返す仕様なので、
+  ペインの上に Canvas カードが開いていると **ペインのコレクションでマークしてしまう**。
+  「付かない」より悪い「間違って付く」になる。navigation が欲しい意味論とは別の accessor が要る。
+- **Canvas カード**は本当に答えられない。canvas が navigation を取るとカード内のリンクを飲み込んで
+  しまうので、意図的に scope 専用 surface として登録されている。
+
+どちらもこの PR では塞がない。失うのは**マークが出ないこと**だけで、間違ったマークが出ることは
+ない（CI の codex-review が round 7 で指摘、ペイン側は Codex が round 8 で追加指摘）。
 
 ## 入れないもの（意図的に）
 
