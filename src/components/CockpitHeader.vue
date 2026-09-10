@@ -6,6 +6,8 @@
 // go in the default slot.
 import { computed } from "vue";
 import DirIcon from "./DirIcon.vue";
+import CollectionMark from "./CollectionMark.vue";
+import type { SessionCollection } from "../../common/sessionCollection";
 import { formatCwd } from "./cwdDisplay";
 import { CELL_DIR_PATH, DIR_TRUNCATE_FRONT } from "./cellChromeClasses";
 import { headerStyleFor } from "./cellHeaderStyle";
@@ -28,11 +30,14 @@ const props = withDefaults(
     headerTextColor: string | null;
     // The directory's `icon` image (#1421), already resolved to something an <img> can load.
     iconUrl?: string | null;
+    // The collection this session was started from (#2020), or null when it was not started from
+    // one. A different question from `iconUrl` — see CollectionMark.
+    collection?: SessionCollection | null;
     workPhase?: WorkPhase | null;
     phase?: PrPhase;
     dirLength?: number;
   }>(),
-  { iconUrl: null, workPhase: null, phase: "none", dirLength: 44 },
+  { iconUrl: null, collection: null, workPhase: null, phase: "none", dirLength: 44 },
 );
 
 const STATUS_WORD: Record<AttentionStatus, string> = { working: "running", blocked: "waiting", done: "done", idle: "idle" };
@@ -88,6 +93,8 @@ const barStyle = computed(() => headerStyleFor(props.headerColor, props.headerTe
     <!-- Leads the bar, ahead of the status dot — the browser-tab position (see TerminalCell). -->
     <DirIcon :src="iconUrl" />
     <span data-testid="cockpit-dot" class="h-2 w-2 flex-none rounded-full" :class="DOT_CLASS[status]" aria-hidden="true" />
+    <!-- Same place as the cell header's, so a row and its cell read as the same session. -->
+    <CollectionMark :collection="collection" />
     <span data-testid="cockpit-badge" class="flex-none rounded-full px-1.5 py-px text-[10px] font-bold" :class="BADGE_CLASS[status]">{{ badgeWord }}</span>
     <span
       v-if="phaseInfo"

@@ -87,6 +87,17 @@ export function currentCollectionChatKey(): string | null {
   return collectionChatKey(currentView(), browseRouteProjectId());
 }
 
+/** The COLLECTION on screen right now, or null.
+ *
+ *  Narrower than the filing key above, and the two answer different questions: the key files a
+ *  chat under wherever it was started (the collections INDEX is a place too, and a feed is one),
+ *  while this names a collection that actually exists to be resolved and drawn. A feed detail and
+ *  an index both answer null here. */
+export function currentCollectionSlug(): string | null {
+  const view = currentView();
+  return view.mode === "detail" && view.kind === "collection" ? view.slug : null;
+}
+
 /** The query a push should carry: the project asked for, else the one already open — so a ref
  *  hop or an index click made INSIDE a project stays in it instead of silently falling back to
  *  the workspace halfway through a browse. */

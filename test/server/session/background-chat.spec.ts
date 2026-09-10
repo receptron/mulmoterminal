@@ -17,9 +17,21 @@ describe("parseBackgroundChat", () => {
       agent: "claude",
       draft: false,
       project: null,
+      collection: null,
       hidden: false,
       message: "look at the failing test",
     });
+  });
+
+  // A NAME, not display text: what a cell wears comes from the server's own resolution of this
+  // slug against the project's collections (#2020). Shape is all that is checked here — whether it
+  // names a real collection depends on the project the spawn lands in, decided after this.
+  it("keeps a well-formed collection slug and drops anything that is not one", () => {
+    expect(ok({ message: "go", collection: "invoices" }).collection).toBe("invoices");
+    expect(ok({ message: "go", collection: "../../etc/passwd" }).collection).toBeNull();
+    expect(ok({ message: "go", collection: "a/b" }).collection).toBeNull();
+    expect(ok({ message: "go", collection: "" }).collection).toBeNull();
+    expect(ok({ message: "go", collection: 7 }).collection).toBeNull();
   });
 
   it("trims the message", () => {

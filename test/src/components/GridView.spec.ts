@@ -557,7 +557,10 @@ describe("GridView skill launch (#1111)", () => {
 
   it("seeds the skill's slash command and shows the session in a cell of its own", async () => {
     const { w, spawns } = await mountWithSpawn();
-    expect(spawns).toEqual([{ message: "/mulmoterminal-theme", draft: false, agent: "claude", project: null }]);
+    // `collection` carries the slash command's word unchecked (#2020): a SKILL's command parses
+    // exactly like a collection's, and only the server can tell them apart. It finds no collection
+    // under this name and records nothing, so the cell wears no mark — see spawn-collection.ts.
+    expect(spawns).toEqual([{ message: "/mulmoterminal-theme", draft: false, agent: "claude", project: null, collection: "mulmoterminal-theme" }]);
     const spawned = spawnedCells(w);
     expect(spawned).toHaveLength(1);
     // Seeded with the directory the server spawns these in, so the cell's header isn't blank while
@@ -580,7 +583,7 @@ describe("GridView skill launch (#1111)", () => {
     launchAgent.value = agent;
     try {
       const { w, spawns } = await mountWithSpawn();
-      expect(spawns).toEqual([{ message: "/mulmoterminal-theme", draft: false, agent, project: null }]);
+      expect(spawns).toEqual([{ message: "/mulmoterminal-theme", draft: false, agent, project: null, collection: "mulmoterminal-theme" }]);
       expect(spawnedCells(w)[0].agent).toBe(agent);
       w.unmount();
     } finally {

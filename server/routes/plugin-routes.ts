@@ -10,12 +10,13 @@ import type { Express } from "express";
 import { CLAUDE_CWD, PORT } from "../config/env.js";
 import { messageOf } from "../errors.js";
 import { isRecord } from "../../common/isRecord.js";
-import { backgroundMarkers, markFailedWorker, markUnplacedSession } from "../session/registry.js";
+import { backgroundMarkers, markFailedWorker, markUnplacedSession, rememberSessionCollection } from "../session/registry.js";
 import { runWithHiddenMarker } from "../session/hiddenMarker.js";
 import { registerCompletionHook } from "../session/completion-hooks.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor, type SpawnMode } from "../session/background-chat.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
+import { resolveSpawnCollection } from "../session/spawn-collection.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { codexifySkillSeed } from "../agents/codex-skills.js";
 import { SESSION_HEADER, sessionIdFromHeader } from "../backends/presentPathRoot.js";
@@ -115,15 +116,22 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
   app.post("/api/plugin/spawnBackgroundChat", async (req, res) => {
     const parsed = parseBackgroundChat(req.body);
     if (!parsed.ok) return res.json({ message: parsed.message });
-    const { agent, draft, hidden, message, project } = parsed.request;
+    const { agent, collection, draft, hidden, message, project } = parsed.request;
     const cwd = spawnCwdFor(project);
     if (cwd === null) return res.json({ message: `spawnBackgroundChat: unknown project '${project?.replace(/[\r\n]/g, " ") ?? ""}'.` });
     const sessionId = randomUUID();
-    const mcpGroups = await groupsForSpawn(agent, cwd);
+    // Resolved alongside the MCP-group read that was already being awaited here, and AWAITED
+    // rather than left to land later: the browser places the cell the moment the id comes back and
+    // reads /api/session/:id exactly ONCE at mount, so a record that arrives a tick afterwards
+    // leaves that cell unmarked until some later turn happens to refresh it (#2020).
+    const [mcpGroups, startedFrom] = await Promise.all([groupsForSpawn(agent, cwd), resolveSpawnCollection(collection, cwd)]);
     try {
       runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () =>
         spawnSeededSession(deps, spawnModeFor(agent, draft), { sessionId, message, mcpGroups, cwd }),
       );
+      // After the spawn, like the marks below: a launch that threw has no session, and a record
+      // for one would sit in the log forever describing nothing.
+      if (startedFrom) rememberSessionCollection(sessionId, startedFrom);
       // Visible: somebody should be able to SEE this session. The browser that asked for it
       // places it immediately (useChatLauncher), and this covers every other caller — an agent
       // calling the tool from another session, with no tab open at all. The mark is cleared the

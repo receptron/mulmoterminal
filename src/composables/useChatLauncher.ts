@@ -22,9 +22,10 @@ import { ref, watch } from "vue";
 import { activeCollectionProjectId } from "./collectionSurface";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { placeSpawnedChat, type SpawnedChatRequest } from "./useSpawnedChat";
-import { currentCollectionChatKey } from "./useCollectionBrowse";
+import { currentCollectionChatKey, currentCollectionSlug } from "./useCollectionBrowse";
 import { dropCollectionChat, holdCollectionChat } from "./collectionChatSessions";
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
+import { parseCollectionSlashSeed } from "../../common/collectionSeed";
 import { isRecord } from "../../common/isRecord";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 
@@ -64,6 +65,21 @@ function placeChat(request: SpawnedChatRequest, filingKey: string | null): void 
   if (!placeSpawnedChat(request, { reveal: !filingKey }) && filingKey) dropCollectionChat(filingKey, request.id);
 }
 
+/** Which collection a chat is ABOUT, for the mark its cell wears (#2020).
+ *
+ *  The SEED first, and that is what makes this work from places the filing key cannot see: an
+ *  action, a starter and a custom view's button all build `/<slug> …` (skillCommandSeed), and they
+ *  are pressed from a Canvas card as often as from the open browser — where the route says
+ *  nothing and `currentCollectionChatKey()` is null. Where there is no slash seed, the collection
+ *  being looked at is the answer.
+ *
+ *  Neither source is trusted to name a real collection: `/deep-research` parses exactly like a
+ *  collection seed. The server resolves the slug against the project's own collections and records
+ *  nothing when it finds none, so a miss costs a mark rather than showing a wrong one. */
+function chatCollectionSlug(message: string): string | null {
+  return parseCollectionSlashSeed(message)?.slug ?? currentCollectionSlug();
+}
+
 export async function startCollectionChat(
   prompt: string,
   opts: { hidden?: boolean; draft?: boolean; project?: string | null } = {},
@@ -89,7 +105,13 @@ export async function startCollectionChat(
         // The CALLER's project when it has one — a chat started from a card belongs to the
         // project that card was made in, not to whatever surface is on screen when the button is
         // pressed. Only the ambient answer is a default, for every caller that is the surface.
-        body: JSON.stringify({ message, draft, agent, project: opts.project === undefined ? activeCollectionProjectId() : opts.project }),
+        body: JSON.stringify({
+          message,
+          draft,
+          agent,
+          project: opts.project === undefined ? activeCollectionProjectId() : opts.project,
+          collection: chatCollectionSlug(message),
+        }),
       },
       SLOW_COMMAND_TIMEOUT_MS,
     );

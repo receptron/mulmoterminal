@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import CockpitHeader from "../../../src/components/CockpitHeader.vue";
 import type { AttentionStatus } from "../../../src/components/attentionStatus";
 import type { PrPhase, WorkPhase } from "../../../src/components/rosterPhase";
+import type { SessionCollection } from "../../../common/sessionCollection";
 
 type Props = {
   status: AttentionStatus;
@@ -14,6 +15,7 @@ type Props = {
   workPhase?: WorkPhase | null;
   phase?: PrPhase;
   dirLength?: number;
+  collection?: SessionCollection | null;
 };
 const base: Props = { status: "idle", agent: "claude", cwd: "/home/me/proj", home: "/home/me", headerColor: null, headerTextColor: null };
 const mountH = (over: Partial<Props> = {}, slot?: string) => mount(CockpitHeader, { props: { ...base, ...over }, slots: slot ? { default: slot } : {} });
@@ -36,6 +38,18 @@ describe("CockpitHeader", () => {
   it("shows the work phase word while working when it is known", () => {
     expect(badge(mountH({ status: "working", workPhase: "implementing" }))).toBe("editing");
     expect(badge(mountH({ status: "working", workPhase: "planning" }))).toBe("planning");
+  });
+
+  // The collection a chat was started from (#2020). Beside the directory icon, not instead of it:
+  // these chats run in the workspace, so the directory picture is the same on every one of them.
+  it("wears the collection mark only when the session was started from one", () => {
+    expect(mountH({ collection: null }).find('[data-testid="cell-collection-mark"]').exists()).toBe(false);
+    const marked = mountH({ collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" } });
+    const mark = marked.get('[data-testid="cell-collection-mark"]');
+    expect(mark.text()).toBe("receipt_long"); // the ligature, which the icon font draws as a glyph
+    // The COLLECTION's name, not the ligature's: a reader hearing "receipt_long" learns nothing.
+    expect(mark.attributes("title")).toBe("Started from Invoices");
+    expect(marked.get('[role="img"]').attributes("aria-label")).toBe("Started from Invoices");
   });
 
   it("shows the PR phase pill only when there is a phase", () => {

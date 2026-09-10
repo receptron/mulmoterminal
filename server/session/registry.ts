@@ -26,6 +26,9 @@ import {
 } from "./agent-conversations.js";
 import { applySessionMemo, createMemoWriteGuard, sessionMemoLine, sessionMemoRecord } from "./session-memos.js";
 import { normalizeMemo } from "../../common/sessionMemo.js";
+import { applySessionCollection, sessionCollectionLine, sessionCollectionRecord } from "./session-collections.js";
+import type { SessionCollection } from "../../common/sessionCollection.js";
+import { isSafeSlug } from "@mulmoclaude/core/collection";
 import { forEachJsonlRecord } from "../infra/jsonl-file.js";
 import { devTerminalCwdLine, hydrateCwdsInto } from "./dev-terminal-cwds.js";
 import { parseSessionToolGroups, sessionToolGroupLine, TOOL_GROUP_RESET, type SessionToolGroup } from "./session-tool-groups.js";
@@ -734,6 +737,54 @@ export async function setSessionMemo(id: string, text: string): Promise<string> 
     throw new Error(`failed to persist the memo: ${messageOf(e)}`, { cause: e });
   }
   return memo;
+}
+
+// Which collection a session was started FROM (#2020). Not what it is standing in — that is the
+// cwd, which the cell already wears as the directory's icon — but which collection's action,
+// starter or `+` opened it. Two cells in the same workspace can be about different collections,
+// and until this was recorded the grid drew them identically.
+//
+// Kept beside the memo rather than derived: the browser that asked for the spawn already files
+// this in localStorage (src/composables/collectionChatSessions.ts), and that filing is per browser.
+// The session outlives it, and a phone looking at the same grid has none of it.
+export const sessionCollections = new Map<string, SessionCollection>();
+const SESSION_COLLECTIONS_FILE = path.join(MULMOTERMINAL_HOME, "session-collections.jsonl");
+
+// Ids this process has already written. Hydration reads the file as it was BEFORE our append could
+// reach it, so without this a session recorded during startup is overwritten by an older line.
+const collectionWrittenIds = new Set<string>();
+
+export const sessionCollectionsHydrated: Promise<void> = (async () => {
+  try {
+    await forEachJsonlRecord(SESSION_COLLECTIONS_FILE, (parsed) => {
+      const record = sessionCollectionRecord(parsed, isValidSessionId, isSafeSlug);
+      if (record && !collectionWrittenIds.has(record.id)) applySessionCollection(sessionCollections, record);
+    });
+  } catch {
+    // absent on first run / unreadable => no session knows its collection, which is how every
+    // session that was not started from one already reads
+  }
+})();
+
+let collectionPersist: Promise<void> = Promise.resolve();
+
+/** Record which collection a session was started from, and persist it.
+ *
+ *  Fire-and-forget on the DISK side, unlike the memo: this is derived from the collection the
+ *  server itself resolved at spawn, so a failed append costs a decoration on the next restart
+ *  rather than words nothing can reconstruct. The in-memory map is set synchronously, which is what
+ *  the spawning client reads a moment later.
+ *
+ *  The slug is re-checked here rather than trusted from the caller — this is the one door into the
+ *  map, and a value that reached it another way still may not name a path. */
+export function rememberSessionCollection(id: string, collection: SessionCollection): void {
+  if (!isValidSessionId(id) || !isSafeSlug(collection.slug)) return;
+  collectionWrittenIds.add(id);
+  applySessionCollection(sessionCollections, { id, ...collection });
+  collectionPersist = collectionPersist
+    .then(() => fs.mkdir(MULMOTERMINAL_HOME, { recursive: true }))
+    .then(() => fs.appendFile(SESSION_COLLECTIONS_FILE, sessionCollectionLine({ id, ...collection })))
+    .catch((e) => console.error(`[session-collections] failed to persist: ${messageOf(e)}`));
 }
 
 // Which GUI tool groups a session actually has. Learned from the group URLs it connects to
