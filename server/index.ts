@@ -13,7 +13,7 @@ import { initOpenPathBackend } from "./backends/openPath.js";
 import { getUserMcpServers, getWorklogConfig, getTerminalSubmit, getQuickCommands, getSessionIdleReapDays, APP_CONFIG_FILE } from "./config/config-routes.js";
 // Its own line: folding it into the import above pushes that line past the print width, and the
 // eight-line import prettier then writes is seven code lines this file has no room for.
-import { getCwdPresets } from "./config/config-routes.js";
+import { getCwdPresets, getSystemTaskSwitches } from "./config/config-routes.js";
 import { enforceKeymap } from "./config/keymap-check.js";
 import { readFileSync } from "node:fs";
 import { submitSequenceForAgent } from "../common/terminalSubmit.js";
@@ -929,6 +929,9 @@ try {
     // (#1582); `feedsSpawnWorker` now spawns in the root core gives it.
     feedRoots: listProjectRoots().map((project) => project.cwd),
     worklog: getWorklogConfig(),
+    // Read HERE, at boot, for the same reason `feedRoots` is: the scheduler registers once, so
+    // turning one off takes effect at the next start.
+    enabled: getSystemTaskSwitches(),
     spawnChat: spawnScheduledChat,
   });
   initUserTaskScheduler({

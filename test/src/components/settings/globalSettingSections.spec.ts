@@ -13,6 +13,7 @@ import { setPrWorkdirFooter } from "../../../../src/composables/prWorkdirFooter"
 import { setAppendSystemPrompt } from "../../../../src/composables/appendSystemPrompt";
 import { setDecisionDigest } from "../../../../src/composables/decisionDigest";
 import { setWorklogEnabled, setWorklogIntervalHours } from "../../../../src/composables/worklog";
+import { setFeedRefreshEnabled, setCalendarSyncEnabled } from "../../../../src/composables/systemTasks";
 import { setGlobalFontFamily } from "../../../../src/composables/terminalFontFamily";
 import { useAppConfig } from "../../../../src/composables/useAppConfig";
 import { reloadLaunchOptions } from "../../../../src/composables/useLaunchOptions";
@@ -145,6 +146,38 @@ describe("SessionSection", () => {
     const wrapper = mount(SessionSection);
     await toggleAt(wrapper, 2, false);
     expect(posts).toEqual([{ worklogEnabled: false }]);
+  });
+
+  // #2015: the two built-in scheduled tasks. Index 3 and 4 — they sit after the worklog box.
+  it("posts feedRefreshEnabled when the collection-refresh box is unticked", async () => {
+    const wrapper = mount(SessionSection);
+    await toggleAt(wrapper, 3, false);
+    expect(posts).toEqual([{ feedRefreshEnabled: false }]);
+  });
+
+  it("posts calendarSyncEnabled when the calendar box is unticked", async () => {
+    const wrapper = mount(SessionSection);
+    await toggleAt(wrapper, 4, false);
+    expect(posts).toEqual([{ calendarSyncEnabled: false }]);
+  });
+
+  // These two are the only default-ON boxes in this section. The risk is `createGlobalFlag`'s
+  // `defaultOn` being set backwards, which surfaces as a checkbox that disagrees with what the
+  // server does — so the case that matters is what a config written BEFORE #2015 sends: nothing.
+  it("renders both built-in task boxes ticked when the config carries neither key", () => {
+    setFeedRefreshEnabled(undefined);
+    setCalendarSyncEnabled(undefined);
+    const boxes = mount(SessionSection).findAll("input[type=checkbox]");
+    expect((boxes[3].element as HTMLInputElement).checked).toBe(true);
+    expect((boxes[4].element as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("unticks them only when the config says false", () => {
+    setFeedRefreshEnabled(false);
+    setCalendarSyncEnabled(false);
+    const boxes = mount(SessionSection).findAll("input[type=checkbox]");
+    expect((boxes[3].element as HTMLInputElement).checked).toBe(false);
+    expect((boxes[4].element as HTMLInputElement).checked).toBe(false);
   });
 
   it("posts the new interval when the stepper is nudged", async () => {

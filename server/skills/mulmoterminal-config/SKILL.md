@@ -297,6 +297,29 @@ wiki pages.
 - **Off by default, and it costs tokens** — each run spawns an LLM session. Say so before enabling.
 - The interval is whole hours, clamped to 1–168. Anything else falls back to 6.
 
+### `feedRefreshEnabled` / `calendarSyncEnabled` — the two always-on scheduled tasks
+
+MulmoTerminal registers two built-in scheduled tasks besides the worklog, both hourly: the
+collection/feed refresh (one per root — the workspace and every saved project directory) and the
+Google Calendar sync. These switch them off.
+
+```json
+{ "feedRefreshEnabled": false, "calendarSyncEnabled": false }
+```
+
+- **Both default ON.** Only an explicit `false` turns one off — an absent key, `null`, `0` or the
+  string `"false"` all leave it running, so an existing config never changes behaviour on upgrade.
+  Same rule as `enabled` on a task in `config/scheduler/tasks.json`.
+- **Takes effect at the next server start.** The scheduler registers once at boot, so flipping
+  either one mid-session changes nothing until a restart.
+- Turning one off does not delete anything already fetched; it stops the *scheduled* run. Feeds
+  and calendar collections still update when someone asks for them explicitly.
+- With both off and `worklogEnabled` off, nothing is registered at all — which is also when the
+  scheduler stops writing its state file and run logs.
+- Reasons to turn one off: no feeds and no Google account (the runs are no-ops), or a machine
+  where the hourly wake-up is unwanted. Neither costs tokens, unlike the worklog.
+- Also two checkboxes in **Settings → Sessions**, under *Built-in scheduled tasks*.
+
 ### `cockpitLines` — how long a roster row is
 
 How many lines each row of the cockpit roster (the list beside an enlarged cell) shows before it

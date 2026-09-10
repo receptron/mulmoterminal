@@ -212,6 +212,13 @@ export const ja: Messages = {
         "保存した作業ディレクトリ全体の最近の作業を、週ごとの wiki ページにまとめます。実行のたびに LLM セッションを起動するのでトークンを消費します。",
       worklogInterval: "実行間隔:",
       worklogStepper: "開発作業ログの間隔",
+      systemTasks: "組み込みの定期タスク",
+      systemTasksHint: "どちらも 1 時間ごとに実行され、切らない限り有効です。切り替えはサーバの次回起動から反映されます。",
+      feedRefresh: "コレクションとフィードを更新する",
+      feedRefreshHint:
+        "RSS/JSON フィードを取得し、スキル連動のコレクション更新を発行します。対象はワークスペースと保存済みの各プロジェクトディレクトリです。フィードを 1 つも登録していなければ何もしません。",
+      calendarSync: "Google カレンダーを同期する",
+      calendarSyncHint: "Google カレンダーを宣言しているコレクションに、変更されたイベントを取り込みます。アカウントを接続するまでは何もしません。",
     },
 
     launchers: {

@@ -101,6 +101,13 @@ export interface AppConfig {
   // session on each run, so it costs tokens). `worklogIntervalHours` is the cadence.
   worklogEnabled: boolean;
   worklogIntervalHours: number;
+  // The two built-in scheduled tasks that are otherwise always on: the hourly collection/feed
+  // refresh and the hourly Google Calendar sync (#2015). Both default ON — they are existing
+  // behaviour, and a workspace with feeds would silently stop updating if the default flipped.
+  // Only an explicit `false` turns one off, which is the rule a USER task in `tasks.json`
+  // already follows.
+  feedRefreshEnabled: boolean;
+  calendarSyncEnabled: boolean;
   // Days a tmux session may sit with nobody attached and no output before the server ends it at
   // its next start (#1467). 0 turns the sweep off; the conversation is on disk either way.
   sessionIdleReapDays: number;
@@ -426,6 +433,16 @@ export function sanitizeWorklogEnabled(input: unknown): boolean {
   return input === true;
 }
 
+// `!== false`, not `=== true`: these two are ON unless the user says otherwise, so an absent key
+// (every existing config) keeps the behaviour it has today. Same rule as `enabled` on a user task.
+export function sanitizeFeedRefreshEnabled(input: unknown): boolean {
+  return input !== false;
+}
+
+export function sanitizeCalendarSyncEnabled(input: unknown): boolean {
+  return input !== false;
+}
+
 export function sanitizeIssueWorkComments(input: unknown): boolean {
   return input === true;
 }
@@ -484,6 +501,8 @@ export const emptyConfig = (): AppConfig => ({
   pushEnabled: false,
   pushKinds: [...DEFAULT_PUSH_KINDS],
   worklogEnabled: false,
+  feedRefreshEnabled: true,
+  calendarSyncEnabled: true,
   worklogIntervalHours: DEFAULT_WORKLOG_INTERVAL_HOURS,
   sessionIdleReapDays: DEFAULT_REAP_IDLE_DAYS,
   providers: [],
@@ -574,6 +593,8 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     pushEnabled: sanitizePushEnabled(o.pushEnabled),
     pushKinds: sanitizePushKinds(o.pushKinds),
     worklogEnabled: sanitizeWorklogEnabled(o.worklogEnabled),
+    feedRefreshEnabled: sanitizeFeedRefreshEnabled(o.feedRefreshEnabled),
+    calendarSyncEnabled: sanitizeCalendarSyncEnabled(o.calendarSyncEnabled),
     worklogIntervalHours: sanitizeWorklogIntervalHours(o.worklogIntervalHours),
     sessionIdleReapDays: sanitizeReapIdleDays(o.sessionIdleReapDays),
     providers: sanitizeProviders(o.providers),
@@ -687,6 +708,8 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     pushEnabled: updated("pushEnabled", sanitizePushEnabled, base.pushEnabled),
     pushKinds: updated("pushKinds", sanitizePushKinds, base.pushKinds),
     worklogEnabled: updated("worklogEnabled", sanitizeWorklogEnabled, base.worklogEnabled),
+    feedRefreshEnabled: updated("feedRefreshEnabled", sanitizeFeedRefreshEnabled, base.feedRefreshEnabled),
+    calendarSyncEnabled: updated("calendarSyncEnabled", sanitizeCalendarSyncEnabled, base.calendarSyncEnabled),
     worklogIntervalHours: updated("worklogIntervalHours", sanitizeWorklogIntervalHours, base.worklogIntervalHours),
     sessionIdleReapDays: updated("sessionIdleReapDays", sanitizeReapIdleDays, base.sessionIdleReapDays),
     providers: updated("providers", sanitizeProviders, base.providers),
@@ -731,6 +754,8 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     pushEnabled: config.pushEnabled,
     pushKinds: config.pushKinds,
     worklogEnabled: config.worklogEnabled,
+    feedRefreshEnabled: config.feedRefreshEnabled,
+    calendarSyncEnabled: config.calendarSyncEnabled,
     worklogIntervalHours: config.worklogIntervalHours,
     sessionIdleReapDays: config.sessionIdleReapDays,
     terminalSubmit: config.terminalSubmit,

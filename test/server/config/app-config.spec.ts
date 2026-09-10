@@ -14,6 +14,8 @@ import {
   sanitizeUserMcpServers,
   sanitizePushEnabled,
   sanitizePrWorkdirFooter,
+  sanitizeFeedRefreshEnabled,
+  sanitizeCalendarSyncEnabled,
   sanitizeCopyOnSelect,
   sanitizeTerminalSubmit,
   loadAppConfig,
@@ -81,6 +83,24 @@ describe("sanitizePrWorkdirFooter", () => {
     expect(sanitizePrWorkdirFooter("false")).toBe(true);
     expect(sanitizePrWorkdirFooter(0)).toBe(true);
     expect(sanitizePrWorkdirFooter(null)).toBe(true);
+  });
+});
+
+describe("sanitizeFeedRefreshEnabled / sanitizeCalendarSyncEnabled", () => {
+  // #2015 added these to switch OFF two tasks that have always run. The direction that matters
+  // is the absent key: every config file written before this must keep both running, or a
+  // workspace with feeds silently stops updating on upgrade.
+  it("is false ONLY for the boolean false", () => {
+    [sanitizeFeedRefreshEnabled, sanitizeCalendarSyncEnabled].forEach((sanitize) => {
+      expect(sanitize(false)).toBe(false);
+      expect(sanitize(true)).toBe(true);
+      expect(sanitize(undefined)).toBe(true);
+      // Same reasoning as `prWorkdirFooter`: a quoted "false" is not the opt-out, and staying on
+      // is the safe direction for a switch whose off state is silent.
+      expect(sanitize("false")).toBe(true);
+      expect(sanitize(0)).toBe(true);
+      expect(sanitize(null)).toBe(true);
+    });
   });
 });
 
@@ -384,6 +404,8 @@ describe("loadAppConfig / saveAppConfig", () => {
     pushEnabled: false,
     pushKinds: [...DEFAULT_PUSH_KINDS],
     worklogEnabled: false,
+    feedRefreshEnabled: true,
+    calendarSyncEnabled: true,
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     providers: [],
@@ -426,6 +448,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       pushEnabled: true,
       pushKinds: [...DEFAULT_PUSH_KINDS],
       worklogEnabled: true,
+      feedRefreshEnabled: true,
+      calendarSyncEnabled: true,
       worklogIntervalHours: 12,
       sessionIdleReapDays: 7,
       providers: [],
@@ -499,6 +523,8 @@ describe("loadAppConfig / saveAppConfig", () => {
       pushEnabled: false,
       pushKinds: [...DEFAULT_PUSH_KINDS],
       worklogEnabled: false,
+      feedRefreshEnabled: true,
+      calendarSyncEnabled: true,
       worklogIntervalHours: 6,
       sessionIdleReapDays: 7,
       providers: [],
@@ -613,6 +639,8 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     pushEnabled: false,
     pushKinds: [...DEFAULT_PUSH_KINDS],
     worklogEnabled: false,
+    feedRefreshEnabled: true,
+    calendarSyncEnabled: true,
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     providers: [],
@@ -687,6 +715,8 @@ describe("mergeConfigUpdate", () => {
     pushEnabled: false,
     pushKinds: [...DEFAULT_PUSH_KINDS],
     worklogEnabled: false,
+    feedRefreshEnabled: true,
+    calendarSyncEnabled: true,
     worklogIntervalHours: 6,
     sessionIdleReapDays: 7,
     providers: [],

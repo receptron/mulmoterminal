@@ -17,11 +17,50 @@ const MAG2 = path.resolve("/srv/mag2");
 const feedId = (root: string) => `system:feed-refresh:${root}`;
 
 const WORKLOG_OFF = { enabled: false, intervalHours: 6 };
-const buildWithRoots = (feedRoots: string[]) => buildSystemTasks({ workspaceRoot: WS, feedRoots, worklog: WORKLOG_OFF, spawnChat: () => "" });
+// What every existing config resolves to: both on. The switches are the #2015 addition, and the
+// cases that turn one off say so explicitly.
+const BOTH_ON = { feedRefresh: true, calendarSync: true };
+const buildWithRoots = (feedRoots: string[]) => buildSystemTasks({ workspaceRoot: WS, feedRoots, worklog: WORKLOG_OFF, enabled: BOTH_ON, spawnChat: () => "" });
 const feedIds = (tasks: ReturnType<typeof buildSystemTasks>) => tasks.map((task) => task.id).filter((id) => id.startsWith("system:feed-refresh"));
-const build = (worklog = WORKLOG_OFF) => buildSystemTasks({ workspaceRoot: WS, worklog, spawnChat: () => "11111111-1111-1111-1111-111111111111" });
+const build = (worklog = WORKLOG_OFF, enabled = BOTH_ON) =>
+  buildSystemTasks({ workspaceRoot: WS, worklog, enabled, spawnChat: () => "11111111-1111-1111-1111-111111111111" });
 
 describe("buildSystemTasks", () => {
+  // #2015: a USER task in tasks.json has always honoured `enabled: false`; the two built-in ones
+  // had no equivalent, which is the asymmetry the switches close.
+  describe("the per-task switches", () => {
+    it("drops every feed refresh when feedRefresh is off, leaving the calendar alone", () => {
+      const ids = buildSystemTasks({
+        workspaceRoot: WS,
+        feedRoots: [MAG2],
+        worklog: WORKLOG_OFF,
+        enabled: { feedRefresh: false, calendarSync: true },
+        spawnChat: () => "",
+      }).map((task) => task.id);
+      expect(ids.filter((id) => id.startsWith("system:feed-refresh"))).toEqual([]);
+      expect(ids).toContain("system:google-calendar-sync");
+    });
+
+    it("drops the calendar sync when calendarSync is off, leaving the feed refreshes alone", () => {
+      const ids = build(WORKLOG_OFF, { feedRefresh: true, calendarSync: false }).map((task) => task.id);
+      expect(ids).not.toContain("system:google-calendar-sync");
+      expect(ids.filter((id) => id.startsWith("system:feed-refresh"))).toEqual([feedId(WS)]);
+    });
+
+    // The state file and the run logs are only created once something is registered, so this is
+    // what makes "no scheduler files at all" reachable for a user who wants that.
+    it("registers nothing when both are off and the worklog is off", () => {
+      expect(build(WORKLOG_OFF, { feedRefresh: false, calendarSync: false })).toEqual([]);
+    });
+
+    // Switching the shared engines off must not take the worklog with them — it is a separate
+    // opt-in feature with its own key.
+    it("keeps the worklog when both shared engines are off", () => {
+      const ids = build({ enabled: true, intervalHours: 6 }, { feedRefresh: false, calendarSync: false }).map((task) => task.id);
+      expect(ids).toEqual(["system.worklog"]);
+    });
+  });
+
   // The feed-refresh id carries its ROOT since core 3.1.0 — the task def is per root, so two
   // roots would otherwise register one id and the second would replace the first. MulmoTerminal
   // registers one (the workspace) today. State is persisted from #1581 onward, but nothing was
