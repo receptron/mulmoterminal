@@ -61,6 +61,8 @@ export const PRESENT_PATH_EXTENSIONS = new Map<string, readonly string[]>([
   // way, or the pair disagrees about which file "models/lamp.shape" names: present
   // would open the session's copy and render the workspace's (codex on #2010).
   ["renderShapeScript", SHAPE_EXTENSIONS],
+  // exportShapeScriptUsdz too — third taker of the same `path`.
+  ["exportShapeScriptUsdz", SHAPE_EXTENSIONS],
 ]);
 
 // `artifacts/…` is the workspace's own output area: the plugins route those values to
