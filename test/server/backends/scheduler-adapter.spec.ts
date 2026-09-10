@@ -60,7 +60,7 @@ describe("startSystemTaskScheduler", () => {
     const { manager, registered } = stubTaskManager();
 
     configureSchedulerAdapter(workspace, silent);
-    await startSystemTaskScheduler({ taskManager: manager, workspace, tasks: [worklogTask(runs)], log: silent });
+    await startSystemTaskScheduler({ taskManager: manager, stateRoot: workspace, tasks: [worklogTask(runs)], log: silent });
 
     expect(runs).toEqual([]); // enabling a task is not a reason to run it
     expect(registered).toEqual(["system.worklog"]); // but it ticks from here on
@@ -76,7 +76,7 @@ describe("startSystemTaskScheduler", () => {
     await seedSchedulerState(workspace, [worklogTask(runs)], new Date(Date.now() - 24 * HOUR_MS));
 
     configureSchedulerAdapter(workspace, silent);
-    await startSystemTaskScheduler({ taskManager: manager, workspace, tasks: [worklogTask(runs)], log: silent });
+    await startSystemTaskScheduler({ taskManager: manager, stateRoot: workspace, tasks: [worklogTask(runs)], log: silent });
 
     expect(runs).toEqual(["ran"]); // run-once: one batch covers everything missed
     const state: Record<string, { lastRunAt: string; totalRuns: number }> = JSON.parse(await readFile(schedulerStateFilePath(workspace), "utf-8"));
@@ -92,7 +92,7 @@ describe("startSystemTaskScheduler", () => {
     await seedSchedulerState(workspace, [worklogTask(runs)], new Date(Date.now() - 24 * HOUR_MS));
 
     configureSchedulerAdapter(workspace, silent);
-    await startSystemTaskScheduler({ taskManager: manager, workspace, tasks: [worklogTask(runs)], log: silent });
+    await startSystemTaskScheduler({ taskManager: manager, stateRoot: workspace, tasks: [worklogTask(runs)], log: silent });
 
     // Read whichever daily file it landed in rather than computing today's name — a run that
     // straddles UTC midnight would otherwise fail this test and nothing else.

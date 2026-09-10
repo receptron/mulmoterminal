@@ -9,6 +9,7 @@ import { MISSED_RUN_POLICIES, SCHEDULE_TYPES } from "@receptron/task-scheduler";
 import { appRequest } from "../../helpers/appRequest.js";
 import type { SystemTaskDef, TaskDefinition } from "@mulmoclaude/core/scheduler";
 import { buildUserTaskDefinitions, loadUserTasks, mountSchedulerRoutes, initUserTaskScheduler } from "../../../server/backends/scheduler.js";
+import { hostStateRoot } from "../../../server/infra/host-state-root.js";
 
 // Mock the shared scheduler package so registration, the tick loop and the persistence adapter
 // are observable without real timers or a real catch-up run. The SEED is deliberately left
@@ -225,7 +226,13 @@ describe("initUserTaskScheduler", () => {
     run: async () => {},
   });
 
+  // Every call gets a disposable home: state and logs now hang off the HOST STATE ROOT, so a
+  // spec that let it default would file them in the home of whoever runs the suite.
+  let home = "";
+
   beforeEach(() => {
+    home = mkdtempSync(path.join(tmpdir(), "mt-home-"));
+    tempDirs.push(home);
     registerTaskMock.mockClear();
     startMock.mockClear();
     initSchedulerMock.mockClear();
@@ -237,6 +244,7 @@ describe("initUserTaskScheduler", () => {
       workspace: makeWorkspace(),
       spawnChat: spawnOk,
       systemTasks: [sysTask("system:feed-refresh")],
+      home,
     });
     expect(count).toBe(0); // zero USER tasks
     // System tasks are NOT registered directly any more — registering them there is what left
@@ -282,7 +290,7 @@ describe("initUserTaskScheduler", () => {
   });
 
   it("does not start the tick loop when there are no tasks at all", () => {
-    initUserTaskScheduler({ workspace: makeWorkspace(), spawnChat: spawnOk });
+    initUserTaskScheduler({ workspace: makeWorkspace(), spawnChat: spawnOk, home });
     expect(registerTaskMock).not.toHaveBeenCalled();
     expect(startMock).not.toHaveBeenCalled();
     expect(initSchedulerMock).not.toHaveBeenCalled();
@@ -290,10 +298,35 @@ describe("initUserTaskScheduler", () => {
 
   // Configured even then: the read-only routes and any later run recording reach the same
   // module-level config, and it touches no disk.
-  it("configures the adapter for the workspace either way", () => {
+  it("configures the adapter even with no tasks at all", () => {
+    initUserTaskScheduler({ workspace: makeWorkspace(), spawnChat: spawnOk, home });
+    expect(configureSchedulerMock).toHaveBeenCalledWith(expect.objectContaining({ workspaceRoot: expect.any(String) }));
+  });
+
+  // #2024: the launcher defaults the workspace to the directory it was run from, so state and
+  // logs filed under it land in someone's project — where they cannot be deleted, because the
+  // next hourly run writes them again.
+  it("keeps the adapter's state root out of a workspace that is not the managed one", () => {
     const workspace = makeWorkspace();
-    initUserTaskScheduler({ workspace, spawnChat: spawnOk });
-    expect(configureSchedulerMock).toHaveBeenCalledWith(expect.objectContaining({ workspaceRoot: workspace }));
+    initUserTaskScheduler({ workspace, spawnChat: spawnOk, home });
+    const [config] = configureSchedulerMock.mock.calls[0] as [{ workspaceRoot: string }];
+    expect(config.workspaceRoot.startsWith(workspace)).toBe(false);
+    expect(config.workspaceRoot.startsWith(home)).toBe(true);
+  });
+
+  // The other direction of the same gate: on the managed workspace both hosts read each
+  // other's state file, so it must stay exactly where MulmoClaude looks for it.
+  it("leaves the state root ON the workspace when it is the managed one", () => {
+    const workspace = makeWorkspace();
+    const saved = process.env.MULMOCLAUDE_WORKSPACE_PATH;
+    process.env.MULMOCLAUDE_WORKSPACE_PATH = workspace;
+    try {
+      initUserTaskScheduler({ workspace, spawnChat: spawnOk, home });
+      expect(configureSchedulerMock).toHaveBeenCalledWith(expect.objectContaining({ workspaceRoot: workspace }));
+    } finally {
+      if (saved === undefined) delete process.env.MULMOCLAUDE_WORKSPACE_PATH;
+      else process.env.MULMOCLAUDE_WORKSPACE_PATH = saved;
+    }
   });
 
   it("registers the user tasks on the manager and the system tasks through the adapter", async () => {
@@ -301,6 +334,7 @@ describe("initUserTaskScheduler", () => {
       workspace: makeWorkspace([{ id: "a", schedule: { type: "daily", time: "11:00" }, enabled: true, prompt: "go" }]),
       spawnChat: spawnOk,
       systemTasks: [sysTask("system:feed-refresh")],
+      home,
     });
     expect(count).toBe(1); // one user task
     expect(registerTaskMock.mock.calls.map((call) => (call[0] as TaskDefinition).id)).toEqual(["user.a"]);
@@ -312,11 +346,11 @@ describe("initUserTaskScheduler", () => {
   // "just registered" every boot, so a 6-hour worklog on a laptop never runs once (#1581).
   it("seeds first-run state for the system tasks before the adapter loads it", async () => {
     const workspace = makeWorkspace();
-    initUserTaskScheduler({ workspace, spawnChat: spawnOk, systemTasks: [sysTask("system.worklog")] });
+    initUserTaskScheduler({ workspace, spawnChat: spawnOk, systemTasks: [sysTask("system.worklog")], home });
 
     await vi.waitFor(() => expect(initSchedulerMock).toHaveBeenCalled());
     const state: Record<string, { lastRunAt: string | null; totalRuns: number }> = JSON.parse(
-      await readFile(path.join(workspace, "config", "scheduler", "state.json"), "utf-8"),
+      await readFile(path.join(hostStateRoot(workspace, home), "config", "scheduler", "state.json"), "utf-8"),
     );
     expect(state["system.worklog"].lastRunAt).not.toBeNull();
     expect(state["system.worklog"].totalRuns).toBe(0); // seeded, not claimed to have run
