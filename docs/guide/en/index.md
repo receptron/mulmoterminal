@@ -8,11 +8,12 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.18.0 is out.** An agent can now **look at the 3D model it wrote** before showing it to you —
-> nothing to turn on, though rasterising needs a browser on the machine. And a conversation you had
-> `/clear`ed **came back after a reboot** on hosts without tmux, then got re-sent on the next turn
-> (one user measured 478,000 tokens) — that is fixed; here is [how to tell you have
-> it](v4.18.0.html).
+> **4.19.0 is out.** A chat started from a collection now runs in a **pane under it** instead of
+> closing what you were reading, and a cell opened from a collection finally **says which one**.
+> Two fixes worth checking you have: the button that repairs a stuck cell was **killing** it, and
+> MulmoTerminal was writing its own state **into your project directory** — where deleting it did
+> nothing, because the hourly task wrote it again. Both are fixed; here is [how to tell you have
+> them](v4.19.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

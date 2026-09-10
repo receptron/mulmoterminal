@@ -6,6 +6,7 @@
 // treated as absent unless it is exactly what we accept.
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent.js";
 import { isRecord } from "../../common/isRecord.js";
+import { isSafeSlug } from "@mulmoclaude/core/collection";
 
 export interface BackgroundChatRequest {
   agent: TerminalAgent;
@@ -22,6 +23,11 @@ export interface BackgroundChatRequest {
    *  not standing in — which reads as a broken template rather than as a wrong cwd. The id is
    *  resolved against the server's own list of known directories; it is never a path. */
   project: string | null;
+  /** The collection this chat was started FROM, as its slug, or null when it was not started from
+   *  one (#2020). A NAME, never display text: the server resolves it against the collections the
+   *  project actually has, and what a cell wears comes from that resolution rather than from
+   *  anything the caller sent. A slug naming nothing is therefore harmless — it records nothing. */
+  collection: string | null;
 }
 
 /** The request, or the message to answer with when it cannot be served. */
@@ -40,6 +46,9 @@ export function parseBackgroundChat(body: unknown): { ok: true; request: Backgro
       hidden: record.hidden === true,
       message,
       project: typeof record.project === "string" && record.project.length > 0 ? record.project : null,
+      // Shape only. Whether it names a real collection is the resolver's question, and it has to
+      // be — the answer depends on the project the spawn lands in, which is decided after this.
+      collection: typeof record.collection === "string" && isSafeSlug(record.collection) ? record.collection : null,
     },
   };
 }

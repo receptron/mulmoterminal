@@ -391,6 +391,32 @@ describe("TerminalCell", () => {
     expect(urls.some((u) => u.includes(`/api/session/${id}`) && u.includes("cwd=%2Fhome%2Fme%2Fproj"))).toBe(true);
   });
 
+  // The collection a chat was started from (#2020), read off the same seed as the prompt above.
+  // The cell's own icon says which PROJECT — these chats all run in the workspace, so it says the
+  // same thing on every one of them — and this is what tells two of them apart.
+  it("wears the mark of the collection its session was started from", async () => {
+    globalThis.fetch = vi.fn((url: string) => {
+      if (String(url).includes("/api/sessions")) return Promise.resolve({ ok: true, json: async () => ({ sessions: [] }) });
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ working: false, waiting: false, lastPrompt: null, collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" } }),
+      });
+    }) as unknown as typeof fetch;
+
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+
+    const mark = w.get('[data-testid="cell-collection-mark"]');
+    expect(mark.text()).toBe("receipt_long");
+    expect(mark.attributes("title")).toBe("Started from Invoices");
+  });
+
+  it("wears no mark for a session that was not started from a collection", async () => {
+    const w = mountCell("11111111-1111-1111-1111-111111111111", { initialCwd: "/home/me/proj" });
+    await flushPromises();
+    expect(w.find('[data-testid="cell-collection-mark"]').exists()).toBe(false);
+  });
+
   it("shows no resume list when the dir has no sessions", async () => {
     const w = mountCell(null);
     await flushPromises();

@@ -38,11 +38,12 @@ describe("mergeSessionMeta", () => {
     lastResponse: "done",
     memo: "ship before the demo",
     workPhase: "implementing" as const,
+    collection: null,
   };
 
   it("takes what the fetch returned", () => {
     const merged = mergeSessionMeta(shown, { lastPrompt: "new task", aiTitle: "New", lastResponse: "ok", memo: "review only", workPhase: "planning" });
-    expect(merged).toEqual({ lastPrompt: "new task", aiTitle: "New", lastResponse: "ok", memo: "review only", workPhase: "planning" });
+    expect(merged).toEqual({ lastPrompt: "new task", aiTitle: "New", lastResponse: "ok", memo: "review only", workPhase: "planning", collection: null });
   });
 
   // The text fields MERGE: the summary can transiently miss a transcript, and blanking every
@@ -105,7 +106,25 @@ describe("mergeSessionMeta", () => {
       lastResponse: null,
       memo: null,
       workPhase: null,
+      collection: null,
     });
+  });
+
+  // A fact about how the session BEGAN, so a successful fetch is authoritative and there is
+  // nothing to preserve. Merged like the text instead, a row would keep the mark of the session
+  // the cell used to hold after it moved to another one.
+  it("takes the collection as-is, dropping the one it was showing", () => {
+    const started = { ...shown, collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" } };
+    expect(mergeSessionMeta(started, { lastPrompt: "new" }).collection).toBeNull();
+    expect(mergeSessionMeta(shown, { collection: { slug: "tasks", icon: "task", title: "Tasks" } }).collection).toEqual({
+      slug: "tasks",
+      icon: "task",
+      title: "Tasks",
+    });
+  });
+
+  it("ignores a malformed collection rather than showing half of one", () => {
+    expect(mergeSessionMeta(shown, { collection: { slug: "tasks" } }).collection).toBeNull();
   });
 
   it("does not mutate what it was given", () => {

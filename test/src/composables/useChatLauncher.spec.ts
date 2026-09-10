@@ -41,7 +41,7 @@ describe("startCollectionChat", () => {
     const [url, init] = fetchFn.mock.calls[0];
     expect(url).toBe("/api/plugin/spawnBackgroundChat");
     expect(init?.method).toBe("POST");
-    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false, agent: "claude", project: null });
+    expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false, agent: "claude", project: null, collection: null });
     expect(placed).toEqual([{ id: "sess-1", agent: "claude", draft: false, canvas: false }]);
   });
 
@@ -77,7 +77,13 @@ describe("startCollectionChat", () => {
 
     await startCollectionChat("summarize this", { draft: true }); // codex ignores draft — it auto-runs
 
-    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "summarize this", draft: false, agent: "codex", project: null });
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({
+      message: "summarize this",
+      draft: false,
+      agent: "codex",
+      project: null,
+      collection: null,
+    });
     // The agent travels with the id: the cell reconnects on codex's endpoint, not claude's.
     expect(placed).toEqual([{ id: "cx-1", agent: "codex", draft: false, canvas: false }]);
   });
@@ -87,7 +93,13 @@ describe("startCollectionChat", () => {
 
     await startCollectionChat("track my tasks", { hidden: false, draft: true });
 
-    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({ message: "track my tasks", draft: true, agent: "claude", project: null });
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body))).toEqual({
+      message: "track my tasks",
+      draft: true,
+      agent: "claude",
+      project: null,
+      collection: null,
+    });
     // draft travels to the cell too: a prompt waiting in the input box, not a turn running.
     expect(placed).toEqual([{ id: "sess-3", agent: "claude", draft: true, canvas: false }]);
   });
@@ -117,6 +129,61 @@ describe("startCollectionChat", () => {
     await startCollectionChat("/deep-research the market for X");
 
     expect(placed).toEqual([{ id: "sess-d", agent: "claude", draft: false, canvas: false }]);
+  });
+
+  // Which collection the SESSION is about (#2020), sent so the server can resolve it and the cell
+  // can wear its icon. The seed is the source wherever there is one: an action or a starter is
+  // pressed from a Canvas card as often as from the open browser, and the route says nothing there.
+  it("names the collection its seed addresses", async () => {
+    const fetchFn = mockFetch((url) => {
+      if (url.includes("/api/collections/list")) return { ok: true, json: () => ({ collections: [{ slug: "invoices" }] }) };
+      if (url.includes("/api/agent/toolResult")) return { ok: true, json: () => ({ ok: true }) };
+      return { ok: true, json: () => ({ jsonData: { chatId: "sess-m" } }) };
+    });
+
+    await startCollectionChat("/invoices summarise this quarter");
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body)).collection).toBe("invoices");
+  });
+
+  // Sent unchecked, on purpose: `/deep-research …` parses exactly like a collection seed, and only
+  // the server can say whether the project has a collection under that name. It records nothing
+  // for a miss, so the cost of guessing here is a missing mark rather than a wrong one.
+  it("sends a slash command's word even when it names no collection", async () => {
+    const fetchFn = mockFetch((url) => {
+      if (url.includes("/api/collections/list")) return { ok: true, json: () => ({ collections: [{ slug: "invoices" }] }) };
+      return { ok: true, json: () => ({ jsonData: { chatId: "sess-n" } }) };
+    });
+
+    await startCollectionChat("/deep-research the market for X");
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body)).collection).toBe("deep-research");
+  });
+
+  it("falls back to the collection on screen when the prompt carries no seed", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-o" } }) }));
+    await router.push("/collections/works");
+    resetCollectionChats();
+
+    await startCollectionChat("tidy this up");
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body)).collection).toBe("works");
+    resetCollectionChats();
+    await router.push("/terminals");
+  });
+
+  // A FEED is not a collection: `/api/collections/list` does not have it, so a slug from a feed
+  // page would resolve to nothing while looking like it should have worked.
+  it("names no collection while a feed is open", async () => {
+    const fetchFn = mockFetch(() => ({ ok: true, json: () => ({ jsonData: { chatId: "sess-f" } }) }));
+    await router.push("/feeds/daily");
+    resetCollectionChats();
+
+    await startCollectionChat("tidy this up");
+
+    expect(JSON.parse(String(fetchFn.mock.calls[0][1]?.body)).collection).toBeNull();
+    resetCollectionChats();
+    await router.push("/terminals");
   });
 
   it("does NOT place when hidden=true (a real background worker)", async () => {

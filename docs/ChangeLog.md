@@ -20,6 +20,97 @@ Entries here are folded into the next release's heading when it ships.
   same file in the browser. Both come from `@mulmoclaude/shapescript-plugin@1.4.0`; the tool's
   contract, the exporter, and the file's location are the package's, shared with MulmoClaude.
 
+## mulmoterminal@4.19.0 — 2026-09-10
+
+> **Setup guide:** [4.19.0 — Read a collection and drive its chat without leaving it](https://receptron.github.io/mulmoterminal/guide/en/v4.19.0.html)
+
+### A chat started from a collection no longer closes the collection
+
+- **[#2016](https://github.com/receptron/mulmoterminal/pull/2016)** — starting a chat from a
+  collection card or template moved the session into a grid cell and navigated to `/terminals`,
+  which **closed the collection you were reading**. The chat is still an ordinary grid cell; while
+  the collection is open, that **same terminal** is now driven from a pane under it. It is a
+  **teleport, not a handover** — the same mechanism that moves an enlarged cell into `.zoom-main`
+  — so the component is never remounted and the socket, the xterm and the scrollback stay single.
+  Several chats live in **tabs** carrying the roster's own attention colours and summaries, the
+  Collections button shows how many are open, and a session the server reaps folds its tab away.
+  The pane **docks below or beside** the collection, each with its own remembered size, resizable
+  by drag or keyboard. The pairing survives a reload. **"Move to the grid" is gone** — there is
+  nothing to move any more. Closes [#2001](https://github.com/receptron/mulmoterminal/issues/2001).
+- **[#2022](https://github.com/receptron/mulmoterminal/pull/2022)** — a screenshot of the
+  side-docked pane in both guides.
+
+### A cell opened from a collection now says which collection
+
+- **[#2027](https://github.com/receptron/mulmoterminal/pull/2027)** — a chat opened from a
+  collection runs in the workspace, so every one of them drew the same project favicon and a grid
+  holding several was unreadable: nothing said which cell was opened for which collection. The
+  cell header now carries **the collection's own icon**, right after the status dot, in the tiled
+  and enlarged views and in the cockpit roster and filmstrip. It is resolved **once at spawn** on
+  the server and filed beside the session (`~/.mulmoterminal/session-collections.jsonl`), not held
+  in the browser — so it survives a reload, another tab and another device, which the localStorage
+  approach could not. The project favicon stays: "which cwd" and "which collection" are different
+  questions. Closes [#2020](https://github.com/receptron/mulmoterminal/issues/2020).
+
+### Repairing a stuck cell was making it permanently dead
+
+- **[#2026](https://github.com/receptron/mulmoterminal/pull/2026)** — the
+  `Cannot read properties of undefined (reading 'onShowLinkUnderline')` in the console was **not
+  noise**. `@xterm/addon-canvas` asks the core to rebuild the DOM renderer as it disposes, and
+  xterm 6 hands that renderer a `linkifier` the terminal's own dispose has already released — so
+  the rebuild throws. `rebuildTerminal`, which is the repair for a frozen cell, did not catch it,
+  so `connect()` never ran and the fresh terminal was left **with no socket**: the button for
+  "fix this stuck cell" was the thing that killed it. Renderer lifecycle now lives in one place
+  (`terminalRenderer.ts`), the renderer is disposed **before** the terminal, and neither throw
+  reaches the caller. Closes [#2021](https://github.com/receptron/mulmoterminal/issues/2021).
+
+### Running in your own project directory no longer litters it
+
+- **[#2025](https://github.com/receptron/mulmoterminal/pull/2025)** — `npx mulmoterminal` defaults
+  the workspace to the directory you ran it from, so the scheduler's execution state and logs
+  (`config/scheduler/state.json`, `data/scheduler/logs/`) and the notifier's (`data/notifier/`)
+  were written **into one of your own projects** — and deleting them was pointless, because the
+  next hourly run wrote them again. They now live under
+  `~/.mulmoterminal/workspaces/<workspace-key>/`, one directory per workspace, keyed on the
+  canonical path so a symlinked workspace and the real one share a single history. The **managed**
+  workspace (`MULMOCLAUDE_WORKSPACE_PATH`, `~/mulmoclaude` by default) is unchanged — MulmoClaude
+  reads the same files there, and splitting them would give the two apps different answers. This
+  repo already made that promise for seeded presets; the scheduler and the notifier had never been
+  held to it. What you made stays in the workspace either way: collections, feeds, and the tasks
+  you write in `config/scheduler/tasks.json`.
+  Closes [#2024](https://github.com/receptron/mulmoterminal/issues/2024).
+- **[#2029](https://github.com/receptron/mulmoterminal/pull/2029)** — two of the nine
+  `initUserTaskScheduler` calls in the scheduler spec were still letting the state root default,
+  so running the suite left directories in the home of whoever ran it. Found by measuring the real
+  home rather than by a failing test — the spec is green either way.
+
+### The built-in hourly tasks can be switched off
+
+- **[#2028](https://github.com/receptron/mulmoterminal/pull/2028)** — the hourly collection/feed
+  refresh and the hourly Google Calendar sync were registered unconditionally, with no config key
+  and no environment variable, while a task you wrote in `config/scheduler/tasks.json` has always
+  honoured `enabled: false`. Two new keys close that asymmetry:
+
+  ```json
+  { "feedRefreshEnabled": false, "calendarSyncEnabled": false }
+  ```
+
+  Both default **on**, and only an explicit `false` turns one off — an absent key, `null`, `0` and
+  the string `"false"` all leave the task running, so no existing config changes behaviour on
+  upgrade. It takes effect at the next server start, because the scheduler registers once at boot.
+  There are checkboxes in **Settings → Sessions** as well. They do **not** touch your own tasks: an
+  enabled one in `tasks.json` still registers and still drives the tick loop with all three
+  built-ins off. Closes [#2015](https://github.com/receptron/mulmoterminal/issues/2015).
+
+### Maintenance
+
+- **[#2030](https://github.com/receptron/mulmoterminal/pull/2030)** — the Codex auto-review
+  workflow no longer runs on every `pull_request`; it is `workflow_dispatch` only
+  (`gh workflow run "Codex auto-review" -f pr_number=<N>`). `main` is not branch-protected and the
+  check was never required, so nothing is blocked by it.
+- **[#2023](https://github.com/receptron/mulmoterminal/pull/2023)** — dependency updates
+  (Markdown parsing, schema validation, `@types/node`, code analysis, TypeScript linting).
+
 ## mulmoterminal@4.18.0 — 2026-09-09
 
 > **Setup guide:** [4.18.0 — Let the agent look at what it built](https://receptron.github.io/mulmoterminal/guide/en/v4.18.0.html)

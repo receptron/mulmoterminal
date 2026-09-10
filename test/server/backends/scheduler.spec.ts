@@ -265,6 +265,7 @@ describe("initUserTaskScheduler", () => {
       workspace: makeWorkspace([{ id: "a", schedule: { type: "daily", time: "11:00" }, prompt: "go" }]),
       spawnChat: spawnOk,
       systemTasks: [sysTask("system:feed-refresh")],
+      home,
     });
 
     expect(startMock).toHaveBeenCalledTimes(1); // already ticking, with the adapter still going
@@ -282,6 +283,7 @@ describe("initUserTaskScheduler", () => {
       workspace: makeWorkspace([{ id: "a", schedule: { type: "daily", time: "11:00" }, prompt: "go" }]),
       spawnChat: spawnOk,
       systemTasks: [sysTask("system:feed-refresh")],
+      home,
     });
 
     expect(startMock).toHaveBeenCalledTimes(1);

@@ -29,6 +29,8 @@ import {
   lastResponses,
   sessionMemos,
   sessionMemosHydrated,
+  sessionCollections,
+  sessionCollectionsHydrated,
   setSessionMemo,
   translationWorkerIds,
 } from "../session/registry.js";
@@ -134,13 +136,19 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   // On the `headless` source this still kicks off a summary; sessionDetailView falls back meanwhile.
   freshenRosterTitle(id, cwd, userTurns, diskAiTitle);
   await sessionMemosHydrated; // a cell seeding on boot must not be told its memo is gone
+  await sessionCollectionsHydrated; // and a chat opened from a collection must not lose its mark to a restart
   const view = sessionDetailView(
     { lastPrompt: lastPrompts.get(id), lastResponse: lastResponses.get(id), aiTitle: aiTitles.get(id), memo: sessionMemos.get(id) },
     { lastPrompt: transcriptPrompt, lastResponse: transcriptResponse },
     activity.get(id) ?? {},
     clearedTranscripts.has(id),
   );
-  res.json({ id, cwd, ...view, usage: badges.usage, context: badges.context, workPhase });
+  // Outside `view` with `workPhase`, deliberately: `sessionDetailView` exists for the `/clear`
+  // precedence rule, and which collection a session was opened from is not a thing `/clear` can
+  // change. `null` rather than an absent key, so a cell that switches session clears the mark it
+  // was wearing instead of keeping the previous one (#2020).
+  const collection = sessionCollections.get(id) ?? null;
+  res.json({ id, cwd, ...view, collection, usage: badges.usage, context: badges.context, workPhase });
 }
 
 // The user's one-line note on a session (#1084). An empty text ERASES it — the same route, so a

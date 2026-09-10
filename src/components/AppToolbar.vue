@@ -184,9 +184,12 @@ function showRooms(): void {
              below once you are inside, so the row a terminal user sees does not grow by four.
              Same `database` icon as the cell header's collections pane (CellChromeButtons.vue), so
              the door and the pane read as one thing wherever you meet them. -->
-        <!-- The badge is how a chat running in the collection pane stays legible (#2001): it is not
-             a grid cell, so nothing else on this screen says it exists. The door it lives behind
-             wears the count, the way the bell wears its unread one. -->
+        <!-- The badge says how many chats are answerable behind this door (#2001). They ARE grid
+             cells — see the note on `chatCount` above — so this is not the only place they can be
+             seen; what it adds while you are looking at the grid is that any exist at all. The one
+             it is the ONLY witness for is a chat the grid could not take (a full grid drops the
+             filing, `dropCollectionChat`), which has no cell to wear the collection's mark (#2020).
+             The door wears the count, the way the bell wears its unread one. -->
         <span class="relative inline-flex flex-none">
           <LauncherButton icon="database" :title="collectionsTitle" :label="collectionsTitle" :active="collectionsActive" @click="showCollections" />
           <span

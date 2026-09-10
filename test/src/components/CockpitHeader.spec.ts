@@ -3,6 +3,7 @@ import { mount } from "@vue/test-utils";
 import CockpitHeader from "../../../src/components/CockpitHeader.vue";
 import type { AttentionStatus } from "../../../src/components/attentionStatus";
 import type { PrPhase, WorkPhase } from "../../../src/components/rosterPhase";
+import type { SessionCollection } from "../../../common/sessionCollection";
 
 type Props = {
   status: AttentionStatus;
@@ -14,6 +15,7 @@ type Props = {
   workPhase?: WorkPhase | null;
   phase?: PrPhase;
   dirLength?: number;
+  collection?: SessionCollection | null;
 };
 const base: Props = { status: "idle", agent: "claude", cwd: "/home/me/proj", home: "/home/me", headerColor: null, headerTextColor: null };
 const mountH = (over: Partial<Props> = {}, slot?: string) => mount(CockpitHeader, { props: { ...base, ...over }, slots: slot ? { default: slot } : {} });
@@ -36,6 +38,40 @@ describe("CockpitHeader", () => {
   it("shows the work phase word while working when it is known", () => {
     expect(badge(mountH({ status: "working", workPhase: "implementing" }))).toBe("editing");
     expect(badge(mountH({ status: "working", workPhase: "planning" }))).toBe("planning");
+  });
+
+  // The collection a chat was started from (#2020). Beside the directory icon, not instead of it:
+  // these chats run in the workspace, so the directory picture is the same on every one of them.
+  it("wears the collection mark only when the session was started from one", () => {
+    expect(mountH({ collection: null }).find('[data-testid="cell-collection-mark"]').exists()).toBe(false);
+    const marked = mountH({ collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" } });
+    const mark = marked.get('[data-testid="cell-collection-mark"]');
+    expect(mark.text()).toBe("receipt_long"); // the ligature, which the icon font draws as a glyph
+    // The COLLECTION's name, not the ligature's: a reader hearing "receipt_long" learns nothing.
+    expect(mark.attributes("title")).toBe("Started from Invoices");
+    expect(mark.attributes("role")).toBe("img");
+    expect(mark.attributes("aria-label")).toBe("Started from Invoices");
+    // The label is on THAT element and on nothing inside it. The glyph within is a Material Symbols
+    // LIGATURE, so a second label there makes a screen reader announce "receipt_long" as well as the
+    // collection's name — which is why the roster's agent mark is built the same way.
+    expect(mark.findAll('[role="img"], [aria-label]')).toHaveLength(0);
+    expect(mark.find("span").attributes("aria-hidden")).toBe("true");
+  });
+
+  // The other end of round 2's fix. `toSummary` omits the key for a schema naming no icon, and the
+  // resolver normalizes that to "" so the record survives the two string guards it used to be
+  // dropped by — which is only worth anything if "" then DRAWS. It resolves to the collection
+  // default (`dataset`), so the cell still says "this one is about a collection".
+  it("still draws a mark for a collection whose schema names no icon", () => {
+    const mark = mountH({ collection: { slug: "notes", icon: "", title: "Notes" } }).get('[data-testid="cell-collection-mark"]');
+    expect(mark.text()).toBe("dataset");
+    expect(mark.attributes("aria-label")).toBe("Started from Notes");
+  });
+
+  // And the title falls back to the slug, so the mark is never announced as "Started from ".
+  it("names the collection by its slug when the schema has no title", () => {
+    const mark = mountH({ collection: { slug: "notes", icon: "task", title: "notes" } }).get('[data-testid="cell-collection-mark"]');
+    expect(mark.attributes("aria-label")).toBe("Started from notes");
   });
 
   it("shows the PR phase pill only when there is a phase", () => {
