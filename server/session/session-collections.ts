@@ -14,6 +14,18 @@
 // Its OWN file rather than a widened existing log: these files are shared between BUILDS as well as
 // instances, and widening a line format makes an older build's parser drop every line of a log it
 // relies on. A file it has never heard of is simply ignored.
+//
+// WRITING is safe between instances; READING is not live between them, and the difference is worth
+// stating because the paragraph above invites the other reading. A process folds this file once at
+// startup and answers from memory afterwards, so a chat spawned by a SECOND live server is unmarked
+// in the first until that one restarts. That is deliberate: the read sits on `/api/session/:id`,
+// which the cockpit roster polls every four seconds PER CELL, and a re-read there would cost every
+// cell of every grid a whole-file fold forever to correct a glyph in a two-server setup. The one
+// log here that does refresh (`refreshAgentConversations`) is folded by an OCCUPANCY CHECK — once,
+// deliberately, to decide whether a worktree is free — not by a render. `sessionMemos` is read on
+// this same route with the same one-shot hydration, for a sentence the user typed; if that gap is
+// accepted there it is accepted here, where the worst case is a missing decoration that comes back
+// on the next restart.
 import type { SessionCollection } from "../../common/sessionCollection.js";
 
 export interface SessionCollectionRecord extends SessionCollection {

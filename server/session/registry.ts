@@ -754,6 +754,11 @@ const SESSION_COLLECTIONS_FILE = path.join(MULMOTERMINAL_HOME, "session-collecti
 // reach it, so without this a session recorded during startup is overwritten by an older line.
 const collectionWrittenIds = new Set<string>();
 
+// Folded ONCE, and never re-read — the same contract as the memo below it, and for the same reason:
+// the reader is `/api/session/:id`, which the roster polls per cell every four seconds. What that
+// costs is spelled out in session-collections.ts; the short version is that a chat spawned by a
+// second live server on this home stays unmarked here until this process restarts.
+
 export const sessionCollectionsHydrated: Promise<void> = (async () => {
   try {
     await forEachJsonlRecord(SESSION_COLLECTIONS_FILE, (parsed) => {
