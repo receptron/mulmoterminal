@@ -144,7 +144,7 @@ interface Conn {
   key: string;
   term: Terminal;
   fitAddon: FitAddon;
-  // The canvas renderer, kept so it can be disposed BEFORE its terminal — see terminalTeardown.ts.
+  // The canvas renderer, kept so it can be disposed BEFORE its terminal — see terminalRenderer.ts.
   // Null where it could not initialise, which is the DOM-renderer fallback below.
   canvas: CanvasAddon | null;
   host: HTMLDivElement; // term.open()'d into this ONCE; re-parented on attach/detach
