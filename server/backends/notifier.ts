@@ -38,9 +38,8 @@ async function writeJsonAtomic(filePath: string, data: unknown): Promise<void> {
   }
 }
 
-/** Configure the engine against MulmoTerminal's pubsub + the shared workspace files.
- *  Call once at startup, before any publish/clear (and before the collection
- *  watchers start). */
+/** Configure the engine against MulmoTerminal's pubsub + its state files. Call once at
+ *  startup, before any publish/clear (and before the collection watchers start). */
 export async function initNotifier(deps: { workspace: string; pubsub: PubSub | null; home?: string }): Promise<void> {
   const { workspace, pubsub } = deps;
   // Under the host state root, not the workspace: on a launch directory that is someone's
