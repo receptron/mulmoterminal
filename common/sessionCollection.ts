@@ -18,6 +18,9 @@ export interface SessionCollection {
    *  `IconGlyph` from `@mulmoclaude/core/plugin-vue`, which is the one renderer that classifies
    *  the two and contains a value it cannot resolve. May be "" when the schema names none. */
   icon: string;
+  /** What the collection calls itself, falling back to its slug. Never empty, and never absent:
+   *  the producer normalizes it (`resolveSpawnCollection`) because the package's own summary type
+   *  promises a string and hands back `undefined` for a schema that names no title. */
   title: string;
 }
 

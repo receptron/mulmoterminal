@@ -8,22 +8,28 @@
 // rather than unstarted.
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+// ONLY `loadCollection` is stubbed. `toSummary` is the REAL one, and that is the point: the first
+// version of this spec supplied its own `toSummary` with a `?? ""` fallback, and the fallback was
+// the thing under test — the real one returns `icon: undefined` for a schema naming no icon, which
+// this file swore was handled and was not (Codex round 2). A stub of the function whose OUTPUT
+// SHAPE is the risk cannot test that shape.
 const loadCollection = vi.fn();
-vi.mock("@mulmoclaude/core/collection/server", () => ({
+vi.mock("@mulmoclaude/core/collection/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@mulmoclaude/core/collection/server")>()),
   loadCollection: (...args: unknown[]) => loadCollection(...args),
-  // The real shape, narrowed to what the mark reads. A collection's summary is what the list route
-  // already answers with, so this stays the one place the fields are named.
-  toSummary: (loaded: { slug: string; schema: { title?: string; icon?: string } }) => ({
-    slug: loaded.slug,
-    title: loaded.schema.title ?? loaded.slug,
-    icon: loaded.schema.icon ?? "",
-  }),
 }));
 
 const { resolveSpawnCollection } = await import("../../../server/session/spawn-collection.js");
+const { sessionCollectionLine, sessionCollectionRecord } = await import("../../../server/session/session-collections.js");
+const { asSessionCollection } = await import("../../../common/sessionCollection.js");
+const { isSafeSlug } = await import("@mulmoclaude/core/collection");
+
+const SESSION = "0a1b2c3d-4e5f-6071-8293-a4b5c6d7e8f9";
 
 const CWD = "/home/me/proj";
-const invoices = { slug: "invoices", schema: { title: "Invoices", icon: "receipt_long" } };
+/** What `loadCollection` hands back, in the shape the real `toSummary` reads. */
+const loadedAs = (slug: string, schema: Record<string, unknown>) => ({ slug, source: "project", schema });
+const invoices = loadedAs("invoices", { title: "Invoices", icon: "receipt_long" });
 
 beforeEach(() => {
   loadCollection.mockReset();
@@ -69,10 +75,37 @@ describe("resolveSpawnCollection", () => {
     logged.mockRestore();
   });
 
-  // A schema naming no icon still gets a record: the title is what the mark announces, and the
-  // renderer has a fallback glyph.
-  it("keeps a collection that declares no icon", async () => {
-    loadCollection.mockResolvedValue({ slug: "notes", schema: { title: "Notes" } });
+  // A schema naming no icon still gets a record. `toSummary` answers `icon: undefined` for it — the
+  // key is absent, not empty — and an undefined reaching the store is not cosmetic: JSON.stringify
+  // drops it, `sessionCollectionRecord` and `asSessionCollection` both demand a string, and the
+  // whole record is discarded. So the collection would lose its TITLE and its mark too.
+  it("keeps a collection that declares no icon, as an empty icon", async () => {
+    loadCollection.mockResolvedValue(loadedAs("notes", { title: "Notes" }));
     expect(await resolveSpawnCollection("notes", CWD)).toEqual({ slug: "notes", title: "Notes", icon: "" });
+  });
+
+  // The same defect on the other optional field, which `toSummary` omits the same way. Fixed as a
+  // CLASS rather than at the reported site: `CollectionSummary` declares both `icon: string` and
+  // `title: string`, and the runtime keeps neither promise.
+  it("falls back to the slug when the schema names no title", async () => {
+    loadCollection.mockResolvedValue(loadedAs("notes", { icon: "task" }));
+    expect(await resolveSpawnCollection("notes", CWD)).toEqual({ slug: "notes", title: "notes", icon: "task" });
+  });
+
+  it("keeps a collection that declares neither", async () => {
+    loadCollection.mockResolvedValue(loadedAs("notes", {}));
+    expect(await resolveSpawnCollection("notes", CWD)).toEqual({ slug: "notes", title: "notes", icon: "" });
+  });
+
+  // And the record it produces has to survive the round trip it is built for — the two guards that
+  // silently dropped it before. Asserted here rather than trusted, because "every field is a
+  // string" is the whole of what those guards check.
+  it("produces a record both the log and the wire accept", async () => {
+    loadCollection.mockResolvedValue(loadedAs("notes", {}));
+    const resolved = await resolveSpawnCollection("notes", CWD);
+    if (!resolved) throw new Error("expected a record"); // narrows, and says what went wrong if it ever does
+    const line = sessionCollectionLine({ id: SESSION, ...resolved });
+    expect(sessionCollectionRecord(JSON.parse(line), () => true, isSafeSlug)).toEqual({ id: SESSION, slug: "notes", title: "notes", icon: "" });
+    expect(asSessionCollection(resolved)).toEqual({ slug: "notes", title: "notes", icon: "" });
   });
 });

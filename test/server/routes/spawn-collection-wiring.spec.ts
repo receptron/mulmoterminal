@@ -71,6 +71,7 @@ beforeEach(() => {
   asked.length = 0;
   answer = null;
   appendFile.mockClear();
+  appendFile.mockImplementation(async () => undefined);
 });
 
 /** Let the append chain (mkdir -> appendFile) run. It is deliberately not awaited by the route,
@@ -131,18 +132,31 @@ describe("recording the collection a spawn was started from", () => {
   // microtask or two either way, so timing alone cannot tell an awaited write from a fire-and-
   // forget one. Never settling is what makes the difference observable.
   it("answers the spawn even while the write never settles", async () => {
+    // Hung by FILE, not by call order. This one route appends to two logs on two independent
+    // chains — session-collections and unplaced-sessions — so a `mockReturnValueOnce` is claimed by
+    // whichever reaches `appendFile` first, which is promise scheduling and not something this test
+    // states. It happens to be the collections one today; moving two lines in the route would hand
+    // the hang to the other log and leave this test green while asserting nothing.
     let release!: () => void;
-    appendFile.mockReturnValueOnce(new Promise<undefined>((resolve) => (release = () => resolve(undefined))));
+    const hung = new Promise<undefined>((resolve) => (release = () => resolve(undefined)));
+    appendFile.mockImplementation((file) => (file.endsWith("session-collections.jsonl") ? hung : Promise.resolve(undefined)));
     answer = { slug: "invoices", icon: "receipt_long", title: "Invoices" };
 
     const chatId = await spawn({ collection: "invoices" });
 
+    // That OUR write is the one still hanging — not merely that it happened. "Was the collections
+    // file appended to" is true either way, so it guards nothing; the promise identity is what says
+    // the response came back over an unfinished write to THIS log.
+    const ours = appendFile.mock.calls.findIndex((call) => call[0].endsWith("session-collections.jsonl"));
+    expect(ours).toBeGreaterThanOrEqual(0);
+    expect(appendFile.mock.results[ours]?.value).toBe(hung);
     expect(sessionCollections.get(chatId)).toEqual({ slug: "invoices", icon: "receipt_long", title: "Invoices" });
     // RELEASED before the test ends, and not merely for tidiness: the appends run on one serial
     // chain, so a write left hanging blocks every later one in this module — which is a real
     // property of the store, and leaving it stuck would make the next test's result about this one.
     release();
     await settleAppends();
+    appendFile.mockReset();
   });
 
   // A failed write must not take the NEXT one with it. The catch sits at the END of the chain for
