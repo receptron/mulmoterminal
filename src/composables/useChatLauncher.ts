@@ -67,11 +67,20 @@ function placeChat(request: SpawnedChatRequest, filingKey: string | null): void 
 
 /** Which collection a chat is ABOUT, for the mark its cell wears (#2020).
  *
- *  The SEED first, and that is what makes this work from places the filing key cannot see: an
- *  action, a starter and a custom view's button all build `/<slug> …` (skillCommandSeed), and they
- *  are pressed from a Canvas card as often as from the open browser — where the route says
- *  nothing and `currentCollectionChatKey()` is null. Where there is no slash seed, the collection
- *  being looked at is the answer.
+ *  The SEED first, and that is what reaches the cases the route cannot see: a collection or record
+ *  ACTION builds `/<slug> …` (buildCollectionActionSeedPrompt), and those are pressed from a Canvas
+ *  card as often as from the open browser — where the path is /terminals and
+ *  `currentCollectionSlug()` is null. Where there is no slash seed, the collection on screen is the
+ *  answer.
+ *
+ *  WHAT THIS DOES NOT REACH, stated because the two sources above look exhaustive and are not: a
+ *  CUSTOM VIEW calls `startChat(prompt)` with whatever prose its author wrote, and the plugin's
+ *  capability carries only the prompt — the slug the iframe was verified against is not passed to
+ *  the host (collectionUi.ts). Inside the browser that costs nothing, because the route answers;
+ *  inside a Canvas card it means no mark. Closing it needs the collection threaded through
+ *  `CollectionSurface`, which deliberately gives a canvas no navigation identity of its own — a
+ *  change to that seam, not to this function. The cost of the gap is a MISSING mark, never a wrong
+ *  one, which is the same bargain every other miss here makes.
  *
  *  Neither source is trusted to name a real collection: `/deep-research` parses exactly like a
  *  collection seed, and so does a FEED's slug. The server resolves the slug against the project's

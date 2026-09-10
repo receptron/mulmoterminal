@@ -91,6 +91,16 @@ cwd がワークスペースなので **全部おなじ絵**になる。グリ�
 これを入れないと、feed をブラウズして押すと付かないのに `/hacker-news …` の seed では付く、という
 PR 内部での食い違いになる（Codex round 3）。
 
+## 届かない経路（既知の限界）
+
+**カスタムビューが `startChat(prompt)` を素のプロンプトで呼ぶ場合**、マークは付かない。
+plugin の capability は prompt しか運ばず、iframe が検証された slug はホストに渡ってこない
+（`collectionUi.ts`）。browse overlay の中ならルートが答えるので問題ないが、**Canvas カードの中**
+だとルートは `/terminals` なので付かない。塞ぐには `CollectionSurface` にコレクションを通す必要が
+あるが、canvas に nav の identity を持たせないのはあの seam の意図的な設計なので、この PR の
+範囲外とした。失うのは**マークが出ないこと**だけで、間違ったマークが出ることはない
+（CI の codex-review が指摘、round 7 時点）。
+
 ## 入れないもの（意図的に）
 
 - **`/api/sessions` の行**: セッションサイドバーは #1201 / #1202 で無くなっていて、いまの
