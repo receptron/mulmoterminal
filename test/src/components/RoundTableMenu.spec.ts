@@ -31,6 +31,20 @@ describe("RoundTableMenu", () => {
       expect(box.findAll('[data-testid="round-table-seat"]')).toHaveLength(19);
     });
 
+    // Stated as what is PERMITTED rather than as a list of controls to check, because a list of
+    // controls is a list someone adds to. Codex round 3 found exactly that: `flex-none` was the
+    // documented invariant, and Start and the room-error row had been missed while stop and watch
+    // had it — one fix applied at some of its sites. Every direct child of the bounded column is
+    // now either THE scroll box or non-shrinking; anything else fails here the moment it is added.
+    it("lets only the seat box shrink — every other direct child is flex-none", () => {
+      const column = render(many).find('[data-testid="round-table"]');
+      const offenders = Array.from(column.element.children)
+        .filter((el) => el.getAttribute("data-testid") !== "round-table-seats")
+        .filter((el) => !el.classList.contains("flex-none"))
+        .map((el) => el.getAttribute("data-testid") ?? el.tagName.toLowerCase());
+      expect(offenders).toEqual([]);
+    });
+
     it("keeps Start, turns and room OUT of that box, so they cannot scroll away", () => {
       const w = render(many);
       const box = w.find('[data-testid="round-table-seats"]');

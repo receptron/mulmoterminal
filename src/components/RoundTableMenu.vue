@@ -136,7 +136,7 @@ function start(): void {
         <option v-for="known in knownRooms" :key="known" :value="known" />
       </datalist>
     </label>
-    <p v-if="roomRejected" data-testid="round-table-room-error" class="m-0 px-2 pb-1 font-sans text-[11px] text-err-text">
+    <p v-if="roomRejected" data-testid="round-table-room-error" class="m-0 flex-none px-2 pb-1 font-sans text-[11px] text-err-text">
       lowercase letters, digits and - only
     </p>
 
@@ -144,7 +144,7 @@ function start(): void {
       v-if="!running"
       type="button"
       data-testid="round-table-start"
-      class="mx-1 mb-1 cursor-pointer rounded-[4px] border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
+      class="mx-1 mb-1 flex-none cursor-pointer rounded-[4px] border border-border bg-transparent px-2 py-1 font-sans text-[12px] text-secondary hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
       :disabled="!ready"
       :title="busy ? 'Another automation is running in this cell' : ready ? `Start a table of ${seats}, ${budget} turns` : 'Pick at least one other terminal'"
       @click="start"
