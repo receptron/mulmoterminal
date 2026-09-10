@@ -42,7 +42,8 @@
 
 - **実機で条件を振る**（build が通っただけでは動作の証明にならない）:
   ①設定なし → `systemTasks: 2`、②`calendarSyncEnabled:false` → `systemTasks: 1`（feed のみ）、
-  ③両方 false → `systemTasks: 0` かつ `config/scheduler` も `data/scheduler` も作られない。
+  ③両方 false → `systemTasks: 0` かつ `config/scheduler` も `data/scheduler` も作られない
+  （user task が無いとき。`tasks.json` の task は別枠で登録され、tick loop も回る）。
 - **既定 ON がテストで噛むこと**を、サーバ側 sanitizer とフロント側 `defaultOn` の
   両方を反転させて赤になることで確認する。ここを逆にすると既存ユーザーが黙って壊れる。
 - `yarn format` → `lint` → `build` → `typecheck` → `test`。

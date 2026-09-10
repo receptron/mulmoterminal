@@ -47,9 +47,10 @@ describe("buildSystemTasks", () => {
       expect(ids.filter((id) => id.startsWith("system:feed-refresh"))).toEqual([feedId(WS)]);
     });
 
-    // The state file and the run logs are only created once something is registered, so this is
-    // what makes "no scheduler files at all" reachable for a user who wants that.
-    it("registers nothing when both are off and the worklog is off", () => {
+    // With no user task in tasks.json either, an empty list here is what makes "no scheduler
+    // files at all" reachable — nothing is registered, so nothing records a run. A user task is
+    // registered separately by `initUserTaskScheduler` and these switches do not touch it.
+    it("yields no SYSTEM task when both are off and the worklog is off", () => {
       expect(build(WORKLOG_OFF, { feedRefresh: false, calendarSync: false })).toEqual([]);
     });
 

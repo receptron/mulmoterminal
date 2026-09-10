@@ -314,8 +314,11 @@ Google Calendar sync. These switch them off.
   either one mid-session changes nothing until a restart.
 - Turning one off does not delete anything already fetched; it stops the *scheduled* run. Feeds
   and calendar collections still update when someone asks for them explicitly.
-- With both off and `worklogEnabled` off, nothing is registered at all — which is also when the
-  scheduler stops writing its state file and run logs.
+- **These do not touch the tasks you wrote.** `config/scheduler/tasks.json` is a separate list with
+  its own per-task `enabled`, and an enabled one still registers and still drives the tick loop
+  with all three built-ins off.
+- With both off, `worklogEnabled` off, AND no enabled user task, nothing is registered at all —
+  which is also when the scheduler stops writing its state file and run logs.
 - Reasons to turn one off: no feeds and no Google account (the runs are no-ops), or a machine
   where the hourly wake-up is unwanted. Neither costs tokens, unlike the worklog.
 - Also two checkboxes in **Settings → Sessions**, under *Built-in scheduled tasks*.
