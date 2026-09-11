@@ -8,6 +8,20 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### Every upstream ShapeScript example renders — `@mulmoclaude/shapescript-plugin@2.3.0`
+
+- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.3.0 (2.1.0 to 2.3.0 in one step),
+  so a script written against the upstream docs no longer hits a refused feature: materials
+  (hex and named colours, `opacity`, `metallicity` / `roughness` / `glow`, `material { … }`),
+  `print` output in the tool result, ranges and custom functions, shapes as values with
+  `.polygons` / `.bounds` / `.volume`, `mesh { polygon { … } }`, `minkowski` and `inset` for
+  rounded edges, and `extrude … along` for sweeps. All nine of the upstream project's example
+  scripts render. Toward upstream: `for` / `if` / `switch` no longer reset transforms at their
+  closing brace, a bare `path` draws as a line, `extrude` is centred on its profile plane and
+  does not close an open path for you (an open path extrudes to a wall), and a lone `position`
+  value is X alone. No host code changes.
+
 ## mulmoterminal@4.20.0 — 2026-09-11
 
 > **Setup guide:** [4.20.0 — Your ShapeScript models need converting, and a deck in your repo finally saves](https://receptron.github.io/mulmoterminal/guide/en/v4.20.0.html)
