@@ -7,6 +7,7 @@ import path from "node:path";
 import { appRequest } from "../../helpers/appRequest.js";
 import { mountFilesRoutes } from "../../../server/backends/files.js";
 import { makeTempDir } from "../../support/tempDir";
+import { canSymlink } from "../../support/canSymlink";
 import { initProjectRoots, projectId } from "../../../server/infra/project-root.js";
 
 let request: ReturnType<typeof appRequest>;
@@ -25,7 +26,9 @@ beforeAll(() => {
   // symlink is where "the name asked for" and "the name on disk" come apart.
   writeFileSync(path.join(ws, "downloads", "images", "月次 レポート.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   writeFileSync(path.join(ws, "downloads", "images", 'weird";name.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-  symlinkSync(path.join(ws, "downloads", "images", "a.png"), path.join(ws, "downloads", "images", "link.png"));
+  // Windows needs Developer Mode or an elevated shell to make one, so the spec that reads it is
+  // `runIf(canSymlink)` — a fixture that was never created reads as broken behaviour, not as untested.
+  if (canSymlink) symlinkSync(path.join(ws, "downloads", "images", "a.png"), path.join(ws, "downloads", "images", "link.png"));
 
   sessionDir = makeTempDir("mt-session-");
   mkdirSync(path.join(sessionDir, "assets", "media"), { recursive: true });
@@ -163,7 +166,7 @@ describe("GET /api/files/raw — the save name", () => {
 
   // `resolveContained` realpaths, so the served path is the TARGET. The user clicked the link,
   // and naming the target would both surprise them and name a file they did not ask about.
-  it("names the link the user asked for, not the file it resolves to", async () => {
+  it.runIf(canSymlink)("names the link the user asked for, not the file it resolves to", async () => {
     const res = await request("/api/files/raw?path=downloads/images/link.png");
     expect(res.status).toBe(200);
     expect(res.headers.get("content-disposition")).toBe("inline; filename=link.png");
