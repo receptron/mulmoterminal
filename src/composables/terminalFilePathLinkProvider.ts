@@ -17,6 +17,7 @@
 // so the string ranges from findFilePathLinks land on the right cells.
 import type { Terminal, ILinkProvider, ILink } from "@xterm/xterm";
 import { SOURCE_CODE_EXTENSIONS } from "../../common/sourceExtensions";
+import { browserDisplays } from "../../common/rawContentType";
 import { findFilePathLinks } from "./terminalFilePathLinks";
 
 export interface TerminalCell {
@@ -98,6 +99,10 @@ export function fileViewerRoute(filePath: string): string {
 
 export function fileLinkTarget(filePath: string, cwd: string): FileLinkTarget {
   if (IN_APP_EXTENSIONS.has(fileExtension(filePath))) return { kind: "files" };
+  // A tab that cannot display the file does not show it — it downloads it, with no warning and no
+  // choice (#2038). The app's own view is the better answer there even though it cannot render it
+  // either: it names the file and offers to open it in the app that owns it.
+  if (!browserDisplays(filePath)) return { kind: "files" };
   return { kind: "url", url: rawFileUrl(filePath, cwd) };
 }
 
@@ -111,7 +116,13 @@ export function isPaneViewable(filePath: string): boolean {
   // Indexed like fileViewerRoute does, not `in`: the table is a plain object, so `in` also
   // answers for whatever Object.prototype carries. Every real key starts with a dot and no
   // inherited one does, which makes it safe today and needlessly load-bearing tomorrow.
-  return IN_APP_EXTENSIONS.has(ext) || ROUTE_BY_EXTENSION[ext] !== undefined;
+  if (IN_APP_EXTENSIONS.has(ext) || ROUTE_BY_EXTENSION[ext] !== undefined) return true;
+  // And anything a TAB cannot display, because there the tab is not a view — it is a download
+  // starting with no warning, which is the half of #2038 the user actually notices. The pane can
+  // at least name the file and offer to open it in the app that owns it. Asked of the same table
+  // the raw route answers `Content-Type` from, so the two cannot disagree about which types
+  // those are (common/rawContentType.ts).
+  return !browserDisplays(filePath);
 }
 
 export function rawFileUrl(filePath: string, cwd: string): string {

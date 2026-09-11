@@ -114,9 +114,23 @@ describe("fileLinkTarget", () => {
     expect(fileLinkTarget(file, CWD)).toEqual({ kind: "url", url: rawFileUrl(file, CWD) });
   });
 
-  it("sends an unknown or extensionless file to the raw route, not the editor", () => {
-    expect(fileLinkTarget("Makefile", CWD)).toEqual({ kind: "url", url: rawFileUrl("Makefile", CWD) });
-    expect(fileLinkTarget("archive.bin", CWD)).toEqual({ kind: "url", url: rawFileUrl("archive.bin", CWD) });
+  // Until #2038 these went to the raw route, where the browser could do nothing with them and the
+  // tab became a silent DOWNLOAD — no warning, no choice, a file in the downloads folder. They go
+  // to the app's own view now: it cannot render them either, but it names the file and offers to
+  // open it in the application that owns it. `Makefile` gains more than that — it is text, so the
+  // pane simply shows it, which is what clicking it looked like it would do all along.
+  it("sends a file the browser would only download to the app's own view", () => {
+    expect(fileLinkTarget("Makefile", CWD)).toEqual({ kind: "files" });
+    expect(fileLinkTarget("archive.bin", CWD)).toEqual({ kind: "files" });
+    expect(fileLinkTarget("book.xlsx", CWD)).toEqual({ kind: "files" });
+  });
+
+  // What a tab genuinely displays still goes to a tab — the pane cannot render these, and the
+  // issue asks for them to stay as they are.
+  it("leaves what the browser displays at a URL", () => {
+    for (const file of ["a.png", "a.pdf", "a.mp4", "a.svg"]) {
+      expect(fileLinkTarget(file, CWD).kind).toBe("url");
+    }
   });
 
   it("matches the extension case-insensitively", () => {

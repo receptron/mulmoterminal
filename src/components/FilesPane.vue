@@ -418,6 +418,26 @@ async function loadFile(pathRel: string, force = false): Promise<void> {
   }
 }
 
+/** Hand the open file to the OS's default application (#2038) — the way out of a file the pane
+ *  cannot show. Failures are SHOWN: a host with no opener used to look exactly like a successful
+ *  launch and nothing appeared (#1447). */
+async function openInOs(): Promise<void> {
+  const pathRel = openPath.value;
+  if (!pathRel || !props.cwd) return;
+  try {
+    const res = await fetchWithTimeout("/api/files/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: absoluteUnder(props.cwd, pathRel) }),
+    });
+    if (res.ok) return;
+    const body = await jsonBody(res);
+    fileError.value = typeof body.error === "string" && body.error.length > 0 ? body.error : `could not open ${pathRel} (HTTP ${res.status})`;
+  } catch (e) {
+    fileError.value = `could not open ${pathRel}: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
 /** Put a file the server served as text into the editor. Paired with `adoptUnpreviewable` so the
  *  two outcomes of one request read side by side rather than as branches inside the fetch. */
 function adoptText(pathRel: string, data: Record<string, unknown>): void {
@@ -755,6 +775,15 @@ defineExpose({
         <div v-else-if="unpreviewable" class="m-auto flex flex-col items-center gap-2 p-4 text-center" data-testid="files-unpreviewable">
           <span class="material-symbols-outlined text-[28px] text-muted" aria-hidden="true">draft</span>
           <p class="text-[13px] text-muted">{{ unpreviewable }}</p>
+          <button
+            type="button"
+            class="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-transparent px-3 py-1.5 text-[13px] text-fg hover:bg-hover"
+            data-testid="files-open-in-os"
+            @click="openInOs"
+          >
+            <span class="material-symbols-outlined text-[16px]" aria-hidden="true">open_in_new</span>
+            Open in OS
+          </button>
         </div>
         <iframe v-show="openPath && !unpreviewable && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
         <div v-show="openPath && !unpreviewable && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />

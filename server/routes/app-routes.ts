@@ -32,6 +32,7 @@ import { mountGuiMcpRoutes } from "../routes/gui-mcp-routes.js";
 import { mountDropRoutes } from "../routes/drop-routes.js";
 import { mountOpenDirRoute } from "../files/open-dir.js";
 import { mountRevealRoute } from "../files/reveal.js";
+import { mountOpenFileRoute } from "../files/open-file.js";
 import { mountGitRemoteRoute } from "../git/gitRemote.js";
 import { mountWorktreeRoutes } from "../git/worktree-routes.js";
 import { mountPickFileRoute } from "../files/pick-file.js";
@@ -382,6 +383,9 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
   // POST /api/files/reveal shows a file or folder in the OS file manager, so something the agent
   // produced can be dragged into another app (#2039). Same local-only guard as the route above.
   mountRevealRoute(app, { isAllowedOrigin: deps.isAllowedOrigin });
+  // POST /api/files/open hands a file to the OS's default application, for the types the browser
+  // can only download (#2038). Same local-only guard as the two routes above.
+  mountOpenFileRoute(app, { isAllowedOrigin: deps.isAllowedOrigin });
 
   // GRID-ONLY (dev_tool): POST /api/git-remote reports a cell dir's GitHub repository
   // URL (null if it isn't a GitHub repo), so the header can offer an "open on GitHub" link.
