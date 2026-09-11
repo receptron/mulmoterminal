@@ -10,7 +10,7 @@ Entries here are folded into the next release's heading when it ships.
 
 ### Every upstream ShapeScript example renders — `@mulmoclaude/shapescript-plugin@2.3.0`
 
-- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — `presentShapeScript`,
+- **[#2041](https://github.com/receptron/mulmoterminal/pull/2041)** — `presentShapeScript`,
   `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.3.0 (2.1.0 to 2.3.0 in one step),
   so a script written against the upstream docs no longer hits a refused feature: materials
   (hex and named colours, `opacity`, `metallicity` / `roughness` / `glow`, `material { … }`),
