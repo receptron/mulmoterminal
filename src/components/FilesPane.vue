@@ -439,6 +439,10 @@ function adoptUnpreviewable(pathRel: string, data: Record<string, unknown>): voi
 }
 
 async function save(): Promise<void> {
+  // Ctrl/Cmd+S reaches here even though the Save button is disabled, and the buffer shown for an
+  // unpreviewable file is EMPTY — saving it truncates the file (CodeRabbit on #2038). The server
+  // refuses this too; this is so the user sees why rather than an error from a keystroke.
+  if (unpreviewable.value) return;
   if (!openPath.value || !editor || saving.value) return;
   saving.value = true;
   fileError.value = null;

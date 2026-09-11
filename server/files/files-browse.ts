@@ -228,6 +228,15 @@ function mountWriteRoute(app: Express, { defaultCwd, backupRoot }: BrowseDeps): 
     if (Buffer.byteLength(text, "utf8") > MAX_EDIT_BYTES) return res.status(413).json({ error: "content too large" });
     try {
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "path is a directory" });
+      // Never write TEXT over content that is not text. This route only ever receives a string, so
+      // overwriting a spreadsheet with one is always a loss — and the editor cannot be the only
+      // thing stopping it: it reached here with an EMPTY buffer through Ctrl+S and "Overwrite
+      // anyway", and truncated a 324-byte xlsx to 0 (CodeRabbit on #2038). Refused BEFORE
+      // `backupCurrentFile`, which reads with "utf8" and would bank a damaged copy of the very
+      // file it is meant to protect.
+      if (fs.existsSync(abs) && losslessText(fs.readFileSync(abs)) === null) {
+        return res.status(415).json({ error: "this file cannot be edited as text", kind: "binary" });
+      }
       const onDisk = currentVersion(abs);
       if (onDisk !== baseVersion) return res.status(409).json({ error: "file changed on disk", version: onDisk });
       // What is about to be replaced, banked before it is. Best-effort: a backup that can't be
