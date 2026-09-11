@@ -168,7 +168,8 @@ than as bytes (files within the session's working directory only):
 | `.json` | **indented** in a new tab (Chrome and Safari otherwise show one long line) |
 | `.csv` `.tsv` | a **table** in a new tab, with a sticky header that scrolls inside its own box |
 | source, config, logs, and `.txt` — 46 extensions | the app's own **Files** view (`/files?path=`), where CodeMirror highlights it, the tree is right there, and it can be edited |
-| everything else — images, PDF, SVG, HTML, video | raw bytes in a new tab, which the browser renders better than an editor would |
+| images, PDF, SVG, HTML, video | raw bytes in a new tab, which the browser renders better than an editor would |
+| everything else — `.xlsx`, `.docx`, `.zip`, a `Makefile` | the app's own **Files** view. A tab cannot display these, so opening one there is not a view — it is a download starting with no warning. The pane names the file and offers **Open in OS**, which hands it to the application that owns it (Excel for an `.xlsx`) |
 
 **While a grid cell is enlarged, the [Files pane](#files-view-browse--edit) takes the click first** — every
 row above except the last one, since the pane is the same editor plus a Markdown preview. The
