@@ -37,12 +37,24 @@ describe("servedFileName", () => {
 
   // Null is the important answer: the caller omits the header, which leaves the browser exactly
   // where it was before this existed. A placeholder would name a file nobody asked for.
+  // ` report.pdf` and `report.pdf` are two different files on a POSIX filesystem, and the bytes
+  // served are the untrimmed one. Advertising the trimmed name saves the file under a name that
+  // does not match it (CodeRabbit on #2040) — the same trap `dirPathKey` set for a workspace whose
+  // name ended in a space (#1934).
+  it("keeps whitespace that is part of the name", () => {
+    expect(servedFileName("reports/ leading.pdf")).toBe(" leading.pdf");
+    expect(servedFileName("reports/trailing .pdf")).toBe("trailing .pdf");
+    expect(servedFileName("reports/both .pdf ")).toBe("both .pdf ");
+    expect(servedFileName(" spaced dir /file.pdf")).toBe("file.pdf");
+    // A file whose whole name is whitespace is legal on POSIX, so it is a name like any other.
+    expect(servedFileName("reports/  ")).toBe("  ");
+  });
+
   it("answers null when there is no name to give", () => {
     expect(servedFileName("")).toBeNull();
     expect(servedFileName("/")).toBeNull();
     expect(servedFileName("///")).toBeNull();
     expect(servedFileName("\\")).toBeNull();
-    expect(servedFileName("  ")).toBeNull();
     expect(servedFileName(".")).toBeNull();
     expect(servedFileName("..")).toBeNull();
     expect(servedFileName("./../.")).toBeNull();

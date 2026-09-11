@@ -15,12 +15,15 @@ const SEGMENTS = /[/\\]+/;
  * exactly where it was before this existed. A guessed name would be worse than no name.
  */
 export function servedFileName(rel: string): string | null {
-  const named = rel
-    .split(SEGMENTS)
-    .map((segment) => segment.trim())
-    // `.` and `..` name a directory rather than a file; the containment gate has already refused
-    // any `..` that escapes, so one reaching here is a spelling to skip, not a path to resolve.
-    .filter((segment) => segment !== "" && segment !== "." && segment !== "..");
+  // Compared EXACTLY, never trimmed. ` report.pdf` and `report.pdf` are two different files on a
+  // POSIX filesystem, and the served bytes are the untrimmed one — `resolveContained` leaves the
+  // path alone (its `trimTrailingDotsAndSpaces` only classifies Windows device names). Trimming
+  // here advertised a name that did not match the file (CodeRabbit on #2040), which is the same
+  // trap `dirPathKey` set for a workspace whose name ended in a space (#1934).
+  //
+  // `.` and `..` name a directory rather than a file; the containment gate has already refused any
+  // `..` that escapes, so one reaching here is a spelling to skip, not a path to resolve.
+  const named = rel.split(SEGMENTS).filter((segment) => segment !== "" && segment !== "." && segment !== "..");
   const last = named.at(-1);
   // A trailing `~` expansion (`~/x.pdf`) is already a segment by here; a bare `~` is not a name.
   return last === undefined || last === "~" ? null : path.basename(last);
