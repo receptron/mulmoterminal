@@ -1149,6 +1149,7 @@ describe("TerminalCell", () => {
       "Repository",
       "Issues",
       "Pull requests",
+      "Actions",
     ]);
   });
 
@@ -1165,7 +1166,7 @@ describe("TerminalCell", () => {
     expect(await openPathMenu(b)).toEqual(local);
   });
 
-  it("opens repository / issues / pull requests from the path menu", async () => {
+  it("opens repository / issues / pull requests / actions from the path menu", async () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
@@ -1179,11 +1180,13 @@ describe("TerminalCell", () => {
     await openItem("Repository");
     await openItem("Issues");
     await openItem("Pull requests");
+    await openItem("Actions");
 
     expect(openSpy.mock.calls.map((c) => c[0])).toEqual([
       "https://github.com/owner/repo",
       "https://github.com/owner/repo/issues",
       "https://github.com/owner/repo/pulls",
+      "https://github.com/owner/repo/actions",
     ]);
     openSpy.mockRestore();
   });

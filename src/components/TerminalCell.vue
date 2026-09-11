@@ -1636,6 +1636,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                   <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/pulls'))">
                     <span class="material-symbols-outlined text-[15px]" aria-hidden="true">merge</span> Pull requests
                   </button>
+                  <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/actions'))">
+                    <span class="material-symbols-outlined text-[15px]" aria-hidden="true">play_circle</span> Actions
+                  </button>
                 </template>
               </div>
             </span>
