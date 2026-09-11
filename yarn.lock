@@ -1950,10 +1950,10 @@
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
 
-"@mulmoclaude/shapescript-plugin@^2.0.0":
-  version "2.0.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-2.0.0.tgz#2c3838d29d35ec734d2c3faf8a46e6357e731259"
-  integrity sha512-5xkhig0S5fXRJB+Gp5rX6SnLKjUn6ydx8gLQtMELt0NgLNyjD2uhjL6UZW6funRxk/gofCUEolDNb47dusasww==
+"@mulmoclaude/shapescript-plugin@^2.3.0":
+  version "2.3.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-2.3.0.tgz#e241dafc9a2c1a17544ec023b504a0309862073b"
+  integrity sha512-2OJ3QHeyp0Gb/2iG2f1gSHAogqoQHu/jqGYCSnG2zbU2Bz2sBns6iNzkdlaQHVLCBacSWRRx078G7b3Qrzd9ag==
   dependencies:
     three "^0.185.1"
     three-bvh-csg "^0.0.18"
