@@ -192,6 +192,15 @@
     box-sizing: border-box;
   }
 
+  /* tailwind.css deliberately ships without preflight (its own header says why), so nothing
+     else resets this: a <button> that names no background is painted with the BROWSER's button
+     face — a light grey that no theme chose, unreadable under accent ink on a dark theme
+     (#1961, measured at 1.74:1 in nord). In `base`, so any author background still wins:
+     utilities are a later layer, scoped styles are unlayered, and a class beats a tag. */
+  button {
+    background-color: transparent;
+  }
+
   body {
     background: var(--bg-base);
     overflow: hidden;
