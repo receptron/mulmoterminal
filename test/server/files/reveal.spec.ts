@@ -165,12 +165,18 @@ describe("POST /api/files/reveal", () => {
 
     // Built by concatenation: `path.join` would fold the `..` before the route ever saw it.
     const asked = root + "/link/../adir";
-    expect(statSync(asked).isDirectory()).toBe(true); // what the kernel reaches
-    expect(statSync(path.resolve(asked)).isDirectory()).toBe(false); // what `path.resolve` names
+    const lexical = path.resolve(asked);
+    // MEASURED, not assumed. On POSIX the kernel follows `link` and only then folds `..`, so this
+    // names a DIRECTORY while `path.resolve` names the FILE beside it — the mismatch Codex found.
+    // Win32 folds `..` lexically in the path API itself, before the reparse point, so the two
+    // agree there and the mismatch cannot arise at all. Asserting the divergence unconditionally
+    // is what turned this test red on Windows CI while passing on macOS.
+    const diverges = statSync(asked).isDirectory() !== statSync(lexical).isDirectory();
+    expect(diverges).toBe(process.platform !== "win32");
 
     expect((await post(request, { path: asked })).status).toBe(200);
-    // The spawned path is the resolved one, and it was treated as the FILE it actually is there —
-    // not as the directory the unresolved spelling would have claimed.
-    expect(calls[0]?.args).toEqual(revealArgv(calls[0]?.cmd ?? "", path.resolve(asked), false));
+    // The invariant, which holds on both: whatever the guard statted is what gets spawned. The
+    // route normalises BEFORE the stat, so `isDir` describes `lexical` and not the other one.
+    expect(calls[0]?.args).toEqual(revealArgv(calls[0]?.cmd ?? "", lexical, statSync(lexical).isDirectory()));
   });
 });

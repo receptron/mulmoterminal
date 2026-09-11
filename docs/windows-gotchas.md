@@ -113,6 +113,26 @@ symlink specs. Non-ASCII names are fine — `月次 レポート.png` writes wit
 quoted one underneath. Each cost a full Windows round (~15 min), and neither is visible on
 macOS or Linux. Simulate locally before pushing by forcing the probe to `false`.
 
+**`..` is folded LEXICALLY by the Win32 path API, before any symlink is followed.** POSIX does the
+opposite: the kernel resolves `link` first and only then applies `..`, so `…/link/../x` can name a
+different file from `path.resolve("…/link/../x")`. On Windows the two always agree, because the
+path is normalised textually before the reparse point is touched.
+
+That difference is a fact about the platform, and a test that asserts one side of it is red on the
+other. #2039 shipped a regression test whose FIRST line was `expect(statSync(asked).isDirectory())
+.toBe(true)` — true on macOS, false on Windows, green locally and red on the runner. The fix is not
+to skip the test: **measure the divergence, then assert the invariant that holds either way.**
+
+```ts
+const diverges = statSync(asked).isDirectory() !== statSync(path.resolve(asked)).isDirectory();
+expect(diverges).toBe(process.platform !== "win32");   // the platform fact, stated
+expect(spawned).toEqual(argvFor(path.resolve(asked))); // the invariant, true on both
+```
+
+This is the one place a `process.platform` check belongs — the thing under test IS the platform's
+own behaviour, so probing for it would be probing for the answer. Everywhere else in this file the
+rule is the opposite: probe the filesystem, do not ask which OS this is.
+
 ## File permissions
 
 **`chmod` moves the read-only attribute and nothing else.** There are no POSIX permission bits
