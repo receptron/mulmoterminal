@@ -94,6 +94,25 @@ machine that runs the suite. Not `endsWith` either: `unplaced-sessions.json` end
 `yarn test` on macOS/Linux cannot see any of this — the whole class only appears where the
 separator and the drive letter differ.
 
+**A fixture the filesystem refuses to create takes the WHOLE spec file with it.** Two things
+Windows will not do, and both throw in `beforeAll` — where the failure reports as
+`1 failed` at the FILE level with zero failing tests, so it reads as the feature being broken
+rather than as the fixture being unbuildable:
+
+- **`symlinkSync` needs Developer Mode or an elevated shell.** Guard with
+  `canSymlink` (`test/support/canSymlink.ts`) and mark the spec `it.runIf(canSymlink)`.
+- **`< > : " / \ | ? *` are illegal in a filename.** A spec about quoting or escaping reaches for
+  a name like `weird";name.png` precisely because it is awkward — and that one cannot exist on
+  NTFS. Guard with `canNameFile(name)` (`test/support/canNameFile.ts`).
+
+Both are PROBES rather than `process.platform` checks, for the same reason: the question is what
+the filesystem under this runner accepts, and a Windows box with Developer Mode on should run the
+symlink specs. Non-ASCII names are fine — `月次 レポート.png` writes without complaint.
+
+#2040 paid for both in sequence: the symlink fixture went red first, and fixing it revealed the
+quoted one underneath. Each cost a full Windows round (~15 min), and neither is visible on
+macOS or Linux. Simulate locally before pushing by forcing the probe to `false`.
+
 ## File permissions
 
 **`chmod` moves the read-only attribute and nothing else.** There are no POSIX permission bits
