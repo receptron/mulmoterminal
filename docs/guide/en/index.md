@@ -8,12 +8,13 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.19.0 is out.** A chat started from a collection now runs in a **pane under it** instead of
-> closing what you were reading, and a cell opened from a collection finally **says which one**.
-> Two fixes worth checking you have: the button that repairs a stuck cell was **killing** it, and
-> MulmoTerminal was writing its own state **into your project directory** — where deleting it did
-> nothing, because the hourly task wrote it again. Both are fixed; here is [how to tell you have
-> them](v4.19.0.html).
+> **4.20.0 is out, and one thing needs your hands.** ShapeScript now reads a script the way the
+> upstream app does, so a `.shape` you saved earlier **renders at half size until you convert it** —
+> the conversion rules are in the guide. New: a model can leave as a **USDZ** for AR Quick Look.
+> Fixed: a deck kept in a repository **opened and then failed every save**, the conversation menu
+> ran off the screen with nothing to scroll, two cell-header buttons wore one icon, and the Update
+> badge was painted by the **browser** rather than your theme. [What to do and how to tell you have
+> them](v4.20.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

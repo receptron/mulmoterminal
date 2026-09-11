@@ -8,9 +8,14 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.20.0 — 2026-09-11
+
+> **Setup guide:** [4.20.0 — Your ShapeScript models need converting, and a deck in your repo finally saves](https://receptron.github.io/mulmoterminal/guide/en/v4.20.0.html)
+
 ### ShapeScript follows the upstream language now — `@mulmoclaude/shapescript-plugin@2.0.0`
 
-- `presentShapeScript`, `renderShapeScript` and `exportShapeScriptUsdz` now read a script the way
+- **[#2033](https://github.com/receptron/mulmoterminal/pull/2033)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` now read a script the way
   the upstream [ShapeScript](https://shapescript.info/mac/) app does: `size` is the **diameter** of
   a sphere, cylinder, cone, circle or polygon; `orientation` (alias `rotation`) and `rotate` take
   **half-turns** as `roll yaw pitch` (0.5 = 90°); path `point` / `curve` coordinates are
@@ -32,7 +37,8 @@ Entries here are folded into the next release's heading when it ships.
 
 ### Take a 3D model out of the chat as a USDZ file
 
-- A ShapeScript model can now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
+- **[#2031](https://github.com/receptron/mulmoterminal/pull/2031)** — a ShapeScript model can
+  now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
   Quick Look places it in the room on iPhone and iPad, and Quick Look previews it on a Mac. New host tool **`exportShapeScriptUsdz`** takes
   the same source as `presentShapeScript` (inline, or a `.shape` you point it at), writes the
   file beside the model under the workspace `artifacts/shapes/`, and answers with the absolute
@@ -41,6 +47,65 @@ Entries here are folded into the next release's heading when it ships.
   workspace. The `presentShapeScript` view also gains a **Download USDZ** button that builds the
   same file in the browser. Both come from `@mulmoclaude/shapescript-plugin@1.4.0`; the tool's
   contract, the exporter, and the file's location are the package's, shared with MulmoClaude.
+
+### A deck kept in a repository opened, then failed at everything after
+
+- **[#2036](https://github.com/receptron/mulmoterminal/pull/2036)** — a MulmoScript deck stored
+  anywhere but the workspace's own `artifacts/stories/` **opened in the Canvas and then answered
+  `File not found` to every beat image and every save**. The card travelled as `stories/<tail>`
+  plus the root's id, and the reopen carries a root — so opening worked. But the View's own
+  dispatches (`updateScript`, `updateBeat`, `beatImage`, the movie and PDF polls) pass `filePath`
+  through and send **no root**, so each one resolved the tail against the DEFAULT stories root.
+  A deck in a repository showed a red error on every beat and failed to save in silence. Those
+  decks now travel as their **own absolute path** — the `byPath` form the plugin has taken since
+  4.6.0 — which cannot lose a root because it has none. Measured against a running server before
+  and after. The spelling is the root's **canonical** one (the server's realpathed path), so a
+  workspace reached through a symlink does not give one deck two Canvas cards; a deck under no
+  registered root is unchanged. Closes [#1970](https://github.com/receptron/mulmoterminal/issues/1970).
+
+### The conversation menu ran off the screen with nothing to scroll
+
+- **[#2032](https://github.com/receptron/mulmoterminal/pull/2032)** — on a grid of about twenty
+  cells, a cell's conversation menu was **1750px tall in an 800px viewport** with **no scrollable
+  element anywhere**, so the ROUND TABLE settings and its Start button could not be reached at all.
+  The reporter was zooming the browser to 50% to work around it. The menu now measures the space
+  it has, opens **upward** when that is roomier, and caps its height; the long lists scroll on
+  their own while Start, room, turns, stop and watch stay outside the scrollers. At an extremely
+  short viewport the menu itself scrolls, so those controls stay **reachable** rather than clipped.
+  Closes [#2003](https://github.com/receptron/mulmoterminal/issues/2003).
+
+### Two buttons in one cell header wore the same icon
+
+- **[#2035](https://github.com/receptron/mulmoterminal/pull/2035)** — the same speech-bubble
+  (`forum`) meant four different things, and **two of them sat in the same cell header**, so there
+  was no telling them apart before pressing one. The prompts button — a list of what *you* sent,
+  nothing to do with a conversation — is now an **`outbox`** tray, and the "talk to another
+  terminal" button's tooltip says what it actually offers (bring in the last turn, exchange a turn,
+  start a round table) instead of naming itself.
+  Closes [#2004](https://github.com/receptron/mulmoterminal/issues/2004).
+
+### The Update badge was painted by the browser, not by the theme
+
+- **[#2037](https://github.com/receptron/mulmoterminal/pull/2037)** — `tailwind.css` ships without
+  preflight on purpose, and nothing else reset a button's background, so **any `<button>` that
+  named no background was painted with the BROWSER's button face** — a light grey no theme chose.
+  Under accent ink that measured **1.74:1 in nord** and 2.82:1 in midnight: the Update pill was
+  unreadable until you hovered it. Fixed as a rule rather than at one button (the same thing was
+  happening to the Copy button inside that pill's own dropdown): one `button { background-color:
+  transparent }` in `@layer base`, where every `bg-*` utility still outranks it. Measured across
+  four themes and two screens before and after — **eight buttons changed, all eight of them the
+  ones the browser was painting, and 312 others did not move**. nord is now 5.03:1, midnight
+  4.91:1, daylight 5.17:1. Closes [#1961](https://github.com/receptron/mulmoterminal/issues/1961).
+
+### A comment that described the opposite of what the code does
+
+- **[#2034](https://github.com/receptron/mulmoterminal/pull/2034)** — the handoff menu's
+  `slotLabel` carried a comment saying the uid in `cell-<uid>` is "what the user sees on the cell".
+  It is an **array position**, renumbered on every grid parse and shown on no cell — the file that
+  assigns it says so. Acting on the false premise was why `#3 · claude · ~/mulmoclaude` was thought
+  to be enough of a label, when two terminals in one directory produce rows differing by that
+  number alone. The comment now says what is true; the labelling itself is left to
+  [#2005](https://github.com/receptron/mulmoterminal/issues/2005).
 
 ## mulmoterminal@4.19.0 — 2026-09-10
 
