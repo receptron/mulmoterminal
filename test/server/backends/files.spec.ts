@@ -8,11 +8,14 @@ import { appRequest } from "../../helpers/appRequest.js";
 import { mountFilesRoutes } from "../../../server/backends/files.js";
 import { makeTempDir } from "../../support/tempDir";
 import { canSymlink } from "../../support/canSymlink";
+import { canNameFile } from "../../support/canNameFile";
 import { initProjectRoots, projectId } from "../../../server/infra/project-root.js";
 
 let request: ReturnType<typeof appRequest>;
 // A session project dir OUTSIDE the workspace root (a sibling repo), reachable only via
 // the `?cwd=` scope — mirrors an agent whose cwd is a different repo.
+const QUOTED_NAME = 'weird";name.png';
+const quotedName = canNameFile(QUOTED_NAME);
 let sessionDir: string;
 let projectDir: string;
 
@@ -25,7 +28,8 @@ beforeAll(() => {
   // #2040: the save name. A non-ASCII name needs `filename*`, a quoted one needs escaping, and a
   // symlink is where "the name asked for" and "the name on disk" come apart.
   writeFileSync(path.join(ws, "downloads", "images", "月次 レポート.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
-  writeFileSync(path.join(ws, "downloads", "images", 'weird";name.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  // Windows refuses `"` in a filename, so the spec that reads this one is `runIf(quotedName)`.
+  if (quotedName) writeFileSync(path.join(ws, "downloads", "images", QUOTED_NAME), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   // Windows needs Developer Mode or an elevated shell to make one, so the spec that reads it is
   // `runIf(canSymlink)` — a fixture that was never created reads as broken behaviour, not as untested.
   if (canSymlink) symlinkSync(path.join(ws, "downloads", "images", "a.png"), path.join(ws, "downloads", "images", "link.png"));
@@ -152,8 +156,8 @@ describe("GET /api/files/raw — the save name", () => {
     expect(header).toMatch(/^inline; filename="[^"]*"; filename\*=UTF-8''/);
   });
 
-  it("escapes a quote rather than ending the header early", async () => {
-    const res = await request(`/api/files/raw?path=${encodeURIComponent('downloads/images/weird";name.png')}`);
+  it.runIf(quotedName)("escapes a quote rather than ending the header early", async () => {
+    const res = await request(`/api/files/raw?path=${encodeURIComponent("downloads/images/" + QUOTED_NAME)}`);
     expect(res.headers.get("content-disposition")).toBe('inline; filename="weird\\";name.png"');
   });
 
