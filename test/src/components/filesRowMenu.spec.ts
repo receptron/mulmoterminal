@@ -65,7 +65,7 @@ describe("the files tree's row menu", () => {
     rightClick(w.findAll('[data-testid="files-row"]')[0].element);
     await flushPromises();
 
-    expect(labels()).toEqual(["Insert relative path", "Insert absolute path"]);
+    expect(labels()).toEqual(["Show in folder", "Insert relative path", "Insert absolute path"]);
     item("insert-relative")?.click();
     await flushPromises();
     expect(w.emitted("insert-text")).toEqual([["README.md "]]);
@@ -89,7 +89,7 @@ describe("the files tree's row menu", () => {
     rightClick(w.findAll('[data-testid="files-row"]')[0].element); // README.md
     await flushPromises();
 
-    expect(labels()).toEqual(["Open in the Canvas", "Insert relative path", "Insert absolute path"]);
+    expect(labels()).toEqual(["Open in the Canvas", "Show in folder", "Insert relative path", "Insert absolute path"]);
     item("open-canvas")?.click();
     await flushPromises();
     expect(w.emitted("open-in-canvas")).toEqual([["README.md"]]);
@@ -97,23 +97,26 @@ describe("the files tree's row menu", () => {
     expect(menu()).toBeNull();
   });
 
-  // A directory is not something a plugin renders, so the row keeps the two inserts it had.
+  // A directory is not something a plugin renders, so the row keeps the two inserts it had. Its
+  // file-manager entry words itself for a folder — "Show in folder" would promise its parent.
   it("does not offer the Canvas on a row nothing can render", async () => {
     const w = await mountPane({ canvasTarget: true, workspace: "/ws" });
     rightClick(w.findAll('[data-testid="files-row"]')[1].element); // src/
     await flushPromises();
-    expect(labels()).toEqual(["Insert relative path", "Insert absolute path"]);
+    expect(labels()).toEqual(["Open this folder", "Insert relative path", "Insert absolute path"]);
   });
 
-  // The full-screen view mounts the same pane with no terminal beside it. Swallowing the
-  // right-click there would cost the user the browser's own menu for nothing.
-  it("leaves the browser's menu alone where there is no terminal to insert into", async () => {
+  // The full-screen view mounts the same pane with no terminal beside it, and until #2039 the
+  // menu was empty there — so the right-click was left to the browser rather than swallowed for
+  // nothing. Showing a row in the file manager needs no terminal, and is most useful exactly
+  // there: it is how a produced file is handed to another app.
+  it("still opens where there is no terminal, now that one entry needs none", async () => {
     const w = await mountPane({ insertTarget: false });
     const event = rightClick(w.findAll('[data-testid="files-row"]')[0].element);
     await flushPromises();
 
-    expect(menu()).toBeNull();
-    expect(event.defaultPrevented).toBe(false);
+    expect(labels()).toEqual(["Show in folder"]);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it("drops the relative path when the terminal is in another directory", async () => {
@@ -121,7 +124,7 @@ describe("the files tree's row menu", () => {
     rightClick(w.findAll('[data-testid="files-row"]')[0].element);
     await flushPromises();
 
-    expect(labels()).toEqual(["Insert absolute path"]);
+    expect(labels()).toEqual(["Show in folder", "Insert absolute path"]);
   });
 
   it("opens from the keyboard, on both spellings of the menu key", async () => {
@@ -146,12 +149,18 @@ describe("the files tree's row menu", () => {
     const row = w.findAll('[data-testid="files-row"]')[0];
     await row.trigger("keydown", { key: "F10", shiftKey: true });
     await flushPromises();
-    expect(document.activeElement).toBe(item("insert-relative"));
+    // The first item, which since #2039 is the file-manager entry rather than an insert.
+    expect(document.activeElement).toBe(item("reveal"));
 
+    menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(item("insert-relative"));
     menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     expect(document.activeElement).toBe(item("insert-absolute"));
     menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect(document.activeElement).toBe(item("insert-relative")); // wraps
+    expect(document.activeElement).toBe(item("reveal")); // wraps
+
+    menu()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+    expect(document.activeElement).toBe(item("insert-relative"));
 
     (document.activeElement as HTMLElement).click(); // what Enter does on a button
     await flushPromises();

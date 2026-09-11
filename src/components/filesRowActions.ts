@@ -23,6 +23,12 @@ export type FilesRowAction =
       text: string;
     })
   | (RowActionChrome & {
+      id: "reveal";
+      /** ABSOLUTE, because the route spawns an OS command and takes nothing else — unlike the
+       *  Canvas entry, whose receiver resolves against the pane's cwd. */
+      pathAbs: string;
+    })
+  | (RowActionChrome & {
       id: "open-canvas";
       /** RELATIVE to the tree's root, which is what `open-in-canvas` already carries from the
        *  pane's own button — the receiver resolves it against the pane's cwd, so an absolute one
@@ -33,6 +39,9 @@ export type FilesRowAction =
 export interface FilesRowTarget {
   /** The row's path, relative to the tree's root. */
   pathRel: string;
+  /** Whether the row is a directory. Decides both the wording and what the file manager is asked
+   *  to do — a folder is opened, a file is selected inside its own. */
+  isDir: boolean;
   /** The tree's root. */
   cwd: string | null;
   /** The terminal an insert goes to, or null where there is none — the full-screen Files view. */
@@ -53,6 +62,9 @@ const ICON = "attach_file";
 // the tree. The Canvas panel's own icon.
 const CANVAS_ICON = "space_dashboard";
 
+// The OS's own window, not ours — the same glyph the header uses for a cell's working directory.
+const REVEAL_ICON = "folder_open";
+
 // Compared without a trailing separator, because `absoluteUnder` JOINS without doubling one: a
 // root spelled `/proj/` builds the same absolute path as `/proj`, so it has to answer the same
 // here too. The two roots reach this function from different cells, so nothing guarantees one
@@ -66,7 +78,7 @@ const withoutTrailingSeparator = (dir: string): string => (dir.endsWith("/") || 
  * A LIST rather than two booleans so a later action (a text file's contents, say) is an entry
  * here and nothing else.
  */
-export function filesRowActions({ pathRel, cwd, terminal, canvas }: FilesRowTarget): FilesRowAction[] {
+export function filesRowActions({ pathRel, isDir, cwd, terminal, canvas }: FilesRowTarget): FilesRowAction[] {
   // No root means no path worth offering: the tree is on the server's default and its rows cannot
   // be resolved against anything the terminal — or the plugins' file layer — knows.
   if (pathRel === "" || cwd === null) return [];
@@ -81,6 +93,16 @@ export function filesRowActions({ pathRel, cwd, terminal, canvas }: FilesRowTarg
   if (canvas && canOpenInCanvas(absoluteUnder(cwd, pathRel), canvas.roots)) {
     actions.push({ id: "open-canvas", label: "Open in the Canvas", icon: CANVAS_ICON, pathRel });
   }
+  // Second: this is how a file LEAVES the app. Not for reading it — for dragging it into a mail
+  // composer or an upload form, or for dropping a file too big to paste into a folder the agent
+  // reads (#2039). Offered on every row, including in the full-screen view that has no terminal,
+  // because neither use needs one.
+  actions.push({
+    id: "reveal",
+    label: isDir ? "Open this folder" : "Show in folder",
+    icon: REVEAL_ICON,
+    pathAbs: absoluteUnder(cwd, pathRel),
+  });
   if (terminal === null) return actions;
   // Only when a relative path means the same thing at the other end. The pane keeps the cell it
   // is on when a re-root could not be saved out of, so the tree and the terminal on screen can

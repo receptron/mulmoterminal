@@ -38,8 +38,15 @@ const runWslpath: WslpathRunner = (args) => spawnCaptureAsync("wslpath", args, {
 async function convert(flag: string, value: string, run: WslpathRunner): Promise<string | null> {
   const { status, stdout } = await run([flag, value]);
   if (status !== 0) return null;
-  const converted = stdout.trim();
-  return converted.length > 0 ? converted : null;
+  // Exactly the line terminator `wslpath` writes, never `trim()`. A trailing space is a legal
+  // character in a filename on both sides, and trimming it translates one path and hands back
+  // another — the same trap `dirPathKey` set for a workspace whose name ended in a space (#1934)
+  // and `servedFileName` for a saved file (#2040). Reached here from every caller of
+  // toWindowsPath / toLinuxPath: reveal, open-dir and the file picker (Codex P3 on #2039).
+  const converted = stdout.replace(/\r?\n$/, "");
+  // Whitespace-only output is still no answer: `wslpath` printing blanks has told us nothing,
+  // and the callers take null as "this opener cannot express the path" rather than as a path.
+  return converted.trim().length > 0 ? converted : null;
 }
 
 /** `C:\proj` / `\\wsl.localhost\Ubuntu\home\me` → the path this process can open, or null. */

@@ -190,6 +190,9 @@ function menuPosition(actions: FilesRowAction[], x: number, y: number): { top: n
 function openRowMenu(node: Node, event: MouseEvent | KeyboardEvent): void {
   const actions = filesRowActions({
     pathRel: node.path,
+    // Decides the wording and what the file manager is asked to do: a folder is opened, a file
+    // is selected inside its own (#2039).
+    isDir: node.dir,
     cwd: props.cwd,
     terminal: insertTerminal.value,
     // The same pair the header's Canvas button is drawn from, so a row can never offer what that
@@ -272,8 +275,32 @@ function runRowAction(action: FilesRowAction): void {
   // The Canvas entry carries the row's path, not text for the terminal — and it goes out on the
   // SAME emit as the header button, relative to the tree's root, so the receiver resolves it once.
   if (action.id === "open-canvas") emit("open-in-canvas", action.pathRel);
+  // Not an emit: nothing above this pane takes part. The browser cannot open a file manager, so
+  // the local server does it (#2039) — the same shape as `writeBuffer` below.
+  else if (action.id === "reveal") void revealInFileManager(action.pathAbs);
   else emit("insert-text", action.text);
   closeRowMenu();
+}
+
+/** Show a path in the OS file manager (#2039).
+ *
+ *  Failures are SHOWN, not logged: a host with no file manager to call — a bare Linux box, WSL
+ *  with interop off — used to look exactly like a successful reveal, and nothing appeared (#1447).
+ *  Into `fileError` because that is this pane's own alert line (`role="alert"`); the message names
+ *  what failed, so it does not read as the open file's problem. */
+async function revealInFileManager(pathAbs: string): Promise<void> {
+  try {
+    const res = await fetchWithTimeout("/api/files/reveal", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: pathAbs }),
+    });
+    if (res.ok) return;
+    const body = await jsonBody(res);
+    fileError.value = typeof body.error === "string" && body.error.length > 0 ? body.error : `could not show ${pathAbs} (HTTP ${res.status})`;
+  } catch (e) {
+    fileError.value = `could not show ${pathAbs}: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 onBeforeUnmount(() => closeRowMenu());
