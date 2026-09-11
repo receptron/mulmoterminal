@@ -98,10 +98,16 @@ export function fileViewerRoute(filePath: string): string {
 }
 
 export function fileLinkTarget(filePath: string, cwd: string): FileLinkTarget {
-  if (IN_APP_EXTENSIONS.has(fileExtension(filePath))) return { kind: "files" };
-  // A tab that cannot display the file does not show it — it downloads it, with no warning and no
-  // choice (#2038). The app's own view is the better answer there even though it cannot render it
-  // either: it names the file and offers to open it in the app that owns it.
+  const ext = fileExtension(filePath);
+  if (IN_APP_EXTENSIONS.has(ext)) return { kind: "files" };
+  // A type with a rendered route of its own goes there, and that outranks the question below —
+  // `.tsv` has the table route but no MIME the raw route knows, so asking "would a browser
+  // display this" first would send it to the pane while its sibling `.csv` opened as a table
+  // (CodeRabbit on #2038).
+  if (ROUTE_BY_EXTENSION[ext] !== undefined) return { kind: "url", url: rawFileUrl(filePath, cwd) };
+  // Otherwise: a tab that cannot display the file does not show it — it downloads it, with no
+  // warning and no choice (#2038). The app's own view is the better answer there even though it
+  // cannot render it either: it names the file and offers to open it in the app that owns it.
   if (!browserDisplays(filePath)) return { kind: "files" };
   return { kind: "url", url: rawFileUrl(filePath, cwd) };
 }

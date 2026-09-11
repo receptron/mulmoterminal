@@ -125,6 +125,16 @@ describe("fileLinkTarget", () => {
     expect(fileLinkTarget("book.xlsx", CWD)).toEqual({ kind: "files" });
   });
 
+  // `.tsv` has the table route but no MIME the raw route knows, so a rule that asked "would a
+  // browser display this" FIRST would send it to the pane while its sibling `.csv` opened as a
+  // table. A rendered route outranks the question (CodeRabbit on #2038).
+  it("keeps a type with a rendered route on that route, even when a tab could not display it raw", () => {
+    expect(fileLinkTarget("rows.tsv", CWD)).toEqual({ kind: "url", url: rawFileUrl("rows.tsv", CWD) });
+    expect(fileViewerRoute("rows.tsv")).toBe(fileViewerRoute("rows.csv"));
+    // The property, not the pair: every extension with its own route keeps it.
+    for (const file of ["a.md", "a.json", "a.csv", "a.tsv"]) expect(fileLinkTarget(file, CWD).kind).toBe("url");
+  });
+
   // What a tab genuinely displays still goes to a tab — the pane cannot render these, and the
   // issue asks for them to stay as they are.
   it("leaves what the browser displays at a URL", () => {
