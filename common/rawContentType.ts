@@ -10,7 +10,7 @@ import { SOURCE_CODE_EXTENSIONS } from "./sourceExtensions.js";
 
 /** What a name with no extension is keyed by — the whole basename, lower-cased. A dotfile like
  *  `.gitignore` has no extension at all to `path.extname`, and keying it by "" would download it. */
-export const contentTypeKey = (name: string): { ext: string; textKey: string } => {
+const contentTypeKey = (name: string): { ext: string; textKey: string } => {
   const base = name.replace(/^.*[/\\]/, "").toLowerCase();
   const dot = base.lastIndexOf(".");
   const ext = dot <= 0 ? "" : base.slice(dot);

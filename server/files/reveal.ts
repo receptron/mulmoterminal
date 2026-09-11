@@ -16,27 +16,11 @@
 import type { Express, Request } from "express";
 import { spawn } from "node:child_process";
 import path from "node:path";
-import { openDirCommands } from "./open-dir.js";
 import { resolvePathRequest } from "./dirRequest.js";
 import { revealArgv } from "./reveal-argv.js";
-import { isWsl, toWindowsPath } from "./wsl.js";
+import { spawnFirstOpener, type Spawner } from "./spawnOpener.js";
 
-/** Injected so a spec can assert the argv without a file manager appearing on the machine. */
-export type Spawner = typeof spawn;
-
-// Resolves null once the child is RUNNING, or the reason it could not start. The exit code is
-// deliberately not awaited — `explorer.exe` returns 1 on a perfectly successful open, and the
-// user is done with us the moment the window appears. Same reasoning as open-dir.ts.
-function spawnReveal(cmd: string, args: string[], spawner: Spawner): Promise<string | null> {
-  return new Promise((resolve) => {
-    const child = spawner(cmd, args, { detached: true, stdio: "ignore" });
-    child.on("error", (e) => resolve(e.message));
-    child.on("spawn", () => {
-      child.unref();
-      resolve(null);
-    });
-  });
-}
+export type { Spawner };
 
 interface RevealOptions {
   isAllowedOrigin: (origin: string | undefined, remoteAddress: string | undefined) => boolean;
@@ -46,30 +30,15 @@ interface RevealOptions {
 export function mountRevealRoute(app: Express, { isAllowedOrigin, spawner = spawn }: RevealOptions): void {
   app.post("/api/files/reveal", async (req: Request, res) => {
     // `path.resolve` BEFORE the stat, not after. The browser joins a row onto the tree's root with
-    // `/` whatever the root looks like, so a Windows path arrives as `C:\\proj/reports/a.pdf` and
+    // `/` whatever the root looks like, so a Windows path arrives as `C:\proj/reports/a.pdf` and
     // `explorer /select,` is particular about separators — but resolving AFTERWARDS would validate
     // one pathname and hand the OS another, because `path.resolve` folds `..` lexically while the
     // kernel folds it through symlinks (Codex P2: `<root>/link/../adir` stats as a directory while
     // its resolved spelling stats as a file). One string, validated and spawned.
     const target = resolvePathRequest(req, res, isAllowedOrigin, { normalise: path.resolve });
     if (!target) return;
-    const native = target.path;
-    const attempts: string[] = [];
-    for (const candidate of openDirCommands(process.platform, isWsl(process.platform, process.env))) {
-      // Translated BEFORE the argv is built: `/select,<path>` is one token, so a Windows opener
-      // has to be handed the Windows spelling inside it rather than beside it.
-      const asked = candidate.windowsPath ? await toWindowsPath(native) : native;
-      if (asked === null) {
-        attempts.push(`${candidate.cmd}: wslpath could not translate ${native}`);
-        continue;
-      }
-      const failure = await spawnReveal(candidate.cmd, revealArgv(candidate.cmd, asked, target.isDir), spawner);
-      if (failure === null) return res.json({ ok: true });
-      attempts.push(`${candidate.cmd}: ${failure}`);
-    }
-    // Answered only once an opener has actually STARTED. Saying ok first and logging the failure
-    // to a console nobody reads is what made a host without `xdg-open` report a reveal that never
-    // happened (#1447).
-    res.status(500).json({ error: `could not show ${target.path} [${attempts.join("; ")}]` });
+    const failed = await spawnFirstOpener(target.path, (cmd, asked) => revealArgv(cmd, asked, target.isDir), spawner);
+    if (failed === null) return res.json({ ok: true });
+    res.status(500).json({ error: `could not show ${target.path} [${failed}]` });
   });
 }
