@@ -8,6 +8,19 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `text`, one statement per line, USDZ colours — `@mulmoclaude/shapescript-plugin@2.5.0`
+
+- **[#2043](https://github.com/receptron/mulmoterminal/pull/2043)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.5.0 (2.3.0 to 2.5.0 in one step).
+  `text "Hello"` draws glyph outlines laid out as the upstream app does — left margin at x = 0,
+  first baseline at y = 0, one unit per line, `size`, `wrapwidth`, `linespacing`, interpolation —
+  which `fill` and `extrude` turn into letters with their counters, and a text is a value with
+  `.bounds`. **Behaviour change** toward upstream: two statements on one line
+  (`sphere { position 0 1 0 size 2 }`) are now a parse error naming the rule, as the upstream app
+  reads a property's arguments to the end of the line; a saved script in that style fails until
+  reformatted. `tau` is gone (write `2 * pi`). A USDZ export of coloured polygon meshes no longer
+  comes out white or misplaced. No host code changes.
+
 ### Every upstream ShapeScript example renders — `@mulmoclaude/shapescript-plugin@2.3.0`
 
 - **[#2041](https://github.com/receptron/mulmoterminal/pull/2041)** — `presentShapeScript`,
