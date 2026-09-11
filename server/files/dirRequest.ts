@@ -21,20 +21,35 @@ export interface ResolvedPath {
 // guards is a random website driving the machine — which is what the same-origin check answers.
 // A tree rooted at a session's cwd already shows paths outside the workspace, so containing this
 // alone would refuse rows the pane is displaying.
-export function resolvePathRequest(req: Request, res: Response, isAllowedOrigin: OriginCheck, notFound = "path not found"): ResolvedPath | null {
+export interface ResolveOptions {
+  /** The 404 text, so a caller that has always said "directory" keeps saying it. */
+  notFound?: string;
+  /** Applied BEFORE the stat, so what comes back is exactly what was validated. A caller that
+   *  hands the path to another process needs this: `path.resolve` folds `..` LEXICALLY while the
+   *  kernel folds it through symlinks, so normalising after the stat validates one pathname and
+   *  acts on another (Codex P2 on #2039 — measured: `<root>/link/../adir` stats as a directory
+   *  and its resolved spelling stats as a file). Callers that spawn the string they validated,
+   *  like /api/open-dir, must NOT pass this: for them the two agree already, and resolving would
+   *  open the lexical directory instead of the one the kernel reaches. */
+  normalise?: (path: string) => string;
+}
+
+export function resolvePathRequest(req: Request, res: Response, isAllowedOrigin: OriginCheck, opts: ResolveOptions = {}): ResolvedPath | null {
   if (!requestOriginAllowed(req, isAllowedOrigin)) {
     res.status(403).json({ error: "forbidden origin" });
     return null;
   }
-  const target = isRecord(req.body) && typeof req.body.path === "string" ? req.body.path : "";
-  if (!target || !path.isAbsolute(target)) {
+  const asked = isRecord(req.body) && typeof req.body.path === "string" ? req.body.path : "";
+  if (!asked || !path.isAbsolute(asked)) {
     res.status(400).json({ error: "absolute path required" });
     return null;
   }
+  // Normalised first, then statted: the pair must describe ONE pathname (see `normalise`).
+  const target = opts.normalise ? opts.normalise(asked) : asked;
   try {
     return { path: target, isDir: statSync(target).isDirectory() };
   } catch {
-    res.status(404).json({ error: notFound });
+    res.status(404).json({ error: opts.notFound ?? "path not found" });
     return null;
   }
 }
@@ -46,7 +61,7 @@ export function resolvePathRequest(req: Request, res: Response, isAllowedOrigin:
 export function resolveDirRequest(req: Request, res: Response, isAllowedOrigin: OriginCheck): string | null {
   // The 404 text is this route's own: its callers have always been told "directory", and the
   // widening below must not change a message they may be showing.
-  const resolved = resolvePathRequest(req, res, isAllowedOrigin, "directory not found");
+  const resolved = resolvePathRequest(req, res, isAllowedOrigin, { notFound: "directory not found" });
   if (!resolved) return null;
   // Kept as its own message: these two routes have always said "directory", and a caller that
   // sent a file gets told which rule it broke rather than a 404 it cannot act on.

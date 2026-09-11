@@ -2,11 +2,13 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import express from "express";
 import { EventEmitter } from "node:events";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { appRequest } from "../../helpers/appRequest.js";
 import { mountRevealRoute, type Spawner } from "../../../server/files/reveal.js";
+import { revealArgv } from "../../../server/files/reveal-argv.js";
 import { makeTempDir } from "../../support/tempDir";
+import { canSymlink } from "../../support/canSymlink";
 import { isRecord } from "../../../common/isRecord.js";
 
 // The route that hands a produced file to another app (#2039): it opens the OS file manager, so
@@ -57,10 +59,12 @@ describe("POST /api/files/reveal", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
     expect(calls).toHaveLength(1);
-    // The argv itself is `revealArgv`'s contract, pinned per platform in its own spec. What this
-    // asserts is that the route asked for the FILE's form rather than the directory's.
-    expect(calls[0]?.args).not.toEqual([file]);
-    expect(calls[0]?.args.join(" ")).toContain(file);
+    // Composed against `revealArgv` rather than spelled out: WHICH argv each platform wants is
+    // that function's contract, pinned per platform in its own spec, and on Linux the file is
+    // deliberately reduced to its folder (there is no portable "select this item"). Asserting a
+    // literal here passed on macOS and Windows and went red on Linux — the route's own job is to
+    // pass the RESOLVED path and the right `isDir`, which is what this now checks.
+    expect(calls[0]?.args).toEqual(revealArgv(calls[0]?.cmd ?? "", file, false));
   });
 
   it("opens a directory as itself", async () => {
@@ -120,7 +124,53 @@ describe("POST /api/files/reveal", () => {
     const { request, calls } = mount(() => "spawn");
     const messy = path.join(dir, "reports") + "/./2026-08.pdf";
     expect((await post(request, { path: messy })).status).toBe(200);
-    expect(calls[0]?.args.join(" ")).toContain(path.resolve(messy));
+    expect(calls[0]?.args).toEqual(revealArgv(calls[0]?.cmd ?? "", path.resolve(messy), false));
     expect(calls[0]?.args.join(" ")).not.toContain("/./");
+  });
+
+  // The security property this route rests on, stated where both halves meet: the guard requires
+  // an ABSOLUTE path, and every absolute spelling on every platform begins with `/`, `\\` or a
+  // drive letter — so the argument DERIVED from the path can never begin with `-`. `open -R -foo`
+  // reading its own target as a flag is therefore not reachable, and it stays that way only while
+  // the absolute-path check does. (Observed during Claude review, not flagged by Codex.)
+  it("can never hand the opener an argument that looks like a flag", async () => {
+    const { request, calls } = mount(() => "spawn");
+    const dashed = path.join(dir, "reports", "-R.pdf");
+    writeFileSync(dashed, "%PDF-1.4\n");
+    expect((await post(request, { path: dashed })).status).toBe(200);
+    // The LAST argument is the one derived from the path, in all three shapes (`["-R", p]`,
+    // [`/select,${p}`], `[dirname]`). Any earlier one is a flag WE chose, fixed in the source.
+    expect(calls[0]?.args.at(-1)?.startsWith("-")).toBe(false);
+    // And the relative spelling that COULD produce one is refused before any spawn.
+    const before = calls.length;
+    expect((await post(request, { path: "-R.pdf" })).status).toBe(400);
+    expect(calls).toHaveLength(before);
+  });
+
+  // `path.resolve` folds `..` LEXICALLY; the kernel folds it through symlinks. So a path carrying
+  // a literal `..` after a symlinked directory names one file to `statSync` and a different one to
+  // `path.resolve` — measured on this fixture: `<root>/link/../adir` stats as a DIRECTORY and its
+  // resolved spelling stats as a FILE. Validating one and spawning the other is what this pins
+  // shut: the route normalises BEFORE the guard stats, so both are the same string (Codex P2).
+  //
+  // `runIf(canSymlink)`: Windows needs Developer Mode to make one, and a fixture that was never
+  // created reads as broken behaviour rather than as untestable (docs/windows-gotchas.md).
+  it.runIf(canSymlink)("validates the same pathname it hands to the file manager", async () => {
+    const { request, calls } = mount(() => "spawn");
+    const root = makeTempDir("mt-reveal-sym-");
+    mkdirSync(path.join(root, "deep", "sub"), { recursive: true });
+    mkdirSync(path.join(root, "deep", "adir"));
+    writeFileSync(path.join(root, "adir"), "a FILE where the lexical fold lands");
+    symlinkSync(path.join(root, "deep", "sub"), path.join(root, "link"));
+
+    // Built by concatenation: `path.join` would fold the `..` before the route ever saw it.
+    const asked = root + "/link/../adir";
+    expect(statSync(asked).isDirectory()).toBe(true); // what the kernel reaches
+    expect(statSync(path.resolve(asked)).isDirectory()).toBe(false); // what `path.resolve` names
+
+    expect((await post(request, { path: asked })).status).toBe(200);
+    // The spawned path is the resolved one, and it was treated as the FILE it actually is there —
+    // not as the directory the unresolved spelling would have claimed.
+    expect(calls[0]?.args).toEqual(revealArgv(calls[0]?.cmd ?? "", path.resolve(asked), false));
   });
 });
