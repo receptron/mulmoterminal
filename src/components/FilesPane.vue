@@ -70,6 +70,10 @@ const openName = computed(() => (openPath.value ? (openPath.value.split("/").pop
 const dirty = ref(false);
 const saving = ref(false);
 const fileError = ref<string | null>(null);
+// Set when the server refuses to serve a file as text (415). Its own state rather than an error:
+// nothing went wrong — this file simply is not text, and the pane has something to say about it
+// rather than a failure to report (#2038).
+const unpreviewable = ref<string | null>(null);
 // The version the open buffer was loaded from; sent back on save so the server can refuse a
 // write that would clobber someone else's (null = the file didn't exist).
 const baseVersion = ref<string | null>(null);
@@ -383,32 +387,62 @@ const failureReason = (body: Record<string, unknown>, status: number): string =>
 // ?path= and opens the same file (#808).
 // `force` re-reads the file already open and skips the unsaved-edits prompt — the
 // conflict banner's "Reload", where discarding is the button the user just pressed.
+/** Whether the pane may leave the buffer it is on. `force` skips both questions: the conflict
+ *  banner's "Reload" is a deliberate discard, and re-reading the open file is not leaving it. */
+async function mayLeaveCurrent(pathRel: string, force: boolean): Promise<boolean> {
+  if (force) return true;
+  if (pathRel === openPath.value) return false; // already open — no reload
+  // Opening another file is leaving this one. If it couldn't be saved OR banked, staying is
+  // the only way not to lose it.
+  return await flush();
+}
+
 async function loadFile(pathRel: string, force = false): Promise<void> {
-  if (!force) {
-    if (pathRel === openPath.value) return; // already open — no reload
-    // Opening another file is leaving this one. If it couldn't be saved OR banked, staying is
-    // the only way not to lose it.
-    if (!(await flush())) return;
-  }
+  if (!(await mayLeaveCurrent(pathRel, force))) return;
   const id = ++fileReqId;
   fileError.value = null;
   conflict.value = null;
+  unpreviewable.value = null;
   showPreview.value = false;
   try {
     const res = await fetchWithTimeout(`/api/files/browse/text?${qs(pathRel)}`);
     const data = await jsonBody(res);
-    if (!res.ok) throw new Error(failureReason(data, res.status));
+    // 415 is the one non-ok status that is not a failure: the file is simply not text, and showing
+    // it as one is what destroyed spreadsheets before this existed (#2038).
+    if (!res.ok && res.status !== 415) throw new Error(failureReason(data, res.status));
     if (id !== fileReqId) return;
-    openPath.value = pathRel;
-    baseVersion.value = typeof data.version === "string" ? data.version : null;
-    editor?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
-    dirty.value = false;
+    if (res.status === 415) adoptUnpreviewable(pathRel, data);
+    else adoptText(pathRel, data);
   } catch (e) {
     if (id === fileReqId) fileError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
+/** Put a file the server served as text into the editor. Paired with `adoptUnpreviewable` so the
+ *  two outcomes of one request read side by side rather than as branches inside the fetch. */
+function adoptText(pathRel: string, data: Record<string, unknown>): void {
+  openPath.value = pathRel;
+  baseVersion.value = typeof data.version === "string" ? data.version : null;
+  editor?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
+  dirty.value = false;
+}
+
+/** Show the "not text" panel for a file the server refused to serve as text. The path is still
+ *  adopted so the header names the file the user picked; the buffer is emptied and marked clean so
+ *  nothing can be saved over it — an empty editor above real content is what destroyed it (#2038). */
+function adoptUnpreviewable(pathRel: string, data: Record<string, unknown>): void {
+  openPath.value = pathRel;
+  baseVersion.value = null;
+  dirty.value = false;
+  editor?.setDoc("", pathRel.split("/").pop() ?? pathRel);
+  unpreviewable.value = typeof data.error === "string" ? data.error : "this file cannot be shown as text";
+}
+
 async function save(): Promise<void> {
+  // Ctrl/Cmd+S reaches here even though the Save button is disabled, and the buffer shown for an
+  // unpreviewable file is EMPTY — saving it truncates the file (CodeRabbit on #2038). The server
+  // refuses this too; this is so the user sees why rather than an error from a keystroke.
+  if (unpreviewable.value) return;
   if (!openPath.value || !editor || saving.value) return;
   saving.value = true;
   fileError.value = null;
@@ -716,8 +750,14 @@ defineExpose({
              the same dead-button silence #1941 removed for everyone else. -->
         <p v-if="fileError" role="alert" data-testid="files-error" class="p-4 text-[13px] text-err">{{ fileError }}</p>
         <p v-if="!openPath" class="m-auto p-4 text-[13px] text-muted">Select a file to view or edit.</p>
-        <iframe v-show="openPath && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
-        <div v-show="openPath && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />
+        <!-- Not text. The editor is hidden rather than shown empty: an empty buffer over a file
+             that has content is an invitation to save, and saving is what destroyed it (#2038). -->
+        <div v-else-if="unpreviewable" class="m-auto flex flex-col items-center gap-2 p-4 text-center" data-testid="files-unpreviewable">
+          <span class="material-symbols-outlined text-[28px] text-muted" aria-hidden="true">draft</span>
+          <p class="text-[13px] text-muted">{{ unpreviewable }}</p>
+        </div>
+        <iframe v-show="openPath && !unpreviewable && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
+        <div v-show="openPath && !unpreviewable && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />
       </section>
     </div>
     <Teleport to="body">
