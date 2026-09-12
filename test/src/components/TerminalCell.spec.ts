@@ -6,6 +6,7 @@ import { CELL_CHIP_BTN, CELL_CHIP_ICON } from "../../../src/components/cellChrom
 import { SUNK_CELL } from "../../../src/components/cellParked";
 import { TOOL_GROUPS } from "../../../common/toolGroups";
 import { setHeaderStatusDefaults } from "../../../src/composables/headerStatusColors";
+import { MENU_VIEWPORT_GAP_PX } from "../../../src/composables/menuPlacement";
 import { DEFAULT_HEADER_STATUS_TINT } from "../../../common/headerStatusColors";
 
 // Capture the "sessions" pub/sub callback and the reconnect handler so tests can push
@@ -1149,6 +1150,7 @@ describe("TerminalCell", () => {
       "Repository",
       "Issues",
       "Pull requests",
+      "Actions",
     ]);
   });
 
@@ -1165,7 +1167,7 @@ describe("TerminalCell", () => {
     expect(await openPathMenu(b)).toEqual(local);
   });
 
-  it("opens repository / issues / pull requests from the path menu", async () => {
+  it("opens repository / issues / pull requests / actions from the path menu", async () => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
@@ -1179,11 +1181,13 @@ describe("TerminalCell", () => {
     await openItem("Repository");
     await openItem("Issues");
     await openItem("Pull requests");
+    await openItem("Actions");
 
     expect(openSpy.mock.calls.map((c) => c[0])).toEqual([
       "https://github.com/owner/repo",
       "https://github.com/owner/repo/issues",
       "https://github.com/owner/repo/pulls",
+      "https://github.com/owner/repo/actions",
     ]);
     openSpy.mockRestore();
   });
@@ -1216,6 +1220,187 @@ describe("TerminalCell", () => {
     // dispatches the key at the menu and does nothing at all for a real user (codex review, #1382).
     await w.find(".cell-dir").trigger("keydown", { key: "Escape" });
     expect(w.find('[data-testid="cell-path-menu"]').exists()).toBe(false);
+  });
+
+  // The seventh row took this menu's border box from 181px to 208px (measured in Chromium against
+  // the built stylesheet), and the CELL is what clips it: the cell root is `overflow-hidden`, so the
+  // last row stops being hittable below a cell height of 244px where six rows survived to 217px —
+  // and a 3x3 tile is about 245px on an ~800px window. Hence the cap, measured against the
+  // intersection of the cell's box and the window's rather than against the window alone.
+  // Row 2 of the cell header, as a window coordinate: the trigger's bottom edge.
+  const TRIGGER_BOTTOM_PX = 52;
+  const openPathMenuIn = async (initialCell: DOMRect) => {
+    mockFetchWithGithub("https://github.com/owner/repo");
+    const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
+    await flushPromises();
+    let cell = initialCell;
+    w.element.getBoundingClientRect = () => cell;
+    const wrap = w.element.querySelector(".cell-dir")?.parentElement;
+    expect(wrap).toBeTruthy();
+    if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, TRIGGER_BOTTOM_PX - 24, 200, 24);
+    await w.find(".cell-dir").trigger("click");
+    return {
+      w,
+      menu: () => w.find('[data-testid="cell-path-menu"]'),
+      /** Change the box under the menu WITHOUT touching it, the way a window resize does. */
+      resizeTo: async (next: DOMRect) => {
+        cell = next;
+        window.dispatchEvent(new Event("resize"));
+        await nextTick();
+      },
+      /** Move the box with no announcement at all — for driving an observer callback by hand. */
+      setBox: (next: DOMRect) => {
+        cell = next;
+      },
+      /** The same, but announced as a scroll: geometry moves, nothing resizes. */
+      scrollTo: async (next: DOMRect) => {
+        cell = next;
+        window.dispatchEvent(new Event("scroll"));
+        await nextTick();
+      },
+      close: async () => {
+        await w.find(".cell-dir").trigger("keydown", { key: "Escape" });
+        await nextTick();
+      },
+      reopen: async () => {
+        await w.find(".cell-dir").trigger("click");
+        await nextTick();
+      },
+    };
+  };
+
+  const openPathMenuInCell = async (cell: DOMRect) => (await openPathMenuIn(cell)).menu();
+
+  /** The cap the menu should get: from the trigger down to whichever edge clips first. */
+  const roomBelow = (clipBottomPx: number) => clipBottomPx - TRIGGER_BOTTOM_PX - MENU_VIEWPORT_GAP_PX;
+
+  it("caps the path menu to the room left in a short tiled cell, so the last item scrolls into reach", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, 245));
+    expect(menu.classes()).toContain("overflow-y-auto");
+    expect(menu.classes()).toContain("top-full");
+    expect(menu.classes()).not.toContain("bottom-full");
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+  });
+
+  it("measures against the cell, not the window, so a short cell caps below what the window allows", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, 600));
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(600)}px`);
+    expect(menu.classes()).not.toContain("bottom-full");
+  });
+
+  // The cap is only true for the box it was measured in, and the menu stays open across a resize.
+  // Measured once at open, a window shrunk under it leaves a cap larger than the room, which is the
+  // clipping this whole mechanism exists to prevent (codex on #2048).
+  it("re-measures while the menu is open, so a box that shrinks under it re-caps", async () => {
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(600)}px`);
+    await open.resizeTo(new DOMRect(0, 0, 400, 245));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+  });
+
+  // A scroll moves both rectangles and resizes nothing, so neither of the other two watchers fires.
+  it("re-measures on a scroll, which changes the geometry without changing any size", async () => {
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    await open.scrollTo(new DOMRect(0, 0, 400, 245));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+  });
+
+  // A box with no height is an ABSENT measurement, not a small one — a cell mid-teleport, or jsdom.
+  // Capping to it would render `max-height: 0` and hide the menu, which is worse than the clipping
+  // the cap exists to prevent, so the uncapped path is the right one there.
+  it("leaves the menu uncapped rather than 0px tall when the cell has no layout yet", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 0, 0));
+    expect(menu.exists()).toBe(true);
+    expect(menu.attributes("style")).toBeUndefined();
+  });
+
+  // Re-measuring costs listeners, and one that outlives what it serves is the kind of leak nothing
+  // reports: the menu is gone, so nobody sees the work it keeps doing. The identity matters as much
+  // as the count — `removeEventListener` with a different function reference removes nothing.
+  it("adds one resize and one capture-phase scroll listener per open, and removes those exact ones on close, re-open and unmount", async () => {
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    const addsOf = (type: string) => add.mock.calls.filter(([t]) => t === type);
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(addsOf("resize")).toHaveLength(1);
+    expect(addsOf("scroll")).toHaveLength(1);
+    const handler = addsOf("resize")[0][1];
+    // The scroll listener is registered in the CAPTURE phase, and a removal with the wrong flag
+    // removes nothing at all — so the flag is part of what has to be paired, not a detail.
+    expect(addsOf("scroll")[0][1]).toBe(handler);
+    expect(addsOf("scroll")[0][2]).toBe(true);
+
+    await open.close();
+    expect(remove).toHaveBeenCalledWith("resize", handler);
+    expect(remove).toHaveBeenCalledWith("scroll", handler, true);
+
+    await open.reopen();
+    expect(addsOf("resize")).toHaveLength(2);
+    expect(addsOf("resize")[1][1]).toBe(handler); // the same reference, so a re-open cannot stack them
+
+    remove.mockClear();
+    open.w.unmount();
+    expect(remove).toHaveBeenCalledWith("resize", handler); // still open at unmount
+    expect(remove).toHaveBeenCalledWith("scroll", handler, true);
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  // The cell can resize with no window event at all — another tile arrives, the grid re-pages — so
+  // the box is observed too. jsdom has no ResizeObserver (the component skips it there and the
+  // window listener still covers the window case), which is why this one supplies a stand-in: the
+  // disconnect is the half that leaks, and nothing else in the suite can reach it.
+  it("re-measures from the observer's own callback, and disconnects on close and on unmount", async () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    // An array rather than a `let`: TypeScript cannot see that the constructor runs, so a nullable
+    // binding narrows to `never` at the call site below.
+    const fires: Array<() => void> = [];
+    class FakeResizeObserver {
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = disconnect;
+      constructor(cb: ResizeObserverCallback) {
+        fires.push(() => cb([], this));
+      }
+    }
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(observe).toHaveBeenCalledTimes(1);
+
+    // Constructing and observing is not the wiring — the CALLBACK is. Shrink the cell the way a
+    // sibling tile arriving would, with no window event, and drive it by hand.
+    open.setBox(new DOMRect(0, 0, 400, 245));
+    expect(fires).toHaveLength(1);
+    fires[0]();
+    await nextTick();
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+
+    await open.close();
+    expect(disconnect).toHaveBeenCalled();
+
+    await open.reopen();
+    disconnect.mockClear();
+    open.w.unmount();
+    expect(disconnect).toHaveBeenCalled(); // still open at unmount
+    vi.unstubAllGlobals();
+  });
+
+  // The cell is not always the nearer edge: one hanging below the fold is clipped by the WINDOW
+  // first, and taking the cell's own bottom there would promise room that is not on screen.
+  it("clamps to the window when the cell extends past the bottom of it", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, window.innerHeight + 400));
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(window.innerHeight)}px`);
+  });
+
+  // And a cell scrolled so its top is off-screen: the room ABOVE the trigger starts at the window's
+  // top edge, not at the cell's. Taking the cell's own top counts 300px nobody can see, which is
+  // enough to make `menuPlacement` flip the menu upward into exactly that invisible space.
+  it("measures from the visible top when the cell is scrolled above the window", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, -300, 400, 400));
+    expect(menu.classes()).toContain("top-full");
+    expect(menu.classes()).not.toContain("bottom-full");
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(100)}px`);
   });
 
   it("ignores an out-of-order /api/git-remote response after a fast cwd change", async () => {

@@ -69,7 +69,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, slotLabel, type HandoffTarget } from "../composables/useHandoff";
-import { menuPlacement } from "../composables/menuPlacement";
+import { menuPlacement, type MenuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
 import { roundTableMessage } from "../composables/roundTableRules";
@@ -597,9 +597,9 @@ function onServerCwd(c: string) {
 }
 
 // "Open on GitHub": when this cell's dir is a GitHub repo, the server returns its
-// repository URL (null otherwise) and the header shows a popover linking to the
-// repo top page / Issues / Pull requests. Refreshed whenever the effective cwd
-// changes (launch, server-confirmed cwd, restore).
+// repository URL (null otherwise) and the path menu grows a section linking to the
+// repo top page / Issues / Pull requests / Actions. Refreshed whenever the effective
+// cwd changes (launch, server-confirmed cwd, restore).
 const githubUrl = ref<string | null>(null);
 const pathMenuOpen = ref(false);
 const pathWrap = useTemplateRef<HTMLElement>("pathWrap");
@@ -632,7 +632,7 @@ async function refreshGithubUrl() {
 }
 watch(cwd, refreshGithubUrl, { immediate: true });
 
-// Repository top page (""), Issues, or Pull requests — opened in a new tab.
+// Repository top page (""), Issues, Pull requests or Actions — opened in a new tab.
 function openGithub(suffix: string) {
   if (!githubUrl.value) return;
   window.open(githubUrl.value + suffix, "_blank", "noopener,noreferrer");
@@ -658,7 +658,7 @@ function newTerminalHere() {
 }
 
 // The shared menu row plus this menu's own layout: every item leads with an icon, so the labels
-// line up and the four navigations are told apart by glyph the way they were as buttons.
+// line up and each destination is told apart by glyph the way they were as buttons.
 const PATH_MENU_ITEM = `inline-flex items-center gap-2 whitespace-nowrap ${CELL_MENU_ITEM}`;
 
 // Closing puts focus back where it came from. The trigger is the only thing in this wrapper that
@@ -677,14 +677,81 @@ function pathMenuAction(run: () => void) {
   run();
 }
 
+// The CELL clips this menu, not just the window — the cell root is `overflow-hidden`, so a menu
+// longer than the room under the header is cut off there however much screen is left below. That is
+// why the arithmetic the ask menu uses (#2003) is fed the cell's box here rather than the window's.
+// Measured in Chromium against the built stylesheet: a row costs 27px, the menu's border box went
+// from 181px at six rows to 208px at seven, and the last row stops being hittable below a cell
+// height of 217px at six rows but 244px at seven — a band a 3x3 tile lands in on an ~800px window.
+const pathMenuUp = ref(false);
+const pathMenuMaxH = ref<number | null>(null);
+
+// Null when there is nothing to measure against (not laid out yet, or jsdom): the menu is then left
+// unbounded, which is what it was before there was any cap at all.
+function pathMenuPlacement(): MenuPlacement | null {
+  const wrap = pathWrap.value;
+  const cell = wrap?.closest(".cell");
+  if (!wrap || !cell) return null;
+  // Whichever edge comes first does the clipping — the cell's or the window's — so the box to fit
+  // inside is the INTERSECTION. Cell alone would over-promise on a cell hanging below the fold;
+  // window alone is what leaves the tiled cell's own overflow unaccounted for (codex on #2048).
+  const box = cell.getBoundingClientRect();
+  const top = Math.max(box.top, 0);
+  const bottom = Math.min(box.bottom, window.innerHeight);
+  // A box with no height is not a small box, it is an absent measurement — a cell mid-teleport, or
+  // jsdom. Capping to it would render `max-height: 0` and hide the menu outright, which is a worse
+  // failure than the clipping the cap exists to prevent, so this is the null path too.
+  if (bottom <= top) return null;
+  const rect = wrap.getBoundingClientRect();
+  return menuPlacement({ top: rect.top - top, bottom: rect.bottom - top }, bottom - top);
+}
+
+function applyPathMenuPlacement() {
+  const placement = pathMenuPlacement();
+  pathMenuUp.value = placement?.up ?? false;
+  pathMenuMaxH.value = placement?.maxHeightPx ?? null;
+}
+
+function togglePathMenu() {
+  pathMenuOpen.value = !pathMenuOpen.value;
+  if (pathMenuOpen.value) applyPathMenuPlacement();
+}
+
+// A cap is only true for the box it was measured in, and this menu outlives the things that change
+// it: the window can shrink under it, the cell can (another tile arrives, the grid re-pages) with no
+// window event at all, and a scroll moves both rectangles while resizing neither. All three are
+// watched while it is open and released on close, so a shut menu costs nothing.
+let pathMenuBox: ResizeObserver | null = null;
+
+function watchPathMenuBox(open: boolean) {
+  pathMenuBox?.disconnect();
+  pathMenuBox = null;
+  window.removeEventListener("resize", applyPathMenuPlacement);
+  // Capture, so a scroll inside any ancestor reaches this: scrolling moves both rectangles without
+  // resizing anything, so neither of the other two watchers fires (codex on #2048).
+  window.removeEventListener("scroll", applyPathMenuPlacement, true);
+  if (!open) return;
+  window.addEventListener("resize", applyPathMenuPlacement);
+  window.addEventListener("scroll", applyPathMenuPlacement, true);
+  const cell = pathWrap.value?.closest(".cell");
+  // jsdom and older embedders have no ResizeObserver; the window listener above still fires there.
+  if (!cell || typeof ResizeObserver === "undefined") return;
+  pathMenuBox = new ResizeObserver(applyPathMenuPlacement);
+  pathMenuBox.observe(cell);
+}
+
 function onPathOutside(e: MouseEvent) {
   if (pathWrap.value && !(e.target instanceof Node && pathWrap.value.contains(e.target))) pathMenuOpen.value = false;
 }
 watch(pathMenuOpen, (open) => {
   if (open) document.addEventListener("mousedown", onPathOutside);
   else document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(open);
 });
-onUnmounted(() => document.removeEventListener("mousedown", onPathOutside));
+onUnmounted(() => {
+  document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(false);
+});
 
 // "Bring another cell's last turn here": pull a sibling terminal's last completed
 // exchange into THIS cell's input box, so the two agents can be pointed at each other's
@@ -1599,7 +1666,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 :title="cwd ?? ''"
                 aria-haspopup="true"
                 :aria-expanded="pathMenuOpen"
-                @click="pathMenuOpen = !pathMenuOpen"
+                @click="togglePathMenu"
               >
                 <span class="min-w-0" :class="DIR_TRUNCATE_FRONT"
                   ><span class="cell-dir-path" :class="CELL_DIR_PATH">{{ headerDir }}</span></span
@@ -1612,7 +1679,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <div
                 v-if="pathMenuOpen"
                 data-testid="cell-path-menu"
-                class="absolute left-0 top-full z-20 mt-1 flex min-w-[190px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute left-0 z-20 flex min-w-[190px] flex-col overflow-y-auto rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                :class="pathMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+                :style="pathMenuMaxH === null ? undefined : { maxHeight: `${pathMenuMaxH}px` }"
               >
                 <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(openDir)">
                   <span class="material-symbols-outlined text-[15px]" aria-hidden="true">folder</span> Reveal in the file manager
@@ -1635,6 +1704,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                   </button>
                   <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/pulls'))">
                     <span class="material-symbols-outlined text-[15px]" aria-hidden="true">merge</span> Pull requests
+                  </button>
+                  <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/actions'))">
+                    <span class="material-symbols-outlined text-[15px]" aria-hidden="true">play_circle</span> Actions
                   </button>
                 </template>
               </div>

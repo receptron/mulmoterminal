@@ -185,7 +185,7 @@ Claude でも Codex でも同じです。**Agent Picker** でどちらかを選�
 - **2 段目（読むもの・操作）**：**ディレクトリのパス**（クリックでメニュー ——
   *Reveal in the file manager*・*Browse files in the app*（このターミナルの隣に出るファイルペイン。
   タイル表示なら先にセルを拡大します）・*New terminal here*・リポジトリの
-  *Repository / Issues / Pull requests*）・**Run**・**Skills**・**Insert a file path**（既定ボタン。
+  *Repository / Issues / Pull requests / Actions*）・**Run**・**Skills**・**Insert a file path**（既定ボタン。
   [設定で置き換え可](config.html#header)）・**Activity timeline**（時計）＝ツール呼び出し履歴。
   接続状態は接続中・失敗時だけここに出ます。
 
