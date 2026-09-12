@@ -8,6 +8,20 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### The object budget counts objects, and a custom shape can recurse — `@mulmoclaude/shapescript-plugin@2.6.0`
+
+- **[#2053](https://github.com/receptron/mulmoterminal/pull/2053)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.6.0
+  ([receptron/mulmoclaude#3112](https://github.com/receptron/mulmoclaude/pull/3112)). Building a
+  tree failed with "ShapeScript produced more than 100000 objects" at about 10k cylinders: the
+  100k ceiling was charged on every statement the converter visited — a `rotate`, a `color`, an
+  `if`, a `group` — not on objects. Only nodes that put an object in the scene are charged now,
+  each once, so the object and vertex ceilings agree. A recursive custom shape written the natural
+  way (`branch { depth depth - 1 }`) overflowed the stack because its option expressions were
+  evaluated in the body's scope where `depth` named the default; they are evaluated in the
+  caller's scope now, and a shape with no way out stops at 256 levels with a script error. No host
+  code changes.
+
 ### `loft` takes path sections only, lofts open paths — `@mulmoclaude/shapescript-plugin@2.5.1`
 
 - **[#2051](https://github.com/receptron/mulmoterminal/pull/2051)** — `presentShapeScript`,
