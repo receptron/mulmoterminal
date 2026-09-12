@@ -98,7 +98,7 @@ same question.
 
 | Kind | Where | Recognizes |
 |---|---|---|
-| Local file path (#778) | `terminalFilePathLinkProvider.ts` (`registerLinkProvider`) | a token with a `/` and a file extension, scoped to the session cwd → the **Files pane** beside an enlarged cell when it can show that kind and the path is under that cell's dir (#910), else **routed by extension** (#808–#811): rendered/indented/table routes, the in-app Files view, or `/api/files/raw` as the fallback |
+| Local file path (#778) | `terminalFilePathLinkProvider.ts` (`registerLinkProvider`) | a token with a `/` and a file extension, scoped to the session cwd → the **Files pane** beside an enlarged cell when it can show that kind and the path is under that cell's dir (#910), else **routed by extension** (#808–#811): rendered/indented/table routes, the in-app Files view, or `/api/files/raw` as the fallback. A type the BROWSER cannot display (`.xlsx`, `.zip`, an extensionless `Makefile`) goes to the Files view too rather than to a tab that would silently download it (#2038) |
 | OSC 8 hyperlink (#783/#785) | `linkHandler` + xterm core `OscLinkService` | arbitrary text → URL (Claude statusline `PR #NNNN`) — **requires the tmux `hyperlinks` feature** |
 | Plain URL | `WebLinksAddon` | visible `http(s)://` URLs |
 

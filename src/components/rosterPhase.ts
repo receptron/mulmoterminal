@@ -4,6 +4,7 @@
 // common/ rule exists to prevent.
 export { isPrPhase, type PrPhase } from "../../common/prPhase";
 import type { PrPhase } from "../../common/prPhase";
+import { asSessionCollection, type SessionCollection } from "../../common/sessionCollection";
 
 // Short badge text + a fuller tooltip. `none` (no PR yet) renders nothing — the roster just
 // shows the agent status until a PR exists.
@@ -58,15 +59,20 @@ export const WORK_WORD: Record<WorkPhase, string> = { planning: "planning", impl
 // `workPhase` is taken AS-IS, including null, because a successful fetch is authoritative for
 // it: null means "no tools yet / not working", which is a real state. Merge it like the text
 // and a finished agent keeps a "planning" badge forever.
+//
+// `collection` follows workPhase for a different reason: it cannot change over a session's life,
+// so every successful fetch for an id carries the same answer and there is nothing a merge could
+// preserve. Taking it as-is is what lets a row stop wearing a mark when the cell changes session.
 export interface SessionMetaView {
   lastPrompt: string | null;
   aiTitle: string | null;
   lastResponse: string | null;
   memo: string | null;
   workPhase: WorkPhase | null;
+  collection: SessionCollection | null;
 }
 
-export const EMPTY_SESSION_META: SessionMetaView = { lastPrompt: null, aiTitle: null, lastResponse: null, memo: null, workPhase: null };
+export const EMPTY_SESSION_META: SessionMetaView = { lastPrompt: null, aiTitle: null, lastResponse: null, memo: null, workPhase: null, collection: null };
 
 // `string | null` as it arrives in untrusted JSON. Anything else reads as ABSENT, so a field the
 // server sent as a number leaves the previous value standing rather than replacing it with junk.
@@ -84,6 +90,7 @@ export function mergeSessionMeta(previous: SessionMetaView, fetched: Record<stri
     lastResponse: stringOrNull(fetched.lastResponse) ?? previous.lastResponse,
     memo: memo !== undefined ? memo : previous.memo,
     workPhase: isWorkPhase(fetched.workPhase) ? fetched.workPhase : null,
+    collection: asSessionCollection(fetched.collection),
   };
 }
 

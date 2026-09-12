@@ -8,6 +8,223 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `text`, one statement per line, USDZ colours — `@mulmoclaude/shapescript-plugin@2.5.0`
+
+- **[#2043](https://github.com/receptron/mulmoterminal/pull/2043)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.5.0 (2.3.0 to 2.5.0 in one step).
+  `text "Hello"` draws glyph outlines laid out as the upstream app does — left margin at x = 0,
+  first baseline at y = 0, one unit per line, `size`, `wrapwidth`, `linespacing`, interpolation —
+  which `fill` and `extrude` turn into letters with their counters, and a text is a value with
+  `.bounds`. **Behaviour change** toward upstream: two statements on one line
+  (`sphere { position 0 1 0 size 2 }`) are now a parse error naming the rule, as the upstream app
+  reads a property's arguments to the end of the line; a saved script in that style fails until
+  reformatted. `tau` is gone (write `2 * pi`). A USDZ export of coloured polygon meshes no longer
+  comes out white or misplaced. No host code changes.
+
+### Every upstream ShapeScript example renders — `@mulmoclaude/shapescript-plugin@2.3.0`
+
+- **[#2041](https://github.com/receptron/mulmoterminal/pull/2041)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.3.0 (2.1.0 to 2.3.0 in one step),
+  so a script written against the upstream docs no longer hits a refused feature: materials
+  (hex and named colours, `opacity`, `metallicity` / `roughness` / `glow`, `material { … }`),
+  `print` output in the tool result, ranges and custom functions, shapes as values with
+  `.polygons` / `.bounds` / `.volume`, `mesh { polygon { … } }`, `minkowski` and `inset` for
+  rounded edges, and `extrude … along` for sweeps. All nine of the upstream project's example
+  scripts render. Toward upstream: `for` / `if` / `switch` no longer reset transforms at their
+  closing brace, a bare `path` draws as a line, `extrude` is centred on its profile plane and
+  does not close an open path for you (an open path extrudes to a wall), and a lone `position`
+  value is X alone. No host code changes.
+
+## mulmoterminal@4.20.0 — 2026-09-11
+
+> **Setup guide:** [4.20.0 — Your ShapeScript models need converting, and a deck in your repo finally saves](https://receptron.github.io/mulmoterminal/guide/en/v4.20.0.html)
+
+### ShapeScript follows the upstream language now — `@mulmoclaude/shapescript-plugin@2.0.0`
+
+- **[#2033](https://github.com/receptron/mulmoterminal/pull/2033)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` now read a script the way
+  the upstream [ShapeScript](https://shapescript.info/mac/) app does: `size` is the **diameter** of
+  a sphere, cylinder, cone, circle or polygon; `orientation` (alias `rotation`) and `rotate` take
+  **half-turns** as `roll yaw pitch` (0.5 = 90°); path `point` / `curve` coordinates are
+  **absolute** in the path's frame, with `curve` a Bézier control point; a `path` may carry its own
+  `position` / `orientation` / `size`; `seed N` reseeds `rnd` for its block; and function arguments
+  may be space-separated (`max(0 (j - 1))`) as upstream writes them, with `.first` … `.last` ordinal
+  members. A script written against the upstream docs renders the same here, and a script written
+  here opens in the upstream app.
+- **Breaking for `.shape` files saved under the old conventions** (radius sizes, radian rotations,
+  relative path points). They still parse but render at half size or rotated wrong — convert them:
+  the `size` of every `sphere`, `cylinder`, `cone`, `circle`, `polygon` and `torus` ×2 (the first
+  component for a cylinder or cone, all of them for a sphere); a `rotation X Y Z` property in
+  radians → `orientation roll yaw pitch` in half-turns, each axis negated and divided by pi (the old
+  X value becomes the new third component, the old Z the first); a `rotate` command in full turns →
+  half-turns, negated and doubled; path `point` / `curve` deltas → absolute points, and the old
+  four-argument `curve x y cx cy` → a `curve cx cy` control point between two `point`s; `tau` → `2 * pi`
+  if the file must also open in the upstream app. MulmoClaude shares these files, so both hosts
+  moved to 2.0.0 together (mulmoclaude#3069).
+
+### Take a 3D model out of the chat as a USDZ file
+
+- **[#2031](https://github.com/receptron/mulmoterminal/pull/2031)** — a ShapeScript model can
+  now leave MulmoTerminal as a **USDZ** file — Apple's AR format: AR
+  Quick Look places it in the room on iPhone and iPad, and Quick Look previews it on a Mac. New host tool **`exportShapeScriptUsdz`** takes
+  the same source as `presentShapeScript` (inline, or a `.shape` you point it at), writes the
+  file beside the model under the workspace `artifacts/shapes/`, and answers with the absolute
+  path. It sits in the **Canvas (render MCPs)** group with the other two ShapeScript tools and
+  runs without asking: it serialises geometry to one local file and reaches nothing outside the
+  workspace. The `presentShapeScript` view also gains a **Download USDZ** button that builds the
+  same file in the browser. Both come from `@mulmoclaude/shapescript-plugin@1.4.0`; the tool's
+  contract, the exporter, and the file's location are the package's, shared with MulmoClaude.
+
+### A deck kept in a repository opened, then failed at everything after
+
+- **[#2036](https://github.com/receptron/mulmoterminal/pull/2036)** — a MulmoScript deck stored
+  anywhere but the workspace's own `artifacts/stories/` **opened in the Canvas and then answered
+  `File not found` to every beat image and every save**. The card travelled as `stories/<tail>`
+  plus the root's id, and the reopen carries a root — so opening worked. But the View's own
+  dispatches (`updateScript`, `updateBeat`, `beatImage`, the movie and PDF polls) pass `filePath`
+  through and send **no root**, so each one resolved the tail against the DEFAULT stories root.
+  A deck in a repository showed a red error on every beat and failed to save in silence. Those
+  decks now travel as their **own absolute path** — the `byPath` form the plugin has taken since
+  4.6.0 — which cannot lose a root because it has none. Measured against a running server before
+  and after. The spelling is the root's **canonical** one (the server's realpathed path), so a
+  workspace reached through a symlink does not give one deck two Canvas cards; a deck under no
+  registered root is unchanged. Closes [#1970](https://github.com/receptron/mulmoterminal/issues/1970).
+
+### The conversation menu ran off the screen with nothing to scroll
+
+- **[#2032](https://github.com/receptron/mulmoterminal/pull/2032)** — on a grid of about twenty
+  cells, a cell's conversation menu was **1750px tall in an 800px viewport** with **no scrollable
+  element anywhere**, so the ROUND TABLE settings and its Start button could not be reached at all.
+  The reporter was zooming the browser to 50% to work around it. The menu now measures the space
+  it has, opens **upward** when that is roomier, and caps its height; the long lists scroll on
+  their own while Start, room, turns, stop and watch stay outside the scrollers. At an extremely
+  short viewport the menu itself scrolls, so those controls stay **reachable** rather than clipped.
+  Closes [#2003](https://github.com/receptron/mulmoterminal/issues/2003).
+
+### Two buttons in one cell header wore the same icon
+
+- **[#2035](https://github.com/receptron/mulmoterminal/pull/2035)** — the same speech-bubble
+  (`forum`) meant four different things, and **two of them sat in the same cell header**, so there
+  was no telling them apart before pressing one. The prompts button — a list of what *you* sent,
+  nothing to do with a conversation — is now an **`outbox`** tray, and the "talk to another
+  terminal" button's tooltip says what it actually offers (bring in the last turn, exchange a turn,
+  start a round table) instead of naming itself.
+  Closes [#2004](https://github.com/receptron/mulmoterminal/issues/2004).
+
+### The Update badge was painted by the browser, not by the theme
+
+- **[#2037](https://github.com/receptron/mulmoterminal/pull/2037)** — `tailwind.css` ships without
+  preflight on purpose, and nothing else reset a button's background, so **any `<button>` that
+  named no background was painted with the BROWSER's button face** — a light grey no theme chose.
+  Under accent ink that measured **1.74:1 in nord** and 2.82:1 in midnight: the Update pill was
+  unreadable until you hovered it. Fixed as a rule rather than at one button (the same thing was
+  happening to the Copy button inside that pill's own dropdown): one `button { background-color:
+  transparent }` in `@layer base`, where every `bg-*` utility still outranks it. Measured across
+  four themes and two screens before and after — **eight buttons changed, all eight of them the
+  ones the browser was painting, and 312 others did not move**. nord is now 5.03:1, midnight
+  4.91:1, daylight 5.17:1. Closes [#1961](https://github.com/receptron/mulmoterminal/issues/1961).
+
+### A comment that described the opposite of what the code does
+
+- **[#2034](https://github.com/receptron/mulmoterminal/pull/2034)** — the handoff menu's
+  `slotLabel` carried a comment saying the uid in `cell-<uid>` is "what the user sees on the cell".
+  It is an **array position**, renumbered on every grid parse and shown on no cell — the file that
+  assigns it says so. Acting on the false premise was why `#3 · claude · ~/mulmoclaude` was thought
+  to be enough of a label, when two terminals in one directory produce rows differing by that
+  number alone. The comment now says what is true; the labelling itself is left to
+  [#2005](https://github.com/receptron/mulmoterminal/issues/2005).
+
+## mulmoterminal@4.19.0 — 2026-09-10
+
+> **Setup guide:** [4.19.0 — Read a collection and drive its chat without leaving it](https://receptron.github.io/mulmoterminal/guide/en/v4.19.0.html)
+
+### A chat started from a collection no longer closes the collection
+
+- **[#2016](https://github.com/receptron/mulmoterminal/pull/2016)** — starting a chat from a
+  collection card or template moved the session into a grid cell and navigated to `/terminals`,
+  which **closed the collection you were reading**. The chat is still an ordinary grid cell; while
+  the collection is open, that **same terminal** is now driven from a pane under it. It is a
+  **teleport, not a handover** — the same mechanism that moves an enlarged cell into `.zoom-main`
+  — so the component is never remounted and the socket, the xterm and the scrollback stay single.
+  Several chats live in **tabs** carrying the roster's own attention colours and summaries, the
+  Collections button shows how many are open, and a session the server reaps folds its tab away.
+  The pane **docks below or beside** the collection, each with its own remembered size, resizable
+  by drag or keyboard. The pairing survives a reload. **"Move to the grid" is gone** — there is
+  nothing to move any more. Closes [#2001](https://github.com/receptron/mulmoterminal/issues/2001).
+- **[#2022](https://github.com/receptron/mulmoterminal/pull/2022)** — a screenshot of the
+  side-docked pane in both guides.
+
+### A cell opened from a collection now says which collection
+
+- **[#2027](https://github.com/receptron/mulmoterminal/pull/2027)** — a chat opened from a
+  collection runs in the workspace, so every one of them drew the same project favicon and a grid
+  holding several was unreadable: nothing said which cell was opened for which collection. The
+  cell header now carries **the collection's own icon**, right after the status dot, in the tiled
+  and enlarged views and in the cockpit roster and filmstrip. It is resolved **once at spawn** on
+  the server and filed beside the session (`~/.mulmoterminal/session-collections.jsonl`), not held
+  in the browser — so it survives a reload, another tab and another device, which the localStorage
+  approach could not. The project favicon stays: "which cwd" and "which collection" are different
+  questions. Closes [#2020](https://github.com/receptron/mulmoterminal/issues/2020).
+
+### Repairing a stuck cell was making it permanently dead
+
+- **[#2026](https://github.com/receptron/mulmoterminal/pull/2026)** — the
+  `Cannot read properties of undefined (reading 'onShowLinkUnderline')` in the console was **not
+  noise**. `@xterm/addon-canvas` asks the core to rebuild the DOM renderer as it disposes, and
+  xterm 6 hands that renderer a `linkifier` the terminal's own dispose has already released — so
+  the rebuild throws. `rebuildTerminal`, which is the repair for a frozen cell, did not catch it,
+  so `connect()` never ran and the fresh terminal was left **with no socket**: the button for
+  "fix this stuck cell" was the thing that killed it. Renderer lifecycle now lives in one place
+  (`terminalRenderer.ts`), the renderer is disposed **before** the terminal, and neither throw
+  reaches the caller. Closes [#2021](https://github.com/receptron/mulmoterminal/issues/2021).
+
+### Running in your own project directory no longer litters it
+
+- **[#2025](https://github.com/receptron/mulmoterminal/pull/2025)** — `npx mulmoterminal` defaults
+  the workspace to the directory you ran it from, so the scheduler's execution state and logs
+  (`config/scheduler/state.json`, `data/scheduler/logs/`) and the notifier's (`data/notifier/`)
+  were written **into one of your own projects** — and deleting them was pointless, because the
+  next hourly run wrote them again. They now live under
+  `~/.mulmoterminal/workspaces/<workspace-key>/`, one directory per workspace, keyed on the
+  canonical path so a symlinked workspace and the real one share a single history. The **managed**
+  workspace (`MULMOCLAUDE_WORKSPACE_PATH`, `~/mulmoclaude` by default) is unchanged — MulmoClaude
+  reads the same files there, and splitting them would give the two apps different answers. This
+  repo already made that promise for seeded presets; the scheduler and the notifier had never been
+  held to it. What you made stays in the workspace either way: collections, feeds, and the tasks
+  you write in `config/scheduler/tasks.json`.
+  Closes [#2024](https://github.com/receptron/mulmoterminal/issues/2024).
+- **[#2029](https://github.com/receptron/mulmoterminal/pull/2029)** — two of the nine
+  `initUserTaskScheduler` calls in the scheduler spec were still letting the state root default,
+  so running the suite left directories in the home of whoever ran it. Found by measuring the real
+  home rather than by a failing test — the spec is green either way.
+
+### The built-in hourly tasks can be switched off
+
+- **[#2028](https://github.com/receptron/mulmoterminal/pull/2028)** — the hourly collection/feed
+  refresh and the hourly Google Calendar sync were registered unconditionally, with no config key
+  and no environment variable, while a task you wrote in `config/scheduler/tasks.json` has always
+  honoured `enabled: false`. Two new keys close that asymmetry:
+
+  ```json
+  { "feedRefreshEnabled": false, "calendarSyncEnabled": false }
+  ```
+
+  Both default **on**, and only an explicit `false` turns one off — an absent key, `null`, `0` and
+  the string `"false"` all leave the task running, so no existing config changes behaviour on
+  upgrade. It takes effect at the next server start, because the scheduler registers once at boot.
+  There are checkboxes in **Settings → Sessions** as well. They do **not** touch your own tasks: an
+  enabled one in `tasks.json` still registers and still drives the tick loop with all three
+  built-ins off. Closes [#2015](https://github.com/receptron/mulmoterminal/issues/2015).
+
+### Maintenance
+
+- **[#2030](https://github.com/receptron/mulmoterminal/pull/2030)** — the Codex auto-review
+  workflow no longer runs on every `pull_request`; it is `workflow_dispatch` only
+  (`gh workflow run "Codex auto-review" -f pr_number=<N>`). `main` is not branch-protected and the
+  check was never required, so nothing is blocked by it.
+- **[#2023](https://github.com/receptron/mulmoterminal/pull/2023)** — dependency updates
+  (Markdown parsing, schema validation, `@types/node`, code analysis, TypeScript linting).
+
 ## mulmoterminal@4.18.0 — 2026-09-09
 
 > **Setup guide:** [4.18.0 — Let the agent look at what it built](https://receptron.github.io/mulmoterminal/guide/en/v4.18.0.html)

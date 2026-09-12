@@ -22,7 +22,11 @@ import os from "node:os";
 import type { Express, Request, Response } from "express";
 import { statFileOr404 } from "./statFileOr404.js";
 import { parseByteRange } from "./byte-range.js";
+// Named export: 3.x is ESM and ships its own types. Express uses this same package for
+// `res.attachment()`, so the RFC 6266 escaping is the one the rest of the stack already trusts.
+import { create as contentDisposition } from "content-disposition";
 import { rawServingPlan } from "./rawServingPlan.js";
+import { servedFileName } from "./servedFileName.js";
 import { streamFileToResponse } from "./streamFile.js";
 import { authorizedServingBase, resolveContained } from "../files/pathContainment.js";
 import { rootForProjectId } from "../infra/project-root.js";
@@ -102,6 +106,13 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string; sessio
     // exception (WebKit won't render a sandbox-opaque PDF). See rawServingPlan.
     if (plan.sandbox) res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("Accept-Ranges", "bytes");
+    // The name a save from the browser gets. Without it the browser falls back to the URL's last
+    // segment plus an extension guessed from the type, so every file saved as `raw.<ext>` (#2040).
+    // BEFORE the Range branch so the 206 carries it too — a media save takes the partial response.
+    // `inline`, not `attachment`: this route is how the app RENDERS images, PDFs and text, and
+    // `attachment` would turn every one of those into a download.
+    const advertised = servedFileName(rel);
+    if (advertised !== null) res.setHeader("Content-Disposition", contentDisposition(advertised, { type: "inline" }));
 
     // Range support (required for <video>/<audio> seeking in Safari).
     const rangeHeader = req.headers.range;

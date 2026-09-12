@@ -8,11 +8,13 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.18.0 is out.** An agent can now **look at the 3D model it wrote** before showing it to you —
-> nothing to turn on, though rasterising needs a browser on the machine. And a conversation you had
-> `/clear`ed **came back after a reboot** on hosts without tmux, then got re-sent on the next turn
-> (one user measured 478,000 tokens) — that is fixed; here is [how to tell you have
-> it](v4.18.0.html).
+> **4.20.0 is out, and one thing needs your hands.** ShapeScript now reads a script the way the
+> upstream app does, so a `.shape` you saved earlier **renders at half size until you convert it** —
+> the conversion rules are in the guide. New: a model can leave as a **USDZ** for AR Quick Look.
+> Fixed: a deck kept in a repository **opened and then failed every save**, the conversation menu
+> ran off the screen with nothing to scroll, two cell-header buttons wore one icon, and the Update
+> badge was painted by the **browser** rather than your theme. [What to do and how to tell you have
+> them](v4.20.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

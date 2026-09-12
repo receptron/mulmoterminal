@@ -13,6 +13,7 @@ import { worktreeLabel } from "../../common/worktreePath";
 import { isSameDirPath } from "../../common/dirPathKey";
 import DirBadge from "./DirBadge.vue";
 import DirIcon from "./DirIcon.vue";
+import CollectionMark from "./CollectionMark.vue";
 import { isCellContext, isCellUsage, type CellContext, type CellUsage } from "./cellPayload";
 import { asTerminalAgent, type TerminalAgent } from "../../common/sessionAgent";
 import { customAgentIdOf, customAgentPick, isCustomAgentId, type AgentPick, type CustomAgent } from "../../common/customAgents";
@@ -21,6 +22,7 @@ import { shouldPromptTidy } from "./mergedTidy";
 import { usageBadge } from "./cellDisplay";
 import { applyActivityPush, cellHeaderText, type ActivityPush } from "./cellActivity";
 import { MEMO_MAX_LENGTH, normalizeMemo } from "../../common/sessionMemo";
+import { asSessionCollection, type SessionCollection } from "../../common/sessionCollection";
 import { preferredLaunchDir, shouldSyncLaunchDir } from "./launchDir";
 import CellLaunchForm from "./CellLaunchForm.vue";
 import GitBranchChip from "./GitBranchChip.vue";
@@ -67,6 +69,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, slotLabel, type HandoffTarget } from "../composables/useHandoff";
+import { menuPlacement, type MenuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
 import { roundTableMessage } from "../composables/roundTableRules";
@@ -239,6 +242,10 @@ const aiTitle = ref<string | null>(null);
 const memo = ref<string | null>(null);
 const memoEditing = ref(false);
 const memoDraft = ref("");
+// Which collection this chat was opened FROM (#2020), or null for every cell that was not. Read
+// from the same /api/session/:id seed as the fields above rather than from the browser's own
+// filing, so a reload, a second tab and a phone all show the same mark.
+const collection = ref<SessionCollection | null>(null);
 
 // Cumulative token usage for this session (from /api/session/:id, refreshed when a
 // turn finishes). Null until first fetched.
@@ -399,6 +406,9 @@ async function loadInitial(id: string) {
   // always refresh — unless a newer badge fetch has since superseded this one.
   if (activityGen === genBeforeFetch) applyActivity(activityPushOf(data));
   if (badgeReq === latestBadgeReq) applyBadges(data);
+  // Not guarded by either token: it is a fact about how the session began, so every answer for
+  // this id carries the same one and there is no older-vs-newer to lose.
+  collection.value = asSessionCollection(data.collection);
 }
 
 // Refresh ONLY the token usage (not the live activity — that's pub/sub's job). Called
@@ -587,9 +597,9 @@ function onServerCwd(c: string) {
 }
 
 // "Open on GitHub": when this cell's dir is a GitHub repo, the server returns its
-// repository URL (null otherwise) and the header shows a popover linking to the
-// repo top page / Issues / Pull requests. Refreshed whenever the effective cwd
-// changes (launch, server-confirmed cwd, restore).
+// repository URL (null otherwise) and the path menu grows a section linking to the
+// repo top page / Issues / Pull requests / Actions. Refreshed whenever the effective
+// cwd changes (launch, server-confirmed cwd, restore).
 const githubUrl = ref<string | null>(null);
 const pathMenuOpen = ref(false);
 const pathWrap = useTemplateRef<HTMLElement>("pathWrap");
@@ -622,7 +632,7 @@ async function refreshGithubUrl() {
 }
 watch(cwd, refreshGithubUrl, { immediate: true });
 
-// Repository top page (""), Issues, or Pull requests — opened in a new tab.
+// Repository top page (""), Issues, Pull requests or Actions — opened in a new tab.
 function openGithub(suffix: string) {
   if (!githubUrl.value) return;
   window.open(githubUrl.value + suffix, "_blank", "noopener,noreferrer");
@@ -648,7 +658,7 @@ function newTerminalHere() {
 }
 
 // The shared menu row plus this menu's own layout: every item leads with an icon, so the labels
-// line up and the four navigations are told apart by glyph the way they were as buttons.
+// line up and each destination is told apart by glyph the way they were as buttons.
 const PATH_MENU_ITEM = `inline-flex items-center gap-2 whitespace-nowrap ${CELL_MENU_ITEM}`;
 
 // Closing puts focus back where it came from. The trigger is the only thing in this wrapper that
@@ -667,14 +677,81 @@ function pathMenuAction(run: () => void) {
   run();
 }
 
+// The CELL clips this menu, not just the window — the cell root is `overflow-hidden`, so a menu
+// longer than the room under the header is cut off there however much screen is left below. That is
+// why the arithmetic the ask menu uses (#2003) is fed the cell's box here rather than the window's.
+// Measured in Chromium against the built stylesheet: a row costs 27px, the menu's border box went
+// from 181px at six rows to 208px at seven, and the last row stops being hittable below a cell
+// height of 217px at six rows but 244px at seven — a band a 3x3 tile lands in on an ~800px window.
+const pathMenuUp = ref(false);
+const pathMenuMaxH = ref<number | null>(null);
+
+// Null when there is nothing to measure against (not laid out yet, or jsdom): the menu is then left
+// unbounded, which is what it was before there was any cap at all.
+function pathMenuPlacement(): MenuPlacement | null {
+  const wrap = pathWrap.value;
+  const cell = wrap?.closest(".cell");
+  if (!wrap || !cell) return null;
+  // Whichever edge comes first does the clipping — the cell's or the window's — so the box to fit
+  // inside is the INTERSECTION. Cell alone would over-promise on a cell hanging below the fold;
+  // window alone is what leaves the tiled cell's own overflow unaccounted for (codex on #2048).
+  const box = cell.getBoundingClientRect();
+  const top = Math.max(box.top, 0);
+  const bottom = Math.min(box.bottom, window.innerHeight);
+  // A box with no height is not a small box, it is an absent measurement — a cell mid-teleport, or
+  // jsdom. Capping to it would render `max-height: 0` and hide the menu outright, which is a worse
+  // failure than the clipping the cap exists to prevent, so this is the null path too.
+  if (bottom <= top) return null;
+  const rect = wrap.getBoundingClientRect();
+  return menuPlacement({ top: rect.top - top, bottom: rect.bottom - top }, bottom - top);
+}
+
+function applyPathMenuPlacement() {
+  const placement = pathMenuPlacement();
+  pathMenuUp.value = placement?.up ?? false;
+  pathMenuMaxH.value = placement?.maxHeightPx ?? null;
+}
+
+function togglePathMenu() {
+  pathMenuOpen.value = !pathMenuOpen.value;
+  if (pathMenuOpen.value) applyPathMenuPlacement();
+}
+
+// A cap is only true for the box it was measured in, and this menu outlives the things that change
+// it: the window can shrink under it, the cell can (another tile arrives, the grid re-pages) with no
+// window event at all, and a scroll moves both rectangles while resizing neither. All three are
+// watched while it is open and released on close, so a shut menu costs nothing.
+let pathMenuBox: ResizeObserver | null = null;
+
+function watchPathMenuBox(open: boolean) {
+  pathMenuBox?.disconnect();
+  pathMenuBox = null;
+  window.removeEventListener("resize", applyPathMenuPlacement);
+  // Capture, so a scroll inside any ancestor reaches this: scrolling moves both rectangles without
+  // resizing anything, so neither of the other two watchers fires (codex on #2048).
+  window.removeEventListener("scroll", applyPathMenuPlacement, true);
+  if (!open) return;
+  window.addEventListener("resize", applyPathMenuPlacement);
+  window.addEventListener("scroll", applyPathMenuPlacement, true);
+  const cell = pathWrap.value?.closest(".cell");
+  // jsdom and older embedders have no ResizeObserver; the window listener above still fires there.
+  if (!cell || typeof ResizeObserver === "undefined") return;
+  pathMenuBox = new ResizeObserver(applyPathMenuPlacement);
+  pathMenuBox.observe(cell);
+}
+
 function onPathOutside(e: MouseEvent) {
   if (pathWrap.value && !(e.target instanceof Node && pathWrap.value.contains(e.target))) pathMenuOpen.value = false;
 }
 watch(pathMenuOpen, (open) => {
   if (open) document.addEventListener("mousedown", onPathOutside);
   else document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(open);
 });
-onUnmounted(() => document.removeEventListener("mousedown", onPathOutside));
+onUnmounted(() => {
+  document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(false);
+});
 
 // "Bring another cell's last turn here": pull a sibling terminal's last completed
 // exchange into THIS cell's input box, so the two agents can be pointed at each other's
@@ -687,9 +764,30 @@ const askTargets = ref<HandoffTarget[]>([]);
 const askMsg = ref<string | null>(null);
 let askMsgTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Measured at OPEN, not bound to a CSS length: the menu hangs off a button partway down the
+// screen, so "how tall may it be" is the space left beside that button, which no viewport unit
+// knows (#2003 — a `100vh` cap still left Start below the fold on a bottom-row cell).
+const askMenuUp = ref(false);
+const askMenuMaxH = ref<number | null>(null);
+
 function openAskMenu() {
   askTargets.value = handoffTargets(`cell-${props.uid}`, props.home);
   askMenuOpen.value = !askMenuOpen.value;
+  if (!askMenuOpen.value) return;
+  // `askWrap` wraps the button AND the menu, but the menu is absolutely positioned and so adds
+  // nothing to the wrapper's box — measured. That is what makes this safe to read here rather
+  // than after a re-render: the number is the trigger's either way.
+  const rect = askWrap.value?.getBoundingClientRect();
+  // No rect (not laid out yet, or jsdom) leaves both unset, which is the pre-#2003 behaviour:
+  // an unbounded menu is wrong, but a menu clamped to a height invented from nothing is worse.
+  if (!rect) {
+    askMenuUp.value = false;
+    askMenuMaxH.value = null;
+    return;
+  }
+  const placement = menuPlacement(rect, window.innerHeight);
+  askMenuUp.value = placement.up;
+  askMenuMaxH.value = placement.maxHeightPx;
 }
 
 function showAskMsg(msg: string) {
@@ -814,6 +912,7 @@ function teardown() {
   // session is resumed. What must not survive is showing it against whatever this cell runs next.
   memo.value = null;
   memoEditing.value = false;
+  collection.value = null;
   usage.value = null;
   context.value = null;
   cwd.value = props.defaultCwd;
@@ -1345,6 +1444,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
           :header-color="dirConfig.headerColor"
           :header-text-color="dirConfig.headerTextColor"
           :icon-url="dirConfig.iconUrl"
+          :collection="collection"
           @click="onHeaderClick"
         >
           <span class="cell-actions" :class="CELL_ACTIONS">
@@ -1379,6 +1479,12 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                  which project it is, and that is the first question. -->
             <DirIcon :src="dirConfig.iconUrl" />
             <span class="cell-dot" :class="[CELL_DOT, statusClass, dotStatusClass, dotMissedClass]" :title="statusLabel" />
+            <!-- After the dot, not instead of the picture before it: the icon says which PROJECT,
+                 this says which COLLECTION, and a chat started from one runs in the workspace — so
+                 replacing it would leave the row unable to say where the agent is standing. Kept
+                 on the filmstrip thumbnail too (the CockpitHeader above), unlike the info chips
+                 below, because it is identity rather than status. -->
+            <CollectionMark :collection="collection" />
             <!-- The path is NOT here any more — it is the lead item on row 2 (see the
                `header-lead` template below). It had `min-w-[16ch]`, a floor of roughly a third of
                this track, and once it hit that floor the only thing left that could shrink was the
@@ -1560,7 +1666,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 :title="cwd ?? ''"
                 aria-haspopup="true"
                 :aria-expanded="pathMenuOpen"
-                @click="pathMenuOpen = !pathMenuOpen"
+                @click="togglePathMenu"
               >
                 <span class="min-w-0" :class="DIR_TRUNCATE_FRONT"
                   ><span class="cell-dir-path" :class="CELL_DIR_PATH">{{ headerDir }}</span></span
@@ -1573,7 +1679,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <div
                 v-if="pathMenuOpen"
                 data-testid="cell-path-menu"
-                class="absolute left-0 top-full z-20 mt-1 flex min-w-[190px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute left-0 z-20 flex min-w-[190px] flex-col overflow-y-auto rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                :class="pathMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+                :style="pathMenuMaxH === null ? undefined : { maxHeight: `${pathMenuMaxH}px` }"
               >
                 <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(openDir)">
                   <span class="material-symbols-outlined text-[15px]" aria-hidden="true">folder</span> Reveal in the file manager
@@ -1597,6 +1705,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                   <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/pulls'))">
                     <span class="material-symbols-outlined text-[15px]" aria-hidden="true">merge</span> Pull requests
                   </button>
+                  <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(() => openGithub('/actions'))">
+                    <span class="material-symbols-outlined text-[15px]" aria-hidden="true">play_circle</span> Actions
+                  </button>
                 </template>
               </div>
             </span>
@@ -1608,42 +1719,61 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 data-testid="cell-ask"
                 class="cell-btn"
                 :class="CELL_BTN"
-                title="Bring another terminal's last turn into this input box"
-                aria-label="Bring another terminal's last turn here"
+                title="Talk to another terminal — bring its last turn here, trade one turn, or start a round table"
+                aria-label="Talk to another terminal"
                 aria-haspopup="true"
                 :aria-expanded="askMenuOpen"
                 @click="openAskMenu"
               >
                 <span class="material-symbols-outlined" aria-hidden="true">forum</span>
               </button>
+              <!-- Bounded and scrollable, like every other dropdown here (MulmoMenu / RunMenu /
+                   SkillMenu). This one was the exception, and it holds TWO lists that grow with the
+                   grid — one row per other terminal here, and one seat per terminal in the round
+                   table below — so at 20 cells it stood 1750px tall with nothing scrollable, and
+                   Start sat a thousand pixels below the window (#2003).
+                   The lists inside do the scrolling, so the controls under them (turns, room,
+                   Start) stay put instead of scrolling away with the rows they act on. The
+                   container scrolls too — `overflow-y-auto`, not `overflow-hidden` — because the
+                   controls are `flex-none` and a short enough menu cannot shrink to hold them:
+                   with `hidden` they were CLIPPED, which is the reported bug again at any height
+                   under ~250px. Scrolling is the graceful failure; clipping is the original one. -->
               <div
                 v-if="askMenuOpen"
                 data-testid="cell-ask-menu"
-                class="absolute right-0 top-full z-20 mt-1 flex min-w-[180px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute right-0 z-20 flex min-w-[180px] flex-col overflow-y-auto rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                :class="askMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+                :style="askMenuMaxH === null ? undefined : { maxHeight: `${askMenuMaxH}px` }"
                 @keydown.escape="askMenuOpen = false"
               >
-                <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    data-testid="cell-ask-item"
-                    class="flex-1"
-                    :class="CELL_MENU_ITEM"
-                    :title="`Bring ${target.label}'s last turn here`"
-                    @click="askCell(target)"
-                  >
-                    {{ target.label }}
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="cell-exchange-item"
-                    :aria-label="`Exchange one turn with ${target.label}`"
-                    class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
-                    :disabled="automating"
-                    title="Send this cell's turn there and bring the answer back, both submitted"
-                    @click="exchangeWith(target)"
-                  >
-                    <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
-                  </button>
+                <!-- A floor of about one row, not `min-h-0`: a flex child that may shrink below its
+                     content will shrink to ZERO in a short menu, and a list with no height is a list
+                     nobody can click. Shrinking is still what gives the max-height its room — this
+                     only stops it going all the way. -->
+                <div v-if="askTargets.length" data-testid="cell-ask-list" class="flex min-h-[2.5rem] flex-col overflow-y-auto">
+                  <div v-for="target in askTargets" :key="target.key" class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      data-testid="cell-ask-item"
+                      class="flex-1"
+                      :class="CELL_MENU_ITEM"
+                      :title="`Bring ${target.label}'s last turn here`"
+                      @click="askCell(target)"
+                    >
+                      {{ target.label }}
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cell-exchange-item"
+                      :aria-label="`Exchange one turn with ${target.label}`"
+                      class="cursor-pointer rounded-[4px] border-none bg-transparent px-1.5 py-1.5 font-sans text-[12px] text-dim hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-40"
+                      :disabled="automating"
+                      title="Send this cell's turn there and bring the answer back, both submitted"
+                      @click="exchangeWith(target)"
+                    >
+                      <span class="material-symbols-outlined" aria-hidden="true">swap_horiz</span>
+                    </button>
+                  </div>
                 </div>
                 <p v-if="!askTargets.length" class="m-0 px-2 py-1.5 font-sans text-[12px] text-dim">No other terminal to read</p>
                 <RoundTableMenu

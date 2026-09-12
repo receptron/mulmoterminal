@@ -70,6 +70,10 @@ const openName = computed(() => (openPath.value ? (openPath.value.split("/").pop
 const dirty = ref(false);
 const saving = ref(false);
 const fileError = ref<string | null>(null);
+// Set when the server refuses to serve a file as text (415). Its own state rather than an error:
+// nothing went wrong — this file simply is not text, and the pane has something to say about it
+// rather than a failure to report (#2038).
+const unpreviewable = ref<string | null>(null);
 // The version the open buffer was loaded from; sent back on save so the server can refuse a
 // write that would clobber someone else's (null = the file didn't exist).
 const baseVersion = ref<string | null>(null);
@@ -190,6 +194,9 @@ function menuPosition(actions: FilesRowAction[], x: number, y: number): { top: n
 function openRowMenu(node: Node, event: MouseEvent | KeyboardEvent): void {
   const actions = filesRowActions({
     pathRel: node.path,
+    // Decides the wording and what the file manager is asked to do: a folder is opened, a file
+    // is selected inside its own (#2039).
+    isDir: node.dir,
     cwd: props.cwd,
     terminal: insertTerminal.value,
     // The same pair the header's Canvas button is drawn from, so a row can never offer what that
@@ -272,8 +279,32 @@ function runRowAction(action: FilesRowAction): void {
   // The Canvas entry carries the row's path, not text for the terminal — and it goes out on the
   // SAME emit as the header button, relative to the tree's root, so the receiver resolves it once.
   if (action.id === "open-canvas") emit("open-in-canvas", action.pathRel);
+  // Not an emit: nothing above this pane takes part. The browser cannot open a file manager, so
+  // the local server does it (#2039) — the same shape as `writeBuffer` below.
+  else if (action.id === "reveal") void revealInFileManager(action.pathAbs);
   else emit("insert-text", action.text);
   closeRowMenu();
+}
+
+/** Show a path in the OS file manager (#2039).
+ *
+ *  Failures are SHOWN, not logged: a host with no file manager to call — a bare Linux box, WSL
+ *  with interop off — used to look exactly like a successful reveal, and nothing appeared (#1447).
+ *  Into `fileError` because that is this pane's own alert line (`role="alert"`); the message names
+ *  what failed, so it does not read as the open file's problem. */
+async function revealInFileManager(pathAbs: string): Promise<void> {
+  try {
+    const res = await fetchWithTimeout("/api/files/reveal", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: pathAbs }),
+    });
+    if (res.ok) return;
+    const body = await jsonBody(res);
+    fileError.value = typeof body.error === "string" && body.error.length > 0 ? body.error : `could not show ${pathAbs} (HTTP ${res.status})`;
+  } catch (e) {
+    fileError.value = `could not show ${pathAbs}: ${e instanceof Error ? e.message : String(e)}`;
+  }
 }
 
 onBeforeUnmount(() => closeRowMenu());
@@ -356,32 +387,82 @@ const failureReason = (body: Record<string, unknown>, status: number): string =>
 // ?path= and opens the same file (#808).
 // `force` re-reads the file already open and skips the unsaved-edits prompt — the
 // conflict banner's "Reload", where discarding is the button the user just pressed.
+/** Whether the pane may leave the buffer it is on. `force` skips both questions: the conflict
+ *  banner's "Reload" is a deliberate discard, and re-reading the open file is not leaving it. */
+async function mayLeaveCurrent(pathRel: string, force: boolean): Promise<boolean> {
+  if (force) return true;
+  if (pathRel === openPath.value) return false; // already open — no reload
+  // Opening another file is leaving this one. If it couldn't be saved OR banked, staying is
+  // the only way not to lose it.
+  return await flush();
+}
+
 async function loadFile(pathRel: string, force = false): Promise<void> {
-  if (!force) {
-    if (pathRel === openPath.value) return; // already open — no reload
-    // Opening another file is leaving this one. If it couldn't be saved OR banked, staying is
-    // the only way not to lose it.
-    if (!(await flush())) return;
-  }
+  if (!(await mayLeaveCurrent(pathRel, force))) return;
   const id = ++fileReqId;
   fileError.value = null;
   conflict.value = null;
+  unpreviewable.value = null;
   showPreview.value = false;
   try {
     const res = await fetchWithTimeout(`/api/files/browse/text?${qs(pathRel)}`);
     const data = await jsonBody(res);
-    if (!res.ok) throw new Error(failureReason(data, res.status));
+    // 415 is the one non-ok status that is not a failure: the file is simply not text, and showing
+    // it as one is what destroyed spreadsheets before this existed (#2038).
+    if (!res.ok && res.status !== 415) throw new Error(failureReason(data, res.status));
     if (id !== fileReqId) return;
-    openPath.value = pathRel;
-    baseVersion.value = typeof data.version === "string" ? data.version : null;
-    editor?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
-    dirty.value = false;
+    if (res.status === 415) adoptUnpreviewable(pathRel, data);
+    else adoptText(pathRel, data);
   } catch (e) {
     if (id === fileReqId) fileError.value = e instanceof Error ? e.message : String(e);
   }
 }
 
+/** Hand the open file to the OS's default application (#2038) — the way out of a file the pane
+ *  cannot show. Failures are SHOWN: a host with no opener used to look exactly like a successful
+ *  launch and nothing appeared (#1447). */
+async function openInOs(): Promise<void> {
+  const pathRel = openPath.value;
+  if (!pathRel || !props.cwd) return;
+  try {
+    const res = await fetchWithTimeout("/api/files/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ path: absoluteUnder(props.cwd, pathRel) }),
+    });
+    if (res.ok) return;
+    const body = await jsonBody(res);
+    fileError.value = typeof body.error === "string" && body.error.length > 0 ? body.error : `could not open ${pathRel} (HTTP ${res.status})`;
+  } catch (e) {
+    fileError.value = `could not open ${pathRel}: ${e instanceof Error ? e.message : String(e)}`;
+  }
+}
+
+/** Put a file the server served as text into the editor. Paired with `adoptUnpreviewable` so the
+ *  two outcomes of one request read side by side rather than as branches inside the fetch. */
+function adoptText(pathRel: string, data: Record<string, unknown>): void {
+  openPath.value = pathRel;
+  baseVersion.value = typeof data.version === "string" ? data.version : null;
+  editor?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
+  dirty.value = false;
+}
+
+/** Show the "not text" panel for a file the server refused to serve as text. The path is still
+ *  adopted so the header names the file the user picked; the buffer is emptied and marked clean so
+ *  nothing can be saved over it — an empty editor above real content is what destroyed it (#2038). */
+function adoptUnpreviewable(pathRel: string, data: Record<string, unknown>): void {
+  openPath.value = pathRel;
+  baseVersion.value = null;
+  dirty.value = false;
+  editor?.setDoc("", pathRel.split("/").pop() ?? pathRel);
+  unpreviewable.value = typeof data.error === "string" ? data.error : "this file cannot be shown as text";
+}
+
 async function save(): Promise<void> {
+  // Ctrl/Cmd+S reaches here even though the Save button is disabled, and the buffer shown for an
+  // unpreviewable file is EMPTY — saving it truncates the file (CodeRabbit on #2038). The server
+  // refuses this too; this is so the user sees why rather than an error from a keystroke.
+  if (unpreviewable.value) return;
   if (!openPath.value || !editor || saving.value) return;
   saving.value = true;
   fileError.value = null;
@@ -689,8 +770,23 @@ defineExpose({
              the same dead-button silence #1941 removed for everyone else. -->
         <p v-if="fileError" role="alert" data-testid="files-error" class="p-4 text-[13px] text-err">{{ fileError }}</p>
         <p v-if="!openPath" class="m-auto p-4 text-[13px] text-muted">Select a file to view or edit.</p>
-        <iframe v-show="openPath && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
-        <div v-show="openPath && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />
+        <!-- Not text. The editor is hidden rather than shown empty: an empty buffer over a file
+             that has content is an invitation to save, and saving is what destroyed it (#2038). -->
+        <div v-else-if="unpreviewable" class="m-auto flex flex-col items-center gap-2 p-4 text-center" data-testid="files-unpreviewable">
+          <span class="material-symbols-outlined text-[28px] text-muted" aria-hidden="true">draft</span>
+          <p class="text-[13px] text-muted">{{ unpreviewable }}</p>
+          <button
+            type="button"
+            class="mt-1 inline-flex cursor-pointer items-center gap-1 rounded-md border border-border bg-transparent px-3 py-1.5 text-[13px] text-fg hover:bg-hover"
+            data-testid="files-open-in-os"
+            @click="openInOs"
+          >
+            <span class="material-symbols-outlined text-[16px]" aria-hidden="true">open_in_new</span>
+            Open in OS
+          </button>
+        </div>
+        <iframe v-show="openPath && !unpreviewable && showPreview" class="flex-auto border-0 bg-white" :src="previewSrc" sandbox="" title="Markdown preview" />
+        <div v-show="openPath && !unpreviewable && !showPreview" ref="editorHost" class="files-editor min-w-0 flex-auto overflow-hidden" />
       </section>
     </div>
     <Teleport to="body">

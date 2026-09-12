@@ -1,17 +1,21 @@
 // @vitest-environment node
 import { describe, it, expect, beforeAll } from "vitest";
 import express from "express";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { appRequest } from "../../helpers/appRequest.js";
 import { mountFilesRoutes } from "../../../server/backends/files.js";
 import { makeTempDir } from "../../support/tempDir";
+import { canSymlink } from "../../support/canSymlink";
+import { canNameFile } from "../../support/canNameFile";
 import { initProjectRoots, projectId } from "../../../server/infra/project-root.js";
 
 let request: ReturnType<typeof appRequest>;
 // A session project dir OUTSIDE the workspace root (a sibling repo), reachable only via
 // the `?cwd=` scope — mirrors an agent whose cwd is a different repo.
+const QUOTED_NAME = 'weird";name.png';
+const quotedName = canNameFile(QUOTED_NAME);
 let sessionDir: string;
 let projectDir: string;
 
@@ -21,6 +25,14 @@ beforeAll(() => {
   // 4-byte PNG signature — enough to assert byte length + Range.
   writeFileSync(path.join(ws, "downloads", "images", "a.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   writeFileSync(path.join(ws, "secret.txt"), "top secret");
+  // #2040: the save name. A non-ASCII name needs `filename*`, a quoted one needs escaping, and a
+  // symlink is where "the name asked for" and "the name on disk" come apart.
+  writeFileSync(path.join(ws, "downloads", "images", "月次 レポート.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  // Windows refuses `"` in a filename, so the spec that reads this one is `runIf(quotedName)`.
+  if (quotedName) writeFileSync(path.join(ws, "downloads", "images", QUOTED_NAME), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+  // Windows needs Developer Mode or an elevated shell to make one, so the spec that reads it is
+  // `runIf(canSymlink)` — a fixture that was never created reads as broken behaviour, not as untested.
+  if (canSymlink) symlinkSync(path.join(ws, "downloads", "images", "a.png"), path.join(ws, "downloads", "images", "link.png"));
 
   sessionDir = makeTempDir("mt-session-");
   mkdirSync(path.join(sessionDir, "assets", "media"), { recursive: true });
@@ -117,6 +129,51 @@ describe("GET /api/files/raw", () => {
     const res = await request("/api/files/raw?path=downloads/images/a.png", { headers: { Range: "bytes=99-100" } });
     expect(res.status).toBe(416);
     expect(res.headers.get("content-range")).toBe("bytes */4");
+  });
+});
+
+// Without this header the browser names a save after the URL's last segment plus an extension
+// guessed from the type — `raw.png` for every file, whatever it is called on disk (#2040,
+// measured the same way in Chromium and in WebKit).
+describe("GET /api/files/raw — the save name", () => {
+  it("advertises the file's own name, inline so the tab still renders it", async () => {
+    const res = await request("/api/files/raw?path=downloads/images/a.png");
+    expect(res.headers.get("content-disposition")).toBe("inline; filename=a.png");
+  });
+
+  // `attachment` would turn every image, PDF and text file this route serves into a download.
+  it("never says attachment", async () => {
+    const res = await request("/api/files/raw?path=downloads/images/a.png");
+    expect(res.headers.get("content-disposition")).not.toContain("attachment");
+  });
+
+  // RFC 6266: an ASCII fallback for old clients, plus the real name percent-encoded.
+  it("carries a non-ASCII name in both forms", async () => {
+    const res = await request(`/api/files/raw?path=${encodeURIComponent("downloads/images/月次 レポート.png")}`);
+    const header = res.headers.get("content-disposition") ?? "";
+    expect(header).toContain("filename*=UTF-8''");
+    expect(header).toContain("%E6%9C%88%E6%AC%A1%20%E3%83%AC%E3%83%9D%E3%83%BC%E3%83%88.png");
+    expect(header).toMatch(/^inline; filename="[^"]*"; filename\*=UTF-8''/);
+  });
+
+  it.runIf(quotedName)("escapes a quote rather than ending the header early", async () => {
+    const res = await request(`/api/files/raw?path=${encodeURIComponent("downloads/images/" + QUOTED_NAME)}`);
+    expect(res.headers.get("content-disposition")).toBe('inline; filename="weird\\";name.png"');
+  });
+
+  // The 206 is what a media save takes, so the header has to be set before the Range branch.
+  it("carries the name on a partial response too", async () => {
+    const res = await request("/api/files/raw?path=downloads/images/a.png", { headers: { Range: "bytes=0-1" } });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("content-disposition")).toBe("inline; filename=a.png");
+  });
+
+  // `resolveContained` realpaths, so the served path is the TARGET. The user clicked the link,
+  // and naming the target would both surprise them and name a file they did not ask about.
+  it.runIf(canSymlink)("names the link the user asked for, not the file it resolves to", async () => {
+    const res = await request("/api/files/raw?path=downloads/images/link.png");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-disposition")).toBe("inline; filename=link.png");
   });
 });
 

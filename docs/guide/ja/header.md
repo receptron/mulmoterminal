@@ -52,7 +52,7 @@ MulmoTerminal は、稼働中セッションのヘッダーに**自分のボタ�
 ![パスメニュー](../images/header-path-menu.png)
 
 GitHub のリモートが解決できるリポジトリなら、区切り線の下に **Repository / Issues /
-Pull requests** も並びます。ここは固定なので設定では変わりません。同じことをボタンでも
+Pull requests / Actions** も並びます。ここは固定なので設定では変わりません。同じことをボタンでも
 やりたい場合は、[`buttons`](#run) に自分で書けば両方出ます。
 
 ---

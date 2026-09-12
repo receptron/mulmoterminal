@@ -114,9 +114,33 @@ describe("fileLinkTarget", () => {
     expect(fileLinkTarget(file, CWD)).toEqual({ kind: "url", url: rawFileUrl(file, CWD) });
   });
 
-  it("sends an unknown or extensionless file to the raw route, not the editor", () => {
-    expect(fileLinkTarget("Makefile", CWD)).toEqual({ kind: "url", url: rawFileUrl("Makefile", CWD) });
-    expect(fileLinkTarget("archive.bin", CWD)).toEqual({ kind: "url", url: rawFileUrl("archive.bin", CWD) });
+  // Until #2038 these went to the raw route, where the browser could do nothing with them and the
+  // tab became a silent DOWNLOAD — no warning, no choice, a file in the downloads folder. They go
+  // to the app's own view now: it cannot render them either, but it names the file and offers to
+  // open it in the application that owns it. `Makefile` gains more than that — it is text, so the
+  // pane simply shows it, which is what clicking it looked like it would do all along.
+  it("sends a file the browser would only download to the app's own view", () => {
+    expect(fileLinkTarget("Makefile", CWD)).toEqual({ kind: "files" });
+    expect(fileLinkTarget("archive.bin", CWD)).toEqual({ kind: "files" });
+    expect(fileLinkTarget("book.xlsx", CWD)).toEqual({ kind: "files" });
+  });
+
+  // `.tsv` has the table route but no MIME the raw route knows, so a rule that asked "would a
+  // browser display this" FIRST would send it to the pane while its sibling `.csv` opened as a
+  // table. A rendered route outranks the question (CodeRabbit on #2038).
+  it("keeps a type with a rendered route on that route, even when a tab could not display it raw", () => {
+    expect(fileLinkTarget("rows.tsv", CWD)).toEqual({ kind: "url", url: rawFileUrl("rows.tsv", CWD) });
+    expect(fileViewerRoute("rows.tsv")).toBe(fileViewerRoute("rows.csv"));
+    // The property, not the pair: every extension with its own route keeps it.
+    for (const file of ["a.md", "a.json", "a.csv", "a.tsv"]) expect(fileLinkTarget(file, CWD).kind).toBe("url");
+  });
+
+  // What a tab genuinely displays still goes to a tab — the pane cannot render these, and the
+  // issue asks for them to stay as they are.
+  it("leaves what the browser displays at a URL", () => {
+    for (const file of ["a.png", "a.pdf", "a.mp4", "a.svg"]) {
+      expect(fileLinkTarget(file, CWD).kind).toBe("url");
+    }
   });
 
   it("matches the extension case-insensitively", () => {

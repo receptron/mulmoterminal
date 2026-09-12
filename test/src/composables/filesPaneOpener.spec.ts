@@ -25,12 +25,23 @@ describe("tryOpenInPane", () => {
     expect(tryOpenInPane(name, CWD)).toBe(true);
   });
 
-  // A new tab is still the right answer for these: the pane would show an empty editor.
-  it.each(["shot.png", "paper.pdf", "clip.mp4", "archive.zip"])("declines %s, leaving it to the raw route", (name) => {
+  // A new tab is still the right answer for what the browser DISPLAYS: the pane cannot render
+  // these, and a tab shows them properly.
+  it.each(["shot.png", "paper.pdf", "clip.mp4"])("declines %s, leaving it to the raw route", (name) => {
     const opener = vi.fn(() => true);
     setFilesPaneOpener(opener);
     expect(tryOpenInPane(name, CWD)).toBe(false);
     expect(opener).not.toHaveBeenCalled();
+  });
+
+  // But a tab is NOT a view for a type the browser cannot display — it is a download that starts
+  // with no warning (#2038). `archive.zip` moved out of the list above for exactly that: the pane
+  // shows no empty editor now, it says the file cannot be previewed and offers to open it in the
+  // application that owns it.
+  it.each(["archive.zip", "book.xlsx", "report.docx"])("takes %s, which a tab would only download", (name) => {
+    const opener = vi.fn(() => true);
+    setFilesPaneOpener(opener);
+    expect(tryOpenInPane(name, CWD)).toBe(true);
   });
 
   it("declines a path outside the cell's directory — the pane cannot walk above its root", () => {

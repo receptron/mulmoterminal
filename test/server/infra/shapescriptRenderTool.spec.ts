@@ -24,7 +24,7 @@ import { makeTempDir } from "../../support/tempDir";
 const ws = makeTempDir("mt-render-tool-");
 const ARTIFACT = "artifacts/shapes/lamp.shape";
 const REPO_REL = "models/bracket.shape";
-const CUBE = "cube { size 1 color 0.2 0.6 0.9 }";
+const CUBE = "cube {\n size 1\n color 0.2 0.6 0.9\n}";
 
 mkdirSync(path.join(ws, "artifacts", "shapes"), { recursive: true });
 writeFileSync(path.join(ws, ARTIFACT), CUBE);

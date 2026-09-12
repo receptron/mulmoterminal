@@ -83,4 +83,19 @@ describe("isWsl with an empty variable", () => {
   it("is still false when both are empty on an ordinary kernel", () => {
     expect(isWsl("linux", { WSL_DISTRO_NAME: "", WSL_INTEROP: "" }, "6.8.0-45-generic")).toBe(false);
   });
+
+  // A trailing space is a legal filename character on both sides of the translation, and `trim()`
+  // took it — so a file named `a ` was revealed as `a`, a different path (Codex P3 on #2039).
+  // The same class as #1934 and #2040: whitespace at the edge of a name is part of the name.
+  it("keeps a trailing space in the name, dropping only wslpath's own line terminator", async () => {
+    await expect(toWindowsPath("/home/me/a ", answers(0, "C:\\x\\a \n"))).resolves.toBe("C:\\x\\a ");
+    await expect(toWindowsPath("/home/me/a ", answers(0, "C:\\x\\a \r\n"))).resolves.toBe("C:\\x\\a ");
+    await expect(toLinuxPath("C:\\x\\a ", answers(0, "/mnt/c/x/a \n"))).resolves.toBe("/mnt/c/x/a ");
+  });
+
+  // Only ONE terminator: a blank line after the path is content, not punctuation, and guessing
+  // which trailing newlines are ours is how the first version lost a space.
+  it("drops one line terminator, not every trailing blank line", async () => {
+    await expect(toWindowsPath("/x", answers(0, "C:\\x\n\n"))).resolves.toBe("C:\\x\n");
+  });
 });

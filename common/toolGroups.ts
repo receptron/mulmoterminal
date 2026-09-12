@@ -94,6 +94,9 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   // able to CHECK one, and splitting the pair would leave an agent able to present a
   // model it cannot look at first.
   ["renderShapeScript", "render"],
+  // And the third of the set: a cell that can show and check a model should be able to
+  // hand it out as a file the user opens in AR.
+  ["exportShapeScriptUsdz", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -212,7 +215,17 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // And the friction had no payoff: the tool exists so an agent can CHECK a model before
 // showing it, which is a render-look-fix loop. A prompt in the middle of that costs the
 // user attention to approve the agent looking at its own work.
-export const AUTO_ALLOWED_TOOLS: readonly string[] = ["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript"];
+//
+// `exportShapeScriptUsdz` clears the same bar more easily: no process at all, just the
+// model's geometry serialised to one file under the workspace artifacts.
+export const AUTO_ALLOWED_TOOLS: readonly string[] = [
+  "presentForm",
+  "presentChart",
+  "presentHtml",
+  "presentShapeScript",
+  "renderShapeScript",
+  "exportShapeScriptUsdz",
+];
 
 /** Tools that must keep the agent's permission prompt on EVERY claude session, including the
  *  workspace.

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { makeTempDir } from "../../support/tempDir.js";
-import { writeFileSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, readFileSync, readdirSync, realpathSync, existsSync } from "node:fs";
 import path from "node:path";
 import express from "express";
 import { routeCall, jsonPost } from "../../helpers/routeCall";
@@ -288,5 +288,94 @@ describe("browse routes keep backups", () => {
     expect(written.status).toBe(200);
     expect(readFileSync(path.join(dir, "a.md"), "utf8")).toBe("two");
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+// The editor reads with `toString("utf8")`, which replaces every byte it cannot represent — so a
+// spreadsheet is already destroyed by the time it reaches the textarea, and one keystroke commits
+// the replacement. Measured before the fix: a 324-byte xlsx came back 336 bytes and no longer
+// opened as a zip. `MAX_EDIT_BYTES`' own comment always claimed binaries were refused; only the
+// size half of it was ever implemented (#2038).
+describe("content that cannot be edited as text", () => {
+  const ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0xff, 0xfe]);
+  const withFiles = async (run: (app: express.Express, dir: string, backups: string) => Promise<void>) => {
+    const dir = tmp();
+    const backups = path.join(dir, ".backups");
+    writeFileSync(path.join(dir, "book.xlsx"), ZIP);
+    writeFileSync(path.join(dir, "notes.txt"), "hello");
+    // A NUL byte survives a UTF-8 round trip exactly, so refusing it would be a false alarm —
+    // which is what the usual "sniff for NUL" rule would do.
+    writeFileSync(path.join(dir, "has-nul.txt"), Buffer.from([0x61, 0x00, 0x62]));
+    const app = express();
+    app.use(express.json());
+    mountFilesBrowseRoutes(app, { defaultCwd: dir, backupRoot: backups });
+    try {
+      await run(app, dir, backups);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+  const ask = (app: express.Express, dir: string, file: string, route = "text") =>
+    routeCall(app)(`/api/files/browse/${route}?cwd=${encodeURIComponent(dir)}&path=${encodeURIComponent(file)}`);
+  const write = (app: express.Express, dir: string, body: unknown) =>
+    routeCall(app)(`/api/files/browse/write?cwd=${encodeURIComponent(dir)}&path=book.xlsx`, { ...jsonPost(body), method: "PUT" });
+
+  it("refuses bytes the round trip would change, with a kind the pane can switch on", async () => {
+    await withFiles(async (app, dir) => {
+      const res = await ask(app, dir, "book.xlsx");
+      expect(res.status).toBe(415);
+      expect(res.body).toMatchObject({ kind: "binary" });
+    });
+  });
+
+  // The safety net was storing the DAMAGED text, so the refusal has to come before it.
+  it("writes no backup for a file it refused", async () => {
+    await withFiles(async (app, dir, backups) => {
+      await ask(app, dir, "book.xlsx");
+      const written = existsSync(backups) ? readdirSync(backupDirFor(path.join(dir, "book.xlsx"), backups)) : [];
+      expect(written.filter((name) => name.endsWith(".bak"))).toEqual([]);
+    });
+  });
+
+  // The read refusal alone was not enough: the editor shows an EMPTY buffer for a file it will not
+  // display, and Ctrl+S reaches `save()` even with the button disabled. The first write 409s, and
+  // "Overwrite anyway" then re-sends the empty text WITH the current version — which truncated a
+  // 324-byte xlsx to 0 (CodeRabbit on #2038). This route only ever receives a string, so writing
+  // one over content that is not text is always a loss, whoever asked.
+  it("refuses to write text over content that is not text", async () => {
+    await withFiles(async (app, dir) => {
+      const before = readFileSync(path.join(dir, "book.xlsx"));
+      const res = await write(app, dir, { text: "", baseVersion: null });
+      expect(res.status).toBe(415);
+      expect(readFileSync(path.join(dir, "book.xlsx"))).toEqual(before);
+    });
+  });
+
+  // Even with the right version in hand — which is exactly what "Overwrite anyway" sends.
+  it("refuses the overwrite retry, which carries the version the conflict reported", async () => {
+    await withFiles(async (app, dir) => {
+      const before = readFileSync(path.join(dir, "book.xlsx"));
+      const version = (await ask(app, dir, "book.xlsx", "version")).body.version;
+      const res = await write(app, dir, { text: "", baseVersion: version });
+      expect(res.status).toBe(415);
+      expect(readFileSync(path.join(dir, "book.xlsx"))).toEqual(before);
+    });
+  });
+
+  // `backupCurrentFile` reads with "utf8", so a backup taken on the way to that write would bank a
+  // damaged copy of the file it exists to protect. The refusal has to come first.
+  it("banks no backup on the way to a refused write", async () => {
+    await withFiles(async (app, dir, backups) => {
+      await write(app, dir, { text: "", baseVersion: null });
+      const written = existsSync(backups) ? readdirSync(backupDirFor(path.join(dir, "book.xlsx"), backups)) : [];
+      expect(written.filter((name) => name.endsWith(".bak"))).toEqual([]);
+    });
+  });
+
+  it("still serves text, including bytes a binary sniff would have refused", async () => {
+    await withFiles(async (app, dir) => {
+      expect((await ask(app, dir, "notes.txt")).status).toBe(200);
+      expect((await ask(app, dir, "has-nul.txt")).status).toBe(200);
+    });
   });
 });

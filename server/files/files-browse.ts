@@ -14,6 +14,7 @@ import type { Express, Request, Response } from "express";
 import os from "node:os";
 import { hasErrnoCode } from "../errors.js";
 import { backupCurrentFile, storeBackup } from "./backup-store.js";
+import { losslessText } from "./editableText.js";
 import { resolveBase, resolveContained } from "./pathContainment.js";
 import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./renderedDoc.js";
 import { requestBody } from "../routes/requestBody.js";
@@ -109,7 +110,15 @@ function readTextOr4xx(res: Response, abs: string): string | null {
       res.status(413).json({ error: "file too large" });
       return null;
     }
-    return fs.readFileSync(abs, "utf8");
+    // Same rule as /text: a file whose bytes do not survive UTF-8 is not something to render as
+    // a document either, and reading it here with "utf8" would put the same replaced content on
+    // screen. Refused at the source so neither surface has to recognise mojibake (#2038).
+    const text = losslessText(fs.readFileSync(abs));
+    if (text === null) {
+      res.status(415).json({ error: "this file cannot be shown as text", kind: "binary" });
+      return null;
+    }
+    return text;
   } catch {
     res.status(404).json({ error: "not found" });
     return null;
@@ -156,7 +165,14 @@ export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
       if (stat.size > MAX_EDIT_BYTES) return res.status(413).json({ error: "file too large to edit" });
       // One read for both, so the version can't describe a different revision than the text.
       const bytes = fs.readFileSync(abs);
-      const text = bytes.toString("utf8");
+      // Refused rather than streamed into a textarea, which is what MAX_EDIT_BYTES' own comment
+      // always claimed and only the size half of ever did. `toString("utf8")` replaces every byte
+      // it cannot represent, so the file is already destroyed by the time it reaches the editor —
+      // typing one character then commits the whole replacement (#2038: a 324-byte xlsx came back
+      // 336 bytes and no longer opened as a zip). The BACKUP is taken from this same string, so
+      // the safety net was storing the damaged version too; both are skipped by returning here.
+      const text = losslessText(bytes);
+      if (text === null) return res.status(415).json({ error: "this file cannot be edited as text", kind: "binary" });
       // Opening is the last moment this content is certainly intact — the editor may save over
       // it, and the agent in this directory may too. Same-content re-opens don't rotate.
       storeBackup(abs, text, backupRoot);
@@ -212,6 +228,15 @@ function mountWriteRoute(app: Express, { defaultCwd, backupRoot }: BrowseDeps): 
     if (Buffer.byteLength(text, "utf8") > MAX_EDIT_BYTES) return res.status(413).json({ error: "content too large" });
     try {
       if (fs.existsSync(abs) && fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "path is a directory" });
+      // Never write TEXT over content that is not text. This route only ever receives a string, so
+      // overwriting a spreadsheet with one is always a loss — and the editor cannot be the only
+      // thing stopping it: it reached here with an EMPTY buffer through Ctrl+S and "Overwrite
+      // anyway", and truncated a 324-byte xlsx to 0 (CodeRabbit on #2038). Refused BEFORE
+      // `backupCurrentFile`, which reads with "utf8" and would bank a damaged copy of the very
+      // file it is meant to protect.
+      if (fs.existsSync(abs) && losslessText(fs.readFileSync(abs)) === null) {
+        return res.status(415).json({ error: "this file cannot be edited as text", kind: "binary" });
+      }
       const onDisk = currentVersion(abs);
       if (onDisk !== baseVersion) return res.status(409).json({ error: "file changed on disk", version: onDisk });
       // What is about to be replaced, banked before it is. Best-effort: a backup that can't be

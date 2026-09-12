@@ -51,8 +51,8 @@ cell's directory.
 
 ![The path menu](../images/header-path-menu.png)
 
-When the repository's remote resolves to GitHub, **Repository / Issues / Pull requests** appear
-below a divider. This menu is fixed and config does not change it — if you want one of these as a
+When the repository's remote resolves to GitHub, **Repository / Issues / Pull requests /
+Actions** appear below a divider. This menu is fixed and config does not change it — if you want one of these as a
 button too, write it yourself in [`buttons`](#run) and you get both.
 
 ---

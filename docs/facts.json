@@ -7,7 +7,7 @@
   "documentation": "https://receptron.github.io/mulmoterminal/",
   "license": "MIT",
   "openSource": true,
-  "version": "4.18.0",
+  "version": "4.20.0",
   "install": "npx mulmoterminal@latest",
   "requires": {
     "node": ">=22.12",
