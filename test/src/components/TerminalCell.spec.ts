@@ -6,6 +6,7 @@ import { CELL_CHIP_BTN, CELL_CHIP_ICON } from "../../../src/components/cellChrom
 import { SUNK_CELL } from "../../../src/components/cellParked";
 import { TOOL_GROUPS } from "../../../common/toolGroups";
 import { setHeaderStatusDefaults } from "../../../src/composables/headerStatusColors";
+import { MENU_VIEWPORT_GAP_PX } from "../../../src/composables/menuPlacement";
 import { DEFAULT_HEADER_STATUS_TINT } from "../../../common/headerStatusColors";
 
 // Capture the "sessions" pub/sub callback and the reconnect handler so tests can push
@@ -1219,6 +1220,39 @@ describe("TerminalCell", () => {
     // dispatches the key at the menu and does nothing at all for a real user (codex review, #1382).
     await w.find(".cell-dir").trigger("keydown", { key: "Escape" });
     expect(w.find('[data-testid="cell-path-menu"]').exists()).toBe(false);
+  });
+
+  // The seventh row took this menu from 181px to 208px (measured in Chromium against the built
+  // stylesheet), and the CELL is what clips it: the cell root is `overflow-hidden`, so on a 3x3 tile
+  // — about 245px tall on an ~800px window — the last row is simply not drawn. Hence the cap, and
+  // hence it is measured against the cell rather than the window.
+  const HEADER_BOTTOM_PX = 52; // where row 2 of the cell header sits, measured from the cell's top
+  const openPathMenuInCell = async (cellHeightPx: number) => {
+    mockFetchWithGithub("https://github.com/owner/repo");
+    const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
+    await flushPromises();
+    w.element.getBoundingClientRect = () => new DOMRect(0, 0, 400, cellHeightPx);
+    const wrap = w.element.querySelector(".cell-dir")?.parentElement;
+    expect(wrap).toBeTruthy();
+    if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, HEADER_BOTTOM_PX - 24, 200, 24);
+    await w.find(".cell-dir").trigger("click");
+    return w.find('[data-testid="cell-path-menu"]');
+  };
+
+  const roomBelowHeader = (cellHeightPx: number) => cellHeightPx - HEADER_BOTTOM_PX - MENU_VIEWPORT_GAP_PX;
+
+  it("caps the path menu to the room left in a short tiled cell, so the last item scrolls into reach", async () => {
+    const menu = await openPathMenuInCell(245);
+    expect(menu.classes()).toContain("overflow-y-auto");
+    expect(menu.classes()).toContain("top-full");
+    expect(menu.classes()).not.toContain("bottom-full");
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelowHeader(245)}px`);
+  });
+
+  it("measures against the cell, not the window, so an enlarged cell gets the whole menu", async () => {
+    const menu = await openPathMenuInCell(600);
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelowHeader(600)}px`);
+    expect(menu.classes()).not.toContain("bottom-full");
   });
 
   it("ignores an out-of-order /api/git-remote response after a fast cwd change", async () => {

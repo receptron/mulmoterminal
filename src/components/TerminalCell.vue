@@ -69,7 +69,7 @@ import { headerStatusStyleFor } from "./cellHeaderStyle";
 import { mergeHeaderStatusColors } from "../../common/headerStatusColors";
 import { globalHeaderStatusColors, globalHeaderStatusTint } from "../composables/headerStatusColors";
 import { handoffTargets, pullLastTurn, slotLabel, type HandoffTarget } from "../composables/useHandoff";
-import { menuPlacement } from "../composables/menuPlacement";
+import { menuPlacement, type MenuPlacement } from "../composables/menuPlacement";
 import { runOneExchange, liveCrossTalkDeps } from "../composables/useCrossTalk";
 import { runRoundTable, liveRoundTableDeps, memberFromTarget, type TableMember } from "../composables/useRoundTable";
 import { roundTableMessage } from "../composables/roundTableRules";
@@ -675,6 +675,33 @@ function closePathMenu() {
 function pathMenuAction(run: () => void) {
   closePathMenu();
   run();
+}
+
+// The CELL is this menu's viewport, not the window — the cell root is `overflow-hidden`, so a menu
+// longer than the room under the header is clipped there however much screen is left below. That is
+// why the arithmetic the ask menu uses (#2003) is fed cell-relative numbers here: measured in
+// Chromium against the built stylesheet, a row costs 27px, so the seventh took this menu from 181px
+// to 208px, while a 3x3 tile on an ~800px window is about 245px tall.
+const pathMenuUp = ref(false);
+const pathMenuMaxH = ref<number | null>(null);
+
+// Null when there is nothing to measure against (not laid out yet, or jsdom): the menu is then left
+// unbounded, which is what it was before there was any cap at all.
+function pathMenuPlacement(): MenuPlacement | null {
+  const wrap = pathWrap.value;
+  const cell = wrap?.closest(".cell");
+  if (!wrap || !cell) return null;
+  const box = cell.getBoundingClientRect();
+  const rect = wrap.getBoundingClientRect();
+  return menuPlacement({ top: rect.top - box.top, bottom: rect.bottom - box.top }, box.height);
+}
+
+function togglePathMenu() {
+  pathMenuOpen.value = !pathMenuOpen.value;
+  if (!pathMenuOpen.value) return;
+  const placement = pathMenuPlacement();
+  pathMenuUp.value = placement?.up ?? false;
+  pathMenuMaxH.value = placement?.maxHeightPx ?? null;
 }
 
 function onPathOutside(e: MouseEvent) {
@@ -1599,7 +1626,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 :title="cwd ?? ''"
                 aria-haspopup="true"
                 :aria-expanded="pathMenuOpen"
-                @click="pathMenuOpen = !pathMenuOpen"
+                @click="togglePathMenu"
               >
                 <span class="min-w-0" :class="DIR_TRUNCATE_FRONT"
                   ><span class="cell-dir-path" :class="CELL_DIR_PATH">{{ headerDir }}</span></span
@@ -1612,7 +1639,9 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
               <div
                 v-if="pathMenuOpen"
                 data-testid="cell-path-menu"
-                class="absolute left-0 top-full z-20 mt-1 flex min-w-[190px] flex-col rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                class="absolute left-0 z-20 flex min-w-[190px] flex-col overflow-y-auto rounded-md border border-border bg-panel p-1 shadow-[0_6px_18px_rgba(0,0,0,0.35)]"
+                :class="pathMenuUp ? 'bottom-full mb-1' : 'top-full mt-1'"
+                :style="pathMenuMaxH === null ? undefined : { maxHeight: `${pathMenuMaxH}px` }"
               >
                 <button type="button" data-testid="cell-path-item" :class="PATH_MENU_ITEM" @click="pathMenuAction(openDir)">
                   <span class="material-symbols-outlined text-[15px]" aria-hidden="true">folder</span> Reveal in the file manager
