@@ -8,6 +8,10 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@4.21.0 — 2026-09-12
+
+> **Setup guide:** [4.21.0 — Your OS opens the files this app cannot, and a spreadsheet no longer breaks when you click it](https://receptron.github.io/mulmoterminal/guide/en/v4.21.0.html)
+
 ### `text`, one statement per line, USDZ colours — `@mulmoclaude/shapescript-plugin@2.5.0`
 
 - **[#2043](https://github.com/receptron/mulmoterminal/pull/2043)** — `presentShapeScript`,
@@ -34,6 +38,72 @@ Entries here are folded into the next release's heading when it ships.
   closing brace, a bare `path` draws as a line, `extrude` is centred on its profile plane and
   does not close an open path for you (an open path extrudes to a wall), and a lone `position`
   value is X alone. No host code changes.
+
+### Opening a binary file in the Files pane was destroying it
+
+- **[#2045](https://github.com/receptron/mulmoterminal/pull/2045)** — clicking a `.xlsx`, a `.png`
+  or any other non-text file in the Files pane loaded it into the text editor as UTF-8. Every byte
+  that is not valid UTF-8 became U+FFFD on the way in, so the editor already held a broken copy
+  before anything was typed — and saving wrote that copy over the original. **The damage happened
+  on READ**, which is why a "don't save binaries" guard would not have helped. The rule is now a
+  pure function, `losslessText()`: a file is editable when its bytes survive a UTF-8 round trip,
+  and nothing else. The read route answers `415` with `kind: "binary"` **before** it takes a
+  backup, and the write route refuses a file on disk that is not lossless text — checked before
+  `backupCurrentFile`, which itself reads as UTF-8. The pane shows what the file is and offers to
+  open it in the OS instead.
+
+### The file tree can hand a file to your OS
+
+- **[#2044](https://github.com/receptron/mulmoterminal/pull/2044)** — right-click a row in the
+  Files pane and pick **Show in folder** (a directory row says **Open this folder**) to reveal it
+  in Finder, Explorer or your Linux file manager, selected rather than merely opened. The argv is a
+  pure function, `revealArgv()`: `open -R` on macOS, `explorer /select,` on Windows, and the
+  parent directory for the `xdg-open` family, which has no reveal verb. Closes
+  [#2039](https://github.com/receptron/mulmoterminal/issues/2039).
+- **[#2046](https://github.com/receptron/mulmoterminal/pull/2046)** — a file the browser cannot
+  display now opens in the OS's default application instead of being downloaded. Which files those
+  are is decided by one shared rule (`common/rawContentType.ts`, extracted with a differential
+  harness over 20,608 generated inputs, 0 mismatches), so a terminal link, the Files pane and the
+  raw route cannot disagree about one file. A `POST /api/files/open` route does the opening and
+  refuses a directory. Closes
+  [#2038](https://github.com/receptron/mulmoterminal/issues/2038).
+
+### A file you save from the app keeps its own name
+
+- **[#2042](https://github.com/receptron/mulmoterminal/pull/2042)** — the raw file route sent no
+  `Content-Disposition`, so a browser named the download after the last path segment it saw: every
+  save came out as `raw.pdf`, `raw.png`, `raw.csv`. The route now advertises the real file name,
+  `inline` so a PDF still previews in a tab. The name is picked by a pure function,
+  `servedFileName()`, which compares path segments **exactly** — a trailing space in a file name is
+  part of the name, the third time that rule has bitten this repository. Closes
+  [#2040](https://github.com/receptron/mulmoterminal/issues/2040).
+
+### GitHub Actions from the cell header
+
+- **[#2048](https://github.com/receptron/mulmoterminal/pull/2048)** — the path menu's GitHub
+  section gained **Actions**, next to Repository, Issues and Pull requests, in GitHub's own tab
+  order. The seventh row also made the menu taller than the cell could clip, measured in a real
+  Chromium against the built stylesheet: a cell 217–243px high hid the bottom row, which a 3x3 grid
+  in an 800px window lands on. The menu is now placed against **the cell's box intersected with the
+  window** and scrolls past that. Closes
+  [#2047](https://github.com/receptron/mulmoterminal/issues/2047).
+
+### Fixes
+
+- **[#2050](https://github.com/receptron/mulmoterminal/pull/2050)** — a deck picked from the
+  `[Mulmo]` menu on an already-enlarged cell without the render MCP was hidden behind "Canvas is not
+  enabled for this session", and collapsing and re-enlarging the cell was the only way to see it.
+  `canvasHasCard` is a cache taken when the enlargement changes, and only the Files-pane route
+  refreshed it by hand; `openCanvasFor` now asks the store itself, but only when the pane would
+  otherwise carry that message. Closes
+  [#1965](https://github.com/receptron/mulmoterminal/issues/1965).
+- **[#2049](https://github.com/receptron/mulmoterminal/pull/2049)** — dependency update. It carries
+  `@mulmoclaude/mulmoscript-plugin` 4.6.0 → 4.8.0: **a failed deck save now appears as a red banner
+  under the tab row** instead of only in the console (the editor keeps showing your edit either
+  way, so a silent refusal used to look exactly like a success), three save-lifecycle races are
+  fixed, and the Canvas View sends the stories root its card names — so a card carrying a root id
+  written by an earlier version saves to that root instead of the default one. Also vite 8.3, zod
+  4.6.2 and `@codemirror/state` 6.7.4.
 
 ## mulmoterminal@4.20.0 — 2026-09-11
 

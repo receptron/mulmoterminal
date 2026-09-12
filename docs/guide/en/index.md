@@ -8,13 +8,13 @@ description: A browser-terminal cockpit for running several AI coding agents (Cl
 
 # MulmoTerminal Guide (English)
 
-> **4.20.0 is out, and one thing needs your hands.** ShapeScript now reads a script the way the
-> upstream app does, so a `.shape` you saved earlier **renders at half size until you convert it** —
-> the conversion rules are in the guide. New: a model can leave as a **USDZ** for AR Quick Look.
-> Fixed: a deck kept in a repository **opened and then failed every save**, the conversation menu
-> ran off the screen with nothing to scroll, two cell-header buttons wore one icon, and the Update
-> badge was painted by the **browser** rather than your theme. [What to do and how to tell you have
-> them](v4.20.0.html).
+> **4.21.0 is out, and one thing may already have cost you a file.** Clicking a spreadsheet or an
+> image in the Files pane used to **damage it on the way in** — that is fixed, and the guide tells
+> you how to find out whether it happened to you. New: right-click a row to **show it in Finder or
+> Explorer**, and a file the browser cannot display **opens in its own application** instead of
+> downloading. Also: **Actions** in the path menu, downloads that keep their own names, a failed
+> deck save that finally says so, and one ShapeScript change that needs your hands (**one statement
+> per line**). [What to do and how to tell you have them](v4.21.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching
