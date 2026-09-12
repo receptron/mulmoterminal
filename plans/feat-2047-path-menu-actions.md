@@ -24,7 +24,18 @@ web URL への suffix を渡すだけの構造。
   - メニュー項目のラベル列挙に `"Actions"` を追加
   - 遷移先を確かめるテストに `<repo>/actions` を追加
 - `yarn format` → `yarn lint` → `yarn typecheck` → `yarn build` → `yarn test`
-- 実機確認: `yarn dev` でセルのパスを開き、Actions が出て正しい URL に飛ぶこと。
+- break-verify: suffix を `/action` に壊すと 1 本、項目ごと消すと 2 本 red になることを確認済み。
+- **ブラウザでの実機確認はしていない**（マシン負荷が高かったため）。テンプレートに項目を 1 つ
+  足しただけで新しいバインディングは無く、遷移先は unit test が押さえているが、実画面の
+  見た目は未確認。PR 本文の Items to Confirm にも同じことを書いてある。
+
+## ドキュメント
+
+パスメニューの中身を書いている **生きているガイド 4 面** も同時に直す
+（`docs/guide/{en,ja}/header.md` と `docs/guide/{en,ja}/basics.md`）。
+日付入りのリリースページ（`v4.4.0.md`）はスナップショットなので触らない。
+`docs/guide/images/header-path-menu.png` は GitHub リモートの無いディレクトリで撮られていて
+ローカル 3 項目しか写っていないため、この変更では stale にならない。
 
 ## やらないこと
 
