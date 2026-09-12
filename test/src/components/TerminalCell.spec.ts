@@ -1248,6 +1248,10 @@ describe("TerminalCell", () => {
         window.dispatchEvent(new Event("resize"));
         await nextTick();
       },
+      /** Move the box with no announcement at all — for driving an observer callback by hand. */
+      setBox: (next: DOMRect) => {
+        cell = next;
+      },
       /** The same, but announced as a scroll: geometry moves, nothing resizes. */
       scrollTo: async (next: DOMRect) => {
         cell = next;
@@ -1313,24 +1317,31 @@ describe("TerminalCell", () => {
   // Re-measuring costs listeners, and one that outlives what it serves is the kind of leak nothing
   // reports: the menu is gone, so nobody sees the work it keeps doing. The identity matters as much
   // as the count — `removeEventListener` with a different function reference removes nothing.
-  it("adds one resize listener per open and removes that exact one on close, re-open and unmount", async () => {
+  it("adds one resize and one capture-phase scroll listener per open, and removes those exact ones on close, re-open and unmount", async () => {
     const add = vi.spyOn(window, "addEventListener");
     const remove = vi.spyOn(window, "removeEventListener");
-    const resizeAdds = () => add.mock.calls.filter(([type]) => type === "resize");
+    const addsOf = (type: string) => add.mock.calls.filter(([t]) => t === type);
     const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
-    expect(resizeAdds()).toHaveLength(1);
-    const handler = resizeAdds()[0][1];
+    expect(addsOf("resize")).toHaveLength(1);
+    expect(addsOf("scroll")).toHaveLength(1);
+    const handler = addsOf("resize")[0][1];
+    // The scroll listener is registered in the CAPTURE phase, and a removal with the wrong flag
+    // removes nothing at all — so the flag is part of what has to be paired, not a detail.
+    expect(addsOf("scroll")[0][1]).toBe(handler);
+    expect(addsOf("scroll")[0][2]).toBe(true);
 
     await open.close();
     expect(remove).toHaveBeenCalledWith("resize", handler);
+    expect(remove).toHaveBeenCalledWith("scroll", handler, true);
 
     await open.reopen();
-    expect(resizeAdds()).toHaveLength(2);
-    expect(resizeAdds()[1][1]).toBe(handler); // the same reference, so a re-open cannot stack them
+    expect(addsOf("resize")).toHaveLength(2);
+    expect(addsOf("resize")[1][1]).toBe(handler); // the same reference, so a re-open cannot stack them
 
     remove.mockClear();
     open.w.unmount();
     expect(remove).toHaveBeenCalledWith("resize", handler); // still open at unmount
+    expect(remove).toHaveBeenCalledWith("scroll", handler, true);
     add.mockRestore();
     remove.mockRestore();
   });
@@ -1339,17 +1350,32 @@ describe("TerminalCell", () => {
   // the box is observed too. jsdom has no ResizeObserver (the component skips it there and the
   // window listener still covers the window case), which is why this one supplies a stand-in: the
   // disconnect is the half that leaks, and nothing else in the suite can reach it.
-  it("observes the cell while open and disconnects on close and on unmount", async () => {
+  it("re-measures from the observer's own callback, and disconnects on close and on unmount", async () => {
     const observe = vi.fn();
     const disconnect = vi.fn();
+    // An array rather than a `let`: TypeScript cannot see that the constructor runs, so a nullable
+    // binding narrows to `never` at the call site below.
+    const fires: Array<() => void> = [];
     class FakeResizeObserver {
       observe = observe;
       unobserve = vi.fn();
       disconnect = disconnect;
+      constructor(cb: ResizeObserverCallback) {
+        fires.push(() => cb([], this));
+      }
     }
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
     expect(observe).toHaveBeenCalledTimes(1);
+
+    // Constructing and observing is not the wiring — the CALLBACK is. Shrink the cell the way a
+    // sibling tile arriving would, with no window event, and drive it by hand.
+    open.setBox(new DOMRect(0, 0, 400, 245));
+    expect(fires).toHaveLength(1);
+    fires[0]();
+    await nextTick();
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+
     await open.close();
     expect(disconnect).toHaveBeenCalled();
 

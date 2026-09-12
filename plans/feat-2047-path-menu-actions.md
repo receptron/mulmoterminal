@@ -20,14 +20,29 @@ web URL への suffix を渡すだけの構造。
 
 ## 検証
 
-- `test/src/components/TerminalCell.spec.ts` の 2 本を更新:
-  - メニュー項目のラベル列挙に `"Actions"` を追加
-  - 遷移先を確かめるテストに `<repo>/actions` を追加
+- `test/src/components/TerminalCell.spec.ts`:
+  - 既存 2 本を更新（メニュー項目のラベル列挙に `"Actions"`、遷移先に `<repo>/actions`）
+  - 高さまわりで 7 本追加: 短いタイルでの cap / 交差がセル側で決まる / 下にはみ出したセルは
+    ウィンドウで clamp / 上にスクロールで隠れたセルは可視上端から測る / scroll で測り直す /
+    高さ 0 の箱は cap しない / listener と observer の lifecycle 2 本
 - `yarn format` → `yarn lint` → `yarn typecheck` → `yarn build` → `yarn test`
-- break-verify（すべてツリーを復元して byte 一致を確認）:
-  suffix を `/action` に壊すと 1 本、項目ごと消すと 2 本、配置モデルをウィンドウ基準に
-  戻すと 3 本、cap を外すと 2 本、ウィンドウ側の clamp を落とすと 1 本、上端の clamp を
-  落とすと 1 本 red。
+- break-verify（すべてツリーを復元して byte 一致を確認）。1 mutation = 1 行:
+
+| mutation | red |
+|---|---|
+| suffix を `/action` に壊す | 1 本 |
+| メニュー項目ごと消す | 2 本 |
+| 配置モデルをウィンドウ基準に戻す | 3 本 |
+| cap（max-height）を外す | 2 本 |
+| ウィンドウ側の clamp を落とす | 1 本 |
+| 上端の clamp を落とす | 1 本 |
+| 高さ 0 のガードを外す | 1 本 |
+| scroll listener を外す | 1 本 |
+| resize ハンドラの同一性を壊す | 1 本 |
+| unmount の後始末を外す | 2 本 |
+| observer のコールバックを no-op にする | 1 本 |
+| scroll を capture 無しで登録する / capture 無しで外す | 各 1 本 |
+| observer を disconnect しない / observe しない | 各 1 本 |
 - 実ブラウザ実測: puppeteer（headless Chromium）+ `dist/assets/index-*.css`。ハーネスは
   セルのルートクラスと `overflow-hidden` をそのまま再現し、セル高を 1px ずつ掃いて
   `document.elementFromPoint` で最下行が hit できるかを判定している。
