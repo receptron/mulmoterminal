@@ -1240,15 +1240,26 @@ describe("TerminalCell", () => {
     if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, TRIGGER_BOTTOM_PX - 24, 200, 24);
     await w.find(".cell-dir").trigger("click");
     return {
+      w,
       menu: () => w.find('[data-testid="cell-path-menu"]'),
-      /** Shrink the box under the menu WITHOUT touching it, the way a window resize does. */
+      /** Change the box under the menu WITHOUT touching it, the way a window resize does. */
       resizeTo: async (next: DOMRect) => {
         cell = next;
         window.dispatchEvent(new Event("resize"));
         await nextTick();
       },
+      /** The same, but announced as a scroll: geometry moves, nothing resizes. */
+      scrollTo: async (next: DOMRect) => {
+        cell = next;
+        window.dispatchEvent(new Event("scroll"));
+        await nextTick();
+      },
       close: async () => {
         await w.find(".cell-dir").trigger("keydown", { key: "Escape" });
+        await nextTick();
+      },
+      reopen: async () => {
+        await w.find(".cell-dir").trigger("click");
         await nextTick();
       },
     };
@@ -1283,15 +1294,43 @@ describe("TerminalCell", () => {
     expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
   });
 
-  // Re-measuring costs a window listener, and a listener that outlives what it serves is the kind
-  // of leak nothing reports: the menu is gone, so nobody sees the work it keeps doing.
-  it("releases the resize listener when the menu closes", async () => {
+  // A scroll moves both rectangles and resizes nothing, so neither of the other two watchers fires.
+  it("re-measures on a scroll, which changes the geometry without changing any size", async () => {
     const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    await open.scrollTo(new DOMRect(0, 0, 400, 245));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+  });
+
+  // A box with no height is an ABSENT measurement, not a small one — a cell mid-teleport, or jsdom.
+  // Capping to it would render `max-height: 0` and hide the menu, which is worse than the clipping
+  // the cap exists to prevent, so the uncapped path is the right one there.
+  it("leaves the menu uncapped rather than 0px tall when the cell has no layout yet", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 0, 0));
+    expect(menu.exists()).toBe(true);
+    expect(menu.attributes("style")).toBeUndefined();
+  });
+
+  // Re-measuring costs listeners, and one that outlives what it serves is the kind of leak nothing
+  // reports: the menu is gone, so nobody sees the work it keeps doing. The identity matters as much
+  // as the count — `removeEventListener` with a different function reference removes nothing.
+  it("adds one resize listener per open and removes that exact one on close, re-open and unmount", async () => {
     const add = vi.spyOn(window, "addEventListener");
     const remove = vi.spyOn(window, "removeEventListener");
+    const resizeAdds = () => add.mock.calls.filter(([type]) => type === "resize");
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(resizeAdds()).toHaveLength(1);
+    const handler = resizeAdds()[0][1];
+
     await open.close();
-    expect(remove).toHaveBeenCalledWith("resize", expect.any(Function));
-    expect(add).not.toHaveBeenCalledWith("resize", expect.any(Function));
+    expect(remove).toHaveBeenCalledWith("resize", handler);
+
+    await open.reopen();
+    expect(resizeAdds()).toHaveLength(2);
+    expect(resizeAdds()[1][1]).toBe(handler); // the same reference, so a re-open cannot stack them
+
+    remove.mockClear();
+    open.w.unmount();
+    expect(remove).toHaveBeenCalledWith("resize", handler); // still open at unmount
     add.mockRestore();
     remove.mockRestore();
   });
@@ -1300,7 +1339,7 @@ describe("TerminalCell", () => {
   // the box is observed too. jsdom has no ResizeObserver (the component skips it there and the
   // window listener still covers the window case), which is why this one supplies a stand-in: the
   // disconnect is the half that leaks, and nothing else in the suite can reach it.
-  it("observes the cell while open and disconnects when the menu closes", async () => {
+  it("observes the cell while open and disconnects on close and on unmount", async () => {
     const observe = vi.fn();
     const disconnect = vi.fn();
     class FakeResizeObserver {
@@ -1313,6 +1352,11 @@ describe("TerminalCell", () => {
     expect(observe).toHaveBeenCalledTimes(1);
     await open.close();
     expect(disconnect).toHaveBeenCalled();
+
+    await open.reopen();
+    disconnect.mockClear();
+    open.w.unmount();
+    expect(disconnect).toHaveBeenCalled(); // still open at unmount
     vi.unstubAllGlobals();
   });
 

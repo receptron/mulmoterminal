@@ -597,9 +597,9 @@ function onServerCwd(c: string) {
 }
 
 // "Open on GitHub": when this cell's dir is a GitHub repo, the server returns its
-// repository URL (null otherwise) and the header shows a popover linking to the
-// repo top page / Issues / Pull requests. Refreshed whenever the effective cwd
-// changes (launch, server-confirmed cwd, restore).
+// repository URL (null otherwise) and the path menu grows a section linking to the
+// repo top page / Issues / Pull requests / Actions. Refreshed whenever the effective
+// cwd changes (launch, server-confirmed cwd, restore).
 const githubUrl = ref<string | null>(null);
 const pathMenuOpen = ref(false);
 const pathWrap = useTemplateRef<HTMLElement>("pathWrap");
@@ -632,7 +632,7 @@ async function refreshGithubUrl() {
 }
 watch(cwd, refreshGithubUrl, { immediate: true });
 
-// Repository top page (""), Issues, or Pull requests — opened in a new tab.
+// Repository top page (""), Issues, Pull requests or Actions — opened in a new tab.
 function openGithub(suffix: string) {
   if (!githubUrl.value) return;
   window.open(githubUrl.value + suffix, "_blank", "noopener,noreferrer");
@@ -658,7 +658,7 @@ function newTerminalHere() {
 }
 
 // The shared menu row plus this menu's own layout: every item leads with an icon, so the labels
-// line up and the four navigations are told apart by glyph the way they were as buttons.
+// line up and each destination is told apart by glyph the way they were as buttons.
 const PATH_MENU_ITEM = `inline-flex items-center gap-2 whitespace-nowrap ${CELL_MENU_ITEM}`;
 
 // Closing puts focus back where it came from. The trigger is the only thing in this wrapper that
@@ -698,6 +698,10 @@ function pathMenuPlacement(): MenuPlacement | null {
   const box = cell.getBoundingClientRect();
   const top = Math.max(box.top, 0);
   const bottom = Math.min(box.bottom, window.innerHeight);
+  // A box with no height is not a small box, it is an absent measurement — a cell mid-teleport, or
+  // jsdom. Capping to it would render `max-height: 0` and hide the menu outright, which is a worse
+  // failure than the clipping the cap exists to prevent, so this is the null path too.
+  if (bottom <= top) return null;
   const rect = wrap.getBoundingClientRect();
   return menuPlacement({ top: rect.top - top, bottom: rect.bottom - top }, bottom - top);
 }
@@ -713,17 +717,22 @@ function togglePathMenu() {
   if (pathMenuOpen.value) applyPathMenuPlacement();
 }
 
-// A cap is only true for the box it was measured in, and this menu outlives a resize: the window
-// can shrink under it, and so can the cell (another tile arrives, the grid re-pages) with no window
-// event at all. Watched while open and released on close, so a shut menu costs nothing.
+// A cap is only true for the box it was measured in, and this menu outlives the things that change
+// it: the window can shrink under it, the cell can (another tile arrives, the grid re-pages) with no
+// window event at all, and a scroll moves both rectangles while resizing neither. All three are
+// watched while it is open and released on close, so a shut menu costs nothing.
 let pathMenuBox: ResizeObserver | null = null;
 
 function watchPathMenuBox(open: boolean) {
   pathMenuBox?.disconnect();
   pathMenuBox = null;
   window.removeEventListener("resize", applyPathMenuPlacement);
+  // Capture, so a scroll inside any ancestor reaches this: scrolling moves both rectangles without
+  // resizing anything, so neither of the other two watchers fires (codex on #2048).
+  window.removeEventListener("scroll", applyPathMenuPlacement, true);
   if (!open) return;
   window.addEventListener("resize", applyPathMenuPlacement);
+  window.addEventListener("scroll", applyPathMenuPlacement, true);
   const cell = pathWrap.value?.closest(".cell");
   // jsdom and older embedders have no ResizeObserver; the window listener above still fires there.
   if (!cell || typeof ResizeObserver === "undefined") return;
