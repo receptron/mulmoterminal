@@ -30,7 +30,7 @@ vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: {
     name: "TerminalCell",
     props: ["expanded", "initialSessionId", "initialCwd", "defaultCwd", "presets", "home", "openSessionIds", "reorderable", "canvasAvailable"],
-    emits: ["toggle-expand", "toggle-files", "toggle-prompts", "session", "cwd", "run", "close", "move", "status"],
+    emits: ["toggle-expand", "toggle-files", "toggle-prompts", "session", "cwd", "run", "close", "move", "status", "canvas"],
     template: '<div class="stub-cell" />',
   },
 }));
@@ -964,6 +964,39 @@ describe("open-in-canvas", () => {
     release();
     await flushPromises();
     expect(w.find(".stub-gui-panel").exists()).toBe(true);
+  });
+
+  // The OTHER route that seeds a card and then asks for the Canvas: the header's `[Mulmo]` menu
+  // (#1948), which seeds in Terminal.vue and emits `canvas`. On a cell that is ALREADY enlarged
+  // nothing re-runs the watch that takes `canvasHasCard`, so the pane said "not enabled for this
+  // session" over the card just written, and collapsing the cell and re-enlarging it was what
+  // appeared to fix it (#1965).
+  //
+  // Asserted on the pane's own `unavailable` prop rather than on the panel existing: the panel
+  // opens either way — carrying the message is the bug.
+  it("shows a card seeded for the cell that is already enlarged, with no render MCP", async () => {
+    let stored: unknown[] = [];
+    globalThis.fetch = vi.fn((url: RequestInfo | URL) => {
+      const u = String(url);
+      if (u.includes("/api/agent/toolResults/")) return Promise.resolve(ok({ toolResults: stored }));
+      if (u.includes("/api/tools")) return Promise.resolve(ok({ groups: [] }));
+      return Promise.resolve(ok({}));
+    }) as unknown as typeof fetch;
+
+    const w = mountGrid([cell(1, "s-one", "/work/a")], 1);
+    await flushPromises();
+    // The premise, both halves. The session has no canvas group AND the grid has been told so —
+    // an unanswered `/api/tools` leaves `canvasChecked` false, and then the pane carries no
+    // message whatever this flag says, which is a test that cannot fail.
+    expect(w.findComponent({ name: "TerminalCell" }).props("canvasAvailable")).toBe(false);
+    expect(w.findComponent({ name: "GuiPanel" }).exists()).toBe(false);
+
+    // What the deck route has already done by the time it emits: the card is in the store.
+    stored = [{ uuid: "u-1", toolName: "presentMulmoScript" }];
+    w.findComponent({ name: "TerminalCell" }).vm.$emit("canvas");
+    await flushPromises();
+
+    expect(w.findComponent({ name: "GuiPanel" }).props("unavailable")).toBeNull();
   });
 
   // The cell moved on while the write was in flight. `canvasHasCard` is one flag for whichever

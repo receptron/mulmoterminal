@@ -397,10 +397,32 @@ async function openCanvasFor(uid: number, enlarge = true, stillWanted?: () => bo
   if (props.expandedUid !== uid) {
     if (!enlarge) return;
     emit("toggle-expand", uid);
-  }
+    // Nothing to re-ask: the enlargement re-runs the watch that takes `canvasHasCard` in the
+    // first place.
+  } else if (mayHaveGainedACard()) await adoptStoredCard();
   // Named rather than left to default: the enlargement above is the PARENT's to apply, so
   // `expandedUid` is still the previous cell when this runs.
   setRightPane("canvas", uid);
+}
+
+// `canvasHasCard` is a CACHE, taken when the enlargement last changed. Seeding a card for the cell
+// that is ALREADY enlarged leaves it stale, and the pane then says "not enabled for this session"
+// over a card sitting in the store — #1965, which reached the deck menu because only the files
+// pane's route remembered to set the flag by hand.
+//
+// Asked here instead, so a route that seeds and then opens cannot forget to. The store is the
+// authority anyway: the seed's POST awaits the write before answering, so the GET below sees the
+// card — and it answers 200 for a card it DROPPED as well, which a hand-set flag would report as
+// something to render.
+const mayHaveGainedACard = (): boolean => expandedSessionId.value !== null && !canvasAvailable.value && !canvasHasCard.value;
+
+async function adoptStoredCard(): Promise<void> {
+  const sessionId = expandedSessionId.value;
+  if (!sessionId) return;
+  const has = await hasStoredCard(sessionId);
+  // The zoom can walk while the ask is in flight; `canvasHasCard` is one flag for whichever cell
+  // is enlarged, so a late answer must not speak for the cell that replaced it.
+  if (sessionId === expandedSessionId.value) canvasHasCard.value = has;
 }
 
 // The same gesture for the files pane: the path menu's "Browse files in the app", which is on
@@ -472,6 +494,10 @@ async function openFileInCanvas(path: string): Promise<void> {
   if (sessionId !== expandedSessionId.value) return;
   // The pane this came from is about to be replaced by the Canvas, so its buffer has to flush —
   // openCanvasFor does that. Already enlarged, hence `false`.
+  //
+  // Said rather than asked: this route just wrote the card and the write came back, so it needs no
+  // round trip — and `adoptStoredCard`'s probe answers "no" when it cannot reach the server, which
+  // over a card that IS there would put the pane's "not enabled" message back.
   canvasHasCard.value = true;
   await openCanvasFor(uid, false);
 }
