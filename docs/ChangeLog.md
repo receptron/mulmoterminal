@@ -8,6 +8,19 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `loft` takes path sections only, lofts open paths — `@mulmoclaude/shapescript-plugin@2.5.1`
+
+- **[#2051](https://github.com/receptron/mulmoterminal/pull/2051)** — `presentShapeScript`,
+  `renderShapeScript` and `exportShapeScriptUsdz` take plugin 2.5.1
+  ([receptron/mulmoclaude#3094](https://github.com/receptron/mulmoclaude/pull/3094)).
+  **Behaviour change** toward upstream: a `fill { path … }` as a `loft` section is now refused
+  with a message naming the fix, as the upstream app refuses it ("A mesh value was not expected
+  in this context") — it rendered here before, so a model could preview fine and then fail in
+  the app. Pass the path itself; `fill` on its own and inside `hull` stay legal. In the other
+  direction, a section whose last point does not repeat its first is now lofted, closed
+  implicitly as upstream does, where it used to fail with a misleading "requires at least two
+  cross-sections". A `define`d or returned path stays a path. No host code changes.
+
 ## mulmoterminal@4.21.0 — 2026-09-12
 
 > **Setup guide:** [4.21.0 — Your OS opens the files this app cannot, and a spreadsheet no longer breaks when you click it](https://receptron.github.io/mulmoterminal/guide/en/v4.21.0.html)
