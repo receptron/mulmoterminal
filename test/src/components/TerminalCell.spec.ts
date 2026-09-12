@@ -1229,17 +1229,32 @@ describe("TerminalCell", () => {
   // intersection of the cell's box and the window's rather than against the window alone.
   // Row 2 of the cell header, as a window coordinate: the trigger's bottom edge.
   const TRIGGER_BOTTOM_PX = 52;
-  const openPathMenuInCell = async (cell: DOMRect) => {
+  const openPathMenuIn = async (initialCell: DOMRect) => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
+    let cell = initialCell;
     w.element.getBoundingClientRect = () => cell;
     const wrap = w.element.querySelector(".cell-dir")?.parentElement;
     expect(wrap).toBeTruthy();
     if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, TRIGGER_BOTTOM_PX - 24, 200, 24);
     await w.find(".cell-dir").trigger("click");
-    return w.find('[data-testid="cell-path-menu"]');
+    return {
+      menu: () => w.find('[data-testid="cell-path-menu"]'),
+      /** Shrink the box under the menu WITHOUT touching it, the way a window resize does. */
+      resizeTo: async (next: DOMRect) => {
+        cell = next;
+        window.dispatchEvent(new Event("resize"));
+        await nextTick();
+      },
+      close: async () => {
+        await w.find(".cell-dir").trigger("keydown", { key: "Escape" });
+        await nextTick();
+      },
+    };
   };
+
+  const openPathMenuInCell = async (cell: DOMRect) => (await openPathMenuIn(cell)).menu();
 
   /** The cap the menu should get: from the trigger down to whichever edge clips first. */
   const roomBelow = (clipBottomPx: number) => clipBottomPx - TRIGGER_BOTTOM_PX - MENU_VIEWPORT_GAP_PX;
@@ -1256,6 +1271,49 @@ describe("TerminalCell", () => {
     const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, 600));
     expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(600)}px`);
     expect(menu.classes()).not.toContain("bottom-full");
+  });
+
+  // The cap is only true for the box it was measured in, and the menu stays open across a resize.
+  // Measured once at open, a window shrunk under it leaves a cap larger than the room, which is the
+  // clipping this whole mechanism exists to prevent (codex on #2048).
+  it("re-measures while the menu is open, so a box that shrinks under it re-caps", async () => {
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(600)}px`);
+    await open.resizeTo(new DOMRect(0, 0, 400, 245));
+    expect(open.menu().attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
+  });
+
+  // Re-measuring costs a window listener, and a listener that outlives what it serves is the kind
+  // of leak nothing reports: the menu is gone, so nobody sees the work it keeps doing.
+  it("releases the resize listener when the menu closes", async () => {
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    const add = vi.spyOn(window, "addEventListener");
+    const remove = vi.spyOn(window, "removeEventListener");
+    await open.close();
+    expect(remove).toHaveBeenCalledWith("resize", expect.any(Function));
+    expect(add).not.toHaveBeenCalledWith("resize", expect.any(Function));
+    add.mockRestore();
+    remove.mockRestore();
+  });
+
+  // The cell can resize with no window event at all — another tile arrives, the grid re-pages — so
+  // the box is observed too. jsdom has no ResizeObserver (the component skips it there and the
+  // window listener still covers the window case), which is why this one supplies a stand-in: the
+  // disconnect is the half that leaks, and nothing else in the suite can reach it.
+  it("observes the cell while open and disconnects when the menu closes", async () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    class FakeResizeObserver {
+      observe = observe;
+      unobserve = vi.fn();
+      disconnect = disconnect;
+    }
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    const open = await openPathMenuIn(new DOMRect(0, 0, 400, 600));
+    expect(observe).toHaveBeenCalledTimes(1);
+    await open.close();
+    expect(disconnect).toHaveBeenCalled();
+    vi.unstubAllGlobals();
   });
 
   // The cell is not always the nearer edge: one hanging below the fold is clipped by the WINDOW

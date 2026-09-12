@@ -702,12 +702,33 @@ function pathMenuPlacement(): MenuPlacement | null {
   return menuPlacement({ top: rect.top - top, bottom: rect.bottom - top }, bottom - top);
 }
 
-function togglePathMenu() {
-  pathMenuOpen.value = !pathMenuOpen.value;
-  if (!pathMenuOpen.value) return;
+function applyPathMenuPlacement() {
   const placement = pathMenuPlacement();
   pathMenuUp.value = placement?.up ?? false;
   pathMenuMaxH.value = placement?.maxHeightPx ?? null;
+}
+
+function togglePathMenu() {
+  pathMenuOpen.value = !pathMenuOpen.value;
+  if (pathMenuOpen.value) applyPathMenuPlacement();
+}
+
+// A cap is only true for the box it was measured in, and this menu outlives a resize: the window
+// can shrink under it, and so can the cell (another tile arrives, the grid re-pages) with no window
+// event at all. Watched while open and released on close, so a shut menu costs nothing.
+let pathMenuBox: ResizeObserver | null = null;
+
+function watchPathMenuBox(open: boolean) {
+  pathMenuBox?.disconnect();
+  pathMenuBox = null;
+  window.removeEventListener("resize", applyPathMenuPlacement);
+  if (!open) return;
+  window.addEventListener("resize", applyPathMenuPlacement);
+  const cell = pathWrap.value?.closest(".cell");
+  // jsdom and older embedders have no ResizeObserver; the window listener above still fires there.
+  if (!cell || typeof ResizeObserver === "undefined") return;
+  pathMenuBox = new ResizeObserver(applyPathMenuPlacement);
+  pathMenuBox.observe(cell);
 }
 
 function onPathOutside(e: MouseEvent) {
@@ -716,8 +737,12 @@ function onPathOutside(e: MouseEvent) {
 watch(pathMenuOpen, (open) => {
   if (open) document.addEventListener("mousedown", onPathOutside);
   else document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(open);
 });
-onUnmounted(() => document.removeEventListener("mousedown", onPathOutside));
+onUnmounted(() => {
+  document.removeEventListener("mousedown", onPathOutside);
+  watchPathMenuBox(false);
+});
 
 // "Bring another cell's last turn here": pull a sibling terminal's last completed
 // exchange into THIS cell's input box, so the two agents can be pointed at each other's
