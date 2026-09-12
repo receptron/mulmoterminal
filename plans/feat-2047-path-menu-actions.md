@@ -24,10 +24,38 @@ web URL への suffix を渡すだけの構造。
   - メニュー項目のラベル列挙に `"Actions"` を追加
   - 遷移先を確かめるテストに `<repo>/actions` を追加
 - `yarn format` → `yarn lint` → `yarn typecheck` → `yarn build` → `yarn test`
-- break-verify: suffix を `/action` に壊すと 1 本、項目ごと消すと 2 本 red になることを確認済み。
+- break-verify（すべてツリーを復元して byte 一致を確認）:
+  suffix を `/action` に壊すと 1 本、項目ごと消すと 2 本、配置モデルをウィンドウ基準に
+  戻すと 3 本、cap を外すと 2 本、ウィンドウ側の clamp を落とすと 1 本、上端の clamp を
+  落とすと 1 本 red。
+- 実ブラウザ実測: puppeteer（headless Chromium）+ `dist/assets/index-*.css`。ハーネスは
+  セルのルートクラスと `overflow-hidden` をそのまま再現し、セル高を 1px ずつ掃いて
+  `document.elementFromPoint` で最下行が hit できるかを判定している。
 - **ブラウザでの実機確認はしていない**（マシン負荷が高かったため）。テンプレートに項目を 1 つ
   足しただけで新しいバインディングは無く、遷移先は unit test が押さえているが、実画面の
   見た目は未確認。PR 本文の Items to Confirm にも同じことを書いてある。
+
+## メニューの高さ（Codex round 2 で判明）
+
+7 行目を足すと、メニューが**セル**からはみ出す帯ができる。clip しているのはウィンドウでは
+なく **セルのルート（`overflow-hidden`）** で、Chromium（puppeteer）+ ビルド済み
+スタイルシートで実測した数値は:
+
+| | 実測 |
+|---|---|
+| 1 行の高さ | 27px |
+| メニューの border box | 6 行 181px → 7 行 208px |
+| 最下行が hit できなくなるセル高 | 6 行なら 217px 未満、**7 行だと 244px 未満** |
+| 対策後（セルに合わせて cap + `overflow-y-auto`） | セル高 120px まで最下行に到達できる |
+
+つまり **セル高 217〜243px が今回の退行帯**で、3x3 タイルは 800px 前後のウィンドウで
+約 245px なのでふつうに踏む。対策は #2003 の純関数 `menuPlacement()` を再利用し、
+**セルの矩形とウィンドウの交差**（`max(box.top,0)` 〜 `min(box.bottom,innerHeight)`）を
+「入る箱」として渡す。セルだけだと画面外にぶら下がったセルで過大に、ウィンドウだけだと
+タイル表示で無意味になる（後者が Codex の当初案で、実測で効かないことを確認した）。
+
+`openAskMenu` はウィンドウ基準のまま。このPRが依頼された範囲外の面の挙動変更になるため
+触らない（Codex も「finding ではない」と合意）。
 
 ## ドキュメント
 

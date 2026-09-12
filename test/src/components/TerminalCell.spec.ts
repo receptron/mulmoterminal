@@ -1222,37 +1222,57 @@ describe("TerminalCell", () => {
     expect(w.find('[data-testid="cell-path-menu"]').exists()).toBe(false);
   });
 
-  // The seventh row took this menu from 181px to 208px (measured in Chromium against the built
-  // stylesheet), and the CELL is what clips it: the cell root is `overflow-hidden`, so on a 3x3 tile
-  // — about 245px tall on an ~800px window — the last row is simply not drawn. Hence the cap, and
-  // hence it is measured against the cell rather than the window.
-  const HEADER_BOTTOM_PX = 52; // where row 2 of the cell header sits, measured from the cell's top
-  const openPathMenuInCell = async (cellHeightPx: number) => {
+  // The seventh row took this menu's border box from 181px to 208px (measured in Chromium against
+  // the built stylesheet), and the CELL is what clips it: the cell root is `overflow-hidden`, so the
+  // last row stops being hittable below a cell height of 244px where six rows survived to 217px —
+  // and a 3x3 tile is about 245px on an ~800px window. Hence the cap, measured against the
+  // intersection of the cell's box and the window's rather than against the window alone.
+  // Row 2 of the cell header, as a window coordinate: the trigger's bottom edge.
+  const TRIGGER_BOTTOM_PX = 52;
+  const openPathMenuInCell = async (cell: DOMRect) => {
     mockFetchWithGithub("https://github.com/owner/repo");
     const w = mountCell("33333333-3333-3333-3333-333333333333", { initialCwd: "/home/me/repo" });
     await flushPromises();
-    w.element.getBoundingClientRect = () => new DOMRect(0, 0, 400, cellHeightPx);
+    w.element.getBoundingClientRect = () => cell;
     const wrap = w.element.querySelector(".cell-dir")?.parentElement;
     expect(wrap).toBeTruthy();
-    if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, HEADER_BOTTOM_PX - 24, 200, 24);
+    if (wrap) wrap.getBoundingClientRect = () => new DOMRect(0, TRIGGER_BOTTOM_PX - 24, 200, 24);
     await w.find(".cell-dir").trigger("click");
     return w.find('[data-testid="cell-path-menu"]');
   };
 
-  const roomBelowHeader = (cellHeightPx: number) => cellHeightPx - HEADER_BOTTOM_PX - MENU_VIEWPORT_GAP_PX;
+  /** The cap the menu should get: from the trigger down to whichever edge clips first. */
+  const roomBelow = (clipBottomPx: number) => clipBottomPx - TRIGGER_BOTTOM_PX - MENU_VIEWPORT_GAP_PX;
 
   it("caps the path menu to the room left in a short tiled cell, so the last item scrolls into reach", async () => {
-    const menu = await openPathMenuInCell(245);
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, 245));
     expect(menu.classes()).toContain("overflow-y-auto");
     expect(menu.classes()).toContain("top-full");
     expect(menu.classes()).not.toContain("bottom-full");
-    expect(menu.attributes("style")).toContain(`max-height: ${roomBelowHeader(245)}px`);
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(245)}px`);
   });
 
-  it("measures against the cell, not the window, so an enlarged cell gets the whole menu", async () => {
-    const menu = await openPathMenuInCell(600);
-    expect(menu.attributes("style")).toContain(`max-height: ${roomBelowHeader(600)}px`);
+  it("measures against the cell, not the window, so a short cell caps below what the window allows", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, 600));
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(600)}px`);
     expect(menu.classes()).not.toContain("bottom-full");
+  });
+
+  // The cell is not always the nearer edge: one hanging below the fold is clipped by the WINDOW
+  // first, and taking the cell's own bottom there would promise room that is not on screen.
+  it("clamps to the window when the cell extends past the bottom of it", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, 0, 400, window.innerHeight + 400));
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(window.innerHeight)}px`);
+  });
+
+  // And a cell scrolled so its top is off-screen: the room ABOVE the trigger starts at the window's
+  // top edge, not at the cell's. Taking the cell's own top counts 300px nobody can see, which is
+  // enough to make `menuPlacement` flip the menu upward into exactly that invisible space.
+  it("measures from the visible top when the cell is scrolled above the window", async () => {
+    const menu = await openPathMenuInCell(new DOMRect(0, -300, 400, 400));
+    expect(menu.classes()).toContain("top-full");
+    expect(menu.classes()).not.toContain("bottom-full");
+    expect(menu.attributes("style")).toContain(`max-height: ${roomBelow(100)}px`);
   });
 
   it("ignores an out-of-order /api/git-remote response after a fast cwd change", async () => {

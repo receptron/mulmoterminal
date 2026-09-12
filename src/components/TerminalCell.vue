@@ -677,11 +677,12 @@ function pathMenuAction(run: () => void) {
   run();
 }
 
-// The CELL is this menu's viewport, not the window — the cell root is `overflow-hidden`, so a menu
-// longer than the room under the header is clipped there however much screen is left below. That is
-// why the arithmetic the ask menu uses (#2003) is fed cell-relative numbers here: measured in
-// Chromium against the built stylesheet, a row costs 27px, so the seventh took this menu from 181px
-// to 208px, while a 3x3 tile on an ~800px window is about 245px tall.
+// The CELL clips this menu, not just the window — the cell root is `overflow-hidden`, so a menu
+// longer than the room under the header is cut off there however much screen is left below. That is
+// why the arithmetic the ask menu uses (#2003) is fed the cell's box here rather than the window's.
+// Measured in Chromium against the built stylesheet: a row costs 27px, the menu's border box went
+// from 181px at six rows to 208px at seven, and the last row stops being hittable below a cell
+// height of 217px at six rows but 244px at seven — a band a 3x3 tile lands in on an ~800px window.
 const pathMenuUp = ref(false);
 const pathMenuMaxH = ref<number | null>(null);
 
@@ -691,9 +692,14 @@ function pathMenuPlacement(): MenuPlacement | null {
   const wrap = pathWrap.value;
   const cell = wrap?.closest(".cell");
   if (!wrap || !cell) return null;
+  // Whichever edge comes first does the clipping — the cell's or the window's — so the box to fit
+  // inside is the INTERSECTION. Cell alone would over-promise on a cell hanging below the fold;
+  // window alone is what leaves the tiled cell's own overflow unaccounted for (codex on #2048).
   const box = cell.getBoundingClientRect();
+  const top = Math.max(box.top, 0);
+  const bottom = Math.min(box.bottom, window.innerHeight);
   const rect = wrap.getBoundingClientRect();
-  return menuPlacement({ top: rect.top - box.top, bottom: rect.bottom - box.top }, box.height);
+  return menuPlacement({ top: rect.top - top, bottom: rect.bottom - top }, bottom - top);
 }
 
 function togglePathMenu() {
