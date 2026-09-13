@@ -8,6 +8,16 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `publishShapeScript` uploads the script as a Storage object — `@mulmoclaude/shapescript-plugin@2.9.0`
+
+- The gallery moved a post's ShapeScript source out of its Firestore document into a Storage
+  object beside the thumbnail ([receptron/mulmoserver#266](https://github.com/receptron/mulmoserver/pull/266)):
+  the document carries `scriptId`, never the text, and the rules there refuse a `script` field.
+  The host's writer gains `uploadScript`, and every object it uploads — picture or script — is
+  stamped `Cache-Control: public, max-age=31536000, immutable`, as the gallery's own editor does.
+  The script cap moves from 900,000 bytes to the Storage rule's 10 MiB. A host on the previous
+  plugin cannot publish once the gallery's new rules are deployed: the write is refused, not lost.
+
 ### `publishShapeScript` posts a model to the gallery — `@mulmoclaude/shapescript-plugin@2.7.0`
 
 - **[#2054](https://github.com/receptron/mulmoterminal/pull/2054)** — a new host tool,

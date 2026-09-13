@@ -3,8 +3,10 @@
 // The publishShapeScript host tool. No Firebase is reached: what is pinned is the
 // contract with the plugin (the definition comes from the package, not a local
 // copy), the document this host writes (the post plus two server stamps, which
-// mulmoserver's rules demand), the Storage path the rule scopes, and that with no
-// remote-host session the tool refuses with the sentence that says how to connect.
+// mulmoserver's rules demand — and `scriptId`, never the script text, since the
+// script is a Storage object: receptron/mulmoserver#266), the Storage path the
+// rule scopes, and that with no remote-host session the tool refuses with the
+// sentence that says how to connect.
 import { describe, it, expect } from "vitest";
 import type { Firestore } from "firebase/firestore";
 import type { FirebaseStorage } from "firebase/storage";
@@ -33,9 +35,11 @@ describe("publishShapeScript host tool", () => {
   });
 
   it("writes the post plus server-stamped createdAt / updatedAt, and nothing else", () => {
-    const post = shapePostFrom({ uid: "u-alice", authorName: "Alice" }, { title: "Lamp", script: "cube", keywords: ["lamp"] });
+    const post = shapePostFrom({ uid: "u-alice", authorName: "Alice" }, { title: "Lamp", scriptId: "script-1", keywords: ["lamp"] });
     const document = postDocumentOf(post);
     expect(Object.keys(document)).toEqual([...SHAPE_POST_KEYS, "createdAt", "updatedAt"]);
+    expect(document.scriptId).toBe("script-1");
+    expect(Object.hasOwn(document, "script")).toBe(false);
     for (const key of ["createdAt", "updatedAt"]) {
       expect((document[key] as { _methodName?: string })._methodName).toBe("serverTimestamp");
     }
@@ -51,6 +55,7 @@ describe("publishShapeScript host tool", () => {
     expect(writer.authorName).toBe("Alice");
     expect(typeof writer.createPost).toBe("function");
     expect(typeof writer.uploadThumbnail).toBe("function");
+    expect(typeof writer.uploadScript).toBe("function");
     expect(typeof writer.deleteObject).toBe("function");
   });
 

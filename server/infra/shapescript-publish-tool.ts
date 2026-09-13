@@ -7,10 +7,12 @@
 // the SESSION. The remote-host runner signs into mulmoserver's Firebase as the
 // user (server/backends/remoteHost/session.ts), so a post is a plain `setDoc` on
 // `shapes/{id}` the gallery's rules accept because `uid == request.auth.uid`,
-// and the thumbnail an upload under `shapes/{uid}/{id}/…`, the path the Storage
-// rule scopes. No session → the tool says how to connect one. Compare
-// MulmoClaude's `server/agent/mcp-tools/publishShapeScript.ts`, the same call
-// over that host's session.
+// and the thumbnail AND the script uploads under `shapes/{uid}/{id}/…`, the
+// path the Storage rule scopes — the script is a Storage object the document
+// points at by `scriptId`, never a field (receptron/mulmoserver#266). No
+// session → the tool says how to connect one. Compare MulmoClaude's
+// `server/agent/mcp-tools/publishShapeScript.ts`, the same call over that
+// host's session.
 //
 // A HOST tool for the reason renderShapeScript is: it needs the workspace
 // artifacts root and the session, which a plugin is not handed.
@@ -20,6 +22,8 @@ import {
   PUBLISH_PROMPT,
   PUBLISH_SCHEMA,
   PUBLISH_TOOL_NAME,
+  SHAPE_OBJECT_CACHE_CONTROL,
+  SHAPE_SCRIPT_CONTENT_TYPE,
   type ShapeGalleryWriter,
   type ShapePostDoc,
 } from "@mulmoclaude/shapescript-plugin";
@@ -55,19 +59,23 @@ export function shapeObjectPath(uid: string, shapeId: string, objectId: string):
 }
 
 /** The writer over one signed-in session: the Firestore document, and the Storage
- *  object the card shows — under `shapes/{uid}/{id}/…`, the path the Storage rule
- *  lets the owner write. */
+ *  objects — the card's picture and the script — under `shapes/{uid}/{id}/…`, the
+ *  path the Storage rule lets the owner write. Every object goes out
+ *  immutable-cacheable: its id is minted here and it is never rewritten. */
 export function galleryWriterFrom(session: { firestore: Firestore; storage: FirebaseStorage; uid: string; authorName: string }): ShapeGalleryWriter {
   const objectRef = (shapeId: string, objectId: string) => storageRef(session.storage, shapeObjectPath(session.uid, shapeId, objectId));
+  const upload = async (shapeId: string, bytes: Uint8Array | string, contentType: string): Promise<string> => {
+    const objectId = crypto.randomUUID();
+    const data = typeof bytes === "string" ? new TextEncoder().encode(bytes) : bytes;
+    await uploadBytes(objectRef(shapeId, objectId), data, { contentType, cacheControl: SHAPE_OBJECT_CACHE_CONTROL });
+    return objectId;
+  };
   return {
     uid: session.uid,
     authorName: session.authorName,
     createPost: (shapeId, post) => setDoc(doc(session.firestore, SHAPES, shapeId), postDocumentOf(post)),
-    uploadThumbnail: async (shapeId, png) => {
-      const objectId = crypto.randomUUID();
-      await uploadBytes(objectRef(shapeId, objectId), png, { contentType: THUMBNAIL_TYPE });
-      return objectId;
-    },
+    uploadThumbnail: (shapeId, png) => upload(shapeId, png, THUMBNAIL_TYPE),
+    uploadScript: (shapeId, script) => upload(shapeId, script, SHAPE_SCRIPT_CONTENT_TYPE),
     deleteObject: (shapeId, objectId) => deleteObject(objectRef(shapeId, objectId)),
   };
 }
