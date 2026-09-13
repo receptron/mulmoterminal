@@ -1883,17 +1883,17 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/common/-/common-1.3.0.tgz#33c48319662077f0ed5dc1c3b3892b6446d44a7e"
   integrity sha512-J+Rta4+JjVMgOGmKq0zPFWzstouRZj6Of/RCHnSkegK1WbHpg7Nx2HCc2J8Ldgjagh5bSwPAgCT/DXQoM5BnYg==
 
-"@mulmoclaude/core@^4.9.1":
-  version "4.9.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.9.1.tgz#fe2fef716dece173b292d75482888d21f64c6538"
-  integrity sha512-HQSTYm+w5IvzBsyUON4UhIV6el08YnZ7tlsbwQ3JI1qWlAymZvhCI7+8MQpBaWQQkWH07PMGV+BfdQn6oB7TTQ==
+"@mulmoclaude/core@^4.9.3":
+  version "4.9.3"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.9.3.tgz#d9abae9bd3f7933ec0c6aa71768e326e1e7c277d"
+  integrity sha512-WhtVJb0BfmDD7lEvNQIxvRMorLpOkUJCP0CjJ8x8W1oR/rave7TmMDqwuGkXaNXmotqkseiznaMmg8tNtBIKpg==
   dependencies:
     "@duckdb/node-api" "^1.5.5-r.4"
     "@mulmoclaude/common" "^1.3.0"
-    "@mulmoclaude/markdown-utils" "^2.2.0"
+    "@mulmoclaude/markdown-utils" "^2.2.1"
     dompurify "^3.4.15"
     fast-xml-parser "^5.11.1"
-    google-auth-library "^10.9.1"
+    google-auth-library "^11.0.2"
     iconv-lite "^0.7.3"
     js-yaml "^5.4.1"
     zod "^4.6.2"
@@ -1938,15 +1938,15 @@
     js-yaml "^5.2.3"
     marked "^18.0.11"
 
-"@mulmoclaude/markdown-utils@^2.2.0":
-  version "2.2.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-utils/-/markdown-utils-2.2.0.tgz#2da389039a281c5617a33c22da474d8be69f0028"
-  integrity sha512-z6k8jJ7a3Kto/fQiZC8RIfe2F/EEaY4kJeWO9AFXUp5aGcRCRbiWxM42GkpPHE05yOASAHfnKtak5btUkghOwg==
+"@mulmoclaude/markdown-utils@^2.2.1":
+  version "2.2.1"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-utils/-/markdown-utils-2.2.1.tgz#681f1830864743d8d838faf31e7b46a67b99136e"
+  integrity sha512-QQqy1ATFACMKdVFUV/NV4W8rFnuIMi02BZs8+ZnWL1eHdIR6a1Ju2HYcEoH7EkppOOEzBDwmAhaHD2EBeMcxdw==
   dependencies:
-    "@mulmoclaude/common" "^1.2.0"
-    dompurify "^3.4.13"
+    "@mulmoclaude/common" "^1.3.0"
+    dompurify "^3.4.15"
     js-yaml "^5.4.1"
-    marked "^18.0.11"
+    marked "^18.0.12"
 
 "@mulmoclaude/mulmoscript-plugin@^4.8.0":
   version "4.8.0"
@@ -5028,6 +5028,15 @@ gaxios@^7.0.0, gaxios@^7.1.4:
     https-proxy-agent "^7.0.1"
     node-fetch "^3.3.2"
 
+gaxios@^7.1.3:
+  version "7.3.1"
+  resolved "https://registry.yarnpkg.com/gaxios/-/gaxios-7.3.1.tgz#b26223db05856dfa5e2393ea376abad00e479c62"
+  integrity sha512-kB3rzJV7d9juLZh8/56QTXCwQfxyhdOMdyYk1HdQKFtF8TJTDTZQJtixWIwXdE9Jji91mC41DUNpjleo4L4eAQ==
+  dependencies:
+    extend "^3.0.2"
+    https-proxy-agent "^7.0.1"
+    node-fetch "^3.3.2"
+
 gcp-metadata@8.1.2, gcp-metadata@^8.0.0:
   version "8.1.2"
   resolved "https://registry.yarnpkg.com/gcp-metadata/-/gcp-metadata-8.1.2.tgz#e62e3373ddf41fc727ccc31c55c687b798bee898"
@@ -5035,6 +5044,15 @@ gcp-metadata@8.1.2, gcp-metadata@^8.0.0:
   dependencies:
     gaxios "^7.0.0"
     google-logging-utils "^1.0.0"
+    json-bigint "^1.0.0"
+
+gcp-metadata@^9.0.0:
+  version "9.0.3"
+  resolved "https://registry.yarnpkg.com/gcp-metadata/-/gcp-metadata-9.0.3.tgz#d8ed78f75b3c842d8cf5c2b8e73e28e2fd80f17f"
+  integrity sha512-2YYnIlHaKBGT2IPg3G2M57hia9Galz15zsEOvw9T3oRf0lSn6KN6VcHQLqby7x8ksYKnjXvp3rp2KJyLCN6zfQ==
+  dependencies:
+    gaxios "^7.1.3"
+    google-logging-utils "^2.0.0"
     json-bigint "^1.0.0"
 
 get-caller-file@^2.0.5:
@@ -5137,7 +5155,7 @@ google-auth-library@10.5.0:
     gtoken "^8.0.0"
     jws "^4.0.0"
 
-google-auth-library@^10.3.0, google-auth-library@^10.9.1:
+google-auth-library@^10.3.0:
   version "10.9.1"
   resolved "https://registry.yarnpkg.com/google-auth-library/-/google-auth-library-10.9.1.tgz#af9852a328a6077e8ffbe776681b4ca9420a1714"
   integrity sha512-i1ydyHrqcIxXkWh/uBmVkzCvIuq5yiK2ATndIe5XxKholrG/MTYP9xGYka4sQhrbIAgGjL2B6NOE7rFaiF3fXw==
@@ -5147,6 +5165,18 @@ google-auth-library@^10.3.0, google-auth-library@^10.9.1:
     gaxios "^7.1.4"
     gcp-metadata "8.1.2"
     google-logging-utils "1.1.3"
+    jws "^4.0.0"
+
+google-auth-library@^11.0.2:
+  version "11.0.2"
+  resolved "https://registry.yarnpkg.com/google-auth-library/-/google-auth-library-11.0.2.tgz#7d08ae14bd81521d27ed27b3f4d0074d2af880a3"
+  integrity sha512-vzpgPutxrghPsnjrjpzLX2bdv8IOL719Rh0oEjGnQu8YCIbnbMuTTQ5zU9LcKvLdOPgCxBwppbvnhgW90Qna5Q==
+  dependencies:
+    base64-js "^1.3.0"
+    ecdsa-sig-formatter "^1.0.11"
+    gaxios "^7.1.4"
+    gcp-metadata "^9.0.0"
+    google-logging-utils "^2.0.0"
     jws "^4.0.0"
 
 google-gax@^5.0.0:
@@ -5170,6 +5200,11 @@ google-logging-utils@1.1.3, google-logging-utils@^1.0.0:
   version "1.1.3"
   resolved "https://registry.yarnpkg.com/google-logging-utils/-/google-logging-utils-1.1.3.tgz#17b71f1f95d266d2ddd356b8f00178433f041b17"
   integrity sha512-eAmLkjDjAFCVXg7A1unxHsLf961m6y17QFqXqAXGj/gVkKFrEICfStRfwUlGNfeCEjNRa32JEWOUTlYXPyyKvA==
+
+google-logging-utils@^2.0.0:
+  version "2.0.1"
+  resolved "https://registry.yarnpkg.com/google-logging-utils/-/google-logging-utils-2.0.1.tgz#d78b34f4250db9ee816f29fee3321939296bcb8a"
+  integrity sha512-HMhaQghlOTvbcb3c4T5jmmOMtG3JUF1iOQMezaJXL86CDS+Tm2vHd0IeLFRAx3+ewd+bo9E1HFHoy17X5aJa9A==
 
 gopd@^1.2.0:
   version "1.2.0"
