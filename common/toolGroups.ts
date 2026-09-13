@@ -97,9 +97,6 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   // And the third of the set: a cell that can show and check a model should be able to
   // hand it out as a file the user opens in AR.
   ["exportShapeScriptUsdz", "render"],
-  // And the fourth: a cell that can show, check and hand out a model can post it to the
-  // gallery. Same group; NOT auto-approved, see NEVER_AUTO_APPROVED_TOOLS.
-  ["publishShapeScript", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -125,6 +122,14 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   // act inside other people's apps. It is in NEVER_AUTO_APPROVED_TOOLS below for the same reason
   // manageSharedApp is: `withdraw` deletes somebody's record with no undo.
   ["useSharedApp", "external"],
+  // publishShapeScript posts a model to a PUBLIC gallery under the user's own Google
+  // account. It reads like the fourth ShapeScript tool, but the group is about blast
+  // radius, not subject: `render` is the auto-allowed group, and for Codex, Antigravity
+  // and Grok a group is approved as a whole (see codexGuiMcpServers), so a render entry
+  // would let an instruction in untrusted text publish under the user's name with no
+  // prompt on those launch paths. `external` is the group that always prompts (codex on
+  // #2054). It is on NEVER_AUTO_APPROVED_TOOLS as well, for the workspace session.
+  ["publishShapeScript", "external"],
 
   ["google", "external"],
   ["readXPost", "external"],

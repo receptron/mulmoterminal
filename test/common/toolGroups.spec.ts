@@ -40,6 +40,9 @@ describe("tool groups", () => {
     expect(groupOfTool("google")).toBe("external");
     expect(groupOfTool("readXPost")).toBe("external");
     expect(groupOfTool("searchX")).toBe("external");
+    // Publishes under the user's account: prompts on every launch path, not render's free pass.
+    expect(groupOfTool("publishShapeScript")).toBe("external");
+    expect(groupOfTool("useSharedApp")).toBe("external");
   });
 
   // The Canvas panel's empty state is built from this, so a group that under-reports its members
