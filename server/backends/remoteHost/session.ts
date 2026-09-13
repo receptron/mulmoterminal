@@ -82,6 +82,10 @@ const requireHandles = (): RemoteHostSessionHandles => {
 
 export const currentUid = (): string | null => handles?.auth.currentUser?.uid ?? null;
 
+/** The Google display name, as the shape gallery shows an author: empty when the account has
+ *  none, null when there is no session at all. */
+export const currentDisplayName = (): string | null => (handles?.auth.currentUser ? (handles.auth.currentUser.displayName ?? "") : null);
+
 /** The address a shared collection may be authorized on, or null.
  *
  *  Shared collections are keyed by EMAIL — the roster in `app.json` lists addresses — and the

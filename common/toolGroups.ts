@@ -97,6 +97,9 @@ const GROUP_BY_TOOL = new Map<string, ToolGroup>([
   // And the third of the set: a cell that can show and check a model should be able to
   // hand it out as a file the user opens in AR.
   ["exportShapeScriptUsdz", "render"],
+  // And the fourth: a cell that can show, check and hand out a model can post it to the
+  // gallery. Same group; NOT auto-approved, see NEVER_AUTO_APPROVED_TOOLS.
+  ["publishShapeScript", "render"],
 
   // presentCollection RENDERS, but it renders collection data and only makes sense next to
   // manageCollection — a cell offered the view without the store gets a tool it cannot fill.
@@ -251,4 +254,12 @@ export const AUTO_ALLOWED_TOOLS: readonly string[] = [
  *  from here, and narrowing it per GROUP would put a prompt in front of every drawing and
  *  collection call in a codex cell, which is what the flag was added to avoid. Said out loud
  *  rather than left to be discovered from the constant's name (Codex on #1843). */
-export const NEVER_AUTO_APPROVED_TOOLS: readonly string[] = ["manageSharedApp", "useSharedApp"];
+export const NEVER_AUTO_APPROVED_TOOLS: readonly string[] = [
+  // publishShapeScript posts a model to a PUBLIC gallery under the user's own Google
+  // account — the "publish to the internet, act in the user's account" case this list is
+  // for. The tool's prompt already says "only when asked"; the permission prompt is what
+  // makes that true when the agent is reading untrusted text.
+  "publishShapeScript",
+  "manageSharedApp",
+  "useSharedApp",
+];

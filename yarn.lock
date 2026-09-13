@@ -1950,14 +1950,14 @@
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
 
-"@mulmoclaude/shapescript-plugin@^2.6.0":
-  version "2.6.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-2.6.0.tgz#3be05d5ee9a1e47803b3a169e0d01fe067d86f80"
-  integrity sha512-Aw2O5059OsP+zxNb2aGDczYwCc07eiEej34oxQ2rGkSzbSihGJmjD/IuujxlIKJL/hVE69fMrqr68OLjVONSrA==
+"@mulmoclaude/shapescript-plugin@^2.7.0":
+  version "2.7.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-2.7.0.tgz#4467decc644ea0447f75da1321d264781e0e69d9"
+  integrity sha512-q2woJYC//r6b63qof15MqLUPYLMvXfj9e1A3wjvg/c1BrKwfL5KMdQCcd1vGMv3fZdxbvtLUIDyHhkFXW0sX6A==
   dependencies:
-    three "^0.185.1"
+    three "^0.186.0"
     three-bvh-csg "^0.0.18"
-    three-mesh-bvh "0.9.13"
+    three-mesh-bvh "0.9.15"
 
 "@mulmoclaude/x-plugin@^1.0.3":
   version "1.0.3"
@@ -7525,15 +7525,15 @@ three-bvh-csg@^0.0.18:
   resolved "https://registry.yarnpkg.com/three-bvh-csg/-/three-bvh-csg-0.0.18.tgz#c2801788f35c3d830800194cf414dcdbd2a84924"
   integrity sha512-M3GCZMmGFgASGuDf+YMamM83nVlD/vdwzVHcYbFxgW+g1S7/nKPiuY00YVHOMbjmJPh8mLevGZL65ItHUuGt2w==
 
-three-mesh-bvh@0.9.13:
-  version "0.9.13"
-  resolved "https://registry.yarnpkg.com/three-mesh-bvh/-/three-mesh-bvh-0.9.13.tgz#706db5d6ad138ef6db155d90cc2807d8c72fe114"
-  integrity sha512-2zRh4iTFDmiTISanSVFofIw6J92DxFSqWn2qsQTtKp2ko5Ebk/JaI/wpMqNaBJ3F0qx7/NuP9GPK4jGDX99J2Q==
+three-mesh-bvh@0.9.15:
+  version "0.9.15"
+  resolved "https://registry.yarnpkg.com/three-mesh-bvh/-/three-mesh-bvh-0.9.15.tgz#0e070be254527155b4cc9285277cddaf531d8ef1"
+  integrity sha512-9xdEDkCzFoT8VPFH9DznwFSdbaIEjMvM106Iqq7TJurrIheUKDcdW4prfJTCxryih4XS/UxWs0H3K4MLMRFyOQ==
 
-three@^0.185.1:
-  version "0.185.1"
-  resolved "https://registry.yarnpkg.com/three/-/three-0.185.1.tgz#63e9e241a17b101e211965121a017b4b4d8054ae"
-  integrity sha512-5aojFCXKwnjBRZvUnt3WFfEcvUJgkN5LlijRFN95hMy8WVkG4I0QNcJE+OuWvuJ0bOdStrbfXn0pkd6/QyiAlg==
+three@^0.186.0:
+  version "0.186.0"
+  resolved "https://registry.yarnpkg.com/three/-/three-0.186.0.tgz#08f70ce80dffa9247a567b421165bec630e86f8d"
+  integrity sha512-cr/fIM2ddMSVbYVgkfD4jLJv7Fh/8ZTjvo+7gQeSVGUZHxpx9FDwoL5iC7hUz/LiRA8wMbqfnb90xKfm1/HHkQ==
 
 tiny-inflate@^1.0.0, tiny-inflate@^1.0.3:
   version "1.0.3"

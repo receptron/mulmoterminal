@@ -241,6 +241,7 @@ const TOOL_HINTS = new Map<string, string>([
   ["presentShapeScript", "a 3D model you can rotate and zoom, written as ShapeScript"],
   ["renderShapeScript", "a picture of a 3D model from several angles at once, saved as a PNG"],
   ["exportShapeScriptUsdz", "a 3D model saved as a USDZ file — AR Quick Look on iPhone and iPad, Quick Look preview on a Mac"],
+  ["publishShapeScript", "a 3D model posted to the public gallery on mulmoserver, under your account"],
 
   ["presentCollection", "a collection from this workspace, laid out to browse"],
   ["manageCollection", "reads and writes those collections and their schemas"],

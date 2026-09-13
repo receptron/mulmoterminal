@@ -8,6 +8,20 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `publishShapeScript` posts a model to the gallery — `@mulmoclaude/shapescript-plugin@2.7.0`
+
+- **[#2054](https://github.com/receptron/mulmoterminal/pull/2054)** — a new host tool,
+  `publishShapeScript`, posts a ShapeScript model to the public gallery on mulmoserver
+  (server.mulmocast.com/shapes) under the signed-in user's Google account and answers the model's
+  URL ([receptron/mulmoclaude#3123](https://github.com/receptron/mulmoclaude/pull/3123)). It takes
+  the same source as `presentShapeScript` (`script` or `path`), a title, an optional description,
+  keywords and the prompt the model was made from, and `published: false` for a draft. The post is
+  a Firestore write over the remote-host session — the host already signs into mulmoserver's
+  Firebase as the user for the phone remote — so there is no new endpoint or credential; with
+  Remote Host disconnected the tool says how to connect it. A thumbnail is rendered with the same
+  headless Chromium `renderShapeScript` uses and attached when the host has one. The document a
+  post is, its key set and the keyword rule are the plugin's, matching mulmoserver's rules.
+
 ### The object budget counts objects, and a custom shape can recurse — `@mulmoclaude/shapescript-plugin@2.6.0`
 
 - **[#2053](https://github.com/receptron/mulmoterminal/pull/2053)** — `presentShapeScript`,

@@ -63,6 +63,8 @@ export const PRESENT_PATH_EXTENSIONS = new Map<string, readonly string[]>([
   ["renderShapeScript", SHAPE_EXTENSIONS],
   // exportShapeScriptUsdz too — third taker of the same `path`.
   ["exportShapeScriptUsdz", SHAPE_EXTENSIONS],
+  // publishShapeScript — fourth.
+  ["publishShapeScript", SHAPE_EXTENSIONS],
 ]);
 
 // `artifacts/…` is the workspace's own output area: the plugins route those values to
