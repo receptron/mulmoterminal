@@ -291,8 +291,10 @@ function mountPublishShapeScriptRoute(app: Express): void {
   // project the agent runs in changes nothing about who posts.
   app.post("/api/plugin/publishShapeScript", async (req, res) => {
     try {
-      const { message } = await runPublishShapeScript(isRecord(req.body) ? req.body : {});
-      return res.json({ message });
+      const { message, url } = await runPublishShapeScript(isRecord(req.body) ? req.body : {});
+      // The broker hands the agent `message` alone, so the link must be IN it, whatever the
+      // plugin's sentence says this release; `url` rides along for a caller that reads JSON.
+      return res.json({ message: message.includes(url) ? message : `${message} ${url}`, url });
     } catch (err) {
       // A missing session, a bad argument or a model that will not build is the agent's
       // (or the user's) to fix, so the reason goes back as the envelope message.
