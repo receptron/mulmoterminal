@@ -30,6 +30,7 @@ describe("publishShapeScript host tool", () => {
       "description",
       "keywords",
       "prompt",
+      "aiModel",
       "published",
     ]);
   });

@@ -8,6 +8,13 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `publishShapeScript` records which AI model wrote the script — `@mulmoclaude/shapescript-plugin@3.1.0`
+
+- An optional `aiModel` argument — the model id the agent is running as, e.g. `claude-opus-5` —
+  lands on the post, and the gallery's model page shows it as "Made with …". Host code is
+  unchanged: the argument, the document and the prompt asking the agent to pass it are the
+  plugin's.
+
 ### `publishShapeScript` uploads the script as a Storage object — `@mulmoclaude/shapescript-plugin@3.0.0`
 
 - The gallery moved a post's ShapeScript source out of its Firestore document into a Storage
