@@ -8,7 +8,7 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
-### `publishShapeScript` uploads the script as a Storage object — `@mulmoclaude/shapescript-plugin@2.9.0`
+### `publishShapeScript` uploads the script as a Storage object — `@mulmoclaude/shapescript-plugin@3.0.0`
 
 - The gallery moved a post's ShapeScript source out of its Firestore document into a Storage
   object beside the thumbnail ([receptron/mulmoserver#266](https://github.com/receptron/mulmoserver/pull/266)):
