@@ -46,7 +46,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const SURFACES = [
   "README.md",
   "CLAUDE.md",
+  // `globSync` answers `docs\ChangeLog.md` on Windows, and neither exclusion below matched it
+  // there — the Windows job then scanned the historical changelog and failed on an entry that
+  // was right the day it was written. Normalise to "/" before filtering.
   ...globSync("docs/**/*.md", { cwd: repoRoot })
+    .map((file) => file.split(path.sep).join("/"))
     .filter((file) => file !== "docs/ChangeLog.md")
     .filter((file) => !/\/v\d+\.\d+\.\d+\.md$/.test(file))
     .sort(),
