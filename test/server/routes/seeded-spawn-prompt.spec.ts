@@ -67,6 +67,7 @@ mountPluginRoutes(app, {
   spawnGrokPty: record("grok", lastOption) as never,
   spawnMusePty: record("muse", lastOption) as never,
   spawnCopilotPty: record("copilot", lastOption) as never,
+  spawnCursorPty: record("cursor", lastOption) as never,
   registerBackgroundSession: () => {},
 });
 const call = routeCall(app);
@@ -123,11 +124,11 @@ describe("which agents are asked for the directory's tool groups", () => {
   //
   // What it does NOT do, stated because the obvious claim is false and I checked: it does not fail
   // if `groupsForSpawn` goes back to enumerating "antigravity | grok | muse". Measured — restoring
-  // that list leaves all of this green, because for TODAY's six agents the enumeration and
+  // that list leaves all of this green, because for the agents that exist TODAY the enumeration and
   // `!agentCarriesFullGuiMcp(agent)` are the same function. They differ only for an agent that does
-  // not exist yet, which no runtime test can reach. The protection for a seventh is the derivation
-  // itself and the predicate's own spec (test/server/routes/agent-typed-lists.spec.ts); this spec
-  // is the behavioural record of what the six do today.
+  // not exist yet, which no runtime test can reach. The protection for the next one is the
+  // derivation itself and the predicate's own spec (test/server/routes/agent-typed-lists.spec.ts);
+  // this spec is the behavioural record of what the current set does.
   it("does not ask for an agent that carries the whole GUI MCP per spawn", async () => {
     for (const agent of ["claude", "codex", "copilot"]) {
       expect((await spawn(agent)).mcpGroups ?? []).toEqual([]);

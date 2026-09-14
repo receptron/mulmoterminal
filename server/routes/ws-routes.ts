@@ -26,6 +26,7 @@ import { antigravityBrainRoot, antigravityConversationExists } from "../agents/a
 import { grokConversationExists, grokSessionsRoot } from "../agents/grok-session.js";
 import { museSessionExistsForCwd } from "../agents/muse-session.js";
 import { copilotSessionExistsForCwd } from "../agents/copilot-sessions.js";
+import { cursorSessionExistsForCwd } from "../agents/cursor-sessions.js";
 import { codexRolloutExists } from "../agents/codex-sessions.js";
 import {
   antigravityConversations,
@@ -43,6 +44,10 @@ import {
 } from "../session/registry.js";
 import { SpawnRefusedError, ptyWouldReattach } from "../session/pty-spawn.js";
 import { bufferEarlyFrames, type EarlyFrames } from "../session/early-frames.js";
+// Re-exported so the endpoint guard keeps its long-standing import path (its spec, and any reader
+// looking for it where it has always been).
+export { settledEntry, startFailureMessageFor, wrongEndpointReason } from "./ws-endpoint-guard.js";
+import { settledEntry, startFailureMessageFor } from "./ws-endpoint-guard.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { parseTerminalSize, type TerminalSize } from "../../common/terminalSize.js";
@@ -60,11 +65,13 @@ import type {
   SpawnGrokPty,
   SpawnMusePty,
   SpawnCopilotPty,
+  SpawnCursorPty,
   SpawnCommandPty,
   SpawnLauncherPty,
   ResolveLauncher,
 } from "../session/spawners.js";
-import type { SpawnDirectoryMcpPty } from "../session/spawn-directory-mcp.js";
+import { syncDirectoryMcpForSpawnAsync, type SpawnDirectoryMcpPty } from "../session/spawn-directory-mcp.js";
+import { syncCursorDirectoryMcp } from "../agents/cursor-mcp.js";
 import { terminalWsKind, type TerminalWsKind } from "./terminal-ws-path.js";
 import { normalizeAgent, parseIndexParam } from "./routeParams.js";
 import { agentResumeId } from "../agents/agent-resume.js";
@@ -98,6 +105,7 @@ export interface WsRouteDeps {
   spawnGrokPty: SpawnGrokPty;
   spawnMusePty: SpawnMusePty;
   spawnCopilotPty: SpawnCopilotPty;
+  spawnCursorPty: SpawnCursorPty;
   spawnCommandPty: SpawnCommandPty;
   spawnLauncherPty: SpawnLauncherPty;
   resolveLauncher: ResolveLauncher;
@@ -587,72 +595,6 @@ function handleRunConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeReq
   void startRunTerminal(deps, ws, new URL(req.url ?? "/", "http://localhost"));
 }
 
-// A refused spawn already carries its own diagnosis — the missing CLI with the PATH that was
-// searched (#1063), or the directory that is gone (#1078). Passing that through rather than
-// wrapping it is what puts the real reason in the terminal instead of `spawn ENOENT`; everything
-// else is an error nobody wrote for a reader, so it gets named.
-/** Whether a PTY entry matches the endpoint trying to reattach it.
- *
- *  `ptys` is shared across all agents, so a Claude cell carrying an old shell-entry id
- *  (unrecognized persisted agent coerced to "shell") would silently reattach the launcher's
- *  process. This gate rejects that.
- */
-export function wrongEndpointReason(endpoint: TerminalWsKind, entryAgent: PtyEntry["agent"] | undefined): string | null {
-  // The run endpoint is ephemeral and owns no sessions, so it has no reattach case.
-  if (endpoint === "run") return null;
-  // A launcher entry is always "shell", whatever command it runs; the endpoint is "launch".
-  if (endpoint === "launch" && entryAgent === "shell") return null;
-  // Agent endpoints match iff the endpoint and the entry's recorded agent are identical.
-  // If agent is missing (test entries), assume it matches.
-  if (entryAgent === undefined || endpoint === entryAgent) return null;
-  return `Session is running ${entryAgent}, not ${endpoint}`;
-}
-
-/** Check if a live PTY entry is still valid after the async admission awaits (git, filesystem, etc).
- *
- *  A live entry was captured at resolve time before those awaits. If the reap timer fired
- *  mid-admission, the entry is a corpse — reattaching it would wire the browser to a dead pty
- *  while the next connect spawned fresh under the same id. Close plainly so the client reconnects.
- *
- *  Also handles the case where a competing connect spawned the id while this one was being
- *  admitted — serialization handles that (it finds the entry where resolve saw none).
- */
-export function settledEntry(
-  ws: WebSocket,
-  endpoint: TerminalWsKind,
-  sessionId: string,
-  hadLiveAtResolve: boolean,
-  early: EarlyFrames,
-): { entry: PtyEntry | undefined } | null {
-  const current = ptys.get(sessionId);
-  const reason = current ? wrongEndpointReason(endpoint, current.agent) : null;
-  if (reason) {
-    console.warn(`[ws/${endpoint}] refusing ${sessionId} — ${reason}`);
-    // Loud, not a plain close: a plain close makes the client retry the same mismatched id
-    // forever with backoff. The mismatch is a persisted-state defect the user has to act on
-    // (asTerminalAgent coerces an unrecognised persisted agent to "claude"), and the error frame
-    // is what stops the reconnect loop and says why.
-    closeWithError(ws, `${reason} — open it from its own agent's cell.`);
-    early.discard();
-    return null;
-  }
-  // A resolve-time snapshot that has since died: close plainly so the client reconnects.
-  if (hadLiveAtResolve && !current) {
-    console.log(`[ws/${endpoint}] ${sessionId} was reaped mid-admission`);
-    ws.close();
-    early.discard();
-    return null;
-  }
-  // Return what is actually there now, not the resolve-time snapshot — a competing connect
-  // may have spawned it while this one was still being admitted.
-  return { entry: current };
-}
-
-export const startFailureMessageFor =
-  (what: string) =>
-  (err: unknown): string =>
-    err instanceof SpawnRefusedError ? err.message : `Failed to start ${what}: ${messageOf(err)}`;
-
 // Start the pty for a resolved session, then hand the socket to it — or fail the socket cleanly.
 //
 // One function for both agents because the ORDER is the fragile part, not the lines: the buffered
@@ -879,6 +821,59 @@ export async function handleCopilotConnection(deps: WsRouteDeps, ws: WebSocket, 
   });
 }
 
+// Cursor is copilot's twin on identity — `--resume <uuid>` mints and resumes under an id of ours
+// (server/agents/cursor-args.ts) — so the resolver above applies verbatim, remembered cwd and all.
+// It differs only in having no GUI MCP to attach: cursor reads MCP from a file and this build
+// writes none (spawn-cursor.ts), so there are no groups to resolve and no `?gui=` to honour.
+export async function resolveCursorSession(requested: string | null, cwd: string): Promise<ResumableSession> {
+  const known = requested === null ? null : sessionCwd(requested);
+  // Awaited BEFORE the resolution rather than inside it, so the pure decision stays a pure
+  // decision — the same shape resolveCopilotSession and resolveMuseSession take.
+  const isResumableHere = requested !== null && (await cursorSessionExistsForCwd(requested, known ?? cwd));
+  return resolveResumableSession(requested, ({ hasLivePty }) => (!hasLivePty && isResumableHere ? requested : null));
+}
+
+export async function handleCursorConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
+  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  if (refuseUnusableWorkspace(ws, "cursor", unusable, requested)) return;
+  // `?gui=` carries TWO things for the other agents — whether to attach the GUI MCP, and whether
+  // this socket is the actively-viewed pane — and cursor reads it only for the second, because it
+  // has no per-spawn MCP to attach either way. Hard-coding the view half was a real defect and not
+  // a cosmetic one: `activityHookEffects("Stop", active)` returns the `waiting` flag ONLY when the
+  // pane is inactive, so a grid cell marked active forever finishes its turn in silence — no
+  // attention dot, no sound. That is the feature this agent was added for (Codex round 1, P1).
+  const singleView = url.searchParams.get("gui") !== "0";
+  await devTerminalCwdsHydrated;
+  const { sessionId, live: resolvedLive } = await resolveCursorSession(requested, cwd);
+  await sessionConnects(sessionId, async () => {
+    const live = ptys.get(sessionId) ?? resolvedLive;
+    const sessionDir = live?.cwd ?? sessionCwd(sessionId) ?? cwd;
+    await reserveWorktreeEnvForSpawn(sessionDir, { id: sessionId, live });
+    const early = await admitAgentSession(ws, "cursor", { requested, sessionId, live, cwd: sessionDir, devTerminal: !singleView });
+    if (!early) return;
+    // The directory's registered groups, written into `.cursor/mcp.json` and approved before the
+    // agent reads either. Not for a live REATTACH, and not merely because it would be wasted: the
+    // file is shared by every cursor session in the directory, so rewriting it speaks for terminals
+    // this connection knows nothing about (spawn-directory-mcp.ts). `.catch(() => [])` is why that
+    // guard matters — a transient failure reading Claude Code's config arrives as "no groups".
+    //
+    // Against the SESSION's directory rather than the request's: a reconnect after a server restart
+    // often carries no `?cwd=` at all, which would resolve to the default workspace (#1514).
+    const mcpGroups = live ? [] : await registeredGuiMcpGroups(sessionDir, TOOL_GROUPS).catch(() => []);
+    if (!live) await syncDirectoryMcpForSpawnAsync(sessionId, sessionDir, mcpGroups, syncCursorDirectoryMcp);
+    if (!clientStillConnected(ws, "cursor", sessionId, early)) return;
+    const settled = settledEntry(ws, "cursor", sessionId, !!live, early);
+    if (!settled) return;
+    startAndWire(deps, ws, { id: sessionId, tag: "cursor", early, startFailureMessage: startFailureMessageFor("cursor"), size }, () => {
+      const entry = settled.entry ? deps.reattachPty(settled.entry, ws, sessionId) : deps.spawnCursorPty(sessionId, ws, null, sessionDir, { mcpGroups });
+      // Single view = the attached session IS the actively-viewed pane. A grid cell (`gui=0`) is
+      // only "viewed" once focused, and says so with a `view` frame.
+      entry.active = singleView;
+      return entry;
+    });
+  });
+}
+
 function resolveAntigravitySession(requested: string | null): ResumableSession {
   return resolveResumableSession(requested, ({ hasLivePty, tmuxAlive }) =>
     // The same rule codex resumes by, including the part that is easy to drop: the key is only
@@ -1059,7 +1054,7 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   const runWss = new WebSocketServer({ noServer: true });
   // Launcher terminals (a plain shell / codex / any configured command) get their own WS
   // too. Unlike /ws/run these are PERSISTENT & reattachable (they share the /ws session
-  // lifecycle — ptys map, reattach, reap grace) but carry no Claude hooks/transcript.
+  // lifecycle — ptys map, reattach, reap grace) but report no activity and keep no transcript.
   const runLaunchWss = new WebSocketServer({ noServer: true });
   // First-class codex sessions — persistent + reattachable like /ws/launch, but running codex
   // with session discovery + resume. Its own endpoint so /ws stays claude-only.
@@ -1071,6 +1066,8 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   const runMuseWss = new WebSocketServer({ noServer: true });
   // First-class copilot sessions — same again, under an id this server minted (`--session-id`).
   const runCopilotWss = new WebSocketServer({ noServer: true });
+  // First-class cursor sessions — same again, under an id this server minted (`--resume <uuid>`).
+  const runCursorWss = new WebSocketServer({ noServer: true });
   const serverFor: Record<TerminalWsKind, WebSocketServer> = {
     claude: wss,
     run: runWss,
@@ -1080,6 +1077,7 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
     grok: runGrokWss,
     muse: runMuseWss,
     copilot: runCopilotWss,
+    cursor: runCursorWss,
   };
   const onUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     const { pathname } = new URL(req.url ?? "/", "http://localhost");
@@ -1109,4 +1107,5 @@ export function mountTerminalWebSockets(deps: WsRouteDeps) {
   runGrokWss.on("connection", (ws, req) => void handleDirectoryMcpAgentConnection(GROK_WS_AGENT, deps, ws, req));
   runMuseWss.on("connection", (ws, req) => void handleDirectoryMcpAgentConnection(MUSE_WS_AGENT, deps, ws, req));
   runCopilotWss.on("connection", (ws, req) => void handleCopilotConnection(deps, ws, req));
+  runCursorWss.on("connection", (ws, req) => void handleCursorConnection(deps, ws, req));
 }

@@ -204,8 +204,8 @@ npx mulmoterminal@latest
 
 **そのプロジェクトの作業ならそのリポジトリ、3.x までの単一ビューと同じことをしたいならワークスペース**（サーバの既定の作業ディレクトリ。起動時に `Workspace: …` と表示されます。MulmoClaude と併用しているなら、その共有ワークスペース＝既定 `~/mulmoclaude`）**です。**
 
-**ワークスペースで起動した Claude / Codex のセッションは、GUI ツールを全部持ちます** — Canvas に描かせる・コレクションを触らせるといったツールが、何も登録せずに通る状態です。
-Claude でも Codex でも同じで、WORKING DIRECTORY 行の先頭にある **WORKSPACE** チップがそこへの近道です（Antigravity と Grok は例外で、どちらもどこで動かしてもディレクトリに登録されたぶんだけ → [Antigravity と Grok はどこでも登録が要る](basics.html#antigravity-gui-tools)）。**起動コマンド（launch command）はこれには当たりません** — コマンドラインを逐語的に実行するだけで、`claude` であっても GUI ツールは付きません。
+**ワークスペースで起動した Claude / Codex / Copilot のセッションは、GUI ツールを全部持ちます** — Canvas に描かせる・コレクションを触らせるといったツールが、何も登録せずに通る状態です。
+この 3 つならどれでも同じで、WORKING DIRECTORY 行の先頭にある **WORKSPACE** チップがそこへの近道です（Antigravity・Grok・Muse・Cursor は例外で、どこで動かしてもディレクトリに登録されたぶんだけ → [Antigravity・Grok・Muse・Cursor はどこでも登録が要る](basics.html#antigravity-gui-tools)）。**起動コマンド（launch command）はこれには当たりません** — コマンドラインを逐語的に実行するだけで、`claude` であっても GUI ツールは付きません。
 プロジェクトのディレクトリで起動したセルは、そのディレクトリに登録されているツールグループだけを持つので、GUI ツールが要るならランチャの MCP トグルで登録します（→ [どのディレクトリで起動するか](basics.html#launch-dir)）。
 
 ---

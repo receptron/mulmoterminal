@@ -73,6 +73,8 @@ const deps = {
   museModel: null,
   copilotBin: "copilot",
   copilotModel: null,
+  cursorBin: "cursor-agent",
+  cursorModel: null,
   permissionMode: "acceptEdits",
   guiMcpTools: "mcp__mt",
   gridMcpTools: "mcp__mulmoterminal-render__presentHtml",

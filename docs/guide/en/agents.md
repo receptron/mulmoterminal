@@ -3,12 +3,12 @@ title: Which coding agent
 layout: default
 parent: English
 nav_order: 7
-description: Every coding agent a MulmoTerminal cell can run — Claude Code, Codex, Antigravity, Grok and Muse — what each one needs installed, how it resumes a conversation, how it reaches the GUI tools, and how to run Claude Code through a backend or a command line of your own.
+description: Every coding agent a MulmoTerminal cell can run — Claude Code, Codex, Antigravity, Grok, Muse, GitHub Copilot CLI and Cursor CLI — what each one needs installed, how it resumes a conversation, how it reaches the GUI tools, and how to run Claude Code through a backend or a command line of your own.
 ---
 
 # Which coding agent
 
-A cell runs **one agent**, chosen in the **Agent Picker** at the top of an empty cell. Five agents
+A cell runs **one agent**, chosen in the **Agent Picker** at the top of an empty cell. Seven agents
 are first-class, plus **Shell**, which is not an agent at all.
 
 They are not interchangeable. Each keeps its conversations in its own place, so **only the agent
@@ -18,7 +18,7 @@ reading before you pick one.
 
 ---
 
-## The five agents at a glance {#at-a-glance}
+## The seven agents at a glance {#at-a-glance}
 
 | | Agent Picker | Command | Badge | GUI tools reach it by | Model override |
 |---|---|---|---|---|---|
@@ -27,9 +27,18 @@ reading before you pick one.
 | **Antigravity** | Antigravity | `agy` | `agy` | a file in the directory | `ANTIGRAVITY_MODEL` |
 | **Grok** | Grok | `grok` | `gk` | a file in the directory | `GROK_MODEL` |
 | **Muse** | Muse | `muse` | `mu` | a plugin, per machine | `MUSE_MODEL` |
+| **GitHub Copilot CLI** | Copilot | `copilot` | `cp` | a per-session URL | `COPILOT_MODEL` |
+| **Cursor CLI** | Cursor | `cursor-agent` | `cu` | a file in the directory *(not written for you yet)* | `CURSOR_MODEL` |
 
 Every command can be pointed elsewhere with `CLAUDE_BIN` / `CODEX_BIN` / `ANTIGRAVITY_BIN` /
-`GROK_BIN` / `MUSE_BIN` — a pinned version, a wrapper, a path outside `PATH`.
+`GROK_BIN` / `MUSE_BIN` / `COPILOT_BIN` / `CURSOR_BIN` — a pinned version, a wrapper, a path
+outside `PATH`.
+
+**Which ones tell you when they finish.** Claude and Cursor drive both the working dot and the
+finished one, so a cell you are not looking at raises the attention mark and plays the sound.
+Codex and Copilot drive the working half only. Antigravity, Grok and Muse drive neither — their
+cells run fine and simply stay quiet. Only Claude can also tell you it is **blocked waiting for
+you**; for every other agent an approval prompt sits in the cell without a sound.
 
 Nothing has to be installed for an agent you do not use. An agent whose command is missing simply
 fails to start that cell; the others are unaffected.
@@ -45,27 +54,38 @@ that draw a chart in the Canvas, read the workspace's data, and so on, grouped a
 There are **three routes**, and which one an agent takes is a property of the agent's CLI, not a
 setting you can change.
 
-### 1. A per-session URL — Claude Code and Codex
+### 1. A per-session URL — Claude Code, Codex and Copilot
 
-In the **workspace**, these two are handed **every tool** on one generated URL, per session. There
-is nothing to register and nothing to switch on: the launcher form does not even show the tool-group
-toggles there, because they would not add anything.
+In the **workspace**, these three are handed **every tool** on one generated URL, per session.
+There is nothing to register and nothing to switch on: the launcher form does not even show the
+tool-group toggles there, because they would not add anything.
 
-In a **project directory** they use route 2 below, like everyone else.
+In a **project directory** they are handed only the groups that directory registered — still on a
+per-spawn flag, not by reading the file route 2 uses.
 
-### 2. A file in the directory — Antigravity and Grok
+### 2. A file in the directory — Antigravity, Grok and Cursor
 
-Neither CLI can be handed a URL at spawn, so both read a **config file in the directory** and get
-whatever that file registers — in the workspace too.
+None of these can be handed a URL at spawn, so each reads a **config file in the directory** and
+gets whatever that file registers — in the workspace too.
 
 - **Antigravity** reads a JSON file MulmoTerminal writes from the directory's toggles, and rewrites
   whenever a toggle flips. Servers it did not write are left alone, and the file is kept out of
   `git status`.
 - **Grok** reads `.grok/config.toml`, which is yours — so MulmoTerminal drives `grok mcp add`
   rather than editing the file itself.
+- **Cursor** reads `.cursor/mcp.json`, which MulmoTerminal writes from the directory's toggles —
+  **when a cursor cell starts there**, not when you flip the switch. (Antigravity's file is rewritten
+  on the flip; cursor's is not, so a directory gets the file the first time you actually run cursor
+  in it.) Either way the change reaches the NEXT session, never one already running. Cursor then
+  needs one step neither of the others does: it will not load a server it has not **approved**, and
+  an unapproved one is *silently absent* rather than prompted for — so each entry MulmoTerminal wrote
+  is approved through `cursor-agent mcp enable` as the cell starts. Your own entries in that file are
+  left exactly as you wrote them, and the file is kept out of `git status` only when MulmoTerminal
+  created it.
 
-So with either of these picked, the four toggles stay visible in the launcher form even in the
-workspace. That is the truthful answer: they are the only way those agents get any GUI tools.
+So with Antigravity, Grok or Cursor picked, the four toggles stay visible in the launcher form even
+in the workspace. That is the truthful answer: the directory's file is the only way these three get
+any GUI tools.
 
 ### 3. A plugin, per machine — Muse *(new in 4.7.0)* {#muse-plugin}
 
@@ -102,6 +122,8 @@ selected*. Each agent keeps its own store, so the lists never mix.
 | Antigravity | its own conversation store |
 | Grok | its own store, keyed by directory |
 | Muse | a SQLite session index plus a session log |
+| GitHub Copilot CLI | `~/.copilot/session-state/<id>/`, with a machine-wide SQLite index |
+| Cursor CLI | `~/.cursor/projects/<slug>/agent-transcripts/<id>/` |
 
 A resumed Muse session keeps its `--workspace`, which is what registers its workspace tools — a
 resume that dropped it came back with the conversation and without the tools (fixed in 4.7.0).
@@ -113,7 +135,7 @@ a seed is only sent on a fresh session.
 
 ## The header badges
 
-A non-Claude cell wears a short badge (`cx`, `agy`, `gk`, `mu`) so you can tell at a glance what a
+A non-Claude cell wears a short badge (`cx`, `agy`, `gk`, `mu`, `cp`, `cu`) so you can tell at a glance what a
 cell is running. Beside it the header shows the model and how full the context is, and the
 up/down arrows are the session's token usage.
 
@@ -152,7 +174,7 @@ hard to diagnose from inside a session: [Providers and models](providers.html).
 ### Your own command line — `customAgents`
 
 A `customAgents` entry is **your** way of starting Claude Code — a wrapper script, a pinned binary,
-`ollama launch claude --model … --` — and it appears in the Agent Picker beside the five above.
+`ollama launch claude --model … --` — and it appears in the Agent Picker beside the built-in ones.
 Claude Code's whole argv is appended to what you wrote, so the session still resumes, still reports
 cost, and still gets the GUI tools.
 

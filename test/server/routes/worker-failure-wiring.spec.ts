@@ -44,6 +44,7 @@ mountPluginRoutes(app, {
   spawnGrokPty: (() => ({})) as never,
   spawnMusePty: (() => ({})) as never,
   spawnCopilotPty: (() => ({})) as never,
+  spawnCursorPty: (() => ({})) as never,
   registerBackgroundSession: () => {},
 });
 const call = routeCall(app);

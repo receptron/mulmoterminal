@@ -2,7 +2,7 @@
 // protocol in server/index.ts). Split out from Terminal.vue so the rules are unit-
 // testable independent of the xterm/keep-alive machinery.
 
-// A command (Run) or launcher terminal has no Claude/Codex attention hooks, so it
+// A command (Run) or launcher terminal reports no activity of its own, so it
 // never reports a view state — the server has nothing to gate on it.
 export function terminalManagesAttention(command: boolean, launcher: boolean): boolean {
   return !command && !launcher;

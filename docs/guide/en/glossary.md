@@ -38,7 +38,7 @@ An AI that runs on the command line, reads your codebase, writes files, runs tes
 **Claude Code** (Anthropic) and **Codex CLI** (OpenAI) are the two this app launches, per cell — so
 you can put the same task to both and compare, or have one review the other.
 
-→ [Claude and Codex together](basics.html#claude-and-codex) · [Cross-terminal talk](features.html)
+→ [Mixing agents in one grid](basics.html#claude-and-codex) · [Cross-terminal talk](features.html)
 
 ## Parallel agents / multi-agent
 
@@ -54,14 +54,14 @@ out is **your attention**, not the machine's. The grid solves that with colour a
 ## Grid / cell
 
 The **grid** is the screen that holds several agents (and the one the app opens on). A **cell** is
-one square: a Claude or Codex session, a shell, or a single command. Nine cells per page; overflow
+one square: an agent session, a shell, or a single command. Nine cells per page; overflow
 opens another page (tab).
 
 → [Basics](basics.html)
 
 ## Agent Picker
 
-The **Claude / Codex / Antigravity / Grok / Shell** toggle at the top of an empty cell's launcher form:
+The **Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor / Shell** toggle at the top of an empty cell's launcher form:
 what that cell will be started as. It is what starts a real **agent session** — resumable
 transcript, cost and context, a "waiting for you" status. Not to be confused with a **launch
 command** (a launcher chip), which runs your own command line verbatim, whatever it names.
@@ -90,7 +90,7 @@ The server's **default working directory** (`CLAUDE_CWD`) — settled in the ord
 It is printed as `Workspace: …` at startup.
 Collections, Wiki and Accounting read and write there, and if you also run MulmoClaude it should be **the same directory for both** (`~/mulmoclaude` by default) — not the directory you cloned MulmoClaude into.
 
-It is treated differently from a project directory: **a Claude or Codex session launched here has every GUI tool**, the way the single view in 3.x did — whichever of the two you pick in the Agent Picker. Antigravity and Grok are the exceptions (each gets what its directory registered, in the workspace too → [Antigravity and Grok register everywhere](basics.html#antigravity-gui-tools)), and a Shell or a **launch command** carries no GUI tools at all, `claude` as the command line included: a launch command is run verbatim and is never an agent session.
+It is treated differently from a project directory: **a Claude, Codex or Copilot session launched here has every GUI tool**, the way the single view in 3.x did. Antigravity, Grok, Muse and Cursor are the exceptions — each gets what its directory registered, in the workspace too (→ [Antigravity, Grok, Muse and Cursor register everywhere](basics.html#antigravity-gui-tools)), and a Shell or a **launch command** carries no GUI tools at all, `claude` as the command line included: a launch command is run verbatim and is never an agent session.
 
 → [Which directory to launch in](basics.html#launch-dir)
 

@@ -45,6 +45,7 @@ import { antigravityModelFromTranscriptHead, antigravityTranscriptPath } from ".
 import { antigravityBadgesFromDb } from "../agents/antigravity-usage.js";
 import { museSessionLogPath, museSessionModel } from "../agents/muse-session.js";
 import { copyMuseBadgeFold, emptyMuseBadgeFold, foldMuseBadges, isMuseBadgeFold, type MuseBadgeFold } from "../agents/muse-usage.js";
+import { cursorBadges } from "../agents/cursor-usage.js";
 import { museConversations, museConversationsHydrated } from "./registry.js";
 import { readTailRecords } from "../infra/jsonl-file.js";
 import { createTranscriptFold } from "./transcript-fold.js";
@@ -241,5 +242,14 @@ export async function agentBadges(cwd: string, id: string, agent: Exclude<Termin
   if (agent === "codex") return codexBadges(id, roots.codexSessions ?? codexSessionsRoot());
   if (agent === "grok") return grokBadges(cwd, id, roots.grokSessions ?? grokSessionsRoot());
   if (agent === "muse") return museBadges(id);
+  // In memory rather than off a log, because cursor writes its counts to no file — see
+  // cursor-usage.ts. Synchronous, and awaited only because this function's shape is a promise.
+  if (agent === "cursor") return cursorBadges(id);
+  // EXPLICIT, and it used to be the fall-through. Every agent added after this function was written
+  // landed on agy's reader by default — a copilot id looked up under agy's HOME, which answers
+  // nothing only because nothing is there to answer. Copilot's own counts are in
+  // `~/.copilot/session-store.db` (`assistant_usage_events`) and reading them is row 15's remaining
+  // follow-up; until then it has no badge, which is what it had.
+  if (agent === "copilot") return { usage: EMPTY_USAGE, context: { model: null, contextTokens: 0 } };
   return antigravityBadges(id, roots.antigravityHome ?? antigravityHome());
 }

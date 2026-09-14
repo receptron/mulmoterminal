@@ -1,6 +1,6 @@
 title: MulmoTerminal Guide
 description: >-
-  Run multiple Claude Code and Codex sessions in parallel — a browser terminal grid
+  Run multiple coding-agent sessions in parallel — a browser terminal grid
   that shows which agent needs you. Setup, the grid view, git worktrees, phone push
   and configuration. 日本語 / English.
 # Built via GitHub Actions (see .github/workflows/pages.yml) with Jekyll 4 + the just-the-docs

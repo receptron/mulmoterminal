@@ -88,17 +88,13 @@ import { spawnScheduledWorker } from "./session/scheduled-chat.js";
 import { createToolStores } from "./session/tool-store.js";
 import { writeDecisionDigest } from "./session/decision-digest-file.js";
 import { createScheduledSessionRegistry, scheduledSessionInUse, scheduledSessionsDir } from "./session/scheduled-sessions.js";
-import { claudeAdapter } from "./agents/claude.js";
-import { codexAdapter } from "./agents/codex.js";
-import { antigravityAdapter } from "./agents/antigravity.js";
-import { grokAdapter } from "./agents/grok.js";
-import { museAdapter } from "./agents/muse.js";
-import { copilotAdapter } from "./agents/copilot.js";
-import { removeCopilotHooksFile, repairStaleCopilotHooksFile } from "./agents/copilot-hooks-file.js";
+import { AGENT_BINS, AGENT_MODELS } from "./config/agent-bins.js";
+import { wireMachineGlobalHooks } from "./agents/machine-global-hooks.js";
 import { createAntigravitySpawner } from "./session/spawn-antigravity.js";
 import { createGrokSpawner } from "./session/spawn-grok.js";
 import { createMuseSpawner } from "./session/spawn-muse.js";
 import { createCopilotSpawner } from "./session/spawn-copilot.js";
+import { createCursorSpawner } from "./session/spawn-cursor.js";
 import { renderScreen } from "./session/headlessScreen.js";
 import {
   agentFromPaneCommand,
@@ -157,7 +153,8 @@ import { earliestStartedAt, liveInstances, registerInstance } from "../bin/insta
 import { setProcessTitle } from "../bin/process-title.js";
 import { pruneOrphanDrops } from "./session/session-drops.js";
 
-// Per-session activity flags, driven by Claude hooks (see /api/hook).
+// Per-session activity flags, driven by agent hooks (see /api/hook) — claude's directly,
+// copilot's and cursor's translated into claude's vocabulary first.
 
 // Register the top-level uncaughtException/unhandledRejection guards before any async boot
 // work runs, so a single unhandled error can't silently kill the backend and disconnect
@@ -171,18 +168,16 @@ setProcessTitle(PORT);
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const CLAUDE_BIN = claudeAdapter.bin();
-const CODEX_BIN = codexAdapter.bin();
-const ANTIGRAVITY_BIN = antigravityAdapter.bin();
-const GROK_BIN = grokAdapter.bin();
-const MUSE_BIN = museAdapter.bin();
-const COPILOT_BIN = copilotAdapter.bin();
-// Model override for codex sessions (--model); null uses codex's own configured default.
-const CODEX_MODEL = process.env.CODEX_MODEL || null;
-const ANTIGRAVITY_MODEL = process.env.ANTIGRAVITY_MODEL || null;
-const GROK_MODEL = process.env.GROK_MODEL || null;
-const MUSE_MODEL = process.env.MUSE_MODEL || null;
-const COPILOT_MODEL = process.env.COPILOT_MODEL || null;
+const {
+  claude: CLAUDE_BIN,
+  codex: CODEX_BIN,
+  antigravity: ANTIGRAVITY_BIN,
+  grok: GROK_BIN,
+  muse: MUSE_BIN,
+  copilot: COPILOT_BIN,
+  cursor: CURSOR_BIN,
+} = AGENT_BINS;
+const { codex: CODEX_MODEL, antigravity: ANTIGRAVITY_MODEL, grok: GROK_MODEL, muse: MUSE_MODEL, copilot: COPILOT_MODEL, cursor: CURSOR_MODEL } = AGENT_MODELS;
 // Permission mode for backend-spawned Claude sessions. Defaults to "auto" so
 // the backend runs hands-off; override with CLAUDE_PERMISSION_MODE (e.g.
 // "default" / "acceptEdits" / "bypassPermissions" / "plan") when needed.
@@ -343,6 +338,8 @@ const spawnDeps: SpawnDeps = {
   museModel: MUSE_MODEL,
   copilotBin: COPILOT_BIN,
   copilotModel: COPILOT_MODEL,
+  cursorBin: CURSOR_BIN,
+  cursorModel: CURSOR_MODEL,
   permissionMode: CLAUDE_PERMISSION_MODE,
   guiMcpTools: GUI_MCP_TOOLS,
   gridMcpTools: GRID_MCP_TOOLS,
@@ -364,6 +361,7 @@ const { spawnAntigravityPty } = createAntigravitySpawner(spawnDeps);
 const { spawnGrokPty } = createGrokSpawner(spawnDeps);
 const { spawnMusePty } = createMuseSpawner(spawnDeps);
 const { spawnCopilotPty } = createCopilotSpawner(spawnDeps);
+const { spawnCursorPty } = createCursorSpawner(spawnDeps);
 const { spawnCommandPty, spawnLauncherPty, resolveLauncher } = createShellSpawners(spawnDeps);
 
 // The hidden translation worker (session/translation-worker.ts). It drives a headless
@@ -526,6 +524,7 @@ mountAppRoutes(app, {
   spawnGrokPty,
   spawnMusePty,
   spawnCopilotPty,
+  spawnCursorPty,
   translateViaHiddenChat,
   freshenRosterTitle,
   forgetTitle,
@@ -938,6 +937,7 @@ mountTerminalWebSockets({
   spawnGrokPty,
   spawnMusePty,
   spawnCopilotPty,
+  spawnCursorPty,
   spawnCommandPty,
   spawnLauncherPty,
   resolveLauncher,
@@ -983,15 +983,9 @@ server.listen(Number(PORT), BIND_HOST, () => {
   // tell our live files from a dead server's leftovers (#1061).
   const unregisterInstance = registerInstance(Number(PORT));
   process.on("exit", unregisterInstance);
-  // Copilot's hook file names this server's port and is read by copilot sessions we did not start,
-  // so leaving it behind points their prompts at whatever takes the port next (#2063). Same exit,
-  // same reason as the instance registration above: our live files must not read as a live server.
-  process.on("exit", () => removeCopilotHooksFile());
-  // …and the other half: a server that died badly never ran that handler, so its file is still
-  // pointing copilot at a port nobody holds. REPAIRED, not removed — proving ownership of a file
-  // written by a process that no longer exists cannot be done from disk alone, so the stale one is
-  // rewritten with this server's port instead of deleted. A live peer's file is left to it.
-  repairStaleCopilotHooksFile("127.0.0.1", PORT);
+  // Both machine-global hook files — copilot's and cursor's — are removed on the way out and
+  // repaired at startup. server/agents/machine-global-hooks.ts says why each half exists.
+  wireMachineGlobalHooks(PORT);
 
   // A crash never reaches reap(), so settings files — one of which may hold a provider's API
   // token — outlive the sessions that used them. Anything not backed by a surviving tmux

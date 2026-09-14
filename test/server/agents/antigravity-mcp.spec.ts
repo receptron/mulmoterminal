@@ -33,6 +33,15 @@ describe("mergeAntigravityMcpServers", () => {
     expect(mergeAntigravityMcpServers({ "mulmoterminal-gui": { command: "old" } }, [])).toEqual({});
   });
 
+  // Same defect, same shape: an OWN `__proto__` key survives JSON.parse and a plain `{}` target
+  // loses it, which would delete the user's entry from the file we write back.
+  it("keeps a user's own `__proto__` server entry instead of dropping it", () => {
+    const existing: Record<string, unknown> = JSON.parse('{"__proto__":{"command":"theirs"},"keep":{"command":"x"}}');
+    const merged = mergeAntigravityMcpServers(existing, ["render"]);
+    expect(Object.prototype.hasOwnProperty.call(merged, "__proto__")).toBe(true);
+    expect(JSON.stringify(merged)).toContain("theirs");
+  });
+
   // `mt` is the CURRENT all-tools id, and this path has never written it — the all-tools entry
   // belongs to the claude/codex spawn config, not to `.agents/mcp_config.json`. So an agy server
   // a user called `mt` is theirs, and deleting it here would be this code destroying a file it

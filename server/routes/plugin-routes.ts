@@ -17,6 +17,7 @@ import { agentCarriesFullGuiMcp } from "../../common/guiMcpAgents.js";
 import { backgroundChatMessage, parseBackgroundChat, spawnModeFor, type SpawnMode } from "../session/background-chat.js";
 import type { TerminalAgent } from "../../common/sessionAgent.js";
 import { registeredGuiMcpGroups } from "../infra/gui-mcp-registration.js";
+import { syncCursorDirectoryMcp } from "../agents/cursor-mcp.js";
 import { resolveSpawnCollection } from "../session/spawn-collection.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { codexifySkillSeed } from "../agents/codex-skills.js";
@@ -30,7 +31,7 @@ import { runManageShapeScript } from "../infra/shapescript-manage-tool.js";
 import { manageSharedApp } from "../infra/shared-app-tool.js";
 import { useSharedApp } from "../infra/use-shared-app-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
-import type { SpawnClaudePty, SpawnCodexPty, SpawnAntigravityPty, SpawnGrokPty, SpawnMusePty, SpawnCopilotPty } from "../session/spawners.js";
+import type { SpawnClaudePty, SpawnCodexPty, SpawnAntigravityPty, SpawnGrokPty, SpawnMusePty, SpawnCopilotPty, SpawnCursorPty } from "../session/spawners.js";
 
 export interface PluginRouteDeps {
   spawnClaudePty: SpawnClaudePty;
@@ -39,6 +40,7 @@ export interface PluginRouteDeps {
   spawnGrokPty: SpawnGrokPty;
   spawnMusePty: SpawnMusePty;
   spawnCopilotPty: SpawnCopilotPty;
+  spawnCursorPty: SpawnCursorPty;
   /** Put a hidden spawn on the scheduled-session retention (#541). Nobody watches a
    *  background worker and the chat list keeps it behind a filter, so the hook-driven reap
    *  is the only thing that would ever end it — and a worker blocked on a permission prompt
@@ -78,6 +80,11 @@ function spawnSeededSession(
   // A seeded copilot chat carries the whole GUI MCP (attachGuiMcp = true): it has no cell, which is
   // the same reason claude and codex get it here.
   else if (mode === "copilot-run") deps.spawnCopilotPty(sessionId, null, null, cwd, true, { mcpGroups, initialPrompt });
+  // Cursor reaches its groups through a file in the directory, written and approved by the caller
+  // before this runs (cursor-mcp.ts). The list is passed anyway, as muse's is: the bridge cannot
+  // inherit anything from cursor, so it asks which session it belongs to and is told these groups
+  // with the answer (bridge-session.ts).
+  else if (mode === "cursor-run") deps.spawnCursorPty(sessionId, null, null, cwd, { mcpGroups, initialPrompt });
   else if (mode === "claude-draft") deps.spawnClaudePty(sessionId, null, null, { draft: message, cwd });
   else deps.spawnClaudePty(sessionId, null, null, { initialPrompt: message, cwd });
 }
@@ -110,9 +117,9 @@ async function groupsForSpawn(agent: TerminalAgent, cwd: string): Promise<readon
   // DERIVED, not listed: an agent that carries the whole GUI MCP on a per-spawn flag has no use for
   // the directory's registered groups, and the membership of that set already lives in
   // common/guiMcpAgents.ts. The list here was written when it held three agents, and a sixth would
-  // have been added to the wrong side of it by anyone reading the names rather than the rule.
-  const needsGroups = !agentCarriesFullGuiMcp(agent);
-  return needsGroups ? await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []) : [];
+  // have been added to the wrong side of it by anyone reading the names rather than the rule — so
+  // an eighth lands on the right side without an edit here.
+  return agentCarriesFullGuiMcp(agent) ? [] : await registeredGuiMcpGroups(cwd, TOOL_GROUPS).catch(() => []);
 }
 
 export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
@@ -138,6 +145,10 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
     // The DISK append is deliberately not awaited — see rememberSessionCollection for why a lost
     // one costs a glyph after a restart and nothing the caller could act on.
     const [mcpGroups, startedFrom] = await Promise.all([groupsForSpawn(agent, cwd), resolveSpawnCollection(collection, cwd)]);
+    // Cursor's groups do not travel in the spawn call: they are written into `.cursor/mcp.json` and
+    // approved, both of which must finish before the agent starts reading either (cursor-mcp.ts).
+    // A fresh id, so this is never a reattach — the guard the ws route needs has nothing to guard.
+    if (agent === "cursor") await syncCursorDirectoryMcp(cwd, mcpGroups);
     try {
       runWithHiddenMarker(hidden, sessionId, backgroundMarkers, () =>
         spawnSeededSession(deps, spawnModeFor(agent, draft), { sessionId, message, mcpGroups, cwd }),
@@ -162,14 +173,27 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
         // leave a hook nothing will ever fire or clear. Safe against the feeds engine's own hook
         // (last writer wins) because that dispatches through its own spawner, never this route.
         //
-        // CLAUDE ONLY, and that is a correctness limit rather than a scope choice. The single
-        // success signal a PTY-hosted agent gives us is a finished turn reported by Claude Code's
-        // Stop hook (hook-routes.ts); codex and antigravity have no hook mechanism at all, so
-        // they can never report success. Registering for them would mean every SUCCESSFUL hidden
-        // codex worker reached reap unreported and was marked failed — a signal that is wrong
-        // more often than it is right, which is worse than the silence it replaced.
-        // (Codex, PR #1188.) A non-claude hidden worker therefore keeps today's behaviour: no
-        // failure signal. Giving it one needs a completion signal for those agents first.
+        // CLAUDE ONLY, and that is a correctness limit rather than a scope choice — but the limit
+        // is not the one this comment used to give, and the difference matters now that three
+        // agents report a finished turn rather than one.
+        //
+        // The rule is: a MISSING Stop may only be read as failure when a Stop was GUARANTEED to
+        // arrive if the turn had finished. Claude qualifies because its hooks travel in a settings
+        // file written per spawn (hook-settings.ts) — if the session started, the hooks are its
+        // own. Codex and antigravity never qualify: they have no hook mechanism at all, so
+        // registering for them would mark every SUCCESSFUL hidden worker failed, a signal wrong
+        // more often than right (Codex, PR #1188).
+        //
+        // Copilot and cursor DO translate a Stop (copilot-hook.ts, cursor-hook.ts) and still do not
+        // qualify, for a reason neither claude nor codex has: their hooks live in ONE machine-global
+        // file, and this server may not own it — it refuses a file a user wrote themselves, and a
+        // second MulmoTerminal instance can take it over. Both are ordinary, logged states in which
+        // the agent runs perfectly and reports nothing. Reading silence as failure there marks
+        // successful workers failed for a reason outside the session entirely.
+        //
+        // So a hidden copilot or cursor worker keeps today's behaviour: no failure signal. Giving
+        // it one means first knowing that OUR hook file is the live one for this spawn, which is a
+        // fact the spawner has and does not currently carry (Codex round 3 of #2065).
         //
         // RECORDS ONLY, and synchronously. Announcing is reap's job: it publishes one teardown
         // message carrying this outcome, which is what keeps the generic notification from

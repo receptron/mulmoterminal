@@ -14,6 +14,7 @@ const noEvidence: SurvivorEvidence = {
   grok: () => false,
   muse: () => false,
   copilot: () => false,
+  cursor: () => false,
 };
 const only = (agent: keyof SurvivorEvidence): SurvivorEvidence => ({ ...noEvidence, [agent]: () => true });
 

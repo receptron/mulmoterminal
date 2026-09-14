@@ -69,6 +69,8 @@ const deps = {
   museBin: "muse",
   museModel: null,
   copilotBin: "copilot",
+  cursorBin: "cursor-agent",
+  cursorModel: null,
   copilotModel: null,
   permissionMode: "default",
   guiMcpTools: "mcp__mulmoterminal-gui",

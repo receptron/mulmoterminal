@@ -42,6 +42,18 @@ const mountForm = (
     global: { stubs: { ModelPicker: true } },
   });
 
+/** Every fetch the launch form makes while the GUI-tools section renders. Module scope because two
+ *  describes need it, and a second copy is a lint error rather than a convenience. */
+const guiMcpFetch = () => {
+  globalThis.fetch = vi.fn(async (url: string) => {
+    const u = String(url);
+    if (u.includes("/api/gui-mcp-groups")) return { ok: true, json: async () => ({ groups: [] }) };
+    if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: true, base: "main", worktrees: [] }) };
+    if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ cwd: "/repo", sessions: [] }) };
+    return { ok: true, json: async () => ({}) };
+  }) as unknown as typeof fetch;
+};
+
 // The launch button of the chip for a given directory. The workspace chip is always first now, so
 // selecting a chip by position picks the wrong one.
 const launchButtonFor = (w: ReturnType<typeof mountForm>, path: string) => chipForPath(w, path).find('[data-testid="cell-chip-launch"]');
@@ -504,16 +516,6 @@ describe("the workspace chip", () => {
 // a per-directory file, never through a per-spawn config, so in the workspace it must still be
 // asked. The cases below pin both halves.
 describe("the GUI tool groups in the workspace", () => {
-  const guiMcpFetch = () => {
-    globalThis.fetch = vi.fn(async (url: string) => {
-      const u = String(url);
-      if (u.includes("/api/gui-mcp-groups")) return { ok: true, json: async () => ({ groups: [] }) };
-      if (u.includes("/api/worktrees")) return { ok: true, json: async () => ({ isGit: true, base: "main", worktrees: [] }) };
-      if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ cwd: "/repo", sessions: [] }) };
-      return { ok: true, json: async () => ({}) };
-    }) as unknown as typeof fetch;
-  };
-
   it("states that everything is available instead of offering the switches", async () => {
     guiMcpFetch();
     const w = mountForm([], { dir: "/home/me/ws", defaultCwd: "/home/me/ws" });
@@ -744,7 +746,7 @@ describe("the Agent Picker's custom agents (#1414)", () => {
       .find('[data-testid="agent-picker"]')
       .findAll('[data-testid="agent-picker-label"]')
       .map((b) => b.text());
-    expect(labels).toEqual(["Claude", "Codex", "Antigravity", "Grok", "Muse", "Copilot", "Nemotron", "Shell"]);
+    expect(labels).toEqual(["Claude", "Codex", "Antigravity", "Grok", "Muse", "Copilot", "Cursor", "Nemotron", "Shell"]);
   });
 
   it("reports the pick as `custom:<id>`, which is what the cell sends to /ws", async () => {
@@ -1216,5 +1218,28 @@ describe("CellLaunchForm — the config could not be read", () => {
 
     await notice.find("button").trigger("click");
     expect(w.emitted("retry-config")).toHaveLength(1);
+  });
+});
+
+describe("the GUI tools section has two answers again (#2066)", () => {
+  // The workspace is TOLD it has everything; a directory-file agent is OFFERED the four switches.
+  // Cursor was a third answer for one release — told it had nothing, because it reads a file
+  // nothing here wrote — and #2066 made it a directory-file agent like grok. The switches are its
+  // route now, so hiding them would be #1423 again: the control that is the agent's ONLY way to
+  // register anything, absent from the form.
+  it("offers cursor the switches, now that what they register reaches it", async () => {
+    guiMcpFetch();
+    const w = mountForm([], { agent: "cursor" });
+    await flushPromises();
+    expect(w.find('[data-testid="cell-mcp-toggle-render"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-mcp-none"]').exists()).toBe(false);
+  });
+
+  it("still offers them to grok, which genuinely reads what they register", async () => {
+    guiMcpFetch();
+    const w = mountForm([], { agent: "grok" });
+    await flushPromises();
+    expect(w.find('[data-testid="cell-mcp-toggle-render"]').exists()).toBe(true);
+    expect(w.find('[data-testid="cell-mcp-none"]').exists()).toBe(false);
   });
 });

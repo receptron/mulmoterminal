@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { terminalManagesAttention, terminalViewActive } from "../../../src/components/terminalViewActive.js";
 
 describe("terminalManagesAttention", () => {
-  it("a Claude/Codex session terminal manages attention", () => {
+  it("an agent session terminal manages attention", () => {
     expect(terminalManagesAttention(false, false)).toBe(true);
   });
   it("command and launcher terminals opt out (no attention hooks)", () => {

@@ -134,6 +134,7 @@ const AGENT_WS_PATH: Record<Exclude<TerminalAgent, "claude">, string> = {
   grok: "ws/grok",
   muse: "ws/muse",
   copilot: "ws/copilot",
+  cursor: "ws/cursor",
 };
 
 export function buildAgentWsUrl(agent: Exclude<TerminalAgent, "claude">, input: AgentWsUrlInput): string {

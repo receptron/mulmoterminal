@@ -3,18 +3,17 @@ title: English
 layout: default
 nav_order: 3
 has_children: true
-description: A browser-terminal cockpit for running several AI coding agents (Claude Code, Codex) in parallel — the grid, the cockpit roster, git worktrees and phone push. Vibe coding, parallelised.
+description: A browser-terminal cockpit for running several AI coding agents in parallel — the grid, the cockpit roster, git worktrees and phone push. Vibe coding, parallelised.
 ---
 
 # MulmoTerminal Guide (English)
 
-> **4.21.0 is out, and one thing may already have cost you a file.** Clicking a spreadsheet or an
-> image in the Files pane used to **damage it on the way in** — that is fixed, and the guide tells
-> you how to find out whether it happened to you. New: right-click a row to **show it in Finder or
-> Explorer**, and a file the browser cannot display **opens in its own application** instead of
-> downloading. Also: **Actions** in the path menu, downloads that keep their own names, a failed
-> deck save that finally says so, and one ShapeScript change that needs your hands (**one statement
-> per line**). [What to do and how to tell you have them](v4.21.0.html).
+> **4.22.0 is out, and there are two more agents in the picker.** **GitHub Copilot CLI** and
+> **Cursor CLI** run in a cell now — seven agents ship. The useful question is no longer "can it
+> run?" but **"will it tell me when it has finished?"**, because the answer differs per agent:
+> **Cursor is the second one, after Claude, that goes green on its own** and raises the attention
+> mark on a cell you are not looking at. Only Claude can tell you it is **blocked** waiting for
+> you. [Which of the seven does what, and how to turn the new two on](v4.22.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

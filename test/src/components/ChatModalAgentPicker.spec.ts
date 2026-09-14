@@ -30,6 +30,6 @@ describe("ChatModalAgentPicker", () => {
 
   it("offers every agent a seeded chat can run, and no shell", () => {
     const w = mount(ChatModalAgentPicker);
-    expect(w.findAll("option").map((o) => o.attributes("value"))).toEqual(["claude", "codex", "antigravity", "grok", "muse", "copilot"]);
+    expect(w.findAll("option").map((o) => o.attributes("value"))).toEqual(["claude", "codex", "antigravity", "grok", "muse", "copilot", "cursor"]);
   });
 });

@@ -62,6 +62,20 @@ export function syncDirectoryMcpForSpawn(
   if (!ptyWouldReattach(sessionId, true)) sync(cwd, groups);
 }
 
+/** The same rule for a sync that must be AWAITED, which cursor's is: writing its file is only half
+ *  the registration — the ids then have to be approved through `cursor-agent mcp enable`, and an
+ *  unapproved server is invisible to the agent rather than prompted for (cursor-mcp.ts). So the
+ *  caller is the route, which is async, and the reattach guard has to travel with it rather than
+ *  stay behind in the sync spawner. */
+export async function syncDirectoryMcpForSpawnAsync(
+  sessionId: string,
+  cwd: string,
+  groups: readonly ToolGroup[],
+  sync: (cwd: string, groups: readonly ToolGroup[]) => Promise<void>,
+): Promise<void> {
+  if (!ptyWouldReattach(sessionId, true)) await sync(cwd, groups);
+}
+
 interface DirectoryMcpStart {
   sessionId: string;
   ws: WebSocket | null;

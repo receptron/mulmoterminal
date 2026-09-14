@@ -26,6 +26,7 @@ const AGENT_DEFAULT_COMMAND: Record<AgentKind, string> = {
   grok: "grok",
   muse: "muse",
   copilot: "copilot",
+  cursor: "cursor-agent",
 };
 
 const agentCommands = (): Record<string, SessionAgent> => {

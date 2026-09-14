@@ -10,7 +10,7 @@ description: Every MulmoTerminal feature: parallel terminals, the cockpit roster
 # Feature reference
 {: .no_toc }
 
-MulmoTerminal — a browser terminal for parallel Claude Code and Codex agents — organized by the **four pillars** (Supervise / See / Automate & investigate / Extend). For how to use them, see [Basics](basics.html) and [Scenarios](scenarios.html).
+MulmoTerminal — a browser terminal for parallel coding agents — organized by the **four pillars** (Supervise / See / Automate & investigate / Extend). For how to use them, see [Basics](basics.html) and [Scenarios](scenarios.html).
 
 - TOC
 {:toc}

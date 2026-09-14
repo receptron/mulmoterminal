@@ -350,7 +350,7 @@ or `terminal-overrides` capability. The isolation test: write the sequence **dir
   and this entry said otherwise until it was corrected.
 - **Selection & copy/paste** — several sharp edges:
   - macOS: selection is **Option+drag** (`macOptionClickForcesSelection`), not plain drag.
-  - You can only select what's on screen: a Claude/Codex TUI runs in the **alternate buffer**,
+  - You can only select what's on screen: an agent TUI runs in the **alternate buffer**,
     which has no xterm scrollback, and the normal-buffer selection **auto-scroll is broken** (#782)
     — so copying more than the visible screen isn't possible today.
   - Copy (auto): Claude's OSC 52 auto-copy works only via the tmux `Ms` override + `set-clipboard

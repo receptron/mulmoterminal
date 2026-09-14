@@ -73,7 +73,8 @@ export interface ConnTarget {
   // (`{ shell: true }`, the header "new terminal" button). Unlike `command` this is a
   // PERSISTENT session — it reconnects on drop and reattaches by session id, like a Claude cell.
   launcher: { index: number } | { shell: true } | null;
-  // A first-class non-Claude session (/ws/codex, /ws/antigravity) instead of a Claude one.
+  // A first-class non-Claude session — one endpoint per agent (`/ws/codex`, `/ws/antigravity`,
+  // `/ws/grok`, `/ws/muse`, `/ws/copilot`, `/ws/cursor`) — instead of a Claude one.
   // Persistent & reattachable like a Claude cell; the server discovers + resumes that agent's
   // own conversation id. Absent means Claude.
   agent?: TerminalAgent;

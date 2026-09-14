@@ -22,7 +22,7 @@ describe("resolveBridgeSession", () => {
   // The measured shape: bridge (2244) -> muse (2220) -> tmux, where 2220 is the pane pid tmux
   // reports for the session named by our own id.
   it("follows the process tree to the pane it is running under", () => {
-    const session = resolveBridgeSession({ panePids: new Map([[2220, A]]), ancestors: [2244, 2220, 15746], museSessions: new Map([[A, 999]]) });
+    const session = resolveBridgeSession({ panePids: new Map([[2220, A]]), ancestors: [2244, 2220, 15746], resolvableSessions: new Map([[A, 999]]) });
     expect(session).toBe(A);
   });
 
@@ -34,7 +34,7 @@ describe("resolveBridgeSession", () => {
         [100, A],
         [200, B],
       ]),
-      museSessions: new Map([
+      resolvableSessions: new Map([
         [A, 900],
         [B, 901],
       ]),
@@ -46,7 +46,7 @@ describe("resolveBridgeSession", () => {
   // With tmux persistence off there is no pane to match, and there muse is a child of the pty this
   // server spawned — so the pty's own pid is in the chain.
   it("falls back to the pty this server spawned when there is no pane", () => {
-    expect(resolveBridgeSession({ panePids: new Map(), ancestors: [4000, 3000], museSessions: new Map([[A, 3000]]) })).toBe(A);
+    expect(resolveBridgeSession({ panePids: new Map(), ancestors: [4000, 3000], resolvableSessions: new Map([[A, 3000]]) })).toBe(A);
   });
 
   // THE security case (Codex on #1514). The plugin is machine-wide, so a muse the USER started in
@@ -54,18 +54,18 @@ describe("resolveBridgeSession", () => {
   // must not be handed the session id and groups of a cell that happens to share its directory —
   // it could otherwise draw into that cell's Canvas and write artifacts under its session.
   it("refuses a muse that descends from nothing of ours, even in the same directory", () => {
-    const session = resolveBridgeSession({ panePids: new Map([[100, A]]), ancestors: [7001, 7000], museSessions: new Map([[A, 900]]) });
+    const session = resolveBridgeSession({ panePids: new Map([[100, A]]), ancestors: [7001, 7000], resolvableSessions: new Map([[A, 900]]) });
     expect(session).toBeNull();
   });
 
   it("answers nothing when no muse session is live at all", () => {
-    expect(resolveBridgeSession({ panePids: new Map([[100, A]]), ancestors: [101, 100], museSessions: new Map() })).toBeNull();
+    expect(resolveBridgeSession({ panePids: new Map([[100, A]]), ancestors: [101, 100], resolvableSessions: new Map() })).toBeNull();
   });
 
   // A pane whose session is not a LIVE muse — it ended, or it is a claude cell — must not be
   // claimed by a bridge that happens to sit under it.
   it("ignores a pane whose session is not a live muse session", () => {
-    const session = resolveBridgeSession({ panePids: new Map([[2220, "some-claude-session"]]), ancestors: [2244, 2220], museSessions: new Map() });
+    const session = resolveBridgeSession({ panePids: new Map([[2220, "some-claude-session"]]), ancestors: [2244, 2220], resolvableSessions: new Map() });
     expect(session).toBeNull();
   });
 
@@ -75,7 +75,7 @@ describe("resolveBridgeSession", () => {
     const session = resolveBridgeSession({
       panePids: new Map([[500, B]]),
       ancestors: [600, 500, 400],
-      museSessions: new Map([
+      resolvableSessions: new Map([
         [A, 400],
         [B, 901],
       ]),

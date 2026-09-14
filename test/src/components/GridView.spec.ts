@@ -572,7 +572,7 @@ describe("GridView skill launch (#1111)", () => {
     w.unmount();
   });
 
-  // A spawn follows the Claude/Codex/Antigravity toggle (`mt-launch-agent`), and a cell with no
+  // A spawn follows the Agent Picker's choice (`mt-launch-agent`), and a cell with no
   // agent flag reconnects on Claude's endpoint — so a codex session would attach as claude. The
   // old single-view path got the agent via the opener's `opts`; the grid has to carry it itself.
   // `launchAgent` (the exported ref) is set directly rather than through localStorage + a module

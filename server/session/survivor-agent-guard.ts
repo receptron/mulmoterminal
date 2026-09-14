@@ -26,6 +26,7 @@ import { codexRolloutExists } from "../agents/codex-sessions.js";
 import { antigravityBrainRoot, antigravityConversationExists } from "../agents/antigravity-session.js";
 import { grokConversationExistsInAnyCwd, grokSessionsRoot } from "../agents/grok-session.js";
 import { copilotSessionExists } from "../agents/copilot-sessions.js";
+import { cursorSessionExists } from "../agents/cursor-sessions.js";
 import { ptyWouldReattach } from "./pty-spawn.js";
 import {
   antigravityConversations,
@@ -79,6 +80,10 @@ async function survivorEvidence(): Promise<SurvivorEvidence> {
     // same shape as grok. A directory test rather than a store query: the guard runs once per
     // reconnect burst, and `session-state/<id>/` appears as soon as the session does.
     copilot: (id) => copilotSessionExists(id),
+    // cursor takes `--resume <uuid>` with an id of ours, so the key is cursor's own chat id and no
+    // mapping exists — the same shape as grok and copilot. Probed across every project partition:
+    // the request's cwd is untrustworthy on this path, as it is for grok.
+    cursor: (id) => cursorSessionExists(id),
   };
 }
 

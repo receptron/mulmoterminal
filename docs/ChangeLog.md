@@ -24,11 +24,65 @@ Entries here are folded into the next release's heading when it ships.
   the post's owner. `readPost` answers `null` for a document the rules hide (another account's
   draft). The tool keeps the `external` group and the never-auto-approved list: it publishes
   and deletes under the user's account, and a tool is grouped as a whole.
+## mulmoterminal@4.22.0 — 2026-09-14
+
+> **Setup guide:** [4.22.0 — Two more agents, and which of them will tell you it has finished](https://receptron.github.io/mulmoterminal/guide/en/v4.22.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v4.22.0.html))
+
+### Two more agent CLIs are first-class: GitHub Copilot CLI and Cursor CLI
+
+- **[#2063](https://github.com/receptron/mulmoterminal/pull/2063)** — **GitHub Copilot CLI** runs in
+  a cell: Agent Picker entry, its own WebSocket (`/ws/copilot`), and the whole GUI MCP on a
+  per-spawn flag. One flag does what the other agents split in two — `--session-id <uuid>` sets the
+  id for a NEW session *and* resumes that same session — so MulmoTerminal mints the id and there is
+  no watcher, no attribution guess and no mapping log. Its status dots and tool history come from
+  copilot's own hooks, registered **once per machine** in `<COPILOT_HOME>/hooks/mulmoterminal.json`
+  because copilot has no `--settings` equivalent and its documented per-directory hook files do not
+  load. Measured against copilot 1.0.83, and three of that vendor's documented behaviours failed on
+  contact — `-p` runs the prompt and exits (a cell needs `-i`), `--resume=<id>` is the interactive
+  picker rather than the resume flag, and `type: "http"` hooks never fire while the identical
+  `type: "command"` list fires every time.
+- **[#2065](https://github.com/receptron/mulmoterminal/pull/2065)** — **Cursor CLI** runs in a cell
+  the same way (`/ws/cursor`, `--resume <uuid>` minting and resuming under an id this server
+  invents; `cursor-agent create-chat` exists and is not needed). **Cursor is the only agent besides
+  Claude that drives BOTH status halves** — `beforeSubmitPrompt` starts the turn and `stop` ends it
+  — so a cursor cell you are not looking at raises the attention mark and plays the sound. `--trust`
+  is passed as well as `--force`, because a directory Cursor has not seen otherwise blocks on a
+  Workspace Trust prompt nobody is watching. Its chats live under
+  `~/.cursor/projects/<slug>/agent-transcripts/`, where the slug is a truncated-and-hashed form of
+  the path that cannot be reconstructed — so the conversation list reads each project directory's
+  own `.workspace-trusted` to learn which directory it stands for, and omits any that does not say.
+  Three things about cursor's hooks were measured and all three fail SILENTLY when wrong: **one
+  unknown event name voids the whole hooks file**, **a hook command whose command line contains a
+  URL is refused** and voids it the same way (hence a generated poster with the URL baked in), and
+  **the interactive TUI and `-p` print mode fire different events** — the upstream report that the
+  CLI omits `beforeSubmitPrompt`, `afterAgentResponse` and `stop` describes print mode, and all
+  three fire in the TUI a cell runs.
+- **Neither reports being blocked on input.** Every event that fires before an approval prompt also
+  fires when nothing is asked, so mapping one would flag every tool call as needing you. Claude
+  remains the only agent that can raise the amber "needs you" state; for the other six an approval
+  prompt waits silently in the cell.
+- **Cursor gets no GUI tools yet** ([#2066](https://github.com/receptron/mulmoterminal/issues/2066)):
+  it reads `.cursor/mcp.json` and nothing here writes that file, so the launcher says so instead of
+  offering four switches that cannot reach it.
+
+### "Can we support `<some other CLI>`?" now has an inventory instead of an argument
+
+- **[#2056](https://github.com/receptron/mulmoterminal/pull/2056)**,
+  **[#2061](https://github.com/receptron/mulmoterminal/pull/2061)** —
+  [`docs/agent-capability-matrix.md`](https://github.com/receptron/mulmoterminal/blob/main/docs/agent-capability-matrix.md)
+  records what each capability requires of a candidate binary, how every hosted agent answers it,
+  the probe list to run against a new one, and the file set an addition touches. Launching a CLI in
+  a PTY is the cheap part; the notification, the resume, the GUI panel and the token badge are
+  separate capabilities with their own preconditions, and the matrix is what a request like
+  [#2055](https://github.com/receptron/mulmoterminal/issues/2055) is answered from. Both agents
+  above were added by running its probe list rather than by reading vendor documentation, and in
+  both cases the documentation did not survive contact.
 
 ### `publishShapeScript` updates a published model by `id` — `@mulmoclaude/shapescript-plugin@4.0.0`
 
-- A new optional `id` argument — the tail of a post's gallery URL — rewrites the user's own
-  post in place under the same URL instead of publishing a second copy
+- **[#2067](https://github.com/receptron/mulmoterminal/pull/2067)** — a new optional `id`
+  argument — the tail of a post's gallery URL — rewrites the user's own post in place under the
+  same URL instead of publishing a second copy
   ([receptron/mulmoclaude#3158](https://github.com/receptron/mulmoclaude/pull/3158)). Only the
   account that published it can update it; every other argument is optional then, a field
   given replacing the post's and one omitted keeping it. The host's writer gains the two
@@ -40,20 +94,28 @@ Entries here are folded into the next release's heading when it ships.
 
 ### `publishShapeScript` records which AI model wrote the script — `@mulmoclaude/shapescript-plugin@3.1.0`
 
-- An optional `aiModel` argument — the model id the agent is running as, e.g. `claude-opus-5` —
-  lands on the post, and the gallery's model page shows it as "Made with …". Host code is
+- **[#2060](https://github.com/receptron/mulmoterminal/pull/2060)** — an optional `aiModel`
+  argument — the model id the agent is running as, e.g. `claude-opus-5` — lands on the post, and the gallery's model page shows it as "Made with …". Host code is
   unchanged: the argument, the document and the prompt asking the agent to pass it are the
   plugin's.
 
 ### `publishShapeScript` uploads the script as a Storage object — `@mulmoclaude/shapescript-plugin@3.0.0`
 
-- The gallery moved a post's ShapeScript source out of its Firestore document into a Storage
-  object beside the thumbnail ([receptron/mulmoserver#266](https://github.com/receptron/mulmoserver/pull/266)):
+- **[#2058](https://github.com/receptron/mulmoterminal/pull/2058)** — the gallery moved a post's
+  ShapeScript source out of its Firestore document into a Storage object beside the thumbnail ([receptron/mulmoserver#266](https://github.com/receptron/mulmoserver/pull/266)):
   the document carries `scriptId`, never the text, and the rules there refuse a `script` field.
   The host's writer gains `uploadScript`, and every object it uploads — picture or script — is
   stamped `Cache-Control: public, max-age=31536000, immutable`, as the gallery's own editor does.
   The script cap moves from 900,000 bytes to the Storage rule's 10 MiB. A host on the previous
   plugin cannot publish once the gallery's new rules are deployed: the write is refused, not lost.
+
+### A Copy button on a ShapeScript result — `@mulmoclaude/shapescript-plugin@2.8.0`
+
+- **[#2057](https://github.com/receptron/mulmoterminal/pull/2057)** — the `presentShapeScript` view
+  gains a **Copy** button that puts the ShapeScript source on the clipboard
+  ([receptron/mulmoclaude#3131](https://github.com/receptron/mulmoclaude/pull/3131)), and the publish
+  cap moves to 900,000 bytes. Host code is unchanged; the bump and the refreshed lockfile are what
+  deliver it.
 
 ### `publishShapeScript` posts a model to the gallery — `@mulmoclaude/shapescript-plugin@2.7.0`
 
@@ -95,6 +157,11 @@ Entries here are folded into the next release's heading when it ships.
   direction, a section whose last point does not repeat its first is now lofted, closed
   implicitly as upstream does, where it used to fail with a misleading "requires at least two
   cross-sections". A `define`d or returned path stays a path. No host code changes.
+
+### Dependencies
+
+- **[#2052](https://github.com/receptron/mulmoterminal/pull/2052)** — `@google/genai` 2.22.0,
+  `@mulmoclaude/core` 4.9.0, `material-symbols` 0.47.2. No user-facing change.
 
 ## mulmoterminal@4.21.0 — 2026-09-12
 

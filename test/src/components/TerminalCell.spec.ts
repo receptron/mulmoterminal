@@ -2997,6 +2997,7 @@ describe("TerminalCell launch target — the OS default shell (#1114)", () => {
       "Grok",
       "Muse",
       "Copilot",
+      "Cursor",
       "Shell",
     ]);
     expect(w.find('[data-testid="agent-picker-claude"]').attributes("aria-checked")).toBe("true");

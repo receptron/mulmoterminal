@@ -29,6 +29,7 @@ const OPTIONS: Record<LaunchAgent, Omit<AgentPickerOption, "agent">> = {
   grok: { label: "Grok" },
   muse: { label: "Muse" },
   copilot: { label: "Copilot" },
+  cursor: { label: "Cursor" },
   shell: { label: "Shell", title: "A plain shell ($SHELL) — no agent, nothing to configure" },
 };
 

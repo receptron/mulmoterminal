@@ -24,7 +24,7 @@ description: Configuring MulmoTerminal — the settings modal, per-project colou
 | Two `yarn dev` **fighting over port 3000** | [A port per worktree](#worktree-env) |
 | A **worktree** looks like a different project | [Worktrees inherit this file](#worktree-inherit) |
 | **No Canvas** when you enlarge a cell / no GUI tools | [Which directory to launch in](basics.html#launch-dir) |
-| **Antigravity or Grok** has no GUI tools, even in the workspace | [Antigravity and Grok register everywhere](basics.html#antigravity-gui-tools) |
+| **Antigravity, Grok, Muse or Cursor** has no GUI tools, even in the workspace | [Antigravity, Grok, Muse and Cursor register everywhere](basics.html#antigravity-gui-tools) |
 | Run on **a model other than Claude** | [Providers](#providers) |
 | Start Claude Code through **your own command** (`ollama launch claude …`) | [Custom agents](#custom-agents) |
 | Add **your own button** to the header | [Customizing the header](#header) |
@@ -126,7 +126,7 @@ of the app is still English.
 | **Keyboard shortcuts** | Every action and the `send` row, bound or not, read-only. **Everything starts as Not set** — "Set up shortcuts…" starts the `mulmoterminal-keys` skill to bind them in `keymap` (→ [Keyboard shortcuts](#keymap)) |
 | **Voice input** | The language you **dictate in** (your browser's, per-clip detection, or a fixed one). Shown only on a machine that can transcribe |
 | **Models and backends** | The backends a session can run on and whether each can be **reached right now**, read-only. "Add a backend…" starts the `mulmoterminal-model` skill (→ [Using another model](providers.html)) |
-| **MCP servers** | Your own HTTP MCP servers (`userMcpServers`), merged into the **Claude** sessions that have every GUI tool — a cell whose working directory is the **workspace**, and a session the server starts on its own (the phone, a scheduled task) unless it is started in a grid cell's shape, as an issue's seed session is. A cell in a project directory does not get this merge, and neither does Codex (the Claude MCP config **you** wrote — `.mcp.json` and the rest — is read in either directory → [which directory to launch in](basics.html#launch-dir)) |
+| **MCP servers** | Your own HTTP MCP servers (`userMcpServers`), merged into the **Claude and Copilot** sessions that have every GUI tool — a cell whose working directory is the **workspace**, and a session the server starts on its own (the phone, a scheduled task) unless it is started in a grid cell's shape, as an issue's seed session is. A cell in a project directory does not get this merge, and neither does Codex (the Claude MCP config **you** wrote — `.mcp.json` and the rest — is read in either directory → [which directory to launch in](basics.html#launch-dir)) |
 | **Notification sounds** | Which moments beep and what each plays — one row per kind, with a preset picker and a play button. "Configure notifications…" starts the `mulmoterminal-notify` skill for a per-project sound and which moments push (→ [Notification sounds](#sounds)) |
 | **Web Push notifications** | The "Notify my devices when a task finishes" toggle (off by default → [Mobile notifications](notifications.html)) |
 | **Phone quick commands** | Phrases offered as chips on the **phone's** terminal view. Tapping one fills the input box; it is sent when you press send (`quickCommands`) |
@@ -1594,7 +1594,7 @@ transcript, no cost or context, no "waiting for you", no GUI tools. A **custom a
 command line and hands it **Claude Code's own arguments**, so the cell is a real session.
 
 It appears in the **Agent Picker** — the toggle at the top of an empty cell — beside Claude, Codex,
-Antigravity, Grok and Shell.
+Antigravity, Grok, Muse, Copilot, Cursor and Shell.
 
 ```json
 {
@@ -1611,7 +1611,7 @@ Antigravity, Grok and Shell.
 
 | Key | What it is | Limit |
 |---|---|---|
-| `id` | A short name identifying the entry internally, so changing it later makes a **different** agent — rename the label instead | `^[a-z0-9][a-z0-9_-]{0,31}$` — lowercase letters, digits, `-` and `_`, up to 32 chars, not starting with `-`/`_`. Cannot be `claude`, `codex`, `antigravity`, `grok` or `shell` |
+| `id` | A short name identifying the entry internally, so changing it later makes a **different** agent — rename the label instead | `^[a-z0-9][a-z0-9_-]{0,31}$` — lowercase letters, digits, `-` and `_`, up to 32 chars, not starting with `-`/`_`. Cannot be the name of a built-in agent — `claude`, `codex`, `antigravity`, `grok`, `muse`, `copilot`, `cursor` or `shell` |
 | `label` | The button's text | 24 characters |
 | `agent` | Which agent this launches **as**, i.e. whose arguments get appended | `"claude"` — the only value today, and **required** |
 | `command` | The command line to run, with Claude Code's arguments appended to it | 500 characters |
@@ -1904,7 +1904,7 @@ What you write here appears in an empty cell's launcher under **OR RUN A SCRIPT*
 |---|---|
 | `cwdPresets` | Working-directory chips in the launcher (`{ label, path }`; click to fill the field, the play icon to launch). Ordered by each directory's [`orderPriority`](#order-priority); the ones that declare none follow, in the order you last launched them |
 | `launchers` | The launch commands that appear under "OR LAUNCH" in a grid cell. Only what you add — a plain shell is already the launcher's **Shell** toggle |
-| `quickCommands` | Phrases the **phone** offers as chips on a session (`{ label, text, agents? }`). Tapping one fills the input box — it is not sent until you press send. `agents` scopes a chip to `"claude"` / `"codex"` / `"shell"`; omit it to offer the chip everywhere. Editable in Settings → **Phone quick commands** |
+| `quickCommands` | Phrases the **phone** offers as chips on a session (`{ label, text, agents? }`). Tapping one fills the input box — it is not sent until you press send. `agents` scopes a chip to any of `SESSION_AGENTS` — `"claude"`, `"codex"`, `"antigravity"`, `"grok"`, `"muse"`, `"copilot"`, `"cursor"` / `"shell"`; omit it to offer the chip everywhere. Editable in Settings → **Phone quick commands** |
 | `prRepos` | The repos targeted by the cross-repo PR/Issue view |
 | `gitlabHosts` | Hosts running a **self-hosted GitLab**, e.g. `["gitlab.example.com"]`. A URL does not say which forge a host runs, so declaring it is what lets `prRepos` entries on that host be read with `glab`. Needs `glab auth login --hostname <host>`. Editable in Settings → **GitHub and GitLab**; either way it takes effect on the next start (→ [A GitLab of your own](github.html#a-gitlab-of-your-own-self-hosted)) |
 | `repoDirs` | Which local clone work on a repo starts in, when you keep several side by side: `{ "acme/web": "/Users/you/src/web" }`. Only the choice is stored — which clones exist is re-derived from `cwdPresets`, so adding one needs no second edit, and an entry that no longer names a clone of that repo is ignored |
@@ -1947,7 +1947,7 @@ there to look at.
 
 | Variable | Default | Role |
 |---|---|---|
-| `CLAUDE_CWD` / `--cwd` | The directory you run `npx mulmoterminal@latest` in (only `~/mulmoclaude` when the server is started directly) | The default working directory (the PTY's cwd), settled in the order `--cwd`, the `CLAUDE_CWD` environment variable, then the directory you ran the launcher in. **A Claude or Codex session launched in this same directory has every GUI tool** (not Antigravity or Grok, and not a Shell or any other launch command → [which directory to launch in](basics.html#launch-dir)) |
+| `CLAUDE_CWD` / `--cwd` | The directory you run `npx mulmoterminal@latest` in (only `~/mulmoclaude` when the server is started directly) | The default working directory (the PTY's cwd), settled in the order `--cwd`, the `CLAUDE_CWD` environment variable, then the directory you ran the launcher in. **A Claude, Codex or Copilot session launched in this same directory has every GUI tool** (not Antigravity, Grok, Muse or Cursor — each takes what its directory registered — and not a Shell or any other launch command → [which directory to launch in](basics.html#launch-dir)) |
 | `PORT` | `34567` | The server port |
 | `MULMOTERMINAL_HOST` | `127.0.0.1` | The interface the server binds to (→ [below](#bind-host)) |
 | `MULMOTERMINAL_ALLOWED_ORIGINS` | *(none)* | Extra browser origins allowed to attach a terminal, comma-separated. Only needed alongside a wider `MULMOTERMINAL_HOST` (→ [below](#bind-host)) |

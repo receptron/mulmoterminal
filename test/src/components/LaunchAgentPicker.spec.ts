@@ -66,7 +66,7 @@ describe("LaunchAgentPicker", () => {
   it("offers every agent a seeded chat can run, and no shell", () => {
     const w = mount(LaunchAgentPicker, { props: { description: "which agent" } });
     const values = w.findAll("option").map((o) => o.attributes("value"));
-    expect(values).toEqual(["claude", "codex", "antigravity", "grok", "muse", "copilot"]);
+    expect(values).toEqual(["claude", "codex", "antigravity", "grok", "muse", "copilot", "cursor"]);
   });
 
   // Two shapes, one accessible name. With words on screen the <label> supplies it; without them

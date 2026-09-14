@@ -48,6 +48,7 @@ const AGENT_NAME: Record<TerminalAgent, string> = {
   grok: "Grok",
   muse: "Muse",
   copilot: "Copilot",
+  cursor: "Cursor",
 };
 export type BadgeAgent = TerminalAgent;
 

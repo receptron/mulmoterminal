@@ -2,7 +2,7 @@
 title: Home
 layout: default
 nav_order: 1
-description: Run multiple Claude Code and Codex sessions in parallel — a browser terminal grid that shows which agent needs you. 複数の AI コーディングエージェントを並列で回し、どれが自分待ちかを一目で。ローカル・tmux 永続化・MIT。
+description: Run multiple coding-agent sessions in parallel — a browser terminal grid that shows which agent needs you. 複数の AI コーディングエージェントを並列で回し、どれが自分待ちかを一目で。ローカル・tmux 永続化・MIT。
 ---
 
 # MulmoTerminal Guide

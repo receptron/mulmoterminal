@@ -34,6 +34,7 @@ import {
 } from "./registry.js";
 import { clearedTranscripts, forgetClearedTranscript } from "./cleared-transcripts.js";
 import { forgetEntitledToolGroups } from "./bridge-session.js";
+import { forgetCursorBadges } from "../agents/cursor-usage.js";
 import { parseWaitGraceMs, reapDecisionFor, reapTimerDelay, shouldForgetActivity } from "./reap-policy.js";
 import { sessionRow, shouldRefreshReply } from "./activity-transition.js";
 import { flagEffect, type ActivityFlag } from "./activity-flag.js";
@@ -151,6 +152,7 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // The GUI tools a muse session was entitled to die with it too: the record exists for a bridge
   // that is a child of this pty, and there is no bridge left to ask.
   forgetEntitledToolGroups(id);
+  forgetCursorBadges(id);
   // And what we remembered about answering its questions (#1685): the claim that stops a duplicate
   // answer is scoped to the session, so it ends with it.
   forgetAnsweredQuestion(id);

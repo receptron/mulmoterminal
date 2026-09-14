@@ -194,6 +194,24 @@ else here does:
 Do not "fix" that by trying to install per directory, and do not add an env var for the bridge —
 both were tried, and both fail silently by serving zero tools.
 
+**Cursor is the fourth shape, and it is half of two others — which is the part to remember.** It
+reads `.cursor/mcp.json` in the working directory, as agy does, so the writer
+(`server/agents/cursor-mcp.ts`) looks like agy's. But cursor starts that MCP server on a **curated
+environment**, exactly as muse's plugin host does, so the mechanism agy's entry leans on — the bridge
+inheriting the agent's `guiMcpEnv` — does not happen: the group and the port go in the entry's
+**argv**, and the SESSION is resolved through `/api/mcp-resolve` by walking the process tree
+(`server/session/bridge-session.ts`, whose resolvable-agent list cursor joins). Writing the file and
+reading the format tells you none of this; it was found by running a turn and watching the bridge
+refuse with *"the mulmoterminal port is not set"*. **So ask what an agent's MCP CHILD inherits, not
+only where the agent reads its config.**
+
+And cursor adds a step no other agent has: **it will not load a server it has not APPROVED, and an
+unapproved one is silently absent** rather than prompted for. Approval lives per project in
+`~/.cursor/projects/<slug>/mcp-approvals.json` keyed by a HASH of the entry, so it invalidates
+whenever the entry changes — which is why `cursor-agent mcp enable <id>` runs on every spawn instead
+of once. Do not reach for `--approve-mcps`: it also approves, and persists, every server the user
+deliberately left unapproved.
+
 The ids differ in **who owns them**, which is what decides whether a rename is free:
 
 - `GUI_SERVER_ID` (`mt`) — regenerated on every spawn, written to no file a user keeps. Ours. It is
@@ -214,20 +232,25 @@ merge recognise our own past output by it, and dropping it strands an entry on s
 
 ## "Can we support <some other CLI>?" is a matrix, not a yes/no
 
-Six agent CLIs are hosted today and they answer that question six different ways. Claude drives the
-working/waiting dots and the attention sound from its hooks; codex and copilot drive the **working
-half only** — codex because its approval prompt never leaves the TUI, copilot because the event that
-looks like "blocked" (`permissionRequest`) fires on every tool call whether or not anyone is asked;
-agy, grok and muse drive neither — and for grok and muse that is a missing WIRE, not a missing
+Seven agent CLIs are hosted today and they answer that question seven different ways. Claude drives
+the working/waiting dots and the attention sound from its hooks; **cursor drives both dots but not
+the sound for input** — its `stop` hook ends the turn, and nothing reports being blocked; codex and
+copilot drive the **working half only** — codex because its approval prompt never leaves the TUI,
+copilot because the event that looks like "blocked" (`permissionRequest`) fires on every tool call
+whether or not anyone is asked, which is cursor's `beforeShellExecution` trap as well; agy, grok and
+muse drive neither — and for grok and muse that is a missing WIRE, not a missing
 record, since this repo already parses their own per-turn logs for the token badges (on a badge poll,
-though, not on a live tail: the tail is part of what a status wire would still have to add). Launching a CLI in a PTY is the cheap
+though, not on a live tail: the tail is part of what a status wire would still have to add). Cursor
+inverts that pair: its status is wired and its counts come from the same hook, because it writes them
+to NO file — so its badge is folded in memory (`server/agents/cursor-usage.ts`) and a restart starts
+the count again. Launching a CLI in a PTY is the cheap
 part; the notification, the resume, the GUI panel and the token badge are separate capabilities,
 each with its own precondition on what that CLI exposes.
 
 [`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md) is the inventory: what each
-capability requires of a candidate binary, how all five current agents answer it, the probe list to
+capability requires of a candidate binary, how all seven current agents answer it, the probe list to
 run against a new one, and the file set an addition touches. Read it before answering a request
-like #2055, and **update it when a sixth agent lands** — several of the lists it names are
+like #2055, and **update it when an eighth agent lands** — several of the lists it names are
 `Record<TerminalAgent, …>` so that a new agent is a type error rather than a silent omission, and
 this file is where the non-typed half of that promise lives.
 

@@ -95,7 +95,7 @@ in. It registers one MCP server for that folder in Claude Code's own config, so 
 
 Two exceptions worth knowing:
 
-- **The workspace needs no switch.** A Claude or Codex cell launched in the workspace directory
+- **The workspace needs no switch.** A cell whose agent takes the GUI MCP on a per-spawn flag, launched in the workspace directory,
   gets every GUI tool automatically, so the row is replaced by a line saying so.
 - **The switch applies from the next launch.** It configures a session that does not exist yet, so
   tick it before you start the cell, not while one is running.

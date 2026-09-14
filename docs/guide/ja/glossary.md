@@ -38,7 +38,7 @@ MulmoTerminal はこのやり方を**ターミナルで**やるための画面�
 **両方**をセル単位で起動できます。同じタスクを両方に投げて見比べる、片方にレビューさせる、
 といった使い分けができます。
 
-→ [Claude と Codex を混在](basics.html#claude-and-codex) ・ [ターミナル間のやり取り](features.html)
+→ [複数のエージェントを混在させる](basics.html#claude-and-codex) ・ [ターミナル間のやり取り](features.html)
 
 ## 並列エージェント / マルチエージェント（parallel agents）
 
@@ -54,14 +54,14 @@ MulmoTerminal はこのやり方を**ターミナルで**やるための画面�
 ## グリッド / セル
 
 **グリッド**は複数のエージェントを並べる画面（起動時に開くのはこちら）。**セル**はその 1 マスで、
-中身は Claude / Codex のセッション、あるいはシェルや 1 コマンド実行です。1 ページ 9 セルまで、
+中身はエージェントのセッション、あるいはシェルや 1 コマンド実行です。1 ページ 9 セルまで、
 あふれるとページ（タブ）が増えます。
 
 → [基本編](basics.html)
 
 ## Agent Picker（エージェント選択）
 
-空きセルのランチャフォーム上部にある **Claude / Codex / Antigravity / Grok / Shell** のトグル。その
+空きセルのランチャフォーム上部にある **Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor / Shell** のトグル。その
 セルを何として起動するかを決めます。**エージェントセッション**（再開できるトランスクリプト、
 コスト・コンテキスト表示、「入力待ち」状態）を開始するのはこれ。ユーザーが書いたコマンドを
 そのまま実行する **launch command**（ランチャチップ）とは別物です。
@@ -92,7 +92,7 @@ MulmoTerminal はこのやり方を**ターミナルで**やるための画面�
 Collections・Wiki・Accounting が読み書きするのはここで、MulmoClaude と併用するなら**両者で同じディレクトリ**（既定 `~/mulmoclaude`）にします。
 MulmoClaude を clone したディレクトリのことではありません。
 
-プロジェクトのディレクトリとは扱いが違い、**ここで起動した Claude / Codex のセッションは GUI ツールを全部持ちます**（3.x までの単一ビューと同じ状態）。Agent Picker でどちらを選んでも同じです。Antigravity と Grok は対象外（ワークスペースでも、それぞれそのディレクトリに登録されたものだけ → [Antigravity と Grok はどこでも登録が要る](basics.html#antigravity-gui-tools)）で、Shell や**起動コマンド**にはそもそも GUI ツールが付きません — コマンドラインが `claude` であっても同じです。起動コマンドは逐語的に実行されるだけで、エージェントのセッションにはなりません。
+プロジェクトのディレクトリとは扱いが違い、**ここで起動した Claude / Codex / Copilot のセッションは GUI ツールを全部持ちます**（3.x までの単一ビューと同じ状態）。Antigravity・Grok・Muse・Cursor は対象外（ワークスペースでも、それぞれそのディレクトリに登録されたものだけ → [Antigravity・Grok・Muse・Cursor はどこでも登録が要る](basics.html#antigravity-gui-tools)）。Shell や**起動コマンド**にはそもそも GUI ツールが付きません — コマンドラインが `claude` であっても同じです。起動コマンドは逐語的に実行されるだけで、エージェントのセッションにはなりません。
 
 → [どのディレクトリで起動するか](basics.html#launch-dir)
 

@@ -52,6 +52,7 @@ import { tmuxAttachedCounts, tmuxHeldSessionIdsAsync } from "../infra/tmux.js";
 import { codexSessionsRoot } from "../agents/codex-session.js";
 import { listCodexSessions } from "../agents/codex-sessions.js";
 import { listCopilotSessionsForCwd } from "../agents/copilot-sessions.js";
+import { listCursorSessionsForCwd } from "../agents/cursor-sessions.js";
 import { antigravityBrainRoot } from "../agents/antigravity-session.js";
 import { listAntigravitySessions } from "../agents/antigravity-sessions.js";
 import { grokSessionsRoot } from "../agents/grok-session.js";
@@ -454,6 +455,25 @@ async function copilotSessionList(req: Request, res: Response) {
   }
 }
 
+async function cursorSessionList(req: Request, res: Response) {
+  try {
+    const cwd = workspaceForRoute(req.query.cwd, res);
+    if (cwd === null) return;
+    const running = await survivorSnapshot();
+    // Cursor keeps no index to query, so this is a directory read — asynchronous, and given the
+    // limit, because the helper uses it to decide how much I/O to do: every chat is stat'ed to be
+    // sorted, but only the rows that will be SHOWN have their title read (cursor-sessions.ts).
+    const metas = await listCursorSessionsForCwd(cwd, undefined, SESSION_LIST_LIMIT);
+    const sessions = metas.map((m) => ({ id: m.id, title: m.title || m.id, mtime: m.mtimeMs }));
+    // No conversation map to join against: `--resume <uuid>` makes cursor's own id ours, so a
+    // running session is already keyed by the id this list reports.
+    res.json({ cwd, sessions: withAttached(sessions, [], running) });
+  } catch (err) {
+    console.error("[api] /api/cursor/sessions failed:", err);
+    res.status(500).json({ error: String(err) });
+  }
+}
+
 // Which handler answers each agent's listing. Keyed by the same type as the paths, so the two are
 // added together or not at all.
 const AGENT_SESSION_LISTS: Record<TerminalAgent, (req: Request, res: Response) => Promise<void>> = {
@@ -463,6 +483,7 @@ const AGENT_SESSION_LISTS: Record<TerminalAgent, (req: Request, res: Response) =
   grok: grokSessionList,
   muse: museSessionList,
   copilot: copilotSessionList,
+  cursor: cursorSessionList,
 };
 
 export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
@@ -515,8 +536,8 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
     // (Codex, PR #2002).
     res.json(liveSessionAnswer(ids, (id) => ptys.has(id), ids.length > 0 ? await tmuxHeldSessionIdsAsync() : []));
   });
-  // The four conversation listings are mounted FROM the shared map rather than from literals
-  // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a fifth
+  // The agent conversation listings are mounted FROM the shared map rather than from literals
+  // beside it (CodeRabbit on #1449). The map is what the launcher builds its URL from, so a new
   // agent that adds an entry there and no route here would 404 for that agent alone — and the
   // `Record<TerminalAgent, …>` on both sides means neither half can be forgotten.
   for (const agent of TERMINAL_AGENTS) {

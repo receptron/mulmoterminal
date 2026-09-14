@@ -10,6 +10,7 @@ import type { createAntigravitySpawner } from "./spawn-antigravity.js";
 import type { createGrokSpawner } from "./spawn-grok.js";
 import type { createMuseSpawner } from "./spawn-muse.js";
 import type { createCopilotSpawner } from "./spawn-copilot.js";
+import type { createCursorSpawner } from "./spawn-cursor.js";
 import type { createShellSpawners } from "./spawn-shell.js";
 
 export type SpawnClaudePty = ReturnType<typeof createClaudeSpawner>["spawnClaudePty"];
@@ -18,6 +19,7 @@ export type SpawnAntigravityPty = ReturnType<typeof createAntigravitySpawner>["s
 export type SpawnGrokPty = ReturnType<typeof createGrokSpawner>["spawnGrokPty"];
 export type SpawnMusePty = ReturnType<typeof createMuseSpawner>["spawnMusePty"];
 export type SpawnCopilotPty = ReturnType<typeof createCopilotSpawner>["spawnCopilotPty"];
+export type SpawnCursorPty = ReturnType<typeof createCursorSpawner>["spawnCursorPty"];
 export type SpawnCommandPty = ReturnType<typeof createShellSpawners>["spawnCommandPty"];
 export type SpawnLauncherPty = ReturnType<typeof createShellSpawners>["spawnLauncherPty"];
 export type ResolveLauncher = ReturnType<typeof createShellSpawners>["resolveLauncher"];

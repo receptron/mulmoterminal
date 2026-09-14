@@ -25,6 +25,7 @@ import { isRecord } from "../../common/isRecord.js";
 import { symlinkFreeWriteTarget } from "../infra/symlink-guard.js";
 import { bridgeCommand, OUR_GUI_SERVER_IDS } from "./gui-mcp-bridge.js";
 import { excludeFromGit } from "./git-exclude.js";
+import { assignOwn } from "../infra/own-assign.js";
 
 /** agy's workspace customization dir. `.agent`/`_agents`/`_agent` are also accepted by agy; we write one. */
 const CUSTOMIZATION_DIR = ".agents";
@@ -47,12 +48,16 @@ const OUR_SERVER_IDS = OUR_GUI_SERVER_IDS;
 // filesystem.
 export function mergeAntigravityMcpServers(existing: Record<string, unknown>, groups: readonly ToolGroup[]): Record<string, unknown> {
   const { command, args } = bridgeCommand();
+  // `assignOwn` for cursor-mcp.ts's reason: `JSON.parse` can produce an OWN `__proto__` key, and
+  // assigning that id runs the inherited setter instead of creating a property — dropping the
+  // user's entry from the file we write back.
   const merged: Record<string, unknown> = {};
   for (const id of Object.keys(existing)) {
-    if (!OUR_SERVER_IDS.has(id)) merged[id] = existing[id];
+    if (!OUR_SERVER_IDS.has(id)) assignOwn(merged, id, existing[id]);
   }
   for (const group of groups) {
-    merged[toolGroupServerId(group)] = { command, args, env: { MULMOTERMINAL_TOOL_GROUP: group } } satisfies AntigravityMcpServer;
+    const server: AntigravityMcpServer = { command, args, env: { MULMOTERMINAL_TOOL_GROUP: group } };
+    assignOwn(merged, toolGroupServerId(group), server);
   }
   return merged;
 }

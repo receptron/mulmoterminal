@@ -107,7 +107,7 @@ const pickerOptions = computed(() => agentPickerOptions(props.customAgents ?? []
 // resolved agent name, which is the same rule the model picker already followed for Shell.
 const launchesClaude = computed(() => props.agent === "claude" || customAgentIdOf(props.agent) !== null);
 
-// The mark each picker option wears. The five built-in agents have one drawn for them
+// The mark each picker option wears. Every built-in agent has one drawn for it
 // (AgentMark.vue) — the same mark the rate-limit gauge uses, so an agent looks the same wherever
 // it is named. The other two options are not agents and get a Material Symbol instead: Shell is a
 // plain terminal, and a CUSTOM agent gets `tune` rather than Claude's burst, because it runs
@@ -211,13 +211,13 @@ const listAgent = computed<TerminalAgent | null>(() => {
   if (launchesClaude.value) return "claude";
   // NARROWED, not asserted: `AgentPick` also spells Shell and `custom:<id>`, and the one thing this
   // must never do is name an agent that has no history to list. Anything that is not one of the
-  // four agents lands on null, which is the same answer Shell gets — no route asked, no section.
+  // no agent lands on null, which is the same answer Shell gets — no route asked, no section.
   return isTerminalAgent(props.agent) ? props.agent : null;
 });
 
 // How the section says whose conversations these are. Claude's keeps the original wording — it is
 // the default, and naming it would put a label on the list nearly everyone sees — while the others
-// must say it: three of the four lists are new here, and a row that resumes as codex looks exactly
+// must say it: every list but claude's is newer than this surface, and a row that resumes as codex looks exactly
 // like a row that resumes as claude.
 const resumeHeading = computed(() => {
   const badge = agentBadge(listAgent.value);
@@ -434,10 +434,10 @@ const mcpGroupFailure = (group: ToolGroup): string | undefined => mcpGroupFailed
 const inWorkspace = computed(() => isSameDirPath(targetDir.value, props.defaultCwd));
 
 // The workspace answers "every tool automatically" only for an agent that can RECEIVE a per-spawn
-// config — the directory alone is not enough. Antigravity, grok and muse take what the DIRECTORY
-// registered wherever they run (agy and grok from a file in it, muse through a machine-wide plugin
-// narrowed per session), and telling them otherwise here both stated something untrue and hid the
-// toggles that were their only way to register anything (#1423).
+// config — the directory alone is not enough. Antigravity, grok, muse and cursor take what the
+// DIRECTORY registered wherever they run (agy, grok and cursor from a file in it, muse through a
+// machine-wide plugin narrowed per session), and telling them otherwise here both stated something
+// untrue and hid the toggles that were their only way to register anything (#1423).
 //
 // Kept apart from `inWorkspace` rather than folded into it: the worktree row below asks the
 // directory question and only that, and the two would have drifted the moment either changed.

@@ -3,13 +3,13 @@ title: どの coding agent を使うか
 layout: default
 parent: 日本語
 nav_order: 7
-description: MulmoTerminal のセルで動かせる coding agent の一覧 — Claude Code / Codex / Antigravity / Grok / Muse。それぞれ何をインストールする必要があるか、会話をどう再開するか、GUI ツールにどう到達するか、そして Claude Code を別のバックエンドや自分のコマンドラインで動かす方法。
+description: MulmoTerminal のセルで動かせる coding agent の一覧 — Claude Code / Codex / Antigravity / Grok / Muse / GitHub Copilot CLI / Cursor CLI。それぞれ何をインストールする必要があるか、会話をどう再開するか、GUI ツールにどう到達するか、そして Claude Code を別のバックエンドや自分のコマンドラインで動かす方法。
 ---
 
 # どの coding agent を使うか
 
 1つのセルで動くエージェントは**1つ**で、空のセル上部の **Agent Picker** で選びます。first-class な
-エージェントは5つ、それに **Shell**（これはエージェントではありません）。
+エージェントは7つ、それに **Shell**（これはエージェントではありません）。
 
 **互換ではありません。** 各エージェントは会話を自分の場所に持つので、**その会話を続けられるのは
 書いた本人だけ**です。ピッカーを切り替えると「or resume here」に出る一覧も変わります。そして
@@ -17,7 +17,7 @@ GUI ツールへの到達方法が3通りに分かれていて、選ぶ前に読
 
 ---
 
-## 5つのエージェント {#at-a-glance}
+## 7つのエージェント {#at-a-glance}
 
 | | Agent Picker | コマンド | バッジ | GUI ツールの到達方法 | モデル指定 |
 |---|---|---|---|---|---|
@@ -26,9 +26,17 @@ GUI ツールへの到達方法が3通りに分かれていて、選ぶ前に読
 | **Antigravity** | Antigravity | `agy` | `agy` | ディレクトリのファイル | `ANTIGRAVITY_MODEL` |
 | **Grok** | Grok | `grok` | `gk` | ディレクトリのファイル | `GROK_MODEL` |
 | **Muse** | Muse | `muse` | `mu` | プラグイン（マシン単位） | `MUSE_MODEL` |
+| **GitHub Copilot CLI** | Copilot | `copilot` | `cp` | セッションごとの URL | `COPILOT_MODEL` |
+| **Cursor CLI** | Cursor | `cursor-agent` | `cu` | ディレクトリのファイル *（まだ自動では書きません）* | `CURSOR_MODEL` |
 
-どのコマンドも `CLAUDE_BIN` / `CODEX_BIN` / `ANTIGRAVITY_BIN` / `GROK_BIN` / `MUSE_BIN` で差し替え
-られます（バージョン固定、ラッパー、`PATH` の外にあるパスなど）。
+どのコマンドも `CLAUDE_BIN` / `CODEX_BIN` / `ANTIGRAVITY_BIN` / `GROK_BIN` / `MUSE_BIN` /
+`COPILOT_BIN` / `CURSOR_BIN` で差し替えられます（バージョン固定、ラッパー、`PATH` の外にある
+パスなど）。
+
+**どれが「終わった」を教えてくれるか。** Claude と Cursor は処理中と完了の両方を出すので、見て
+いないセルでも注目マークが付き、音が鳴ります。Codex と Copilot は処理中のみ。Antigravity・Grok・
+Muse はどちらも出しません（セルは正常に動き、ただ静かなだけです）。**入力待ちを知らせられるのは
+Claude だけ**で、他のエージェントでは承認プロンプトが無音のままセルに表示されます。
 
 **使わないエージェントは入れる必要がありません。** コマンドが無いエージェントは、そのセルが起動
 しないだけで、他には影響しません。
@@ -43,26 +51,36 @@ GUI ツールへの到達方法が3通りに分かれていて、選ぶ前に読
 到達方法は **3通り**あり、どれになるかは**そのエージェントの CLI の性質**であって、設定で変えられる
 ものではありません。
 
-### 1. セッションごとの URL — Claude Code と Codex
+### 1. セッションごとの URL — Claude Code / Codex / Copilot
 
-**ワークスペース**では、この2つはセッションごとに生成される1つの URL で**全ツール**を受け取ります。
+**ワークスペース**では、この3つはセッションごとに生成される1つの URL で**全ツール**を受け取ります。
 登録も切り替えも不要で、ランチャーのフォームにはツールグループのトグル自体が出ません（出しても
 足せるものが無いため）。
 
-**プロジェクトディレクトリ**では下の2番になります。
+**プロジェクトディレクトリ**では、そのディレクトリが登録したグループだけを、やはり spawn ごとの
+フラグで受け取ります（ファイルを読みに行く2番とは別の道です）。
 
-### 2. ディレクトリのファイル — Antigravity と Grok
+### 2. ディレクトリのファイル — Antigravity / Grok / Cursor
 
-どちらの CLI も spawn 時に URL を渡せないので、**ディレクトリの設定ファイル**を自分で読み、そこに
+この3つはいずれも spawn 時に URL を渡せないので、**ディレクトリの設定ファイル**を自分で読み、そこに
 登録されているものだけを得ます。ワークスペースでも同じです。
 
 - **Antigravity** は MulmoTerminal がディレクトリのトグルから書く JSON を読みます。トグルを切り替える
   たびに書き直され、MulmoTerminal が書いていないサーバーはそのまま残し、`git status` にも出ません。
 - **Grok** は `.grok/config.toml` を読みます。これはユーザーのファイルなので、MulmoTerminal は直接
   書かず `grok mcp add` を駆動します。
+- **Cursor** は `.cursor/mcp.json` を読みます。MulmoTerminal はディレクトリのトグルからこのファイルを
+  書きますが、書くのは**そのディレクトリで cursor のセルを起動したとき**で、トグルを切り替えた瞬間では
+  ありません（Antigravity はトグル時に書き直します）。どちらにせよ反映されるのは次に起動する
+  セッションからで、動いているセッションには届きません。そのうえで cursor だけもう 1 手あります。cursor は
+  **承認していない MCP サーバーを読み込まず、しかも未承認であることを黙って伏せます**（プロンプトも
+  エラーも出ず、単に「MCP サーバーが無い」と見えます）。そこでセル起動時に
+  `cursor-agent mcp enable` で、こちらが書いたサーバーだけを承認します。あなた自身が書いた項目は
+  そのまま残り、ファイルを `git status` から隠すのは MulmoTerminal が新規に作った場合だけです。
 
-なのでこの2つを選んでいるときは、ワークスペースでも4つのトグルが出たままになります。それが正確な
-答えで、この2つが GUI ツールを得る唯一の道だからです。
+なので Antigravity・Grok・Cursor のどれかを選んでいるときは、ワークスペースでも4つのトグルが出た
+ままになります。それが正確な答えで、ディレクトリのファイルがこの3つにとって GUI ツールを得る唯一の
+道だからです。
 
 ### 3. プラグイン（マシン単位）— Muse *(4.7.0 で対応)* {#muse-plugin}
 
@@ -99,6 +117,8 @@ Muse は URL を渡す方法も、ディレクトリごとの設定ファイル�
 | Antigravity | 自身の会話ストア |
 | Grok | ディレクトリをキーにした自身のストア |
 | Muse | SQLite のセッションインデックス＋セッションログ |
+| GitHub Copilot CLI | `~/.copilot/session-state/<id>/` と、マシン単位の SQLite インデックス |
+| Cursor CLI | `~/.cursor/projects/<slug>/agent-transcripts/<id>/` |
 
 再開した Muse セッションは `--workspace` を保ちます。これがワークスペースのツールを登録している
 ものなので、これを落とすと**会話は戻るのにツールが無い**状態になっていました（4.7.0 で修正）。
@@ -110,7 +130,7 @@ Muse は URL を渡す方法も、ディレクトリごとの設定ファイル�
 
 ## ヘッダーのバッジ
 
-Claude 以外のセルには短いバッジ（`cx` / `agy` / `gk` / `mu`）が付き、何が動いているか一目で分かり
+Claude 以外のセルには短いバッジ（`cx` / `agy` / `gk` / `mu` / `cp` / `cu`）が付き、何が動いているか一目で分かり
 ます。その横にモデル名とコンテキスト使用率、上下の矢印はそのセッションのトークン使用量です。
 
 Muse のコンテキスト表示は「**直近の完了した呼び出し**の値」で、それまでの最大値ではありません。
@@ -148,7 +168,7 @@ Model picker に Anthropic のモデルと並んで出ます。ディレクト�
 ### 自分のコマンドライン — `customAgents`
 
 `customAgents` エントリは、**あなた自身の** Claude Code の起動方法です（ラッパースクリプト、
-バージョン固定したバイナリ、`ollama launch claude --model … --` など）。登録すると上記5つと並んで
+バージョン固定したバイナリ、`ollama launch claude --model … --` など）。登録すると上記7つと並んで
 Agent Picker に出ます。Claude Code の argv がまるごと後ろに付くので、セッションは再開でき、コストも
 報告され、GUI ツールも得られます。
 

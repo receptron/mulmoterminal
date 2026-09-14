@@ -10,7 +10,7 @@ import { CELL_BTN, CELL_TERM } from "./cellChromeClasses";
 // A grid cell running a configured launch command — any interactive program, run exactly as the
 // user wrote it and never inspected. Unlike CommandCell this is PERSISTENT: it
 // carries a session id and a durable connection (persistKey), so it survives page
-// switches and reconnects — but it has no Claude hooks, so its status is only
+// switches and reconnects — but it reports no activity of its own, so its status is only
 // running (working) / exited (idle). `launcher.index` is the command's position in the
 // configured launcher list (the server's allowlist); it runs in `cwd`.
 //

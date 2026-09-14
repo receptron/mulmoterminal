@@ -5,6 +5,7 @@ import { antigravityAdapter } from "./antigravity.js";
 import { grokAdapter } from "./grok.js";
 import { museAdapter } from "./muse.js";
 import { copilotAdapter } from "./copilot.js";
+import { cursorAdapter } from "./cursor.js";
 
 const adapters: Record<AgentKind, AgentAdapter> = {
   claude: claudeAdapter,
@@ -13,6 +14,7 @@ const adapters: Record<AgentKind, AgentAdapter> = {
   grok: grokAdapter,
   muse: museAdapter,
   copilot: copilotAdapter,
+  cursor: cursorAdapter,
 };
 
 // Resolve the adapter for a kind; Claude is the default and the fallback.

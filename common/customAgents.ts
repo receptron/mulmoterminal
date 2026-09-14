@@ -1,6 +1,6 @@
 // A CUSTOM AGENT: the user's own way of starting Claude Code.
 //
-// It is an entry in the AGENT PICKER, beside Claude / Codex / Antigravity / Shell — NOT a
+// It is an entry in the AGENT PICKER, beside the built-in agents and Shell — NOT a
 // launcher chip. The difference is the whole point of the two controls (see CLAUDE.md):
 //
 //   - A launcher chip runs the user's command line VERBATIM. Nothing is inserted, no MCP is
@@ -64,7 +64,7 @@ export const CUSTOM_AGENT_ID_RE = /^[a-z0-9][a-z0-9_-]{0,31}$/;
  *  which looks like the config was ignored. */
 export const isCustomAgentId = (value: unknown): value is string => typeof value === "string" && CUSTOM_AGENT_ID_RE.test(value) && !isLaunchAgent(value);
 
-// What the Agent Picker holds: one of the four built-ins, or `custom:<id>`.
+// What the Agent Picker holds: one of the built-ins (`LAUNCH_AGENTS`), or `custom:<id>`.
 //
 // The prefix is what keeps the union honest. Bare ids would make the type `string`, and every
 // `pick === "shell"` in a template would then be a comparison the compiler cannot check — while

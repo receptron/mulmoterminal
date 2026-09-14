@@ -645,7 +645,7 @@ const placeChat = ({ id, agent, canvas }: SpawnedChatRequest): boolean => {
   if (state.value.cells.some((cell) => cell.session === id)) return true;
   // Seeded with the directory the server spawns these in (CLAUDE_CWD, which /api/config reports as
   // `cwd`); the cell adopts whatever the PTY reports anyway. sessionCell carries the agent, which
-  // matters because a spawn follows the Claude/Codex/Antigravity toggle.
+  // matters because a spawn follows the Agent Picker's choice.
   const placed = insertCellAfter(state.value, NO_ORIGIN_UID, sessionCell(id, defaultCwd.value, agent));
   // A full grid (MAX_TERMINALS) drops the cell and insertCellAfter hands the state straight back.
   // Judged by identity AFTER the spawn, not by counting before it: the count can cross the cap

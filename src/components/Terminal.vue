@@ -60,7 +60,7 @@ const props = defineProps<{
   // resuming a Claude session.
   launcher?: { index: number } | { shell: true } | null;
   // Which agent this terminal runs. Anything but "claude" connects to that agent's own
-  // endpoint (/ws/codex, /ws/antigravity) instead of /ws. Absent means Claude.
+  // endpoint — one per agent, `/ws/<agent>` — instead of /ws. Absent means Claude.
   agent?: TerminalAgent;
   // A custom agent's id (#1414), when the Agent Picker started this terminal from one of the
   // user's own ways of running Claude Code. `agent` stays "claude" — that is what it runs.

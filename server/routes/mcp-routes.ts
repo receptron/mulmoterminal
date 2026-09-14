@@ -16,7 +16,7 @@ import type { GuiCallRecorder } from "../mcp/gui-call-history.js";
 import { translationWorkerIds, markSessionToolGroup, sessionToolGroups, markAllToolsSession, hasAllGuiTools } from "../session/registry.js";
 import { isToolGroup, TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
 import { isRecord } from "../../common/isRecord.js";
-import { entitledToolGroups, liveMuseSessions, resolveBridgeSession } from "../session/bridge-session.js";
+import { entitledToolGroups, bridgeResolvableSessions, resolveBridgeSession } from "../session/bridge-session.js";
 import { ancestorPids } from "../infra/process-tree.js";
 import { tmuxPanePids } from "../infra/tmux.js";
 import { submitTranslation } from "../session/translation-worker.js";
@@ -68,7 +68,7 @@ function resolveBridge(req: Request, res: Response) {
   if (pid === null || !Number.isInteger(pid) || pid <= 1) return res.status(400).json({ error: "pid is required" });
   // `cwd` is read for the log line and NOTHING else: a shared directory is not evidence of
   // anything (see bridge-session.ts), and treating it as such let an unrelated muse claim a cell.
-  const sessionId = resolveBridgeSession({ panePids: tmuxPanePids(), ancestors: ancestorPids(pid), museSessions: liveMuseSessions() });
+  const sessionId = resolveBridgeSession({ panePids: tmuxPanePids(), ancestors: ancestorPids(pid), resolvableSessions: bridgeResolvableSessions() });
   // Logged on BOTH outcomes, and it is the only place this can be seen: an unresolved bridge is
   // silent by design — it serves an empty toolset — so without this line "muse has no GUI tools"
   // is indistinguishable from "muse was never given any".

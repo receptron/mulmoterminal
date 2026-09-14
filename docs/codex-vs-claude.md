@@ -69,7 +69,7 @@ is skipped, so a name containing whitespace or quotes can't alter the injected p
 
 - The cross-agent inventory these observations generalise into:
   [`docs/agent-capability-matrix.md`](agent-capability-matrix.md) — what each capability requires of a
-  candidate CLI, and how all five hosted agents answer it.
+  candidate CLI, and how every hosted agent answers it.
 - Codex work: sidebar list + resume (#249), GUI-panel parity (#240), collection actions
   and skills in codex (#257) — all shipped in `mulmoterminal@0.8.0`.
 - Multi-agent tracking issue: #236.

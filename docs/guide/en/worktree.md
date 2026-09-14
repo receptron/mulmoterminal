@@ -82,7 +82,7 @@ The limit is on the **directory**, not the row. Pasting the same worktree path i
 DIRECTORY**, or opening it from a recent-directory chip, will not start one either. The server is
 what refuses, so no client and no way of spelling the path gets around it.
 
-**The limit applies to agents** (Claude / Codex / Antigravity). An **OR LAUNCH** command is refused
+**The limit applies to agents** — every entry in the Agent Picker. An **OR LAUNCH** command is refused
 too when what it runs is an agent. **Shell**, and launchers that run anything else (`yarn dev`,
 `lazygit`), are exempt — the worktree an agent is working in is exactly where you want to run those.
 

@@ -14,9 +14,14 @@
 // Two consequences, both accepted rather than overlooked:
 //
 //   - Copilot sessions this server never started — the user's own, in a plain terminal — also post
-//     here. They carry a session id we do not know, and copilotHookBody's caller drops them. The
-//     cost is one silent curl per hook in someone else's terminal, which is why the command is
-//     quiet and short-lived (see COMMAND below).
+//     here. They carry a session id we do not host, and THE ROUTE DOES NOT DROP THEM: the id's
+//     SHAPE is checked, not its ownership, so the activity flags and a finished-turn push are
+//     applied for an id with no pty. (`noteWorkPhase` is the one effect already gated on a live
+//     entry.) This comment used to say the caller dropped them, which was false — found on #2065
+//     by CodeRabbit, and true of this agent since it shipped. Gating the rest is its own change:
+//     the obvious `ptys.has(id)` drops hooks for a session that survived a restart and has not
+//     reconnected. The cost meanwhile is one silent curl per hook in someone else's terminal,
+//     which is why the command is quiet and short-lived (see COMMAND below).
 // WHAT THIS CODE CLAIMS, and what it does not.
 //
 // It claims ONE FILENAME — `mulmoterminal.json` in copilot's hooks directory — plus a `.mt-owned`

@@ -13,6 +13,8 @@ export interface SpawnDeps {
   museModel: string | null;
   copilotBin: string;
   copilotModel: string | null;
+  cursorBin: string;
+  cursorModel: string | null;
   permissionMode: string;
   /** Tool names auto-allowed for every session, already comma-joined. */
   guiMcpTools: string;

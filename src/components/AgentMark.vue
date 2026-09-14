@@ -52,6 +52,16 @@ const spokeRotations = Array.from({ length: SPOKES }, (_, i) => (i * 360) / SPOK
       <line x1="11.5" y1="12" x2="12.5" y2="12" />
     </g>
   </svg>
+  <!-- Cursor: an isometric cube, drawn as the three faces its own mark shows. Its own branch for
+       the reason copilot's states — the v-else below is codex's mark, so an agent without a branch
+       is not unmarked, it is mislabelled as a different first-class agent. Three quads rather than
+       a filled solid: at 14px a filled cube is a blob, and the seam lines are what read as depth. -->
+  <svg v-else-if="agent === 'cursor'" viewBox="0 0 24 24" class="h-[14px] w-[14px] flex-none" fill="none" aria-hidden="true">
+    <g stroke="currentColor" stroke-width="1.6" stroke-linejoin="round">
+      <path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z" />
+      <path d="M4 7.5 12 12l8-4.5M12 12v9" />
+    </g>
+  </svg>
   <!-- Two crossed loops, not three. The knot's own six-fold form was tried first and measured at
        the size it actually renders: three overlapping ellipses fill the middle in and the whole
        thing reads as one dark blob, which distinguishes nothing. Two loops keep an open centre and
@@ -59,7 +69,7 @@ const spokeRotations = Array.from({ length: SPOKES }, (_, i) => (i * 360) / SPOK
 
        The v-else, so codex is what an unrecognised agent looks like. Every caller passes a
        TerminalAgent, and every one of them now has a branch above — so this is unreachable again,
-       which is the property that has to hold when a seventh agent arrives. -->
+       which is the property that has to hold when an eighth agent arrives. -->
   <svg v-else viewBox="0 0 24 24" class="h-[14px] w-[14px] flex-none" fill="none" aria-hidden="true">
     <g stroke="currentColor" stroke-width="1.5">
       <ellipse cx="12" cy="12" rx="4.5" ry="10" transform="rotate(45 12 12)" />

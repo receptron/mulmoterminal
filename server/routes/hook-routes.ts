@@ -1,4 +1,4 @@
-// The Claude hook endpoint: every Stop / Notification / Pre|PostToolUse / SessionStart
+// The agent hook endpoint: every Stop / Notification / Pre|PostToolUse / SessionStart
 // POSTs here. One request fans out to the session's attention flags, a push to the user's
 // phone, the tool-call history, the header prompt and the AI title. Split from index.ts
 // (#548 step 3g) — the fan-out is what made the route long, not the route itself.
@@ -6,6 +6,8 @@ import type { Express, Request, Response } from "express";
 import { SESSION_ID_RE } from "../config/env.js";
 import { isRecord } from "../../common/isRecord.js";
 import { copilotHookBody } from "../agents/copilot-hook.js";
+import { cursorHookBody } from "../agents/cursor-hook.js";
+import { recordCursorStop } from "../agents/cursor-usage.js";
 import { ASK_QUESTION_TOOL, parseAskQuestions, type AskQuestionDone, type AskQuestionEvent } from "../../common/askQuestion.js";
 import { watchOtherWrites } from "../session/write-to-session.js";
 import { dirConfigWriteTarget } from "../config/dir-config.js";
@@ -64,9 +66,11 @@ function handleActivityHook(deps: HookDeps, sessionId: string, active: boolean, 
   // Stop (blocked on a permission dialog nobody can answer, or dead before its first turn) is
   // exactly the failed refresh, and reap reports it as such. No-op unless a hook is registered,
   // which a hidden feeds worker does — and, since #1188, a hidden CLAUDE spawnBackgroundChat.
-  // Only claude: this endpoint is Claude Code's hook mechanism, so it is the only agent that can
-  // ever reach here to report success, and a hook registered for another one could only ever
-  // report failure.
+  // Claude, copilot and cursor all reach here — the latter two by translation (copilot-hook.ts,
+  // cursor-hook.ts) — so this line is no longer claude-only, and the sentence that said it was is
+  // gone rather than reworded. What keeps the behaviour unchanged is the registration side, not
+  // this one: `runCompletionHook` is a no-op unless a hook was registered for the session, and
+  // spawnBackgroundChat registers one only for claude, for the reason its own comment now gives.
   if (event === "Stop") void runCompletionHook(sessionId, { didError: false }).catch((err) => console.error(`[completion-hook] ${messageOf(err)}`));
 }
 
@@ -233,23 +237,38 @@ type HookFields = ReturnType<typeof hookFields>;
  *  alongside ours, so a repeat is simply not a value. */
 const readHeader = (value: string | string[] | undefined): string | undefined => (typeof value === "string" ? value : undefined);
 
-// Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
+// Agent hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
 // we can flag which background sessions have new activity / build tool history.
+/** Which agents speak their own hook vocabulary, and what turns it into claude's. An agent absent
+ *  from here is claude-shaped and its body is passed through untouched.
+ *
+ *  A MAP, not an object, and for the same reason `terminal-ws-path.ts` gives for its own: the key
+ *  is an attacker-controlled request header, and a plain object answers `__proto__` with
+ *  `Object.prototype` — truthy, then called as a function, then a 500 (Codex round 15 of #2065).
+ *  A Map has no prototype chain to walk into. */
+const TRANSLATE_HOOK = new Map<string, (hookName: string | undefined, payload: unknown) => Record<string, unknown> | null>([
+  ["copilot", copilotHookBody],
+  ["cursor", cursorHookBody],
+]);
+
 async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
   // express hands `req.body` back as `any`, so every field below is read through a check —
   // this is a request body from outside, not a shape anything has verified.
   //
-  // A COPILOT hook arrives here too, in copilot's own vocabulary, and is translated into claude's
-  // before anything reads it (server/agents/copilot-hook.ts). One endpoint rather than two because
+  // A COPILOT or CURSOR hook arrives here too, in that agent's own vocabulary, and is translated
+  // into claude's before anything reads it. One endpoint rather than three because
   // everything past this line — the flags, the push, the tool history, the header — is written
   // against claude's event names, and a second vocabulary would mean a second copy of all of it.
-  // The agent says so in a header because the payload does not: copilot's hook file is
-  // machine-global, so the registering side is the only thing that knows which event it registered.
+  // The agent says so in a header. For copilot the payload does not carry the event name at all;
+  // for cursor it does, but the registering side always knows it, and reading it from the header
+  // keeps the two branches identical.
   const raw: Record<string, unknown> = isRecord(req.body) ? req.body : {};
-  const body = req.headers["x-mt-agent"] === "copilot" ? copilotHookBody(readHeader(req.headers["x-mt-hook"]), raw) : raw;
-  // Null means a copilot payload this server cannot act on — an event it does not translate, or
-  // one with no session id. Not an error: the hook file is machine-global, so copilot sessions
-  // this server never started post here too, and theirs are exactly the ones to answer quietly.
+  const agent = readHeader(req.headers["x-mt-agent"]) ?? "";
+  const translate = TRANSLATE_HOOK.get(agent);
+  const body = translate ? translate(readHeader(req.headers["x-mt-hook"]), raw) : raw;
+  // Null means a payload this server cannot act on — an event it does not translate, or one with no
+  // session id. Not an error: both hook files are machine-global, so sessions this server never
+  // started post here too, and theirs are exactly the ones to answer quietly.
   if (!body) {
     res.json({ ok: true });
     return;
@@ -279,6 +298,21 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     // pty — so tracking an id with no pty (any well-formed uuid may be posted here) would never be
     // reclaimed. A session whose pty is gone simply reports no phase, as it does before its first tool.
     if (entry) deps.noteWorkPhase(sessionId, event, toolName);
+    // Cursor's token counts, taken off the RAW payload rather than the translated body: they are
+    // cursor's own fields and claude has no counterpart for the translation to carry them in. The
+    // only agent recorded here, because it is the only one that states its usage nowhere a badge
+    // poll could read it back (cursor-usage.ts).
+    //
+    // BEFORE the activity publish below, for noteWorkPhase's reason one line up: that push is what
+    // moves the cell out of `working`, and the cell answers that transition by re-reading its
+    // badges. Recorded afterwards, the read could arrive first and show the turn before this one.
+    //
+    // LIVE SESSIONS ONLY, for noteWorkPhase's OTHER reason, and here it is a leak rather than a
+    // no-op: cursor's hook file is machine-global, so a cursor the user started in their own
+    // terminal posts here too. Its id has no pty, so nothing ever reaps it — an entry recorded for
+    // it would sit in the map for the life of the process, once per such session (CodeRabbit on
+    // #2071). A session of ours always has an entry: its pty is what the hook is reporting about.
+    if (entry && agent === "cursor" && event === "Stop") recordCursorStop(sessionId, raw);
     handleActivityHook(deps, sessionId, active, fields);
     await handleToolHook(deps, sessionId, event, toolPayload(body), cwd);
     // A hidden translation worker that ends its turn while still pending never called
@@ -291,10 +325,23 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
 }
 
 export function mountHookRoute(app: Express, deps: HookDeps) {
-  // Claude hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so
-  // we can flag which background sessions have new activity / build tool history.
+  // Hooks (Stop / Notification / Pre|PostToolUse / SessionStart) POST their payload here so we can
+  // flag which background sessions have new activity / build tool history. Claude's arrive in that
+  // vocabulary already; copilot's and cursor's are translated into it above.
   // Return the promise rather than dropping it: express 5 forwards a rejected handler
   // to its error middleware, and swallowing it here would turn a failed hook into an
   // unhandled rejection instead of a 500.
   app.post("/api/hook", (req, res) => handleHookRequest(deps, req, res));
+  // A pre-flight for the machine-global hook posters (server/agents/cursor-hooks-file.ts). Their
+  // command line outlives this server — a crash skips the exit handler, and a user who edits the
+  // hook file makes it one we may no longer rewrite — so before sending a PROMPT and its tool
+  // arguments to a bare local port, the poster asks whether the thing listening there is us. The
+  // registry check it does first cannot answer that on its own: a crashed instance's entry can
+  // name a pid the OS has since recycled, which is the failure #2063 hit twice from the other side
+  // (Codex round 17 of #2065).
+  //
+  // On the hook path deliberately, rather than a new endpoint: it answers for exactly the thing the
+  // poster is about to use, and a server that has this route mounted is by definition able to
+  // receive the POST.
+  app.get("/api/hook", (_req, res) => res.json({ mulmoterminal: true }));
 }

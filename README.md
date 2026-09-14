@@ -1,9 +1,10 @@
 # MulmoTerminal
 
-**Run multiple Claude Code and Codex sessions in parallel — and see which one needs you.**
+**Run multiple coding-agent sessions in parallel — and see which one needs you.**
 
-A **browser terminal** for **parallel AI coding agents**: several **Claude Code** and **Codex**
-sessions side by side, each in its own cell, with the one that needs you marked in colour. Vibe
+A **browser terminal** for **parallel AI coding agents**: several sessions side by side, each in
+its own cell, with the one that needs you marked in colour. **Claude Code** is the default and six
+more CLIs are first-class — Codex, Antigravity, Grok, Muse, GitHub Copilot CLI and Cursor CLI. Vibe
 coding with a single agent needs nothing but a shell — this is for when you run several and lose
 track of which is waiting. Sessions survive a reload (tmux), work isolates in **git worktrees**,
 and a **phone push** reaches you when a turn finishes.
@@ -47,7 +48,7 @@ That is the whole install.
 
 </details>
 
-MulmoTerminal turns [Claude Code](https://claude.com/claude-code) (and OpenAI's **Codex**)
+MulmoTerminal turns [Claude Code](https://claude.com/claude-code) — and six other agent CLIs —
 into a parallel, observable workspace: many agent sessions at once in a grid, each one
 color-coded so you see at a glance which are **working**, which **need you**, and which are
 **done** — plus rich GUI output, git worktrees with one-click PRs, cost readouts, and a
@@ -63,7 +64,7 @@ Requires **Node ≥ 22.12** and the [`claude`](https://claude.com/claude-code) C
 ### Why not tmux + iTerm panes?
 
 Running agents in parallel was never the hard part — tmux does that fine. What gets lost
-is **which** of the five is waiting for you. A pane is opaque: working, finished and
+is **which** of them is waiting for you. A pane is opaque: working, finished and
 blocked-on-a-permission all look the same until you read it. Here every cell reports its
 state back to one grid — working (blue), done (green), **needs you** (amber) — with a chime
 when one goes amber off-screen, and a [cockpit roster](#why-youll-want-it) of one line per
@@ -123,7 +124,7 @@ streamed to an [xterm.js](https://xtermjs.org/) terminal in the browser over a W
 **cockpit roster** lists every session and reflects, in real time, which are **working**
 (the agent is thinking, a spinner), which are **waiting on you** (a permission prompt or a
 question — an amber dot; nothing proceeds until you answer) and which are **finished with output
-you haven't seen** (a green dot) — driven by Claude/Codex activity hooks the server injects per
+you haven't seen** (a green dot) — driven by the activity each agent reports; claude's hooks are injected per
 spawn. The horizontal tab bar carries the same two dots.
 
 ![One agent zoomed, with the GUI panel beside it](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/zoom-canvas.png)
@@ -268,7 +269,7 @@ Needs **Node ≥ 22.12**, plus these CLIs on your `PATH`:
 | **Required** | `gh` | the cross-repo **PRs & Issues** view and one-click PR creation — it uses your `gh` login, so no token is stored | [cli.github.com](https://cli.github.com), then `gh auth login` |
 | Optional | `glab` | the same for **GitLab** projects (#981) — gitlab.com, and a self-hosted instance you declare in `gitlabHosts` (#1332). Same arrangement: the CLI holds the credentials, this app stores no token | `brew install glab`, then `glab auth login` (self-hosted: `glab auth login --hostname gitlab.example.com`) |
 | Recommended | `tmux` | [session persistence](#session-persistence-tmux) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · `sudo dnf install tmux` · no native Windows build (falls back to plain PTYs) |
-| Optional | `codex` | [Codex sessions](#agents-claude--codex) in a cell, alongside Claude | `npm i -g @openai/codex` |
+| Optional | any other agent CLI | a cell can run **Codex**, **Antigravity** (`agy`), **Grok**, **Muse**, **GitHub Copilot CLI** or **Cursor CLI** instead of Claude — install only the ones you use, and a missing one simply fails to start that cell. What each can do is [the capability matrix](docs/agent-capability-matrix.md); how to install and pick one is the [agents guide](https://receptron.github.io/mulmoterminal/guide/en/agents.html) | e.g. `npm i -g @openai/codex` |
 | Optional | `ffmpeg` | video rendering from the [mulmo-script panel](#wiki-collections--the-gui-panel) (its plugin ships enabled) | `brew install ffmpeg` · `sudo apt install ffmpeg` · `sudo dnf install ffmpeg` |
 | Optional | `ollama` | [`claude-ollama`](https://receptron.github.io/mulmoterminal/guide/en/claude-ollama.html) — Claude Code against a fully local model | [ollama.com/download](https://ollama.com/download) |
 | Linux only | a file dialog | the **Choose a folder / Insert a file path** buttons, which open an OS dialog on the machine the server runs on. macOS and Windows have one built in; **WSL** uses the Windows one over interop and needs nothing installed. A Linux desktop needs one of these — without any, the buttons say so and you type the path instead (#1447) | `sudo apt install zenity` · `sudo dnf install zenity` · `kdialog`, `qarma` and `yad` also work |
@@ -365,7 +366,7 @@ The launcher detects it and prints the exact, OS-appropriate removal command; ru
 
 - [Architecture](#architecture)
 - [Why a PTY?](#why-a-pty)
-- [Agents: Claude & Codex](#agents-claude--codex)
+- [Agents](#agents-claude-codex-antigravity-grok-muse-copilot--cursor)
 - [Session persistence (tmux)](#session-persistence-tmux)
 - [Tech stack](#tech-stack)
 - [Configuration](#configuration)
@@ -418,11 +419,15 @@ The launcher detects it and prints the exact, OS-appropriate removal command; ru
 - **Session list** is fetched over HTTP (`/api/sessions`) — by `App.vue` for the tab favicon,
   and by an empty cell's launch form (`?cwd=`) for its resume rows.
 - **Live activity** is pushed over a Socket.IO pub/sub channel (`/ws/pubsub`);
-  the server learns of activity from **Claude hooks** that POST to `/api/hook`.
-- **Other terminals** run on their own raw WebSockets: **Codex** sessions on `/ws/codex`,
-  persistent **launch commands** on `/ws/launch`, and one-off **script commands**
-  (`yarn dev`, tests, …) on `/ws/run`. Only Claude/Codex are agent sessions with hooks;
-  see [Agents: Claude & Codex](#agents-claude--codex) and [Scripts (Run menu)](#scripts-run-menu).
+  the server learns of activity from **hooks** that POST to `/api/hook`.
+- **Other terminals** run on their own raw WebSockets — one per agent (`/ws/codex`,
+  `/ws/antigravity`, `/ws/grok`, `/ws/muse`, `/ws/copilot`, `/ws/cursor`), persistent
+  **launch commands** on `/ws/launch`, and one-off **script commands** (`yarn dev`, tests, …)
+  on `/ws/run`. **Three agents reach `/api/hook`** — Claude directly, Copilot and Cursor through
+  a translation of their own vocabularies; Codex is read from its rollout instead, and agy, grok
+  and muse report no activity at all. Which agent does what is the matrix in
+  [`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md); see also
+  [Scripts (Run menu)](#scripts-run-menu).
 - In dev (`yarn dev`) the Vite dev server runs on its own port (`CLIENT_PORT`,
   default `6856`) and proxies `/ws` (a prefix covering `/ws/codex`, `/ws/launch`, and
   `/ws/run`), `/ws/pubsub`, `/api`, `/artifacts`, and `/htmlfile` to the backend
@@ -449,13 +454,13 @@ SDK; we drive the real interactive CLI and relay its TTY over the WebSocket.
 
 ---
 
-## Agents: Claude, Codex, Antigravity, Grok, Muse & Copilot
+## Agents: Claude, Codex, Antigravity, Grok, Muse, Copilot & Cursor
 
 MulmoTerminal drives **interactive coding-agent CLIs**, not just Claude. An
 `AgentAdapter` seam abstracts the per-agent bits (which binary to spawn, how it resumes)
-so the PTY, grid, persistence, and GUI-panel plumbing stay shared. Six adapters ship
-today — **Claude Code** (the default), **Codex**, **Antigravity** (`agy`), **Grok**, **Muse**, and
-**GitHub Copilot CLI**.
+so the PTY, grid, persistence, and GUI-panel plumbing stay shared. Seven adapters ship
+today — **Claude Code** (the default), **Codex**, **Antigravity** (`agy`), **Grok**, **Muse**,
+**GitHub Copilot CLI**, and **Cursor CLI**.
 Which capabilities each one actually has — status dots, notifications, resume, cost, GUI tools —
 is the matrix in [`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md).
 
@@ -555,9 +560,34 @@ is the matrix in [`docs/agent-capability-matrix.md`](docs/agent-capability-matri
   on every tool call, not only when someone is asked), token/context badges, or `$` cost — see
   [`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md) for what each would take.
 
+- **Cursor CLI** — spawned as `cursor-agent` (override with `CURSOR_BIN`; `CURSOR_MODEL` sets
+  `--model`), on its own WebSocket (`/ws/cursor`). Identity works exactly as copilot's does: one
+  flag, `--resume <uuid>`, both starts a chat under an id MulmoTerminal invented and returns to it
+  later, so there is no watcher, no attribution guess and no mapping log. `--trust` is passed as well
+  as `--force`, because a directory Cursor has not seen before otherwise blocks on a Workspace Trust
+  prompt nobody is watching. Chats land under `~/.cursor/projects/<slug>/agent-transcripts/<id>/`,
+  where `<slug>` is a truncated-and-hashed form of the directory that cannot be reconstructed — so
+  `/api/cursor/sessions` reads each project directory's own `.workspace-trusted` to learn which
+  directory it stands for, and omits any that does not say.
+
+  **Its status dots and tool history come from cursor's own hooks**, registered **once per machine**
+  in `~/.cursor/hooks.json` — cursor has no `--settings` equivalent, and `--plugin-dir`, which would
+  have been one, does not deliver hooks to the interactive TUI. That file is a FIXED path, so a user
+  who already keeps their own hooks there is left alone (with a line in the log) rather than merged
+  into. It is removed when the server exits, and a stale one left by a crash is rewritten at the next
+  startup. Two MulmoTerminal instances share it with the same accepted limitation copilot's has.
+
+  Cursor is the only agent besides Claude that drives **both** status halves — `beforeSubmitPrompt`
+  starts the turn and `stop` ends it. What it does **not** do: report being blocked on input (every
+  event that fires before an approval prompt also fires when nothing is asked), the GUI MCP (cursor
+  reads MCP from a file and no writer ships yet), token/context badges (the `stop` payload carries
+  the counts, unread), or `$` cost — see
+  [`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md) for what each would take.
+
 **Choosing an agent.** Each grid cell's launch form carries the **Agent Picker** — a
-**Claude / Codex / Antigravity / Grok / Muse / Copilot / Shell** toggle — and the Collections browser
-a **Claude / Codex / Antigravity / Grok / Muse / Copilot** one (your choice is remembered).
+**Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor / Shell** toggle — and the Collections
+browser a **Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor** one (your choice is
+remembered).
 **Shell** is not an agent: it runs your OS default shell (`$SHELL`, or `/bin/sh`) in the
 chosen directory, with nothing to install and nothing to configure. It starts a launcher
 cell, so it has no model, no MCP registration, and no worktree — those rows disappear
@@ -661,6 +691,8 @@ the `claude` / `codex` sessions themselves.
 | `COPILOT_BIN` | `copilot` | The GitHub Copilot CLI binary to spawn. |
 | `COPILOT_MODEL` | copilot default | Model passed to Copilot as `--model` (unset = copilot's own default). |
 | `COPILOT_HOME` | `~/.copilot` | Copilot's config directory. MulmoTerminal registers its status hooks in `<COPILOT_HOME>/hooks/mulmoterminal.json` and reads the session list from `<COPILOT_HOME>/session-store.db`. |
+| `CURSOR_BIN` | `cursor-agent` | The Cursor CLI binary to spawn. |
+| `CURSOR_MODEL` | cursor default | Model passed to Cursor as `--model` (unset = cursor's own default). Cursor's model names are **account-specific** and a wrong one is a hard exit — check `cursor-agent --list-models` first. |
 | `MULMOTERMINAL_HOME` | `~/.mulmoterminal` | Root for managed **git worktrees**. |
 | `CLAUDE_CONFIG_DIR` | `~` | Claude Code's own config directory. `.claude.json` lives **inside** it, so relocating your Claude Code config moves that file too — MulmoTerminal reads it to tell whether the per-project GUI MCP server is registered (`server/infra/gui-mcp-registration.ts`). Leave it unset and `~/.claude.json` is used. |
 | `MULMOCLAUDE_WORKSPACE_PATH` | `~/mulmoclaude` | Where the managed MulmoClaude workspace lives. MulmoTerminal seeds presets/helps **only** into this directory, so launching in an arbitrary project never writes them there (`server/backends/workspaceSetup.ts`), and it is what decides where MulmoTerminal's own runtime state goes — see the note under the table. Set it to the same value MulmoClaude uses. |
@@ -716,7 +748,7 @@ The Settings modal (the gear button) persists per-user UI choices to `~/.mulmote
 | `repoDirs`   | `{ "owner/repo": "/abs/path" }` — which local clone work on a repo starts in, when you keep several side by side. Only the *choice* is stored; which clones exist is re-derived from `cwdPresets` on every read, and an entry that no longer names a clone of that repo is ignored. |
 | `launchers`  | `{ label, command }` entries offered in a grid cell's launcher besides the agents — any interactive command. A plain shell needs no entry: the Agent Picker's **Shell** option opens `$SHELL` unconfigured. |
 | `customAgents` | `{ id, label, agent, command }` entries offered in the **Agent Picker** — your own way of starting Claude Code (`ollama launch claude --model … --`, a wrapper script). Unlike a launcher, Claude Code's own argv is **appended** to `command`, so the cell is a real session: resume, cost, context, GUI tools. `agent` says which agent's arguments to append and is required (`"claude"` is the only value today); `command` must stop taking arguments where Claude Code's begin — hence the trailing `--` above. Up to 8. |
-| `quickCommands` | `{ label, text, agents? }` phrases the **phone** offers as chips on a session's terminal view. Tapping one puts `text` in the input box; it is not sent until you press send. `agents` (`"claude"` / `"codex"` / `"shell"`) scopes a chip to session kinds — omit it to offer the chip everywhere. Empty by default. |
+| `quickCommands` | `{ label, text, agents? }` phrases the **phone** offers as chips on a session's terminal view. Tapping one puts `text` in the input box; it is not sent until you press send. `agents` scopes a chip to session kinds — any of `SESSION_AGENTS` (`"claude"`, `"codex"`, `"antigravity"`, `"grok"`, `"muse"`, `"copilot"`, `"cursor"`, `"shell"`); omit it to offer the chip everywhere. Empty by default. |
 | `userMcpServers` | `{ id, url }` HTTP MCP servers merged into the `--mcp-config` of the **Claude** sessions that carry the full GUI MCP (codex is handed the GUI server alone, `codexGuiMcpServers`) — a cell whose working directory is the **workspace**, and a session the server starts itself (the phone, a scheduled task) unless it asks for a grid cell's shape, as an issue's seed session does (`issueSpawnOptions`). A cell in a project directory does not get this merge; the MCP config the user wrote is read either way. Takes effect on the next session. |
 | `buttons`    | Header action buttons — see [Header buttons](#header-buttons). Omit to keep the defaults; set to replace them. |
 | `chips`      | Header info chips (`dir` / `git` / `work` / `diff` / `ctx` / `usage` / `status` / `tools` / `env`, or custom text). `env` shows what this working tree was reserved by [`worktreeEnv`](#per-directory-settings-projectmulmoterminaljson) (`:3010`, clickable) and draws nothing where none is declared. Omit to keep the default set; `[]` hides all built-ins. `work` shows which PR / issue the cell is on (`#977 → #966`) and clears itself when the PR merges — see the [Configuration guide](https://receptron.github.io/mulmoterminal/guide/en/config.html#work-chip). |
@@ -1043,7 +1075,7 @@ The same launcher also has an **or launch** row for your configured **launch com
 entry here: the Agent Picker's **Shell** option already opens `$SHELL`. Unlike
 a one-shot script, a launcher runs as a **persistent terminal in the cell's directory**:
 it survives grid page switches and reconnects, and its dot shows running vs. exited (it
-has no Claude hooks, so no blocked/done states).
+reports no activity of its own, so no blocked/done states).
 
 Every running terminal's header also has a **▶ Run ▾** dropdown (next to the
 connection status) — but **only when the
@@ -1249,7 +1281,7 @@ the same worktree reached by pasting its path into **WORKING DIRECTORY**, or by 
 chip, will not launch either — and the **server** refuses the spawn whichever client asks,
 so a path spelled another way (a trailing slash, a symlink) does not slip past.
 
-What the limit covers is an **agent**: Claude, Codex, Antigravity, Grok, Muse or Copilot, including an **OR
+What the limit covers is an **agent** — every entry in `TERMINAL_AGENTS` (Claude, Codex, Antigravity, Grok, Muse, Copilot, Cursor) — including an **OR
 LAUNCH** command that runs one of them. A **Shell**, and a launcher that runs anything else
 (`yarn dev`, `lazygit`, `htop`), stays free — a worktree an agent is working in is exactly
 where you want those. A project that declares `worktreeEnv` also gets **its own value per
@@ -1285,7 +1317,7 @@ Typing a task name yourself keeps the local base it has always used, with no fet
 
 ![An empty cell's launch form — choose the agent, working directory, or a worktree](https://raw.githubusercontent.com/receptron/mulmoterminal/main/docs/guide/images/grid-launch-form.png)
 
-*Every empty grid cell shows this launch form: pick an agent in the **Agent Picker** (**Claude / Codex / Antigravity / Grok / Muse / Copilot / Shell**), type a **working directory** (frequent ones autocomplete from your presets), or — in a git repo — name a task under **OR ISOLATE IN A WORKTREE** and hit **＋ New worktree** to start the agent on its own isolated branch. **Shell** runs your OS default shell there instead of an agent; **OR LAUNCH** runs one of your configured launch commands.*
+*Every empty grid cell shows this launch form: pick an agent in the **Agent Picker** (**Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor / Shell**), type a **working directory** (frequent ones autocomplete from your presets), or — in a git repo — name a task under **OR ISOLATE IN A WORKTREE** and hit **＋ New worktree** to start the agent on its own isolated branch. **Shell** runs your OS default shell there instead of an agent; **OR LAUNCH** runs one of your configured launch commands.*
 
 A worktree cell's header carries a **diff badge** (`+<commits> ●<dirty>`); click it for a
 **Changes vs `<base>`** panel (file list + patch) with actions:
@@ -1337,7 +1369,7 @@ Each grid cell's header shows two badges for its session, refreshed when a turn 
 - **Context badge** — e.g. `Opus · ctx 35%`: the model family plus how full its context
   window is (the *last* turn's input + cache tokens ÷ the model's window — **1M** for
   current-gen Opus / Sonnet / Fable / Mythos, **200k** otherwise). A session running on a
-  [provider model](#agents-claude--codex) shows that model's name and its published window
+  [provider model](#agents-claude-codex-antigravity-grok-muse-copilot--cursor) shows that model's name and its published window
   (`Kimi K2.7 Code · ctx 12%`); a model in neither list keeps the label and hides the %,
   since the window is never guessed. A reading **past 100%** shows `ctx ?` instead of the
   number: the window is a hard cap, so an impossible percentage means the built-in window
@@ -1408,16 +1440,29 @@ it came from — `mcp__<id>__presentChart` in Claude Code, `mcp-<id>-presentChar
 also rewrites `-` in the id to `_`). So the id you register under is repeated on every tool, in
 every listing, for the life of the session.
 
-MulmoTerminal delivers the GUI MCP by **three different routes**, and they do not share an id:
+MulmoTerminal delivers the GUI MCP by **three different routes**, and they do not share an id.
+Which route an agent takes is `FULL_GUI_MCP_AGENTS` in `common/guiMcpAgents.ts`, and the test is one
+question: can this CLI be handed a session-scoped payload on a per-spawn flag? **Claude, Codex and
+Copilot** can. **Antigravity, Grok and Cursor** cannot — they read a file in the directory — and
+**Muse** reads neither, which is the third route below.
+
+**Cursor is half of each**, and the half nobody would guess is the second: it reads a file in the
+directory as agy does (`.cursor/mcp.json`, written by `server/agents/cursor-mcp.ts`), but it starts
+that MCP server on a CURATED ENVIRONMENT rather than its own — so the group and the port travel as
+ARGV, as muse's do, and the SESSION is resolved through `/api/mcp-resolve`. An agy-shaped entry (group
+in `env`, port inherited) was tried first and reached the bridge with no port at all. Cursor also refuses to
+load a server it has not APPROVED and says nothing when it skips one, so each entry is approved with
+`cursor-agent mcp enable` as the cell starts.
+
 
 | | Workspace cell / single view | Project-directory grid cell |
 |---|---|---|
-| How it arrives | generated per spawn into `--mcp-config` (Claude) or `-c mcp_servers.<id>.url=` (Codex) | the user's OWN per-folder config — `.mcp.json`, `claude mcp add -s local` |
+| How it arrives | generated per spawn into `--mcp-config` (Claude), `-c mcp_servers.<id>.url=` (Codex) or `--additional-mcp-config` (Copilot) | the user's OWN per-folder config — `.mcp.json`, `claude mcp add -s local` |
 | Server id | **`mt`** | **`mulmoterminal-render`**, `-data`, `-media`, `-external` — one per tool group |
 | Tools carried | all of them, on one URL | only the groups that directory registered |
 | Tool name looks like | `mcp__mt__presentChart` | `mcp__mulmoterminal-render__presentChart` |
 
-The third is **Muse**, which reads neither a flag nor a file in the directory: its MCP servers are
+The third route is **Muse**, which reads neither a flag nor a file in the directory: its MCP servers are
 declared by an installed **plugin**, and `muse plugins install` records one per MACHINE. So
 MulmoTerminal registers a single `mulmoterminal` plugin holding all four group servers, and each
 session is narrowed back to what its own directory switched on — the bridge asks the server which
@@ -1446,34 +1491,37 @@ Which route a session takes is decided by `carriesFullGuiMcp()` in
 `server/session/mcp-config.ts` — the single view, a cell-less chat, or anything whose cwd **is**
 the workspace take the first; anything in a project directory takes the second.
 
-**The workspace is agent-agnostic for the agents that can RECEIVE a per-spawn config** — claude and
-codex ask the same predicate, so two terminals in the workspace reach the same tools no matter which
-of the two started them. **Antigravity, Grok and Muse cannot, and that is the exception you will
-meet first:**
+**The workspace is agent-agnostic for the agents that can RECEIVE a per-spawn config** — claude,
+codex and copilot ask the same predicate, so two terminals in the workspace reach the same tools no
+matter which of the three started them. **Antigravity, Grok, Muse and Cursor cannot, and that is the
+exception you will meet first:**
 
 | Started as | In the workspace | In a project directory |
 |---|---|---|
 | claude cell (including `?gui=0`) | `mt`, every tool | the directory's registered groups |
 | codex cell | `mt`, every tool | the directory's registered groups |
+| copilot cell | `mt`, every tool | the directory's registered groups |
+| cursor cell | **the directory's registered groups** — nothing registered means **no GUI tools at all** | the directory's registered groups |
 | antigravity cell | **the directory's registered groups** — nothing registered means **no GUI tools at all** | the directory's registered groups |
 | grok cell | **the directory's registered groups** — nothing registered means **no GUI tools at all** | the directory's registered groups |
 | muse cell | **the directory's registered groups** — nothing registered means **no GUI tools at all** | the directory's registered groups |
 | any launcher chip | untouched | untouched |
 
-None of the three takes an MCP flag: `agy` reads `.agents/mcp_config.json`, `grok` reads
-`.grok/config.toml` in the working directory, and `muse` reads a plugin installed for the whole
-machine — and neither a file shared by every session in a directory nor a machine-wide plugin can be
-handed to one session and not another — so there is nothing for "this cwd is the workspace" to change. The
+None of those four takes an MCP flag: `agy` reads `.agents/mcp_config.json`, `grok` reads
+`.grok/config.toml` and `cursor` reads `.cursor/mcp.json` in the working directory, and `muse` reads a
+plugin installed for the whole machine — and neither a file shared by every session in a directory nor
+a machine-wide plugin can be handed to one session and not another — so there is nothing for "this cwd
+is the workspace" to change. The
 membership is `FULL_GUI_MCP_AGENTS` in `common/guiMcpAgents.ts`, in `common/` precisely so the
 launcher form and the spawn cannot disagree about it
 ([#1423](https://github.com/receptron/mulmoterminal/issues/1423)).
 
 The consequence is easy to hit and hard to guess: `presentDocument` works in a project you once
 flipped **Canvas** on for, and is missing in the workspace where everything else is automatic. Fix it
-the same way anywhere — pick **Antigravity** or **Grok**, point WORKING DIRECTORY at that directory,
-flip the **Canvas** switch (it stays visible for both), and start a **new** session; the switch
-registers the directory, never a session already running. Full procedure:
-[Antigravity and Grok register everywhere](https://receptron.github.io/mulmoterminal/guide/en/basics.html#antigravity-gui-tools)
+the same way anywhere — pick **Antigravity**, **Grok**, **Muse** or **Cursor**, point WORKING
+DIRECTORY at that directory, flip the **Canvas** switch (it stays visible for all four), and start a
+**new** session; the switch registers the directory, never a session already running. Full procedure:
+[Antigravity, Grok, Muse and Cursor register everywhere](https://receptron.github.io/mulmoterminal/guide/en/basics.html#antigravity-gui-tools)
 · [日本語](https://receptron.github.io/mulmoterminal/guide/ja/basics.html#antigravity-gui-tools).
 
 **A launcher chip is not an agent session — it is a command.** Whatever the command line names,
@@ -1647,9 +1695,9 @@ quietly answering about the **default workspace** (#1151):
 
 | Where | What happens |
 | --- | --- |
-| `/ws`, `/ws/codex`, `/ws/antigravity`, `/ws/grok`, `/ws/muse`, `/ws/launch`, `/ws/run` | The socket is closed with `{ type: "error", message }`, which the terminal shows as a red banner and does not retry. |
+| `/ws`, `/ws/codex`, `/ws/antigravity`, `/ws/grok`, `/ws/muse`, `/ws/copilot`, `/ws/cursor`, `/ws/launch`, `/ws/run` | The socket is closed with `{ type: "error", message }`, which the terminal shows as a red banner and does not retry. |
 | A session that is still running (`?session=` names a live PTY or a surviving tmux session) | **Attaches anyway**, with a warning in the server log. Moving or renaming a directory must not shut you out of an agent that is still working in it — and the cwd reported back comes from the running PTY, not from the request. |
-| `GET /api/scripts`, `/api/skills`, `/api/dir-config`, `/api/dir-sound`, `/api/git-status`, `/api/pr-phase`, `/api/header`, `/api/sessions`, `/api/codex/sessions`, `/api/antigravity/sessions`, `/api/grok/sessions`, `/api/muse/sessions`, `/api/session/:id`, `/api/transcript/*`, `/api/cost` | `404 { error, cwd }` — a directory that is not there. |
+| `GET /api/scripts`, `/api/skills`, `/api/dir-config`, `/api/dir-sound`, `/api/git-status`, `/api/pr-phase`, `/api/header`, `/api/sessions`, `/api/codex/sessions`, `/api/copilot/sessions`, `/api/cursor/sessions`, `/api/antigravity/sessions`, `/api/grok/sessions`, `/api/muse/sessions`, `/api/session/:id`, `/api/transcript/*`, `/api/cost` | `404 { error, cwd }` — a directory that is not there. |
 | A `?cwd=` that cannot name a directory at all (relative, or repeated as `?cwd=a&cwd=b`) | `400 { error, cwd }`. |
 
 A request that names **no** directory is unaffected: `CLAUDE_CWD` is then the answer it
@@ -1741,11 +1789,15 @@ Empty output returns a `{ summary }` note rather than calling the CLI. Errors:
 
 ### HTTP: `POST /api/hook`
 
-**Internal endpoint.** Claude hooks (injected per session — see
-[Claude hook injection](#claude-hook-injection)) POST their event payload here.
+**Internal endpoint.** Hooks POST their event payload here. Claude's are injected per session
+(see [Claude hook injection](#claude-hook-injection)); **Copilot's and Cursor's arrive from a
+machine-global hook file** and name their agent in an `x-mt-agent: copilot|cursor` header, with the
+event in `x-mt-hook` — the body is translated into the Claude shape below before anything reads it
+(`server/agents/{copilot,cursor}-hook.ts`), so everything downstream is written against one
+vocabulary. A request with no `x-mt-agent` is a Claude payload and is untouched.
 You normally don't call this yourself.
 
-**Request `application/json`** — the Claude hook payload; only these fields are used:
+**Request `application/json`** — the Claude-shaped hook payload; only these fields are used:
 
 ```jsonc
 {
@@ -1781,6 +1833,8 @@ same-origin-guarded.
 | `GET /api/antigravity/sessions?cwd=` | Antigravity conversations for the project, newest first. agy does record a workspace, but never as a complete conversation-to-workspace map (`cache/last_conversations.json` keeps one conversation per directory and is written at exit; `history.jsonl` carries no conversation id), so the project comes from MulmoTerminal's own `~/.mulmoterminal/antigravity-conversations.jsonl`; agy's transcript supplies the title. |
 | `GET /api/grok/sessions?cwd=` | Grok conversations for the project, newest first. `~/.grok/sessions` is partitioned by working directory (percent-encoded), so this is a directory listing; each conversation's `summary.json` supplies the title and the last-active time, falling back to the directory's `prompt_history.jsonl`. |
 | `GET /api/muse/sessions?cwd=` | Muse sessions for the project, newest first. Muse keeps one sqlite index for the machine (`~/.local/share/muse/session-index.db`, home overridable via `MUSE_HOME`) with the workspace recorded per row, so this is a query rather than a directory listing. |
+| `GET /api/copilot/sessions?cwd=` | Copilot sessions for the project, newest first. Copilot keeps one sqlite index for the machine (`~/.copilot/session-store.db`) with the working directory on each row, so this is a query rather than a directory walk. |
+| `GET /api/cursor/sessions?cwd=` | Cursor chats for the project, newest first. Cursor's project directory name is a truncated-and-hashed slug of the path, so this reads each directory's own `.workspace-trusted` to learn which one it stands for and omits any that does not say. |
 | `GET /api/cost?cwd=&session=` | Estimated $ cost — session / today / month. |
 | `GET /api/transcript/timeline?session=&cwd=` | Per-session activity timeline (tools run). |
 | `GET /api/transcript/last-turn?session=&cwd=&agent=` | A session's last completed exchange (`prompt`, `reply`) plus the `text` to paste into another terminal. `agent=codex` reads the codex rollout instead of the Claude transcript. |
@@ -1898,17 +1952,19 @@ A non-JSON frame is written to the PTY verbatim (fallback).
 
 ### More WebSocket endpoints
 
-Two more raw WebSockets share the `/ws` frame format (`output` / `input` / `resize` /
-`exit`):
+The other raw WebSockets share the `/ws` frame format (`output` / `input` / `resize` / `exit`).
+**Every non-Claude agent has one** — `/ws/codex`, `/ws/antigravity`, `/ws/grok`, `/ws/muse`,
+`/ws/copilot`, `/ws/cursor` — and they take the same query and behave the same way; codex's is
+documented here as the representative one, and the per-agent differences are the matrix in
+[`docs/agent-capability-matrix.md`](docs/agent-capability-matrix.md).
 
-- **`/ws/codex?session=<id>&cwd=<dir>&gui=<0|1>`** — a **Codex** agent PTY (see
-  [Agents: Claude & Codex](#agents-claude--codex)). Like `/ws` it sends a `session` frame
+- **`/ws/codex?session=<id>&cwd=<dir>&gui=<0|1>`** — a **Codex** agent PTY. Like `/ws` it sends a `session` frame
   with the id and reattaches to a live or tmux-backed session on resume. `gui=0` (grid
   cells) omits the GUI MCP and marks the session a grid terminal.
 - **`/ws/launch?session=<id>&cwd=<dir>&launcher=<index>`** — a **launch command** PTY (a
   plain shell, `codex`, or any command configured in Settings → Launch commands). Unlike a
   Run-menu script it's **persistent and reattachable** (survives page switches /
-  reconnects), but it has no Claude hooks, so its dot only shows running vs. exited.
+  reconnects), but it reports no activity of its own, so its dot only shows running vs. exited.
 
 ### WebSocket: `/ws/run` (command terminal)
 

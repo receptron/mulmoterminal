@@ -86,6 +86,7 @@ import type { createGrokSpawner } from "../session/spawn-grok.js";
 import type { createAntigravitySpawner } from "../session/spawn-antigravity.js";
 import type { createMuseSpawner } from "../session/spawn-muse.js";
 import type { createCopilotSpawner } from "../session/spawn-copilot.js";
+import type { createCursorSpawner } from "../session/spawn-cursor.js";
 import type { createTranslationWorker } from "../session/translation-worker.js";
 import type { createTitleManager } from "../session/session-title.js";
 import { tmuxHasSession, tmuxKillSession } from "../infra/tmux.js";
@@ -112,6 +113,7 @@ export interface AppRouteDeps extends SessionActivityDeps {
   spawnGrokPty: ReturnType<typeof createGrokSpawner>["spawnGrokPty"];
   spawnMusePty: ReturnType<typeof createMuseSpawner>["spawnMusePty"];
   spawnCopilotPty: ReturnType<typeof createCopilotSpawner>["spawnCopilotPty"];
+  spawnCursorPty: ReturnType<typeof createCursorSpawner>["spawnCursorPty"];
   translateViaHiddenChat: ReturnType<typeof createTranslationWorker>["translateViaHiddenChat"];
   freshenRosterTitle: ReturnType<typeof createTitleManager>["freshenRosterTitle"];
   reap: (id: string) => void;
@@ -171,6 +173,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     spawnGrokPty: deps.spawnGrokPty,
     spawnMusePty: deps.spawnMusePty,
     spawnCopilotPty: deps.spawnCopilotPty,
+    spawnCursorPty: deps.spawnCursorPty,
     registerBackgroundSession: deps.registerBackgroundSession,
   });
 
@@ -301,7 +304,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
   // prefix — see server/spa-fallback.ts for why that's sufficient.
   mountSpaFallback(app, path.join(clientDir, "../dist"));
 
-  // The Claude hook endpoint (routes/hook-routes.ts). Session lifecycle, the title
+  // The agent hook endpoint (routes/hook-routes.ts). Session lifecycle, the title
   // bookkeeping and the tool stores stay here; the fan-out that reads them moves out.
   mountSessionFacingRoutes(app, deps);
 }

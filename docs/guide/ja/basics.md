@@ -55,10 +55,10 @@ description: グリッドで複数の AI コーディングエージェント（
 
 | 部分 | 役割 |
 |---|---|
-| **Agent Picker**（**Claude / Codex / Antigravity / Grok / Muse / Shell**） | このセルで動かすものを選ぶ。**エージェント**か、**Shell**（OS 標準シェル `$SHELL`。インストールも設定も不要）。実際のエージェントセッションを起動するのはこのコントロールで、下の **launch commands** はユーザーが書いたコマンドをそのまま実行する。各エージェントに何が必要か・どう再開するか・GUI ツールにどう到達するかは → [どの coding agent を使うか](agents.html) |
+| **Agent Picker**（**Claude / Codex / Antigravity / Grok / Muse / Copilot / Cursor / Shell**） | このセルで動かすものを選ぶ。**エージェント**か、**Shell**（OS 標準シェル `$SHELL`。インストールも設定も不要）。実際のエージェントセッションを起動するのはこのコントロールで、下の **launch commands** はユーザーが書いたコマンドをそのまま実行する。各エージェントに何が必要か・どう再開するか・GUI ツールにどう到達するかは → [どの coding agent を使うか](agents.html) |
 | **WORKING DIRECTORY** | 作業ディレクトリを入力（再生ボタンで起動）。よく使うディレクトリは *cwd presets* の**チップ**をクリックして入力（チップの再生ボタンで即起動）。チップは起動したディレクトリから自動で記録されますが、worktree は対象外です（1 タスク 1 ブランチの使い捨てで、またそこで起動する場所ではないため）。チップ列の先頭には **WORKSPACE** が常にあります（→ [どのディレクトリで起動するか](#launch-dir)） |
 | **モデル選択**（Claude 選択時） | このセッションだけのバックエンド／モデルを選ぶ（→ [プロバイダ](providers.html)） |
-| **Canvas / Workspace data / External accounts** のトグル（エージェント選択時） | GUI ツール群（`render` / `data` / `media` / `external`）の MCP サーバを、**このセッションではなくディレクトリに**登録。**Claude / Codex** を選んでいるときは、**ワークスペースを選んでいる間は出ません**（そこは登録なしで全部使えるため）。**Antigravity / Grok** を選んでいるときはワークスペースでも出たままです — この 2 つはどこで動いてもこの登録だけが GUI ツールの入手経路だからです（→ [Antigravity と Grok はどこでも登録が要る](#antigravity-gui-tools)） |
+| **Canvas / Workspace data / External accounts** のトグル（エージェント選択時） | GUI ツール群（`render` / `data` / `media` / `external`）の MCP サーバを、**このセッションではなくディレクトリに**登録。**Claude / Codex / Copilot** を選んでいるときは、**ワークスペースを選んでいる間はトグルが消えます** — そこでは登録しなくても全部使えるからです。**Antigravity / Grok / Muse / Cursor** ではワークスペースでも残ります（登録がそれらの唯一の入手経路 → [Antigravity・Grok・Muse・Cursor はどこでも登録が要る](#antigravity-gui-tools)） |
 | **OR ISOLATE IN A WORKTREE** | git リポなら、タスク名を入れて **New worktree**。作業を隔離した worktree を作って起動。既存の worktree はその下に一覧表示 |
 | **OR RESUME HERE** | そのディレクトリに既にある会話のうち、**Agent Picker で選んでいるエージェントのもの**。クリックすると続きから再開。Claude 以外のときは見出しがエージェント名を含みます（`or resume a codex conversation here`） |
 | **OR LAUNCH** | 設定済みの**起動コマンド**（`codex` / `htop` / 任意）を永続端末として起動 |
@@ -79,7 +79,8 @@ description: グリッドで複数の AI コーディングエージェント（
 
 **一覧は選んでいるエージェントのものです。** 履歴の置き場所はエージェントごとに違い（Claude は
 `~/.claude/projects`、Codex は `~/.codex/sessions`、Grok は `~/.grok/sessions`、Antigravity は自身の
-brain ディレクトリ）、その続きを再開できるのは書いた本人だけです。だから Agent Picker を切り替えると
+brain ディレクトリ、Muse と Copilot はそれぞれ自前の SQLite インデックス、Cursor は
+`~/.cursor/projects`）、その続きを再開できるのは書いた本人だけです。だから Agent Picker を切り替えると
 一覧も入れ替わり、会話は必ず始めたエージェントで再開されます。注意点が 2 つ。**Shell では一覧が出ません**
 （再開するものがないため）。そして **Antigravity** の一覧は *MulmoTerminal が起動した* 会話しか出せません —
 agy は会話とディレクトリの対応を記録しないので、ディレクトリは MulmoTerminal 自身のログから取っており、
@@ -106,18 +107,23 @@ MCP 登録・worktree がないので、選んでいる間はその 3 つの欄�
 今どこなのか分からなくなったら、起動時に出る `Workspace: …` が答えです。
 Collections・Wiki・Accounting が読み書きするのは、どのセルにいても常にここです（拡大したセルの横に開く Files ペインだけは、そのセルのディレクトリを見ます）。
 
-| セルの作業ディレクトリ | Claude / Codex | Antigravity / Grok |
-|---|---|---|
-| **ワークスペースと同じ** | **GUI ツールを全部持ちます。登録は要りません** | 特例はありません。**そのディレクトリに登録されているツールグループだけ**です |
-| **プロジェクトのディレクトリ** | **そのディレクトリに登録されているツールグループだけ**です。GUI ツールが要るなら MCP トグルで登録します | 同じ |
+**どのツールが入るかはディレクトリが決めますが、「ワークスペースなら全部入る」という特例が効くかどうか
+はエージェント側で決まります。** どう渡せるかはその CLI の性質であって設定ではありません。詳しくは
+[GUI ツールへの到達方法](agents.html#gui-tools)。
+
+| エージェント | どう渡せるか | ワークスペースでは | プロジェクトのディレクトリでは |
+|---|---|---|---|
+| **Claude / Codex / Copilot** | セッション自体に渡すフラグ | **GUI ツールを全部持ちます。登録は要りません** | **そのディレクトリに登録されたグループだけ** — 要るなら MCP トグルで登録します |
+| **Antigravity / Grok / Cursor** | 作業ディレクトリの設定ファイル | **そのディレクトリ**に登録されたぶんだけ（ワークスペースも例外ではありません） | そのディレクトリに登録されたぶんだけ |
+| **Muse** | マシン単位で入れたプラグインを、セッションごとに絞る | **そのディレクトリ**で ON にしたぶんだけ | そのディレクトリで ON にしたぶんだけ |
 
 **Claude のセッションは、どちらのディレクトリでも自分の MCP 設定を読みます**（`.mcp.json`・`claude mcp add`・claude.ai のコネクタ）。4.4.0 より前はワークスペースのセルだけがそれを読めていませんでした（→ [4.4.0 セットアップガイド](v4.4.0.html)）。
-設定の [MCP servers](config.html#settings-modal)（`userMcpServers`）が合流するのは、**ワークスペースで起動した Claude のセッションだけ**です。プロジェクトディレクトリのセルには合流しませんし、Codex にも合流しません（Codex が受け取るのは MulmoTerminal の GUI ツールのほうで、Codex 自身の MCP 設定は `~/.codex` 側の話になります）。
+設定の [MCP servers](config.html#settings-modal)（`userMcpServers`）が合流するのは、**GUI ツールを全部持つ Claude と Copilot のセッション**です。グリッドではワークスペースで起動したものだけが該当します。プロジェクトディレクトリのセルには合流しませんし、Codex にも合流しません（Codex が受け取るのは MulmoTerminal の GUI ツールのほうで、Codex 自身の MCP 設定は `~/.codex` 側の話になります）。
 
 **3.x までの単一ビューでしていたことを続けるなら、ワークスペースで起動します。**
-単一ビューはこのディレクトリで動いていたので、ここに起動した Claude / Codex のセルは同じものを持ちます。
+単一ビューはこのディレクトリで動いていたので、ここに起動した Claude / Codex / Copilot のセルは同じものを持ちます。
 Canvas に描かせる、コレクションを触らせる、といった操作がトグルなしで通ります。
-Claude でも Codex でも同じです。**Agent Picker** でどちらかを選び、ワークスペースで起動してください（→ [4.3.0 セットアップガイド](v4.3.0.html)）。
+この 3 つならどれでも同じです。**Agent Picker** でどれかを選び、ワークスペースで起動してください（→ [4.3.0 セットアップガイド](v4.3.0.html)）。Antigravity・Grok・Muse・Cursor を選んだ場合、ワークスペースであることは何も足しません — どこで動かしてもディレクトリに登録されたぶんだけです。
 **起動コマンド（launch command）はこれには当たりません。** 書いたコマンドが `claude` であっても、起動コマンドは逐語的に実行されるだけなので、そのプログラムが動いているターミナルであって GUI ツールは付きません。エージェントのセッションを始めるのは Agent Picker です。
 
 {: .note }
@@ -131,7 +137,7 @@ Claude でも Codex でも同じです。**Agent Picker** でどちらかを選�
 **ワークスペースはチップ 1 つで選べます。**
 ランチャのチップ列の先頭には、最近使ったディレクトリとは別枠で **WORKSPACE** チップが常に出ています（ディレクトリ名ではなく役割名で、専用アイコン付き）。
 再生ボタンでそのまま起動、チップ本体を押せば WORKING DIRECTORY に入るだけです。
-**Claude / Codex を選んだ状態で**ワークスペースを選んでいる間は MCP トグルが消え、代わりに `GUI TOOLS — All of them, automatically` と出ます。登録するものが無いからです。**Antigravity / Grok** を選ぶとトグルは戻ります（ワークスペースでも）。次項を参照してください。
+**Claude / Codex / Copilot を選んだ状態で**ワークスペースを選んでいる間は MCP トグルが消え、代わりに `GUI TOOLS — All of them, automatically` と出ます。登録するものが無いからです。**Antigravity / Grok / Muse / Cursor** を選ぶとトグルは戻ります（ワークスペースでも）。次項を参照してください。
 
 ![ランチャのチップ列 — 先頭がワークスペース](../images/v4.3.1-workspace-chip.png)
 
@@ -140,37 +146,51 @@ Claude でも Codex でも同じです。**Agent Picker** でどちらかを選�
 トグルは**セッションではなくディレクトリ**への登録なので、効くのは次にそこで起動するセッションからです。
 動いているセッションに後から載ることはありません。
 
-### Antigravity と Grok はどこでも登録が要る — ワークスペースでも {#antigravity-gui-tools}
+### Antigravity・Grok・Muse・Cursor はどこでも登録が要る — ワークスペースでも {#antigravity-gui-tools}
 
-**Antigravity と Grok にこの特例はありません。** ワークスペースで起動しても、GUI ツールは
+**この 4 つにその特例はありません。** ワークスペースで起動しても、GUI ツールは
 **そのディレクトリに**登録されているぶんだけです。つまり、何も登録していないワークスペースで動かした
-`agy` / `grok` セッションは **GUI ツールを 1 つも持ちません**。一方、以前 Canvas を入れたプロジェクト
-では同じセッションが使えます。これが分かりにくさの正体です — 「全部使えるはずの」ワークスペースでだけ
-`presentDocument` が無く、プロジェクトでは動く、という形で出ます。
+`agy` / `grok` / `muse` / `cursor` セッションは **GUI ツールを 1 つも持ちません**。一方、以前 Canvas を入れた
+プロジェクトでは同じセッションが使えます。これが分かりにくさの正体です — 「全部使えるはずの」
+ワークスペースでだけ `presentDocument` が無く、プロジェクトでは動く、という形で出ます。
 
-理由は仕様上の構造で、不具合ではありません。Claude / Codex は起動時に**セッション単位の** MCP 設定を
-渡されます（`--mcp-config`、`-c mcp_servers.…`）。だからワークスペースでは全部渡してしまえます。
-残る 2 つにはその口がなく、どちらも作業ディレクトリの**ファイル**から MCP サーバを読みます。`agy` は
-`.agents/mcp_config.json` で、これはそのディレクトリのトグルから MulmoTerminal が書き出しています
+理由は仕様上の構造で、不具合ではありません。Claude / Codex / Copilot は起動時に**セッション単位の**
+MCP 設定を渡されます（`--mcp-config`、`-c mcp_servers.…`、`--additional-mcp-config`）。だから
+ワークスペースでは全部渡してしまえます。残る 4 つにはその口がありません。`agy`・`grok`・`cursor` は
+作業ディレクトリの**ファイル**から MCP サーバを読みます。`agy` は `.agents/mcp_config.json` で、これは
+そのディレクトリのトグルから MulmoTerminal が書き出しています
 （→ [2.8.0 セットアップガイド](v2.8.0.html)）。`grok` は `.grok/config.toml` で、こちらは grok 自身の
-`grok mcp add -s project` 経由なので、ファイルの他の記述はそのまま残ります。ディレクトリに 1 つの
-ファイルは特定のセッションにだけ渡す、ということができないので、「ワークスペースにいる」ことで
-変えられるものが無いのです。
+`grok mcp add -s project` 経由なので、ファイルの他の記述はそのまま残ります。`muse` はどちらでもなく、
+**マシン単位で入れたプラグイン**から読みます。MulmoTerminal は 4 グループ全部を持つプラグインを 1 つ
+登録し、セッションごとにそのディレクトリで ON になっているぶんへ絞ります
+（→ [4.7.0 セットアップガイド](v4.7.0.html)）。いずれも「特定のセッションにだけ渡す」ことができないので、
+「ワークスペースにいる」ことで変えられるものが無いのです。
 
-**Antigravity / Grok のセッションに GUI ツールを持たせる手順（ワークスペースでも、それ以外でも同じ）:**
+**Cursor は `.cursor/mcp.json` を読み、この 4 つの中で唯一「サーバごとの承認」が要ります。**
+（Muse も承認は要りますが、マシン全体のプラグイン 1 つに対して 1 回だけです。）MulmoTerminal は
+そのディレクトリで cursor のセルを最初に起動したときにこのファイルを書き、そのうえで自分が書いた項目
+だけを `cursor-agent mcp enable` で承認します。cursor は未承認のサーバを読み込まず、しかもそれを黙って伏せる
+ため（セルからは「MCP サーバが無い」としか見えません）、書くだけでは半分しか終わらないからです。自分で
+そのファイルに書いた MCP サーバはそのまま残ります。
 
-1. 空きセルのランチャで、Agent Picker の **Antigravity** または **Grok** を選びます。
+**Antigravity / Grok / Muse / Cursor のセッションに GUI ツールを持たせる手順（ワークスペースでも、それ以外でも同じ）:**
+
+1. 空きセルのランチャで、Agent Picker の **Antigravity**・**Grok**・**Muse**・**Cursor** のどれかを選びます。
 2. **WORKING DIRECTORY** にディレクトリを入れます（ワークスペースなら **WORKSPACE** チップ）。
-3. **Canvas / Workspace data / External accounts** のトグルはそのまま出ています — Claude / Codex の
-   ときのように消えません。必要なものを ON にします。`presentDocument`・`presentChart`・
+3. **Canvas / Workspace data / External accounts** のトグルはそのまま出ています — Claude / Codex /
+   Copilot のときのように消えません。必要なものを ON にします。`presentDocument`・`presentChart`・
    `presentHtml`・`presentForm` を持ってくるのは **Canvas**（`render`）です。
 4. **セッションを起動し直します。** トグルは*ディレクトリ*への登録なので、既に動いているセッションには
    届きません。開いているセッションは起動時に渡されたものを持ち続けます。
 
-外から確かめるなら、`<そのディレクトリ>/.agents/mcp_config.json`（Antigravity）または
-`<そのディレクトリ>/.grok/config.toml`（Grok）に `mulmoterminal-render` サーバが入っているかを見ます。
-セッション内でのツール名は `mcp__mulmoterminal-render__presentDocument` です。どちらも常にグループごとの
-サーバ id を使い、ワークスペースの Claude セッションが見る `mt` id にはなりません。
+外から確かめるなら、`<そのディレクトリ>/.agents/mcp_config.json`（Antigravity）・
+`<そのディレクトリ>/.grok/config.toml`（Grok）・`<そのディレクトリ>/.cursor/mcp.json`（Cursor）に
+`mulmoterminal-render` サーバが入っているかを見ます。Muse はマシン単位の登録なので、
+`muse plugins list` に出ているかを見ます。cursor のセルでは、承認まで済むと `cursor-agent mcp list` が
+`ready` と答えます（承認はセル起動時に自動で行われます）。セッション内でのツール名は
+`mcp__mulmoterminal-render__presentDocument`、Muse のセルでは
+`mcp__plugin_mulmoterminal_render__presentDocument` です。3 つとも常にグループごとのサーバ id を使い、
+ワークスペースの Claude / Codex / Copilot セッションが見る `mt` id にはなりません。
 
 ## セルの読み方 — 「どこで何をしているか」
 
@@ -178,7 +198,7 @@ Claude でも Codex でも同じです。**Agent Picker** でどちらかを選�
 
 ![起動したセル（2段ヘッダー）](../images/grid-one-cell.png)
 
-*図はレイアウトを示す例です。各セルには通常 **Claude / Codex のセッション**が入り、ヘッダーにそのエージェントの状態・モデル・作業内容が出ます（図の中身は端末の例）。*
+*図はレイアウトを示す例です。各セルには通常**エージェントのセッション**が入り、ヘッダーにそのエージェントの状態・モデル・作業内容が出ます（図の中身は端末の例）。*
 
 - **1 段目（見比べるもの）**：状態ドット・プロジェクトバッジ・git チップ（`⎇ ブランチ ●変更数`）・
   **モデル/コンテキスト量**・そのエージェントが**今やっていること**・自分で書けるメモ・並べ替え/拡大/退避/閉じる。
@@ -263,11 +283,14 @@ Claude でも Codex でも同じです。**Agent Picker** でどちらかを選�
 
 Mac のラップトップキーボードには独立した Page Up / Page Down がないため、**`Fn`+`↑`** / **`Fn`+`↓`** を使ってください。
 
-## Claude・Codex・Antigravity・Grok を混在 {#claude-and-codex}
+## 複数のエージェントを混在させる {#claude-and-codex}
 
-同じグリッドで、セルごとに **Claude**・**Codex**・**Antigravity**（`agy`）・**Grok** を起動できます。端末だけ欲しいときは
+同じグリッドで、セルごとに **Claude**・**Codex**・**Antigravity**（`agy`）・**Grok**・**Muse**・**Copilot**・
+**Cursor** を起動できます。端末だけ欲しいときは
 **Shell** も選べます。エージェントはどれも同じ端末体験・永続化・GUI パネル・可視化の仕組みを共有。得意分野で
-使い分けたり、同じタスクを複数に投げて見比べたりできます。
+使い分けたり、同じタスクを複数に投げて見比べたりできます。それぞれ何をインストールする必要があるか・
+どう再開するか・終わったときに教えてくれるのはどれかは → [どの coding agent を使うか](agents.html)。
+以下の 2 つは、GUI パネルの登録がディレクトリ単位になる 2 つです。
 
 Antigravity は `agy` が `PATH` に載っている必要があります。バイナリ・モデル・会話の置き場所は
 `ANTIGRAVITY_BIN` / `ANTIGRAVITY_MODEL` / `ANTIGRAVITY_HOME` で変えられます。1 点だけ仕組みが違い、GUI パネルの
