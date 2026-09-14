@@ -10,7 +10,9 @@
 // and the thumbnail AND the script uploads under `shapes/{uid}/{id}/…`, the
 // path the Storage rule scopes — the script is a Storage object the document
 // points at by `scriptId`, never a field (receptron/mulmoserver#266). No
-// session → the tool says how to connect one. Compare MulmoClaude's
+// session → the tool says how to connect one. With `id` the plugin rewrites the
+// user's own post instead: the read, and the conditional `updateDoc` in a
+// transaction, are this host's too. Compare MulmoClaude's
 // `server/agent/mcp-tools/publishShapeScript.ts`, the same call over that
 // host's session.
 //
@@ -24,11 +26,14 @@ import {
   PUBLISH_TOOL_NAME,
   SHAPE_OBJECT_CACHE_CONTROL,
   SHAPE_SCRIPT_CONTENT_TYPE,
+  POST_CHANGED_MESSAGE,
   type ShapeGalleryWriter,
   type ShapePostDoc,
+  type ShapePostExpect,
+  type ShapePostPatch,
 } from "@mulmoclaude/shapescript-plugin";
 import { renderShapeThumbnail } from "@mulmoclaude/shapescript-plugin/render";
-import { doc, serverTimestamp, setDoc, type Firestore } from "firebase/firestore";
+import { doc, getDoc, runTransaction, serverTimestamp, setDoc, type Firestore } from "firebase/firestore";
 import { deleteObject, ref as storageRef, uploadBytes, type FirebaseStorage } from "firebase/storage";
 import type { ToolDefinition } from "gui-chat-protocol";
 import { artifactsFileOps } from "../backends/artifacts.js";
@@ -50,6 +55,19 @@ export const PUBLISH_SHAPE_SCRIPT: ToolDefinition = {
  *  server's. Exported for the test that pins it. */
 export function postDocumentOf(post: ShapePostDoc): Record<string, unknown> {
   return { ...post, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+}
+
+/** The update as written: only the fields the plugin gave plus a server `updatedAt`, and NO
+ *  `createdAt` — the rules freeze it. Field-level (`updateDoc`), so a field not given keeps
+ *  what the document holds now, not what a read a moment ago saw. */
+export function postUpdateOf(patch: ShapePostPatch): Record<string, unknown> {
+  return { ...patch, updatedAt: serverTimestamp() };
+}
+
+/** Whether the stored document is still the one the plugin merged against: same owner, same
+ *  object ids. Object ids are minted per upload, so a match means no edit landed in between. */
+export function postStillMatches(data: Record<string, unknown> | undefined, expect: ShapePostExpect): boolean {
+  return data !== undefined && data.uid === expect.uid && data.scriptId === expect.scriptId && data.thumbnailId === expect.thumbnailId;
 }
 
 /** `shapes/{uid}/{shapeId}/{objectId}` — under the owner, so the Storage rule
@@ -74,6 +92,19 @@ export function galleryWriterFrom(session: { firestore: Firestore; storage: Fire
     uid: session.uid,
     authorName: session.authorName,
     createPost: (shapeId, post) => setDoc(doc(session.firestore, SHAPES, shapeId), postDocumentOf(post)),
+    readPost: async (shapeId) => {
+      const snapshot = await getDoc(doc(session.firestore, SHAPES, shapeId));
+      return snapshot.exists() ? snapshot.data() : null;
+    },
+    // A transaction: the check and the field-level update are one atomic step, so a
+    // concurrent edit either lands before (and this one is refused) or after (and sees ours).
+    updatePost: (shapeId, patch, expect) =>
+      runTransaction(session.firestore, async (transaction) => {
+        const ref = doc(session.firestore, SHAPES, shapeId);
+        const snapshot = await transaction.get(ref);
+        if (!postStillMatches(snapshot.data(), expect)) throw new Error(POST_CHANGED_MESSAGE);
+        transaction.update(ref, postUpdateOf(patch));
+      }),
     uploadThumbnail: (shapeId, png) => upload(shapeId, png, THUMBNAIL_TYPE),
     uploadScript: (shapeId, script) => upload(shapeId, script, SHAPE_SCRIPT_CONTENT_TYPE),
     deleteObject: (shapeId, objectId) => deleteObject(objectRef(shapeId, objectId)),

@@ -15,6 +15,8 @@ import {
   PUBLISH_SHAPE_SCRIPT,
   galleryWriterFrom,
   postDocumentOf,
+  postStillMatches,
+  postUpdateOf,
   runPublishShapeScript,
   shapeObjectPath,
 } from "../../../server/infra/shapescript-publish-tool.js";
@@ -24,6 +26,7 @@ describe("publishShapeScript host tool", () => {
     expect(PUBLISH_SHAPE_SCRIPT.name).toBe("publishShapeScript");
     expect(PUBLISH_SHAPE_SCRIPT.description).toContain("gallery");
     expect(Object.keys(PUBLISH_SHAPE_SCRIPT.parameters?.properties ?? {})).toEqual([
+      "id",
       "title",
       "script",
       "path",
@@ -46,6 +49,22 @@ describe("publishShapeScript host tool", () => {
     }
   });
 
+  it("updates only the fields the plugin gave, with a server-stamped updatedAt and never createdAt, which the rules freeze", () => {
+    const update = postUpdateOf({ title: "Lamp 2", scriptId: "script-2" });
+    expect(Object.keys(update)).toEqual(["title", "scriptId", "updatedAt"]);
+    expect((update.updatedAt as { _methodName?: string })._methodName).toBe("serverTimestamp");
+    expect(Object.hasOwn(update, "createdAt")).toBe(false);
+  });
+
+  it("applies an update only while the post still carries the owner and object ids the plugin read", () => {
+    const expected = { uid: "u-alice", scriptId: "script-1", thumbnailId: "obj-1" };
+    expect(postStillMatches({ uid: "u-alice", scriptId: "script-1", thumbnailId: "obj-1", title: "Lamp" }, expected)).toBe(true);
+    expect(postStillMatches({ uid: "u-alice", scriptId: "script-2", thumbnailId: "obj-1" }, expected)).toBe(false);
+    expect(postStillMatches({ uid: "u-alice", scriptId: "script-1", thumbnailId: "obj-2" }, expected)).toBe(false);
+    expect(postStillMatches({ uid: "u-bob", scriptId: "script-1", thumbnailId: "obj-1" }, expected)).toBe(false);
+    expect(postStillMatches(undefined, expected)).toBe(false);
+  });
+
   it("keeps a picture under the owner, where the Storage rule scopes writes", () => {
     expect(shapeObjectPath("u-alice", "s-1", "o-1")).toBe("shapes/u-alice/s-1/o-1");
   });
@@ -55,6 +74,8 @@ describe("publishShapeScript host tool", () => {
     expect(writer.uid).toBe("u-alice");
     expect(writer.authorName).toBe("Alice");
     expect(typeof writer.createPost).toBe("function");
+    expect(typeof writer.readPost).toBe("function");
+    expect(typeof writer.updatePost).toBe("function");
     expect(typeof writer.uploadThumbnail).toBe("function");
     expect(typeof writer.uploadScript).toBe("function");
     expect(typeof writer.deleteObject).toBe("function");

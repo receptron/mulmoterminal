@@ -8,6 +8,19 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `publishShapeScript` updates a published model by `id` — `@mulmoclaude/shapescript-plugin@4.0.0`
+
+- A new optional `id` argument — the tail of a post's gallery URL — rewrites the user's own
+  post in place under the same URL instead of publishing a second copy
+  ([receptron/mulmoclaude#3158](https://github.com/receptron/mulmoclaude/pull/3158)). Only the
+  account that published it can update it; every other argument is optional then, a field
+  given replacing the post's and one omitted keeping it. The host's writer gains the two
+  members the plugin now requires: `readPost`, a `getDoc` of `shapes/{id}`, and `updatePost`,
+  a `runTransaction` that re-reads the post, refuses it unless it still carries the owner and
+  object ids the plugin read (`POST_CHANGED_MESSAGE`), and applies a field-level patch with a
+  server `updatedAt` and no `createdAt`, which the rules freeze. Two edits racing on one post
+  can no longer orphan each other's objects.
+
 ### `publishShapeScript` records which AI model wrote the script — `@mulmoclaude/shapescript-plugin@3.1.0`
 
 - An optional `aiModel` argument — the model id the agent is running as, e.g. `claude-opus-5` —
