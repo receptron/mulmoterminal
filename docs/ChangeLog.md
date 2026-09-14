@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### Download GLB and STL from a ShapeScript result; Copy moves to the source bar — `@mulmoclaude/shapescript-plugin@5.1.0`
+
+- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — the `presentShapeScript` view
+  offers **Download GLB** (binary glTF, for the web and game engines; vertex colours survive as
+  `COLOR_0`) and **Download STL** (binary, geometry only, every vertex baked into world space, for
+  slicers) beside Download USDZ, all built in the browser from the applied script and disabled
+  while the editor holds unapplied edits
+  ([receptron/mulmoclaude#3171](https://github.com/receptron/mulmoclaude/pull/3171)). The
+  **Copy** button moves from the header to the right end of the "Edit ShapeScript Source" bar,
+  next to the text it copies. Host code is unchanged; the bump and the refreshed lockfile are
+  what deliver it.
+
 ### `manageShapeScript` replaces `publishShapeScript` — one gallery tool with `publish`, `update`, `delete`, `get`, `getList` — `@mulmoclaude/shapescript-plugin@5.0.0`
 
 - The gallery is one tool with an `action`, the shape `manageCollection` has, and
