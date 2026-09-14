@@ -10,7 +10,7 @@ Entries here are folded into the next release's heading when it ships.
 
 ### Download GLB and STL from a ShapeScript result; Copy moves to the source bar — `@mulmoclaude/shapescript-plugin@5.1.0`
 
-- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — the `presentShapeScript` view
+- **[#2074](https://github.com/receptron/mulmoterminal/pull/2074)** — the `presentShapeScript` view
   offers **Download GLB** (binary glTF, for the web and game engines; vertex colours survive as
   `COLOR_0`) and **Download STL** (binary, geometry only, every vertex baked into world space, for
   slicers) beside Download USDZ, all built in the browser from the applied script and disabled
