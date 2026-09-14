@@ -26,7 +26,7 @@ import { projectScopeForCwd, rootForProjectId } from "../infra/project-root.js";
 import { manageCollectionHandlerFor } from "../infra/collection-tool.js";
 import { runRenderShapeScript } from "../infra/shapescript-render-tool.js";
 import { runExportShapeScriptUsdz } from "../infra/shapescript-usdz-tool.js";
-import { runPublishShapeScript } from "../infra/shapescript-publish-tool.js";
+import { runManageShapeScript } from "../infra/shapescript-manage-tool.js";
 import { manageSharedApp } from "../infra/shared-app-tool.js";
 import { useSharedApp } from "../infra/use-shared-app-tool.js";
 import { upstreamFailureMessage } from "./plugin-narration.js";
@@ -221,7 +221,7 @@ export function mountPluginRoutes(app: Express, deps: PluginRouteDeps): void {
   mountCollectionRoute(app);
   mountRenderShapeScriptRoute(app);
   mountExportShapeScriptUsdzRoute(app);
-  mountPublishShapeScriptRoute(app);
+  mountManageShapeScriptRoute(app);
   mountSharedAppRoute(app);
   mountUseSharedAppRoute(app);
 }
@@ -293,22 +293,24 @@ function mountExportShapeScriptUsdzRoute(app: Express): void {
   });
 }
 
-function mountPublishShapeScriptRoute(app: Express): void {
-  // Host tool: publishShapeScript — post a ShapeScript model to the public gallery on
-  // mulmoserver over the remote-host session. Workspace-scoped like exportShapeScriptUsdz
-  // for its `path` routing; the SESSION is the host's one signed-in user, so which
-  // project the agent runs in changes nothing about who posts.
-  app.post("/api/plugin/publishShapeScript", async (req, res) => {
+function mountManageShapeScriptRoute(app: Express): void {
+  // Host tool: manageShapeScript — the user's ShapeScript models in the public gallery on
+  // mulmoserver over the remote-host session (publish / update / delete / get / getList).
+  // Workspace-scoped like exportShapeScriptUsdz for its `path` routing; the SESSION is the
+  // host's one signed-in user, so which project the agent runs in changes nothing about
+  // who posts.
+  app.post("/api/plugin/manageShapeScript", async (req, res) => {
     try {
-      const { message, url } = await runPublishShapeScript(isRecord(req.body) ? req.body : {});
-      // The broker hands the agent `message` alone, so the link must be IN it, whatever the
-      // plugin's sentence says this release; `url` rides along for a caller that reads JSON.
-      return res.json({ message: message.includes(url) ? message : `${message} ${url}`, url });
+      const { message, url } = await runManageShapeScript(isRecord(req.body) ? req.body : {});
+      // The broker hands the agent `message` alone, so when the call concerns one post its
+      // link must be IN it, whatever the plugin's sentence says this release; `url` rides
+      // along for a caller that reads JSON. `getList` has no single URL.
+      return res.json({ message: url === undefined || message.includes(url) ? message : `${message} ${url}`, ...(url === undefined ? {} : { url }) });
     } catch (err) {
       // A missing session, a bad argument or a model that will not build is the agent's
       // (or the user's) to fix, so the reason goes back as the envelope message.
-      console.error(`[publishShapeScript] dispatch failed: ${messageOf(err)}`);
-      return res.json({ message: `publishShapeScript failed: ${messageOf(err)}` });
+      console.error(`[manageShapeScript] dispatch failed: ${messageOf(err)}`);
+      return res.json({ message: `manageShapeScript failed: ${messageOf(err)}` });
     }
   });
 }

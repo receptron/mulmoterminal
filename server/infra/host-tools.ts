@@ -11,7 +11,7 @@ import { MANAGE_SHARED_APP } from "./shared-app-tool.js";
 import { USE_SHARED_APP } from "./use-shared-app-tool.js";
 import { RENDER_SHAPE_SCRIPT } from "./shapescript-render-tool.js";
 import { EXPORT_SHAPE_SCRIPT_USDZ } from "./shapescript-usdz-tool.js";
-import { PUBLISH_SHAPE_SCRIPT } from "./shapescript-publish-tool.js";
+import { MANAGE_SHAPE_SCRIPT } from "./shapescript-manage-tool.js";
 
 // Mirrors MulmoClaude's spawnBackgroundChat signature (message/role/hidden) so the
 // tool is a drop-in from the model's point of view — but the implementation is
@@ -67,8 +67,8 @@ export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
 // @mulmoclaude/shapescript-plugin/render — see shapescript-render-tool.ts.
 // exportShapeScriptUsdz likewise: same artifacts root, same `path` routing, and the
 // whole tool from @mulmoclaude/shapescript-plugin — see shapescript-usdz-tool.ts.
-// publishShapeScript too, plus the remote-host session it posts through — see
-// shapescript-publish-tool.ts.
+// manageShapeScript too, plus the remote-host session it reaches the gallery through —
+// see shapescript-manage-tool.ts.
 export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   SPAWN_BACKGROUND_CHAT,
   MANAGE_ACCOUNTING,
@@ -77,5 +77,5 @@ export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
   USE_SHARED_APP,
   RENDER_SHAPE_SCRIPT,
   EXPORT_SHAPE_SCRIPT_USDZ,
-  PUBLISH_SHAPE_SCRIPT,
+  MANAGE_SHAPE_SCRIPT,
 ];

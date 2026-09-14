@@ -8,6 +8,23 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `manageShapeScript` replaces `publishShapeScript` — one gallery tool with `publish`, `update`, `delete`, `get`, `getList` — `@mulmoclaude/shapescript-plugin@5.0.0`
+
+- The gallery is one tool with an `action`, the shape `manageCollection` has, and
+  `publishShapeScript` is gone
+  ([receptron/mulmoclaude#3161](https://github.com/receptron/mulmoclaude/pull/3161)). `publish`
+  and `update` are what it did; `delete` removes the user's own post and every object under it;
+  `get` answers a post's readable fields plus its ShapeScript source — anyone's published one,
+  the user's own draft — and with `save: true` writes it under `artifacts/shapes/` where
+  `presentShapeScript` opens it; `getList` is the gallery's own "My models" query, drafts
+  included, newest first. The host's writer gains the three members the plugin now requires:
+  `deletePost`, a transaction like `updatePost`'s that refuses a post replaced meanwhile and
+  answers the document as deleted, whose objects are then removed; `listPosts`, the
+  `uid == me` query ordered by `createdAt`; and `readScript`, a Storage `getBytes` from under
+  the post's owner. `readPost` answers `null` for a document the rules hide (another account's
+  draft). The tool keeps the `external` group and the never-auto-approved list: it publishes
+  and deletes under the user's account, and a tool is grouped as a whole.
+
 ### `publishShapeScript` updates a published model by `id` — `@mulmoclaude/shapescript-plugin@4.0.0`
 
 - A new optional `id` argument — the tail of a post's gallery URL — rewrites the user's own

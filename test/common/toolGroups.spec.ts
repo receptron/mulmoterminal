@@ -40,8 +40,8 @@ describe("tool groups", () => {
     expect(groupOfTool("google")).toBe("external");
     expect(groupOfTool("readXPost")).toBe("external");
     expect(groupOfTool("searchX")).toBe("external");
-    // Publishes under the user's account: prompts on every launch path, not render's free pass.
-    expect(groupOfTool("publishShapeScript")).toBe("external");
+    // Publishes and deletes under the user's account: prompts on every launch path, not render's free pass.
+    expect(groupOfTool("manageShapeScript")).toBe("external");
     expect(groupOfTool("useSharedApp")).toBe("external");
   });
 
