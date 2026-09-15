@@ -1,7 +1,14 @@
 // The disposal order xterm 6 + the xterm-5-era canvas addon require, and the promise that neither
 // side can stop the caller (#2021).
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { attachRenderer, disposeTerminal, type Disposes } from "../../../src/composables/terminalRenderer";
+import {
+  attachRenderer,
+  disposeTerminal,
+  trackTextureAtlas,
+  untrackTextureAtlas,
+  type Disposes,
+  type ClearsTextureAtlas,
+} from "../../../src/composables/terminalRenderer";
 
 const recorder = () => {
   const order: string[] = [];
@@ -107,5 +114,93 @@ describe("attachRenderer", () => {
     };
     expect(() => attachRenderer(term, renderer)).not.toThrow();
     expect(attachRenderer(term, renderer)).toBeNull();
+  });
+});
+
+// The GPU comes back and the glyphs do not (#2076). Chrome blanks every 2D canvas when it restarts
+// its GPU process; the addon's glyph cache still says each glyph is rasterized, so it blits from
+// empty atlas pages and the text stays invisible until the page is reloaded.
+describe("rebuilding the glyph atlas when the GPU comes back", () => {
+  const tracked: object[] = [];
+
+  const owner = (throws = false) => {
+    const term: ClearsTextureAtlas & { cleared: number } = {
+      cleared: 0,
+      clearTextureAtlas() {
+        term.cleared += 1;
+        if (throws) throw new Error("renderer refused");
+      },
+    };
+    trackTextureAtlas(term);
+    tracked.push(term);
+    return term;
+  };
+
+  /** A restore as the browser dispatches it: on the canvas, not bubbling — so only a CAPTURE
+   *  listener on an ancestor ever sees it. */
+  const restore = (target: EventTarget = document.createElement("canvas")) => {
+    if (target instanceof HTMLElement) document.body.appendChild(target);
+    target.dispatchEvent(new Event("contextrestored", { bubbles: false }));
+  };
+
+  afterEach(() => {
+    tracked.splice(0).forEach(untrackTextureAtlas);
+    document.body.innerHTML = "";
+    vi.restoreAllMocks();
+  });
+
+  it("rebuilds every tracked terminal's atlas", async () => {
+    const a = owner();
+    const b = owner();
+    restore();
+    await Promise.resolve();
+    expect([a.cleared, b.cleared]).toEqual([1, 1]);
+  });
+
+  // Every terminal, not the one whose canvas fired: a cell with a different font size has its own
+  // atlas, and one parked off-screen fires nothing while still holding a stale cache.
+  it("rebuilds a terminal whose own canvas fired nothing", async () => {
+    const offscreen = owner();
+    restore(document.createElement("canvas"));
+    await Promise.resolve();
+    expect(offscreen.cleared).toBe(1);
+  });
+
+  // One GPU restart fires the event once per canvas, and each rebuild is a full refresh of every
+  // cell. Coalesced into one pass.
+  it("rebuilds once for a burst of events", async () => {
+    const term = owner();
+    restore();
+    restore();
+    restore();
+    await Promise.resolve();
+    expect(term.cleared).toBe(1);
+  });
+
+  it("does nothing until a restore actually arrives", async () => {
+    const term = owner();
+    await Promise.resolve();
+    expect(term.cleared).toBe(0);
+  });
+
+  // A terminal that has been disposed must not be reached: its renderer is gone and the call would
+  // land on a torn-down object.
+  it("leaves a disposed terminal alone", async () => {
+    const gone = owner();
+    const live = owner();
+    disposeTerminal(gone as unknown as Disposes, null);
+    restore();
+    await Promise.resolve();
+    expect([gone.cleared, live.cleared]).toEqual([0, 1]);
+  });
+
+  // A recovery path: one cell's renderer refusing must not cost the others theirs.
+  it("keeps going when one terminal throws", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const bad = owner(true);
+    const good = owner();
+    restore();
+    await Promise.resolve();
+    expect([bad.cleared, good.cleared]).toEqual([1, 1]);
   });
 });

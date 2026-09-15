@@ -249,6 +249,31 @@ on the shipped pair: terminal-first throws 10/10, addon-first 0/10. It is not co
 escapes `dispose()`, and in the #846 rebuild path it skipped the `connect()` that gives the
 replacement terminal its socket, so the repair for a frozen cell left the cell dead.
 
+**GPU context loss (#2076).** When Chrome restarts its GPU process it blanks every 2D canvas and
+fires `contextlost` / `contextrestored` — and **nothing in the shipped stack listens**: grep both
+bundles for either name and you get zero. The glyph cache is what does not survive. The addon keeps
+glyph → atlas position in a `FourKeyMap` over 512px atlas pages, so after the restore the map still
+says every glyph is rasterized while the pages are empty: the renderer blits nothing. Backgrounds
+are `fillRect`s and keep drawing, which is the tell — **coloured bands with no text**, and only
+characters typed after the restore appear, because a glyph the cache has not seen is rasterized
+fresh. Before the fix the only recovery was a page reload.
+
+`terminalRenderer.ts` now listens on `document` at the **capture** phase and calls
+`clearTextureAtlas()` on every tracked terminal. Four facts hold it up, and each is a thing to
+re-measure on an xterm bump:
+
+| | |
+|---|---|
+| Why capture | `contextrestored` does not bubble, so an ancestor listener only sees it on the way down. |
+| Whose canvas fires it | the terminal's **text layer**, which xterm puts in the document. Atlas pages are canvases the addon never attaches, so nothing of theirs reaches a document listener. If a future xterm stops putting the text layer in the DOM, this hook goes quiet with no error. |
+| Why every terminal | terminals with the same font size and dpr SHARE an atlas (`acquireTextureAtlas` keys on them), but a different font size has its own — and a terminal parked off-screen fires nothing while still holding a stale cache. |
+| Why the repaint is free | the core's `clearTextureAtlas()` calls `_fullRefresh()` itself, so no output or keystroke is needed to bring the text back. |
+
+Measured by the reporter in headless Chrome 152, dark pixels in the text layer: 32784 before the
+restart, **6393** after a plain `refresh()` (the new characters only), **41139** after
+`clearTextureAtlas()`. On `@xterm/addon-webgl` the same problem is `onContextLoss`, which the table
+above already names as something to settle before moving.
+
 **Debugging note:** the canvas renderer
 paints to `<canvas>`, so terminal text and link decorations are **not in the DOM** — headless
 inspection (`.xterm-rows`, `elementFromPoint`) sees nothing. To debug links/selection headlessly,
