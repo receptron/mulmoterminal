@@ -56,7 +56,15 @@ const YARN_SHIM_DIR = /^yarn--\d/;
 // node-gyp-bin dirs. Matched on the entry's LAST segment: a directory that
 // merely contains one of these names somewhere in its path is the user's.
 export function isLauncherPathEntry(entry: string): boolean {
-  const segments = entry.split(/[\\/]/).filter((segment) => segment !== "");
+  // DEQUOTED first, because the search does: a Windows PATH entry may be written
+  // `"C:\Program Files\tools"`, and `windowsSearchDirectories` strips those quotes before looking
+  // inside. Matching the quoted spelling left `"…\node_modules\.bin"` in the PATH and then searched
+  // it anyway — the entry this function exists to remove, kept by its punctuation (Codex review on
+  // PR #2085, round 7).
+  const segments = entry
+    .replace(/^"(.*)"$/, "$1")
+    .split(/[\\/]/)
+    .filter((segment) => segment !== "");
   if (segments.length === 0) return false; // "" and "/" name no directory of ours
   const last = segments[segments.length - 1];
   if (last === undefined) return false; // unreachable: length was checked above

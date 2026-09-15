@@ -16,9 +16,10 @@ import {
   isPlainCommandName,
   isRunScriptPathEntry,
   namesAPath,
+  probeEnvFrom,
   searchPathForProbe,
 } from "../../bin/agent-commands.js";
-import { isLauncherPathEntry } from "../../server/infra/pty-env.js";
+import { isLauncherPathEntry, sanitizePtyEnv } from "../../server/infra/pty-env.js";
 import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
 import { claudeAdapter } from "../../server/agents/claude.js";
 import { codexAdapter } from "../../server/agents/codex.js";
@@ -273,6 +274,16 @@ describe("searchPathForProbe — the launcher looking where the spawn looks", ()
     "D:\\p\\node_modules\\.bin",
     "C:\\Temp\\yarn--1700000000000-0.1",
     "/opt/yarn--not-a-digit",
+    // QUOTED, which a Windows PATH entry may be and which `windowsSearchDirectories` strips before
+    // looking inside. Matching the quoted spelling kept the very entry the rule removes, and then
+    // searched it anyway — the gap was in the SERVER's predicate too, so both were fixed rather
+    // than making the launcher stricter (Codex review, round 7).
+    '"D:\\p\\node_modules\\.bin"',
+    '"C:\\Program Files\\tools"',
+    '"/x/node_modules/.bin"',
+    '"C:\\Temp\\yarn--1700000000000-0.1"',
+    '"unterminated',
+    '""',
   ];
 
   it.each(ENTRIES)("agrees with the server's isLauncherPathEntry about %p", (entry) => {
@@ -297,5 +308,39 @@ describe("searchPathForProbe — the launcher looking where the spawn looks", ()
   it("keeps a user directory whose name only resembles one of ours", () => {
     expect(isRunScriptPathEntry("/home/me/my_node_modules/.bin")).toBe(false);
     expect(isRunScriptPathEntry("/a/node_modules/.bin/deeper")).toBe(false);
+  });
+});
+
+// Found by me while writing round 7's prompt, not by Codex: `{ ...env, PATH: clean }` is wrong on
+// WINDOWS, where the variable is `Path`. The spread keeps the original key and the assignment adds a
+// SECOND one, so the child can still search the unsanitised value — on the one platform none of this
+// can be exercised from here. The server matches the name case-insensitively (`isPathVar`) for
+// exactly this reason.
+describe("probeEnvFrom — the environment the probe runs in", () => {
+  const DIRTY = ["/usr/bin", "/repo/node_modules/.bin"].join(":");
+  const CLEAN = "/usr/bin";
+
+  it.each(["PATH", "Path", "path", "PaTh"])("rewrites the %s variable in place rather than adding one", (name) => {
+    const out = probeEnvFrom({ [name]: DIRTY, HOME: "/h" }, ":");
+    expect(Object.keys(out).sort()).toEqual([name, "HOME"].sort());
+    expect(out[name]).toBe(CLEAN);
+  });
+
+  it("leaves every other variable exactly as it was", () => {
+    const env = { PATH: DIRTY, HOME: "/h", npm_lifecycle_event: "dev", EMPTY: "" };
+    const out = probeEnvFrom(env, ":");
+    expect({ ...out, PATH: undefined }).toEqual({ ...env, PATH: undefined });
+  });
+
+  // The server keeps launcher VARIABLES out of a spawn as well, and this deliberately does not: the
+  // probe runs `<agent> --version` in this process's own context, where npm_lifecycle_event and the
+  // rest are true of it. Only the PATH decides what is FOUND, and that is what has to agree.
+  it("agrees with the server about what a PATH search will find", () => {
+    const env = { PATH: DIRTY };
+    expect(probeEnvFrom(env, ":").PATH).toBe(sanitizePtyEnv(env, ":").PATH);
+  });
+
+  it("answers an env with no PATH at all without inventing one", () => {
+    expect(probeEnvFrom({ HOME: "/h" }, ":")).toEqual({ HOME: "/h" });
   });
 });

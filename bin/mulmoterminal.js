@@ -38,7 +38,7 @@ import {
 } from "./cli-args.js";
 import { liveInstances } from "./instances.js";
 import { setProcessTitle } from "./process-title.js";
-import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents, searchPathForProbe } from "./agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents, probeEnvFrom } from "./agent-commands.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -117,7 +117,7 @@ function hasCommand(cmd, versionArg = "--version", env = process.env) {
 // `sanitizePtyEnv` exists to keep out of a spawn (Codex review, round 6).
 //
 // Computed once: PATH is a start-up setting here like `<AGENT>_BIN`, and the probe runs per agent.
-const probeEnv = { ...process.env, PATH: searchPathForProbe(process.env.PATH, pathDelimiter) };
+const probeEnv = probeEnvFrom(process.env, pathDelimiter);
 
 // PATH tools the app shells out to; mirrors the requirements table in README.md. `required`
 // ones back the core grid — without them a developer loses whole views rather than one

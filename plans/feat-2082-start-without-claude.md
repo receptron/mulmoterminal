@@ -318,6 +318,31 @@ matching a substring instead of the last segment 5, not stripping at all 2.
   reads exactly like "the tests do not catch this". The sweep now asserts the file CHANGED before
   running and matches its pristine copy after.
 
+## Round 7 — a quoted PATH entry walked past the rule, on BOTH sides
+
+`"C:\p\node_modules\.bin"` — a Windows PATH entry may be written with literal quotes, and
+`windowsSearchDirectories` strips them before looking inside. `isLauncherPathEntry` matched the
+quoted spelling, so the entry it exists to remove survived by its punctuation and was then searched
+anyway.
+
+**The mirror was faithful; the rule underneath was not.** Measured, the launcher and the server both
+answered `false` for the quoted form — so fixing only the launcher would have made it stricter than
+the server, which is the divergence Codex warned against in round 1. Both now dequote before
+matching, and the equivalence pin grew the quoted forms, a `"unterminated` one and `""`.
+
+Break-verified with each mutation asserted to have applied: removing the dequote from either side
+reddens 4. The server-side mutation was SKIPPED on the first attempt because prettier had reformatted
+the line the pattern was written against — an unapplied mutation reads exactly like a test that does
+not catch it, so the pattern count is now printed and asserted.
+
+**And one thing I got wrong in my own favour.** While writing round 7's prompt I found that
+`{ ...process.env, PATH: clean }` leaves Windows's `Path` key intact and adds a second one, and
+changed it to rewrite path variables in place (`probeEnvFrom`). Codex checked Node's documented
+behaviour: duplicate keys are sorted and the uppercase `PATH` wins, so **there was no bug on the
+pushed head**. The change stays — rewriting in place is the right shape and now tested against the
+server's own answer — but it fixed nothing, and saying it fixed something would have put a false
+claim in the record.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

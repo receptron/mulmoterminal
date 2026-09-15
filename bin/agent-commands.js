@@ -54,7 +54,11 @@ const YARN_SHIM_DIR = /^yarn--\d/;
  * @returns {boolean}
  */
 export function isRunScriptPathEntry(entry) {
-  const segments = entry.split(/[\\/]/).filter((segment) => segment !== "");
+  // Dequoted first, because the search does — see `isLauncherPathEntry`, which this mirrors.
+  const segments = entry
+    .replace(/^"(.*)"$/, "$1")
+    .split(/[\\/]/)
+    .filter((segment) => segment !== "");
   const last = segments[segments.length - 1];
   if (last === undefined) return false;
   const parent = segments[segments.length - 2];
@@ -82,6 +86,27 @@ export const searchPathForProbe = (pathValue, delimiter) =>
     .split(delimiter)
     .filter((entry) => !isRunScriptPathEntry(entry))
     .join(delimiter);
+
+/** The environment an agent probe runs in: every PATH variable rewritten to what the SPAWN will
+ *  search, and nothing else touched.
+ *
+ *  REWRITTEN IN PLACE, not added. On Windows the variable is `Path`, and `{ ...env, PATH: clean }`
+ *  leaves the original `Path` intact while adding a SECOND key — so the child can still search the
+ *  unsanitised one, on the one platform this cannot be tested from here. The server's
+ *  `sanitizePtyEnv` matches the name case-insensitively for exactly this reason (`isPathVar`), and
+ *  this mirrors it.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {string} delimiter
+ * @returns {NodeJS.ProcessEnv}
+ */
+export function probeEnvFrom(env, delimiter) {
+  const out = {};
+  for (const [name, value] of Object.entries(env)) {
+    out[name] = name.toLowerCase() === "path" && value !== undefined ? searchPathForProbe(value, delimiter) : value;
+  }
+  return out;
+}
 
 /** Does this command NAME A PATH, rather than a command to look up? The server's own rule
  *  (`namesAPath`, server/infra/resolve-bin.ts): a separator anywhere in it.
