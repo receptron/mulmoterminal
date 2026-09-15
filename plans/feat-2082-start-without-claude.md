@@ -187,6 +187,52 @@ known" for the rest of the session.
 Break-verified: removing the `await` in `startCollectionChat` reddens the new race spec, which
 asserts the ORDER (`/api/agents` settles before the spawn goes out) rather than just the outcome.
 
+## Round 2 — the gate could be hung by an agent nobody asked for
+
+One P2, reproduced with a real hanging binary before it was accepted. The old gate probed ONE name;
+this one probes seven, six of which the user may not control — a stale shim on someone's PATH is
+enough. Measured with a `grok` on PATH that blocks for 30 seconds and a `claude` that answers
+immediately:
+
+| | gate | doctor (`init`) |
+|---|---|---|
+| before | **30,059 ms** — and `grok` was then reported INSTALLED, because `sleep` exits 0 | 30,059 ms |
+| hang AFTER a valid agent | **9 ms** | 5,040 ms |
+| hang FIRST, so nothing can be skipped | **5,011 ms** | 5,043 ms |
+
+**Two fixes, and neither is sufficient alone.** The gate asks `firstInstalledAgent` and stops at the
+first hit — but that does nothing when the hanging agent is first. The probe takes a 5-second
+timeout and reports a timeout as MISSING — but that alone still costs one timeout per row on a
+machine with no agents. The doctor keeps probing every row, because it reports every row; the
+timeout is what bounds it there.
+
+`Agent CLIs ✓ claude codex` became `Agent CLI ✓ claude`, naming the one that answered, because
+listing them all is what the short-circuit gives up. `npx mulmoterminal init` is the full list and
+the line says so.
+
+**And a measurement mistake worth recording**, because it nearly cost a wrong conclusion twice: the
+first two attempts to time the gate measured the wrong thing — once because `| head -2` closed the
+pipe and ended the timing early, once because the elapsed time included the whole app starting after
+the gate had already passed. The `sleep` in the first fake agent was also not on the stripped PATH,
+so it exited immediately and the hang never happened. Only the third harness — calling
+`firstInstalledAgent` and `installedAgents` directly, with an absolute `/bin/sleep` — measured the
+gate.
+
+### The test gap Codex named without calling it a finding
+
+Its TESTS axis said removing the await from `LaunchPanel` alone would stay green, and it was right:
+the race spec only covered `startCollectionChat`. A second spec now mounts the real panel with
+`/api/agents` still in flight, emits `start` immediately, and asserts the emitted pick is `codex`.
+Break-verified: removing either await now reddens one test, and removing the gate's short-circuit
+reddens two.
+
+### One CI failure that was mine from the PREVIOUS PR
+
+`test_windows` went red on `copilot-turns.spec.ts` — a test from #2083, already on main. It inserted
+261 rows by opening and closing the database once per row, which is unremarkable on macOS and takes
+34 seconds on a Windows runner, enough to cross the test timeout. Batched through one connection:
+458 ms. Not this PR's code, but this PR's branch cannot go green without it.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

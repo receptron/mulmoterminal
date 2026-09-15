@@ -38,7 +38,7 @@ import {
 } from "./cli-args.js";
 import { liveInstances } from "./instances.js";
 import { setProcessTitle } from "./process-title.js";
-import { AGENT_COMMANDS, agentBin, canRun, installedAgents } from "./agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents } from "./agent-commands.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -204,9 +204,12 @@ const agentProbe = (bin) =>
 // Still a gate rather than nothing: with no agent at all there is nothing to launch, and a reason
 // beats an empty grid.
 function requireAnAgent() {
-  const agents = installedAgents(process.env, agentProbe);
-  if (agents.length > 0) {
-    log(`Agent CLIs ✓  ${agents.map(({ agent }) => agent).join(" ")}`);
+  // The FIRST one, not all of them. The question here is "is there anything to launch", and probing
+  // the rest lets an optional agent nobody asked for delay startup — measured at 30,059 ms with a
+  // hanging `grok` on PATH and `claude` already found. `init` is what reports the whole list.
+  const found = firstInstalledAgent(process.env, agentProbe);
+  if (found !== null) {
+    log(`Agent CLI ✓  ${found.agent}   (\`npx mulmoterminal init\` lists them all)`);
     return;
   }
   error("No agent CLI found — MulmoTerminal has nothing to launch.");

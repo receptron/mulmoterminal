@@ -7,7 +7,7 @@
 // nobody checks is how an eighth agent silently stops counting toward "is anything installed", so
 // the table is pinned here against both of the things it mirrors.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { AGENT_COMMANDS, agentBin, canRun, installedAgents, isPlainCommandName, namesAPath } from "../../bin/agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents, isPlainCommandName, namesAPath } from "../../bin/agent-commands.js";
 import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
 import { claudeAdapter } from "../../server/agents/claude.js";
 import { codexAdapter } from "../../server/agents/codex.js";
@@ -196,5 +196,44 @@ describe("isPlainCommandName", () => {
 
   it.each(["", "my codex", "a;b", "a|b", "a&b", "$(x)", "`x`", "a>b", "a<b", "a\nb"])("%p is not", (bin) => {
     expect(isPlainCommandName(bin)).toBe(false);
+  });
+});
+
+// Codex review, round 2, reproduced with a real hanging binary before being accepted: a `grok` on
+// PATH that blocks for 30 seconds held the startup gate for 30,059 ms even though `claude` had
+// already been found and answered the gate's only question.
+describe("firstInstalledAgent — the gate's question, not the doctor's", () => {
+  it("stops at the first installed agent", () => {
+    const asked: string[] = [];
+    const found = firstInstalledAgent({}, (bin) => (asked.push(bin), bin === "claude"));
+    expect(found?.agent).toBe("claude");
+    expect(asked, "nothing after the first hit may be probed").toEqual(["claude"]);
+  });
+
+  // The hit is not always first. What matters is that probing STOPS there — the rows after it are
+  // commands the user may not control, and one of them hanging must not delay a settled answer.
+  it("probes no further than the agent it finds", () => {
+    const asked: string[] = [];
+    const found = firstInstalledAgent({}, (bin) => (asked.push(bin), bin === "copilot"));
+    expect(found?.agent).toBe("copilot");
+    expect(asked).toEqual(["claude", "codex", "copilot"]);
+    expect(asked).not.toContain("muse");
+  });
+
+  it("answers null when nothing is installed, which is what the gate refuses on", () => {
+    expect(firstInstalledAgent({}, () => false)).toBeNull();
+  });
+
+  it("asks about the overridden path, like the doctor does", () => {
+    const found = firstInstalledAgent({ CLAUDE_BIN: "/opt/bin/claude" }, (bin) => bin === "/opt/bin/claude");
+    expect(found?.agent).toBe("claude");
+  });
+
+  // The doctor still probes EVERY row — it reports each agent's line, so it cannot short-circuit.
+  // Its protection against a hang is the probe's own timeout, not this.
+  it("is not what the doctor uses: installedAgents still asks about all seven", () => {
+    const asked: string[] = [];
+    installedAgents({}, (bin) => (asked.push(bin), bin === "claude"));
+    expect(asked).toHaveLength(AGENT_COMMANDS.length);
   });
 });

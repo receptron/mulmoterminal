@@ -110,7 +110,10 @@ export function canRun(bin, probe, platform) {
   return platform === "win32" || probe.isExecutable(bin);
 }
 
-/** The agents whose command this machine can run.
+/** The agents whose command this machine can run. EVERY row is probed, which is what the doctor
+ *  (`npx mulmoterminal init`) wants — it reports each agent's line.
+ *
+ *  The startup GATE must not use this: see `firstInstalledAgent`.
  *
  *  `probe` is injected so the decision can be tested without seven real CLIs on the runner — the
  *  launcher passes one built on `canRun`.
@@ -120,3 +123,22 @@ export function canRun(bin, probe, platform) {
  * @returns {AgentCommand[]}
  */
 export const installedAgents = (env, probe) => AGENT_COMMANDS.filter((agentCommand) => probe(agentBin(agentCommand, env)));
+
+/** The FIRST agent this machine can run, or null — the startup gate's question, and a different one
+ *  from the doctor's.
+ *
+ *  Short-circuiting is not an optimisation. Probing a bare name runs `<name> --version`, so every
+ *  row is a command the user may not control: measured, a `grok` on PATH that blocks for 30 seconds
+ *  held the gate for 30,059 ms even though `claude` had already been found and answered. An optional
+ *  agent nobody asked for must not be able to delay startup once the gate's question is settled
+ *  (Codex review, round 2).
+ *
+ *  The probe's own timeout is the other half and neither is sufficient alone: this one does nothing
+ *  when the hanging agent is FIRST, and the timeout alone still costs one per row on a machine with
+ *  no agents at all.
+ *
+ * @param {NodeJS.ProcessEnv} env
+ * @param {(bin: string) => boolean} probe
+ * @returns {AgentCommand | null}
+ */
+export const firstInstalledAgent = (env, probe) => AGENT_COMMANDS.find((agentCommand) => probe(agentBin(agentCommand, env))) ?? null;

@@ -16,3 +16,4 @@ export interface AgentRunProbe {
 export declare function canRun(bin: string, probe: AgentRunProbe, platform: NodeJS.Platform): boolean;
 export declare function isPlainCommandName(bin: string): boolean;
 export declare function couldBeABinary(bin: string): boolean;
+export declare function firstInstalledAgent(env: NodeJS.ProcessEnv, probe: (bin: string) => boolean): AgentCommand | null;

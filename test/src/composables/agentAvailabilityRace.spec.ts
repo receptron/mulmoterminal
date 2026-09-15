@@ -24,13 +24,17 @@ const AVAILABILITY_DELAY_MS = 5;
 /** fetch that answers `/api/agents` only after the caller has had a chance to run ahead of it. */
 function slowAvailabilityFetch() {
   const order: string[] = [];
+  // The panel mounts the real CellLaunchForm, which reads the directory's worktrees and sessions on
+  // open; empty answers are the ordinary case and keep this about the RACE.
   const answer = (url: string): Promise<Response> => {
-    if (url !== "/api/agents") return Promise.resolve(responseOf({ jsonData: { chatId: "sess-race" } }));
-    return new Promise<Response>((resolve) => setTimeout(() => resolve(responseOf(CODEX_ONLY)), AVAILABILITY_DELAY_MS));
+    if (url === "/api/agents") return new Promise<Response>((resolve) => setTimeout(() => resolve(responseOf(CODEX_ONLY)), AVAILABILITY_DELAY_MS));
+    if (url.includes("/api/worktrees")) return Promise.resolve(responseOf({ isGit: false, base: null, worktrees: [] }));
+    if (url.includes("/api/sessions")) return Promise.resolve(responseOf({ cwd: "/repo", sessions: [] }));
+    return Promise.resolve(responseOf({ jsonData: { chatId: "sess-race" } }));
   };
   const fn = vi.fn((url: string) => {
-    order.push(url);
-    return answer(url);
+    order.push(String(url));
+    return answer(String(url));
   });
   vi.stubGlobal("fetch", fn);
   return { fn, order };
@@ -61,5 +65,32 @@ describe("a chat spawned before availability is known", () => {
     expect(order).toContain("/api/plugin/spawnBackgroundChat");
     const { launchAgent } = await import("../../../src/composables/useChatLauncher");
     expect(launchAgent.value).toBe("codex");
+  });
+});
+
+// Codex round 2 named this gap in the TESTS axis rather than as a finding, and it was right: with
+// only the spec above, removing the await from LaunchPanel's start path left everything green. An
+// unbreak-verified fix is exactly what this loop exists to catch, so the second path gets its own.
+describe("a panel start before availability is known", () => {
+  it("emits the agent this machine HAS, not the initial pick it does not", async () => {
+    vi.resetModules();
+    slowAvailabilityFetch();
+
+    const { mount } = await import("@vue/test-utils");
+    const LaunchPanel = (await import("../../../src/components/LaunchPanel.vue")).default;
+    const CellLaunchForm = (await import("../../../src/components/CellLaunchForm.vue")).default;
+
+    const w = mount(LaunchPanel, {
+      props: { initialDir: "/home/me/proj", defaultCwd: "/home/me/workspace", presets: [], launchers: [], customAgents: [] },
+      attachTo: document.body,
+    });
+    // Started IMMEDIATELY, while `/api/agents` is still in flight — the interleaving Codex
+    // described: the fetch is out, the grid is interactive, and the user clicks.
+    w.findComponent(CellLaunchForm).vm.$emit("start", "/home/me/other");
+    await new Promise((resolve) => setTimeout(resolve, AVAILABILITY_DELAY_MS * 6));
+
+    const emitted = w.emitted("start");
+    expect(emitted, "the start must still be emitted, only later").toBeTruthy();
+    expect(emitted?.[0]?.[0]).toMatchObject({ dir: "/home/me/other", pick: "codex" });
   });
 });
