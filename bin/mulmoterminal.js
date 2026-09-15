@@ -38,6 +38,7 @@ import {
 } from "./cli-args.js";
 import { liveInstances } from "./instances.js";
 import { setProcessTitle } from "./process-title.js";
+import { AGENT_COMMANDS, agentBin, installedAgents } from "./agent-commands.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -100,10 +101,6 @@ function hasCommand(cmd, versionArg = "--version") {
   }
 }
 
-function claudeInstalled() {
-  return hasCommand("claude");
-}
-
 // PATH tools the app shells out to; mirrors the requirements table in README.md. `required`
 // ones back the core grid — without them a developer loses whole views rather than one
 // feature — so a miss is an ✗, not an ○.
@@ -120,7 +117,6 @@ const PATH_TOOLS = [
     hint: "brew install glab  (then: glab auth login)",
   },
   { cmd: "tmux", versionArg: "-V", required: false, why: "sessions survive a restart", hint: "brew install tmux  ·  apt install tmux" },
-  { cmd: "codex", versionArg: "--version", required: false, why: "run OpenAI Codex as an agent", hint: "npm install -g @openai/codex" },
   {
     cmd: "ffmpeg",
     versionArg: "-version",
@@ -171,6 +167,26 @@ function toolCheckLine({ cmd, versionArg, required, why, hint }) {
   return `${head}\n      → ${hint}`;
 }
 
+// The startup gate is "at least one agent", not "Claude Code" (#2082). The server needs none of
+// them to start, and a machine running only Codex or GitHub Copilot CLI was being turned away at the
+// door. A missing one simply fails to start that CELL, with a message naming the binary and its
+// `<AGENT>_BIN` — which is the sentence that helps, at the moment it helps.
+//
+// Still a gate rather than nothing: with no agent at all there is nothing to launch, and a reason
+// beats an empty grid.
+function requireAnAgent() {
+  const agents = installedAgents(process.env, (bin) => hasCommand(bin));
+  if (agents.length > 0) {
+    log(`Agent CLIs ✓  ${agents.map(({ agent }) => agent).join(" ")}`);
+    return;
+  }
+  error("No agent CLI found — MulmoTerminal has nothing to launch.");
+  error("Install at least one:");
+  AGENT_COMMANDS.forEach(({ agent, hint }) => error(`  ${agent.padEnd(12)}${hint}`));
+  error("Already installed somewhere else? Point <AGENT>_BIN at it, e.g. CLAUDE_BIN=/opt/bin/claude");
+  process.exit(1);
+}
+
 function promptYesNo(question) {
   return new Promise((res) => {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -190,13 +206,15 @@ async function runInit(initArgs) {
   const nodeOk = nodeMeetsMinimum(process.versions.node);
   console.log(nodeOk ? `  ✓ Node ${process.versions.node}` : `  ✗ Node ${process.versions.node} — MulmoTerminal needs ≥ ${MIN_NODE_LABEL}`);
 
-  const hasClaude = claudeInstalled();
-  if (hasClaude) {
-    console.log("  ✓ Claude Code CLI");
-  } else {
-    console.log("  ✗ Claude Code CLI — not found");
-    console.log("      → npm install -g @anthropic-ai/claude-code   (then run `claude` and log in)");
-  }
+  // Every agent, not just Claude Code (#2082): the app needs ONE of them, so reporting one by name
+  // and the rest nowhere told a Codex user they were missing something they were not.
+  const agents = installedAgents(process.env, (bin) => hasCommand(bin));
+  AGENT_COMMANDS.forEach(({ agent, cmd, env, hint }) => {
+    const found = agents.some((installed) => installed.agent === agent);
+    const named = process.env[env] ? `${cmd} (${env})` : cmd;
+    console.log(found ? `  ✓ ${agent} — ${named}` : `  ○ ${agent} — optional (${named} not found)\n      → ${hint}`);
+  });
+  if (agents.length === 0) console.log("  ✗ no agent CLI at all — install one of the above, or point <AGENT>_BIN at one you have");
 
   [...PATH_TOOLS, fileDialogTool()].filter(Boolean).forEach((tool) => console.log(toolCheckLine(tool)));
 
@@ -218,12 +236,15 @@ async function runInit(initArgs) {
 
   // Offer the interactive skill only in a real terminal; a non-TTY run (CI / piped input)
   // must never block waiting on stdin.
-  if (hasClaude && process.stdin.isTTY && (await promptYesNo("\nConfigure interactively now with the /mulmoterminal-config skill? [y/N] "))) {
+  // This offer is Claude Code's specifically — the skill runs inside it — so it asks about that one
+  // agent rather than about `agents`, and spawns the binary the rest of the app would run.
+  const claude = agents.find(({ agent }) => agent === "claude");
+  if (claude && process.stdin.isTTY && (await promptYesNo("\nConfigure interactively now with the /mulmoterminal-config skill? [y/N] "))) {
     log("Launching Claude — use  /mulmoterminal-config  (or just ask it to configure MulmoTerminal).");
-    spawn("claude", ["Use the mulmoterminal-config skill to configure MulmoTerminal."], { stdio: "inherit" });
+    spawn(agentBin(claude, process.env), ["Use the mulmoterminal-config skill to configure MulmoTerminal."], { stdio: "inherit" });
     return;
   }
-  if (hasClaude) log("Later: run `claude` in any project and use  /mulmoterminal-config");
+  if (claude) log("Later: run `claude` in any project and use  /mulmoterminal-config");
   // Pinned to @latest: an unpinned `npx` reuses whatever it already has cached, so the very
   // command printed for someone to type next would start an older version than the one they
   // just set up with.
@@ -618,12 +639,7 @@ async function main() {
 
   checkForUpdate();
 
-  if (!claudeInstalled()) {
-    error("Claude Code CLI not found.");
-    error("Install it first:  npm install -g @anthropic-ai/claude-code  &&  claude auth login");
-    process.exit(1);
-  }
-  log("Claude Code CLI ✓");
+  requireAnAgent();
 
   if (!existsSync(SERVER_ENTRY)) {
     error(`Server entry not found at ${SERVER_ENTRY}`);

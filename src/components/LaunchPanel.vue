@@ -18,6 +18,7 @@ import type { Launcher, LaunchPick } from "./launchers";
 import type { LaunchChoice } from "./wsUrl";
 import type { RunCommand } from "./runCommand";
 import type { TerminalAgent } from "../../common/sessionAgent";
+import { agentAvailability, agentCorrection, loadAgentAvailability } from "../composables/useAgentAvailability";
 
 const props = defineProps<{
   // The directory the form opens on: the cell the panel was opened from, or the default workspace
@@ -48,7 +49,17 @@ const dir = ref(props.initialDir ?? props.defaultCwd ?? "");
 // Claude every time, deliberately: the panel is mounted fresh per open (GridView holds it behind
 // v-if), so the picker starts where the in-cell form starts rather than inheriting whatever the
 // origin cell happens to run. Opening it on a codex cell is not a request to start codex.
-const pickedAgent = ref<AgentPick>("claude");
+//
+// Unless this machine has no Claude Code, which is #2082: offering an agent that cannot run gives a
+// cell that dies on spawn. The correction moves the value only while it is still this initial one,
+// and the availability answer is already in memory by the second open, so it is not a flicker the
+// user watches — `agentCorrection` answers null when there is nothing known or nothing to fix.
+const INITIAL_PICK = "claude";
+const pickedAgent = ref<AgentPick>(INITIAL_PICK);
+void loadAgentAvailability().then(() => {
+  const next = agentCorrection(pickedAgent.value, INITIAL_PICK, agentAvailability.value);
+  if (next !== null) pickedAgent.value = next;
+});
 const launchChoice = ref<LaunchChoice | null>(null);
 
 const panel = ref<HTMLElement | null>(null);

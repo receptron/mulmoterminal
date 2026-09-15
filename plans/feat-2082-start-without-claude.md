@@ -1,0 +1,125 @@
+# The app must not require Claude Code to start (#2082)
+
+`npx mulmoterminal` refuses to start when `claude` is not on PATH, so a machine running Codex or
+GitHub Copilot CLI never reaches the app at all. The server itself has no such requirement — the
+gate is one `process.exit(1)` in the CLI wrapper.
+
+## Two defects, and the second one hits people who DO use Claude Code
+
+Both reproduced before designing anything, against 4.24.0 with a PATH holding `codex` / `git` /
+`gh` / `tmux` / `node` and no `claude`:
+
+1. **The gate itself.** `bin/mulmoterminal.js:621` exits 1 with "Claude Code CLI not found."
+   Codex is present and irrelevant to it.
+2. **The gate ignores `CLAUDE_BIN`.** `claudeInstalled()` is `hasCommand("claude")` — a PATH
+   lookup of the literal name. The server's own resolver is `process.env.CLAUDE_BIN || "claude"`
+   (`server/agents/claude.ts:18`, and `CLAUDE_BIN` is documented in README). So with
+   `CLAUDE_BIN=/Users/…/.local/bin/claude` pointing at a **working claude 2.1.272** and `claude`
+   merely absent from PATH, the CLI still refuses to start — and tells the user to install
+   something they already have. Confirmed in the same shell that the server-side resolution
+   succeeds.
+
+The second is a bug for current users, not a feature request, and it is why this is one PR: the
+gate is wrong about Claude Code in exactly the way it is wrong about everyone else.
+
+## What replaces the gate
+
+**"At least one TERMINAL_AGENT is installed", not "no gate at all".** A machine with no agent CLI
+gets a reason instead of an empty grid. Seven agents, each with its own `<AGENT>_BIN` override:
+
+| agent | default command | override |
+|---|---|---|
+| claude | `claude` | `CLAUDE_BIN` |
+| codex | `codex` | `CODEX_BIN` |
+| antigravity | `agy` | `ANTIGRAVITY_BIN` |
+| grok | `grok` | `GROK_BIN` |
+| muse | `muse` | `MUSE_BIN` |
+| copilot | `copilot` | `COPILOT_BIN` |
+| cursor | `cursor-agent` | `CURSOR_BIN` |
+
+**`bin/` cannot import that table.** It runs as plain JS before tsx exists, which is why
+`isWslHost()` already mirrors `server/files/wsl.ts` with a "keep the two in step" comment. So the
+table is mirrored and **pinned by a spec** against `TERMINAL_AGENTS` and each adapter's real
+`bin()` / `binEnvVar` — the same device `BUNDLED_SKILL_NAMES` uses. A mirrored list nobody checks
+is how an eighth agent silently fails to count.
+
+## The real work is the default agent, and the trap is what "default" means
+
+Removing the gate alone leaves a Codex-only user looking at a launch form that says Claude, whose
+cell then fails to spawn. But there are TWO defaults here and only one of them may move:
+
+- **The WIRE default stays `claude`, permanently.** `asTerminalAgent(anything unrecognised)` is
+  `claude`, `storedCellAgent` omits the field when it is claude, `agent ?? "claude"` appears across
+  the UI and the protocol. That is not a preference — it is what an older persisted cell, written
+  before the field existed, MEANS. Changing it would rewrite the meaning of data already on disk.
+- **The initial PICK may move.** Two refs hold it: `launchAgent` (`useChatLauncher.ts:39`, persisted
+  in localStorage) and `pickedAgent` (`LaunchPanel.vue:51`). These are "what the form offers before
+  the user has said anything", and offering something that cannot run is the defect.
+
+So this adds an availability signal and moves only the second. No config key: the rule is "claude if
+it is installed, otherwise the first installed agent in `TERMINAL_AGENTS` order", which needs
+nothing remembered and nothing documented in `mulmoterminal-model` or the guides.
+
+**The correction is applied ONCE and never fights the user.** Availability arrives over HTTP, after
+the refs are already initialised synchronously at module scope; it rewrites the value only if the
+value is still the one it was initialised to. A user who deliberately picks an uninstalled agent
+keeps it — that is a real thing to want while installing one.
+
+## Where availability comes from
+
+`GET /api/agents` → `{ agents: { agent, installed }[] }`, the wire type in `common/` because both
+sides decide from it. Resolved ONCE at boot, like `AGENT_BINS` and for the same stated reason:
+`<AGENT>_BIN` is a start-up setting, so asking per request would answer a question nobody changed.
+
+`hasBinary()` from `server/infra/has-binary.ts` already answers it, including the `<AGENT>_BIN`
+override and the "exists but is not executable" case — nothing new is needed there.
+
+## What was verified, and how
+
+**The gate, run three ways against the real CLI** with a PATH holding `node` / `git` / `gh` / `tmux`
+and nothing else added:
+
+| | result |
+|---|---|
+| `codex` present, no `claude` | `Agent CLIs ✓  codex` — starts, where 4.24.0 exited 1 |
+| `CLAUDE_BIN` at a working claude 2.1.272, `claude` off PATH | `Agent CLIs ✓  claude codex` — the bug |
+| no agent at all | refuses with all seven install lines, exit 1 |
+
+`npx mulmoterminal init` now reports every agent rather than Claude Code alone, and names the
+variable when one is the source: `✓ claude — claude (CLAUDE_BIN)`.
+
+**The route, on a real server.** Started from this checkout on a spare port under a scratch `HOME`
+(so the live config was never touched) with every `<AGENT>_BIN` but codex pointed at a path that
+does not exist: `GET /api/agents` answers all seven rows with `codex` alone installed. Stopped by
+PORT afterwards; the port is free and the user's own server on 34567 still answers 200.
+
+**Break-verification.** Each mutation applied to a file checked against a pristine copy first and
+restored and re-checked after; all four matched at the end.
+
+| mutation | went red |
+|---|---|
+| the gate ignores `<AGENT>_BIN` again (the original bug) | 2 |
+| an agent drops out of the launcher's table | 2 |
+| cursor is looked for under the wrong command name | 2 |
+| "unknown" is treated the same as "not installed" | 1 |
+| a value the user already changed is overwritten too | 2 |
+| an agent that is not installed can be offered | 3 |
+| the probe is asked about the agent name rather than the resolved bin | 3 |
+
+**What was NOT exercised locally: the browser half.** `agentCorrection` is pure and covered in both
+directions, and the route is verified against a real server — but that the composable is actually
+CALLED, and that the picker visibly lands on codex, was not driven in a browser (no Playwright on
+this machine). The correction is a no-op wherever claude is installed, which is every machine this
+was developed on, so that is the part a reviewer should look at rather than take on trust.
+
+**One test caught a documentation slip**, and it was the guard working rather than a false alarm:
+`agentSetClaims.spec.ts` scans prose for "<number> agent CLIs" and checks the count against the real
+seven. "at least **one** agent CLI" tripped it. The README was reworded rather than the guard
+loosened — the sentence states a requirement and does not need a number at all.
+
+## Not in this PR
+
+- Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell
+  failure already names the binary and its `<AGENT>_BIN` (`pty-spawn.ts` → `binaryProblemMessage`),
+  which is the sentence that matters at the moment it matters.
+- Any change to `asTerminalAgent`, `storedCellAgent`, or the `agent ?? "claude"` convention.

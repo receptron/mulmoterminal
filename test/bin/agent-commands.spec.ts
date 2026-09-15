@@ -1,0 +1,100 @@
+// @vitest-environment node
+//
+// The launcher's agent table (#2082), and the pin that keeps it honest.
+//
+// `bin/` runs as plain JS before tsx exists, so it CANNOT import `TERMINAL_AGENTS` or the adapters
+// — the same constraint that makes `isWslHost()` mirror `server/files/wsl.ts`. A mirrored list
+// nobody checks is how an eighth agent silently stops counting toward "is anything installed", so
+// the table is pinned here against both of the things it mirrors.
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { AGENT_COMMANDS, agentBin, installedAgents } from "../../bin/agent-commands.js";
+import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
+import { claudeAdapter } from "../../server/agents/claude.js";
+import { codexAdapter } from "../../server/agents/codex.js";
+import { antigravityAdapter } from "../../server/agents/antigravity.js";
+import { grokAdapter } from "../../server/agents/grok.js";
+import { museAdapter } from "../../server/agents/muse.js";
+import { copilotAdapter } from "../../server/agents/copilot.js";
+import { cursorAdapter } from "../../server/agents/cursor.js";
+
+const ADAPTERS = {
+  claude: claudeAdapter,
+  codex: codexAdapter,
+  antigravity: antigravityAdapter,
+  grok: grokAdapter,
+  muse: museAdapter,
+  copilot: copilotAdapter,
+  cursor: cursorAdapter,
+};
+
+// `bin()` reads `<AGENT>_BIN` live, so the DEFAULT command is only observable with the overrides
+// gone — and the machine this runs on really does set CLAUDE_BIN.
+beforeEach(() => AGENT_COMMANDS.forEach(({ env }) => vi.stubEnv(env, undefined)));
+afterEach(() => vi.unstubAllEnvs());
+
+describe("the launcher's agent table mirrors the server's", () => {
+  it("names exactly the agents a terminal can be launched as", () => {
+    expect([...AGENT_COMMANDS.map(({ agent }) => agent)].sort()).toEqual([...TERMINAL_AGENTS].sort());
+  });
+
+  // Not the same assertion as the one above: a table could hold every agent and still look for the
+  // wrong binary, which is a startup refusal with no error anywhere near the cause.
+  it.each(TERMINAL_AGENTS)("looks for the same command and override the %s adapter runs", (agent) => {
+    const row = AGENT_COMMANDS.find((candidate) => candidate.agent === agent);
+    expect(row).toBeDefined();
+    expect(row?.cmd).toBe(ADAPTERS[agent].bin());
+    expect(row?.env).toBe(ADAPTERS[agent].binEnvVar);
+  });
+
+  it("gives every agent something to type to install it", () => {
+    AGENT_COMMANDS.forEach(({ agent, hint }) => expect(hint, agent).not.toBe(""));
+  });
+});
+
+describe("agentBin", () => {
+  // Not `find(...)!`: if the table ever loses this row the failure should name THAT, not be a
+  // non-null assertion quietly passing an undefined into the function under test.
+  const claude = AGENT_COMMANDS.find(({ agent }) => agent === "claude") ?? { agent: "claude", cmd: "MISSING FROM AGENT_COMMANDS", env: "CLAUDE_BIN", hint: "" };
+
+  it("uses the default command when nothing overrides it", () => {
+    expect(agentBin(claude, {})).toBe("claude");
+  });
+
+  // THE BUG IN #2082. The gate asked PATH for the literal name `claude`, while the server runs
+  // `CLAUDE_BIN`. A user whose Claude Code lives outside PATH was refused startup and told to
+  // install what they already had.
+  it("uses <AGENT>_BIN when it is set, which is what the server will run", () => {
+    expect(agentBin(claude, { CLAUDE_BIN: "/opt/homebrew/bin/claude" })).toBe("/opt/homebrew/bin/claude");
+  });
+
+  // An override set to the empty string is not an override — it is an unset variable spelled badly,
+  // and resolving to "" would ask the probe about nothing at all.
+  it("falls back to the default command for an empty override", () => {
+    expect(agentBin(claude, { CLAUDE_BIN: "" })).toBe("claude");
+  });
+});
+
+describe("installedAgents", () => {
+  const probeFor =
+    (...bins: string[]) =>
+    (bin: string) =>
+      bins.includes(bin);
+
+  it("answers only the agents whose command this machine can run", () => {
+    expect(installedAgents({}, probeFor("codex")).map(({ agent }) => agent)).toEqual(["codex"]);
+  });
+
+  it("answers nothing when no agent is installed, which is what the gate refuses on", () => {
+    expect(installedAgents({}, probeFor())).toEqual([]);
+  });
+
+  it("asks about the overridden path rather than the bare name", () => {
+    const env = { CLAUDE_BIN: "/opt/bin/claude" };
+    expect(installedAgents(env, probeFor("/opt/bin/claude")).map(({ agent }) => agent)).toEqual(["claude"]);
+    expect(installedAgents(env, probeFor("claude"))).toEqual([]);
+  });
+
+  it("answers every installed agent, not the first", () => {
+    expect(installedAgents({}, probeFor("claude", "codex", "cursor-agent")).map(({ agent }) => agent)).toEqual(["claude", "codex", "cursor"]);
+  });
+});

@@ -264,12 +264,11 @@ Needs **Node ≥ 22.12**, plus these CLIs on your `PATH`:
 
 | | Tool | What it gives you | Install |
 | --- | --- | --- | --- |
-| **Required** | [`claude`](https://claude.com/claude-code) | every Claude session — this app is a cockpit for it | `npm i -g @anthropic-ai/claude-code`, then run `claude` once to log in |
+| **Required** | an agent CLI | something to launch. Any ONE of [`claude`](https://claude.com/claude-code), `codex`, `copilot`, `cursor-agent`, `agy`, `grok` or `muse` is enough to start (#2082) — Claude Code is the one this app grew around and still the default pick where it is installed, but a Codex- or Copilot-only machine is a supported setup. Install more later; a missing one simply fails to start that cell. What each can do is [the capability matrix](docs/agent-capability-matrix.md); how to install and pick one is the [agents guide](https://receptron.github.io/mulmoterminal/guide/en/agents.html) | `npm i -g @anthropic-ai/claude-code` (then run `claude` once to log in) · `npm i -g @openai/codex` · `npm i -g @github/copilot` |
 | **Required** | `git` | [worktree isolation](#git-worktrees--pull-requests), each cell's branch / unsaved-dot / diff readout, the PR footer | `brew install git` · `sudo apt install git` · `sudo dnf install git` · Windows: [git-scm.com](https://git-scm.com/download/win) |
 | **Required** | `gh` | the cross-repo **PRs & Issues** view and one-click PR creation — it uses your `gh` login, so no token is stored | [cli.github.com](https://cli.github.com), then `gh auth login` |
 | Optional | `glab` | the same for **GitLab** projects (#981) — gitlab.com, and a self-hosted instance you declare in `gitlabHosts` (#1332). Same arrangement: the CLI holds the credentials, this app stores no token | `brew install glab`, then `glab auth login` (self-hosted: `glab auth login --hostname gitlab.example.com`) |
 | Recommended | `tmux` | [session persistence](#session-persistence-tmux) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · `sudo dnf install tmux` · no native Windows build (falls back to plain PTYs) |
-| Optional | any other agent CLI | a cell can run **Codex**, **Antigravity** (`agy`), **Grok**, **Muse**, **GitHub Copilot CLI** or **Cursor CLI** instead of Claude — install only the ones you use, and a missing one simply fails to start that cell. What each can do is [the capability matrix](docs/agent-capability-matrix.md); how to install and pick one is the [agents guide](https://receptron.github.io/mulmoterminal/guide/en/agents.html) | e.g. `npm i -g @openai/codex` |
 | Optional | `ffmpeg` | video rendering from the [mulmo-script panel](#wiki-collections--the-gui-panel) (its plugin ships enabled) | `brew install ffmpeg` · `sudo apt install ffmpeg` · `sudo dnf install ffmpeg` |
 | Optional | `ollama` | [`claude-ollama`](https://receptron.github.io/mulmoterminal/guide/en/claude-ollama.html) — Claude Code against a fully local model | [ollama.com/download](https://ollama.com/download) |
 | Linux only | a file dialog | the **Choose a folder / Insert a file path** buttons, which open an OS dialog on the machine the server runs on. macOS and Windows have one built in; **WSL** uses the Windows one over interop and needs nothing installed. A Linux desktop needs one of these — without any, the buttons say so and you type the path instead (#1447) | `sudo apt install zenity` · `sudo dnf install zenity` · `kdialog`, `qarma` and `yad` also work |
@@ -277,7 +276,12 @@ Needs **Node ≥ 22.12**, plus these CLIs on your `PATH`:
 The server starts without any of the non-required rows; you just lose that row's feature,
 and the header/panel for it says so. `git` and `gh` are marked required because losing them
 costs whole views rather than one button. `npx mulmoterminal@latest init` (below) reports which of
-these it can find.
+these it can find, agent by agent.
+
+Every agent is looked for by the same name the app will run it with — `<AGENT>_BIN` when you set one
+(`CLAUDE_BIN`, `CODEX_BIN`, `COPILOT_BIN`, `CURSOR_BIN`, `ANTIGRAVITY_BIN`, `GROK_BIN`, `MUSE_BIN`),
+its default command otherwise. So a CLI installed somewhere outside your `PATH` counts, as long as
+you point its variable at it.
 
 ```bash
 npx mulmoterminal@latest           # start on http://localhost:34567 and open the browser

@@ -27,6 +27,7 @@ import type { SystemTaskSwitches } from "../backends/system-tasks.js";
 import type { PushKind } from "../../common/pushKinds.js";
 import { type TerminalSubmitMode } from "../../common/terminalSubmit.js";
 import { launchOptions } from "./launch-options.js";
+import { AGENT_AVAILABILITY } from "./agent-availability.js";
 import { worktreesRootDir } from "./worktree-task.js";
 import { canonicalPath } from "../infra/canonical-path.js";
 import { registeredStoriesRoots } from "../backends/mulmoscript.js";
@@ -338,6 +339,28 @@ function mountCwdPresetRoutes(app: Express, onCwdPresetsChanged?: CwdPresetsChan
   }
 }
 
+/** What the launch form may offer, which is two independent questions with one audience: which
+ *  model BACKENDS can be reached (#584), and which agent CLIs this machine has (#2082).
+ *
+ *  Together rather than inline above, because they are the only routes here that describe what can
+ *  be STARTED rather than what is configured — and `mountConfigRoutes` has a line budget that a
+ *  reviewer should spend on config. */
+function mountLaunchOfferRoutes(app: Express): void {
+  // Never the tokens themselves — only the NAME of the variable each is read from, which is what
+  // the setup help has to say.
+  app.get("/api/launch-options", (_req, res) => {
+    res.json(launchOptions(config.providers, process.env));
+  });
+
+  // The form reads this to avoid OFFERING an agent that cannot run — a machine with only Codex must
+  // not be shown Claude and a cell that dies on spawn. It says nothing about which agent a session
+  // IS: `claude` remains the wire default and the meaning of an absent `agent` field, which is what
+  // a grid cell persisted before that field existed means.
+  app.get("/api/agents", (_req, res) => {
+    res.json({ agents: AGENT_AVAILABILITY });
+  });
+}
+
 export function mountConfigRoutes(app: Express, claudeCwd: string, onCwdPresetsChanged?: CwdPresetsChanged): void {
   // The live config as the API exposes it, so a client (e.g. a settings UI) can read back
   // everything it can write — buttons/chips included — and round-trip it.
@@ -433,12 +456,7 @@ export function mountConfigRoutes(app: Express, claudeCwd: string, onCwdPresetsC
 
   mountCwdPresetRoutes(app, onCwdPresetsChanged);
 
-  // What the launch form may offer (#584): the configured backends, whether each can be
-  // reached right now, and the models it can run. Never the tokens themselves — only the
-  // NAME of the variable each is read from, which is what the setup help has to say.
-  app.get("/api/launch-options", (_req, res) => {
-    res.json(launchOptions(config.providers, process.env));
-  });
+  mountLaunchOfferRoutes(app);
 
   // Stream the user's custom attention sound (their own file, set in config). The
   // path comes from server-side config — never from the request — so there's no

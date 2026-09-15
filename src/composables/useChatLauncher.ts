@@ -27,6 +27,7 @@ import { dropCollectionChat, holdCollectionChat } from "./collectionChatSessions
 import { seedCollectionCanvas } from "./seedCollectionCanvas";
 import { parseCollectionSlashSeed } from "../../common/collectionSeed";
 import { isRecord } from "../../common/isRecord";
+import { agentAvailability, agentCorrection, loadAgentAvailability } from "./useAgentAvailability";
 import { fetchWithTimeout, SLOW_COMMAND_TIMEOUT_MS } from "../utils/fetchWithTimeout";
 
 export type Agent = TerminalAgent;
@@ -36,8 +37,19 @@ export type Agent = TerminalAgent;
 // survives reloads.
 const LAUNCH_AGENT_KEY = "mt-launch-agent";
 const saved = localStorage.getItem(LAUNCH_AGENT_KEY);
-export const launchAgent = ref<Agent>(asTerminalAgent(saved));
+const initialLaunchAgent = asTerminalAgent(saved);
+export const launchAgent = ref<Agent>(initialLaunchAgent);
 watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
+
+// The remembered agent may not be installed — most often because it is Claude on a machine that
+// only has Codex, which is the whole of #2082. Availability arrives over HTTP, after this ref
+// already exists, so the correction happens here rather than in the initialiser; it moves the value
+// only while it is still the remembered one, so a deliberate pick made in the meantime survives.
+// The correction then persists like any other choice: the remembered agent becomes one that runs.
+void loadAgentAvailability().then(() => {
+  const next = agentCorrection(launchAgent.value, initialLaunchAgent, agentAvailability.value);
+  if (next !== null) launchAgent.value = next;
+});
 
 /** A session this module started. The agent travels WITH the id because a spawn is not always
  *  Claude — `launchAgent` decides, and a caller that reads that toggle again to find out has two
