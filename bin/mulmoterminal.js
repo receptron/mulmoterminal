@@ -92,9 +92,19 @@ async function checkForUpdate() {
 // Detect a CLI on the user's PATH by asking for its version. Intentionally resolves from
 // PATH — detecting the user's installed tools is the whole point of the pre-flight /
 // `init` checks.
+// A `--version` that never returns hangs whoever asked. That was survivable while this only ran
+// against a fixed list of tools; it is not, now that `<AGENT>_BIN` and seven agent names reach it,
+// any of which may be a stale shim on someone's PATH. Measured against the shipped code: a `grok`
+// on PATH that blocks 30 seconds held `npx mulmoterminal init` for 30 seconds without this.
+//
+// Generous on purpose — a cold npm shim on Windows is slow, and calling a working agent missing is
+// worse than waiting for it. A probe that times out is reported MISSING, which is the honest
+// answer: a binary that cannot say its version in five seconds cannot back a terminal either.
+const VERSION_PROBE_TIMEOUT_MS = 5000;
+
 function hasCommand(cmd, versionArg = "--version") {
   try {
-    execSync(`${cmd} ${versionArg}`, { stdio: "pipe" });
+    execSync(`${cmd} ${versionArg}`, { stdio: "pipe", timeout: VERSION_PROBE_TIMEOUT_MS, killSignal: "SIGKILL" });
     return true;
   } catch {
     return false;

@@ -194,17 +194,27 @@ this one probes seven, six of which the user may not control — a stale shim on
 enough. Measured with a `grok` on PATH that blocks for 30 seconds and a `claude` that answers
 immediately:
 
-| | gate | doctor (`init`) |
+Measured **against the shipped CLI** — time from spawn to the launcher's own gate line, with a
+normal machine as the control so that a fast number is recognisable as fast:
+
+| | gate line | `init` (probes every row) |
 |---|---|---|
 | before | **30,059 ms** — and `grok` was then reported INSTALLED, because `sleep` exits 0 | 30,059 ms |
-| hang AFTER a valid agent | **9 ms** | 5,040 ms |
-| hang FIRST, so nothing can be skipped | **5,011 ms** | 5,043 ms |
+| hang AFTER a valid agent | **64 ms** | 6,010 ms |
+| hang FIRST, so nothing can be skipped | **5,077 ms** | 6,031 ms |
+| no hang at all (control) | 81 ms | — |
 
-**Two fixes, and neither is sufficient alone.** The gate asks `firstInstalledAgent` and stops at the
-first hit — but that does nothing when the hanging agent is first. The probe takes a 5-second
-timeout and reports a timeout as MISSING — but that alone still costs one timeout per row on a
-machine with no agents. The doctor keeps probing every row, because it reports every row; the
-timeout is what bounds it there.
+An earlier version of this section carried 9 ms and 5,011 ms. **Those were measured in a standalone
+harness with the timeout hardcoded, not in the shipped code — and the shipped code did not have the
+timeout at all.** The edit that was supposed to add it aborted on an unrelated assertion in the same
+script and was never applied, while the commit message, this file and the PR comment all said it
+had been. Codex caught it in round 3 by reading the file rather than the claim. The numbers above
+are from the CLI as it ships.
+
+**Two fixes, and neither is sufficient alone** — which the accident above demonstrated for free: with
+only the short-circuit shipped, the hang-first case still hung. The gate asks `firstInstalledAgent`
+and stops at the first hit; the probe takes a 5-second timeout and reports a timeout as MISSING. The
+doctor keeps probing every row, because it reports every row, so the timeout is its only bound.
 
 `Agent CLIs ✓ claude codex` became `Agent CLI ✓ claude`, naming the one that answered, because
 listing them all is what the short-circuit gives up. `npx mulmoterminal init` is the full list and
