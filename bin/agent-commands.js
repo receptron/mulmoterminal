@@ -41,6 +41,48 @@ export const AGENT_COMMANDS = [
  */
 export const agentBin = ({ cmd, env: name }, env) => env[name] || cmd;
 
+// yarn v1 prepends a temp dir holding a `node` shim; yarn and npm both prepend `node_modules/.bin`
+// and npm's node-gyp-bin. MIRRORS `isLauncherPathEntry` (server/infra/pty-env.ts) — matched on the
+// entry's LAST segment, so a directory that merely CONTAINS one of these names somewhere is the
+// user's — and a spec pins the two against each other over generated entries rather than by copying
+// the list.
+const YARN_SHIM_DIR = /^yarn--\d/;
+
+/** Is this PATH entry a run-script injection rather than something the user installed?
+ *
+ * @param {string} entry
+ * @returns {boolean}
+ */
+export function isRunScriptPathEntry(entry) {
+  const segments = entry.split(/[\\/]/).filter((segment) => segment !== "");
+  const last = segments[segments.length - 1];
+  if (last === undefined) return false;
+  const parent = segments[segments.length - 2];
+  return YARN_SHIM_DIR.test(last) || (last === ".bin" && parent === "node_modules") || last === "node-gyp-bin";
+}
+
+/** The PATH the launcher may probe, which is the PATH the SPAWN will search.
+ *
+ *  THIS IS WHY IT EXISTS, and it is not only about agreeing on an answer. `npx mulmoterminal` run
+ *  where a `node_modules/.bin` is on PATH — which `yarn`/`npm` run-scripts and npx itself arrange —
+ *  made the gate EXECUTE that directory's `codex --version`, a binary the server deliberately
+ *  refuses to spawn (`sanitizePtyEnv` strips those entries). Measured: a fake `codex` in a repo's
+ *  `node_modules/.bin` ran at the gate.
+ *
+ *  Stripping them here makes the launcher's probe ask the question the spawn will ask, so the
+ *  divergence that produced a finding in four separate rounds is closed at the source rather than
+ *  case by case.
+ *
+ * @param {string | undefined} pathValue
+ * @param {string} delimiter
+ * @returns {string}
+ */
+export const searchPathForProbe = (pathValue, delimiter) =>
+  (pathValue ?? "")
+    .split(delimiter)
+    .filter((entry) => !isRunScriptPathEntry(entry))
+    .join(delimiter);
+
 /** Does this command NAME A PATH, rather than a command to look up? The server's own rule
  *  (`namesAPath`, server/infra/resolve-bin.ts): a separator anywhere in it.
  *

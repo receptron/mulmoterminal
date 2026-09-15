@@ -288,6 +288,36 @@ carry `C:\tools` — it splits at the drive colon — so the pieces are per deli
 because it names no directory of ours, which is what `isLauncherPathEntry` already says. The property
 is "drop ours", not "drop anything odd-looking".
 
+## Round 6 — the launcher was EXECUTING binaries the spawn refuses, and the rule changed shape
+
+The round-4 fix made the ROUTE ask with the spawn's environment. The LAUNCHER still probed the raw
+PATH — so `npx mulmoterminal` run where a `node_modules/.bin` is on PATH (which yarn/npm run-scripts
+and npx itself arrange) **executed that directory's `codex --version` at the gate**. Reproduced with
+a fake `codex` that touched a file. `sanitizePtyEnv` exists precisely to keep those entries out of a
+spawn; the gate was running one before the server existed.
+
+**This is where the rule changed shape instead of gaining another patch.** Findings 1, 2, 3, 5, 6, 7
+and now this one were all the same thing — the launcher's probe disagreeing with the spawn about what
+can be started — and six rounds of fixing cases is what this loop's own guidance says to stop doing.
+So the launcher now probes with **the PATH the spawn will search**: `searchPathForProbe` strips the
+run-script injections, and `hasCommand` takes that environment.
+
+The mirror is pinned as an **equivalence** against the server's own `isLauncherPathEntry`, over
+generated entries, rather than by copying its list — `bin/` cannot import it at runtime (plain JS,
+before tsx) but a spec can. Break-verified with each mutation asserted to have actually applied:
+letting `node_modules/.bin` through reddens 4, letting the yarn shim through 4, `node-gyp-bin` 3,
+matching a substring instead of the last segment 5, not stripping at all 2.
+
+**Two of my own verification mistakes, both of which looked like success:**
+
+- The first fix used `path.delimiter`, but this file imports `{ dirname, join, resolve }` — there is
+  no `path`. The launcher CRASHED, nothing was executed, and the repro therefore "passed". A test
+  that stops the program loading is not a test the program survived, so the re-check ran a control:
+  a normal PATH still starts and still finds codex.
+- The first mutation sweep's replacements were mangled by shell quoting and never applied, which
+  reads exactly like "the tests do not catch this". The sweep now asserts the file CHANGED before
+  running and matches its pristine copy after.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

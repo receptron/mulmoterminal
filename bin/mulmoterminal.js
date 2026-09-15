@@ -10,7 +10,7 @@ import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { release } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { delimiter as pathDelimiter, dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
 import { computeUpdateNotice, isUpdateCheckDisabled } from "./update-check.js";
@@ -38,7 +38,7 @@ import {
 } from "./cli-args.js";
 import { liveInstances } from "./instances.js";
 import { setProcessTitle } from "./process-title.js";
-import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents } from "./agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents, searchPathForProbe } from "./agent-commands.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -102,14 +102,22 @@ async function checkForUpdate() {
 // answer: a binary that cannot say its version in five seconds cannot back a terminal either.
 const VERSION_PROBE_TIMEOUT_MS = 5000;
 
-function hasCommand(cmd, versionArg = "--version") {
+function hasCommand(cmd, versionArg = "--version", env = process.env) {
   try {
-    execSync(`${cmd} ${versionArg}`, { stdio: "pipe", timeout: VERSION_PROBE_TIMEOUT_MS, killSignal: "SIGKILL" });
+    execSync(`${cmd} ${versionArg}`, { stdio: "pipe", timeout: VERSION_PROBE_TIMEOUT_MS, killSignal: "SIGKILL", env });
     return true;
   } catch {
     return false;
   }
 }
+
+// The environment an AGENT probe runs in: PATH with the run-script injections stripped, so the
+// launcher looks where the spawn will look. Without it, `npx mulmoterminal` in a directory whose
+// `node_modules/.bin` is on PATH EXECUTED that directory's `codex --version` at the gate — a binary
+// `sanitizePtyEnv` exists to keep out of a spawn (Codex review, round 6).
+//
+// Computed once: PATH is a start-up setting here like `<AGENT>_BIN`, and the probe runs per agent.
+const probeEnv = { ...process.env, PATH: searchPathForProbe(process.env.PATH, pathDelimiter) };
 
 // PATH tools the app shells out to; mirrors the requirements table in README.md. `required`
 // ones back the core grid — without them a developer loses whole views rather than one
@@ -201,7 +209,7 @@ const agentProbe = (bin) =>
           return false;
         }
       },
-      runsOnPath: (name) => hasCommand(name),
+      runsOnPath: (name) => hasCommand(name, "--version", probeEnv),
     },
     process.platform,
   );

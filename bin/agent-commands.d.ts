@@ -17,3 +17,5 @@ export declare function canRun(bin: string, probe: AgentRunProbe, platform: Node
 export declare function isPlainCommandName(bin: string): boolean;
 export declare function couldBeABinary(bin: string): boolean;
 export declare function firstInstalledAgent(env: NodeJS.ProcessEnv, probe: (bin: string) => boolean): AgentCommand | null;
+export declare function isRunScriptPathEntry(entry: string): boolean;
+export declare function searchPathForProbe(pathValue: string | undefined, delimiter: string): string;

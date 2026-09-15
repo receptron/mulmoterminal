@@ -7,7 +7,18 @@
 // nobody checks is how an eighth agent silently stops counting toward "is anything installed", so
 // the table is pinned here against both of the things it mirrors.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { AGENT_COMMANDS, agentBin, canRun, firstInstalledAgent, installedAgents, isPlainCommandName, namesAPath } from "../../bin/agent-commands.js";
+import {
+  AGENT_COMMANDS,
+  agentBin,
+  canRun,
+  firstInstalledAgent,
+  installedAgents,
+  isPlainCommandName,
+  isRunScriptPathEntry,
+  namesAPath,
+  searchPathForProbe,
+} from "../../bin/agent-commands.js";
+import { isLauncherPathEntry } from "../../server/infra/pty-env.js";
 import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
 import { claudeAdapter } from "../../server/agents/claude.js";
 import { codexAdapter } from "../../server/agents/codex.js";
@@ -235,5 +246,56 @@ describe("firstInstalledAgent — the gate's question, not the doctor's", () => 
     const asked: string[] = [];
     installedAgents({}, (bin) => (asked.push(bin), bin === "claude"));
     expect(asked).toHaveLength(AGENT_COMMANDS.length);
+  });
+});
+
+// The launcher probes with the PATH the SPAWN will search, and this pins the mirror that makes that
+// possible. Codex round 6, reproduced first: `npx mulmoterminal` where a repo's `node_modules/.bin`
+// is on PATH — which yarn/npm run-scripts and npx itself arrange — EXECUTED that directory's
+// `codex --version` at the gate, a binary `sanitizePtyEnv` exists to keep out of a spawn.
+//
+// Pinned as an EQUIVALENCE against the server's own predicate rather than by copying its list, so a
+// change to either side is a red test rather than a divergence nobody sees. `bin/` cannot import it
+// at runtime (plain JS, before tsx) but a spec can.
+describe("searchPathForProbe — the launcher looking where the spawn looks", () => {
+  const ENTRIES = [
+    "/usr/bin",
+    "/opt/homebrew/bin",
+    "/x/node_modules/.bin",
+    "/x/node-gyp-bin",
+    "/tmp/yarn--1700000000000-0.1",
+    "/home/me/my_node_modules/.bin",
+    "/home/me/.bin",
+    "/a/node_modules/.bin/deeper",
+    "",
+    "/",
+    "C:\\Windows",
+    "D:\\p\\node_modules\\.bin",
+    "C:\\Temp\\yarn--1700000000000-0.1",
+    "/opt/yarn--not-a-digit",
+  ];
+
+  it.each(ENTRIES)("agrees with the server's isLauncherPathEntry about %p", (entry) => {
+    expect(isRunScriptPathEntry(entry)).toBe(isLauncherPathEntry(entry));
+  });
+
+  // Joined PER DELIMITER: a `:`-joined PATH cannot carry `C:\\Windows`, because it splits at the
+  // drive colon. That is the shape of the real thing, not a quirk to design around.
+  it.each([
+    [":", ENTRIES.filter((entry) => !entry.includes(":"))],
+    [";", ENTRIES.filter((entry) => !entry.includes(";"))],
+  ])("drops the run-script entries and keeps the rest, in order (%s)", (delimiter, entries) => {
+    expect(searchPathForProbe(entries.join(delimiter), delimiter).split(delimiter)).toEqual(entries.filter((entry) => !isLauncherPathEntry(entry)));
+  });
+
+  it("answers an empty PATH for an absent one rather than throwing", () => {
+    expect(searchPathForProbe(undefined, ":")).toBe("");
+  });
+
+  // A user directory that merely CONTAINS one of those names is theirs, which is what matching on
+  // the last segment buys and the reason this is not a substring test.
+  it("keeps a user directory whose name only resembles one of ours", () => {
+    expect(isRunScriptPathEntry("/home/me/my_node_modules/.bin")).toBe(false);
+    expect(isRunScriptPathEntry("/a/node_modules/.bin/deeper")).toBe(false);
   });
 });
