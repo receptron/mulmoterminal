@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent";
 import { agentAvailability, type AgentBins } from "../../../server/config/agent-availability";
+import { hasBinary, type BinaryProbe } from "../../../server/infra/has-binary";
 
 const binsWhere = (overrides: Partial<AgentBins> = {}): AgentBins => {
   const bins = Object.fromEntries(TERMINAL_AGENTS.map((agent) => [agent, `/nowhere/${agent}`]));
@@ -48,20 +49,57 @@ describe("agentAvailability", () => {
   });
 });
 
-// The default probe is `hasBinary`, and these pin the two answers that decide whether a user is
-// told "install it" or nothing at all.
-describe("the real probe", () => {
-  it("counts an executable file and not a file that merely exists", () => {
+// The default probe is `hasBinary`, and these pin the answers that decide whether a user is told
+// "install it", "chmod +x it", or nothing at all.
+//
+// THE EXECUTE-BIT RULE IS PINNED WITH A FAKE FILESYSTEM, not with real temp files, and that is the
+// lesson this PR's first push paid for on `test_windows`. Two things vary per host and both have to
+// be held still: an executable BIT is a POSIX idea (Windows has none — executability there is the
+// extension, so an absolute path that exists is ok), AND the SHAPE of a temp path differs, so
+// `/var/folders/...` is not absolute to `path.win32` and `C:\...` is not absolute to `path.posix`.
+// Forcing the platform flag alone still asks the wrong question. `BinaryProbe` exists so the rules
+// are "checkable from any host"; this uses it for that.
+describe("the execute-bit rule, on both platforms", () => {
+  const RUNNABLE = "/opt/bin/codex";
+  const PRESENT_BUT_NOT_RUNNABLE = "/opt/bin/claude";
+  const fakeFs: BinaryProbe = {
+    isFile: (candidate) => candidate === RUNNABLE || candidate === PRESENT_BUT_NOT_RUNNABLE,
+    isExecutable: (candidate) => candidate === RUNNABLE,
+  };
+  const bins = binsWhere({ codex: RUNNABLE, claude: PRESENT_BUT_NOT_RUNNABLE });
+  const on = (platform: NodeJS.Platform) => (bin: string) => hasBinary(bin, {}, platform, fakeFs);
+
+  // A file that is there but cannot be run is not an installed agent, and saying so is the
+  // difference between "install it" and "chmod +x it".
+  it("does not count a file that exists but is not executable, on a POSIX host", () => {
+    expect(installedOf("codex", bins, on("linux"))).toBe(true);
+    expect(installedOf("claude", bins, on("linux"))).toBe(false);
+  });
+
+  // Not a bug to fix: there is no bit to read on Windows, and reporting "not executable" there would
+  // send a user chasing a permission that does not exist. The spawn's own error is the real answer.
+  it("counts a file that exists on Windows, where there is no bit to read", () => {
+    expect(installedOf("codex", bins, on("win32"))).toBe(true);
+    expect(installedOf("claude", bins, on("win32"))).toBe(true);
+  });
+
+  it("counts neither when the path does not exist, on either platform", () => {
+    const nowhere = binsWhere();
+    expect(agentAvailability(nowhere, on("linux")).some((entry) => entry.installed)).toBe(false);
+    expect(agentAvailability(nowhere, on("win32")).some((entry) => entry.installed)).toBe(false);
+  });
+});
+
+// One test that does touch the real filesystem through the real probe, so the wiring above is not
+// the only thing proven. Its assertions are the ones that hold on EVERY platform.
+describe("the real filesystem, through the default probe", () => {
+  it("counts an executable file and not a path that is not there", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "mt-agents-"));
     try {
       const runnable = path.join(dir, "codex");
-      const notRunnable = path.join(dir, "claude");
-      [runnable, notRunnable].forEach((bin) => writeFileSync(bin, "#!/bin/sh\nexit 0\n"));
+      writeFileSync(runnable, "#!/bin/sh\nexit 0\n");
       chmodSync(runnable, 0o755);
-      // A file that is there but cannot be run is not an installed agent, and saying so is the
-      // difference between "install it" and "chmod +x it".
-      chmodSync(notRunnable, 0o644);
-      const bins = binsWhere({ codex: runnable, claude: notRunnable });
+      const bins = binsWhere({ codex: runnable });
       expect(installedOf("codex", bins)).toBe(true);
       expect(installedOf("claude", bins)).toBe(false);
     } finally {
