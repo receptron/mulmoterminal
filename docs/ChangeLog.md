@@ -8,6 +8,24 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### `manageShapeScript` asks for the gallery's CC BY 4.0 agreement — `@mulmoclaude/shapescript-plugin@6.0.0`
+
+- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — a public model in the Shapes
+  gallery on mulmoserver is licensed under CC BY 4.0
+  ([receptron/mulmoserver#269](https://github.com/receptron/mulmoserver/pull/269)), and the tool
+  now asks the way the gallery's own editor does: `publish` of a public post, an `update` that makes
+  a draft public, or an edit of a public post with no license yet needs `acceptLicense: true` — the
+  user's explicit agreement, which the tool's prompt tells the agent to ask for and never to pass on
+  its own — and is refused before any upload without it. A draft needs none. A post with
+  `license: null` from `get` / `getList` was published before the gallery asked and grants nothing;
+  the prompt says not to present such a model as reusable
+  ([receptron/mulmoclaude#3180](https://github.com/receptron/mulmoclaude/pull/3180)). This host's
+  adapter now stamps `licenseAcceptedAt` as a server time beside a grant on create and on the
+  first-agreement update, drops it when the stored post is licensed already, and pins the published
+  state in the update precondition so a concurrent unpublish cannot get a draft licensed — the
+  writer-contract change that made the plugin a major. `@mulmoclaude/core` moves to 4.9.4, the
+  peer the plugin declares.
+
 ## mulmoterminal@4.24.0 — 2026-09-15
 
 > **Setup guide:** [4.24.0 — One tool for the gallery, and two more ways out of a ShapeScript result](https://receptron.github.io/mulmoterminal/guide/en/v4.24.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v4.24.0.html))

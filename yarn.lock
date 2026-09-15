@@ -396,68 +396,68 @@
   resolved "https://registry.yarnpkg.com/@csstools/selector-specificity/-/selector-specificity-5.0.0.tgz#037817b574262134cabd68fc4ec1a454f168407b"
   integrity sha512-PCqQV3c4CoVm3kdPhyeZ07VmBRdH2EpMFA/pd9OASpOEC3aXNGoqPDAZ80D0cLpMBxnmk0+yNhGsEx31hq7Gtw==
 
-"@duckdb/node-api@^1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-api/-/node-api-1.5.5-r.4.tgz#6aea6c54b257ac90694712591b2d95bd5bd3d546"
-  integrity sha512-8v0CZNo7aM6GQCNUHERGTrZWIfss8xKzZPF3ACNhPdMMrt7UjkNI5nRQ9FTFO7Yx8ghxYxVpdotmBBMQ5vXUOA==
+"@duckdb/node-api@^1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-api/-/node-api-1.5.5-r.5.tgz#731a292d094f80fb6210c58d0b0cd43a3ff79e4a"
+  integrity sha512-ZMX+sel3DjSKbGuQ44Y5Tp5LwYjlJkhB5faKr+9sSMcxixDMSW+8vaTOD1uRDuN9o0udUoCY/XX9PI1haEZuZg==
   dependencies:
-    "@duckdb/node-bindings" "1.5.5-r.4"
+    "@duckdb/node-bindings" "1.5.5-r.5"
 
-"@duckdb/node-bindings-darwin-arm64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-darwin-arm64/-/node-bindings-darwin-arm64-1.5.5-r.4.tgz#320f20f599c3b86fc772ce4e757c284111279124"
-  integrity sha512-4OdO3pkoJzAZDnZ2iyehi67XL4+WqHPCGYWbyAsYyhGJS+WscGrAnFhMhHudMM2XF8pIEM2tuOKMmwWnTNN2wQ==
+"@duckdb/node-bindings-darwin-arm64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-darwin-arm64/-/node-bindings-darwin-arm64-1.5.5-r.5.tgz#48c6ca2ea1feaa44099ad05e6a4663fccdd5b5c9"
+  integrity sha512-WJdeLTFy4pRg60rkbp9smtlP1iIQ8ErtIJkxS+2LQtM1ZZMSByyW+3WPpNoKe7IwPtVl2fLlPw7tDmQW4Z974g==
 
-"@duckdb/node-bindings-darwin-x64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-darwin-x64/-/node-bindings-darwin-x64-1.5.5-r.4.tgz#ed619c9e0adbf9b8436f2f16ee18ce5a1fb49b9b"
-  integrity sha512-WHg3E+TupdujG31LGujMMcmtPIdW6rqRHeihlKgJR8EMetHycoYkwYxRud0niitJvS+uV0du/6pdemzs3HG9GQ==
+"@duckdb/node-bindings-darwin-x64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-darwin-x64/-/node-bindings-darwin-x64-1.5.5-r.5.tgz#d1bd3dbe974a710c75b07f650eb1cc4003d84431"
+  integrity sha512-rN0KjX13MwVQ5V5ufykolty/tf4SaafOpGWcUA1Cegf98jPeRdsJsEE1IMXn8n3u6WvMSZEVJmHJ3ma4Hr7Vzg==
 
-"@duckdb/node-bindings-linux-arm64-musl@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-arm64-musl/-/node-bindings-linux-arm64-musl-1.5.5-r.4.tgz#90d1f1d7b0d64a009fae0e0bad09ca9e09652fe0"
-  integrity sha512-Tswnf+/XWpOcFJNUUu1fkFIX/su4tMcnNz0ZV0Nru3/CkJKIMwBh+VL4SM9YV4zPK90GC4Lm8gzafjc1qDmfyQ==
+"@duckdb/node-bindings-linux-arm64-musl@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-arm64-musl/-/node-bindings-linux-arm64-musl-1.5.5-r.5.tgz#0ba9913f93cb55704da711d445ff89cde293a2f0"
+  integrity sha512-00z3mYHUBAucp3L73EoftKDdaGOaV8ENELejiT+PK7dFjTzdXxqhJwZ1LaQV1/zEhIecz+x23f6WvFhWw+7XXQ==
 
-"@duckdb/node-bindings-linux-arm64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-arm64/-/node-bindings-linux-arm64-1.5.5-r.4.tgz#1a95e67ea90203bbd40418104954ccc835de366e"
-  integrity sha512-VIeHMpYAKpGiWZ4QYsOhODAHDEcXcn089aKty0MFsMEKaEfRJWixKwnwXy/ba2/wwFmnPiSFhKNqygj2BrQbqw==
+"@duckdb/node-bindings-linux-arm64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-arm64/-/node-bindings-linux-arm64-1.5.5-r.5.tgz#bf9215d8ca09b6f4ec481398f5f7e4a707ea9226"
+  integrity sha512-CafH2AIvXtpwDynG3KB/4uEOHRGlFoB7auCRMIwH3BKNIobsANV5LSpDJ3tfyRCFIsK6e8AT1eseWVnu2Dv3cw==
 
-"@duckdb/node-bindings-linux-x64-musl@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-x64-musl/-/node-bindings-linux-x64-musl-1.5.5-r.4.tgz#e697b6da4a1abda80355743481d4aa817da3ef4e"
-  integrity sha512-h0ixrgGHtHh+C/Fu1eAL9hX4iCf8yuyJN6Y24Gh8axXXP8UuSh0rQRAQUQTYarQ8pm2qSG/67ZYjyYYydD+J/w==
+"@duckdb/node-bindings-linux-x64-musl@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-x64-musl/-/node-bindings-linux-x64-musl-1.5.5-r.5.tgz#e2aa547b0fcb1d8ee70c966e220a66c1c53d2b86"
+  integrity sha512-S5qEc7F+GjXt85T2xArjjvN5oc/IjtH6zsLJsuo8N3fQolheBCefemIMdZoK2Jik8a0sBxidiS6Ld4qprMPPDw==
 
-"@duckdb/node-bindings-linux-x64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-x64/-/node-bindings-linux-x64-1.5.5-r.4.tgz#f3da2ea301dc4a021779b58405d02999a1f262eb"
-  integrity sha512-EY+CL/4h8MQZd9MxTBq+98m3U9osmvHBwhE9b5fMWQGt2I6p1j8fvX0SXiwy9KBfQIbjVUOf5XvGdXncI54KSg==
+"@duckdb/node-bindings-linux-x64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-linux-x64/-/node-bindings-linux-x64-1.5.5-r.5.tgz#36f4c1c1fc032489c59a8d042fdeb5bb0fc72de5"
+  integrity sha512-kCyq6BXhn6QXfwF8yVdVKriSSHP+rfVWcJ56cG8qZzlOZpxyvT5WGm6jMshxg4ditLlOsHsIN/D47RYrcjXuHQ==
 
-"@duckdb/node-bindings-win32-arm64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-win32-arm64/-/node-bindings-win32-arm64-1.5.5-r.4.tgz#baa220d5678e24eea911b474753ec8de9f262791"
-  integrity sha512-uorAnySIMwWkRDuUhM1yTDxWIislnX8mndhFIw6r4VKhVW61HEOOMX5oAgkSQFII4RNWpC5PCcUAEhSATgNvVQ==
+"@duckdb/node-bindings-win32-arm64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-win32-arm64/-/node-bindings-win32-arm64-1.5.5-r.5.tgz#9d445657921540da75e4682f3aa7c0c20fddb7c7"
+  integrity sha512-L3Mroc23xhqOowWVElni8LgEmsm5e9DdG1y2pLka/1ug3Pl2vpQMl1Phxwz4UEMF8DOBbMgN5BBNrYwG2BFo+g==
 
-"@duckdb/node-bindings-win32-x64@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-win32-x64/-/node-bindings-win32-x64-1.5.5-r.4.tgz#c7bc38bfde25b41a9ec7cf215499e40cd1df747a"
-  integrity sha512-X9XGcWQ10P3mvUIaMXXk2bi94Cow7b/ziTPMKxJ0U8U3wQPxsLzEUP7D7C/KrBWINl5am2k+5SkDVyA/THUgPg==
+"@duckdb/node-bindings-win32-x64@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings-win32-x64/-/node-bindings-win32-x64-1.5.5-r.5.tgz#97babe80dd4d15541b22ca9573013bc2ba0f5928"
+  integrity sha512-mBGFn8netT/AAhK4TOG6Fw47+Db68CxCVtQ9qfxZc1kZAjds+aYrh17Fd/u5CbTDdxILsrcyuF8q9cUcm54kQA==
 
-"@duckdb/node-bindings@1.5.5-r.4":
-  version "1.5.5-r.4"
-  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings/-/node-bindings-1.5.5-r.4.tgz#5aa29360d05ef05361ceb1dc8e4e7c568e0a5d1d"
-  integrity sha512-n+4hEfjp4vny3BuWn5p1Gh5CzHaPRxoI8TzTytxL1GMlIKKrXcg/o6sSAjrsROUXGAM4WQCiWPLKnPsjJJSggg==
+"@duckdb/node-bindings@1.5.5-r.5":
+  version "1.5.5-r.5"
+  resolved "https://registry.yarnpkg.com/@duckdb/node-bindings/-/node-bindings-1.5.5-r.5.tgz#45fcf42da043c5dbde2e69c08277a5e7c04e15ed"
+  integrity sha512-sR7x91TfBunLqLbdvrcdiPCU+VGEQFPicxh1STZM402fuHW2ituPTAo2bY3IlntsvJShltrKF4R6B+JYPlAPZg==
   dependencies:
     detect-libc "^2.1.2"
   optionalDependencies:
-    "@duckdb/node-bindings-darwin-arm64" "1.5.5-r.4"
-    "@duckdb/node-bindings-darwin-x64" "1.5.5-r.4"
-    "@duckdb/node-bindings-linux-arm64" "1.5.5-r.4"
-    "@duckdb/node-bindings-linux-arm64-musl" "1.5.5-r.4"
-    "@duckdb/node-bindings-linux-x64" "1.5.5-r.4"
-    "@duckdb/node-bindings-linux-x64-musl" "1.5.5-r.4"
-    "@duckdb/node-bindings-win32-arm64" "1.5.5-r.4"
-    "@duckdb/node-bindings-win32-x64" "1.5.5-r.4"
+    "@duckdb/node-bindings-darwin-arm64" "1.5.5-r.5"
+    "@duckdb/node-bindings-darwin-x64" "1.5.5-r.5"
+    "@duckdb/node-bindings-linux-arm64" "1.5.5-r.5"
+    "@duckdb/node-bindings-linux-arm64-musl" "1.5.5-r.5"
+    "@duckdb/node-bindings-linux-x64" "1.5.5-r.5"
+    "@duckdb/node-bindings-linux-x64-musl" "1.5.5-r.5"
+    "@duckdb/node-bindings-win32-arm64" "1.5.5-r.5"
+    "@duckdb/node-bindings-win32-x64" "1.5.5-r.5"
 
 "@emnapi/core@1.11.2", "@emnapi/core@^1.11.1":
   version "1.11.2"
@@ -1883,20 +1883,20 @@
   resolved "https://registry.yarnpkg.com/@mulmoclaude/common/-/common-1.3.0.tgz#33c48319662077f0ed5dc1c3b3892b6446d44a7e"
   integrity sha512-J+Rta4+JjVMgOGmKq0zPFWzstouRZj6Of/RCHnSkegK1WbHpg7Nx2HCc2J8Ldgjagh5bSwPAgCT/DXQoM5BnYg==
 
-"@mulmoclaude/core@^4.9.3":
-  version "4.9.3"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.9.3.tgz#d9abae9bd3f7933ec0c6aa71768e326e1e7c277d"
-  integrity sha512-WhtVJb0BfmDD7lEvNQIxvRMorLpOkUJCP0CjJ8x8W1oR/rave7TmMDqwuGkXaNXmotqkseiznaMmg8tNtBIKpg==
+"@mulmoclaude/core@^4.9.4":
+  version "4.9.4"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/core/-/core-4.9.4.tgz#c2f627a85263006d74ea527b94fd563e6d600dc6"
+  integrity sha512-qMJeWO8pOT7eEXdJqA363rCMoqfzQtrdvbvU7EDZuV4iTaeelq/uxkaSRwFZe5sO2kh4cD6ky7wSaaJVlWD4/Q==
   dependencies:
-    "@duckdb/node-api" "^1.5.5-r.4"
+    "@duckdb/node-api" "^1.5.5-r.5"
     "@mulmoclaude/common" "^1.3.0"
-    "@mulmoclaude/markdown-utils" "^2.2.1"
+    "@mulmoclaude/markdown-utils" "^3.0.0"
     dompurify "^3.4.15"
     fast-xml-parser "^5.11.1"
     google-auth-library "^11.0.2"
     iconv-lite "^0.7.3"
-    js-yaml "^5.4.1"
-    zod "^4.6.2"
+    js-yaml "^5.4.2"
+    zod "^4.6.5"
 
 "@mulmoclaude/form-plugin@^2.0.0":
   version "2.0.0"
@@ -1938,15 +1938,15 @@
     js-yaml "^5.2.3"
     marked "^18.0.11"
 
-"@mulmoclaude/markdown-utils@^2.2.1":
-  version "2.2.1"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-utils/-/markdown-utils-2.2.1.tgz#681f1830864743d8d838faf31e7b46a67b99136e"
-  integrity sha512-QQqy1ATFACMKdVFUV/NV4W8rFnuIMi02BZs8+ZnWL1eHdIR6a1Ju2HYcEoH7EkppOOEzBDwmAhaHD2EBeMcxdw==
+"@mulmoclaude/markdown-utils@^3.0.0":
+  version "3.0.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/markdown-utils/-/markdown-utils-3.0.0.tgz#58a1b469a19f6a205b73d0a2593ae8b12de9c506"
+  integrity sha512-qa0NOgQzp0kbd0610J806kSV2DIbOMNqIAquPaBgkyIunUSJNp6p/T2YePek2A+VBEnV2qg4sOQaMeN4yoMAYg==
   dependencies:
     "@mulmoclaude/common" "^1.3.0"
     dompurify "^3.4.15"
-    js-yaml "^5.4.1"
-    marked "^18.0.12"
+    js-yaml "^5.4.2"
+    marked "^18.0.13"
 
 "@mulmoclaude/mulmoscript-plugin@^4.8.0":
   version "4.8.0"
@@ -1955,10 +1955,10 @@
   dependencies:
     "@mulmoclaude/common" "^1.2.0"
 
-"@mulmoclaude/shapescript-plugin@^5.1.0":
-  version "5.1.0"
-  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-5.1.0.tgz#3c5effb1ab4d28b4ca1888e23469e180a9634e47"
-  integrity sha512-N+WYgCAJXmnkggNctd5wF6aC4tidFzoXc38tkedmkoeMemcDUXbavQTuKm8Ic1yvokQup7tqzva0Vm9ku1BmZA==
+"@mulmoclaude/shapescript-plugin@^6.0.0":
+  version "6.0.0"
+  resolved "https://registry.yarnpkg.com/@mulmoclaude/shapescript-plugin/-/shapescript-plugin-6.0.0.tgz#3d42b2d09d79f4c097dbb8fecd51b76b1be63502"
+  integrity sha512-VjvIitR314cUrrFYJqCK7r8Ha4k4lb0mi54Id9iA0EmS1ToPnB/5pMA8y/tjxwFnetmJnW+pdpBHBdO9yd+9tg==
   dependencies:
     three "^0.186.0"
     three-bvh-csg "^0.0.18"
@@ -5598,10 +5598,17 @@ js-yaml@^4.3.0:
   dependencies:
     argparse "^2.0.1"
 
-js-yaml@^5.2.3, js-yaml@^5.4.1:
+js-yaml@^5.2.3:
   version "5.4.1"
   resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-5.4.1.tgz#4629d91d4b4551f300435f0e4127899710f816fb"
   integrity sha512-28R/k+NAjeuf7+CKlTxWZVExJGwVVLwY06DgEnOMz2gEpfNkDcD7QvyiVPT0xy0XXhU8vHsd4Ot42OOPdJG7dQ==
+  dependencies:
+    argparse "^2.0.1"
+
+js-yaml@^5.4.2:
+  version "5.4.2"
+  resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-5.4.2.tgz#eebc7a57e0bbe1d6b6d9416a72e7463082c7da85"
+  integrity sha512-m+aqu+LwO1O6sIopafj8HUVl5aawITwZQe/yHpMCKjaWBaA/d07B/QdMb3529REftiU+RMMHL3Vlsw3hON7vWg==
   dependencies:
     argparse "^2.0.1"
 
@@ -6049,6 +6056,11 @@ marked@^18.0.10, marked@^18.0.11, marked@^18.0.12:
   version "18.0.12"
   resolved "https://registry.yarnpkg.com/marked/-/marked-18.0.12.tgz#25840ec9ea7b22f2da48b9260ff5d8c2a6048997"
   integrity sha512-LEm4ga2YeI2T3GVHj9b0BaDPPk93LLTHMFeMyQbNIzPxc8vCI0y/scy0ZA6z6lXKyT9j9Nhl/OC6ZYKYGuFScA==
+
+marked@^18.0.13:
+  version "18.0.13"
+  resolved "https://registry.yarnpkg.com/marked/-/marked-18.0.13.tgz#f642286759fcd640b29c1ea7b0d964a63afc01e3"
+  integrity sha512-xTxVzZsBFwunP6HDmtBkabUQEYArnP7/rMDGmPj9SlrKlQ4i8MdYVow+nJL0eOqwpUqhzBoTBRADGN6uYwPyOw==
 
 material-symbols@^0.47.2:
   version "0.47.2"
@@ -8248,6 +8260,11 @@ zod@^3.24.1:
   version "4.6.2"
   resolved "https://registry.yarnpkg.com/zod/-/zod-4.6.2.tgz#91b2ce79ec994eaa42675499166587d3d223c961"
   integrity sha512-lh5RCAGFa1Cm2hjtNwLQhSs/AsqdWnTQaBER9fEwN/88pSh7KOtJavtBx/0VlkN/uFd61SwYmljLMDAsHlvzBQ==
+
+zod@^4.6.5:
+  version "4.6.5"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-4.6.5.tgz#e3af3edbdc260239c52f73caad05dbbffe6e82cd"
+  integrity sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==
 
 zrender@6.1.0:
   version "6.1.0"

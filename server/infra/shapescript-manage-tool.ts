@@ -28,6 +28,7 @@ import {
   SHAPE_OBJECT_CACHE_CONTROL,
   SHAPE_SCRIPT_CONTENT_TYPE,
   POST_CHANGED_MESSAGE,
+  SHAPE_LICENSE,
   type ManageShapeResult,
   type ShapeGalleryWriter,
   type ShapePostDoc,
@@ -66,23 +67,41 @@ export const MANAGE_SHAPE_SCRIPT: ToolDefinition = {
   parameters: MANAGE_SCHEMA,
 };
 
-/** The document as written: the post plus the two stamps the rules demand be the
- *  server's. Exported for the test that pins it. */
+/** The grant's stamp, beside a `license` the owner is granting now: the rules want it to be
+ *  the server's, and refuse one without a grant — so none for a draft, or an unlicensed post. */
+const acceptedNow = (license: ShapePostDoc["license"] | undefined): Record<string, unknown> =>
+  license === SHAPE_LICENSE ? { licenseAcceptedAt: serverTimestamp() } : {};
+
+/** The document as written: the post plus the stamps the rules demand be the server's — the
+ *  two times, and the agreement's when there is one. Exported for the test that pins it. */
 export function postDocumentOf(post: ShapePostDoc): Record<string, unknown> {
-  return { ...post, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  return { ...post, ...acceptedNow(post.license), createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
 }
 
 /** The update as written: only the fields the plugin gave plus a server `updatedAt`, and NO
  *  `createdAt` — the rules freeze it. Field-level (`updateDoc`), so a field not given keeps
- *  what the document holds now, not what a read a moment ago saw. */
-export function postUpdateOf(patch: ShapePostPatch): Record<string, unknown> {
-  return { ...patch, updatedAt: serverTimestamp() };
+ *  what the document holds now, not what a read a moment ago saw. A `license` in the patch is
+ *  the owner's first agreement and gets its server stamp — unless the document is licensed
+ *  `already` (another client agreed since the plugin's read): the rules let a grant be made
+ *  once and never restated, so both are then left out and the stored grant stands. */
+export function postUpdateOf(patch: ShapePostPatch, already = false): Record<string, unknown> {
+  const { license, ...rest } = patch;
+  const grant = already ? {} : { ...(license === undefined ? {} : { license }), ...acceptedNow(license) };
+  return { ...rest, ...grant, updatedAt: serverTimestamp() };
 }
 
 /** Whether the stored document is still the one the plugin merged against: same owner, same
- *  object ids. Object ids are minted per upload, so a match means no edit landed in between. */
+ *  object ids, same published state. Object ids are minted per upload, so a match means no edit
+ *  replaced the model in between; the published state is what the patch's grant was decided
+ *  from, so a toggle in between refuses the write instead of licensing a draft. */
 export function postStillMatches(data: Record<string, unknown> | undefined, expect: ShapePostExpect): data is Record<string, unknown> {
-  return data !== undefined && data.uid === expect.uid && data.scriptId === expect.scriptId && data.thumbnailId === expect.thumbnailId;
+  return (
+    data !== undefined &&
+    data.uid === expect.uid &&
+    data.scriptId === expect.scriptId &&
+    data.thumbnailId === expect.thumbnailId &&
+    (data.published !== false) === expect.published
+  );
 }
 
 /** A read the rules refused — another account's draft. The gallery shows the same "not here"
@@ -127,9 +146,9 @@ export function galleryWriterFrom(session: { firestore: Firestore; storage: Fire
     // concurrent edit either lands before (and this one is refused) or after (and sees ours).
     updatePost: (shapeId, patch, expect) =>
       runTransaction(session.firestore, async (transaction) => {
-        const snapshot = await transaction.get(post(shapeId));
-        if (!postStillMatches(snapshot.data(), expect)) throw new Error(POST_CHANGED_MESSAGE);
-        transaction.update(post(shapeId), postUpdateOf(patch));
+        const data = (await transaction.get(post(shapeId))).data();
+        if (!postStillMatches(data, expect)) throw new Error(POST_CHANGED_MESSAGE);
+        transaction.update(post(shapeId), postUpdateOf(patch, data.license === SHAPE_LICENSE));
       }),
     // The same transaction shape: refused unless the post still carries the ids the plugin
     // read, so a delete cannot orphan the objects of an update that landed in between. Answers
