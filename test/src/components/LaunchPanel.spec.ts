@@ -46,6 +46,9 @@ describe("LaunchPanel", () => {
     w.findComponent({ name: "CellLaunchForm" }).vm.$emit("update:agent", customAgentPick("kimi_k3"));
     await flushPromises();
     w.findComponent({ name: "CellLaunchForm" }).vm.$emit("start", "/home/me/other");
+    // The panel now AWAITS `/api/agents` before emitting, so that a machine without Claude Code
+    // never has a Claude cell placed on it (#2082, Codex round 1). One microtask once settled.
+    await flushPromises();
     expect(w.emitted("start")?.[0]).toEqual([{ dir: "/home/me/other", pick: customAgentPick("kimi_k3"), choice: null }]);
   });
 
@@ -58,6 +61,9 @@ describe("LaunchPanel", () => {
     form.vm.$emit("update:choice", { provider: "openrouter", model: "moonshotai/kimi-k3" });
     await flushPromises();
     form.vm.$emit("start", "/home/me/proj");
+    // The panel now AWAITS `/api/agents` before emitting, so that a machine without Claude Code
+    // never has a Claude cell placed on it (#2082, Codex round 1). One microtask once settled.
+    await flushPromises();
     expect(w.emitted("start")?.[0]).toEqual([{ dir: "/home/me/proj", pick: "claude", choice: { provider: "openrouter", model: "moonshotai/kimi-k3" } }]);
   });
 
@@ -65,6 +71,9 @@ describe("LaunchPanel", () => {
     const w = mountPanel();
     await flushPromises();
     w.findComponent({ name: "CellLaunchForm" }).vm.$emit("start", "/home/me/proj");
+    // The panel now AWAITS `/api/agents` before emitting, so that a machine without Claude Code
+    // never has a Claude cell placed on it (#2082, Codex round 1). One microtask once settled.
+    await flushPromises();
     expect(w.emitted("start")?.[0]).toEqual([{ dir: "/home/me/proj", pick: "claude", choice: null }]);
   });
 

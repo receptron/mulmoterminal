@@ -119,6 +119,12 @@ export async function startCollectionChat(
   // Where this was asked from, read now rather than after the spawn: the request below is awaited,
   // and moving to another collection meanwhile must not file the chat where you landed.
   const filingKey = currentCollectionChatKey();
+  // Awaited before the agent is READ, not merely started at module scope (Codex review, round 1):
+  // a chat spawned programmatically at boot — a collection action, a plugin — can otherwise beat the
+  // availability answer and start the remembered Claude on a machine that has no Claude. Costs
+  // nothing once settled, and the module-scope correction below has already run by the time this
+  // resumes: both continuations hang off the SAME promise, and that one was registered first.
+  await loadAgentAvailability();
   const agent = launchAgent.value;
   // codex has no editable-draft path (it auto-runs the seed), so a draft only applies to claude.
   const draft = agent === "claude" && opts.draft === true;

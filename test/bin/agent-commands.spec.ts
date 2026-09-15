@@ -7,7 +7,7 @@
 // nobody checks is how an eighth agent silently stops counting toward "is anything installed", so
 // the table is pinned here against both of the things it mirrors.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { AGENT_COMMANDS, agentBin, canRun, installedAgents, namesAPath } from "../../bin/agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, installedAgents, isPlainCommandName, namesAPath } from "../../bin/agent-commands.js";
 import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
 import { claudeAdapter } from "../../server/agents/claude.js";
 import { codexAdapter } from "../../server/agents/codex.js";
@@ -147,5 +147,54 @@ describe("namesAPath", () => {
 
   it.each(["claude", "cursor-agent", "agy"])("%s is a bare name", (bin) => {
     expect(namesAPath(bin)).toBe(false);
+  });
+});
+
+// Codex review, round 1. Both were reproduced before being accepted.
+describe("canRun — the two ways the launcher disagreed with the server", () => {
+  // A RELATIVE path resolves against the PTY's cwd, not this process's, so it cannot be answered
+  // from here — `diagnosePathName` returns ok for exactly that reason. Probing it from the
+  // launcher's cwd made the launcher refuse `CLAUDE_BIN=./claude` that the server treats as
+  // spawnable; measured server=true / launcher=false for all three of these before the fix.
+  it.each(["./claude", "dir/claude", "../bin/claude"])("does not refuse the relative path %s the server accepts", (bin) => {
+    expect(canRun(bin, { isFile: () => false, isExecutable: () => false, runsOnPath: () => false }, "linux")).toBe(true);
+  });
+
+  it("still probes an ABSOLUTE path, which is the one the filesystem can answer", () => {
+    expect(canRun("/opt/bin/claude", { isFile: () => false, isExecutable: () => false, runsOnPath: () => true }, "linux")).toBe(false);
+  });
+
+  it("treats a Windows drive path as absolute rather than relative", () => {
+    expect(canRun("C:\\tools\\claude.exe", { isFile: () => false, isExecutable: () => false, runsOnPath: () => true }, "win32")).toBe(false);
+  });
+
+  // The PATH probe runs `<name> --version` THROUGH A SHELL, and a bare name from `<AGENT>_BIN`
+  // reaches it. Measured: `CODEX_BIN='echo hi; touch /tmp/x'` ran the touch. Not a privilege
+  // boundary — the variable is the user's own environment, and a repo-local `.env` reaches the
+  // SERVER child rather than this process — but a value that cannot be a command name must be
+  // reported MISSING, not executed as a command line.
+  it.each(["echo hi; touch /tmp/x", "claude && rm -rf /", "$(id)", "`id`", "my codex", "claude|tee", "a>b"])(
+    "refuses %p without ever asking the shell",
+    (bin) => {
+      let asked = false;
+      const probe = { isFile: () => false, isExecutable: () => false, runsOnPath: () => ((asked = true), true) };
+      expect(canRun(bin, probe, "linux")).toBe(false);
+      expect(asked, "the shell probe must not be reached").toBe(false);
+    },
+  );
+
+  it("still accepts the command names agents really have", () => {
+    const probe = { isFile: () => false, isExecutable: () => false, runsOnPath: () => true };
+    ["claude", "codex", "cursor-agent", "agy", "claude.cmd", "copilot.exe"].forEach((bin) => expect(canRun(bin, probe, "win32"), bin).toBe(true));
+  });
+});
+
+describe("isPlainCommandName", () => {
+  it.each(["claude", "cursor-agent", "claude.cmd", "node_18", "a+b", "user@host"])("%s is a command name", (bin) => {
+    expect(isPlainCommandName(bin)).toBe(true);
+  });
+
+  it.each(["", "my codex", "a;b", "a|b", "a&b", "$(x)", "`x`", "a>b", "a<b", "a\nb"])("%p is not", (bin) => {
+    expect(isPlainCommandName(bin)).toBe(false);
   });
 });

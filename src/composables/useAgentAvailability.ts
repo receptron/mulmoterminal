@@ -19,12 +19,19 @@ export const agentAvailability = ref<AgentAvailability[]>([]);
 
 // The request currently in the air, so a grid mounting a dozen cells at once asks the server once.
 let inFlight: Promise<void> | null = null;
+// Whether a fetch has actually SUCCEEDED — the same shape `useLaunchOptions` keeps, for the same
+// reason. `inFlight` is cleared when the request settles, so it alone makes this "once per CALLER",
+// not "once per page": every `startCollectionChat` would re-ask. And a FAILED fetch must not count,
+// or the first attempt losing a race with a server that is still starting would freeze the answer
+// at "nothing known" for the rest of the page session.
+let loaded = false;
 
 async function fetchAvailability(): Promise<void> {
   try {
     const res = await fetchWithTimeout("/api/agents", undefined, FETCH_TIMEOUT_MS);
     if (!res.ok) throw new Error(`GET /api/agents → ${res.status}`);
     agentAvailability.value = parseAgentAvailability(await res.json());
+    loaded = true;
   } catch (err) {
     // Nothing the user can act on: with no answer the form keeps the agent it already had, which is
     // what every release before this one did.
@@ -35,8 +42,9 @@ async function fetchAvailability(): Promise<void> {
   }
 }
 
-/** Asked once per page, however many cells mount at once. */
+/** Asked once per page — however many cells mount at once, and however many launches follow. */
 export function loadAgentAvailability(): Promise<void> {
+  if (loaded) return Promise.resolve();
   inFlight ??= fetchAvailability();
   return inFlight;
 }

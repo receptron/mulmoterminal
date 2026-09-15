@@ -56,10 +56,23 @@ const dir = ref(props.initialDir ?? props.defaultCwd ?? "");
 // user watches — `agentCorrection` answers null when there is nothing known or nothing to fix.
 const INITIAL_PICK = "claude";
 const pickedAgent = ref<AgentPick>(INITIAL_PICK);
-void loadAgentAvailability().then(() => {
+const correctPick = () => {
   const next = agentCorrection(pickedAgent.value, INITIAL_PICK, agentAvailability.value);
   if (next !== null) pickedAgent.value = next;
-});
+};
+void loadAgentAvailability().then(correctPick);
+
+// AWAITED on the way out, not only on the way in (Codex review, round 1 — DISPUTED my rebuttal and
+// was right). Correcting on mount alone leaves a real interleaving: the fetch is in flight, the grid
+// is already interactive, and a user who opens this panel and clicks start before it settles places
+// a Claude cell on a machine with no Claude. Once the answer has landed this costs one microtask —
+// `loadAgentAvailability` returns an already-resolved promise — so the cell appears when it always
+// did; the wait only exists in the window that was the bug.
+const startWithAvailableAgent = async (dir: string | null) => {
+  await loadAgentAvailability();
+  correctPick();
+  emit("start", { dir, pick: pickedAgent.value, choice: launchChoice.value });
+};
 const launchChoice = ref<LaunchChoice | null>(null);
 
 const panel = ref<HTMLElement | null>(null);
@@ -130,7 +143,7 @@ onBeforeUnmount(() => {
       @update:dir="(value) => (dir = value)"
       @update:agent="(value) => (pickedAgent = value)"
       @update:choice="(value) => (launchChoice = value)"
-      @start="(value) => emit('start', { dir: value, pick: pickedAgent, choice: launchChoice })"
+      @start="(value) => void startWithAvailableAgent(value)"
       @resume="(value) => emit('resume', value)"
       @run="(value) => emit('run', value)"
       @launch="(value) => emit('launch', value)"

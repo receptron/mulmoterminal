@@ -14,3 +14,5 @@ export interface AgentRunProbe {
   runsOnPath: (name: string) => boolean;
 }
 export declare function canRun(bin: string, probe: AgentRunProbe, platform: NodeJS.Platform): boolean;
+export declare function isPlainCommandName(bin: string): boolean;
+export declare function couldBeABinary(bin: string): boolean;

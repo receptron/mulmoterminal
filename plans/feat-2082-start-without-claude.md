@@ -143,6 +143,50 @@ Verified across five cases end to end: a spaced `CLAUDE_BIN` is now counted, the
 cases are unchanged, and a file without the execute bit is refused on POSIX — which is the server's
 answer too.
 
+## What the Codex cross-review changed (round 1)
+
+Three findings, all real, and two of them exposed a further defect that the finding itself did not
+name.
+
+**A bare `<AGENT>_BIN` reached a shell.** `hasCommand` builds `execSync(\`${cmd} --version\`)`, and
+measured, `CODEX_BIN='echo hi; touch /tmp/x'` ran the `touch`. Codex called it arbitrary local
+execution from a hostile environment; **the premise is wrong and the finding is still right.** A
+repo-local `.env` does NOT reach this process — `bin/cli-args.js:431` hands it to the SERVER CHILD as
+`--env-file-if-exists` — so `<AGENT>_BIN` is the user's own shell and there is no privilege boundary
+to cross. What IS real is the wrong answer: `CODEX_BIN="my codex"` was split at the space and
+silently probed something else instead of being reported missing. A bare name must now match
+`/^[A-Za-z0-9_.+@-]+$/` before the shell is asked. Codex accepted the correction.
+
+**Relative overrides diverged, which is my earlier fix being half right.** `diagnosePathName` returns
+ok for a non-absolute path deliberately — it resolves against the PTY's cwd, not ours, so it cannot
+be answered from here — while the launcher probed its own cwd. Measured: `./claude`, `dir/claude`
+and `../bin/claude` were all server=true / launcher=false. Now mirrored.
+
+**And that fix opened a hole my own test caught, not Codex's.** Every one of Codex's injection
+examples contains a `/`, so with "relative ⇒ true" they became INSTALLED AGENTS: no execution, but
+the gate would pass on a machine with nothing on it — the one thing the gate exists to catch. The
+shortcut is now guarded by `couldBeABinary` (shell operators and control characters only; spaces,
+dots and separators stay legal because real paths have them). Codex agreed with where the line was
+drawn, and specifically that the launcher must NOT become stricter than the server, which would
+re-create the divergence in the other direction.
+
+**The async race — I declined half of it and was wrong.** Availability arrives over HTTP, and I
+argued the UI half was unreachable in practice and not worth blocking a control for. Codex DISPUTED
+it with the concrete interleaving (fetch in flight, grid interactive, panel opened and started), and
+the cost argument did not survive the fix to `loadAgentAvailability` below: once the answer is
+cached, `await` is a single microtask, so the cell appears exactly when it always did and the wait
+exists only in the window that was the bug. Both launch paths now await.
+
+**The suite then caught a third defect in those fixes: `loadAgentAvailability` was not "once per
+page", and its comment said it was.** `inFlight` is cleared when the request settles, so every
+`startCollectionChat` would have re-fetched `/api/agents`. It now keeps a `loaded` flag, set on
+success only — the shape `useLaunchOptions` already had, for the reason it already documented: a
+FAILED fetch must not count, or one lost race with a starting server freezes the answer at "nothing
+known" for the rest of the session.
+
+Break-verified: removing the `await` in `startCollectionChat` reddens the new race spec, which
+asserts the ORDER (`/api/agents` settles before the spawn goes out) rather than just the outcome.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

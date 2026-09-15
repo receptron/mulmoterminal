@@ -37,8 +37,11 @@ describe("startCollectionChat", () => {
 
     await startCollectionChat("fix my records", { hidden: false });
 
-    expect(fetchFn).toHaveBeenCalledOnce();
-    const [url, init] = fetchFn.mock.calls[0];
+    // Found by URL rather than taken from index 0: since #2082 this path first settles
+    // `/api/agents`, so that the agent it spawns with is one this machine can actually run.
+    const spawnCalls = fetchFn.mock.calls.filter(([called]) => called === "/api/plugin/spawnBackgroundChat");
+    expect(spawnCalls).toHaveLength(1);
+    const [url, init] = spawnCalls[0];
     expect(url).toBe("/api/plugin/spawnBackgroundChat");
     expect(init?.method).toBe("POST");
     expect(JSON.parse(String(init?.body))).toEqual({ message: "fix my records", draft: false, agent: "claude", project: null, collection: null });

@@ -9,6 +9,8 @@
 // rather than by the type's own order — the point of the list is to help someone install their
 // first agent. Nothing decides behaviour from the position.
 
+import path from "node:path";
+
 /** @typedef {{ agent: string, cmd: string, env: string, hint: string }} AgentCommand */
 
 /** @type {readonly AgentCommand[]} */
@@ -43,24 +45,56 @@ export const agentBin = ({ cmd, env: name }, env) => env[name] || cmd;
  */
 export const namesAPath = (bin) => bin.includes("/") || bin.includes("\\");
 
+/** Could this be a command NAME at all? Letters, digits, and the punctuation real command names
+ *  use — `cursor-agent`, `claude.cmd`, `node_modules`-style underscores.
+ *
+ *  It exists because the PATH probe runs `<name> --version` THROUGH A SHELL, which a bare name
+ *  from `<AGENT>_BIN` now reaches. Measured: `CODEX_BIN='echo hi; touch /tmp/x'` runs the `touch`.
+ *  That is not a privilege boundary — the variable is the user's own environment, and a repo-local
+ *  `.env` does NOT reach this process (it is handed to the SERVER child as `--env-file-if-exists`,
+ *  bin/cli-args.js) — but it is still the wrong answer to the wrong question: a value that cannot
+ *  be a command name should be reported MISSING, not executed as a command line. The same guard
+ *  fixes the ordinary case that has nothing to do with hostility: `CODEX_BIN="my codex"` was split
+ *  at the space and silently probed something else.
+ *
+ * @param {string} bin
+ * @returns {boolean}
+ */
+export const isPlainCommandName = (bin) => /^[A-Za-z0-9_.+@-]+$/.test(bin);
+
+/** Could this be a BINARY at all — a name or a path — rather than a fragment of a command line?
+ *
+ *  It guards the branch below that answers TRUE without checking anything: a relative path cannot be
+ *  resolved from this process, so "I cannot tell" is the honest answer for `./claude`. It is NOT the
+ *  honest answer for `echo hi; touch /tmp/x`, which also contains a separator and would otherwise be
+ *  counted as an installed agent — letting the gate pass on a machine with nothing on it, which is
+ *  the one thing the gate exists to catch.
+ *
+ *  Shell operators and control characters only. Spaces, dots and separators are ordinary in real
+ *  paths (`/Applications/My Tools/claude`) and must stay allowed.
+ *
+ * @param {string} bin
+ * @returns {boolean}
+ */
+export const couldBeABinary = (bin) => bin !== "" && !/[;&|<>$`\n\r\0]/.test(bin);
+
 /** Whether a resolved command can be started — asked the way the SERVER asks it, which is the
- *  whole point of this function existing.
+ *  whole point of this function existing. Three branches, and each one was paid for:
  *
- *  A NAME is looked up by running it. A PATH IS NOT, and that is a bug this file was written with:
- *  the launcher's `hasCommand` builds a SHELL STRING, so `CLAUDE_BIN="/Applications/My
- *  Tools/claude"` was split at the space and reported missing — the app refusing to start for
- *  someone who has Claude Code installed, which is the exact complaint #2082 is about, re-created
- *  through a different door. The server meanwhile answers `true` for that same path, so the two
- *  disagreed: a launcher that refuses what the server would happily spawn is worse than the gate
- *  it replaced.
+ *  A NAME goes through the shell, because `npm install -g` on Windows produces `codex.cmd` and
+ *  CreateProcess cannot run one without a shell. It must look like a name first (above).
  *
- *  A path is therefore asked of the FILESYSTEM, mirroring `diagnosePathName`: it must be a file,
- *  and on POSIX it must be executable. Windows has no execute bit — executability there is the
- *  extension — so existing is the whole question, and asking for a bit that does not exist would
- *  refuse every Windows install.
+ *  A RELATIVE path answers TRUE without being probed, mirroring `diagnosePathName`: it resolves
+ *  against the PTY's cwd, not this process's, so it cannot be answered from here at all. Probing it
+ *  here made the launcher refuse `CLAUDE_BIN=./claude` that the server deliberately treats as
+ *  spawnable (Codex review, round 1 — reproduced: server true, launcher false for `./claude`,
+ *  `dir/claude` and `../bin/claude`). `couldBeABinary` is what keeps that shortcut from swallowing a
+ *  command-line fragment, which also contains separators and would otherwise be counted as an agent.
  *
- *  A bare name still goes through the shell, deliberately: `npm install -g` on Windows produces
- *  `codex.cmd`, which CreateProcess cannot run without one.
+ *  An ABSOLUTE path is asked of the filesystem: a file, and on POSIX an executable one. Windows has
+ *  no execute bit — executability there is the extension — so existing is the whole question, and
+ *  asking for a bit that does not exist would refuse every Windows install. Asking the SHELL
+ *  instead was the original bug: `CLAUDE_BIN="/Applications/My Tools/claude"` split at the space.
  *
  * @param {string} bin
  * @param {{ isFile: (p: string) => boolean, isExecutable: (p: string) => boolean, runsOnPath: (name: string) => boolean }} probe
@@ -68,7 +102,10 @@ export const namesAPath = (bin) => bin.includes("/") || bin.includes("\\");
  * @returns {boolean}
  */
 export function canRun(bin, probe, platform) {
-  if (!namesAPath(bin)) return probe.runsOnPath(bin);
+  if (!couldBeABinary(bin)) return false;
+  if (!namesAPath(bin)) return isPlainCommandName(bin) && probe.runsOnPath(bin);
+  const rules = platform === "win32" ? path.win32 : path.posix;
+  if (!rules.isAbsolute(bin)) return true;
   if (!probe.isFile(bin)) return false;
   return platform === "win32" || probe.isExecutable(bin);
 }
