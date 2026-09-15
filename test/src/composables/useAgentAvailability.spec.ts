@@ -16,37 +16,50 @@ const CODEX_ONLY: AgentAvailability[] = [
 
 describe("agentCorrection", () => {
   it("moves an untouched claude off a machine that has no claude", () => {
-    expect(agentCorrection("claude", "claude", CODEX_ONLY)).toBe("codex");
+    expect(agentCorrection("claude", "claude", CODEX_ONLY, false)).toBe("codex");
   });
 
   // The user opened the picker and chose something while the answer was still in the air. Whatever
   // they chose, it is theirs — including an agent they are in the middle of installing, which is a
   // real thing to want and exactly when this race happens.
   it("refuses to move a value the user has already changed", () => {
-    expect(agentCorrection("cursor", "claude", CODEX_ONLY)).toBeNull();
+    expect(agentCorrection("cursor", "claude", CODEX_ONLY, false)).toBeNull();
   });
 
   it("refuses to move an agent that is installed", () => {
-    expect(agentCorrection("claude", "claude", [{ agent: "claude", installed: true }])).toBeNull();
+    expect(agentCorrection("claude", "claude", [{ agent: "claude", installed: true }], false)).toBeNull();
   });
 
   // Silence is not absence. A host too old to serve the route, or a fetch that failed, answers
   // nothing — and nothing must change, which is what every release before this one did.
   it("refuses to move anything when availability is unknown", () => {
-    expect(agentCorrection("claude", "claude", [])).toBeNull();
+    expect(agentCorrection("claude", "claude", [], false)).toBeNull();
   });
 
   // A machine with no agent at all: the launcher refuses to start, and if this is somehow reached
   // there is nothing better to offer, so the value stays rather than being rewritten to another
   // agent that is equally absent.
   it("refuses to move when nothing at all is installed", () => {
-    expect(agentCorrection("claude", "claude", [{ agent: "claude", installed: false }])).toBeNull();
+    expect(agentCorrection("claude", "claude", [{ agent: "claude", installed: false }], false)).toBeNull();
   });
 
   // `pickedAgent` may hold a shell or a custom agent id, which are not TerminalAgents at all. Those
   // are by definition not the untouched value, so they are left alone without any type gymnastics.
   it("leaves a value that is not an agent alone", () => {
-    expect(agentCorrection("shell", "claude", CODEX_ONLY)).toBeNull();
-    expect(agentCorrection("custom:ollama", "claude", CODEX_ONLY)).toBeNull();
+    expect(agentCorrection("shell", "claude", CODEX_ONLY, false)).toBeNull();
+    expect(agentCorrection("custom:ollama", "claude", CODEX_ONLY, false)).toBeNull();
+  });
+});
+
+// Codex round 8: the flag is not a nicety. Comparing VALUES said "untouched" for a user who picked
+// codex and changed back to claude while the answer was in flight — their claude is a choice and
+// reads identically to the default, and it was being overwritten.
+describe("a user who changed their mind and changed it back", () => {
+  it("is not corrected, even though the value looks like the default", () => {
+    expect(agentCorrection("claude", "claude", CODEX_ONLY, true)).toBeNull();
+  });
+
+  it("is still corrected when they have not touched it at all", () => {
+    expect(agentCorrection("claude", "claude", CODEX_ONLY, false)).toBe("codex");
   });
 });

@@ -56,8 +56,12 @@ const dir = ref(props.initialDir ?? props.defaultCwd ?? "");
 // user watches — `agentCorrection` answers null when there is nothing known or nothing to fix.
 const INITIAL_PICK = "claude";
 const pickedAgent = ref<AgentPick>(INITIAL_PICK);
+// Set by the picker, never by the correction below — the flag is what distinguishes "the user has
+// not spoken" from "the value happens to equal the default", and someone who picks codex and changes
+// back to claude has spoken (Codex review, round 8).
+const userPicked = ref(false);
 const correctPick = () => {
-  const next = agentCorrection(pickedAgent.value, INITIAL_PICK, agentAvailability.value);
+  const next = agentCorrection(pickedAgent.value, INITIAL_PICK, agentAvailability.value, userPicked.value);
   if (next !== null) pickedAgent.value = next;
 };
 void loadAgentAvailability().then(correctPick);
@@ -141,7 +145,12 @@ onBeforeUnmount(() => {
       :open-cwds="openCwds"
       :cancellable="true"
       @update:dir="(value) => (dir = value)"
-      @update:agent="(value) => (pickedAgent = value)"
+      @update:agent="
+        (value) => {
+          userPicked = true;
+          pickedAgent = value;
+        }
+      "
       @update:choice="(value) => (launchChoice = value)"
       @start="(value) => void startWithAvailableAgent(value)"
       @resume="(value) => emit('resume', value)"

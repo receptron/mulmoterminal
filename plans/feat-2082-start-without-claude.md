@@ -343,6 +343,32 @@ pushed head**. The change stays — rewriting in place is the right shape and no
 server's own answer — but it fixed nothing, and saying it fixed something would have put a false
 claim in the record.
 
+## Round 8 — two defects I introduced, and the second one broke a promise this file makes
+
+**The round-7 dequote was Windows semantics applied platformlessly.** `windowsSearchDirectories`
+strips a wrapping pair of quotes because Windows does; POSIX does not, and a directory may legally BE
+named with quotes there. So the fix removed a PATH entry the POSIX search would have used — new
+behaviour for every PTY spawn, not just for the gate. `isLauncherPathEntry`, `sanitizePathEntries`,
+`sanitizePtyEnv` and the launcher's mirror all take a platform now, defaulting to `process.platform`,
+and dequote only on win32.
+
+The equivalence pin had quietly stopped exercising the case it was added for: it ran on the runner's
+own platform, so on macOS the quoted entries were simply `false` on both sides. It now runs both
+platforms explicitly.
+
+**And `agentCorrection` did fight the user, in exactly the case this file said it would not.** It
+compared VALUES: someone who picked codex and changed back to claude while the answer was in flight
+looked identical to someone who had never touched it, and was overwritten. It takes a `touched` FLAG
+now, set by the picker and by a watcher on `launchAgent`, and cleared around the correction's own
+assignment so the correction does not mark itself.
+
+That one is worth stating plainly because the file's own comment claimed the property. A claim in a
+comment is not a test, and the thing that caught it was a reviewer asking what happens when the user
+changes their mind twice.
+
+Break-verified, each mutation asserted applied: platformless dequote reddens 6, no dequote at all 4,
+dequoting in the launcher only 4, ignoring the touched flag 1.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

@@ -286,8 +286,14 @@ describe("searchPathForProbe — the launcher looking where the spawn looks", ()
     '""',
   ];
 
-  it.each(ENTRIES)("agrees with the server's isLauncherPathEntry about %p", (entry) => {
-    expect(isRunScriptPathEntry(entry)).toBe(isLauncherPathEntry(entry));
+  // BOTH platforms explicitly, not whichever the runner is: since round 8 the rule is
+  // platform-conditional (Windows dequotes because its search does, POSIX does not), so a pin that
+  // only ran on the runner's own platform would stop exercising the case it was added for.
+  const PLATFORMS: NodeJS.Platform[] = ["win32", "linux"];
+  const PAIRS: [NodeJS.Platform, string][] = PLATFORMS.flatMap((platform) => ENTRIES.map((entry): [NodeJS.Platform, string] => [platform, entry]));
+
+  it.each(PAIRS)("agrees with the server's isLauncherPathEntry on %s about %p", (platform, entry) => {
+    expect(isRunScriptPathEntry(entry, platform)).toBe(isLauncherPathEntry(entry, platform));
   });
 
   // Joined PER DELIMITER: a `:`-joined PATH cannot carry `C:\\Windows`, because it splits at the
@@ -296,7 +302,9 @@ describe("searchPathForProbe — the launcher looking where the spawn looks", ()
     [":", ENTRIES.filter((entry) => !entry.includes(":"))],
     [";", ENTRIES.filter((entry) => !entry.includes(";"))],
   ])("drops the run-script entries and keeps the rest, in order (%s)", (delimiter, entries) => {
-    expect(searchPathForProbe(entries.join(delimiter), delimiter).split(delimiter)).toEqual(entries.filter((entry) => !isLauncherPathEntry(entry)));
+    expect(searchPathForProbe(entries.join(delimiter), delimiter, "linux").split(delimiter)).toEqual(
+      entries.filter((entry) => !isLauncherPathEntry(entry, "linux")),
+    );
   });
 
   it("answers an empty PATH for an absent one rather than throwing", () => {
@@ -337,7 +345,8 @@ describe("probeEnvFrom — the environment the probe runs in", () => {
   // rest are true of it. Only the PATH decides what is FOUND, and that is what has to agree.
   it("agrees with the server about what a PATH search will find", () => {
     const env = { PATH: DIRTY };
-    expect(probeEnvFrom(env, ":").PATH).toBe(sanitizePtyEnv(env, ":").PATH);
+    expect(probeEnvFrom(env, ":", "linux").PATH).toBe(sanitizePtyEnv(env, ":", "linux").PATH);
+    expect(probeEnvFrom(env, ":", "win32").PATH).toBe(sanitizePtyEnv(env, ":", "win32").PATH);
   });
 
   it("answers an env with no PATH at all without inventing one", () => {

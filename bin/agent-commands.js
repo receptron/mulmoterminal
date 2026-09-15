@@ -53,12 +53,10 @@ const YARN_SHIM_DIR = /^yarn--\d/;
  * @param {string} entry
  * @returns {boolean}
  */
-export function isRunScriptPathEntry(entry) {
-  // Dequoted first, because the search does — see `isLauncherPathEntry`, which this mirrors.
-  const segments = entry
-    .replace(/^"(.*)"$/, "$1")
-    .split(/[\\/]/)
-    .filter((segment) => segment !== "");
+export function isRunScriptPathEntry(entry, platform = process.platform) {
+  // Dequoted on WINDOWS only, because that is where the search dequotes — see `isLauncherPathEntry`,
+  // which this mirrors. On POSIX a quote is part of the directory's name.
+  const segments = (platform === "win32" ? entry.replace(/^"(.*)"$/, "$1") : entry).split(/[\\/]/).filter((segment) => segment !== "");
   const last = segments[segments.length - 1];
   if (last === undefined) return false;
   const parent = segments[segments.length - 2];
@@ -81,10 +79,10 @@ export function isRunScriptPathEntry(entry) {
  * @param {string} delimiter
  * @returns {string}
  */
-export const searchPathForProbe = (pathValue, delimiter) =>
+export const searchPathForProbe = (pathValue, delimiter, platform = process.platform) =>
   (pathValue ?? "")
     .split(delimiter)
-    .filter((entry) => !isRunScriptPathEntry(entry))
+    .filter((entry) => !isRunScriptPathEntry(entry, platform))
     .join(delimiter);
 
 /** The environment an agent probe runs in: every PATH variable rewritten to what the SPAWN will
@@ -100,10 +98,10 @@ export const searchPathForProbe = (pathValue, delimiter) =>
  * @param {string} delimiter
  * @returns {NodeJS.ProcessEnv}
  */
-export function probeEnvFrom(env, delimiter) {
+export function probeEnvFrom(env, delimiter, platform = process.platform) {
   const out = {};
   for (const [name, value] of Object.entries(env)) {
-    out[name] = name.toLowerCase() === "path" && value !== undefined ? searchPathForProbe(value, delimiter) : value;
+    out[name] = name.toLowerCase() === "path" && value !== undefined ? searchPathForProbe(value, delimiter, platform) : value;
   }
   return out;
 }

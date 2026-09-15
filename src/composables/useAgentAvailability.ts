@@ -52,11 +52,15 @@ export function loadAgentAvailability(): Promise<void> {
 /** What an agent-holding value should BECOME once availability is known, or null to leave it alone.
  *
  *  Takes and answers plain values rather than the ref, because the two callers hold different types
- *  — `launchAgent` is a TerminalAgent, `pickedAgent` may also be a shell or a custom agent — and the
- *  decision is the same for both: only a value still equal to what it was initialised with, and only
- *  when that value is known to be missing, may move. */
-export function agentCorrection(current: string, untouched: TerminalAgent, availability: readonly AgentAvailability[]): TerminalAgent | null {
-  if (current !== untouched) return null;
+ *  — `launchAgent` is a TerminalAgent, `pickedAgent` may also be a shell or a custom agent.
+ *
+ *  `touched` is a FLAG and not a value comparison, which is the whole difference between "the user
+ *  has not spoken" and "the value happens to look untouched". Comparing values overwrote a user who
+ *  picked codex and changed back to claude while the answer was in flight: their claude is a choice
+ *  and reads identically to the default (Codex review, round 8). The caller sets the flag on any
+ *  change it did not make itself. */
+export function agentCorrection(current: string, untouched: TerminalAgent, availability: readonly AgentAvailability[], touched: boolean): TerminalAgent | null {
+  if (touched || current !== untouched) return null;
   const next = offerableAgent(untouched, availability);
   return next === untouched ? null : next;
 }

@@ -226,3 +226,36 @@ describe("inheritedPtyEnv", () => {
     expect(inheritedPtyEnv({ PATH: "/usr/bin", ...locale }, "linux", ":").LANG).toBe(locale.LANG);
   });
 });
+
+// Codex round 8. The dequote added in round 7 is WINDOWS semantics — `windowsSearchDirectories`
+// strips a wrapping pair of quotes before looking inside — and applying it platformlessly removed a
+// POSIX PATH entry the search would have used, because on POSIX a quote is part of the name.
+describe("quoting is a Windows idea, and the rule follows the search", () => {
+  const QUOTED_RUN_SCRIPT = '"/x/node_modules/.bin"';
+  const QUOTED_WINDOWS = '"C:\\p\\node_modules\\.bin"';
+
+  it("drops a quoted run-script entry on Windows, where the search dequotes", () => {
+    expect(isLauncherPathEntry(QUOTED_WINDOWS, "win32")).toBe(true);
+    expect(isLauncherPathEntry(QUOTED_RUN_SCRIPT, "win32")).toBe(true);
+  });
+
+  // A directory really named `"/x/node_modules/.bin"`, quotes included, is a directory execvp will
+  // search. Stripping it would lose a PATH entry the user has.
+  it("keeps a quoted entry on POSIX, where a quote is part of the name", () => {
+    expect(isLauncherPathEntry(QUOTED_RUN_SCRIPT, "linux")).toBe(false);
+    expect(isLauncherPathEntry(QUOTED_RUN_SCRIPT, "darwin")).toBe(false);
+  });
+
+  it("is unaffected for an unquoted entry, on either platform", () => {
+    ["win32", "linux"].forEach((platform) => {
+      expect(isLauncherPathEntry("/x/node_modules/.bin", platform as NodeJS.Platform)).toBe(true);
+      expect(isLauncherPathEntry("/usr/bin", platform as NodeJS.Platform)).toBe(false);
+    });
+  });
+
+  it("carries the platform through sanitizePtyEnv", () => {
+    const env = { PATH: ["/usr/bin", QUOTED_RUN_SCRIPT].join(":") };
+    expect(sanitizePtyEnv(env, ":", "linux").PATH).toBe(["/usr/bin", QUOTED_RUN_SCRIPT].join(":"));
+    expect(sanitizePtyEnv(env, ":", "win32").PATH).toBe("/usr/bin");
+  });
+});

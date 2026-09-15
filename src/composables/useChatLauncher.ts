@@ -46,9 +46,18 @@ watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 // already exists, so the correction happens here rather than in the initialiser; it moves the value
 // only while it is still the remembered one, so a deliberate pick made in the meantime survives.
 // The correction then persists like any other choice: the remembered agent becomes one that runs.
+// Set by anyone who writes `launchAgent` before the answer lands — the dropdown in the collection
+// browser, Settings — and NOT by the correction itself, which is why it is cleared around the
+// assignment. Comparing values instead would overwrite a user who picked codex and changed back to
+// claude, whose claude is a choice that reads identically to the default (Codex review, round 8).
+let launchAgentTouched = false;
+watch(launchAgent, () => (launchAgentTouched = true));
+
 void loadAgentAvailability().then(() => {
-  const next = agentCorrection(launchAgent.value, initialLaunchAgent, agentAvailability.value);
-  if (next !== null) launchAgent.value = next;
+  const next = agentCorrection(launchAgent.value, initialLaunchAgent, agentAvailability.value, launchAgentTouched);
+  if (next === null) return;
+  launchAgent.value = next;
+  launchAgentTouched = false;
 });
 
 /** A session this module started. The agent travels WITH the id because a spawn is not always
