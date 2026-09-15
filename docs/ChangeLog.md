@@ -10,7 +10,7 @@ Entries here are folded into the next release's heading when it ships.
 
 ### `manageShapeScript` asks for the gallery's CC BY 4.0 agreement — `@mulmoclaude/shapescript-plugin@6.0.0`
 
-- **[#PR](https://github.com/receptron/mulmoterminal/pull/PR)** — a public model in the Shapes
+- **[#2079](https://github.com/receptron/mulmoterminal/pull/2079)** — a public model in the Shapes
   gallery on mulmoserver is licensed under CC BY 4.0
   ([receptron/mulmoserver#269](https://github.com/receptron/mulmoserver/pull/269)), and the tool
   now asks the way the gallery's own editor does: `publish` of a public post, an `update` that makes
