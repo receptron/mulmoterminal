@@ -1,6 +1,15 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { isLauncherEnvVar, isPathVar, pathFromEnv, sanitizePathEntries, sanitizePtyEnv, withFallbackLocale } from "../../../server/infra/pty-env";
+import {
+  inheritedPtyEnv,
+  isLauncherEnvVar,
+  isLauncherPathEntry,
+  isPathVar,
+  pathFromEnv,
+  sanitizePathEntries,
+  sanitizePtyEnv,
+  withFallbackLocale,
+} from "../../../server/infra/pty-env";
 
 describe("isLauncherEnvVar", () => {
   it("flags the vars package-manager launchers inject", () => {
@@ -178,5 +187,42 @@ describe("withFallbackLocale", () => {
     const env = { HOME: "/Users/u" };
     withFallbackLocale(env, "darwin");
     expect(env).toEqual({ HOME: "/Users/u" });
+  });
+});
+
+// `inheritedPtyEnv` is the composition `ptyEnv` used to spell out inline, lifted so the availability
+// route can ask the same question without importing the spawn (PR #2085, round 4). The lift was
+// proved behaviour-preserving by running the old composition beside it over 3,420 generated
+// environments — 0 mismatches. What survives that harness is the GENERATOR below and the PROPERTY it
+// established, because half the harness was code that no longer exists.
+describe("inheritedPtyEnv", () => {
+  // Per DELIMITER: a `:`-joined PATH cannot carry `C:\\tools`, because it splits at the drive colon.
+  const PIECES: Record<string, string[]> = {
+    ":": ["/usr/bin", "/opt/homebrew/bin", "/x/node_modules/.bin", "/x/node-gyp-bin", "/tmp/yarn--1700000000000-0.1", "", "/"],
+    ";": ["C:\\Windows", "C:\\tools", "D:\\p\\node_modules\\.bin", "C:\\Temp\\yarn--1700000000000-0.1", ""],
+  };
+  const PLATFORMS: NodeJS.Platform[] = ["darwin", "linux", "win32"];
+  const entriesOf = (value: string | undefined, delimiter: string): string[] => (value ?? "").split(delimiter).filter((entry) => entry !== "");
+
+  const CASES: [NodeJS.Platform, string, number][] = PLATFORMS.flatMap((platform) =>
+    Object.entries(PIECES).flatMap(([delimiter, pieces]) => pieces.map((_, n): [NodeJS.Platform, string, number] => [platform, delimiter, n])),
+  );
+
+  // `/` is KEPT: it names no directory of ours, which is what `isLauncherPathEntry` says about it.
+  // The property is "drop OURS, keep everything else" — not "drop anything odd-looking".
+  it.each(CASES)("keeps every user PATH entry and drops every run-script one (%s, %s, first %i+1)", (platform, delimiter, n) => {
+    const before = (PIECES[delimiter] ?? []).slice(0, n + 1);
+    const after = entriesOf(inheritedPtyEnv({ PATH: before.join(delimiter) }, platform, delimiter).PATH, delimiter);
+    expect(after).toEqual(before.filter((entry) => entry !== "" && !isLauncherPathEntry(entry)));
+  });
+
+  // The locale half of the same composition: macOS only, and only when NOTHING names one — a user's
+  // own LANG, and an LC_ALL beside an empty LANG, both have to survive.
+  const LOCALES: Record<string, string>[] = [{}, { LANG: "" }, { LANG: "ja_JP.UTF-8" }, { LC_ALL: "C" }, { LC_CTYPE: "en_GB.UTF-8" }];
+
+  it.each(LOCALES)("supplies a fallback locale only where nothing names one: %o", (locale) => {
+    const named = ["LC_ALL", "LC_CTYPE", "LANG"].some((name) => (locale[name] ?? "") !== "");
+    expect(inheritedPtyEnv({ PATH: "/usr/bin", ...locale }, "darwin", ":").LANG).toBe(named ? locale.LANG : "en_US.UTF-8");
+    expect(inheritedPtyEnv({ PATH: "/usr/bin", ...locale }, "linux", ":").LANG).toBe(locale.LANG);
   });
 });

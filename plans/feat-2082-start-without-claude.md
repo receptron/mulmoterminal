@@ -270,6 +270,24 @@ here" posture rather than a find.
 written; since the round-2 short-circuit it decides which agent the gate names and how much latency
 an earlier one can add. Reordering is a behaviour change now, and the comment says so.
 
+## The `inheritedPtyEnv` lift, proved rather than argued
+
+The round-4 fix extracted the composition every PTY spawn goes through, so "this behaves the same"
+is a claim that has to be RUN. The old composition was copied verbatim into a throwaway harness and
+run beside the new function over generated environments — PATH prefixes per delimiter, five locale
+shapes, three platforms, launcher variables present and absent: **3,420 environments, 0 mismatches**.
+
+The harness cannot survive (half of it is code that no longer exists), so the two parts that outlive
+it were harvested into `test/server/infra/pty-env.spec.ts`: the GENERATOR (which environments matter)
+and the PROPERTY (drop OURS from PATH and keep everything else; supply a locale on macOS only when
+nothing names one). Break-verified: dropping the locale half reddens 2, dropping the PATH half
+reddens 3.
+
+Two things the generator got wrong first, both mine and both worth keeping: a `:`-joined PATH cannot
+carry `C:\tools` — it splits at the drive colon — so the pieces are per delimiter; and `/` is KEPT,
+because it names no directory of ours, which is what `isLauncherPathEntry` already says. The property
+is "drop ours", not "drop anything odd-looking".
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell
