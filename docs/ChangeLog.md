@@ -10,8 +10,8 @@ Entries here are folded into the next release's heading when it ships.
 
 ### The ShapeScript view header stacks, and the three Download buttons become one menu — `@mulmoclaude/shapescript-plugin@6.1.0`
 
-- In a narrow pane the `presentShapeScript` header put the title and six buttons on one line: a
-  CJK title, which has no break opportunity, was squeezed into a one-glyph column and the buttons
+- **[#2087](https://github.com/receptron/mulmoterminal/pull/2087)** — in a narrow pane the
+  `presentShapeScript` header put the title and six buttons on one line: a CJK title, which has no break opportunity, was squeezed into a one-glyph column and the buttons
   ran off the right edge. The title now sits on its own line (one line, ellipsised) with the
   toolbar under it, sized to MulmoClaude's chrome-row standard and wrapping rather than
   overflowing. **Download USDZ / GLB / STL** collapse into one **Download** menu whose items carry
