@@ -94,3 +94,23 @@ describe("a panel start before availability is known", () => {
     expect(emitted?.[0]?.[0]).toMatchObject({ dir: "/home/me/other", pick: "codex" });
   });
 });
+
+// Codex round 8 gave the touched flag; this pins the ordering it depends on. A DEFAULT Vue watcher
+// runs on the next microtask, so a user who changes back to claude while the answer is in flight
+// could have the flag still false against a value that equals the default — the exact case the flag
+// exists for. `flush: "sync"` is what closes it.
+describe("a user who changes their mind twice while the answer is in flight", () => {
+  it("keeps the agent they chose, even when it equals the default", async () => {
+    vi.resetModules();
+    slowAvailabilityFetch();
+    localStorage.setItem("mt-launch-agent", "claude");
+
+    const { launchAgent } = await import("../../../src/composables/useChatLauncher");
+    // Away and back, with no awaits between: this is what a default (microtask) watcher misses.
+    launchAgent.value = "codex";
+    launchAgent.value = "claude";
+
+    await new Promise((resolve) => setTimeout(resolve, AVAILABILITY_DELAY_MS * 6));
+    expect(launchAgent.value, "their claude is a choice, not the default").toBe("claude");
+  });
+});

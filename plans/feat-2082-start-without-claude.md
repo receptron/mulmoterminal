@@ -369,6 +369,22 @@ changes their mind twice.
 Break-verified, each mutation asserted applied: platformless dequote reddens 6, no dequote at all 4,
 dequoting in the launcher only 4, ignoring the touched flag 1.
 
+## The touched flag needed a SYNCHRONOUS watcher, which I found by attacking my own fix
+
+Found while writing round 9's prompt — I asked Codex to attack the flag's clearing and then attacked
+it myself first. A default Vue watcher runs on the next microtask, so:
+
+    launchAgent.value = "codex"      // watcher scheduled, not run
+    launchAgent.value = "claude"     // watcher scheduled, not run
+    …availability lands here…        // flag still false, value equals the default → CORRECTED
+
+which is precisely the case the flag was added for in round 8. `flush: "sync"` closes it, and the
+callback is a single assignment so running it synchronously costs nothing.
+
+Break-verified and NOT vacuous: removing `flush: "sync"` reddens the new spec, and so does ignoring
+the flag. The spec changes the value away and back with no awaits in between, which is what a
+microtask watcher misses.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

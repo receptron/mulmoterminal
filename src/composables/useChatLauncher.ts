@@ -51,12 +51,18 @@ watch(launchAgent, (agent) => localStorage.setItem(LAUNCH_AGENT_KEY, agent));
 // assignment. Comparing values instead would overwrite a user who picked codex and changed back to
 // claude, whose claude is a choice that reads identically to the default (Codex review, round 8).
 let launchAgentTouched = false;
-watch(launchAgent, () => (launchAgentTouched = true));
+// `flush: "sync"`, and that is the whole point of it: a default watcher runs on the next microtask,
+// so a user who changes back to claude and an answer that lands before the watcher flushes leaves
+// the flag false against a value that equals the default — the exact case the flag exists for. The
+// callback is one assignment, so running it synchronously costs nothing.
+watch(launchAgent, () => (launchAgentTouched = true), { flush: "sync" });
 
 void loadAgentAvailability().then(() => {
   const next = agentCorrection(launchAgent.value, initialLaunchAgent, agentAvailability.value, launchAgentTouched);
   if (next === null) return;
   launchAgent.value = next;
+  // Cleared AFTER the write, because the sync watcher has already set it by now: the correction must
+  // not mark itself as a user's choice, or a second one would refuse to run.
   launchAgentTouched = false;
 });
 
