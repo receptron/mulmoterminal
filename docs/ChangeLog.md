@@ -8,6 +8,20 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### The ShapeScript view header stacks, and the three Download buttons become one menu — `@mulmoclaude/shapescript-plugin@6.1.0`
+
+- In a narrow pane the `presentShapeScript` header put the title and six buttons on one line: a
+  CJK title, which has no break opportunity, was squeezed into a one-glyph column and the buttons
+  ran off the right edge. The title now sits on its own line (one line, ellipsised) with the
+  toolbar under it, sized to MulmoClaude's chrome-row standard and wrapping rather than
+  overflowing. **Download USDZ / GLB / STL** collapse into one **Download** menu whose items carry
+  a hint of what each format is for (AR Quick Look, web and game engines, 3D printing). The menu
+  is a plain disclosure: Escape and a picked format close it and return focus to the trigger, an
+  outside click closes it — tested with `composedPath()`, so it works inside this host's
+  shadow-root PluginFrame — and it stays inside the pane at any width
+  ([receptron/mulmoclaude#3187](https://github.com/receptron/mulmoclaude/pull/3187)). Host code is
+  unchanged; the bump and the refreshed lockfile are what deliver it.
+
 ## mulmoterminal@4.25.0 — 2026-09-15
 
 > **Setup guide:** [4.25.0 — Start without Claude Code, and read a codex, cursor or copilot conversation on the phone](https://receptron.github.io/mulmoterminal/guide/en/v4.25.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v4.25.0.html))
