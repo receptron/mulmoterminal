@@ -117,6 +117,32 @@ was developed on, so that is the part a reviewer should look at rather than take
 seven. "at least **one** agent CLI" tripped it. The README was reworded rather than the guard
 loosened — the sentence states a requirement and does not need a number at all.
 
+## The launcher has to agree with the SERVER, not merely have an opinion
+
+Found during the cross-review setup, before round 1, and reproduced rather than reasoned about:
+
+```
+CLAUDE_BIN="/Applications/My Tools/claude"     (a real, working claude)
+  launcher  hasCommand → false     the app refuses to start
+  server    hasBinary  → true      it would spawn it without complaint
+```
+
+`hasCommand` builds a SHELL STRING — `execSync(\`${cmd} --version\`)` — so a path with a space in
+it is split at the space and reported missing. That is new in this change: before it, `hasCommand`
+only ever saw literal names from `PATH_TOOLS`. And it re-creates #2082's own complaint through a
+different door — the app refusing to start for someone who has the agent installed — on paths that
+are entirely ordinary (`C:\Program Files\…`, `/Applications/…`).
+
+So the launcher now asks the question the way the server asks it (`namesAPath` → `diagnosePathName`,
+server/infra/): a bare NAME goes through the shell, because `npm install -g` on Windows produces
+`codex.cmd` which CreateProcess cannot run without one; a PATH is asked of the filesystem — it must
+be a file, and on POSIX it must be executable. Windows has no execute bit, so existing is the whole
+question there.
+
+Verified across five cases end to end: a spaced `CLAUDE_BIN` is now counted, the three original
+cases are unchanged, and a file without the execute bit is refused on POSIX — which is the server's
+answer too.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

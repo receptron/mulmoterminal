@@ -35,10 +35,48 @@ export const AGENT_COMMANDS = [
  */
 export const agentBin = ({ cmd, env: name }, env) => env[name] || cmd;
 
+/** Does this command NAME A PATH, rather than a command to look up? The server's own rule
+ *  (`namesAPath`, server/infra/resolve-bin.ts): a separator anywhere in it.
+ *
+ * @param {string} bin
+ * @returns {boolean}
+ */
+export const namesAPath = (bin) => bin.includes("/") || bin.includes("\\");
+
+/** Whether a resolved command can be started — asked the way the SERVER asks it, which is the
+ *  whole point of this function existing.
+ *
+ *  A NAME is looked up by running it. A PATH IS NOT, and that is a bug this file was written with:
+ *  the launcher's `hasCommand` builds a SHELL STRING, so `CLAUDE_BIN="/Applications/My
+ *  Tools/claude"` was split at the space and reported missing — the app refusing to start for
+ *  someone who has Claude Code installed, which is the exact complaint #2082 is about, re-created
+ *  through a different door. The server meanwhile answers `true` for that same path, so the two
+ *  disagreed: a launcher that refuses what the server would happily spawn is worse than the gate
+ *  it replaced.
+ *
+ *  A path is therefore asked of the FILESYSTEM, mirroring `diagnosePathName`: it must be a file,
+ *  and on POSIX it must be executable. Windows has no execute bit — executability there is the
+ *  extension — so existing is the whole question, and asking for a bit that does not exist would
+ *  refuse every Windows install.
+ *
+ *  A bare name still goes through the shell, deliberately: `npm install -g` on Windows produces
+ *  `codex.cmd`, which CreateProcess cannot run without one.
+ *
+ * @param {string} bin
+ * @param {{ isFile: (p: string) => boolean, isExecutable: (p: string) => boolean, runsOnPath: (name: string) => boolean }} probe
+ * @param {NodeJS.Platform} platform
+ * @returns {boolean}
+ */
+export function canRun(bin, probe, platform) {
+  if (!namesAPath(bin)) return probe.runsOnPath(bin);
+  if (!probe.isFile(bin)) return false;
+  return platform === "win32" || probe.isExecutable(bin);
+}
+
 /** The agents whose command this machine can run.
  *
  *  `probe` is injected so the decision can be tested without seven real CLIs on the runner — the
- *  launcher passes its own `hasCommand`, which spawns `<bin> --version`.
+ *  launcher passes one built on `canRun`.
  *
  * @param {NodeJS.ProcessEnv} env
  * @param {(bin: string) => boolean} probe

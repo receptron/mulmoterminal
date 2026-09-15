@@ -6,7 +6,7 @@
 // runs the server via tsx. Mirrors the mulmoclaude launcher.
 
 import { execSync, spawn } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import { accessSync, constants, existsSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { release } from "node:os";
@@ -38,7 +38,7 @@ import {
 } from "./cli-args.js";
 import { liveInstances } from "./instances.js";
 import { setProcessTitle } from "./process-title.js";
-import { AGENT_COMMANDS, agentBin, installedAgents } from "./agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, installedAgents } from "./agent-commands.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PKG_DIR = join(__dirname, "..");
@@ -167,6 +167,35 @@ function toolCheckLine({ cmd, versionArg, required, why, hint }) {
   return `${head}\n      → ${hint}`;
 }
 
+// How the launcher asks whether an agent can be started, and it is deliberately NOT just
+// `hasCommand`: a `<AGENT>_BIN` that NAMES A PATH must be asked of the filesystem, because
+// `hasCommand` builds a shell string and a path with a space in it gets split. The server answers
+// that same path with `true`, so spawning it through the shell here made the two disagree in the
+// one direction that matters — refusing to start for someone whose agent is installed.
+const agentProbe = (bin) =>
+  canRun(
+    bin,
+    {
+      isFile: (candidate) => {
+        try {
+          return statSync(candidate).isFile();
+        } catch {
+          return false;
+        }
+      },
+      isExecutable: (candidate) => {
+        try {
+          accessSync(candidate, constants.X_OK);
+          return true;
+        } catch {
+          return false;
+        }
+      },
+      runsOnPath: (name) => hasCommand(name),
+    },
+    process.platform,
+  );
+
 // The startup gate is "at least one agent", not "Claude Code" (#2082). The server needs none of
 // them to start, and a machine running only Codex or GitHub Copilot CLI was being turned away at the
 // door. A missing one simply fails to start that CELL, with a message naming the binary and its
@@ -175,7 +204,7 @@ function toolCheckLine({ cmd, versionArg, required, why, hint }) {
 // Still a gate rather than nothing: with no agent at all there is nothing to launch, and a reason
 // beats an empty grid.
 function requireAnAgent() {
-  const agents = installedAgents(process.env, (bin) => hasCommand(bin));
+  const agents = installedAgents(process.env, agentProbe);
   if (agents.length > 0) {
     log(`Agent CLIs ✓  ${agents.map(({ agent }) => agent).join(" ")}`);
     return;
@@ -208,7 +237,7 @@ async function runInit(initArgs) {
 
   // Every agent, not just Claude Code (#2082): the app needs ONE of them, so reporting one by name
   // and the rest nowhere told a Codex user they were missing something they were not.
-  const agents = installedAgents(process.env, (bin) => hasCommand(bin));
+  const agents = installedAgents(process.env, agentProbe);
   AGENT_COMMANDS.forEach(({ agent, cmd, env, hint }) => {
     const found = agents.some((installed) => installed.agent === agent);
     const named = process.env[env] ? `${cmd} (${env})` : cmd;

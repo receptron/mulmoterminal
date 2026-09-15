@@ -7,7 +7,7 @@
 // nobody checks is how an eighth agent silently stops counting toward "is anything installed", so
 // the table is pinned here against both of the things it mirrors.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { AGENT_COMMANDS, agentBin, installedAgents } from "../../bin/agent-commands.js";
+import { AGENT_COMMANDS, agentBin, canRun, installedAgents, namesAPath } from "../../bin/agent-commands.js";
 import { TERMINAL_AGENTS } from "../../common/sessionAgent.js";
 import { claudeAdapter } from "../../server/agents/claude.js";
 import { codexAdapter } from "../../server/agents/codex.js";
@@ -96,5 +96,56 @@ describe("installedAgents", () => {
 
   it("answers every installed agent, not the first", () => {
     expect(installedAgents({}, probeFor("claude", "codex", "cursor-agent")).map(({ agent }) => agent)).toEqual(["claude", "codex", "cursor"]);
+  });
+});
+
+// The launcher must answer "can this be started" the SAME WAY the server does, and it did not:
+// `hasCommand` builds a shell string, so a `<AGENT>_BIN` with a space in it was split at the space
+// and reported missing — the app refusing to start for someone who HAS the agent, which is the
+// complaint #2082 exists to fix, re-created through a different door. The server answers `true` for
+// that same path (measured), so the two disagreed in the one direction that matters.
+describe("canRun — the launcher agreeing with the server", () => {
+  const SPACED = "/Applications/My Tools/claude";
+  const probe = (opts: { isFile?: boolean; isExecutable?: boolean; runsOnPath?: boolean } = {}) => ({
+    isFile: () => opts.isFile ?? false,
+    isExecutable: () => opts.isExecutable ?? false,
+    runsOnPath: () => opts.runsOnPath ?? false,
+  });
+
+  it("asks the FILESYSTEM about a path, so a space in it is not a word boundary", () => {
+    expect(canRun(SPACED, probe({ isFile: true, isExecutable: true }), "darwin")).toBe(true);
+  });
+
+  // The shell is what a bare NAME still needs: `npm install -g` on Windows produces `codex.cmd`,
+  // which CreateProcess cannot run without one.
+  it("asks PATH about a bare name, by running it", () => {
+    expect(canRun("codex", probe({ runsOnPath: true }), "darwin")).toBe(true);
+    expect(canRun("codex", probe({ isFile: true, isExecutable: true }), "darwin")).toBe(false);
+  });
+
+  it("does not count a path that is not a file", () => {
+    expect(canRun(SPACED, probe({ isExecutable: true }), "darwin")).toBe(false);
+  });
+
+  // Mirrors `diagnosePathName`: on POSIX a file that exists but cannot be run is not an agent, and
+  // saying so is the difference between "install it" and "chmod +x it".
+  it("requires the execute bit on POSIX", () => {
+    expect(canRun(SPACED, probe({ isFile: true }), "linux")).toBe(false);
+  });
+
+  // ...and must NOT require it on Windows, which has no such bit — executability there is the
+  // extension. Asking for it would refuse every Windows install.
+  it("does not require the execute bit on Windows", () => {
+    expect(canRun("C:\\Program Files\\claude\\claude.exe", probe({ isFile: true }), "win32")).toBe(true);
+  });
+});
+
+describe("namesAPath", () => {
+  it.each(["/opt/bin/claude", "./claude", "C:\\tools\\claude.exe", "dir/claude"])("%s names a path", (bin) => {
+    expect(namesAPath(bin)).toBe(true);
+  });
+
+  it.each(["claude", "cursor-agent", "agy"])("%s is a bare name", (bin) => {
+    expect(namesAPath(bin)).toBe(false);
   });
 });
