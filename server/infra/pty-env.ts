@@ -81,6 +81,19 @@ const LOCALE_NAMES = ["LC_ALL", "LC_CTYPE", "LANG"];
 // would be noisier than the empty environment they started from.
 const FALLBACK_LOCALE = "en_US.UTF-8";
 
+/** The environment a PTY inherits, before any per-session additions: the launcher variables
+ *  dropped, the run-script PATH injections stripped, a UTF-8 LANG supplied on macOS when nothing
+ *  names a locale.
+ *
+ *  Separate from `ptyEnv` so that a caller who needs only "the PATH the spawn will search" can have
+ *  it without importing the spawn — `server/config/agent-availability.ts` asks exactly that, and
+ *  importing pty-spawn for it broke every spec that mocks pty-spawn. The two must not drift: the
+ *  route's answer is a claim about what a spawn will find, and it is worth nothing if the two
+ *  environments differ (Codex review on PR #2085, round 4).
+ */
+export const inheritedPtyEnv = (env: NodeJS.ProcessEnv, platform: NodeJS.Platform, delimiter: string): NodeJS.ProcessEnv =>
+  withFallbackLocale(sanitizePtyEnv(env, delimiter), platform);
+
 // `env` with a UTF-8 LANG added when it names no locale at all (#1634).
 //
 // A process launched from a macOS GUI inherits launchd's environment, which carries no

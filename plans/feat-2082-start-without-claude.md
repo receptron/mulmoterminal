@@ -243,6 +243,33 @@ reddens two.
 34 seconds on a Windows runner, enough to cross the test timeout. Batched through one connection:
 458 ms. Not this PR's code, but this PR's branch cannot go green without it.
 
+## Round 4 — the route answered about the wrong environment
+
+`/api/agents` probed `process.env`, while the spawn's own preflight probes `ptyEnv()`. That is not a
+detail: `diagnoseBinary`'s docstring says so in as many words, and `sanitizePtyEnv` strips the
+run-script PATH injections — `node_modules/.bin`, npm's node-gyp-bin, yarn's shim dir — so under
+`yarn dev` the two genuinely disagree.
+
+Reproduced, after one failed attempt that reproduced nothing: the first try used `codex`, which is
+really installed on this machine, so stripping `node_modules/.bin` changed no answer. With a name
+this machine does not have, `process.env` says `true` and the spawn's env says `false`. The route
+would have advertised an agent the cell then refuses with `SpawnBinaryError` — and the launch form
+trusts this route specifically to avoid offering one.
+
+**The first fix was the wrong shape and the suite said so.** Importing `ptyEnv` from `pty-spawn`
+made `tool-group-reattach.spec.ts` fail to LOAD — it mocks that module, and the mock has no `ptyEnv`.
+A config module reaching into the spawn is the wrong direction. The shared base is now
+`inheritedPtyEnv` in `server/infra/pty-env.ts`, called by `ptyEnv` and by the availability probe, so
+there is one definition and the two cannot drift.
+
+And the test for it needed a second PATH entry, because an EMPTY path is degenerate: `diagnoseBinary`
+answers `ok` for a bare name when there is nowhere to look, which is the "cannot be answered from
+here" posture rather than a find.
+
+**The order comment was also false and is fixed.** `AGENT_COMMANDS` order decided nothing when it was
+written; since the round-2 short-circuit it decides which agent the gate names and how much latency
+an earlier one can add. Reordering is a behaviour change now, and the comment says so.
+
 ## Not in this PR
 
 - Telling the user, in the UI, WHICH agents are missing and how to install them. The per-cell

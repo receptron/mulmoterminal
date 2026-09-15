@@ -5,9 +5,13 @@
 // the launcher mirrors server/files/wsl.ts. A spec pins this table against both, so an eighth agent
 // is a red test rather than an agent that silently does not count.
 //
-// The ORDER is the order `init` reports them in, which is by how likely a reader is to have one
-// rather than by the type's own order — the point of the list is to help someone install their
-// first agent. Nothing decides behaviour from the position.
+// The ORDER is by how likely a reader is to have one rather than by the type's own order — the point
+// of the list is to help someone install their first agent, and it is the order `init` reports in.
+//
+// It DOES decide behaviour, since the round-2 short-circuit: `firstInstalledAgent` probes in this
+// order and stops, so the position decides which agent the startup gate names, and how much latency
+// an earlier one can add before a later installed agent is reached (bounded by the probe timeout).
+// Reordering is therefore a behaviour change, not a cosmetic one.
 
 import path from "node:path";
 

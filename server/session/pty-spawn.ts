@@ -6,7 +6,7 @@ import pty from "node-pty";
 import type { IPty } from "node-pty";
 import os from "node:os";
 import path from "node:path";
-import { sanitizePtyEnv, withFallbackLocale } from "../infra/pty-env.js";
+import { inheritedPtyEnv } from "../infra/pty-env.js";
 import { resolvePtyLaunchForEnv } from "../infra/resolve-bin.js";
 import { binaryProblemMessage, diagnoseBinary, type BinaryDiagnosis } from "../infra/has-binary.js";
 import { cwdProblemMessage, diagnoseSpawnCwd, type CwdDiagnosis } from "../infra/spawn-cwd.js";
@@ -35,7 +35,7 @@ export const TMUX_CLIENT_CWD = os.homedir();
 // On macOS a UTF-8 LANG is supplied when the environment names no locale at all (#1634) —
 // inside `withoutUnset`, so a caller asking for LANG to be gone still gets it gone.
 export function ptyEnv(unset: readonly string[] = [], extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  const inherited = withFallbackLocale(sanitizePtyEnv(process.env, path.delimiter), process.platform);
+  const inherited = inheritedPtyEnv(process.env, process.platform, path.delimiter);
   return { ...withoutUnset(inherited, unset), ...extra };
 }
 

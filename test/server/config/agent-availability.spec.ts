@@ -9,11 +9,12 @@
 // (`<AGENT>_BIN` is a start-up setting), so the decision is what gets tested, with the reading
 // supplied.
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { TERMINAL_AGENTS } from "../../../common/sessionAgent";
 import { agentAvailability, type AgentBins } from "../../../server/config/agent-availability";
+import { sanitizePtyEnv } from "../../../server/infra/pty-env";
 import { hasBinary, type BinaryProbe } from "../../../server/infra/has-binary";
 
 const binsWhere = (overrides: Partial<AgentBins> = {}): AgentBins => {
@@ -102,6 +103,37 @@ describe("the real filesystem, through the default probe", () => {
       const bins = binsWhere({ codex: runnable });
       expect(installedOf("codex", bins)).toBe(true);
       expect(installedOf("claude", bins)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// Codex review, round 4, reproduced before accepting. The route's answer is what the launch form
+// trusts to avoid OFFERING an agent that cannot run, so it has to be asked of the environment the
+// SPAWN gets — which is what `diagnoseBinary`'s own docstring demands. `sanitizePtyEnv` strips the
+// run-script PATH injections (`node_modules/.bin`, npm's node-gyp-bin, yarn's shim dir), so under
+// `yarn dev` the two genuinely disagree: measured, a `muse` in `node_modules/.bin` answered true to
+// `process.env` and false to the spawn's env, and the cell would then have refused with
+// SpawnBinaryError.
+describe("the environment the probe asks", () => {
+  it("does not see a binary the spawn's PATH will not see", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-agents-nm-"));
+    try {
+      const injected = path.join(dir, "node_modules", ".bin");
+      mkdirSync(injected, { recursive: true });
+      const bin = path.join(injected, "muse");
+      writeFileSync(bin, "#!/bin/sh\nexit 0\n");
+      chmodSync(bin, 0o755);
+      // A SECOND entry that survives sanitising, because an empty PATH is a degenerate case:
+      // `diagnoseBinary` answers `ok` for a bare name when there is nowhere to look, which is the
+      // "cannot be answered from here" posture and not a find. A real PATH always has other entries.
+      const alsoOnPath = path.join(dir, "elsewhere");
+      mkdirSync(alsoOnPath, { recursive: true });
+      const env = { PATH: [injected, alsoOnPath].join(path.delimiter) };
+      // The bare name, so the PATH decides — which is the only case the two environments can differ on.
+      expect(hasBinary("muse", env), "a run-script PATH entry does find it").toBe(true);
+      expect(hasBinary("muse", sanitizePtyEnv(env, path.delimiter)), "the spawn's PATH does not").toBe(false);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
