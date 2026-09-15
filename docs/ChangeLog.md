@@ -23,8 +23,7 @@ Entries here are folded into the next release's heading when it ships.
   adapter now stamps `licenseAcceptedAt` as a server time beside a grant on create and on the
   first-agreement update, drops it when the stored post is licensed already, and pins the published
   state in the update precondition so a concurrent unpublish cannot get a draft licensed — the
-  writer-contract change that made the plugin a major. `@mulmoclaude/core` moves to 4.9.4, the
-  peer the plugin declares.
+  writer-contract change that made the plugin a major.
 
 ## mulmoterminal@4.24.0 — 2026-09-15
 
