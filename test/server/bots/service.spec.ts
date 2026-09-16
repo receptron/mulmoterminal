@@ -164,6 +164,32 @@ describe("durable background Bots", () => {
     expect(s.service.list(s.owner)[0]?.botId).toBe(s.botId);
   });
 
+  it("continues waking other frontends when one notification send fails", async () => {
+    const s = setup();
+    const other = randomUUID();
+    for (const requester of [s.owner, other]) {
+      const request = s.service.enqueue(requester, s.botId, "task");
+      s.ready.add(s.sessionId);
+      await s.service.tick();
+      s.service.reply(s.sessionId, request.requestId, "done", "result");
+    }
+    s.ready.add(s.owner);
+    s.ready.add(other);
+    vi.mocked(s.runtime.send).mockRejectedValueOnce(new Error("missing acknowledgement"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await expect(s.service.tick()).resolves.toBeUndefined();
+      expect(s.runtime.send).toHaveBeenLastCalledWith(other, expect.stringContaining("readBotReplies"));
+      expect(new BotStore(s.file).state.replies.map(({ owner, notified }) => ({ owner, notified }))).toEqual([
+        { owner: s.owner, notified: false },
+        { owner: other, notified: true },
+      ]);
+      expect(s.service.read(s.owner, false)[0]?.text).toBe("done");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("reports missing replies and blocked turns instead of leaving the requester waiting", async () => {
     const s = setup();
     s.service.enqueue(s.owner, s.botId, "task");

@@ -76,6 +76,30 @@ function create() {
 }
 
 describe("Bot host transport", () => {
+  it("disables tools when recovery cannot persist state, preserving the saved Bots", async () => {
+    const bot = create();
+    vi.mocked(tmuxCaptureStyledPane).mockReturnValue(permissionScreen());
+    await vi.advanceTimersByTimeAsync(1600);
+    const file = path.join(dir, "bots", "34567", "state.json");
+    const before = fs.readFileSync(file, "utf8");
+    vi.clearAllTimers();
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const write = vi.spyOn(fs, "writeFileSync").mockImplementationOnce(() => {
+      throw new Error("disk unavailable");
+    });
+    try {
+      startBots(34567, spawn, vi.fn());
+      expect(error).toHaveBeenCalledWith(expect.stringContaining("initialization failed"), expect.any(Error));
+      expect(() => dispatchBotTool(owner, "manageBot", { action: "list" })).toThrow("service is not available");
+      expect(vi.getTimerCount()).toBe(0);
+      expect(fs.readFileSync(file, "utf8")).toBe(before);
+      expect(ptys.has(bot.id)).toBe(true);
+    } finally {
+      write.mockRestore();
+      error.mockRestore();
+    }
+  });
+
   it("spawns without a viewer and uses an MCP reply to start a frontend turn", async () => {
     const bot = create();
     expect(spawn).toHaveBeenCalledWith(bot.id, null, null, expect.objectContaining({ cwd: dir, botRole: "Find test gaps", attachGuiMcp: true }));

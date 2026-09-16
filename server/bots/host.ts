@@ -168,6 +168,7 @@ export function startBots(...args: Parameters<typeof initializeBots>): void {
   try {
     initializeBots(...args);
   } catch (error) {
+    service = undefined;
     console.error("[bots] initialization failed; Bot state was preserved", error);
   }
 }
