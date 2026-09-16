@@ -267,8 +267,10 @@ export class BotService {
         try {
           sent = await this.runtime.send(bot.sessionId, requestText(request));
         } catch {
+          const current = this.store.state.bots.find((item) => item.id === bot.id && item.alive);
+          if (!current?.requests.some((item) => item.id === request.id && item.state === "uncertain")) continue;
           this.prompts.blocked(
-            bot,
+            current,
             "Task delivery was not acknowledged and may have happened. The request is held as uncertain. Inspect the Bot; do not resend it automatically.",
           );
           continue;

@@ -217,6 +217,31 @@ describe("durable background Bots", () => {
     expect(restored.read(s.owner, false)[0]?.text).toBe("finished");
   });
 
+  it.each(["kill", "reply"])("does not create a stale delivery question after a concurrent %s", async (action) => {
+    const s = setup();
+    const request = s.service.enqueue(s.owner, s.botId, "do once");
+    let fail: ((error: Error) => void) | undefined;
+    const started = new Promise<void>((resolve) => {
+      vi.mocked(s.runtime.send).mockImplementationOnce(async () => {
+        resolve();
+        return new Promise<boolean>((_resolve, reject) => {
+          fail = reject;
+        });
+      });
+    });
+    s.ready.add(s.sessionId);
+    const tick = s.service.tick();
+    await started;
+    if (action === "kill") s.service.kill(randomUUID(), s.botId);
+    else s.service.reply(s.sessionId, request.requestId, "done", "result");
+    assert(fail);
+    fail(new Error("lost acknowledgement"));
+    await tick;
+    expect(new BotStore(s.file).state.prompts).toEqual([]);
+    expect(s.service.inspect(s.owner, s.botId).waitingPrompt).toBeNull();
+    expect(s.service.read(s.owner, false)).toEqual([expect.objectContaining({ requestId: request.requestId, kind: action === "kill" ? "error" : "result" })]);
+  });
+
   it("shares one Bot across terminals but sends each reply and wakeup only to its requester", async () => {
     const s = setup();
     const other = randomUUID();
