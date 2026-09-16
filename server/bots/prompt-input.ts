@@ -20,7 +20,8 @@ export async function answerChoice(terminal: PromptTerminal, prompt: BotPrompt, 
     const selected = prompt.options.findIndex((option) => option.id === screen.selected);
     if (selected < 0) return false;
     if (selected === target) {
-      // Capture is synchronous, so no host event can change the dialog between this check and Enter.
+      // No host callback can interleave here. The external CLI can still redraw;
+      // its terminal protocol offers no atomic compare-and-submit operation.
       terminal.write("\r");
       return true;
     }

@@ -155,10 +155,15 @@ export function dispatchBotTool(sessionId: string, name: string, args: unknown):
 
 export function handleBotHook(id: string, event: string, source?: unknown, message?: string): void {
   const bot = service?.store.state.bots.find((item) => item.sessionId === id);
-  if (event === "IdlePrompt" && bot && service?.prompts.active(bot.id)) return;
-  if (event !== "IdlePrompt") monitor.touch(id);
+  if (event === "IdlePrompt") {
+    if (botInputPhase(id) === "busy" || bot?.requests.some((request) => request.state === "sent" || request.state === "uncertain")) return;
+    if (bot && service?.prompts.active(bot.id)) return;
+    observeBotInputHook(id, event);
+    return; // An idle reminder is not evidence that the current task has ended.
+  }
+  monitor.touch(id);
   observeBotInputHook(id, event, source);
-  if (event === "Stop" || event === "IdlePrompt") service?.onStop(id);
+  if (event === "Stop") service?.onStop(id);
   if (event === "SessionStart" && source === "compact") service?.onStop(id, true);
   if (event === "Notification") service?.onBlocked(id, message);
   if (event === "PreCompact" || event === "PreToolUse" || event === "UserPromptSubmit") service?.onProgress(id);

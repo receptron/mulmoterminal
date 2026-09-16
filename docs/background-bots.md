@@ -39,7 +39,7 @@ The host persists CLI questions separately from task results. A question does no
 { "action": "respond", "botId": "<bot-id>", "promptId": "<current-prompt-id>", "optionId": "1" }
 ```
 
-Only the first response claims the question. The host commits that claim before writing keys, checks the current menu before each navigation step and Enter, and holds the Bot until lifecycle/idle evidence shows the dialog has ended. Stale ids, changed screens, competing tmux clients, and uncertain answers are not blindly retried. A crash during the answer preserves uncertainty rather than sending Enter again.
+Only the first response claims the question. The host commits that claim before writing keys, checks the current menu before each navigation step and Enter, and holds the Bot until lifecycle/idle evidence shows the dialog has ended. Stale ids, changed screens, competing tmux clients, and uncertain answers are not blindly retried. A crash during the answer preserves uncertainty rather than sending Enter again. Capture and Enter are consecutive on the host, but the external CLI can redraw independently; the terminal protocol has no atomic compare-and-submit operation. A host input lease cannot freeze the CLI.
 
 Creation accepts `resumePolicy: "summary"` (the default) or `"ask"`. The default automatically chooses the summary option on a specifically recognized Claude resume dialog after stable observations, without needing a frontend. It does not choose “Don't ask me again” or alter global Claude settings. `ask` leaves the decision as a durable CLI question. Ordinary context auto-compaction remains Claude's own feature.
 
@@ -59,6 +59,6 @@ Botはtmux上で動くClaude Codeの対話セッションです。ターミナ�
 
 再起動後、隠れたBotはライフサイクル通知、または入力欄が空で待機中と確認できるtmux画面の安定した2回の読み取りで復帰します。入力候補の薄い文字は許容しますが、入力途中・実行中・ダイアログ・未知の画面では送信を保留します。通常のフロントterminalの入力保護は維持します。
 
-CLIの確認待ちもサーバーに保存します。Bot一覧の `waitingPrompt` または `manageBot` の `inspect` で質問を取得し、別のterminalからも `respond` に質問IDと選択肢IDを渡して回答できます。最初の回答だけを適用し、確認待ちの間も元の依頼を保持します。元のterminalを開き直す必要はありません。
+CLIの確認待ちもサーバーに保存します。Bot一覧の `waitingPrompt` または `manageBot` の `inspect` で質問を取得し、別のterminalからも `respond` に質問IDと選択肢IDを渡して回答できます。最初の回答だけを適用し、確認待ちの間も元の依頼を保持します。元のterminalを開き直す必要はありません。画面確認とEnter送信はホスト内で連続して行いますが、CLI側の独立した画面更新を停止する仕組みはなく、確認と送信の完全な原子性は保証できません。
 
 既定の `resumePolicy: "summary"` では、対応する「要約から再開」の確認画面だけを認識して自動選択します。`"ask"` ならフロントからの回答を待ちます。その他の確認には自動回答しません。画面が変わった場合や回答結果が不明な場合は再入力せず、状態を残します。認識できない画面は診断情報として通知し、Botのterminalは表示しません。

@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto";
 import { startBots, dispatchBotTool, handleBotHook } from "../../../server/bots/host.js";
 import { ptys } from "../../../server/session/registry.js";
 import type { PtyEntry } from "../../../server/session/types.js";
-import { forgetBotInput, noteBotUserInput } from "../../../server/bots/input-gate.js";
+import { botInputPhase, forgetBotInput, noteBotUserInput } from "../../../server/bots/input-gate.js";
 import { isBotSession } from "../../../server/bots/session-marker.js";
 import { tmuxAttachedClientCount, tmuxCaptureStyledPane } from "../../../server/infra/tmux.js";
 import { idleScreen, resumeScreen, permissionScreen } from "./prompt-fixtures.js";
@@ -139,6 +139,20 @@ describe("Bot host transport", () => {
     await vi.advanceTimersByTimeAsync(1600);
     expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith("\r");
     expect(isBotSession(bot.id)).toBe(true); // killed transcripts stay hidden
+  });
+
+  it.each([800, 1600])("ignores a delayed idle reminder during or after task submission at %dms", async (elapsed) => {
+    const bot = create();
+    const request = dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "keep my result" }) as { requestId: string };
+    handleBotHook(bot.id, "Stop");
+    await vi.advanceTimersByTimeAsync(elapsed);
+    observeSessionBotHook(bot.id, {}, "Notification", "idle_prompt");
+    expect(botInputPhase(bot.id)).toBe("busy");
+    expect(dispatchBotTool(owner, "readBotReplies", {})).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(dispatchBotTool(bot.id, "replyToFrontend", { requestId: request.requestId, text: "actual result" })).toEqual({ received: true });
+    handleBotHook(bot.id, "Stop");
+    expect(dispatchBotTool(owner, "readBotReplies", {})).toEqual([expect.objectContaining({ text: "actual result", kind: "result" })]);
   });
 
   it("hides new transcript ids after compact and distinguishes idle reminders from dialogs", async () => {
