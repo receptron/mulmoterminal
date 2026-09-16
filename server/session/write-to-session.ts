@@ -1,3 +1,4 @@
+import { deferDuringBotDelivery, noteBotUserInput, forgetBotInput } from "../bots/input-gate.js";
 import { ptys } from "./registry.js";
 import { scanForUserInput } from "../../common/terminalReplies.js";
 
@@ -94,6 +95,7 @@ export const noteInput = (sessionId: string, data: string): void => {
   if (pending) partialReply.set(sessionId, pending);
   else partialReply.delete(sessionId);
   if (fromUser) {
+    noteBotUserInput(sessionId);
     lastUserInputAt.set(sessionId, Date.now());
     noteOtherWrite(sessionId);
   }
@@ -102,10 +104,18 @@ export const noteInput = (sessionId: string, data: string): void => {
 /** Teardown for a session that has ended. */
 export const forgetUserInputClock = (sessionId: string): void => {
   lastUserInputAt.delete(sessionId);
+  forgetBotInput(sessionId);
 };
 
 /** Write on behalf of anything but an answer: the phone's typing, and anything added later. */
 export const writeToSession = (sessionId: string, chunk: string): boolean => {
+  if (
+    deferDuringBotDelivery(sessionId, () => {
+      writeToSession(sessionId, chunk);
+    })
+  )
+    return true;
+  noteBotUserInput(sessionId);
   noteOtherWrite(sessionId);
   return write(sessionId, chunk);
 };

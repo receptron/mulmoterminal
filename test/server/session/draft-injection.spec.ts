@@ -54,6 +54,15 @@ afterEach(() => {
 });
 
 describe("attachDraftInjection", () => {
+  it("requires an actual ready marker for hidden Bots, with no timeout into a trust dialog", () => {
+    const t = target();
+    const scan = attachDraftInjection(t.entry, "ready", undefined, () => ESC_CR, true);
+    scan("Yes, I trust this folder");
+    vi.advanceTimersByTime(120_000);
+    expect(t.writes).toEqual([]);
+    typeAndSubmit(scan);
+    expect(t.writes).toHaveLength(2);
+  });
   it("submits an initialPrompt with the host's ESC+CR, in a write of its own", () => {
     const t = target();
     typeAndSubmit(attachDraftInjection(t.entry, "run me", undefined, () => ESC_CR));

@@ -21,6 +21,13 @@ describe("toolHookRecord", () => {
     expect(toolHookRecord("PostToolUseFailure", payload)).toMatchObject({ phase: "end", call: { status: "failed" } });
   });
 
+  it("includes the CLI failure reason in the visible tool history", () => {
+    expect(toolHookRecord("PostToolUseFailure", { ...payload, error: "This Bot has ended." })).toMatchObject({
+      call: { status: "failed", toolOutput: "This Bot has ended." },
+    });
+    expect(toolHookRecord("PostToolUse", { ...payload, error: "ignored" })).toMatchObject({ call: { toolOutput: undefined } });
+  });
+
   // The CLI has used both field names; whichever is present is the output.
   it("takes the output from tool_output", () => {
     expect(toolHookRecord("PostToolUse", { ...payload, tool_output: "A", tool_response: "B" })).toMatchObject({ call: { toolOutput: "A" } });

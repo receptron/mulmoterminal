@@ -1,3 +1,6 @@
+import { dispatchBotTool } from "../bots/host.js";
+import { isBotTool, botToolAllowed } from "../bots/tools.js";
+import { isBotSession } from "../bots/session-marker.js";
 // GUI chat-protocol MCP server, built per session and served over HTTP from the
 // main mulmoterminal process (see the `/api/mcp/:sessionId` route in server/index.ts).
 // Registers one MCP tool per enabled plugin (from server/plugins-registry.js,
@@ -100,7 +103,13 @@ export function buildGuiMcpServer(
   // offer is filtered here, and anything outside it that gets named anyway is refused below.
   const isWorker = !!opts.submitTranslationTool;
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: offeredTools(isWorker, toolDefinitions, SUBMIT_TRANSLATION_TOOL, group, carriesAllTools),
+    tools: offeredTools(
+      isWorker,
+      toolDefinitions.filter((tool) => botToolAllowed(tool.name, isBotSession(sessionId))),
+      SUBMIT_TRANSLATION_TOOL,
+      group,
+      carriesAllTools,
+    ),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -134,8 +143,15 @@ export function buildGuiMcpServer(
       return { content: [{ type: "text", text: route.message }], isError: true };
     }
 
+    if (!botToolAllowed(name, isBotSession(sessionId)))
+      return { content: [{ type: "text", text: "This tool is unavailable to this session." }], isError: true };
     started();
     try {
+      if (isBotTool(name)) {
+        const text = JSON.stringify(await dispatchBotTool(sessionId, name, args ?? {}));
+        finished(text, "completed");
+        return { content: [{ type: "text", text }] };
+      }
       // Dispatch to the plugin's server-side handler, then interpret its envelope (tool-envelope.ts).
       // The session id travels as a header, not in the body: the args are the tool's own
       // schema and every plugin sees them. It is what lets a relative `path` be read as

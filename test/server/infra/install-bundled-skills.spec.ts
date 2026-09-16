@@ -205,7 +205,7 @@ describe("mulmoterminal-config routes to skills that exist", () => {
     // and its collections, never anything the router is a table of contents for. Routing to it
     // would put "make a survey" in a list of places to change fonts and keybindings, and the agent
     // finds it the way it finds any skill: by what the user asked for.
-    const notSettings = ["mulmoterminal-config", "mulmoterminal-bug-report", "mulmoterminal-decisions", "mulmoterminal-shared-app"];
+    const notSettings = ["bot", "mulmoterminal-config", "mulmoterminal-bug-report", "mulmoterminal-decisions", "mulmoterminal-shared-app"];
     const writers = BUNDLED_SKILL_NAMES.filter((name) => !notSettings.some((excluded) => excluded === name));
     expect(writers.filter((name) => !routed().includes(name))).toEqual([]);
   });

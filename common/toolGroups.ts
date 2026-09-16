@@ -85,6 +85,10 @@ export const TOOL_GROUP_HEADINGS: Record<ToolGroup, string> = {
 // resolve to an Object.prototype member and report a truthy "group". Map.get only ever returns
 // own entries.
 const GROUP_BY_TOOL = new Map<string, ToolGroup>([
+  ["manageBot", "data"],
+  ["sendToBot", "data"],
+  ["readBotReplies", "data"],
+  ["replyToFrontend", "data"],
   ["presentDocument", "render"],
   ["presentForm", "render"],
   ["presentChart", "render"],
@@ -228,6 +232,8 @@ export const LEGACY_GUI_SERVER_IDS: readonly string[] = ["mulmoterminal-gui"];
 // `exportShapeScriptUsdz` clears the same bar more easily: no process at all, just the
 // model's geometry serialised to one file under the workspace artifacts.
 export const AUTO_ALLOWED_TOOLS: readonly string[] = [
+  "readBotReplies",
+  "replyToFrontend",
   "presentForm",
   "presentChart",
   "presentHtml",

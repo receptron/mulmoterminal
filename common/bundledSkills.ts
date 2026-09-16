@@ -13,6 +13,7 @@
  *  pins this list against what is actually on disk: adding a directory is not what ships it, and
  *  one nobody lists is copied nowhere with no error at any point. */
 export const BUNDLED_SKILL_NAMES = [
+  "bot",
   "mulmoterminal-config",
   "mulmoterminal-dirs",
   "mulmoterminal-theme",

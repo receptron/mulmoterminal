@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { isBotTool } from "../../common/botTools";
 import { ref, computed, watch, nextTick, onBeforeUnmount } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
@@ -337,7 +338,7 @@ const toolSections = computed(() =>
     const known = availableTools.value;
     const names = known ? known.filter((name) => groupOfTool(name) === group) : toolsInGroup(group);
     // toolsInGroup order, not the server's: the group table is where the reading order was chosen.
-    const ordered = toolsInGroup(group).filter((name) => names.includes(name));
+    const ordered = toolsInGroup(group).filter((name) => names.includes(name) && !isBotTool(name));
     return { group, tools: ordered.map((name) => ({ name, hint: TOOL_HINTS.get(name) ?? "" })) };
   }).filter((section) => section.tools.length > 0),
 );

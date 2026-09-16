@@ -10,7 +10,7 @@ const settings = (over: Partial<Parameters<typeof hookSettingsJson>[0]> = {}) =>
   JSON.parse(hookSettingsJson({ host: "localhost", port: 34567, sessionId: SESSION, ...over }));
 
 const HOOK_EVENTS = ["UserPromptSubmit", "Stop", "Notification", "SessionStart"] as const;
-const TOOL_EVENTS = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+const TOOL_EVENTS = ["PreCompact", "PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
 
 const commandOf = (entry: { hooks: { command: string }[] }): string => entry.hooks[0].command;
 

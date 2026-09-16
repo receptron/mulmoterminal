@@ -1,3 +1,4 @@
+import { deferDuringBotDelivery } from "../bots/input-gate.js";
 // What happens on a terminal connection once it exists: handing a live PTY to a new
 // socket, dispatching the frames a browser sends, and deciding the PTY's fate when the
 // socket goes away. Split from index.ts (#548 step 3d) — shared by every terminal
@@ -158,8 +159,12 @@ export function createConnectionHandlers(deps: ConnectionDeps) {
         // typing refused every answer from the question pane after any attach or theme read
         // (#1693). A MOUSE report does count: a click can pick an option in the dialog. The split
         // an escape sequence can arrive in is handled per session, in noteInput.
-        noteInput(sessionId, msg.data);
-        entry.term.write(msg.data);
+        const data = msg.data;
+        const write = () => {
+          noteInput(sessionId, data);
+          entry.term.write(data);
+        };
+        if (!deferDuringBotDelivery(sessionId, write)) write();
       } else if (isResizeFrame(msg)) {
         entry.term.resize(msg.cols, msg.rows);
         // A size that CHANGED already makes tmux redraw; one that matches what the pty had leaves

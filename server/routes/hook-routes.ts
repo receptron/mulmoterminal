@@ -1,3 +1,4 @@
+import { observeSessionBotHook } from "../bots/hooks.js";
 // The agent hook endpoint: every Stop / Notification / Pre|PostToolUse / SessionStart
 // POSTs here. One request fans out to the session's attention flags, a push to the user's
 // phone, the tool-call history, the header prompt and the AI title. Split from index.ts
@@ -82,6 +83,7 @@ const toolPayload = (body: Record<string, unknown>): ToolHookPayload => ({
   tool_input: body.tool_input,
   tool_output: body.tool_output,
   tool_response: body.tool_response,
+  error: body.error,
   duration_ms: typeof body.duration_ms === "number" ? body.duration_ms : undefined,
 });
 
@@ -281,6 +283,7 @@ async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
     // precondition for using it as a Firestore doc id and as push routing.
     console.warn(`[hook] ignoring ${event} — session id is not a canonical uuid`);
   }
+  if (observeSessionBotHook(sessionId, body, event, fields.notificationType)) return res.json({ ok: true });
   if (sessionId) {
     const entry = ptys.get(sessionId);
     const active = !!(entry && entry.active);

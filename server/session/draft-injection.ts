@@ -80,6 +80,7 @@ export function attachDraftInjection(
   initialPrompt: string | undefined,
   draft: string | undefined,
   submitSequence: () => string,
+  requireReadyMarker = false,
 ): (data: string) => void {
   const plan = planDraftInjection(initialPrompt, draft, sanitizeDraftText);
   if (!plan) return () => {};
@@ -117,7 +118,7 @@ export function attachDraftInjection(
   // Fallback: type even if the readiness marker never appears — a further UI string drift, or a
   // status line too narrow for the hint (claude drops it for the context meter in a small pane).
   // Re-armed on every burst below, so it measures silence rather than elapsed time.
-  let quiet = setTimeout(typeDraft, DRAFT_QUIET_MS);
+  let quiet = requireReadyMarker ? undefined : setTimeout(typeDraft, DRAFT_QUIET_MS);
   const waitFor = (ms: number) => {
     clearTimeout(quiet);
     quiet = setTimeout(typeDraft, ms);
@@ -139,6 +140,8 @@ export function attachDraftInjection(
       setTimeout(typeDraft, DRAFT_SETTLE_MS);
       return;
     }
+    // Hidden Bots have no person to catch a mistaken fallback into login/trust UI.
+    if (requireReadyMarker) return;
     // The one quiet screen that must not be typed into: hold much longer than usual. `scan` is
     // cleared so a repaint does not keep re-arming the long window forever — and the repaint that
     // ANSWERS it then arrives against an empty buffer, where the new screen it draws is all the
