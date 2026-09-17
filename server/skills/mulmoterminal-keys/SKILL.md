@@ -145,6 +145,7 @@ binding you add is a key the program inside the terminal (Claude Code, `vim`, `l
 | `terminal-new-adjacent` | Start a **shell** in the current terminal's directory, straight away — no form | **yes** |
 | `terminal-close` | Close the current terminal | **yes** |
 | `terminal-restart` | Restart the agent in the current terminal — same cell, same directory, same conversation | **yes** |
+| `files-find` | Open a file BY NAME in the Files pane beside the current terminal: a fuzzy search over every file in that project, opening what is picked with the tree expanded to it. Opens the pane first if it is closed | **yes** |
 | `copy` | Copy the terminal's selection. Acts **only** when something is selected, so `Ctrl+C` stays usable as interrupt — with no selection the key reaches the program untouched | no |
 | `paste` | Paste into the terminal | no |
 
@@ -200,6 +201,11 @@ Each is checked against the traps below. The guide documents them at
   tokens, not a free reload. Offer it only to someone who says they change MCP servers, config or
   plugins while sessions are open, and put it somewhere deliberate for the same reason as
   `terminal-close`.
+- **`files-find` is reachable without a binding** — the Files pane's header has a search button that
+  opens the same panel. So it is safe to leave unbound, and worth saying so rather than spending a
+  key on it by default. If they ask for the VS Code key: `Cmd+P` is Print in a browser and cannot be
+  taken, and `Ctrl+P` is the shell's history-back inside the terminal. `Ctrl+Alt+P` or a function
+  key is the honest answer.
 
 ### `keymap.send` — raw bytes to the terminal
 

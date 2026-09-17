@@ -17,6 +17,7 @@ vi.mock("../../../src/composables/usePubSub", () => ({
 }));
 
 const flush = vi.fn(async () => undefined as boolean | undefined);
+const openFinder = vi.fn();
 
 vi.mock("../../../src/components/TerminalCell.vue", () => ({
   default: {
@@ -38,7 +39,7 @@ vi.mock("../../../src/components/FilesPane.vue", () => ({
     props: ["cwd", "requestedPath", "initialState", "canvasTarget", "workspace"],
     emits: ["close", "dirty", "open-in-canvas"],
     setup: (_p: unknown, { expose, slots }: { expose: (e: Record<string, unknown>) => void; slots: { title?: () => VNode[] } }) => {
-      expose({ flush, reload: () => {}, snapshot: () => ({ openPath: null, expanded: [] }) });
+      expose({ flush, reload: () => {}, snapshot: () => ({ openPath: null, expanded: [] }), openFinder });
       return () => h("div", { class: "stub-files-pane" }, slots.title?.());
     },
   },
@@ -96,6 +97,7 @@ describe("open-files from a cell's path menu", () => {
     requests.install();
     flush.mockClear();
     flush.mockResolvedValue(undefined);
+    openFinder.mockClear();
     // The zoom-flip watcher asks for the reduced-motion preference the moment `expandedUid`
     // moves, which is exactly what the tiled case here does.
     if (!window.matchMedia) {
@@ -126,6 +128,35 @@ describe("open-files from a cell's path menu", () => {
 
     expect(w.emitted("toggle-expand")).toBeUndefined();
     expect(filesPane(w).exists()).toBe(true);
+    expect(filesPane(w).props("cwd")).toBe("/work/a");
+    w.unmount();
+  });
+
+  // The `files-find` shortcut (#2099). It has to work from a cell with NO pane open — that is the
+  // request: "ファイルペインを開いていない状態でショートカットを押した場合は、いま見ているセルの
+  // 作業ディレクトリを対象にファイルペインが開いて、そのまま検索できる".
+  it("opens the pane on the enlarged cell and then the finder, from a grid with no pane up", async () => {
+    const w = mountGrid();
+    expect(filesPane(w).exists()).toBe(false);
+
+    await (w.vm as unknown as { openFilesFinder: () => Promise<void> }).openFilesFinder();
+    await flushPromises();
+
+    expect(filesPane(w).exists()).toBe(true);
+    expect(filesPane(w).props("cwd")).toBe("/work/a");
+    expect(openFinder).toHaveBeenCalledTimes(1);
+    w.unmount();
+  });
+
+  it("just opens the finder when the pane is already up, leaving the pane where it is", async () => {
+    const w = mountGrid();
+    cells(w)[0].vm.$emit("open-files");
+    await flushPromises();
+
+    await (w.vm as unknown as { openFilesFinder: () => Promise<void> }).openFilesFinder();
+    await flushPromises();
+
+    expect(openFinder).toHaveBeenCalledTimes(1);
     expect(filesPane(w).props("cwd")).toBe("/work/a");
     w.unmount();
   });

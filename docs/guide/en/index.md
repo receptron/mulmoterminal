@@ -8,13 +8,13 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **4.25.0 is out, and you can now start without Claude Code.** Declare a default agent —
-> `npx mulmoterminal --agent codex`, or `{ "defaultAgent": "codex" }` in your config — and the
-> start-up check follows the declaration instead of looking for Claude Code. Claude Code stays the
-> default when you say nothing, and **cells you already have are untouched**. It also fixes a bug
-> that was hitting Claude Code users: the check ignored `CLAUDE_BIN`. And the phone's conversation
-> view now reads **codex, cursor and copilot** as well as claude.
-> [How to declare one, and what it does not change](v4.25.0.html).
+> **4.27.0 is out, and the Files pane can open a file by name.** The tree opens one directory at a
+> time, which is the wrong shape when you already know the file's name and only its directory
+> escapes you. A **search** button in the pane's header now narrows every file in the project as you
+> type — fuzzily, so `fpane` finds `FilesPane.vue` — and picking one opens it **with the tree
+> expanded down to it**. In a git repository `.gitignore` decides what is offered, so `node_modules`
+> never appears. There is a `files-find` key you can bind, unbound by default.
+> [How to use it, and how to bind a key](v4.27.0.html).
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

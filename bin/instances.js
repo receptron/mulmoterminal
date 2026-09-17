@@ -13,6 +13,7 @@
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
+import { portOwners } from "./port-owner.js";
 
 export const instancesDir = () => path.join(homedir(), ".mulmoterminal", "instances");
 
@@ -67,6 +68,18 @@ const parseEntry = (raw) => {
   }
 };
 
+/** Drop an entry we have positively established nobody is behind. Takes a path, and each caller
+ *  passes the file it actually read: liveInstances its own, servingInstances `<pid>.json` — which is
+ *  the same file only because liveInstances refuses to report one whose name disagrees with its
+ *  pid. Best-effort: one we may not remove is one the next reader disproves again. */
+const forgetFile = (file) => {
+  try {
+    rmSync(file, { force: true });
+  } catch {
+    // not ours to remove; harmless
+  }
+};
+
 /** Every OTHER running server, newest entry first. Entries whose process is gone are deleted as
  *  they are found: a crash cannot clean up after itself, and leaving them would make a lone
  *  instance believe it has company forever. */
@@ -92,16 +105,51 @@ export function liveInstances(excludePid = process.pid) {
     // the very failure this registry exists to prevent (Codex review).
     if (entry === null) continue;
     if (!isProcessAlive(entry.pid)) {
-      try {
-        rmSync(file, { force: true });
-      } catch {
-        // not ours to remove; harmless
-      }
+      forgetFile(file);
       continue;
     }
+    // Every writer names the file after the pid inside it, so a file that disagrees was not written
+    // by one — corrupted, or edited by hand. Report nothing about it: a reader that acts on an
+    // entry by its pid (servingInstances deletes `<pid>.json`, stop signals the pid) would act on
+    // SOMEBODY ELSE's file or process, and a live server's own entry is the one it would erase.
+    if (name !== `${entry.pid}.json`) continue;
     if (entry.pid !== excludePid) live.push(entry);
   }
   return live.sort((a, b) => (b.startedAt ?? 0) - (a.startedAt ?? 0));
+}
+
+/**
+ * Of these entries, the ones whose pid STILL OWNS the port it registered — and the others deleted.
+ *
+ * A LIVE PID IS NOT AN IDENTITY, and `liveInstances` above cannot tell the difference. The OS
+ * hands a pid out again once its process is gone, so an entry left by a hard kill becomes a peer
+ * that never dies: the reporter's machine had one whose number `svchost.exe` and later
+ * `csrss.exe` were holding, and every start after that was told one was already running (#2090).
+ *
+ * bin/port-owner.js had already written down why the kernel is the only party worth asking, and
+ * bin/stop.js has been asking since #1820 — for signalling, where the same staleness would kill a
+ * stranger. What made this reader wait was that its question looked harmless.
+ *
+ * THERE IS NO BOOT RACE HERE. `registerInstance` is called from inside the server's `listen`
+ * callback, so the port is already bound the moment the entry exists: an entry whose port has no
+ * owner cannot be a peer that has not finished starting.
+ *
+ * NULL KEEPS THE ENTRY, which is the OPPOSITE of stop.js and deliberate. `portOwners` answers null
+ * for "could not ask" and [] for "nobody is there", and what the two risks cost is not the same:
+ * stopping the wrong process is worse than asking, so `stop` fails closed; losing the
+ * second-instance warning is worse than keeping a stale line, so this fails open. Do not unify
+ * them.
+ */
+export async function servingInstances(instances, deps = {}) {
+  const { owners = portOwners } = deps;
+  const serving = [];
+  for (const instance of instances) {
+    // Nothing to ask about: an entry with no port names no socket to check it against.
+    const pids = instance.port === null ? null : await owners(instance.port);
+    if (pids === null || pids.includes(instance.pid)) serving.push(instance);
+    else forgetFile(entryFile(instance.pid));
+  }
+  return serving;
 }
 
 /** When the EARLIEST of the given instances started, or null when there are none.

@@ -36,7 +36,7 @@ import {
 } from "./cli-args.js";
 import { ANSWER_DEADLINE_MS, askYesNo } from "./prompt-yes-no.js";
 import { hasCommand } from "./has-command.js";
-import { liveInstances } from "./instances.js";
+import { liveInstances, servingInstances } from "./instances.js";
 import { agentBin, AGENT_BIN_SPEC } from "./agent-bins.js";
 import { configuredDefaultAgent, gateFor, isKnownAgent, missingAgentMessage, parseAgentArg, resolveDeclaredAgent } from "./default-agent.js";
 import { setProcessTitle } from "./process-title.js";
@@ -414,7 +414,10 @@ const runningInstancesWarning = (running) => runningInstancesPrompt(running, STO
 // is attached, and a Windows wrapper that redirects only stdout and stderr is attached to a
 // console no human can type into, so the launch waited for an answer forever (#2090).
 async function confirmNoRunningInstance() {
-  const running = liveInstances();
+  // servingInstances rather than liveInstances alone: a pid that is merely ALIVE is not still
+  // ours, and a reused one made this question permanent on the reported machine (#2090). It costs
+  // one lookup, and only once the registry is non-empty — which is to say, almost never.
+  const running = await servingInstances(liveInstances());
   if (running.length === 0) return;
   if (!process.stdin.isTTY) {
     log(runningInstancesWarning(running));

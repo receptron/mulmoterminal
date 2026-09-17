@@ -59,12 +59,38 @@ describe("sanitizeCustomThemes", () => {
   });
 });
 
+// #2097: the cursor pair could only be set per directory, so the same `.mulmoterminal.json` had
+// to be dropped into every project to get one cursor colour. `term` puts it on the theme.
+describe("sanitizeCustomThemes: the term block", () => {
+  it("keeps the xterm keys a directory's colors block also takes", () => {
+    const withTerm = theme({ term: { cursor: "#b0402a", cursorAccent: "#fffdf8", red: "#c05f00" } });
+    expect(sanitizeCustomThemes([withTerm])[0].term).toEqual({ cursor: "#b0402a", cursorAccent: "#fffdf8", red: "#c05f00" });
+  });
+
+  // The whole entry goes, exactly as it does for a bad key in `colors`: a theme that is half what
+  // was written would be harder to diagnose than one that is plainly absent, and an absent entry
+  // is what the Directory-settings panel's "dropped" list is there to report. A CSS variable put
+  // in `term` is the mistake this catches — the two blocks take different vocabularies.
+  it("drops the whole theme when term names something that is not an xterm colour", () => {
+    expect(sanitizeCustomThemes([theme({ term: { cursor: "#b0402a", "--accent": "#ff0000" } })])).toEqual([]);
+  });
+
+  // Same rule as `colors`: a value that escaped the hex shape has no business reaching a palette.
+  it("drops a theme whose term value is not a hex literal", () => {
+    expect(sanitizeCustomThemes([theme({ term: { cursor: "red; background: url(x)" } })])).toEqual([]);
+  });
+
+  it("leaves a theme without one alone", () => {
+    expect(sanitizeCustomThemes([theme()])[0].term).toBeUndefined();
+  });
+});
+
 describe("themes survive the write/read round trip", () => {
   // toPublicAppConfig is both the API response and what gets persisted, while sanitizeAppConfig
   // reads the file back. A key named differently on the two sides would drop every theme on the
   // next start — silently, and only for the user who had defined one.
   it("uses the same key on the way out as the loader reads on the way in", () => {
-    const config = { ...emptyConfig(), themes: sanitizeCustomThemes([theme()]) };
+    const config = { ...emptyConfig(), themes: sanitizeCustomThemes([theme({ term: { cursor: "#b0402a" } })]) };
     const persisted = toPublicAppConfig(config);
     expect(persisted.themes).toHaveLength(1);
     expect(sanitizeCustomThemes((persisted as unknown as Record<string, unknown>).themes)).toEqual(config.themes);

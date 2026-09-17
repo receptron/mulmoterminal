@@ -33,3 +33,12 @@ export function restoreOrder(paths: readonly string[]): string[] {
   const depth = (p: string) => p.split("/").length;
   return [...new Set(paths)].sort((a, b) => depth(a) - depth(b) || a.localeCompare(b));
 }
+
+/** The directories that have to be open for `pathRel` to be visible in the tree, outermost first
+ *  — `a/b/c.ts` needs `a`, then `a/b`. Ordered because each expansion FETCHES that directory's
+ *  children, so a child cannot be opened before its parent exists (the same rule `restoreOrder`
+ *  exists for). A path at the root needs nothing. */
+export function ancestorDirs(pathRel: string): string[] {
+  const segments = pathRel.split("/").filter((segment) => segment !== "");
+  return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"));
+}

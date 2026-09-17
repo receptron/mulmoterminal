@@ -16,6 +16,7 @@ const LABEL_KEYS: Record<KeymapAction, string> = {
   "terminal-new-adjacent": "settings.shortcuts.actions.terminalNewAdjacent",
   "terminal-close": "settings.shortcuts.actions.terminalClose",
   "terminal-restart": "settings.shortcuts.actions.terminalRestart",
+  "files-find": "settings.shortcuts.actions.filesFind",
   // Only acts when the terminal has a selection; with none, the key reaches the shell as it
   // always did — which is what makes Ctrl+C a usable binding here without losing interrupt.
   copy: "settings.shortcuts.actions.copy",

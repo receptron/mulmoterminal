@@ -372,7 +372,7 @@ that escapes it, is rejected. `preset:<id>` works in **`sounds`** (per kind), so
 audio file of its own — but **not in `sound`**, which takes a relative file path only and silently
 drops a preset reference. → [Notification sounds](#sounds)
 
-### The terminal itself (xterm palette)
+### The terminal itself (xterm palette) {#dir-colors}
 
 Where `headerColor` and friends tint the **chrome** (header / cell frame), **`colors` (and `theme`) tint the terminal
 itself (xterm)**. `colors` overrides xterm's ITheme — `background` / `foreground` / `cursor` and the 16 ANSI colors
@@ -390,6 +390,10 @@ itself (xterm)**. `colors` overrides xterm's ITheme — `background` / `foregrou
 Set `theme` to `midnight` / `nord` / `daylight` / `solarized` for a preset palette; `colors` layers per-key
 overrides on top. The color-coding screenshot in [Scenario 6](scenarios.html) combines header colors with `colors` to
 paint each project — **from the header down to the terminal body**.
+
+This block is **per project**. For the same override in *every* cell — one cursor colour across the
+whole app — put it on the theme instead, in its `term` block
+(→ [Setting the terminal palette outright](#theme-term)).
 
 ### Terminal font size (`fontSize`) {#font-size}
 
@@ -643,7 +647,10 @@ recolours the whole app — grid background, headers, panels, and the terminals 
 - **Light schemes are detected, not declared.** The lightness of `--bg-base` decides it, and the
   status colours (done / waiting / error) switch to their light-background set. Nothing to write.
 - **The terminal's own colours are derived**: background from `--bg-base`, text from `--term-fg`,
-  selection from `--term-selection`. The 16 ANSI colours come from whatever `extends` names.
+  selection from `--term-selection`, and the cursor from those same two — the block takes
+  `--term-fg` and the character on it takes `--bg-base`, so the cursor cell is an inverted one and
+  what you are pointing at stays readable. The 16 ANSI colours come from whatever `extends` names.
+- **`term` overrides any of that**, in xterm's own vocabulary (→ [The terminal palette](#theme-term)).
 
 **Restart `mulmoterminal` after editing.** The global config is read once at server start, so a
 new theme — or a colour you just tweaked — does not arrive on a page reload alone. It is the same
@@ -661,6 +668,36 @@ The twenty variables:
 | `--accent` / `--accent-bg` / `--accent-bg-hover` / `--on-accent` | The accent, and text drawn on it |
 | `--text` / `--text-secondary` / `--text-muted` / `--text-dim` | Four levels of text |
 | `--term-fg` / `--term-selection` | Terminal text and selection |
+
+### Setting the terminal palette outright (`term`) {#theme-term}
+
+`colors` reaches the canvas only through those four derivations. A theme that wants a cursor of its
+own — or one ANSI colour different from the base it extends — writes `term` next to `colors`:
+
+```json
+{
+  "themes": [
+    {
+      "id": "washi",
+      "label": "Washi",
+      "extends": "daylight",
+      "colors": { "--bg-base": "#ece7dc", "--term-fg": "#2a2622" },
+      "term": { "cursor": "#b0402a", "cursorAccent": "#fffdf8" }
+    }
+  ]
+}
+```
+
+- The keys are the ones a project's `.mulmoterminal.json` takes in its own `colors` block
+  (→ [Colours for one project](#dir-colors)): `foreground`, `background`, `cursor`,
+  `cursorAccent`, `selectionBackground`, `selectionForeground`,
+  `selectionInactiveBackground`, and the 16 ANSI names (`red` … `brightWhite`).
+- **`cursor` is the block, `cursorAccent` is the character drawn on it.** Set them as a pair, or
+  the one you leave out keeps the derived value and may sink into the other.
+- Values are hex, like `colors`. **A key outside that list drops the whole theme** — `term` and
+  `colors` take different vocabularies, and a `--bg-base` written into `term` is the usual slip.
+- A project's own `colors` still wins over this for its cells. Widest to narrowest: what `extends`
+  names, then what `colors` implies, then `term`, then the directory.
 
 ### How to build one
 
@@ -1138,6 +1175,7 @@ terminal stops receiving**, and only you know whether that trade is worth it for
 | `terminal-new-adjacent` | Start a **shell** in the current terminal's working directory, straight away — no form to fill in. The closest thing to "split this terminal" | yes |
 | `terminal-close` | **Close** the current terminal (same as its close button) | yes |
 | `terminal-restart` | **Restart the agent** in the current terminal — same cell, same directory, same conversation. Costs a resume, and interrupts a turn in progress | yes |
+| `files-find` | **Open a file by name** in the Files pane beside the current terminal — type part of a name or path, pick from the list, and it opens with the tree expanded to it. In a git repository the candidates come from git, so `.gitignore` applies; elsewhere the tree is walked, no ignore file is read, and only directories nobody authors by hand (`node_modules`, virtualenvs, caches) are skipped. Opens the pane first if it is not already up | yes |
 | `copy` | **Copy** the terminal's selection. Acts only when something IS selected — with no selection the key reaches the shell untouched, which is what makes `Ctrl+C` bindable here without losing **interrupt** | no |
 | `paste` | **Paste** into the terminal | no |
 
@@ -1155,6 +1193,11 @@ both ends** instead of wrapping. See [Basics → switching the enlarged terminal
 > **`terminal-restart` also acts immediately.** It kills the agent even mid-turn, and the conversation
 > then has to be read back from its transcript — real tokens, not a free reload. It is for the moment
 > you change an MCP server, a config file or a plugin and need the running agent to see it.
+
+{: .note }
+> **`files-find` needs no binding to be reachable.** The Files pane's own header has a search button
+> that opens the same panel, so bind this only if you want it from the keyboard. On a Mac, `Cmd+P`
+> is the browser's Print and cannot be taken — pick something else.
 
 ### Ready-made keymaps
 

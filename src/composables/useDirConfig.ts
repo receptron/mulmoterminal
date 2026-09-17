@@ -3,7 +3,7 @@ import { usePubSub } from "./usePubSub";
 import type { ITheme } from "@xterm/xterm";
 import { isThemeIdLike } from "../../common/themeVars";
 // Shared with the server config schema so the two can't drift — see common/themeColors.ts.
-import { THEME_COLOR_KEYS } from "../../common/themeColors";
+import { THEME_COLOR_KEYS, isPaletteColor } from "../../common/themeColors";
 import { EMPTY_DIR_CHROME, type DirChrome } from "../../common/dirChrome";
 import { sanitizeHeaderStatusColors, sanitizeHeaderStatusTint, type HeaderStatusColors } from "../../common/headerStatusColors";
 import { normalizeFontSize } from "../../common/terminalFontSize";
@@ -39,12 +39,15 @@ function dirStatusColors(input: unknown): HeaderStatusColors | null {
   return Object.keys(colors).length ? colors : null;
 }
 
+// Keys AND values: the same rule the theme's own `term` block is held to (customThemes.ts).
+// A string that is not a colour does not degrade to the theme's — xterm throws parsing it, and
+// the throw lands while the whole theme object is being applied.
 function parseColors(input: unknown): Partial<ITheme> | null {
   if (!isRecord(input)) return null;
   const out: Partial<ITheme> = {};
   for (const key of THEME_COLOR_KEYS) {
     const value = input[key];
-    if (typeof value === "string") out[key] = value;
+    if (isPaletteColor(value)) out[key] = value;
   }
   return Object.keys(out).length ? out : null;
 }

@@ -4,6 +4,7 @@
 // it, so a key known to one side and not the other would be accepted and then silently ignored.
 
 import { THEME_IDS, type ThemeId } from "./themeIds.js";
+import type { ThemeColorKey } from "./themeColors.js";
 
 // The CSS custom properties one theme sets, mirroring the `:root[data-theme=...]` blocks in
 // src/style.css. A theme with no `extends` has to supply every one of them — a half-painted
@@ -65,6 +66,10 @@ export interface CustomThemeInput {
   /** A built-in theme to start from. Omitted means `colors` must be complete. */
   extends?: ThemeId;
   colors: Partial<ThemeVars>;
+  /** xterm palette entries set outright, for the canvas colours `colors` cannot reach: the
+   *  cursor pair, the selection foreground, the 16 ANSI colours. Wins over what `colors`
+   *  implies (#2097). */
+  term?: Partial<Record<ThemeColorKey, string>>;
 }
 
 /** The full variable set for a theme: the base it extends, with its own colours on top.
@@ -132,11 +137,24 @@ export function isLightTheme(vars: ThemeVars): boolean {
 /** The xterm palette a theme's variables imply. xterm draws on a canvas and cannot read CSS
  *  variables, so the same colours have to reach it as values — derived here rather than asked
  *  for twice, since two copies of one colour is two chances to change only one. The 16 ANSI
- *  colours are NOT derived: they come from the base theme, which is what `extends` is for. */
-export function termThemeFromVars(vars: ThemeVars): { background: string; foreground: string; selectionBackground: string } {
+ *  colours are NOT derived: they come from the base theme, which is what `extends` is for.
+ *
+ *  The cursor pair is derived from the SAME two variables the cell it sits on uses, which makes
+ *  the cursor an inverted cell — so the character under it stays as readable as the characters
+ *  beside it. Inheriting the cursor from the base instead is what made a light theme extending a
+ *  dark one draw a dark block with xterm's default black glyph on top (#2097). */
+export function termThemeFromVars(vars: ThemeVars): {
+  background: string;
+  foreground: string;
+  selectionBackground: string;
+  cursor: string;
+  cursorAccent: string;
+} {
   return {
     background: vars["--bg-base"],
     foreground: vars["--term-fg"],
     selectionBackground: vars["--term-selection"],
+    cursor: vars["--term-fg"],
+    cursorAccent: vars["--bg-base"],
   };
 }

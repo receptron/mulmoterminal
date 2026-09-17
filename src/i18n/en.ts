@@ -92,6 +92,7 @@ export const en = {
         terminalNewAdjacent: "Shell in this terminal's directory, straight away",
         terminalClose: "Close this terminal",
         terminalRestart: "Restart the agent in this terminal",
+        filesFind: "Open a file by name, beside this terminal",
         copy: "Copy the terminal selection",
         paste: "Paste into the terminal",
       },

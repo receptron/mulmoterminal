@@ -16,6 +16,7 @@ import { hasErrnoCode } from "../errors.js";
 import { backupCurrentFile, storeBackup } from "./backup-store.js";
 import { losslessText } from "./editableText.js";
 import { resolveBase, resolveContained } from "./pathContainment.js";
+import { listProjectFiles } from "./project-files.js";
 import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./renderedDoc.js";
 import { requestBody } from "../routes/requestBody.js";
 
@@ -151,6 +152,19 @@ export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
     try {
       if (!fs.statSync(abs).isDirectory()) return res.status(400).json({ error: "not a directory" });
       res.json({ cwd: path.resolve(root), path: browseRel(req), entries: listEntries(abs) });
+    } catch {
+      res.status(404).json({ error: "not found" });
+    }
+  });
+
+  // Every file in the project as one flat list, for the pane's "open by name" finder (#2099).
+  // Rooted at the project base and NOT at `?path=`: the finder hands what it picks straight to
+  // the tree and the editor, both of which resolve relative to the root, so a list relative to
+  // some subdirectory would open the wrong file at every depth.
+  app.get("/api/files/browse/index", async (req, res) => {
+    const root = browseBase(req, defaultCwd);
+    try {
+      res.json(await listProjectFiles(root));
     } catch {
       res.status(404).json({ error: "not found" });
     }

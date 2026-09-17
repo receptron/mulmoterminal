@@ -6,7 +6,7 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import { earliestStartedAt, instancesDir, isProcessAlive, liveInstances, registerInstance } from "../../bin/instances.js";
+import { earliestStartedAt, instancesDir, isProcessAlive, liveInstances, registerInstance, servingInstances } from "../../bin/instances.js";
 
 describe("isProcessAlive", () => {
   it("says yes for this very process", () => {
@@ -101,6 +101,16 @@ describe("liveInstances — a live peer must not be erasable", () => {
     });
   });
 
+  it("reports nothing about a file whose name disagrees with the pid inside it, and leaves it alone", () => {
+    withHome(() => {
+      // No writer produces this; a hand edit or corruption does. The pid is alive (this process),
+      // so only the name check keeps it out of what callers act on by pid.
+      writeFileSync(path.join(entriesDir(), "111.json"), JSON.stringify({ pid: process.pid, port: 1, startedAt: 1 }));
+      expect(liveInstances(process.pid + 1)).toEqual([]);
+      expect(readdirSync(entriesDir())).toContain("111.json");
+    });
+  });
+
   it("reports a registered peer and never itself", () => {
     withHome(() => {
       // This process is alive, so registering it and asking as somebody else must find it.
@@ -116,5 +126,112 @@ describe("liveInstances — a live peer must not be erasable", () => {
       registerInstance(34567);
       expect(readdirSync(entriesDir()).filter((n) => n.endsWith(".tmp"))).toEqual([]);
     });
+  });
+});
+
+// A LIVE PID IS NOT AN IDENTITY. The OS hands a number out again once its process is gone, so an
+// entry left by a hard kill becomes a peer that never dies — and on the reported Windows machine
+// `svchost.exe` and later `csrss.exe` were holding that number, so every start was told one was
+// already running (#2090). isProcessAlive cannot see any of this; the kernel's view of who owns
+// the port can.
+describe("servingInstances — a reused pid is not still us", () => {
+  const dirs: string[] = [];
+  // `await run()` INSIDE the try, not `return run()`: the latter hands the promise back and lets
+  // the finally unstub the home before a single await inside has resolved, so every assertion
+  // then reads the real home directory.
+  const withHome = async <T>(run: () => Promise<T>): Promise<T> => {
+    const dir = path.join(tmpdir(), `mt-serving-${process.pid}-${dirs.length}`);
+    mkdirSync(path.join(dir, ".mulmoterminal", "instances"), { recursive: true });
+    dirs.push(dir);
+    vi.stubEnv("HOME", dir);
+    vi.stubEnv("USERPROFILE", dir);
+    try {
+      return await run();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  };
+  const entriesDir = () => path.join(homedir(), ".mulmoterminal", "instances");
+  const write = (pid: number, port: number | null) => {
+    writeFileSync(path.join(entriesDir(), `${pid}.json`), JSON.stringify({ pid, port, startedAt: 1 }));
+    return { pid, port, startedAt: 1 };
+  };
+  // Same guard as the block above: without it a home var the platform ignores would make every
+  // "the file survived" assertion trivially true.
+  const guardRedirect = () => expect(dirs).toContain(homedir());
+  afterEach(() => dirs.splice(0).forEach((dir) => rmSync(dir, { recursive: true, force: true })));
+
+  it("keeps the entry when the kernel says that pid owns that port", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      const entry = write(4242, 34567);
+      const owners = vi.fn(async () => [4242]);
+      expect(await servingInstances([entry], { owners })).toEqual([entry]);
+      expect(owners).toHaveBeenCalledWith(34567);
+      expect(readdirSync(entriesDir())).toContain("4242.json");
+    });
+  });
+
+  it("drops a reused pid — somebody else owns the port now — and removes the file", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      const entry = write(4242, 34567);
+      expect(await servingInstances([entry], { owners: async () => [9999] })).toEqual([]);
+      expect(readdirSync(entriesDir())).not.toContain("4242.json");
+    });
+  });
+
+  it("drops an entry whose port nobody is listening on, which is the reported shape", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      const entry = write(4242, 34567);
+      // registerInstance runs inside the server's listen callback, so an entry that exists with
+      // an unbound port cannot be a peer that has not finished starting. [] is a real answer.
+      expect(await servingInstances([entry], { owners: async () => [] })).toEqual([]);
+      expect(readdirSync(entriesDir())).not.toContain("4242.json");
+    });
+  });
+
+  it("KEEPS the entry when the kernel could not be asked, unlike stop's fail-closed check", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      const entry = write(4242, 34567);
+      // null is "could not ask" (no lsof, a timeout, a platform with no command). Losing the
+      // second-instance warning is worse here than keeping a line that may be stale, which is the
+      // opposite trade to signalling a process.
+      expect(await servingInstances([entry], { owners: async () => null })).toEqual([entry]);
+      expect(readdirSync(entriesDir())).toContain("4242.json");
+    });
+  });
+
+  it("keeps an entry with no port rather than deleting what it cannot check", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      const entry = write(4242, null);
+      const owners = vi.fn(async () => []);
+      expect(await servingInstances([entry], { owners })).toEqual([entry]);
+      expect(owners).not.toHaveBeenCalled();
+      expect(readdirSync(entriesDir())).toContain("4242.json");
+    });
+  });
+
+  it("never deletes a live server's entry over a stale file that names the same pid", async () => {
+    await withHome(async () => {
+      guardRedirect();
+      // The live server's own entry, on a port it owns — and a file named for some other pid whose
+      // content names the SAME pid on a port nobody holds. Disproving the second deleted the first,
+      // because servingInstances removes `<pid>.json` (Codex, PR #2092 round 1).
+      const live = process.pid;
+      writeFileSync(path.join(entriesDir(), `${live}.json`), JSON.stringify({ pid: live, port: 34567, startedAt: 2 }));
+      writeFileSync(path.join(entriesDir(), "111.json"), JSON.stringify({ pid: live, port: 34568, startedAt: 1 }));
+      const owners = async (port: number) => (port === 34567 ? [live] : []);
+      const serving = await servingInstances(liveInstances(-1), { owners });
+      expect(serving.map((e) => e.port)).toEqual([34567]);
+      expect(readdirSync(entriesDir())).toContain(`${live}.json`);
+    });
+  });
+
+  it("says nothing is serving when there is nothing to ask about", async () => {
+    expect(await servingInstances([], { owners: async () => [] })).toEqual([]);
   });
 });

@@ -61,7 +61,44 @@ describe("applyCustomTheme", () => {
 describe("customTermTheme", () => {
   it("derives the canvas colours from the resolved variables", () => {
     const term = customTermTheme({ id: "my-dark", label: "My Dark", extends: "midnight", colors: { "--term-fg": "#fafafa" } }, BUILTINS);
-    expect(term).toEqual({ background: "#1a1a2e", foreground: "#fafafa", selectionBackground: "#3a3a5e" });
+    expect(term).toEqual({
+      background: "#1a1a2e",
+      foreground: "#fafafa",
+      selectionBackground: "#3a3a5e",
+      cursor: "#fafafa",
+      cursorAccent: "#1a1a2e",
+    });
+  });
+
+  // #2097: `term` is the theme's own statement about the canvas, so it beats what the CSS
+  // variables imply — that is the whole point of having it. Without this the cursor pair could
+  // only ever be the inverted cell, which is a sane default but not a choice.
+  it("lets the theme's own term block win over the derived colours", () => {
+    const term = customTermTheme(
+      { id: "washi", label: "Washi", extends: "daylight", colors: { "--term-fg": "#2a2622" }, term: { cursor: "#b0402a", cursorAccent: "#fffdf8" } },
+      BUILTINS,
+    );
+    expect(term?.cursor).toBe("#b0402a");
+    expect(term?.cursorAccent).toBe("#fffdf8");
+    // Everything it did not name still comes from the variables.
+    expect(term?.foreground).toBe("#2a2622");
+  });
+
+  // The 16 ANSI colours have never been derivable — `extends` was the only way to get them, so a
+  // theme wanting one different red had to fork a whole built-in. `term` reaches them too.
+  it("carries an ANSI colour the theme sets outright", () => {
+    const term = customTermTheme({ id: "washi", label: "Washi", extends: "daylight", colors: {}, term: { red: "#b0402a" } }, BUILTINS);
+    expect(term?.red).toBe("#b0402a");
+  });
+
+  // The server validated this already; re-checking here is what keeps the two key lists one set.
+  it("drops a term key xterm does not know", () => {
+    const term = customTermTheme(
+      { id: "washi", label: "Washi", extends: "daylight", colors: {}, term: { cursor: "#b0402a", "--accent": "#ff0000" } as Record<string, string> },
+      BUILTINS,
+    );
+    expect(term?.cursor).toBe("#b0402a");
+    expect(term).not.toHaveProperty("--accent");
   });
 
   it("is null when the theme can't be resolved", () => {

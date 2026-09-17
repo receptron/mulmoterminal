@@ -33,6 +33,7 @@ import type {
 import type { RegistryListResponse, RegistryImportResponse } from "@mulmoclaude/core/collection/registry";
 import type { TranslateRequest, TranslateResponse } from "@mulmoclaude/core/translation/client";
 import type { CollectionPushResult } from "../../common/collectionPush";
+import type { CollectionRefreshResult } from "../../common/collectionRefresh";
 import { buildCustomViewSrcdoc } from "../utils/customViewSrcdoc";
 import { fetchJson, errorMessage, readErrorBody } from "../utils/fetchJson";
 import { htmlPreviewUrl, remoteViewItemsQuery } from "./collectionUiRules";
@@ -305,7 +306,10 @@ function makeCollectionUi(projectIdOf: () => string | null): HostBinding {
       ),
     runCollectionAction: (slug, actionId) =>
       apiPost<CollectionActionResult>(`/api/collections/${encodeURIComponent(slug)}/actions/${encodeURIComponent(actionId)}`, {}),
-    refreshCollection: (slug) => apiPost(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
+    // Typed against OUR response, not inferred from the plugin's expectation: this is the one
+    // place the two shapes meet, so a server arm that stopped answering what the view reads is a
+    // type error here rather than a field that silently arrives undefined.
+    refreshCollection: (slug) => apiPost<CollectionRefreshResult>(`/api/collections/${encodeURIComponent(slug)}/refresh`, {}),
     // The write direction. Path matches MulmoClaude's `API_ROUTES.collections.calendarPush`.
     // A push that could not run still answers 200 with the reason in `errors`, which is what
     // the view shows beside the button (server/backends/calendarPush.ts).

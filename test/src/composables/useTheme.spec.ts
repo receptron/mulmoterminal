@@ -13,6 +13,19 @@ describe("theme id / theme object lockstep", () => {
   });
 });
 
+// #2097: xterm draws the character under the cursor in `cursorAccent`, defaulting to a flat
+// black. A light theme's cursor is a dark block, so the default put black on dark — the one
+// character you are looking at was the only unreadable one. Every theme states it, and the value
+// is its own background, so the cursor cell is the inverted version of the cells beside it.
+describe("every built-in states its cursor pair", () => {
+  it("sets cursorAccent to the theme's own background", () => {
+    for (const { id, term } of THEMES) {
+      expect(term.cursorAccent, id).toBe(term.background);
+      expect(term.cursor, id).toBe(term.foreground);
+    }
+  });
+});
+
 describe("isThemeId", () => {
   it("accepts every defined theme id", () => {
     for (const { id } of THEMES) expect(isThemeId(id)).toBe(true);

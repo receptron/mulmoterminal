@@ -7,6 +7,7 @@
 
 import { ref, computed } from "vue";
 import { THEME_VAR_KEYS, resolveThemeVars, isLightTheme, termThemeFromVars, type CustomThemeInput, type ThemeVars } from "../../common/themeVars";
+import { THEME_COLOR_KEYS, isPaletteColor, type ThemeColorKey } from "../../common/themeColors";
 import type { ThemeId } from "../../common/themeIds";
 import { isRecord } from "../../common/isRecord";
 
@@ -97,8 +98,27 @@ export function clearCustomTheme(root: HTMLElement = document.documentElement): 
   THEME_VAR_KEYS.forEach((key) => root.style.removeProperty(key));
 }
 
-/** The xterm palette for a custom theme, or null when it can't be resolved. */
+/** The palette entries a theme sets outright, keyed down to the ones xterm knows and checked
+ *  against the colour shape. Re-checked here even though the server already validated: same
+ *  reason the dir-config parser re-checks its own `colors` block — the lists are one set in
+ *  common/, and a key that only one side knew would be accepted at the boundary and dropped on
+ *  the way to the canvas. The VALUE is re-checked too, because a string that is not a colour
+ *  does not fall back to the theme's: xterm throws while parsing it, and the throw happens
+ *  during `term.options.theme = …`, which takes the whole terminal down rather than one colour. */
+function themeTermOverrides(theme: CustomThemeInput): Partial<Record<ThemeColorKey, string>> {
+  const raw = theme.term;
+  if (!isRecord(raw)) return {};
+  const out: Partial<Record<ThemeColorKey, string>> = {};
+  for (const key of THEME_COLOR_KEYS) {
+    const value = raw[key];
+    if (isPaletteColor(value)) out[key] = value;
+  }
+  return out;
+}
+
+/** The xterm palette for a custom theme, or null when it can't be resolved. The theme's own
+ *  `term` block wins over what its CSS variables imply — it is the more specific statement. */
 export function customTermTheme(theme: CustomThemeInput, builtins: Partial<Record<ThemeId, ThemeVars>>) {
   const vars = resolveThemeVars(theme, builtins);
-  return vars ? termThemeFromVars(vars) : null;
+  return vars ? { ...termThemeFromVars(vars), ...themeTermOverrides(theme) } : null;
 }

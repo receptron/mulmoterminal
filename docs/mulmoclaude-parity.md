@@ -24,6 +24,7 @@ Each of these runs the same engine as MulmoClaude, with host specifics injected:
 | Scheduler engine + user cron tasks (`config/scheduler/tasks.json` → spawn a visible chat) | `@mulmoclaude/core/scheduler` | `server/backends/scheduler.ts` (#125) |
 | RSS/JSON feed refresh (system task) | `@mulmoclaude/core/feeds(/server)` | `server/backends/feeds.ts` + `feedRefreshTaskDef` registration in `server/index.ts` |
 | Google account (loopback OAuth) + Calendar (events, non-primary calendars, colours) incl. the settings-UI link routes | `@mulmoclaude/core/google` | `server/backends/google.ts` (shim + `/api/google/*`), `remoteHost/googleCalendar.ts` (`createEvent`/`listEvents` w/ `calendarId`+`colorId`, `listCalendars`, `colors`), `server/cli-google.ts` (#386, #425) |
+| Collection ↔ Google Calendar: hourly pull, manual sync (the header button's calendar arm), push | `@mulmoclaude/core/google` | `server/backends/system-tasks.ts` (`googleCalendarSyncTaskDef`), `calendarRefresh.ts` + `calendarRefreshResult.ts`, `calendarPush.ts` + `calendarPushResult.ts` |
 
 The two workspaces are interchangeable: both apps read and write the same
 on-disk layout (`data/`, `.claude/skills/`, `config/`), and cross-app invariants
@@ -199,6 +200,25 @@ acknowledgement.
 (`spawnBackgroundChat` internals) from the item/collection action routes in
 `server/backends/collections.ts`, answering `{dispatched: true}`, and adding
 the run-key bookkeeping the plugin reads from the detail response.
+
+### 6. First sync of a freshly declared `googleCalendar` collection
+
+**What MulmoClaude has:** `startInitialCalendarSync`
+(`server/services/google/initialCalendarSync.ts`), fired from the config refresh
+that both a Write-tool create and `manageCollection`'s `putSchema` converge on.
+It calls `syncNewCalendarCollections`, so a calendar a user has just declared
+fills immediately.
+
+**Why MulmoTerminal doesn't:** nothing decided it; the manual arm of the same
+feature was the gap that issue #2108 reported, and this is its other half.
+Nothing is lost without it — `syncDueCalendarCollections` treats a never-synced
+collection as due, so the hourly task picks it up — which makes this latency, not
+a missed sync, and a separate change from the one that made the button work.
+
+**Picking it up means:** finding this host's equivalent of that convergence
+point (there is no `/api/config/refresh` here) and calling
+`syncNewCalendarCollections` behind the same single-flight, since authoring a
+collection writes several files in a burst.
 
 ---
 

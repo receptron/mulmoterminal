@@ -267,7 +267,34 @@ export type HeadlessRun =
  *  and a page that will answer does so in a few milliseconds — the handshake is two messages
  *  between a frame and its own parent. So it is short: it is paid once per mount by exactly the
  *  pages that are broken, and every mount of them. */
-export const LIMITS = { pages: 6, presses: 6, writes: 4, evaluateMs: 5000, readyMs: 2000, settleMs: 600, textChars: 400 } as const;
+/** Every wait a headless run may make, in one place.
+ *
+ *  `navigateMs` is the newest and the reason the others are worth listing: the harness navigation
+ *  was the one wait with no budget of its own, inheriting Puppeteer's 30s default — six times what
+ *  the `waitForFunction` on the line after it gets, in a file whose discipline is choosing these
+ *  numbers (#2103). Sized so that `openHarness`'s three attempts cost about what ONE attempt used
+ *  to, rather than three times it; not sized down to `evaluateMs`, because a loaded runner reading
+ *  a local bundle can legitimately take seconds and a budget that is too small produces the
+ *  spurious failure this repo has already paid for once (receptron/mulmoclaude#3201).
+ *
+ *  `harnessMs` is what actually bounds `openHarness`, and it exists because the per-attempt
+ *  arithmetic did NOT: one attempt is a navigation AND the wait after it AND the pause before the
+ *  next, so three reach 45s while `navigateMs` alone suggests 30s. Promising something about the
+ *  whole from a budget for one phase is how that claim came out wrong (CodeRabbit on #2104); the
+ *  loop watches the clock now instead of counting. */
+export const LIMITS = {
+  pages: 6,
+  presses: 6,
+  writes: 4,
+  harnessAttempts: 3,
+  harnessMs: 30_000,
+  navigateMs: 10_000,
+  retryPauseMs: 250,
+  evaluateMs: 5000,
+  readyMs: 2000,
+  settleMs: 600,
+  textChars: 400,
+} as const;
 
 /** The clickable things, in document order. `input[type=submit]` is in the list although the
  *  sandbox will never let one submit — that IS the finding, and a scan that skipped them would
@@ -544,6 +571,19 @@ async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | typeof
   }
 }
 
+/** The worst one attempt can cost: the navigation, the wait for the harness to appear, and the
+ *  pause before another attempt is started. */
+const ATTEMPT_WORST_MS = LIMITS.navigateMs + LIMITS.evaluateMs + LIMITS.retryPauseMs;
+
+/** May another attempt START, given what the loop has already spent?
+ *
+ *  Exported and pure because it is the rule the budget rests on, and this arithmetic is exactly
+ *  what went wrong the first time: a loop that only counts attempts promises a bound it does not
+ *  keep. An attempt is allowed only if the WHOLE of it fits in what is left, so the last thing to
+ *  happen is a real failure carrying a real diagnostic, rather than a caller abandoning a wait
+ *  nobody budgeted. */
+export const roomForAnotherHarnessAttempt = (elapsedMs: number): boolean => elapsedMs + ATTEMPT_WORST_MS <= LIMITS.harnessMs;
+
 /** Get the harness page loaded, and do not accept a first refusal.
  *
  *  `page.goto` has come back `net::ERR_ABORTED` against this server on a Windows runner while the
@@ -557,14 +597,16 @@ async function withDeadline<T>(work: Promise<T>, ms: number): Promise<T | typeof
  *  failure here names what was missing instead of arriving later as "render is not a function". */
 async function openHarness(page: Page, origin: string): Promise<void> {
   let last: unknown = null;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const startedAt = Date.now();
+  for (let attempt = 0; attempt < LIMITS.harnessAttempts; attempt += 1) {
     try {
-      await page.goto(origin, { waitUntil: "domcontentloaded" });
+      await page.goto(origin, { waitUntil: "domcontentloaded", timeout: LIMITS.navigateMs });
       await page.waitForFunction("window.__preview !== undefined", { timeout: LIMITS.evaluateMs });
       return;
     } catch (err) {
       last = err;
-      await new Promise((resolve) => setTimeout(resolve, 250));
+      if (!roomForAnotherHarnessAttempt(Date.now() - startedAt)) break;
+      await new Promise((resolve) => setTimeout(resolve, LIMITS.retryPauseMs));
     }
   }
   // Whether NODE can reach it, said in the same sentence. It separates "the server never came up"

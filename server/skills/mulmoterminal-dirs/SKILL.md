@@ -304,7 +304,9 @@ The seven above tint the **chrome** around the terminal. These paint the **termi
   `cursorAccent`, `selectionBackground`, `selectionForeground`, `selectionInactiveBackground`, and
   the ANSI 16: `black` `red` `green` `yellow` `blue` `magenta` `cyan` `white` `brightBlack`
   `brightRed` `brightGreen` `brightYellow` `brightBlue` `brightMagenta` `brightCyan` `brightWhite`.
-  Unknown keys are dropped.
+  Unknown keys are dropped. **This is per directory.** For the same override in every cell — one
+  cursor colour across the whole app — the theme's own `term` block is the place
+  (`mulmoterminal-theme`), and this block still wins over it here.
 
 ### Grid and launcher position — `orderPriority`
 

@@ -505,7 +505,18 @@ async function openFileInCanvas(path: string): Promise<void> {
 // GridView drives this one from OUTSIDE a user gesture (placing a spawned chat whose Canvas is
 // already seeded). The pane is TerminalGrid's own state — GridView owns the cells, not what sits
 // beside them — so this is the seam rather than another prop to watch.
-defineExpose({ openCanvasFor });
+/** The `files-find` shortcut's entrance (#2099): make sure the files pane is up, then put the
+ *  finder over it. Shaped like `showClickedPath` — the other way something outside this component
+ *  opens this pane — and for its reason: `setFilesOpen` answers for the pane that is ON SCREEN,
+ *  which is not always the enlarged cell. The pane can TRAIL another cell after a re-root it could
+ *  not save out of, and moving it from here would take that unsaved buffer with it. */
+async function openFilesFinder(): Promise<void> {
+  if (!filesOpen.value) setFilesOpen(true);
+  await nextTick(); // the pane may have just mounted; `filesPane` is only a ref afterwards
+  filesPane.value?.openFinder();
+}
+
+defineExpose({ openCanvasFor, openFilesFinder });
 
 // A pane button: opens its pane on that cell, or closes it when it is already the one that cell
 // has. `uid` is the cell whose button was pressed.

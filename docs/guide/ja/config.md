@@ -366,7 +366,7 @@ repo.json  →  .mulmoterminal.json  →  .mulmoterminal.local.json
 `../` で外に出るものは拒否されます。`preset:<id>` は **`sounds`**（種類ごと）で使えるので、プロジェクト側に音声
 ファイルを置く必要はありません。→ [通知音](#sounds)
 
-### ターミナル自体の色（xterm パレット）
+### ターミナル自体の色（xterm パレット） {#dir-colors}
 
 `headerColor` などが「**枠**（ヘッダー・セル）」の色なのに対し、**`colors`（と `theme`）は端末の中身（xterm）**を染めます。
 `colors` は xterm の ITheme——`background` / `foreground` / `cursor` や `red` `green` … の ANSI 16 色——を上書きできます。
@@ -382,6 +382,10 @@ repo.json  →  .mulmoterminal.json  →  .mulmoterminal.local.json
 
 `theme` に `midnight` / `nord` / `daylight` / `solarized` を指定するとプリセットのパレットになり、`colors` はその上へ部分上書き。
 [応用編 6](scenarios.html) の色分けスクショは、ヘッダー色と `colors` を組み合わせて**ヘッダーから端末の中身まで**プロジェクトごとに染めた例です。
+
+これは**プロジェクト単位**の設定です。同じ上書きを**全セル**に効かせたい（アプリ全体でカーソル色を
+1 つに揃えたい）ときは、テーマ側の `term` に書いてください
+（→ [ターミナルのパレットを直接指定する](#theme-term)）。
 
 ### ターミナルのフォントサイズ（`fontSize`） {#font-size}
 
@@ -612,7 +616,11 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 - **明るい配色は自動で判別されます**。`--bg-base` の明るさから判断し、ステータス表示（完了・待機・
   エラーの色）を明るい背景向けに切り替えます。何も書く必要はありません
 - **ターミナルの中身の色は自動で決まります**。背景は `--bg-base`、文字は `--term-fg`、選択は
-  `--term-selection`。ANSI 16 色は `extends` 先から受け継ぎます
+  `--term-selection`。カーソルも同じ 2 つから決まり、ブロックが `--term-fg`、その上に載る文字が
+  `--bg-base` — つまりカーソルのマスは「文字色と背景色を入れ替えたマス」になるので、いま指している
+  文字も読めたままです。ANSI 16 色は `extends` 先から受け継ぎます
+- **`term` を書けば、それらをすべて上書きできます**（xterm 自身のキー名で指定。→
+  [ターミナルのパレットを直接指定する](#theme-term)）
 
 **書き換えたら `mulmoterminal` を再起動してください。** グローバル設定はサーバ起動時に一度だけ
 読まれるので、`themes` を足しても・色を変えても、ページのリロードだけでは反映されません
@@ -630,6 +638,36 @@ MulmoTerminal の「**拡張**」の柱がここ。稼働中ターミナルの�
 | `--accent` / `--accent-bg` / `--accent-bg-hover` / `--on-accent` | アクセント色と、その上に載る文字 |
 | `--text` / `--text-secondary` / `--text-muted` / `--text-dim` | 文字の 4 段階 |
 | `--term-fg` / `--term-selection` | ターミナルの文字色・選択範囲 |
+
+### ターミナルのパレットを直接指定する（`term`） {#theme-term}
+
+`colors` から端末に届くのは上の 4 種類の導出だけです。カーソルの色を自分で決めたい、`extends` 先の
+ANSI 16 色のうち 1 色だけ差し替えたい、という場合は `colors` の隣に `term` を書きます。
+
+```json
+{
+  "themes": [
+    {
+      "id": "washi",
+      "label": "Washi",
+      "extends": "daylight",
+      "colors": { "--bg-base": "#ece7dc", "--term-fg": "#2a2622" },
+      "term": { "cursor": "#b0402a", "cursorAccent": "#fffdf8" }
+    }
+  ]
+}
+```
+
+- キーはプロジェクトの `.mulmoterminal.json` の `colors` と同じ集合です
+  （→ [ターミナル自体の色](#dir-colors)）。`foreground` / `background` / `cursor` /
+  `cursorAccent` / `selectionBackground` / `selectionForeground` /
+  `selectionInactiveBackground` と、ANSI 16 色（`red` … `brightWhite`）
+- **`cursor` はブロック、`cursorAccent` はその上に描かれる文字です。** 2 つで 1 組として指定してください。
+  片方だけ書くと、書かなかったほうは導出値のままなので、もう片方に埋もれることがあります
+- 値は `colors` と同じく hex。**この一覧に無いキーを書くと、そのテーマ全体が読まれません** —
+  `term` と `colors` はキーの語彙が違うので、`--bg-base` を `term` に書いてしまうのがよくある間違いです
+- そのセルのディレクトリに `colors` があれば、そちらが勝ちます。広い順に
+  `extends` 先 → `colors` からの導出 → `term` → ディレクトリの `colors`
 
 ### 作る手順
 
@@ -1096,6 +1134,7 @@ Claude のセッションが何かを尋ねて止まったとき —— 普段�
 | `terminal-new-adjacent` | 今のターミナルの作業ディレクトリで**シェルを即座に起動**する。フォームは出ない。「このターミナルを分割する」に最も近い | 必要 |
 | `terminal-close` | 今のターミナルを**閉じる**（セルの閉じるボタンと同じ） | 必要 |
 | `terminal-restart` | 今のターミナルの**エージェントを再起動**する —— 同じセル・同じディレクトリ・同じ会話のまま。resume の代償があり、作業中でも中断します | 必要 |
+| `files-find` | 今のターミナルの横の Files ペインで、**ファイル名から探して開く**。名前やパスの一部を打って候補から選ぶと、ツリーもそのファイルの位置まで開いた状態で開きます。git リポジトリなら候補は git から取るので `.gitignore` が効き、そうでないディレクトリはツリーを走査し、ignore ファイルは読まず、`node_modules` など手で書かないディレクトリだけを飛ばします。ペインが閉じていれば先に開きます | 必要 |
 | `copy` | ターミナルの選択範囲を**コピー**。**選択がある時だけ**動き、選択が無ければキーはそのままシェルへ届く — これにより `Ctrl+C` を割り当てても**中断（^C）を失いません** | 不要 |
 | `paste` | ターミナルへ**ペースト** | 不要 |
 
@@ -1113,6 +1152,11 @@ Claude のセッションが何かを尋ねて止まったとき —— 普段�
 > **`terminal-restart` も確認なしで即座に実行されます。** 作業中でもエージェントを終了し、会話は
 > transcript から読み直しになります——無料の再読み込みではなく、実際にトークンを消費します。
 > MCP サーバ・設定ファイル・plugin を変更して、動いているエージェントに反映させたいときのためのものです。
+
+{: .note }
+> **`files-find` は割り当てなくても使えます。** Files ペインのヘッダーにある検索ボタンが同じパネルを
+> 開くので、割り当てるのは「キーボードから開きたい」場合だけで十分です。なお macOS のブラウザでは
+> `Cmd+P` は印刷に取られているので、別のキーを選んでください。
 
 ### すぐ使えるキーマップ例
 

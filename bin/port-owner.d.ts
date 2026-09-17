@@ -12,7 +12,7 @@ export type PortOwnerRunner = (
   file: string,
   args: readonly string[],
   options: { timeout: number; windowsHide: boolean },
-  callback: (error: PortOwnerError | null, stdout: string) => void,
+  callback: (error: PortOwnerError | null, stdout: string, stderr?: string) => void,
 ) => void;
 
 export interface PortOwnerDeps {

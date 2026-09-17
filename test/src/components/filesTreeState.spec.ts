@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { expandedPaths, restoreOrder, type TreeNode } from "../../../src/components/filesTreeState";
+import { ancestorDirs, expandedPaths, restoreOrder, type TreeNode } from "../../../src/components/filesTreeState";
 
 const dir = (path: string, expanded: boolean, children: TreeNode[] = []): TreeNode => ({ path, dir: true, expanded, children });
 const file = (path: string): TreeNode => ({ path, dir: false, expanded: false, children: [] });
@@ -33,5 +33,23 @@ describe("restoreOrder", () => {
 
   it("is empty for nothing remembered", () => {
     expect(restoreOrder([])).toEqual([]);
+  });
+});
+
+describe("ancestorDirs", () => {
+  it("lists the directories to open, outermost first", () => {
+    expect(ancestorDirs("a/b/c.ts")).toEqual(["a", "a/b"]);
+  });
+
+  it("has nothing to open for a file at the root", () => {
+    expect(ancestorDirs("README.md")).toEqual([]);
+  });
+
+  it("ignores empty segments from a doubled or trailing separator", () => {
+    expect(ancestorDirs("a//b/c.ts")).toEqual(["a", "a/b"]);
+  });
+
+  it("has nothing to say about an empty path", () => {
+    expect(ancestorDirs("")).toEqual([]);
   });
 });

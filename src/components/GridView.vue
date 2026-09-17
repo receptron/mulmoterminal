@@ -533,6 +533,10 @@ function runCellShortcut(shortcut: GridShortcut, uid: number | null) {
     state.value = insertCellAfter(state.value, uid, shellCell(adjacentCwd(uid)));
   } else if (shortcut === "terminal-close") {
     onClose(uid);
+  } else if (shortcut === "files-find") {
+    // The grid owns the key; the pane that answers it belongs to TerminalGrid, which alone knows
+    // what is enlarged and where the pane is rooted.
+    void gridRef.value?.openFilesFinder();
   } else if (shortcut === "terminal-restart") {
     // The cell owns its session, so it does the work; a cell still on its launch form declines and
     // the key does nothing, which is the same answer its header button gives.

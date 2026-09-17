@@ -13,7 +13,7 @@
 import path from "node:path";
 import { z } from "zod";
 // Shared with the client dir-config parser so the two can't drift — see common/themeColors.ts.
-import { THEME_COLOR_KEYS } from "../../common/themeColors.js";
+import { THEME_COLOR_KEYS, PALETTE_COLOR_RE } from "../../common/themeColors.js";
 import { THEME_IDS } from "../../common/themeIds.js";
 import { CUSTOM_THEME_ID_RE, THEME_VAR_KEYS, isBuiltinThemeId } from "../../common/themeVars.js";
 import { isUsableModelId, isUsableProviderId } from "../../common/modelIds.js";
@@ -54,8 +54,6 @@ export const NAME_MAX_CHARS = 40;
 export const MAX_BUTTONS = 32;
 export const MAX_CHIPS = 16;
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
-// xterm accepts #rgb / #rgba / #rrggbb / #rrggbbaa for palette colors.
-const PALETTE_COLOR_RE = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
 
 // ---- primitives ---------------------------------------------------------------------------
 
@@ -178,6 +176,11 @@ export const customThemeSchema = z
     label: z.string().trim().min(1).max(NAME_MAX_CHARS),
     extends: z.enum(THEME_IDS).optional(),
     colors: z.partialRecord(z.enum(THEME_VAR_KEYS), paletteColor),
+    // The canvas colours `colors` cannot reach — the cursor pair above all (#2097). The same key
+    // set a directory's `colors` block takes, so one palette vocabulary covers both scopes, and
+    // the same `paletteColor`: these end up as xterm ITheme values rather than in CSS, but a
+    // second, looser shape for the same colours is how one of them stops being checked.
+    term: z.partialRecord(z.enum(THEME_COLOR_KEYS), paletteColor).optional(),
   })
   // Enforced HERE, not only where it is painted (Codex review on #996): an incomplete theme with
   // no base cannot be resolved, so keeping it puts an entry in the picker that silently falls

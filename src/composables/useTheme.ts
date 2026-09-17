@@ -18,6 +18,11 @@ export interface Theme {
   // an explicit terminal palette mirroring its CSS tokens. Light themes also set
   // the 16 ANSI colors (mapping bright-white to a dark tone) so colored TUI output
   // stays legible on a light background — xterm's defaults assume a dark canvas.
+  //
+  // `cursorAccent` (the glyph drawn ON the cursor block) is set by every theme for the same
+  // reason: xterm's default is a flat `#000000`, which on a light theme is black on a dark
+  // block — the one character you are looking at, unreadable (#2097). It is each theme's own
+  // background, so the cursor cell reads as an inverted one.
   term: ITheme;
 }
 
@@ -26,13 +31,13 @@ export const THEMES: (Theme & { id: ThemeId })[] = [
     id: "midnight",
     label: "Midnight",
     swatch: { base: "#1a1a2e", panel: "#16213e", accent: "#4a8cff" },
-    term: { background: "#1a1a2e", foreground: "#e0e0e0", cursor: "#e0e0e0", selectionBackground: "#3a3a5e" },
+    term: { background: "#1a1a2e", foreground: "#e0e0e0", cursor: "#e0e0e0", cursorAccent: "#1a1a2e", selectionBackground: "#3a3a5e" },
   },
   {
     id: "nord",
     label: "Nord",
     swatch: { base: "#2e3440", panel: "#3b4252", accent: "#88c0d0" },
-    term: { background: "#2e3440", foreground: "#d8dee9", cursor: "#d8dee9", selectionBackground: "#434c5e" },
+    term: { background: "#2e3440", foreground: "#d8dee9", cursor: "#d8dee9", cursorAccent: "#2e3440", selectionBackground: "#434c5e" },
   },
   {
     id: "daylight",
@@ -42,6 +47,7 @@ export const THEMES: (Theme & { id: ThemeId })[] = [
       background: "#f4f6fb",
       foreground: "#1b2430",
       cursor: "#1b2430",
+      cursorAccent: "#f4f6fb",
       selectionBackground: "#cfe0ff",
       black: "#1b2430",
       red: "#cf222e",
@@ -69,6 +75,7 @@ export const THEMES: (Theme & { id: ThemeId })[] = [
       background: "#fdf6e3",
       foreground: "#586e75",
       cursor: "#586e75",
+      cursorAccent: "#fdf6e3",
       selectionBackground: "#eee8d5",
       black: "#073642",
       red: "#dc322f",
@@ -173,7 +180,8 @@ export function termThemeFor(id: string): Theme["term"] {
   if (builtin) return builtin.term;
   const custom = findCustomTheme(id);
   // A custom theme's canvas colours are derived from its chrome variables, and the 16 ANSI
-  // colours come from the base it extends — hence the spread over that base's palette.
+  // colours come from the base it extends — hence the spread over that base's palette. Its own
+  // `term` block rides along inside `derived` and wins over both (#2097).
   const derived = custom ? customTermTheme(custom, builtins()) : null;
   const base = THEMES.find((t) => t.id === custom?.extends) ?? THEMES[0];
   const fallback = THEMES[0];

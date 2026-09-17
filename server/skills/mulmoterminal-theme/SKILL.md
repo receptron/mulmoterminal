@@ -86,21 +86,25 @@ A theme is global. If the user wanted "this project in my new scheme", the secon
 | `id` | **Required.** Lowercase letter first, then lowercase/digits/dashes, ≤ 32 chars (`^[a-z][a-z0-9-]{0,31}$`). It becomes a `data-theme` attribute value and is what a project's `theme` key names. |
 | `label` | **Required.** What the picker shows, ≤ 40 chars after trimming. |
 | `extends` | Optional: `"midnight"` / `"nord"` / `"daylight"` / `"solarized"`. Omit only if you set all 20 colours. |
-| `colors` | Hex only — `#rgb` / `#rgba` / `#rrggbb` / `#rrggbbaa`. Unknown keys are dropped. |
+| `colors` | Hex only — `#rgb` / `#rgba` / `#rrggbb` / `#rrggbbaa`. **A key outside the 20 drops the whole theme**, so check spelling before writing. |
+| `term` | Optional. The xterm palette, set outright — see [The terminal palette](#the-terminal-palette-term) below. Same hex rule, and its own key vocabulary. |
 
 **`id` must not be a built-in id.** `midnight`, `nord`, `daylight` and `solarized` are refused
 rather than merged into — someone reading the guide's description of Midnight has to get Midnight.
 
-The hex shape is doing security work, not tidiness: these values land in CSS custom properties, so
-a value that escaped the hex shape would be injected into a style declaration. Never write anything
-but a hex literal here — no `var(...)`, no `color-mix(...)`, no named colours.
+The hex shape is doing security work in `colors`, not tidiness: those values land in CSS custom
+properties, so one that escaped the shape would be injected into a style declaration. `term` goes
+to a canvas instead, where the risk is different and still real — xterm throws on a colour it
+cannot parse, and it throws while the whole theme object is being applied, so one bad string costs
+every colour in the terminal. Never write anything but a hex literal in either — no `var(...)`, no
+`color-mix(...)`, no named colours.
 
 ### The 20 keys
 
 | Key | Role |
 |---|---|
-| `--bg-base` | The page behind everything |
-| `--bg-deep` | The deepest surface (terminal background) |
+| `--bg-base` | The page behind everything — **and the terminal background**, which xterm takes from here |
+| `--bg-deep` | The deepest chrome surface: side panes, overlays, inset boxes |
 | `--bg-panel` | Panels, modals, the sidebar |
 | `--bg-subtle` | A surface a step up from the panel |
 | `--bg-elevated` | Cards, popovers, dropdowns |
@@ -116,6 +120,40 @@ but a hex literal here — no `var(...)`, no `color-mix(...)`, no named colours.
 | `--term-fg` | Default terminal foreground |
 | `--term-selection` | Selection in the terminal |
 
+## The terminal palette (`term`)
+
+`colors` reaches the terminal canvas only by derivation: background from `--bg-base`, text and the
+cursor block from `--term-fg`, selection from `--term-selection`, and the character drawn ON the
+cursor from `--bg-base`. That makes the cursor an inverted cell, which is the right default and
+not always the wanted one.
+
+`term` states the palette directly, in xterm's own key names:
+
+```json
+{ "id": "washi", "label": "Washi", "extends": "daylight",
+  "colors": { "--bg-base": "#ece7dc", "--term-fg": "#2a2622" },
+  "term": { "cursor": "#b0402a", "cursorAccent": "#fffdf8" } }
+```
+
+Reach for it in two situations, and otherwise leave it out — the derivation is usually right:
+
+- **A cursor of its own.** `cursor` is the block, `cursorAccent` the character on it. **Write both
+  or neither**: set only `cursor` and the character keeps the derived background, which may now be
+  invisible on the new block colour. Check that pair for contrast the way you checked `--text`.
+- **One ANSI colour different from the base.** Those 16 have no CSS variable at all, so before
+  `term` the only way to change a single red was to give up `extends` entirely.
+
+The keys are the same set a project's `.mulmoterminal.json` takes in *its* `colors` block:
+`foreground`, `background`, `cursor`, `cursorAccent`, `selectionBackground`,
+`selectionForeground`, `selectionInactiveBackground`, and `black` … `brightWhite`.
+
+**`term` and `colors` do not share a vocabulary.** A CSS variable written into `term` — or an
+xterm name written into `colors` — drops the whole theme, silently, at load. That is the mistake
+to look for first when a theme you just wrote is missing from the picker.
+
+A project's own `colors` block still wins over `term` for that project's cells. Widest to
+narrowest: `extends` → what `colors` implies → `term` → the directory.
+
 ## When it doesn't take
 
 Work down this list before changing colours:
@@ -125,4 +163,8 @@ Work down this list before changing colours:
 - **Nothing changed after picking it** — an `extends`-less theme missing keys never reached the
   config at all. Re-read `~/.mulmoterminal/config.json` and see whether the entry is actually there.
 - **The whole array vanished** — a partial write. Always send `themes` complete.
-- **One colour ignored** — a key outside the 20, or a value that isn't a hex literal.
+- **One theme vanished** — a key outside its block's vocabulary, or a value that isn't a hex
+  literal. Neither is ignored in place: the entry is dropped whole. A CSS variable inside `term`,
+  or an xterm name inside `colors`, is the usual cause.
+- **The theme is there but the terminal ignored a colour** — `colors` only reaches the canvas as
+  background / foreground / selection / cursor. Anything else has to be in `term`.

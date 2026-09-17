@@ -22,6 +22,7 @@ export const KEYMAP_ACTIONS = [
   "terminal-new-adjacent",
   "terminal-close",
   "terminal-restart",
+  "files-find",
   "copy",
   "paste",
 ] as const;
@@ -49,7 +50,17 @@ export const TERMINAL_SCOPED_ACTIONS: readonly KeymapAction[] = ["copy", "paste"
 // Here rather than beside gridShortcutFor because BOTH sides decide from it: the grid dispatches on
 // it, and validateKeymap has to know that these decline the key — the handler returns WITHOUT
 // stopping the event, so a `send` on the same keystroke fires instead (codex on #1906).
-export const NEEDS_A_CURRENT_TERMINAL: readonly KeymapAction[] = ["zoom-next", "zoom-prev", "terminal-new-adjacent", "terminal-close", "terminal-restart"];
+// `files-find` is here because the pane it opens exists only in the ENLARGED row (see
+// docs/grid-view-modes.md) — a tiled grid has nowhere to put it, so the key declines rather than
+// guessing which of nine terminals was meant.
+export const NEEDS_A_CURRENT_TERMINAL: readonly KeymapAction[] = [
+  "zoom-next",
+  "zoom-prev",
+  "terminal-new-adjacent",
+  "terminal-close",
+  "terminal-restart",
+  "files-find",
+];
 
 // A key that puts BYTES into the focused terminal instead of running an app action (#1005) —
 // Cmd+Right as Ctrl+E for end-of-line, say, or Alt+B for word-back.
