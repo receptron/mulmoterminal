@@ -95,3 +95,10 @@ Validation: 127 Bot and bundled-skill tests passed across 9 files, including exp
 Live inspection found the new project Bot idle with a styled `[⧉ In 22.md]` editor-context badge in the input box. The empty-input check treated that UI badge as a real draft, while lifecycle status remained ready, so the task stayed queued without a diagnostic. Recognize only the observed standalone styled badge in the hidden-Bot parser, continue rejecting unstyled lookalikes or additional draft text, and include queued work in the no-progress diagnostic. Verify the real pending request continues under the same Bot and request ids after deploying the fix.
 
 Validation: all 80 Bot tests, lint, typecheck/build, formatting and diff checks passed. Updated only the test server, preserving Bot and request identities. The previously queued live request changed to sent and the existing Bot began reading its task inputs. No replacement Bot or duplicate request was created.
+
+
+### Mouse activity must not masquerade as a frontend draft
+
+A completed Bot result remained unread because the requesting frontend was ready but its input guard retained `dirty: true`. The shared input path treated mouse reports as draft edits. Mouse reports still count as user activity and must interrupt paced question answers; only draft tracking excludes complete mouse reports. Mouse activity delays delivery for a settling interval without clearing any existing draft. Before sending to a tmux frontend, the host also verifies its current input box is empty and idle, so a click that selects a suggestion or opens a dialog cannot receive an automatic paste. Frontends without tmux retain conservative draft tracking. Unknown or partial input remains guarded.
+
+Regression coverage exercises mouse-driven wakeups, the settling delay, interruption of question answers, visible drafts and dialogs, unknown captures, and preservation of real typed drafts.

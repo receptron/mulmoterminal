@@ -33,6 +33,11 @@ export const noteBotUserInput = (id: string): void => {
   stateOf(id).dirty = true;
 };
 
+/** Let mouse-driven redraws settle without inventing or clearing a text draft. */
+export const noteBotPointerInput = (id: string): void => {
+  stateOf(id).readyAt = Date.now() + 750;
+};
+
 /** Only a surviving hidden Bot can recover from a verified empty, idle tmux screen. */
 export function recoverBotInput(id: string, afterDialog = false): void {
   const state = stateOf(id);

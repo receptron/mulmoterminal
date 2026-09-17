@@ -3,7 +3,7 @@
 // exactly like typing. Counting them as typing refused every answer from the question pane after
 // any attach, resize or theme read (#1693). The samples below were CAPTURED from a real cell.
 import { describe, it, expect } from "vitest";
-import { scanForUserInput } from "../../common/terminalReplies";
+import { scanForUserInput, scanForDraftInput } from "../../common/terminalReplies";
 
 const ESC = "\u001b";
 const scan = (data: string, pending = "") => scanForUserInput(pending, data);
@@ -74,4 +74,19 @@ describe("scanForUserInput", () => {
   it("has nothing to report for an empty chunk", () => {
     expect(scan("")).toEqual({ fromUser: false, pending: "" });
   });
+});
+
+describe("scanForDraftInput", () => {
+  it.each([`${ESC}[<64;20;10M`, `${ESC}[<65;20;10M`, `${ESC}[<0;20;10M${ESC}[<0;20;10m`, `${ESC}[M !"`])(
+    "distinguishes complete mouse activity from draft input: %j",
+    (mouse) => {
+      expect(scanForUserInput("", mouse).fromUser).toBe(true);
+      expect(scanForDraftInput("", mouse)).toEqual({ fromUser: false, pending: "" });
+      expect(scanForDraftInput("", `${ESC}[I${mouse}${ESC}[?1;2c`).fromUser).toBe(false);
+    },
+  );
+  it.each(["draft", `${ESC}[A`, `${ESC}[<64;20;10Mdraft`, `draft${ESC}[<0;20;10m`, `${ESC}[<64;20`, `${ESC}[M !`, `${ESC}[200~${ESC}[<0;20;10M${ESC}[201~`])(
+    "preserves text, history keys, incomplete reports and pasted input: %j",
+    (input) => expect(scanForDraftInput("", input).fromUser).toBe(true),
+  );
 });

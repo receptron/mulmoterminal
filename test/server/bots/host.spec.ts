@@ -11,6 +11,7 @@ import { botInputPhase, forgetBotInput, noteBotUserInput } from "../../../server
 import { isBotSession } from "../../../server/bots/session-marker.js";
 import { tmuxAttachedClientCount, tmuxCaptureStyledPane } from "../../../server/infra/tmux.js";
 import { idleScreen, resumeScreen, permissionScreen } from "./prompt-fixtures.js";
+import { noteInput, otherWriteCount, watchOtherWrites, stopWatchingOtherWrites } from "../../../server/session/write-to-session.js";
 import { observeSessionBotHook } from "../../../server/bots/hooks.js";
 
 vi.mock("../../../server/session/registry.js", () => ({ ptys: new Map(), backgroundMarkers: new Set() }));
@@ -198,6 +199,70 @@ describe("Bot host transport", () => {
     await vi.advanceTimersByTimeAsync(1600);
     expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith("\r");
     expect(isBotSession(bot.id)).toBe(true); // killed transcripts stay hidden
+  });
+
+  it.each(["\u001b[<64;20;10M", "\u001b[<0;20;10M\u001b[<0;20;10m"])("wakes the frontend after mouse activity settles: %j", async (mouse) => {
+    const bot = create();
+    dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "task" });
+    dispatchBotTool(owner, "manageBot", { action: "kill", botId: bot.botId });
+    handleBotHook(owner, "Stop");
+    watchOtherWrites(owner);
+    try {
+      await vi.advanceTimersByTimeAsync(700);
+      noteInput(owner, mouse);
+      expect(otherWriteCount(owner)).toBe(1); // mouse input must still interrupt question answers
+      await vi.advanceTimersByTimeAsync(700);
+      expect(ptys.get(owner)?.term.write).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith(expect.stringContaining("readBotReplies"));
+      expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith("\r");
+    } finally {
+      stopWatchingOtherWrites(owner);
+    }
+  });
+
+  it.each([idleScreen.replace("❯ ", "❯ selected prompt"), permissionScreen(), "unknown layout", null])(
+    "holds frontend delivery when a mouse interaction leaves a nonempty or unknown screen: %j",
+    async (screen) => {
+      const bot = create();
+      dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "task" });
+      dispatchBotTool(owner, "manageBot", { action: "kill", botId: bot.botId });
+      handleBotHook(owner, "Stop");
+      noteInput(owner, "\u001b[<0;20;10M");
+      vi.mocked(tmuxCaptureStyledPane).mockReturnValue(screen);
+      await vi.advanceTimersByTimeAsync(6000);
+      expect(ptys.get(owner)?.term.write).not.toHaveBeenCalled();
+      vi.mocked(tmuxCaptureStyledPane).mockReturnValue(idleScreen);
+      await vi.advanceTimersByTimeAsync(1600);
+      expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith("\r");
+    },
+  );
+
+  it("never clears an existing typed draft on mouse activity, even with an empty-looking screen", async () => {
+    const bot = create();
+    dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "task" });
+    dispatchBotTool(owner, "manageBot", { action: "kill", botId: bot.botId });
+    handleBotHook(owner, "Stop");
+    noteInput(owner, "draft");
+    noteInput(owner, "\u001b[<64;20;10M");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(ptys.get(owner)?.term.write).not.toHaveBeenCalled();
+    handleBotHook(owner, "UserPromptSubmit");
+    handleBotHook(owner, "Stop");
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(ptys.get(owner)?.term.write).toHaveBeenCalledWith("\r");
+  });
+
+  it("keeps mouse activity conservative when the frontend has no tmux screen to verify", async () => {
+    const bot = create();
+    dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "task" });
+    dispatchBotTool(owner, "manageBot", { action: "kill", botId: bot.botId });
+    const frontend = { ...entry(owner), tmux: false };
+    ptys.set(owner, frontend);
+    handleBotHook(owner, "Stop");
+    noteInput(owner, "\u001b[<64;20;10M");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(frontend.term.write).not.toHaveBeenCalled();
   });
 
   it.each([800, 1600])("ignores a delayed idle reminder during or after task submission at %dms", async (elapsed) => {

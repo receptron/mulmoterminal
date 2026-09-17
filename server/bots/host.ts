@@ -21,7 +21,7 @@ import {
   observeBotInputHook,
   recoverBotInput,
 } from "./input-gate.js";
-import { BotRecovery } from "./recovery.js";
+import { BotRecovery, idleBotScreen } from "./recovery.js";
 import { PromptMonitor } from "./prompt-monitor.js";
 import { answerChoice } from "./prompt-input.js";
 import type { BotPrompt } from "./prompt-schema.js";
@@ -40,7 +40,7 @@ async function send(id: string, text: string): Promise<boolean> {
   if (isBotSession(id)) {
     const screen = inspectScreen(id);
     if (!screen?.idle) return false;
-  }
+  } else if (entry.tmux && idleBotScreen(tmuxCaptureStyledPane(id, 0) ?? "") === null) return false;
   const lease = claimBotInput(id);
   if (lease === null) return false;
   try {

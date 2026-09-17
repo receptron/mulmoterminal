@@ -29,6 +29,7 @@ const REPLIES = [
 ].join("|");
 
 const ANY_REPLY = new RegExp(REPLIES, "g");
+const MOUSE_REPORT = new RegExp(`${ESC}\\[<\\d+;\\d+;\\d+[Mm]|${ESC}\\[M[\\s\\S]{3}`, "g");
 
 // A chunk can END mid-sequence: the socket splits where it likes, so `ESC[?1` and `;2c` can arrive
 // separately. Neither half matches, and both would read as "the user typed" — the very false alarm
@@ -64,3 +65,9 @@ export const scanForUserInput = (pending: string, data: string): InputScan => {
   if (rest.length > 0 && rest.length <= MAX_PENDING && STILL_GROWING.test(rest)) return { fromUser: false, pending: rest };
   return { fromUser: rest.length > 0, pending: "" };
 };
+
+/** Mouse reports are user activity (and must cancel paced answers), but do not type
+ * a draft. Only complete reports are excluded; keys, mixed text and unknown fragments
+ * remain conservative. Callers must verify the idle input box before automatic input,
+ * since a click can still change the CLI's UI or select a suggested prompt. */
+export const scanForDraftInput = (pending: string, data: string): InputScan => scanForUserInput("", `${pending}${data}`.replace(MOUSE_REPORT, ""));
