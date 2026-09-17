@@ -68,7 +68,7 @@ function inspectScreen(id: string) {
     return null;
   }
   const bot = service?.store.state.bots.find((item) => item.sessionId === id);
-  const outstanding = bot?.requests.some((request) => request.state === "sent" || request.state === "uncertain") ?? false;
+  const outstanding = bot?.requests.some((request) => request.state !== "replied") ?? false;
   const screen = monitor.inspect(id, raw, outstanding);
   if (screen.prompt) observeBotInputHook(id, "Notification");
   if (screen.idle && bot && service?.prompts.active(bot.id)) recoverBotInput(id, true);

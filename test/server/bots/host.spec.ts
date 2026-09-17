@@ -76,6 +76,31 @@ function create() {
 }
 
 describe("Bot host transport", () => {
+  it("delivers a queued request when the idle input box contains only an editor context badge", async () => {
+    const bot = create();
+    const request = dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "editor task" }) as { requestId: string };
+    vi.mocked(tmuxCaptureStyledPane).mockReturnValue(idleScreen.replace("❯ ", "\u001b[39m❯\u00a0\u001b[38;5;74m[⧉ In 22.md]\u001b[39m"));
+    handleBotHook(bot.id, "Stop");
+    await vi.advanceTimersByTimeAsync(1600);
+    expect(ptys.get(bot.id)?.term.write).toHaveBeenCalledWith(expect.stringContaining(request.requestId));
+    dispatchBotTool(bot.id, "replyToFrontend", { requestId: request.requestId, text: "editor result" });
+    expect(dispatchBotTool(owner, "readBotReplies", {})).toEqual([expect.objectContaining({ requestId: request.requestId, text: "editor result" })]);
+  });
+
+  it("reports queued work held by an unrecognized input screen even if lifecycle readiness is ready", async () => {
+    const bot = create();
+    const request = dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "held task" }) as { requestId: string };
+    vi.mocked(tmuxCaptureStyledPane).mockReturnValue(idleScreen.replace("❯ ", "❯ unrecognized input"));
+    handleBotHook(bot.id, "Stop");
+    await vi.advanceTimersByTimeAsync(122000);
+    expect(ptys.get(bot.id)?.term.write).not.toHaveBeenCalled();
+    expect(dispatchBotTool(owner, "manageBot", { action: "inspect", botId: bot.botId })).toMatchObject({
+      waitingPrompt: { kind: "unknown", message: expect.stringContaining("No CLI progress") },
+      requests: [{ requestId: request.requestId, state: "queued" }],
+    });
+    expect(dispatchBotTool(owner, "readBotReplies", {})).toEqual([expect.objectContaining({ kind: "question" })]);
+  });
+
   it.each(["absolute", "tilde"])("starts in an explicit %s cwd and preserves it across restart", (style) => {
     const target = path.join(dir, "mag2 project");
     fs.mkdirSync(target);

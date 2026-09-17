@@ -14,6 +14,15 @@ describe("surviving Bot screen recovery", () => {
     expect(idleBotScreen(screen("", "? for shortcuts"))).not.toBeNull();
   });
 
+  it("recognizes the standalone styled editor badge but never a draft or plain lookalike", () => {
+    const badge = "\u001b[38;5;74m[⧉ In 22.md]\u001b[39m";
+    expect(idleBotScreen(screen(badge))).not.toBeNull();
+    expect(idleBotScreen(screen(badge).replace("❯ ", "\u001b[39m❯\u00a0"))).not.toBeNull();
+    for (const input of ["[⧉ In 22.md]", badge + "typed", "typed" + badge, badge + "\nwrapped draft", "\u001b[38;5;74m[⧉ In 22.md]typed\u001b[39m"]) {
+      expect(idleBotScreen(screen(input))).toBeNull();
+    }
+  });
+
   it.each([
     screen("unfinished draft"),
     screen("\u001b[2msuggestion\u001b[0mtyped"),

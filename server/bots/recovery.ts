@@ -2,6 +2,12 @@ import { parseStyledRows } from "../session/screen-rows.js";
 import { claudeAdapter } from "../agents/claude.js";
 import { squashForMarker } from "../session/pty-scan.js";
 
+const ESC = "\u001b";
+// Claude 2.1.274 renders the active editor file as a cyan UI badge in an empty
+// prompt. Require its actual styling and the whole prompt row; plain lookalikes
+// and any text beside the badge remain drafts.
+const IDE_CONTEXT_ROW = new RegExp(`^(?:${ESC}\\[[\\d;]*m)*[ \\t]*❯[ \\t\\u00a0]*${ESC}\\[38;5;74m\\[⧉ In [^\\r\\n\\]]+\\]${ESC}\\[39m[ \\t]*$`, "u");
+
 // Only inspect the current input box, never a ready marker left in scrollback.
 // Unknown layouts fail closed. Dim suggestions are not drafts and are not accepted by paste.
 export function idleBotScreen(styled: string): string | null {
@@ -13,7 +19,8 @@ export function idleBotScreen(styled: string): string | null {
   const box = rows.slice(top + 1, bottom);
   const first = box[0];
   if (!first || !/^\s*❯(?:\s|$)/u.test(first.text)) return null;
-  if (first.text.replace(/^\s*❯(?:\s|$)/u, "").trim() !== first.dim.trim()) return null;
+  const empty = first.text.replace(/^\s*❯(?:\s|$)/u, "").trim() === first.dim.trim();
+  if (!empty && !IDE_CONTEXT_ROW.test(styled.split("\n")[top + 1] ?? "")) return null;
   if (box.slice(1).some((row) => row.text.trim() !== row.dim.trim())) return null;
   const footer = squashForMarker(
     rows
