@@ -76,6 +76,40 @@ function create() {
 }
 
 describe("Bot host transport", () => {
+  it.each(["absolute", "tilde"])("starts in an explicit %s cwd and preserves it across restart", (style) => {
+    const target = path.join(dir, "mag2 project");
+    fs.mkdirSync(target);
+    const home = vi.spyOn(os, "homedir").mockReturnValue(dir);
+    try {
+      const result = dispatchBotTool(owner, "manageBot", {
+        action: "create",
+        name: "editor",
+        role: "Edit articles",
+        cwd: style === "tilde" ? "~/mag2 project" : target + path.sep,
+      }) as { botId: string };
+      const id = spawn.mock.calls[0]?.[0];
+      expect(spawn).toHaveBeenCalledWith(id, null, null, expect.objectContaining({ cwd: target }));
+      expect(dispatchBotTool(owner, "manageBot", { action: "list" })).toEqual([expect.objectContaining({ botId: result.botId, cwd: target })]);
+      vi.clearAllTimers();
+      startBots(34567, spawn, vi.fn());
+      expect(spawn).toHaveBeenLastCalledWith(id, id, null, expect.objectContaining({ cwd: target }));
+      expect(dispatchBotTool(owner, "manageBot", { action: "list" })).toEqual([expect.objectContaining({ botId: result.botId, cwd: target })]);
+    } finally {
+      home.mockRestore();
+    }
+  });
+
+  it.each(["missing", "file", "relative", "", "   ", null])("rejects invalid cwd %j without registering or spawning a Bot", (kind) => {
+    const file = path.join(dir, "file.txt");
+    fs.writeFileSync(file, "not a directory");
+    const invalidPath = kind === "file" ? file : kind;
+    const cwd = kind === "missing" ? path.join(dir, "missing") : invalidPath;
+    expect(() => dispatchBotTool(owner, "manageBot", { action: "create", name: "editor", role: "Edit articles", cwd })).toThrow();
+    expect(spawn).not.toHaveBeenCalled();
+    expect(dispatchBotTool(owner, "manageBot", { action: "list" })).toEqual([]);
+    expect(fs.existsSync(path.join(dir, "bots", "34567", "state.json"))).toBe(false);
+  });
+
   it("disables tools when recovery cannot persist state, preserving the saved Bots", async () => {
     const bot = create();
     vi.mocked(tmuxCaptureStyledPane).mockReturnValue(permissionScreen());
@@ -284,6 +318,7 @@ describe("Bot host transport", () => {
     if (!frontend) throw new Error("Missing frontend");
     frontend.agent = "codex";
     expect(() => dispatchBotTool(owner, "manageBot", { action: "create", name: "unsupported", role: "role" })).toThrow("requires a live Claude");
+    expect(() => dispatchBotTool(owner, "manageBot", { action: "create", name: "unsupported", role: "role", cwd: dir })).toThrow("requires a live Claude");
     expect(() => dispatchBotTool(owner, "sendToBot", { botId: bot.botId, text: "unsupported" })).toThrow("requires a live Claude");
     expect(() => dispatchBotTool(owner, "manageBot", { action: "compact", botId: bot.botId })).toThrow("requires a live Claude");
     expect(spawn).toHaveBeenCalledOnce();

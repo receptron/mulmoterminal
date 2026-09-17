@@ -83,3 +83,9 @@ Implemented: version 3 state adds durable CLI prompts and a per-Bot `resumePolic
 Validation: the full suite passed with **898 files passed, 3 skipped; 13,241 tests passed, 50 skipped**. After the final delayed-screen-clear guard and parser refinements, all **63 Bot tests across 8 files** passed again. Final lint, typecheck/build, formatting and diff checks passed. Dialog tests use representative screen fixtures; the actual expired-cache Claude dialog has not yet been reproduced live.
 
 Restarted only the test server on port 34568 with this implementation. HTTP returned 200. Two independent read-only MCP callers saw the same two existing Bots, both `ready`, with `summary` policy and no pending questions. Compared the live store with `/private/tmp/bots-before-prompts-upgrade.json`: Bot ids, tmux session ids and requests were preserved. No tasks or dialog answers were sent to the user's existing Bots during this verification.
+
+### Follow-up: optional creation directory
+
+Allow `manageBot create` to accept optional `cwd`. When omitted, keep the caller's working directory. Explicit values accept absolute paths and home-relative `~/...` paths, use the host's existing directory validation/canonicalization, and fail before registering or spawning a Bot if invalid. Keep the live-Claude capability check even when `cwd` is supplied. The selected directory is persisted and passed to spawn/recovery, so callers in other directories keep using the same Bot context. Update the bundled skill and bilingual docs, and verify actual host dispatch/spawn arguments, persistence/restart, omitted/tilde paths and invalid inputs without touching the user's Bots.
+
+Validation: 127 Bot and bundled-skill tests passed across 9 files, including explicit/tilde cwd, inherited cwd, restart persistence, invalid directories and the live-Claude requirement with an override. Typecheck/build and formatting passed; final lint and diff checks run before commit.

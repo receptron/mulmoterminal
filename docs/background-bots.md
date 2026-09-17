@@ -24,7 +24,13 @@ sequenceDiagram
 
 MCP receipt alone does not run a frontend turn. The host sends a fixed mailbox notice through its existing PTY, then the frontend reads the actual reply through MCP. A hook-backed input lease delays automatic input during work, drafts, dialogs, and concurrent typing. Queued requests execute one at a time per Bot. `/compact` joins the same queue; its role remains in the appended system instructions.
 
-The first version supports **Claude as both frontend and Bot**, requires tmux, and inherits the frontend's working directory. It uses neither `-p` nor a model polling loop. Other CLI adapters need their own reliable idle/draft/submit signals before automatic wakeup is enabled.
+The first version supports **Claude as both frontend and Bot**, requires tmux, and defaults to the frontend's working directory. It uses neither `-p` nor a model polling loop. Other CLI adapters need their own reliable idle/draft/submit signals before automatic wakeup is enabled.
+
+Creation accepts optional `cwd` to start in another existing directory. Use an absolute path or `~/...` (expanded on the host). Omitting it preserves the frontend-directory default; relative, missing or non-directory paths are rejected before creating a Bot. The selected directory is persisted for restart and is used for the Bot's directory configuration. It does not change when another terminal contacts the Bot.
+
+```json
+{ "action": "create", "name": "mag2-bot", "role": "Edit Life is Beautiful articles", "cwd": "~/git/ai/mag2" }
+```
 
 Bot state and mailboxes live in `~/.mulmoterminal/bots/<port>/state.json`. Durable markers in `~/.mulmoterminal/bot-sessions/` also hide transcripts after kill or compaction. A host restart reconnects surviving tmux sessions. The host restores Bot readiness after a lifecycle signal or two stable tmux captures of a recognized idle, empty input box (dim suggestions are allowed). Busy screens, drafts, dialogs and unknown layouts keep delivery pending. This screen recovery is limited to surviving hidden Bots. Reattached frontend drafts are conservatively considered occupied until a user submits a turn. Missed Bot turns become explicit errors when a later idle signal arrives; uncertain requests are never blindly replayed. Pending mailbox notifications may be repeated after a crash; reply ids support deduplication.
 
@@ -52,6 +58,8 @@ Botはtmux上で動くClaude Codeの対話セッションです。ターミナ�
 「Botを作ってテストの不足を調べて」と依頼すると、フロントがBotを作成して仕事を渡します。結果はMCP経由で保存され、フロントが待機中になったら自動的に続きを開始します。ユーザーが「終わった？」と聞く必要はありません。入力途中や確認ダイアログ中は返信の通知を保留します。
 
 `bot`スキルで一覧・作成・依頼・compact・killを操作できます。compactしてもBotの役割と識別子は維持されます。初期版はフロントとBotの両方がClaudeの場合に対応します。再起動後やCLIの確認待ちで状態を判定できない場合は保留し、依頼を勝手に再実行しません。
+
+作成時の `cwd` はオプションです。`cwd: "~/git/ai/mag2"` のように指定すると、そのディレクトリと設定で起動します。絶対パスまたは `~/...` を指定でき、省略時は会話の作業ディレクトリを継承します。存在しないパスやファイル、相対パスは作成前に拒否します。別のセルを開く必要はありません。指定したディレクトリは再起動後も維持され、既存Botのディレクトリを変更するものではありません。
 
 同じMulmoTerminalサーバー内の複数ターミナルから、同じBotを一覧・利用・compact・killできます。返信はBotを作成したターミナルではなく、その仕事を依頼したターミナルに届きます。Botの作業ディレクトリとコンテキストは共通で、別ポートのサーバー間では共有しません。
 
