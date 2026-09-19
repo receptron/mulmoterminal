@@ -50,19 +50,36 @@ const dropEndedSessionFiles = (reaped: readonly string[]): void => {
     });
 };
 
+/** The interval a previous schedule started, so a new one can cancel it. */
+let armedTimer: ReturnType<typeof setInterval> | null = null;
+
 // Off unless asked for: a running server that starts ending sessions because someone upgraded is
 // the surprise worth avoiding.
 //
-// Answers with what it armed — the hours, or OFF when it armed nothing. That return value is the
-// whole of what `armedReapIntervalHours` knows, so the two cannot drift: there is no path that
-// starts a timer without reporting it.
+// Answers with what it armed — the hours, or OFF when it armed nothing — and that return value is
+// the whole of what `armedReapIntervalHours` reports.
+//
+// **A superseded schedule is cancelled first, on every call, including one that arms nothing.**
+// Without that, `startReapSchedule(6)` then `startReapSchedule(0)` leaves the six-hour interval
+// ticking while the getter says OFF, and the list then promises "ends at next start" about a
+// session the very next sweep will take — the understatement this whole change exists to remove
+// (Codex round 1 on #2191, reproduced by advancing the clock and watching a sweep fire).
+//
+// This is NOT the live re-arming that #2167 declined. That was re-arming on every config POST,
+// which lets a stream of edits reset the countdown forever. This cancels only when a caller
+// explicitly starts a new schedule, which happens once per process at boot.
 function armTimer({ intervalHours, idleDays, log }: ReapSchedule): number {
+  if (armedTimer !== null) {
+    clearInterval(armedTimer);
+    armedTimer = null;
+  }
   if (!reapTimerEnabled(intervalHours)) return REAP_INTERVAL_HOURS_OFF;
   log(`[tmux] idle-session sweep repeats every ${intervalHours}h`);
   const timer = setInterval(() => {
     dropEndedSessionFiles(sweepNow(idleDays, log).reaped);
   }, reapIntervalMs(intervalHours));
   timer.unref(); // a sweep waiting to run is never a reason to keep the process alive
+  armedTimer = timer;
   return intervalHours;
 }
 
@@ -88,7 +105,8 @@ export function startReapSchedule(schedule: ReapSchedule): string[] {
   const sweep = sweepNow(schedule.idleDays, schedule.log);
   // Assigned on EVERY call, not only when a timer starts: were it set inside the `if`, a schedule
   // that armed nothing would leave the previous value standing and report a cadence that is not
-  // running.
+  // running. `armTimer` cancels any superseded interval first, so the number it returns is the
+  // timer that is actually scheduled rather than merely the last one started.
   armedIntervalHours = armTimer(schedule);
   return sweep.reaped;
 }

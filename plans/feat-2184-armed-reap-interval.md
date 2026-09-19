@@ -39,10 +39,18 @@ do nothing is explained instead of mysterious.
 
 - **Assigned on every call, not only when a timer starts.** Inside the `if`, a later schedule
   that armed nothing would leave the previous number standing and report a cadence that is not
-  running — the exact false claim this issue exists to end. A spec pins it.
-- **`armTimer` returns what it armed** rather than a module write at the arming site, so the
-  recorded value and the started timer cannot drift: there is no path that starts one without
-  reporting it.
+  running — the exact false claim this issue exists to end.
+- **A superseded schedule is CANCELLED, on every call, including one that arms nothing.** The
+  first version of this change only reassigned the number, and that was not enough: a
+  `startReapSchedule(6)` followed by `startReapSchedule(0)` left the six-hour interval ticking
+  while the getter said OFF, so the list promised "ends at next start" about a session the very
+  next sweep would take. That is the understatement this issue exists to remove, re-created in a
+  new place. Found by Codex in round 1 of #2191's review and reproduced by advancing the clock.
+- **`armTimer` returns what it armed**, and cancels before it arms, so the number reported is the
+  timer that is actually scheduled — not merely the last one someone started.
+- **Cancelling is not the live re-arming #2167 declined.** That was re-arming on every config
+  POST, which lets a stream of edits reset the countdown forever. This cancels only when a caller
+  explicitly starts a new schedule, which production does once, at boot.
 - **Read per request, not captured at mount.** Routes are mounted before the server listens,
   and the schedule does not arm until it does; a captured value would be OFF forever.
 - **The client falls back to OFF**, not to the saved value, when the server does not say — an
@@ -54,10 +62,12 @@ do nothing is explained instead of mysterious.
 
 ## Verification
 
-- Specs at each layer: the schedule reports what it armed and stops reporting one when a later
-  schedule arms none; the route puts it on the response and asks per request; the component
-  decides the row from it, ignores the saved value, shows the pending state, and falls back to
-  OFF when the field is absent.
+- Specs at each layer: the schedule reports what it armed, stops reporting one when a later
+  schedule arms none, **and stops the superseded sweep itself — asserted by advancing the clock
+  and counting sweeps, because asserting only the number is what let the defect through**; the
+  route puts it on the response and asks per request; the component decides the row from it,
+  ignores the saved value, shows the pending state, and falls back to OFF when the field is
+  absent.
 - Five mutations, each red, each with its application asserted by count before running —
   including the specific regression of keying the row off the saved cadence again.
 - i18n lockstep across **five** locales: `en`, `ja`, `ko`, `zh-CN`, `zh-TW`. The last three

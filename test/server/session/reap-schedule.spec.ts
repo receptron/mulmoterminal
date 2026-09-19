@@ -128,6 +128,30 @@ describe("startReapSchedule", () => {
     expect(armedReapIntervalHours()).toBe(0);
   });
 
+  // …and the scalar alone is NOT enough, which is how the first version of this spec passed over a
+  // real defect: it asserted the number and never advanced the clock, so the superseded six-hour
+  // interval went on firing while the getter said OFF. The list would then say "ends at next
+  // start" about a session the very next sweep takes — understating exactly what #2184 set out to
+  // stop understating (Codex round 1 on #2191; reproduced before this was written).
+  it("also STOPS the superseded sweep, not just the number that reports it", () => {
+    startReapSchedule(schedule(6));
+    startReapSchedule(schedule(0));
+    const before = sweepIdleSessions.mock.calls.length;
+    vi.advanceTimersByTime(24 * 60 * 60 * 1000);
+    expect(sweepIdleSessions.mock.calls.length).toBe(before);
+  });
+
+  // The same rule in its other direction: a replacement cadence must be the ONLY one ticking, or
+  // the sweep silently runs at the union of every interval ever armed.
+  it("leaves only the newest cadence running when one schedule replaces another", () => {
+    startReapSchedule(schedule(6));
+    startReapSchedule(schedule(2));
+    expect(armedReapIntervalHours()).toBe(2);
+    const before = sweepIdleSessions.mock.calls.length;
+    vi.advanceTimersByTime(6 * 60 * 60 * 1000); // 3 ticks at 2h, and 0 from the cancelled 6h
+    expect(sweepIdleSessions.mock.calls.length).toBe(before + 3);
+  });
+
   // The threshold is live config: a POST between ticks must be what the next sweep uses.
   it("re-reads the idle threshold at every tick", () => {
     let days = 7;
