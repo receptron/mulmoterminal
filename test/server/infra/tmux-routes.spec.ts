@@ -58,6 +58,8 @@ function baseDeps(over: Partial<TmuxRouteDeps> = {}): TmuxRouteDeps {
     killTmux: vi.fn(),
     sweep: () => ({ reaped: [], heldBack: 0, recent: 0, unclear: 0 }),
     survivingSessions: async () => [],
+    // Off by default, which is what an untouched config arms (#2184).
+    armedReapIntervalHours: () => 0,
     ...over,
   };
 }
@@ -157,7 +159,27 @@ describe("mountTmuxRoutes — GET /api/tmux/sessions", () => {
     const { surviving } = mountAndCapture(baseDeps({ survivingSessions: async () => [ROW] }));
     const res = makeRes();
     await surviving({ headers: {}, params: {} }, res);
-    expect(res.payload).toEqual({ sessions: [ROW] });
+    expect(res.payload).toEqual({ sessions: [ROW], armedReapIntervalHours: 0 });
+  });
+
+  // The cadence this PROCESS armed, which the saved config does not tell the client: the timer is
+  // armed once at boot and deliberately not re-armed on a POST, so between a save and a restart
+  // the two disagree. The row's promise depends on this one, not on the saved one (#2184).
+  it("says which cadence is actually armed, not which one is saved", async () => {
+    const { surviving } = mountAndCapture(baseDeps({ armedReapIntervalHours: () => 6 }));
+    const res = makeRes();
+    await surviving({ headers: {}, params: {} }, res);
+    expect(res.payload).toEqual({ sessions: [], armedReapIntervalHours: 6 });
+  });
+
+  // Asked per request rather than captured at mount: routes are mounted before the server listens,
+  // and the schedule does not arm until it does — a captured value would be 0 forever.
+  it("asks for the armed cadence on every request", async () => {
+    const armed = vi.fn(() => 6);
+    const { surviving } = mountAndCapture(baseDeps({ armedReapIntervalHours: armed }));
+    await surviving({ headers: {}, params: {} }, makeRes());
+    await surviving({ headers: {}, params: {} }, makeRes());
+    expect(armed).toHaveBeenCalledTimes(2);
   });
 
   // Safe methods are EXEMPT from the origin rule on purpose (same-origin-guard.ts, #1094): a
@@ -169,7 +191,7 @@ describe("mountTmuxRoutes — GET /api/tmux/sessions", () => {
     const { surviving, cleanup } = mountAndCapture(baseDeps({ isAllowedOrigin: () => false, survivingSessions: async () => [ROW] }));
     const read = makeRes();
     await surviving({ headers: { origin: "https://elsewhere.example" }, params: {} }, read);
-    expect(read.payload).toEqual({ sessions: [ROW] });
+    expect(read.payload).toEqual({ sessions: [ROW], armedReapIntervalHours: 0 });
 
     const write = makeRes();
     await cleanup({ headers: { origin: "https://elsewhere.example" }, params: {} }, write);

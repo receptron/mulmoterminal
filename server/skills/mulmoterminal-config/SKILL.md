@@ -309,11 +309,13 @@ sessions that go idle after boot sit there until the next restart. This repeats 
 - A second stepper in **Settings → Sessions that survived a restart**, beside the one that sets
   the threshold. It is disabled while the threshold is `0`, because then there is nothing to
   repeat.
-- **The rows do not reflect this number, deliberately.** A doomed row always reads **ends at next
-  start**. The timer is armed once at boot, so a value saved here is not what the running process
-  is doing, and a row keyed off it would be wrong from the save until the next restart — and wrong
-  the other way when someone sets it back to `0`. A row that says what is really armed needs the
-  server to report it (#2184).
+- **The rows follow what is ARMED, not what is saved** (#2184). A doomed row reads **ends on the
+  next sweep** when this server actually has a repeat running, and **ends at next start**
+  otherwise. Those differ between a save and the next restart, which is why the server reports the
+  interval it armed rather than the UI reading the config — a row keyed off the saved number would
+  promise a sweep that is not scheduled, to exactly the person who just switched this on.
+- **While the two differ the stepper says so**, naming what is running until the restart, so a
+  saved number that appears to do nothing is explained rather than mysterious.
 
 ### `worklogEnabled` / `worklogIntervalHours` — the periodic dev-work log
 

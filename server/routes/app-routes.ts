@@ -18,6 +18,7 @@ import { mountTmuxRoutes } from "../infra/tmux-routes.js";
 import { survivingSessions } from "../session/surviving-sessions.js";
 import { getSessionIdleReapDays, getQuestionPaneEnabled } from "../config/config-routes.js";
 import { sweepIdleSessions } from "../session/reap-idle-sessions.js";
+import { armedReapIntervalHours } from "../session/reap-schedule.js";
 import { mountHookRoute } from "../routes/hook-routes.js";
 import { mountPluginRoutes } from "../routes/plugin-routes.js";
 import { mountMcpRoutes } from "../routes/mcp-routes.js";
@@ -455,5 +456,8 @@ function mountSessionFacingRoutes(app: Express, deps: AppRouteDeps): void {
     // `Date.now()` is read HERE rather than inside the builder, which stays pure and takes the
     // moment as a number (session/surviving-sessions.ts).
     survivingSessions: () => survivingSessions(Date.now(), getSessionIdleReapDays()),
+    // Read per request, not captured: routes are mounted before the server listens, and the
+    // schedule does not arm until it does (#2184).
+    armedReapIntervalHours,
   });
 }

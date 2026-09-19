@@ -19,8 +19,11 @@ const row = (over: Partial<SurvivingSession> = {}): SurvivingSession => ({
   ...over,
 });
 
-const serve = (sessions: unknown) => {
-  globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sessions }) })) as unknown as typeof fetch;
+// `armed` is what the SERVER reports it started, which is NOT the saved config: the timer is armed
+// once at boot and not re-armed on a POST, so the two disagree from a save until the next restart
+// (#2184). Every row promise below is decided from this one.
+const serve = (sessions: unknown, armed = 0) => {
+  globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sessions, armedReapIntervalHours: armed }) })) as unknown as typeof fetch;
 };
 
 const posts = (): string[] => (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
@@ -146,34 +149,68 @@ describe("the surviving-sessions section", () => {
     expect(bodies.filter((b) => b?.includes("sessionIdleReapDays"))).toHaveLength(0);
   });
 
-  // The row's promise is deliberately INDEPENDENT of the cadence, and this pins it so nobody
-  // re-derives the obvious-looking wording. The timer is armed once at boot, so a cadence saved
-  // here is not what the running process is doing: keying the row off it would be false from the
-  // moment it is saved until the next restart, and false the other way on a change back to 0
-  // (Codex round 1 on #2183). Saying what is actually armed needs the server to report it (#2184).
-  it.each([0, 6])("says the next START ends a row whatever the saved cadence is (%i)", async (hours) => {
+  // #2183 pinned the row's wording as independent of the SAVED cadence, because the saved number
+  // is not what the running process is doing. #2184 does not undo that — it gives the row the
+  // number that IS true: the one the server reports it armed. So the saved value still decides
+  // nothing here, and these pin both halves of that.
+  it.each([0, 6])("ignores the SAVED cadence when deciding a row's promise (%i)", async (hours) => {
     setSessionReapIntervalHours(hours);
-    serve([row({ reapable: true })]);
+    serve([row({ reapable: true })], 0); // nothing armed, whatever is saved
     const w = mount(SurvivingSessionsSection);
     await flushPromises();
     expect(w.get('[data-testid="surviving-doomed"]').text()).toBe("ends at next start");
   });
 
-  // Same reason, on the hint under the threshold stepper.
-  it.each([0, 6])("keeps the threshold hint's wording whatever the saved cadence is (%i)", async (hours) => {
-    setSessionReapIntervalHours(hours);
+  // The armed value is what changes it — a sweep really is scheduled, so the row no longer has to
+  // point at a restart that is not the next thing to happen.
+  it("promises the next sweep when the SERVER says one is armed", async () => {
+    setSessionReapIntervalHours(0); // saved says off; the running server disagrees
+    serve([row({ reapable: true })], 6);
     const w = mount(SurvivingSessionsSection);
     await flushPromises();
-    expect(w.text()).toContain("ended when the server next starts");
+    expect(w.get('[data-testid="surviving-doomed"]').text()).toBe("ends on the next sweep");
+    expect(w.text()).toContain("ended on the next sweep");
   });
 
-  // The cadence hint speaks about the NEXT start, never about what is running now.
-  it("promises the cadence only from the next start", async () => {
+  // A server that armed a repeat says so in the present tense, because now it is a fact it
+  // reported rather than an inference from a number someone typed.
+  it("says the cadence is running when saved and armed agree", async () => {
     setSessionReapIntervalHours(6);
+    serve([], 6);
     const w = mount(SurvivingSessionsSection);
     await flushPromises();
-    expect(w.text()).toContain("after the next server start");
-    expect(w.text()).not.toContain("for as long as the server is up");
+    expect(w.text()).toContain("Repeating every 6 hour(s) in this server");
+  });
+
+  // The window this whole change exists for: the number was saved, nothing re-armed, and the
+  // person who just changed it would otherwise watch it do nothing with no explanation.
+  it("says a saved cadence has not started yet, and what is running until it does", async () => {
+    setSessionReapIntervalHours(6);
+    serve([], 0);
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    expect(w.text()).toContain("starts repeating at the next server start");
+    expect(w.text()).toContain("sweeps only at start");
+  });
+
+  it("names the cadence still running while a different one waits for a restart", async () => {
+    setSessionReapIntervalHours(2);
+    serve([], 6);
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    expect(w.text()).toContain("starts repeating at the next server start");
+    expect(w.text()).toContain("keeps sweeping every 6 hour(s)");
+  });
+
+  // A server too old to report it, or a body we could not read, must not produce a promise. OFF
+  // understates — the row points at a restart that may come later than the sweep would have — and
+  // understating is the only safe direction for a claim about when someone's session disappears.
+  it("falls back to no sweep when the server does not say what is armed", async () => {
+    setSessionReapIntervalHours(6);
+    globalThis.fetch = vi.fn(async () => ({ ok: true, json: async () => ({ sessions: [row({ reapable: true })] }) })) as unknown as typeof fetch;
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    expect(w.get('[data-testid="surviving-doomed"]').text()).toBe("ends at next start");
   });
 
   // Turning the threshold off turns the whole sweep off, so a cadence promising a repeat would
