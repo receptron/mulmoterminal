@@ -284,7 +284,10 @@ many days.
   the sweep safe, and the reason "it has a transcript" is not a reason to keep a session alive.
 - Whole days, 0–365. Anything else falls back to 7.
 - Also a stepper in **Settings → Sessions that survived a restart**, beside the list it acts on; each
-  row there says whether the next start will take it.
+  row there is marked **due to be ended** when the next sweep will take it.
+- **This one applies at once.** `startReapSchedule` takes the threshold as a function and re-reads
+  it on every tick, so a change reaches the running server immediately — including `0`, which
+  stops an already-armed timer from ending anything. Only the cadence below waits for a restart.
 
 ### `sessionReapIntervalHours` — looking again while the server is up
 
@@ -309,13 +312,20 @@ sessions that go idle after boot sit there until the next restart. This repeats 
 - A second stepper in **Settings → Sessions that survived a restart**, beside the one that sets
   the threshold. It is disabled while the threshold is `0`, because then there is nothing to
   repeat.
-- **The rows follow what is ARMED, not what is saved** (#2184). A doomed row reads **ends on the
-  next sweep** when this server actually has a repeat running, and **ends at next start**
-  otherwise. Those differ between a save and the next restart, which is why the server reports the
-  interval it armed rather than the UI reading the config — a row keyed off the saved number would
-  promise a sweep that is not scheduled, to exactly the person who just switched this on.
-- **While the two differ the stepper says so**, naming what is running until the restart, so a
-  saved number that appears to do nothing is explained rather than mysterious.
+- **Nothing in that section names WHEN the next sweep is, and that is the rule.** The timer is
+  armed once at boot, so the saved number and the running one are different things until a
+  restart, and the browser only sees the saved one. Every clock-naming sentence is therefore false
+  in half the reachable states: "ends at next start" is wrong for a server that booted with a
+  cadence, and "ends on the next sweep" would be wrong for one that has a cadence saved and has
+  not restarted. So a doomed row names the **event** — **due to be ended**, "the next sweep ends
+  it" — the hints state what is **saved**, and one line always says the cadence is read at server
+  start. All of that is true whatever was armed.
+- **#2184 added the one thing the browser could not work out: the cadence this server ARMED.** The
+  row is unchanged — it still names the event — but the hint under the stepper no longer has to
+  hedge. When the saved and armed cadences agree it states the running one as a fact; when they
+  differ it says the value is saved and names what is still sweeping until the restart. The server
+  reports it on `/api/tmux/sessions`, and when it does not say, the hint falls back to the
+  saved-value wording rather than inventing a claim.
 
 ### `worklogEnabled` / `worklogIntervalHours` — the periodic dev-work log
 

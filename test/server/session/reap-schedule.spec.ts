@@ -138,7 +138,7 @@ describe("startReapSchedule", () => {
     startReapSchedule(schedule(0));
     const before = sweepIdleSessions.mock.calls.length;
     vi.advanceTimersByTime(24 * 60 * 60 * 1000);
-    expect(sweepIdleSessions.mock.calls.length).toBe(before);
+    expect(sweepIdleSessions.mock.calls).toHaveLength(before);
   });
 
   // The same rule in its other direction: a replacement cadence must be the ONLY one ticking, or
@@ -149,7 +149,7 @@ describe("startReapSchedule", () => {
     expect(armedReapIntervalHours()).toBe(2);
     const before = sweepIdleSessions.mock.calls.length;
     vi.advanceTimersByTime(6 * 60 * 60 * 1000); // 3 ticks at 2h, and 0 from the cancelled 6h
-    expect(sweepIdleSessions.mock.calls.length).toBe(before + 3);
+    expect(sweepIdleSessions.mock.calls).toHaveLength(before + 3);
   });
 
   // The threshold is live config: a POST between ticks must be what the next sweep uses.

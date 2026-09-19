@@ -132,7 +132,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | **Pull request repos** | 横断 PR/Issue ビューが集約するリポ（`owner/repo`） |
 | **Google account** | Calendar 連携用の Google サインイン（RemoteHost の Connect とは別物） |
 | **Sessions and background tasks** | 返信を[まとめで終わらせるか](#append-system-prompt)（`appendSystemPrompt`、既定 ON — ディレクトリ側の設定が優先）、[決めたことの記録を残すか](#decision-digest)（`decisionDigest`、既定 OFF）、[定期の開発ログ](#all-keys)とその間隔（`worklogEnabled`、既定 OFF — 実行のたびにトークンを消費します） |
-| **Sessions that survived a restart** | 以前のサーバから動き続けているターミナルを、**全ディレクトリ横断**で一覧。もう開かないプロジェクトのセッションや、素のシェルを見て終了できる唯一の場所です。各行に「どこで動いているか・何なのか（キーに紐づく会話が無ければ `shell or unknown`）・どれだけ放置されているか・終了して失うものがあるか」が出ます。**stop** はそのセッションだけを終了し、transcript のある会話はあとで再開できます。ターミナルが掴んでいる行は代わりに `● open` と出て、そちらで閉じます。この節では、セッションを勝手に終了させる2つの値 — `sessionIdleReapDays`（何日放置したら終了するか）と `sessionReapIntervalHours`（どれくらいの間隔で見直すか）— を変更できます。対象になる行には、このサーバが実際に繰り返しスイープしているときは **ends on the next sweep**、そうでなければ **ends at next start** と出ます。表示は保存値ではなく**サーバが実際に仕掛けた間隔**に従います — 繰り返しは起動時に仕掛けられるので、再起動するまで両者は食い違うためです（#2184） |
+| **Sessions that survived a restart** | 以前のサーバから動き続けているターミナルを、**全ディレクトリ横断**で一覧。もう開かないプロジェクトのセッションや、素のシェルを見て終了できる唯一の場所です。各行に「どこで動いているか・何なのか（キーに紐づく会話が無ければ `shell or unknown`）・どれだけ放置されているか・終了して失うものがあるか」が出ます。**stop** はそのセッションだけを終了し、transcript のある会話はあとで再開できます。ターミナルが掴んでいる行は代わりに `● open` と出て、そちらで閉じます。この節では、セッションを勝手に終了させる2つの値 — `sessionIdleReapDays`（何日放置したら終了するか）と `sessionReapIntervalHours`（どれくらいの間隔で見直すか）— を変更できます。対象になる行には **自動終了の対象** と出ます。時刻ではなくイベントを名乗るのは、繰り返しが起動時に仕掛けられ、保存された値が稼働中のサーバの実際の挙動とは限らないためです（#2184） |
 | **Cost (estimated)** | Session / Today / Month の推定コスト表示 |
 | **Help & user guide** | このガイドへのリンク集 |
 
@@ -1918,7 +1918,7 @@ posted by MulmoTerminal
 | `sounds` | 種類ごとの音。例 `{ "waiting": "preset:coin" }` — `preset:<id>` か絶対パス。未指定の種類は `soundFile` を使う（→ [通知音](#sounds)） |
 | `pushEnabled` | Web Push の master スイッチ（既定 `false` → [スマホ通知](notifications.html)） |
 | `pushKinds` | どの瞬間に飛ばすか：`"finished"`（ターン完了）と `"waiting"`（質問して停止）。**書かなければ両方**、`[]` でどれも飛ばさない（→ [どの瞬間に飛ぶか](notifications.html#kinds)） |
-| `sessionIdleReapDays` | **誰も attach しておらず、出力も無い**ターミナルを、何日放置したらサーバが次回起動時に終了するか（既定 7 日、`0` で無効、0〜365）。会話は失われない — transcript があれば tmux セッション無しで再開できる。失うのはプロセスとスクロールバック。Settings → **Sessions that survived a restart** の、対象一覧のすぐ横で変更可 |
+| `sessionIdleReapDays` | **誰も attach しておらず、出力も無い**ターミナルを、何日放置したらスイープが終了するか（既定 7 日、`0` で無効、0〜365）。会話は失われない — transcript があれば tmux セッション無しで再開できる。失うのはプロセスとスクロールバック。Settings → **Sessions that survived a restart** の、対象一覧のすぐ横で変更可 |
 | `sessionReapIntervalHours` | そのスイープを**稼働中に**何時間ごとに回し直すか（既定 `0` = OFF で起動時のみ、0〜168）。再起動しないサーバは、これが `0` のままだと二度と見に行かない。起動時のスイープより弱く、このサーバが pty を掴んでいるセッションは経過日数に関係なく対象外。しきい値はあくまで `sessionIdleReapDays` で、そちらが `0` ならこの値は何も変えない。タイマーは起動時に仕掛けるので、変更は次回起動時に反映。同じ Settings 節で変更可 |
 | `worklogEnabled` / `worklogIntervalHours` | 定期 dev-work ログ — 保存済みディレクトリの最近の作業を週次の wiki ページにまとめる（既定 OFF / 6 時間、1〜168 に丸め）。実行のたびに LLM セッションを起こすのでトークンを消費する。Settings → **Sessions and background tasks** で編集可 |
 | `decisionDigest` | このプロジェクトで既に決めたことを Markdown にまとめ、エージェントが聞き直す前に読む。**既定 off**（→ [このプロジェクトで既に決めたこと](#decision-digest)） |

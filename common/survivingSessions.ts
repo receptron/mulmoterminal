@@ -31,7 +31,7 @@ export interface SurvivingSession {
    *  On-disk evidence ONLY. Being live, or having once been a grid cell, restores nothing — and
    *  counting those is why this column claimed 20 of 22 sessions were restorable when 15 were. */
   resumable: boolean;
-  /** The server will end it at its next start: nothing is using it and it has been silent past
+  /** The next sweep will end it: nothing is using it and it has been silent past
    *  `sessionIdleReapDays` (#1467). Said on the row so the sweep is visible in the list it acts on,
    *  rather than being noticed after the fact. */
   reapable: boolean;

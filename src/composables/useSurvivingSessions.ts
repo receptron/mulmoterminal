@@ -23,7 +23,7 @@ const isSurvivingSession = (row: unknown): row is SurvivingSession =>
   typeof row.attached === "boolean" &&
   typeof row.resumable === "boolean" &&
   // Required like the rest, and worth saying why: absent would assert as `undefined`, read as
-  // false, and quietly drop the "ends at next start" mark from a row the server is about to end —
+  // false, and quietly drop the due-to-be-ended mark from a row the server is about to end —
   // the one thing on this row nobody would think to double-check (Codex on #1486).
   typeof row.reapable === "boolean";
 

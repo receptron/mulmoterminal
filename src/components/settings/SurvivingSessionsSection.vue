@@ -52,7 +52,7 @@ const REAP_STEP_DAYS = 1;
 const SWEEP_STEP_HOURS = 1;
 
 // Re-read after saving: `reapable` is the SERVER's answer against the old threshold, so raising it
-// would otherwise leave rows saying "ends at next start" about a start that will now spare them
+// would otherwise leave rows marked due-to-be-ended by a sweep that will now spare them
 // (CodeRabbit on #1486).
 async function nudgeIdleDays(delta: number): Promise<void> {
   if (await saveSessionIdleReapDays(sessionIdleReapDays.value + delta)) await reload();
@@ -104,12 +104,8 @@ const cadencePending = computed(() => sessionReapIntervalHours.value !== armedIn
         v-if="s.reapable"
         data-testid="surviving-doomed"
         class="flex-none text-[11px] text-dim"
-        :title="
-          sweeping
-            ? t('settings.surviving.doomedSoonTitle', { days: sessionIdleReapDays, hours: armedIntervalHours })
-            : t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })
-        "
-        >{{ sweeping ? t("settings.surviving.doomedSoon") : t("settings.surviving.doomed") }}</span
+        :title="t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })"
+        >{{ t("settings.surviving.doomed") }}</span
       >
       <span v-if="s.attached" data-testid="surviving-open" class="flex-none text-[11px] text-amber" :title="t('settings.surviving.openTitle')">{{
         t("settings.surviving.open")
@@ -145,7 +141,7 @@ const cadencePending = computed(() => sessionReapIntervalHours.value !== armedIn
       </template>
       <i18n-t v-else keypath="settings.surviving.reapHint" tag="span">
         <template #ended>
-          <strong class="text-fg">{{ sweeping ? t("settings.surviving.reapEndedSweep") : t("settings.surviving.reapEnded") }}</strong>
+          <strong class="text-fg">{{ t("settings.surviving.reapEnded") }}</strong>
         </template>
       </i18n-t>
     </span>
@@ -155,10 +151,20 @@ const cadencePending = computed(() => sessionReapIntervalHours.value !== armedIn
        decision: the days say WHICH sessions go, this says whether a server that never restarts
        ever looks again (#2165).
 
-       The row above follows the cadence the SERVER reports it armed, never this number. The timer
-       is armed once, at boot (server/session/reap-schedule.ts), so between a save here and the
-       next restart the two disagree — and a row keyed off the saved value would promise a sweep
-       that is not scheduled, to exactly the person who just switched the feature on (#2184). -->
+       NOTHING IN THIS SECTION NAMES A CLOCK IT CANNOT READ, and that is the rule rather than a
+       property of these particular sentences (#2189). The timer is armed once, at boot
+       (server/session/reap-schedule.ts), so the saved number and the running one are different
+       things until a restart. Every clock-naming sentence written from the SAVED value alone is
+       therefore false in half the reachable states — "ends at next start" is wrong for a server
+       that booted with a cadence, and it is wrong the other way for someone who has just saved 0
+       while the old timer runs on.
+
+       The row keeps naming the EVENT ("the next sweep ends it"), which is true whatever is armed.
+       What #2184 adds is underneath: the server now REPORTS the cadence it armed, so the hint can
+       stop hedging. When saved and armed agree it states the running cadence as a fact; when they
+       differ it says the value is saved and names what is still running until the restart. That is
+       the one thing the saved number could never tell anyone, and it is why this section may now
+       speak in the present tense at all. -->
   <div class="mb-3 flex items-center gap-3">
     <SettingsStepper
       :value="sessionReapIntervalHours"
@@ -185,4 +191,8 @@ const cadencePending = computed(() => sessionReapIntervalHours.value !== armedIn
       </template>
     </span>
   </div>
+  <!-- Shown in every state, including the disabled one: "when does this apply" is exactly the
+       question the saved-value wording above leaves open, so it must not be the line that is
+       missing when someone looks. -->
+  <p data-testid="surviving-sweep-note" class="mb-3 text-[12px] text-dim">{{ t("settings.surviving.sweepNote") }}</p>
 </template>

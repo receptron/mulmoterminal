@@ -120,7 +120,7 @@ export const createTerminalSessionHandlers = ({
     // screen — the command layer turns a rejection into the message it shows, and the
     // most likely failure ("no browser is open") is one the user can act on.
     launchTerminal: async (params: JsonObject) => {
-      const result = launchTerminal(params.agent, params.sessionId);
+      const result = await launchTerminal(params.agent, params.sessionId);
       if (!result.ok) throw new Error(result.error);
       return toJsonObject({ ok: true });
     },

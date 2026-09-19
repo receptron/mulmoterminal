@@ -1,4 +1,4 @@
-# feat: the row follows the cadence the server ARMED, not the one in the config (#2184)
+# feat: the hint states the cadence the server ARMED, not the one in the config (#2184)
 
 ## The gap
 
@@ -24,16 +24,22 @@ That value rides on the `/api/tmux/sessions` response, which this Settings secti
 fetches, rather than a route of its own: the list is what needs it, because a row's promise
 depends on whether a sweep is scheduled.
 
-The row then reads:
+## What #2189 changed about this, mid-review
 
-| the server armed | the row says |
-|---|---|
-| a repeat | **ends on the next sweep** |
-| nothing | **ends at next start** |
+While this was in review, **#2189 merged** and fixed the same falsehood a different way: the row
+stopped naming a clock at all. It reads **due to be ended**, its title says *the next sweep ends
+it*, and a standing note says the cadence is read at server start. All true whatever is armed.
 
-and the cadence stepper gains a fourth state for the window this issue is about: **saved, not
-yet armed** — which also names what is running until the restart, so a number that appears to
-do nothing is explained instead of mysterious.
+That is the better base, and this change now sits on top of it rather than replacing it:
+
+- **the row is #2189's, unchanged.** It names the EVENT. Knowing the armed cadence does not make
+  a clock on the row any more useful, and #2189's own comment says so.
+- **what the armed value buys is the HINT.** #2189 had to write *"Saved: repeats every N"* because
+  the browser was never told what was running. With it on the wire the hint can stop hedging:
+  saved-and-armed-agree states the running cadence as a fact, and a disagreement says the value is
+  saved and names what is still sweeping until the restart.
+- **when the server does not report it**, the hint falls back to the saved-value wording rather
+  than inventing a present-tense claim.
 
 ## Decisions
 

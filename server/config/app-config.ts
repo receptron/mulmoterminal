@@ -111,7 +111,7 @@ export interface AppConfig {
   feedRefreshEnabled: boolean;
   calendarSyncEnabled: boolean;
   // Days a tmux session may sit with nobody attached and no output before the server ends it at
-  // its next start (#1467). 0 turns the sweep off; the conversation is on disk either way.
+  // the next sweep (#1467). 0 turns the sweep off; the conversation is on disk either way.
   sessionIdleReapDays: number;
   sessionReapIntervalHours: number;
   // Anthropic-compatible backends a directory can point its sessions at (#579). Safe to

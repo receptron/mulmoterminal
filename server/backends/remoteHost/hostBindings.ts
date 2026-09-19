@@ -10,6 +10,7 @@ import { captureTerminalScreen } from "./hostScreens.js";
 import { decideLaunchTerminal, NO_BROWSER_ERROR } from "./launchTerminal.js";
 import { canClearInputBox } from "./terminalInput.js";
 import { activity, markUnplacedSession, ptys } from "../../session/registry.js";
+import { tmuxHeldSessionIdsAsync } from "../../infra/tmux.js";
 import { agentOfSession, cwdOfSession } from "../../session/session-lookup.js";
 import { issueSpawnOptions } from "../../session/issue-spawn-options.js";
 import { sessionTranscriptView } from "../../session/transcript-view-read.js";
@@ -21,7 +22,7 @@ import { openQuestionOf } from "../../../common/askQuestion.js";
 import { submitSequenceForAgent } from "../../../common/terminalSubmit.js";
 import { LAUNCH_TERMINAL_CHANNEL } from "../../../common/launchAgent.js";
 import { getTerminalSubmit } from "../../config/config-routes.js";
-import { CLAUDE_CWD } from "../../config/env.js";
+import { CLAUDE_CWD, SESSION_ID_RE } from "../../config/env.js";
 
 export interface RemoteHostDeps {
   spawnClaudePty: SpawnClaudePty;
@@ -53,15 +54,31 @@ const spawnIssueSeed = (spawnClaudePty: SpawnClaudePty, cwd: string, seed: strin
   return sessionId;
 };
 
+// Does this host hold that session RIGHT NOW? Exact by construction, which is the point: tmux
+// resolves `-t NAME` by PREFIX, so `has-session -t mt-<uuid>` also answers yes for a session named
+// `mt-<uuid>-suffix` — measured on tmux 3.6a, and true of capture-pane and display-message too
+// (#2192). Listing the names and comparing them cannot match a prefix. The async form is also the
+// one a REQUEST must use: the sync variant holds the event loop, and this runs on a phone command.
+const sessionExistsHere = async (sessionId: unknown): Promise<boolean> => {
+  if (typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) return false;
+  if (ptys.has(sessionId)) return true; // a live pty is existence enough, and costs no subprocess
+  return (await tmuxHeldSessionIdsAsync())?.includes(sessionId) ?? false;
+};
+
 // The phone asked for a new terminal in the directory of the session it was viewing (#831). The
 // grid lives in the browser — markDevTerminalSession is only ever reached through the terminal
 // WebSocket — so the host cannot open the cell, and publishes the request to whichever tab is
 // connected instead. The phone sends a session id, never a path.
-const launchTerminal = (deps: RemoteHostDeps, agent: unknown, sessionId: unknown) => {
+const launchTerminal = async (deps: RemoteHostDeps, agent: unknown, sessionId: unknown) => {
   const decision = decideLaunchTerminal({
     agent,
     sessionId,
-    cwdOf: (id) => ptys.get(id)?.cwd ?? null,
+    // The same lookup the row the phone tapped was built from. Asking `ptys` alone refused every
+    // session that outlived a restart — which tmux does by design — while the list it was chosen
+    // from showed a directory for it (#2181). `decideLaunchTerminal` tests the answer with `!cwd`,
+    // so "" and null refuse alike and the wording of that refusal is unchanged.
+    cwdOf: cwdOfSession,
+    sessionExists: await sessionExistsHere(sessionId),
     listenerCount: deps.subscriberCount(LAUNCH_TERMINAL_CHANNEL),
   });
   if (!decision.ok) return decision;

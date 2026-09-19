@@ -172,15 +172,19 @@ export function getSystemTaskSwitches(): SystemTaskSwitches {
   return { feedRefresh: config.feedRefreshEnabled, calendarSync: config.calendarSyncEnabled };
 }
 
-// How long a session may sit unused before the boot sweep ends it (#1467). Read live like the rest,
-// though only the boot sweep asks — a POST that changes it takes effect at the next start, which is
-// also when the sweep runs.
+// How long a session may sit unused before a sweep ends it (#1467). Read live, and LIVE IS THE
+// POINT: `startReapSchedule` takes this as a function and calls it on every tick, so a POST reaches
+// the running server at once — including `0`, which stops an already-armed timer from ending
+// anything. That is the opposite of the cadence getter below, and the pair is the asymmetry the
+// Settings copy rests on: the threshold may be described in the present tense, the cadence may not.
 export function getSessionIdleReapDays(): number {
   return config.sessionIdleReapDays;
 }
 
 // How often the sweep runs again while we are up (#2165). Read once, at the start that arms the
 // timer: re-arming on every config POST would let a stream of edits reset the countdown forever.
+// So unlike the threshold above, the saved value and the running one differ until a restart —
+// which is why nothing in the Settings section names when the next sweep is.
 export function getSessionReapIntervalHours(): number {
   return config.sessionReapIntervalHours;
 }
