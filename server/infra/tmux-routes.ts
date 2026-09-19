@@ -1,3 +1,4 @@
+import { isBotSession } from "../bots/session-marker.js";
 import type { Express } from "express";
 import { requestOriginAllowed } from "../routes/same-origin-guard.js";
 import type { SurvivingSession } from "../../common/survivingSessions.js";
@@ -51,7 +52,7 @@ export function mountTmuxRoutes(app: Express, deps: TmuxRouteDeps): void {
   // reply; the rule lives in routes/same-origin-guard.ts.
   app.get("/api/tmux/sessions", async (req, res) => {
     if (!requestOriginAllowed(req, deps.isAllowedOrigin)) return res.status(403).json({ error: "forbidden origin" });
-    return res.json({ sessions: await deps.survivingSessions() });
+    return res.json({ sessions: (await deps.survivingSessions()).filter((session) => !isBotSession(session.key)) });
   });
 
   // The same sweep on demand: end every session nothing is using — nobody attached, no pty of

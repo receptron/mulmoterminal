@@ -1,3 +1,4 @@
+import { isBotSession } from "../bots/session-marker.js";
 // The terminal WebSocket endpoints: /ws (claude), /ws/run (a one-off command), /ws/launch
 // (a configured launcher) and /ws/codex. Split from index.ts (#548 step 3e) — the last of
 // the terminal machinery, and the composition root that ties the spawners, the connection
@@ -283,6 +284,10 @@ async function admitAgentSession(
   },
 ): Promise<EarlyFrames | null> {
   const { requested, sessionId, live, cwd, devTerminal, worktreeLimited = true } = session;
+  if (isBotSession(sessionId) || (requested && isBotSession(requested))) {
+    closeWithError(ws, "Bots do not expose terminals");
+    return null;
+  }
   // A live entry is already agent-checked by settledEntry (wrongEndpointReason); a tmux-only
   // survivor — a reconnect after a server restart — has no entry to check, and `tmux
   // new-session -A` would attach whatever runs in the pane under THIS endpoint's identity.

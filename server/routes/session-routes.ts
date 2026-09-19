@@ -1,3 +1,4 @@
+import { isBotSession } from "../bots/session-marker.js";
 // The session routes: what the sidebar lists, what one session looks like, and the
 // attention flags the grid polls. They come out of index.ts last of step 2 (#548) because
 // they were the most entangled — every reader they call had to become a module first.
@@ -355,7 +356,7 @@ async function sessionList(req: Request, res: Response) {
     // on-disk files (a deleted/corrupt file is dropped, not fatal). Hidden translation
     // workers are dropped first — they're transient internal helpers, not user chats.
     const top = selectSessionRows([...onDiskStats, ...pending], {
-      isInternalHelper: (id) => translationWorkerIds.has(id) || isProbeSessionId(id),
+      isInternalHelper: (id) => translationWorkerIds.has(id) || isProbeSessionId(id) || isBotSession(id),
       isDevTerminal: (id) => devTerminalSessions.has(id),
       isBackground: (id) => isBackgroundSession(id),
       includePending,
@@ -588,15 +589,17 @@ export function mountSessionRoutes(app: Express, deps: SessionRouteDeps): void {
   // same until someone adds a caller.
   app.get("/api/sessions/unplaced", async (_req, res) => {
     await Promise.all([unplacedSessionsHydrated, placedSessionsHydrated]);
-    const sessions = unplacedSessionRows().map(({ id, agent }) => {
-      const entry = ptys.get(id);
-      // A session whose PTY is gone (the server restarted, tmux ended) is still worth adopting —
-      // the cell resumes it from disk. The AGENT comes from the mark rather than the entry for
-      // exactly that case: a codex session adopted as claude reconnects on the wrong endpoint, and
-      // the entry that would have said so is what is missing (Codex, PR #1189). The live entry
-      // still wins when there is one — it is the process actually running.
-      return { id, agent: entry?.agent ?? agent, cwd: entry?.cwd ?? null };
-    });
+    const sessions = unplacedSessionRows()
+      .filter(({ id }) => !isBotSession(id))
+      .map(({ id, agent }) => {
+        const entry = ptys.get(id);
+        // A session whose PTY is gone (the server restarted, tmux ended) is still worth adopting —
+        // the cell resumes it from disk. The AGENT comes from the mark rather than the entry for
+        // exactly that case: a codex session adopted as claude reconnects on the wrong endpoint, and
+        // the entry that would have said so is what is missing (Codex, PR #1189). The live entry
+        // still wins when there is one — it is the process actually running.
+        return { id, agent: entry?.agent ?? agent, cwd: entry?.cwd ?? null };
+      });
     res.json({ sessions });
   });
   // Which of these sessions still has something running. The collection pane asks after a dropped

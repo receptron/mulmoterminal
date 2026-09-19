@@ -1,3 +1,5 @@
+import { isBotSession } from "../bots/session-marker.js";
+import { noteBotUserInput } from "../bots/input-gate.js";
 // Starting a claude session in a PTY and wiring it to the browser. The most entangled
 // piece of index.ts (#548 step 3c): it spans the CLI args, the
 // sidebar's optimistic row, the draft typed into the input box, and teardown on exit.
@@ -40,6 +42,8 @@ import { customAgentLaunch } from "./custom-agent-command.js";
 import type { CustomAgent } from "../../common/customAgents.js";
 
 export interface SpawnClaudeOptions {
+  /** Persistent Bot instructions survive CLI compaction. Host-only, never a URL parameter. */
+  botRole?: string;
   // Passed to claude as the first turn, so the session starts working before anyone
   // opens it. Mutually exclusive with `draft`.
   initialPrompt?: string;
@@ -83,9 +87,14 @@ function sessionWorkdirFooter(cwd: string): string | null {
 // The placement happens here, beside the other two arguments a Windows spawn has to send as a
 // path (settingsArgument / mcpConfigArgument): the text is multi-line, and a Windows command line
 // cannot carry a newline at all (#1516).
-function sessionAppendedPrompt(sessionId: string, cwd: string, dirSetting: boolean | null): AppendedPromptArgument | null {
+function sessionAppendedPrompt(sessionId: string, cwd: string, dirSetting: boolean | null, botRole?: string): AppendedPromptArgument | null {
   const prompt = appendedSystemPrompt({ dirSetting, globalSetting: getAppendSystemPrompt(), workdirFooter: sessionWorkdirFooter(cwd) });
-  return prompt === null ? null : appendedPromptArgument(sessionId, prompt);
+  const botPrompt =
+    botRole === undefined
+      ? null
+      : `You are a hidden background Bot. Communicate only with the frontend using replyToFrontend for each host requestId, then end the turn. Never poll or sleep waiting for work. Never use interactive questions; report a question via replyToFrontend. Never create other Bots. Your role: ${botRole}`;
+  const combined = [prompt, botPrompt].filter(Boolean).join("\n\n");
+  return combined ? appendedPromptArgument(sessionId, combined) : null;
 }
 
 // The sidebar row a session gets before it has a transcript. A session spawned to run something
@@ -198,6 +207,12 @@ function sessionProgram(
   return { file: launch.file, prefixArgs: launch.prefixArgs, spawnEnv: env, note };
 }
 
+function prepareDraftInjection(entry: PtyEntry, id: string, options: SpawnClaudeOptions): (data: string) => void {
+  const { initialPrompt, draft, botRole } = options;
+  if (initialPrompt || draft) noteBotUserInput(id);
+  return attachDraftInjection(entry, initialPrompt, draft, () => submitSequenceForAgent(entry.agent, getTerminalSubmit()), botRole !== undefined);
+}
+
 export function createClaudeSpawner(deps: SpawnDeps) {
   // Spawn a fresh claude PTY for this session, register it, and wire its output /
   // exit back to the browser socket. `ws` may be null for a session spawned without
@@ -241,7 +256,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       // that path never went through our allowlist before.
       allowedTools: fullGuiMcp ? fullGuiAllowedTools(deps.guiMcpTools, getUserMcpServers()) : deps.gridMcpTools,
       addDirs,
-      appendedPrompt: sessionAppendedPrompt(sessionId, cwd, dir.appendSystemPrompt),
+      appendedPrompt: sessionAppendedPrompt(sessionId, cwd, dir.appendSystemPrompt, options.botRole),
     });
 
     console.log(`[ws] client connected (${canResume ? "resume" : "new"} ${sessionId})`);
@@ -285,6 +300,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
       recordCapabilitiesForThisSpawn();
       const program = sessionProgram(deps.claudeBin, sessionId, customAgentId, canResume ? resume : null, resolved.unset);
       const { term, tmux, reattached } = ptySpawn(sessionId, program.file, [...program.prefixArgs, ...args], cwd, true, program.spawnEnv);
+      if (reattached && !isBotSession(sessionId)) noteBotUserInput(sessionId);
       console.log(ptyStartLine({ agent: "claude", pid: term.pid, cwd, tmux, reattached, sessionId, note: program.note }));
       return { term, ws, buffer: "", cwd, tmux, active: false, agent: "claude" }; // "claude" whatever wrapper started it — see sessionProgram
     }
@@ -294,7 +310,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // its GUI calls a second time (mcp/gui-call-history.ts).
     hookedSessions.add(sessionId);
 
-    if (!canResume) {
+    if (!canResume && !isBotSession(sessionId)) {
       // Brand-new (or restarted-idle) session: surface it in the sidebar before it's persisted.
       knownSessions.set(sessionId, { createdAt: Date.now(), title: newSessionTitle(initialPrompt ?? draft) });
       deps.publishSessionCreated(sessionId);
@@ -305,7 +321,7 @@ export function createClaudeSpawner(deps: SpawnDeps) {
     // are resolved per send, the same live config read and agent scoping the phone's submit
     // uses (index.ts) — an `esc-cr` host submits on ESC+CR, so a hardcoded CR would land as a
     // newline and the prompt would never run (#1148).
-    const scanForDraftReady = attachDraftInjection(entry, initialPrompt, draft, () => submitSequenceForAgent(entry.agent, getTerminalSubmit()));
+    const scanForDraftReady = prepareDraftInjection(entry, sessionId, options);
 
     // PTY -> browser (buffering a tail for reattach, batching the frames).
     const output = wireBufferedOutput(entry, deps.outputBufferLimit, scanForDraftReady);

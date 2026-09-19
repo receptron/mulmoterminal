@@ -1,3 +1,4 @@
+import { isBotSession } from "../bots/session-marker.js";
 // When a session dies, and who is told about its state.
 //
 // The last stateful thing index.ts owned. The DECISIONS inside were extracted and tested
@@ -132,6 +133,7 @@ function armReapForDetached(deps: SessionLifecycleDeps, id: string) {
   // last arm, and a stale short timer must not survive to reap a session that now
   // needs the user. cancelReap clears it so scheduleReap re-arms with the right grace.
   cancelReap(id);
+  if (isBotSession(id)) return;
   const decision = reapDecisionFor(activity.get(id), { idleMs: REAP_GRACE_MS, waitingMs: WAIT_REAP_GRACE_MS });
   if (decision.kind === "keep") {
     console.log(`[pty] keeping working session ${id} alive (detached)`);
@@ -214,11 +216,12 @@ function reap(deps: SessionLifecycleDeps, id: string) {
   // channel keys on to drop a reaped session (sessionActivity.ts); the outcome rides along as a
   // field. Publishing a second "worker-failed" message instead let the generic teardown
   // notification race ahead of the specific one, and beeped twice for one event (Codex, #1188).
-  deps.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed", failed: isFailedWorker(id) });
+  if (!isBotSession(id)) deps.publish(SESSIONS_CHANNEL, { id, working: false, event: "closed", failed: isFailedWorker(id) });
 }
 
 // Publish a session's current activity (working + waiting) to subscribers.
 function publishActivity(deps: SessionLifecycleDeps, id: string) {
+  if (isBotSession(id)) return;
   const a = activity.get(id);
   // `cwd` rides along so the attention-sound player can pick up that directory's custom
   // sound (<cwd>/.mulmoterminal.json). Null for a session with no live PTY.

@@ -1,3 +1,5 @@
+import { isBotSession } from "./bots/session-marker.js";
+import { startBots } from "./bots/host.js";
 import express from "express";
 import http from "http";
 import path from "path";
@@ -744,7 +746,7 @@ const remoteHostListTerminalSessions = async () => {
     // one — never a tmux shell that was never a cell. resumableSessionPredicate() below already
     // awaited devTerminalSessionsHydrated, and the unplaced logs are awaited just above; a
     // session that has only just been spawned passes `isResumable` on its live pty.
-    isGridSession: isPhoneListableSession,
+    isGridSession: (id) => !isBotSession(id) && isPhoneListableSession(id),
     // Empty title rather than the id as a fallback — buildSessionList uses "nameless"
     // to drop the long tail of finished sessions the phone can't meaningfully offer.
     detailOf: (id) => {
@@ -971,6 +973,7 @@ server.on("error", (err) => {
 // Number(): PORT comes from the environment as a string, and the (port, host, cb) overload
 // takes a number — the (port, cb) form we used before accepted either.
 server.listen(Number(PORT), BIND_HOST, () => {
+  startBots(Number(PORT), spawnClaudePty, reap);
   // Takes the loopback addresses this bind did not, and only then tells the parent — the order,
   // the guards on the send and the reason each field is on the wire are all in that module.
   void announceListening(server, loopbackServers, Number(PORT), boundAddress(server.address()), process);

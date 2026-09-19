@@ -1,3 +1,4 @@
+import { isBotSession } from "../bots/session-marker.js";
 // Ending the sessions nothing is using, once per server start (#1467).
 //
 // The report was "cleanup-orphans is never called". Calling it was not enough: it consulted
@@ -119,7 +120,7 @@ export function sweepIdleSessions(nowMs: number, idleDays: number): ReapSweepRes
     idleDays,
     // At boot this is empty, and that is not something to rely on: the sweep is written to be safe
     // whenever it runs, so a later caller (a timer, a button) cannot turn it into a session killer.
-    liveHere: (id) => ptys.has(id),
+    liveHere: (id) => ptys.has(id) || isBotSession(id),
     validId: (id) => SESSION_ID_RE.test(id),
     kill: tmuxKillSession,
   });

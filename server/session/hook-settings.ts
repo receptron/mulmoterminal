@@ -49,6 +49,7 @@ export function hookSettingsJson({ host, port, sessionId, env = {} }: HookSettin
       Notification: entry,
       // SessionStart fires with source "clear" on /clear — used to reset the header prompt.
       SessionStart: entry,
+      PreCompact: toolEntry,
       PreToolUse: toolEntry,
       PostToolUse: toolEntry,
       PostToolUseFailure: toolEntry,

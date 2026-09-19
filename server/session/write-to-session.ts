@@ -1,5 +1,6 @@
+import { deferDuringBotDelivery, noteBotUserInput, noteBotPointerInput, forgetBotInput } from "../bots/input-gate.js";
 import { ptys } from "./registry.js";
-import { scanForUserInput } from "../../common/terminalReplies.js";
+import { scanForUserInput, scanForDraftInput } from "../../common/terminalReplies.js";
 
 // Write a chunk to a session's live PTY: the phone's typing (#445), and question answers (#1685).
 // Only sessions attached in THIS process are writable: a tmux session that outlived a restart is
@@ -90,10 +91,15 @@ export const msSinceUserInput = (sessionId: string, now = Date.now()): number =>
 
 /** Classify one chunk of terminal input and count it if the user produced it. */
 export const noteInput = (sessionId: string, data: string): void => {
-  const { fromUser, pending } = scanForUserInput(partialReply.get(sessionId) ?? "", data);
+  const previous = partialReply.get(sessionId) ?? "";
+  const { fromUser, pending } = scanForUserInput(previous, data);
   if (pending) partialReply.set(sessionId, pending);
   else partialReply.delete(sessionId);
   if (fromUser) {
+    // Mouse input still interrupts question answers and resets the activity clock.
+    // Only tmux frontends can verify the resulting screen before a Bot notification.
+    if (!ptys.get(sessionId)?.tmux || scanForDraftInput(previous, data).fromUser) noteBotUserInput(sessionId);
+    else noteBotPointerInput(sessionId);
     lastUserInputAt.set(sessionId, Date.now());
     noteOtherWrite(sessionId);
   }
@@ -102,10 +108,18 @@ export const noteInput = (sessionId: string, data: string): void => {
 /** Teardown for a session that has ended. */
 export const forgetUserInputClock = (sessionId: string): void => {
   lastUserInputAt.delete(sessionId);
+  forgetBotInput(sessionId);
 };
 
 /** Write on behalf of anything but an answer: the phone's typing, and anything added later. */
 export const writeToSession = (sessionId: string, chunk: string): boolean => {
+  if (
+    deferDuringBotDelivery(sessionId, () => {
+      writeToSession(sessionId, chunk);
+    })
+  )
+    return true;
+  noteBotUserInput(sessionId);
   noteOtherWrite(sessionId);
   return write(sessionId, chunk);
 };

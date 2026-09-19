@@ -104,7 +104,16 @@ describe("tool groups", () => {
   // its execute resolves image placeholders through the image backend, a PAID call. Auto-
   // allowing it would let a model spend money under a switch labelled "let the agent draw".
   it("auto-allows only tools that call nothing external", () => {
-    expect(AUTO_ALLOWED_TOOLS).toEqual(["presentForm", "presentChart", "presentHtml", "presentShapeScript", "renderShapeScript", "exportShapeScriptUsdz"]);
+    expect(AUTO_ALLOWED_TOOLS).toEqual([
+      "readBotReplies",
+      "replyToFrontend",
+      "presentForm",
+      "presentChart",
+      "presentHtml",
+      "presentShapeScript",
+      "renderShapeScript",
+      "exportShapeScriptUsdz",
+    ]);
     expect(AUTO_ALLOWED_TOOLS).not.toContain("presentDocument");
   });
 
@@ -129,9 +138,9 @@ describe("tool groups", () => {
     expect(unstated).toEqual(["presentDocument"]);
   });
 
-  // They still have to BE render tools — a directory that enabled Canvas is what grants them.
-  it("auto-allows nothing outside the render group", () => {
-    for (const name of AUTO_ALLOWED_TOOLS) expect(groupOfTool(name)).toBe("render");
+  // Only local Bot mailbox operations join the render tools. Creating/sending still prompts in a project cell.
+  it("auto-allows only rendering and local Bot mailbox operations", () => {
+    for (const name of AUTO_ALLOWED_TOOLS) expect(groupOfTool(name)).toBe(["readBotReplies", "replyToFrontend"].includes(name) ? "data" : "render");
   });
 
   it("accepts only the real group names", () => {

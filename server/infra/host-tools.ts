@@ -1,3 +1,4 @@
+import { BOT_TOOLS } from "../bots/tools.js";
 // Host tools: built-in GUI-protocol tools whose execute lives in the main server
 // (server/index.ts) rather than in a plugin module, because they need server
 // internals the plugin sandbox doesn't expose — e.g. the live PTY table. The
@@ -70,6 +71,7 @@ export const SPAWN_BACKGROUND_CHAT: ToolDefinition = {
 // manageShapeScript too, plus the remote-host session it reaches the gallery through —
 // see shapescript-manage-tool.ts.
 export const HOST_TOOL_DEFINITIONS: ToolDefinition[] = [
+  ...BOT_TOOLS,
   SPAWN_BACKGROUND_CHAT,
   MANAGE_ACCOUNTING,
   MANAGE_COLLECTION,

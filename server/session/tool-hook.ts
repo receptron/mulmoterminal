@@ -19,6 +19,7 @@ export interface ToolHookPayload {
   tool_input?: unknown;
   tool_output?: unknown;
   tool_response?: unknown;
+  error?: unknown;
   duration_ms?: number | undefined;
 }
 
@@ -49,7 +50,7 @@ export function toolHookRecord(event: string, payload: ToolHookPayload): ToolHoo
       ...call,
       // The CLI has used both names; whichever is present is the output. Lose this and tool
       // outputs render blank for whichever version uses the other one.
-      toolOutput: payload.tool_output ?? payload.tool_response,
+      toolOutput: payload.tool_output ?? payload.tool_response ?? (event === "PostToolUseFailure" ? payload.error : undefined),
       durationMs: payload.duration_ms,
       status: event === "PostToolUseFailure" ? "failed" : "completed",
     },

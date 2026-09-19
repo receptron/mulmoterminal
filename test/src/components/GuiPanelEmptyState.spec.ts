@@ -1,3 +1,4 @@
+import { isBotTool } from "../../../common/botTools";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import GuiPanel from "../../../src/components/GuiPanel.vue";
@@ -92,7 +93,7 @@ describe("the canvas pane's empty state", () => {
     mockServer(null);
     const w = mountPanel();
     await flushPromises();
-    expect(itemsOf(w)).toHaveLength(TOOL_GROUPS.flatMap(toolsInGroup).length);
+    expect(itemsOf(w)).toHaveLength(TOOL_GROUPS.flatMap(toolsInGroup).filter((name) => !isBotTool(name)).length);
   });
 
   // "Ask Claude to use one of these:" above an EMPTY list is a dead end.
@@ -106,6 +107,12 @@ describe("the canvas pane's empty state", () => {
   });
 
   // Naming a tool says nothing about what asking for it would get.
+  it("keeps internal Bot control out of the Canvas hint", async () => {
+    const w = mountPanel();
+    await flushPromises();
+    expect(itemsOf(w).some((item) => /manageBot|sendToBot|readBotReplies|replyToFrontend/.test(item))).toBe(false);
+  });
+
   it("says what each one produces", async () => {
     const w = mountPanel();
     await flushPromises();
