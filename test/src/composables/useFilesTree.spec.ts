@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { adoptListing, findIn, flattenRows, useFilesTree, type TreeNode } from "../../../src/composables/useFilesTree";
 
 // The three decisions the tree makes about NODES, now that they are reachable without mounting a
@@ -110,18 +110,28 @@ describe("adoptListing", () => {
 // listing that fails must leave the row CLOSED, because an open row with no children reads as an
 // empty directory that is not.
 describe("useFilesTree", () => {
+  // A real Response rather than a shape asserted into one: `ok` then follows from the status the
+  // way a browser's does, and nothing here needs a cast (Codex on #2174).
   const serve = (listings: Record<string, { name: string; dir: boolean; size: number }[] | null>) => {
     const calls: string[] = [];
-    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+    const answer: typeof fetch = async (input) => {
       const path = new URL(String(input), "https://x").searchParams.get("path") ?? "";
       calls.push(path);
       const entries = listings[path];
-      if (!entries) return { ok: false, status: 500, json: async () => ({ error: "boom" }) };
-      return { ok: true, json: async () => ({ entries }) };
-    }) as unknown as typeof fetch;
+      if (!entries) return new Response(JSON.stringify({ error: "boom" }), { status: 500 });
+      return new Response(JSON.stringify({ entries }), { status: 200 });
+    };
+    globalThis.fetch = answer;
     return calls;
   };
   const paths = (tree: ReturnType<typeof useFilesTree>) => tree.rows.value.map((r) => r.node.path);
+  /** The node at `target`, or a failure that NAMES it. A cast here would report the miss as
+   *  "cannot read properties of null" several lines later (Codex on #2174). */
+  const nodeAt = (tree: ReturnType<typeof useFilesTree>, target: string): TreeNode => {
+    const found = tree.findNode(target);
+    if (!found) throw new Error(`no node at ${target}`);
+    return found;
+  };
   const root = [
     { name: "src", dir: true, size: 0 },
     { name: "a.ts", dir: false, size: 1 },
@@ -133,9 +143,7 @@ describe("useFilesTree", () => {
     serve({ "": root, src: [{ name: "inside.ts", dir: false, size: 1 }] });
     const tree = useFilesTree(() => "/proj");
     await tree.loadRoot();
-    const dir = tree.findNode("src");
-    expect(dir).not.toBeNull();
-    await tree.toggleDir(dir as TreeNode);
+    await tree.toggleDir(nodeAt(tree, "src"));
     expect(paths(tree)).toEqual(["src", "src/inside.ts", "a.ts"]);
   });
 
@@ -143,7 +151,7 @@ describe("useFilesTree", () => {
     serve({ "": root, src: null });
     const tree = useFilesTree(() => "/proj");
     await tree.loadRoot();
-    const dir = tree.findNode("src") as TreeNode;
+    const dir = nodeAt(tree, "src");
     await tree.toggleDir(dir);
 
     expect(dir.expanded).toBe(false); // not half-open over nothing
@@ -152,11 +160,30 @@ describe("useFilesTree", () => {
     expect(tree.error.value).toBeNull(); // one directory failing is not the TREE failing
   });
 
+  // A directory that IS empty answers `{ entries: [] }`, which is not the same as a listing that
+  // could not be read — the row stays open over nothing and is not asked for again. Carried from
+  // #2169, where the failure case landed and this one did not.
+  it("keeps an empty directory open and does not ask again", async () => {
+    const calls = serve({ "": root, src: [] });
+    const tree = useFilesTree(() => "/proj");
+    await tree.loadRoot();
+    const dir = nodeAt(tree, "src");
+    await tree.toggleDir(dir);
+
+    expect(dir.expanded).toBe(true);
+    expect(dir.loaded).toBe(true);
+    expect(paths(tree)).toEqual(["src", "a.ts"]);
+
+    await tree.toggleDir(dir); // closed
+    await tree.toggleDir(dir); // and open again
+    expect(calls.filter((c) => c === "src")).toHaveLength(1);
+  });
+
   it("asks again the next time that row is clicked", async () => {
     const calls = serve({ "": root, src: null });
     const tree = useFilesTree(() => "/proj");
     await tree.loadRoot();
-    const dir = tree.findNode("src") as TreeNode;
+    const dir = nodeAt(tree, "src");
     await tree.toggleDir(dir);
     await tree.toggleDir(dir);
 
@@ -167,7 +194,7 @@ describe("useFilesTree", () => {
     const calls = serve({ "": root, src: [{ name: "inside.ts", dir: false, size: 1 }] });
     const tree = useFilesTree(() => "/proj");
     await tree.loadRoot();
-    const dir = tree.findNode("src") as TreeNode;
+    const dir = nodeAt(tree, "src");
     await tree.toggleDir(dir);
     await tree.toggleDir(dir);
 

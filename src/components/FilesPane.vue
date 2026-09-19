@@ -8,43 +8,18 @@
 // It owns no notion of routes or of being open — the host decides when it exists, and
 // calls `reload()` after a root change it has already cleared with the user.
 import { onBeforeUnmount, onMounted, ref, computed, nextTick, useTemplateRef, watch } from "vue";
-import { createEditor, langKindForFilename, type CaretAt, type CmEditor } from "./cmEditor";
 import { ancestorDirs, expandedPaths, restoreOrder } from "./filesTreeState";
 import { useFilesTree, type TreeNode } from "../composables/useFilesTree";
+import { useOpenFile } from "../composables/useOpenFile";
+import type { FilesPaneState } from "./filesPaneState";
 import FileFinder from "./FileFinder.vue";
 import FileSearch from "./FileSearch.vue";
 import { useFileSearchPanel } from "../composables/useFileSearchPanel";
 import FilesToolbarButton from "./FilesToolbarButton.vue";
-import { watchExternalFileChanges } from "../composables/externalFileChanges";
 import { canOpenInCanvas, absoluteUnder, type StoriesRoots } from "../composables/canvasOpenFile";
 import { filesRowActions, type FilesRowAction } from "./filesRowActions";
 import { useFilesRowMenu } from "../composables/useFilesRowMenu";
-import { restoresPreview, staysOnSameFile } from "./filesPreviewMode";
-import { MARKDOWN_FILE_SCOPE, fileChannelPath, pluginFileChannel } from "../../common/fileChannel";
-import { jsonBody } from "../jsonBody";
-import { askTheMachine, bankText, browseQuery, writeBuffer } from "./filesPaneApi";
-import { diskVersion, previewQuery } from "./filesPreviewSrc";
-import { fetchWithTimeout } from "../utils/fetchWithTimeout";
-
-/** What a host hands back so a revisited directory looks the way it was left. */
-export interface FilesPaneState {
-  openPath: string | null;
-  expanded: string[];
-  /** Whether the open file was being READ in the Markdown preview rather than edited (#2137).
-   *  Optional because nothing written before this existed carries one, and a pane that has never
-   *  been anywhere near a preview should not have to say so — absent is the editor. */
-  showPreview?: boolean;
-  /** Where the reader was in `openPath`, so coming back does not mean finding the line again
-   *  (#2149). A place in the file, not a pixel: the pane is often a different width next time. */
-  caret?: CaretAt | undefined;
-  /** The line that was at the TOP of the editor. Kept beside the caret because scrolling moves
-   *  neither the selection nor the caret — a reader who never clicks has a caret on line 1 while
-   *  reading line 130, and the caret alone would put them back at the top of the file. */
-  topLine?: number | undefined;
-  /** How far down the tree was scrolled. The expanded directories are remembered already, so the
-   *  same rows come back — this is which of them were on screen. */
-  treeScrollTop?: number;
-}
+import { askTheMachine } from "./filesPaneApi";
 
 const props = defineProps<{
   cwd: string | null;
@@ -65,24 +40,11 @@ const emit = defineEmits<{ close: []; dirty: [boolean]; "open-in-canvas": [path:
 // The tree is its own thing now (#2158): what has been read, what is expanded, what is on screen.
 // The markup for it stays here.
 const tree = useFilesTree(() => props.cwd);
-const openPath = ref<string | null>(null);
-const openName = computed(() => (openPath.value ? (openPath.value.split("/").pop() ?? "") : ""));
-const dirty = ref(false);
-/** Bumped on every edit. The search panel needs a dependency that MOVES — see its own comment. */
-const editSeq = ref(0);
-const saving = ref(false);
-const fileError = ref<string | null>(null);
-// Set when the server refuses to serve a file as text (415). Its own state rather than an error:
-// nothing went wrong — this file simply is not text, and the pane has something to say about it
-// rather than a failure to report (#2038).
-const unpreviewable = ref<string | null>(null);
-// The version the open buffer was loaded from; sent back on save so the server can refuse a
-// write that would clobber someone else's (null = the file didn't exist).
-const baseVersion = ref<string | null>(null);
-// Set when a save came back 409, holding the version now on disk — what "Overwrite" re-sends.
-const conflict = ref<{ version: string | null } | null>(null);
-const showPreview = ref(false);
-const isMarkdown = computed(() => langKindForFilename(openName.value) === "markdown");
+// And so is the open file: the buffer, the editor it is shown in, the reader's place in it, and
+// every way it is written back. Destructured because the template names these directly.
+const file = useOpenFile(() => props.cwd);
+const { openPath, openName, dirty, editSeq, saving, fileError, unpreviewable, conflict, showPreview, isMarkdown, previewSrc } = file;
+const { flush, save, overwrite, discardAndReload, openInOs } = file;
 // Whether the Canvas has a View for the open file — the plugins' own gates decide, not an
 // extension test here (see canvasOpenFile.ts).
 // Gated on the path the CARD will carry, not the row's relative one: a cell whose directory has a
@@ -93,25 +55,9 @@ const storiesRoots = computed<StoriesRoots>(() => props.storiesRoots ?? NO_ROOTS
 const canvasOpenable = computed(() => canOpenInCanvas(openPath.value ? absoluteUnder(props.cwd, openPath.value) : null, storiesRoots.value));
 
 const editorHost = ref<HTMLDivElement>();
-let editor: CmEditor | null = null;
-// The tree and the open file are fetched independently, so they get a counter EACH. One
-// shared counter reads as "latest request wins" and is wrong the moment the two overlap:
-// opening a file while the tree is still loading bumped the shared id, the tree's own
-// `id === reqId` check then failed, and its result was thrown away — leaving a pane that says
-// "Empty directory." next to the file it just opened. Nothing overlapped them until a click in
-// terminal output could open a file at the same moment the pane mounts (#910).
-let fileReqId = 0;
 
 // The host guards its own navigation on this, so it has to hear every change.
 watch(dirty, (value) => emit("dirty", value));
-
-const qs = (pathRel: string): string => browseQuery(props.cwd, pathRel);
-// The version is what makes this URL change when the file does — without it the browser keeps
-// serving the rendering it already has, and a full page reload was the only way to see an edit
-// another cell's agent had made (#2136).
-const previewSrc = computed(() =>
-  openPath.value ? `/api/files/browse/md?${previewQuery(props.cwd, openPath.value, diskVersion(baseVersion.value, conflict.value))}` : "",
-);
 
 // The row menu: right-click a tree row (or Shift+F10 / the Menu key on it) to put its path at
 // the terminal's cursor (#1859). Teleported and fixed-positioned for CockpitRowMenu's reason —
@@ -142,7 +88,7 @@ function runRowAction(action: FilesRowAction): void {
   if (action.id === "open-canvas") emit("open-in-canvas", action.pathRel);
   // Not an emit: nothing above this pane takes part. The browser cannot open a file manager, so
   // the local server does it (#2039) — through filesPaneApi, like every other request here.
-  else if (action.id === "reveal") void showMachineFailure(askTheMachine("/api/files/reveal", action.pathAbs, `could not show ${action.pathAbs}`));
+  else if (action.id === "reveal") void file.reportFailure(askTheMachine("/api/files/reveal", action.pathAbs, `could not show ${action.pathAbs}`));
   else emit("insert-text", action.text);
 }
 
@@ -158,199 +104,9 @@ const {
   run: runRowAction,
 });
 
-// Save on the way out instead of asking. The editor sits beside a terminal the user is
-// working in, so anything that moves the enlargement — a key, a click on the filmstrip —
-// would otherwise raise a dialog mid-flow. Nothing is lost either way: the server banks
-// three generations of every file it replaces.
-//
-// A save that loses the version race can't put a banner up (we are already leaving), so the
-// buffer is banked instead and the file left as the other writer left it. Everything needed
-// is read BEFORE the first await, so an unmount mid-flight can't take the content with it.
-// Returns whether the buffer is safe to leave behind — false when NEITHER the save nor the
-// backup landed (the server is down, the disk is full). Callers that can stay must stay: with
-// no copy anywhere, walking away is the one outcome that loses what was typed.
-async function flush(): Promise<boolean> {
-  if (!dirty.value || !openPath.value || !editor) return true;
-  const pathRel = openPath.value;
-  const text = editor.getDoc();
-  const outcome = await writeBuffer(qs(pathRel), text, baseVersion.value);
-  if (outcome.status !== "saved" && !(await bankText(qs(pathRel), text))) {
-    fileError.value = outcome.status === "error" ? outcome.message : "could not save or back up this file";
-    return false;
-  }
-  dirty.value = false;
-  conflict.value = null;
-  return true;
-}
-
 async function openFile(node: TreeNode): Promise<void> {
   if (node.dir) return tree.toggleDir(node);
-  await loadFile(node.path);
-}
-
-// Open a project-relative path in the editor. Split out from openFile because the other way
-// in has no tree node to hand over: a clicked source path in terminal output arrives as
-// Every /api route answers a failure as `res.status(4xx).json({ error })`, so the reason a read
-// was refused is in the body — reporting only the status turns a fixable problem into a mystery.
-const failureReason = (body: Record<string, unknown>, status: number): string =>
-  typeof body.error === "string" && body.error !== "" ? body.error : `HTTP ${status}`;
-
-// ?path= and opens the same file (#808).
-// `force` re-reads the file already open and skips the unsaved-edits prompt — the
-// conflict banner's "Reload", where discarding is the button the user just pressed.
-/** Whether the pane may leave the buffer it is on. `force` skips both questions: the conflict
- *  banner's "Reload" is a deliberate discard, and re-reading the open file is not leaving it. */
-async function mayLeaveCurrent(pathRel: string, force: boolean): Promise<boolean> {
-  if (force) return true;
-  if (pathRel === openPath.value) return false; // already open — no reload
-  // Opening another file is leaving this one. If it couldn't be saved OR banked, staying is
-  // the only way not to lose it.
-  return await flush();
-}
-
-/** `remembered` is a restore asking for the view mode that path was left in. It is applied HERE
- *  rather than by the caller after the await, so the decision sits inside this request's own
- *  generation guard: a load that lost its race must not hand its mode to the file that won. */
-async function loadFile(pathRel: string, force = false, remembered: FilesPaneState | null = null): Promise<void> {
-  if (!(await mayLeaveCurrent(pathRel, force))) return;
-  const id = ++fileReqId;
-  fileError.value = null;
-  conflict.value = null;
-  unpreviewable.value = null;
-  // What survives a re-read of the SAME file, and what a different file leaves behind: the mode
-  // belongs to the file it was turned on for, and so does the reader's place in it. Carried across
-  // the read rather than restored from a snapshot, because this path has no snapshot — the agent
-  // editing the file you are reading is what triggers it (see staysOnSameFile).
-  const staying = staysOnSameFile(openPath.value, pathRel);
-  const carried = staying ? placeNow() : null;
-  if (!staying) showPreview.value = false;
-  try {
-    const res = await fetchWithTimeout(`/api/files/browse/text?${qs(pathRel)}`);
-    const data = await jsonBody(res);
-    // 415 is the one non-ok status that is not a failure: the file is simply not text, and showing
-    // it as one is what destroyed spreadsheets before this existed (#2038).
-    if (!res.ok && res.status !== 415) throw new Error(failureReason(data, res.status));
-    if (id !== fileReqId) return;
-    if (res.status === 415) adoptUnpreviewable(pathRel, data);
-    else adoptText(pathRel, data);
-    restorePlace(pathRel, remembered, carried);
-  } catch (e) {
-    if (id === fileReqId) fileError.value = e instanceof Error ? e.message : String(e);
-  }
-}
-
-/** Where a reader is in a file: the cursor, and what is on screen. ONE value because they are one
- *  fact — carrying the caret alone left a reader who never clicks at the top of the file (Codex
- *  found that twice, once per field, which is what a field-by-field rule earns). It is the shape a
- *  snapshot already stores, so neither end converts: a remembered state IS a place. */
-type FilePlace = Pick<FilesPaneState, "caret" | "topLine">;
-
-const placeNow = (): FilePlace => {
-  const [caret, topLine] = [editor?.caretAt(), editor?.topLine()];
-  // Absent rather than undefined: `exactOptionalPropertyTypes` treats the two as different, and
-  // absent is what "the editor had nothing to say" means here.
-  return { ...(caret ? { caret } : {}), ...(topLine ? { topLine } : {}) };
-};
-
-/** The screen goes back LAST: `goTo` scrolls the caret into view, and what was visible is the
- *  authoritative answer to "where was I". */
-function goToPlace(place: FilePlace): void {
-  if (place.caret) editor?.goTo(place.caret);
-  if (place.topLine) editor?.scrollLineToTop(place.topLine);
-}
-
-/** Put the reader back, from whichever of the two sources this read has. They are exclusive: a
- *  restore knows where they were LAST TIME, a same-file re-read where they are NOW. */
-function restorePlace(pathRel: string, remembered: FilesPaneState | null, carried: FilePlace | null): void {
-  if (remembered) return applyRemembered(remembered);
-  if (carried && openPath.value === pathRel && !unpreviewable.value) goToPlace(carried);
-}
-
-/** Put back what was remembered about the file that just landed. Both halves ask about what
- *  ACTUALLY arrived rather than what was asked for: the path may hold something else now, or
- *  nothing this pane can show. */
-function applyRemembered(remembered: FilesPaneState): void {
-  showPreview.value = restoresPreview(remembered, { openPath: openPath.value, isMarkdown: isMarkdown.value, unpreviewable: unpreviewable.value !== null });
-  if (remembered.openPath !== openPath.value || unpreviewable.value) return;
-  goToPlace(remembered);
-}
-
-/** Hand the open file to the OS's default application (#2038) — the way out of a file the pane
- *  cannot show. */
-async function openInOs(): Promise<void> {
-  const pathRel = openPath.value;
-  if (!pathRel || !props.cwd) return;
-  await showMachineFailure(askTheMachine("/api/files/open", absoluteUnder(props.cwd, pathRel), `could not open ${pathRel}`));
-}
-
-/** Put a file the server served as text into the editor. Paired with `adoptUnpreviewable` so the
- *  two outcomes of one request read side by side rather than as branches inside the fetch. */
-function adoptText(pathRel: string, data: Record<string, unknown>): void {
-  openPath.value = pathRel;
-  baseVersion.value = typeof data.version === "string" ? data.version : null;
-  editor?.setDoc(typeof data.text === "string" ? data.text : "", pathRel.split("/").pop() ?? pathRel);
-  dirty.value = false;
-}
-
-/** Show the "not text" panel for a file the server refused to serve as text. The path is still
- *  adopted so the header names the file the user picked; the buffer is emptied and marked clean so
- *  nothing can be saved over it — an empty editor above real content is what destroyed it (#2038). */
-function adoptUnpreviewable(pathRel: string, data: Record<string, unknown>): void {
-  openPath.value = pathRel;
-  baseVersion.value = null;
-  dirty.value = false;
-  editor?.setDoc("", pathRel.split("/").pop() ?? pathRel);
-  unpreviewable.value = typeof data.error === "string" ? data.error : "this file cannot be shown as text";
-  // A file the server will not serve as text has no preview to be in. Reachable now that the mode
-  // survives a re-read of the same path: the open `.md` can come back 415 on an external change.
-  showPreview.value = false;
-}
-
-async function save(): Promise<void> {
-  // Ctrl/Cmd+S reaches here even though the Save button is disabled, and the buffer shown for an
-  // unpreviewable file is EMPTY — saving it truncates the file (CodeRabbit on #2038). The server
-  // refuses this too; this is so the user sees why rather than an error from a keystroke.
-  if (unpreviewable.value) return;
-  if (!openPath.value || !editor || saving.value) return;
-  saving.value = true;
-  fileError.value = null;
-  const outcome = await writeBuffer(qs(openPath.value), editor.getDoc(), baseVersion.value);
-  saving.value = false;
-  // 409: the file moved on under us (the agent working in this very directory is the likeliest
-  // author). Nothing was written — offer the choice instead of picking a loser.
-  if (outcome.status === "conflict") {
-    conflict.value = { version: outcome.version };
-    return;
-  }
-  if (outcome.status === "error") {
-    fileError.value = outcome.message;
-    return;
-  }
-  baseVersion.value = outcome.version;
-  dirty.value = false;
-  conflict.value = null;
-}
-
-/** Conflict banner — take the disk's copy. The buffer is banked first, so "discard" costs
- *  nothing that can't be fetched back out of the backup store. */
-async function discardAndReload(): Promise<void> {
-  if (!openPath.value || !editor) return;
-  // "Kept as a backup either way" is the promise the banner makes. If the store refuses it,
-  // the honest answer is to keep the buffer rather than discard it anyway.
-  if (!(await bankText(qs(openPath.value), editor.getDoc()))) {
-    fileError.value = "could not back up your version — nothing was discarded";
-    return;
-  }
-  void loadFile(openPath.value, true);
-}
-
-/** Conflict banner — keep the buffer, adopting the disk's version as the new baseline so the
- *  retry is a deliberate overwrite rather than another conflict. */
-function overwrite(): void {
-  if (!conflict.value) return;
-  baseVersion.value = conflict.value.version;
-  conflict.value = null;
-  void save();
+  await file.load(node.path);
 }
 
 // "Open by name" (#2099). Its own state rather than a route or a prop: the finder belongs to
@@ -366,8 +122,8 @@ function closeFinder(): void {
 
 // "Search in files" (#2140) — the finder's companion, and its own panel for the reason its own
 // header says: the rows are a file heading with matching lines under it, not one row per path.
-// `editor` is passed as a GETTER because this file reassigns it when the host element remounts.
-const search = useFileSearchPanel({ dirty, openPath, editSeq, editor: () => editor, revealPath });
+// The editor is passed as a GETTER because the pane replaces it when the host element remounts.
+const search = useFileSearchPanel({ dirty, openPath, editSeq, editor: () => file.editor.value, revealPath });
 
 // Picking is "show me this file", not only "open it": the tree is how the user goes on to its
 // neighbours, and a file opened with the tree still collapsed leaves them where they started.
@@ -377,9 +133,9 @@ function onFinderPick(pathRel: string): void {
 }
 
 // Which reveal is the current one. A reveal spends most of its time FETCHING — one request per
-// ancestor directory — so a second pick can overtake the first and finish before it. `loadFile`
-// takes the newest `fileReqId` as it goes, so the loser landing second would replace the file the
-// user actually chose with the one they abandoned (CodeRabbit on #2102). Bumped by teardown too:
+// ancestor directory — so a second pick can overtake the first and finish before it. A read takes
+// the newest generation as it goes, so the loser landing second would replace the file the user
+// actually chose with the one they abandoned (CodeRabbit on #2102). Bumped by teardown too:
 // a re-rooted pane must not be scrolled to a row from the project it just left.
 let revealId = 0;
 
@@ -395,13 +151,13 @@ async function revealPath(pathRel: string): Promise<boolean> {
     if (node?.dir && !node.expanded) await tree.toggleDir(node);
     if (id !== revealId) return false; // a later pick took over while this one was fetching
   }
-  await loadFile(pathRel);
+  await file.load(pathRel);
   await nextTick(); // the row only exists once the expansions above have rendered
   if (id !== revealId) return false;
   rowElementFor(pathRel)?.scrollIntoView({ block: "nearest" });
-  // Whether the editor is REALLY showing what was asked for. `loadFile` returns nothing and has
-  // several ways to end without opening anything — the file is gone, the fetch failed, or
-  // `mayLeaveCurrent` declined because the current dirty buffer could not be saved — and in each
+  // Whether the editor is REALLY showing what was asked for. `file.load` returns nothing and has
+  // several ways to end without opening anything — the file is gone, the fetch failed, or it
+  // declined to leave a dirty buffer that could not be saved — and in each
   // the editor keeps the previous document. A caller that goes on to scroll to a line number needs
   // to know that, or it scrolls an unrelated file to an arbitrary place while looking deliberate.
   return openPath.value === pathRel;
@@ -412,13 +168,6 @@ async function revealPath(pathRel: string): Promise<boolean> {
  *  selector built by concatenation. */
 function rowElementFor(pathRel: string): HTMLElement | undefined {
   return [...(treeEl.value?.querySelectorAll<HTMLElement>("[data-path]") ?? [])].find((el) => el.dataset.path === pathRel);
-}
-
-/** Report what `askTheMachine` could not do, in this pane's own alert line (`role="alert"`) —
- *  the message names what failed, so it does not read as the open file's problem. */
-async function showMachineFailure(attempt: Promise<string | null>): Promise<void> {
-  const message = await attempt;
-  if (message !== null) fileError.value = message;
 }
 
 async function requestClose(): Promise<void> {
@@ -434,62 +183,19 @@ function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-// The file may move under the editor at any moment — the agent working in this directory is
-// editing the same files. Two ways of finding out, because neither alone is enough: the write
-// hook is immediate but only speaks for Claude (Codex reports through a different channel, and
-// git, a build or another editor report through none), while the poll misses nothing and is
-// merely late. The 409 on save is still the hard guarantee; these two only get the news out
-// before the user has typed into a file that already moved.
-/** Re-read the version and react: a clean buffer just takes the new content (the pane reads as
- *  a live view), a dirty one raises the banner rather than choosing for the user. */
-async function checkForExternalChange(): Promise<void> {
-  if (!openPath.value || saving.value || conflict.value) return;
-  const pathRel = openPath.value;
-  try {
-    const res = await fetchWithTimeout(`/api/files/browse/version?${qs(pathRel)}`);
-    if (!res.ok) return;
-    const data = await jsonBody(res);
-    const onDisk = typeof data.version === "string" ? data.version : null;
-    // Still the version we loaded, or the answer arrived after the user moved on.
-    if (onDisk === baseVersion.value || pathRel !== openPath.value) return;
-    if (dirty.value) conflict.value = { version: onDisk };
-    else void loadFile(pathRel, true);
-  } catch {
-    // Offline or the server restarted: the next tick asks again, and the save still can't clobber.
-  }
-}
-
-/** The channel the open document's own changes are announced on, or null when the pane is on
- *  something the server does not watch. Absolute and POSIX-spelled, because that is what the
- *  server resolves and what it will spell the channel back as (common/fileChannel.ts). */
-const openDocChannel = computed(() =>
-  openPath.value && isMarkdown.value ? pluginFileChannel(MARKDOWN_FILE_SCOPE, fileChannelPath(absoluteUnder(props.cwd, openPath.value))) : null,
-);
-
-function watchExternalChanges(): () => void {
-  return watchExternalFileChanges({
-    cwd: () => props.cwd,
-    openPath: () => openPath.value,
-    docChannel: () => openDocChannel.value,
-    recheck: () => void checkForExternalChange(),
-  });
-}
-
 function teardown(): void {
-  // Every generation, not only the reveal's: a `loadFile` already in flight would otherwise land
-  // after the re-root and adopt the OLD project's content into the new tree, because its own
-  // `id === fileReqId` check still passes (Codex on #2102). Invalidating ALL of them is what makes
-  // "the pane is being torn down" stop the work, rather than each request's own successor. The
-  // tree's own generation is bumped by `tree.reset()` below, for the same reason.
+  // Every generation, not only the reveal's: a read already in flight would otherwise land after
+  // the re-root and adopt the OLD project's content into the new tree, because its own generation
+  // check still passes (Codex on #2102). Invalidating ALL of them is what makes "the pane is being
+  // torn down" stop the work, rather than each request's own successor. The tree's and the open
+  // file's own generations are bumped by their `reset()` / `teardown()` below, for the same reason.
   revealId += 1;
-  fileReqId += 1;
+  file.teardown();
   closeFinder();
   // And the search, for the finder's reason: the root is changing, and a panel left open goes on
   // showing the OLD project's matches. Clicking one then reveals that relative path under the NEW
   // root — opening a different file where the same path exists, and nothing where it does not.
   search.close();
-  editor?.destroy();
-  editor = null;
   // The root is changing and nothing has been read for the new one — including the error, which
   // belonged to the root being left. The header's Reload button deliberately does NOT come through
   // here: that tree is still this root's, and swapping the result in beats replacing a correct tree
@@ -499,11 +205,6 @@ function teardown(): void {
   // where the last directory left it, and a directory with nothing remembered would open
   // mid-scroll. `restore` puts a remembered offset back after this (Codex on #2156).
   if (treeEl.value) treeEl.value.scrollTop = 0;
-  openPath.value = null;
-  dirty.value = false;
-  baseVersion.value = null;
-  conflict.value = null;
-  showPreview.value = false;
 }
 
 // The current startup, so anything that needs the TREE can wait for it. The pane mounts with an
@@ -515,26 +216,19 @@ function teardown(): void {
 let started: Promise<void> = Promise.resolve();
 
 async function start(): Promise<void> {
-  const reqIdAtStart = fileReqId;
+  const reqIdAtStart = file.generation();
   await nextTick();
-  if (editorHost.value)
-    editor = createEditor(editorHost.value, () => {
-      dirty.value = true;
-      // `dirty` only ever goes false->true, so it cannot tell the search panel that the text has
-      // changed AGAIN. CodeMirror's document is not reactive either, so this counter is the only
-      // thing that moves on a second keystroke (see useFileSearchPanel's `buffer`).
-      editSeq.value += 1;
-    });
+  if (editorHost.value) file.attach(editorHost.value);
   await tree.loadRoot();
   await restore(props.initialState ?? null, reqIdAtStart);
   // An explicitly requested path wins over whatever was remembered — it is the more recent
   // intent (a clicked path in terminal output).
-  if (props.requestedPath) void loadFile(props.requestedPath);
+  if (props.requestedPath) void file.load(props.requestedPath);
 }
 
 /** Put a remembered tree back: open its directories parents-first (each fetches its children),
  *  then the file that was open. Anything since deleted simply isn't found and is skipped.
- *  `reqIdAtStart` is the fileReqId snapshot from the beginning of start() — restore only
+ *  `reqIdAtStart` is the read generation at the beginning of start() — restore only
  *  opens the remembered file when no competing request arrived during THIS startup cycle. */
 async function restore(state: FilesPaneState | null, reqIdAtStart: number): Promise<void> {
   if (!state) return;
@@ -542,7 +236,7 @@ async function restore(state: FilesPaneState | null, reqIdAtStart: number): Prom
     const node = tree.findNode(dirPath);
     if (node?.dir && !node.expanded) await tree.toggleDir(node);
   }
-  if (state.openPath && fileReqId === reqIdAtStart) await loadFile(state.openPath, false, state);
+  if (state.openPath && file.generation() === reqIdAtStart) await file.load(state.openPath, false, state);
   // Last, and only after a tick: the rows have to exist before there is anything to scroll past,
   // and the expansions above are what create them.
   if (state.treeScrollTop !== undefined) {
@@ -556,35 +250,14 @@ async function restore(state: FilesPaneState | null, reqIdAtStart: number): Prom
 watch(
   () => props.requestedPath,
   (pathRel) => {
-    if (pathRel) void loadFile(pathRel);
+    if (pathRel) void file.load(pathRel);
   },
 );
 
-// Closing the tab or reloading is also leaving the file. `keepalive` lets the request outlive
-// the page — capped at 64 KB by the browser, so a very large buffer may not make it out, which
-// is the one hole autosave can't close.
-function onPageHide(): void {
-  if (!dirty.value || !openPath.value || !editor) return;
-  const pathRel = openPath.value;
-  const text = editor.getDoc();
-  // Both, unconditionally: there is no awaiting an answer here, so the only way to honour
-  // "your version is kept either way" is to bank it whether or not the write wins the race.
-  // The cost is one redundant generation per tab-close with unsaved edits.
-  void bankText(qs(pathRel), text, true);
-  void writeBuffer(qs(pathRel), text, baseVersion.value, true);
-}
-
-let stopWatchingExternal: (() => void) | null = null;
 onMounted(() => {
-  window.addEventListener("pagehide", onPageHide);
-  stopWatchingExternal = watchExternalChanges();
   started = start();
 });
-onBeforeUnmount(() => {
-  window.removeEventListener("pagehide", onPageHide);
-  stopWatchingExternal?.();
-  teardown();
-});
+onBeforeUnmount(teardown);
 
 // `reload` is the host's way to say "the root changed and I have already cleared it with the
 // user" — the pane never watches `cwd` itself, because reacting to it would discard a buffer
@@ -601,7 +274,7 @@ defineExpose({
     openPath: openPath.value,
     expanded: expandedPaths(tree.roots.value ?? []),
     showPreview: showPreview.value,
-    ...placeNow(),
+    ...file.place(),
     treeScrollTop: treeEl.value?.scrollTop ?? 0,
   }),
   reload: async () => {
@@ -620,10 +293,10 @@ defineExpose({
   openSearch: () => {
     search.open.value = true;
   },
-  /** Open a file the host chose — a path clicked in terminal output (#910). Routed through
-   *  loadFile, which treats opening another file as leaving this one, so an unsaved buffer is
+  /** Open a file the host chose — a path clicked in terminal output (#910). Routed through the
+   *  same load, which treats opening another file as leaving this one, so an unsaved buffer is
    *  flushed (or keeps the pane where it is) exactly as it would be from the tree. */
-  openFile: (pathRel: string) => loadFile(pathRel),
+  openFile: (pathRel: string) => file.load(pathRel),
   flush,
 });
 </script>

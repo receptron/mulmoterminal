@@ -9,7 +9,7 @@
 //
 // Pure: no localStorage here. The host reads and writes the string through its own best-effort
 // storage helpers, which is also what makes this testable without a DOM.
-import type { FilesPaneState } from "./FilesPane.vue";
+import type { FilesPaneState } from "./filesPaneState";
 import type { CaretAt } from "./cmEditor";
 import { isRecord } from "../../common/isRecord";
 

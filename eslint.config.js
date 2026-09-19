@@ -335,7 +335,6 @@ export default [
       "src/main.ts", // App.vue
       "src/plugins-registry.ts", // CollectionCardView.vue
       "src/composables/collectionUi.ts", // PinToggle.vue
-      "src/components/filesPaneStore.ts", // FilesPaneState from FilesPane.vue
     ],
     rules: {
       "@typescript-eslint/no-unsafe-argument": "off",
