@@ -28,7 +28,7 @@ import type { SurvivingSession } from "../../../common/survivingSessions";
 // sweep wearing a button, and the sweep already exists with a rule of its own — which this section
 // also owns the number for, since it is the list that number acts on (#1467).
 const { t } = useI18n();
-const { sessions, loading, failed, reload } = useSurvivingSessions();
+const { sessions, armedIntervalHours, loading, failed, reload } = useSurvivingSessions();
 const { stopping, stopSession } = useSessionStop(reload);
 
 onMounted(reload);
@@ -65,6 +65,16 @@ const nudgeSweepHours = (delta: number): void => void saveSessionReapIntervalHou
 // With the threshold off, nothing is swept at any cadence, so the row below says that rather
 // than promising a repeat that will never end anything.
 const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAYS_OFF);
+
+// A repeat is running in THIS server — the server's own answer, not the saved number (#2184). The
+// timer is armed once at boot and deliberately not re-armed on a POST, so between a save and the
+// next restart the saved value describes a future server. Only this one can decide what a row is
+// allowed to promise.
+const sweeping = computed(() => armedIntervalHours.value > REAP_INTERVAL_HOURS_OFF);
+
+// Saved, but not what is running. The gap closes at the next restart and the row says so, which is
+// the honest thing to show someone who just changed the number and sees nothing happen.
+const cadencePending = computed(() => sessionReapIntervalHours.value !== armedIntervalHours.value);
 </script>
 
 <template>
@@ -94,8 +104,12 @@ const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAY
         v-if="s.reapable"
         data-testid="surviving-doomed"
         class="flex-none text-[11px] text-dim"
-        :title="t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })"
-        >{{ t("settings.surviving.doomed") }}</span
+        :title="
+          sweeping
+            ? t('settings.surviving.doomedSoonTitle', { days: sessionIdleReapDays, hours: armedIntervalHours })
+            : t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })
+        "
+        >{{ sweeping ? t("settings.surviving.doomedSoon") : t("settings.surviving.doomed") }}</span
       >
       <span v-if="s.attached" data-testid="surviving-open" class="flex-none text-[11px] text-amber" :title="t('settings.surviving.openTitle')">{{
         t("settings.surviving.open")
@@ -131,7 +145,7 @@ const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAY
       </template>
       <i18n-t v-else keypath="settings.surviving.reapHint" tag="span">
         <template #ended>
-          <strong class="text-fg">{{ t("settings.surviving.reapEnded") }}</strong>
+          <strong class="text-fg">{{ sweeping ? t("settings.surviving.reapEndedSweep") : t("settings.surviving.reapEnded") }}</strong>
         </template>
       </i18n-t>
     </span>
@@ -141,11 +155,10 @@ const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAY
        decision: the days say WHICH sessions go, this says whether a server that never restarts
        ever looks again (#2165).
 
-       The row above deliberately does NOT change its wording with this number. The timer is armed
-       once, at boot (server/session/reap-schedule.ts), so a value saved here is not what the
-       running process is doing — promising "ends on the next sweep" off the saved value is false
-       from the moment it is saved until the next restart, and false the other way when someone
-       sets it back to 0. Saying what is actually armed needs the server to report it (#2184). -->
+       The row above follows the cadence the SERVER reports it armed, never this number. The timer
+       is armed once, at boot (server/session/reap-schedule.ts), so between a save here and the
+       next restart the two disagree — and a row keyed off the saved value would promise a sweep
+       that is not scheduled, to exactly the person who just switched the feature on (#2184). -->
   <div class="mb-3 flex items-center gap-3">
     <SettingsStepper
       :value="sessionReapIntervalHours"
@@ -159,9 +172,14 @@ const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAY
     />
     <span class="text-[12px] text-dim">
       <template v-if="sweepDisabled">{{ t("settings.surviving.sweepDisabledHint") }}</template>
-      <template v-else-if="sessionReapIntervalHours > REAP_INTERVAL_HOURS_OFF">{{
-        t("settings.surviving.sweepHint", { hours: sessionReapIntervalHours })
-      }}</template>
+      <!-- Saved but not armed: the number on the stepper is not what this server is doing, and the
+           person who just changed it deserves to be told that rather than left wondering. -->
+      <template v-else-if="cadencePending">
+        <strong class="text-fg">{{ t("settings.surviving.sweepPendingTitle") }}</strong>
+        {{ sweeping ? t("settings.surviving.sweepPendingRunning", { hours: armedIntervalHours }) : t("settings.surviving.sweepPendingIdle") }}
+      </template>
+      <!-- Saved and armed: present tense is now a fact the server reported, not a guess. -->
+      <template v-else-if="sweeping">{{ t("settings.surviving.sweepHint", { hours: armedIntervalHours }) }}</template>
       <template v-else>
         <strong class="text-fg">{{ t("settings.surviving.sweepOffTitle") }}</strong> {{ t("settings.surviving.sweepOffHint") }}
       </template>

@@ -20,7 +20,7 @@ vi.mock("../../../server/session/session-drops.js", () => ({
   cleanupSessionDrops: (...a: unknown[]) => cleanupSessionDrops(...(a as [])),
 }));
 
-const { startReapSchedule } = await import("../../../server/session/reap-schedule.js");
+const { startReapSchedule, armedReapIntervalHours } = await import("../../../server/session/reap-schedule.js");
 
 // Real session ids are UUIDs (SESSION_ID_RE in server/config/env.ts), and the guard under test
 // rejects anything else — so a readable stand-in like "mt-a" would make these pass for the wrong
@@ -103,6 +103,29 @@ describe("startReapSchedule", () => {
     vi.advanceTimersByTime(60 * 60 * 1000);
     expect(cleanupSessionSettings).not.toHaveBeenCalled();
     expect(cleanupSessionDrops).not.toHaveBeenCalled();
+  });
+
+  // What the SETTINGS list needs, and what the saved config cannot tell it: the timer is armed
+  // once at boot and not re-armed on a POST, so from a save until the next restart the saved
+  // number describes a future server while this one describes the running one (#2184).
+  it("reports the cadence it armed", () => {
+    startReapSchedule(schedule(6));
+    expect(armedReapIntervalHours()).toBe(6);
+  });
+
+  it("reports OFF when it armed nothing", () => {
+    startReapSchedule(schedule(0));
+    expect(armedReapIntervalHours()).toBe(0);
+  });
+
+  // The one that would rot silently. Were the value assigned only inside the `if` that starts a
+  // timer, a later schedule that armed NOTHING would leave the earlier number standing, and the
+  // list would promise a sweep that is not scheduled — the exact false claim #2184 exists to end.
+  it("stops reporting a cadence once a later schedule arms none", () => {
+    startReapSchedule(schedule(6));
+    expect(armedReapIntervalHours()).toBe(6);
+    startReapSchedule(schedule(0));
+    expect(armedReapIntervalHours()).toBe(0);
   });
 
   // The threshold is live config: a POST between ticks must be what the next sweep uses.
