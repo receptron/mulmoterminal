@@ -1,31 +1,34 @@
-{%- comment -%} just-the-docs が head の末尾に差し込む場所。jekyll-seo-tag は WebSite しか出さないので、
-製品そのものを説明する構造化データをここで足す。検索結果の見え方だけでなく、 要約する側が「これは何か」を取り違えないためでもある。トップページにだけ出す。 {%-
-endcomment -%} {%- if page.url == "/" -%}
+{%- comment -%}
+just-the-docs が head の末尾に差し込む場所。jekyll-seo-tag は WebSite しか出さないので、
+製品そのものを説明する構造化データをここで足す。検索結果の見え方だけでなく、
+要約する側が「これは何か」を取り違えないためでもある。トップページにだけ出す。
+{%- endcomment -%}
+{%- if page.url == "/" -%}
 <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    "name": "MulmoTerminal",
-    "url": "{{ '/' | absolute_url }}",
-    "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "macOS, Linux, Windows",
-    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-    "license": "https://opensource.org/licenses/MIT",
-    "softwareHelp": "{{ '/guide/ja/' | absolute_url }}",
-    "codeRepository": "https://github.com/receptron/mulmoterminal",
-    "installUrl": "https://www.npmjs.com/package/mulmoterminal",
-    "screenshot": "{{ '/guide/images/hero.gif' | absolute_url }}",
-    "description": "Run several coding-agent sessions at once in a browser terminal grid, and see which one is waiting for you. Inside a terminal, \"still thinking\", \"finished\" and \"stopped for your permission\" all look the same. MulmoTerminal reads each agent CLI's own hooks and shows the difference in colour and sound.",
-    "featureList": [
-      "Nine agent sessions per page in one grid",
-      "Colour and sound for working, finished, and waiting for your permission",
-      "Claude Code, Codex, Antigravity, Grok, Muse, GitHub Copilot CLI, Cursor CLI and a plain shell",
-      "Sessions survive a reload, backed by tmux",
-      "git worktree isolation",
-      "Web Push to a phone when a session needs you"
-    ],
-    "author": { "@type": "Organization", "name": "receptron", "url": "https://github.com/receptron" }
-  }
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "MulmoTerminal",
+  "url": "{{ '/' | absolute_url }}",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "license": "https://opensource.org/licenses/MIT",
+  "softwareHelp": "{{ '/guide/ja/' | absolute_url }}",
+  "codeRepository": "https://github.com/receptron/mulmoterminal",
+  "installUrl": "https://www.npmjs.com/package/mulmoterminal",
+  "screenshot": "{{ '/guide/images/hero.gif' | absolute_url }}",
+  "description": "Run several coding-agent sessions at once in a browser terminal grid, and see which one is waiting for you. Inside a terminal, \"still thinking\", \"finished\" and \"stopped for your permission\" all look the same. MulmoTerminal reads each agent CLI's own hooks and shows the difference in colour and sound.",
+  "featureList": [
+    "Nine agent sessions per page in one grid",
+    "Colour and sound for working, finished, and waiting for your permission",
+    "Claude Code, Codex, Antigravity, Grok, Muse, GitHub Copilot CLI, Cursor CLI and a plain shell",
+    "Sessions survive a reload, backed by tmux",
+    "git worktree isolation",
+    "Web Push to a phone when a session needs you"
+  ],
+  "author": { "@type": "Organization", "name": "receptron", "url": "https://github.com/receptron" }
+}
 </script>
 <link rel="alternate" hreflang="ja" href="{{ '/guide/ja/' | absolute_url }}" />
 <link rel="alternate" hreflang="en" href="{{ '/guide/en/' | absolute_url }}" />

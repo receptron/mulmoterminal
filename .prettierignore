@@ -7,3 +7,12 @@ yarn.lock
 # test/server/backends/appViewGolden.spec.ts; formatting them here would make
 # every regeneration a diff.
 test/fixtures/sharedAppGolden/
+
+# Jekyll's Liquid templates. Prettier has no Liquid parser and formats them as HTML, which splits
+# a tag across a line break — `{%- endcomment -%}` came back as `{%-\nendcomment -%}`, and the
+# Japanese above it ran together into one line. It still RENDERS, which is why it went unnoticed.
+# `_layouts/default.html` is the sharper case: it is just-the-docs 0.12.0's own file held with one
+# line changed, and its comment asks the next reader to re-align it with upstream on a theme
+# upgrade. Being diffable against upstream is the whole point of it, and formatting ends that.
+docs/_layouts/
+docs/_includes/
