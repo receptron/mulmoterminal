@@ -1,4 +1,5 @@
-// Ending the sessions nothing is using, once per server start (#1467).
+// Ending the sessions nothing is using — at each server start, and on a timer while it runs
+// (#1467, #2165).
 //
 // The report was "cleanup-orphans is never called". Calling it was not enough: it consulted
 // `isResumableTmuxSession`, which is made of permanent records — a transcript that is never
@@ -9,10 +10,16 @@
 // now (infra/tmux.ts). What is lost when one is ended is the work in flight and the scrollback; the
 // conversation is on disk and resumes without the tmux session, which is what made "it has a
 // transcript" the wrong reason to keep it alive.
+//
+// Boot alone was not enough: a restart is the only moment the sweep ever ran unasked, so a server
+// that stays up — which this one is built to do — accumulated exactly what the sweep exists to
+// clear (#2165). `startIdleSessionSweep` at the bottom is the second caller.
 import { reapableTmuxSession, tmuxAttachedCounts, tmuxKillSession, tmuxListSessionIds, tmuxSessionActivity } from "../infra/tmux.js";
-import { reapIdleSeconds, reapSweepEnabled } from "../../common/sessionReap.js";
+import { reapIdleSeconds, reapIntervalMs, reapSweepEnabled, reapTimerEnabled } from "../../common/sessionReap.js";
 import { SESSION_ID_RE } from "../config/env.js";
 import { ptys } from "./registry.js";
+import { cleanupSessionSettings } from "./session-settings.js";
+import { cleanupSessionDrops } from "./session-drops.js";
 
 export interface ReapSweepResult {
   /** Ended, and confirmed ended: a kill tmux refused is not in here. */
@@ -122,5 +129,82 @@ export function sweepIdleSessions(nowMs: number, idleDays: number): ReapSweepRes
     liveHere: (id) => ptys.has(id),
     validId: (id) => SESSION_ID_RE.test(id),
     kill: tmuxKillSession,
+  });
+}
+
+/** What the periodic sweep needs, all injected: a spec fires a tick without waiting hours, and
+ *  without tmux, a registry or a clock. */
+export interface SweepTimerDeps {
+  /** Hours between ticks. Zero arms nothing, which is boot-only sweeping (#2165). */
+  intervalHours: number;
+  /** Read at EACH tick rather than captured — the Settings stepper writes this number while the
+   *  server runs, and a timer holding the boot value would act on a threshold the list beside it
+   *  has stopped showing. */
+  idleDays: () => number;
+  sweep: (idleDays: number) => ReapSweepResult;
+  /** Drop what the ended session left on disk. One of those files holds a provider's API token,
+   *  and until now the only thing that removed it was the next boot's orphan prune — which on a
+   *  server nobody restarts never comes. */
+  cleanupSession: (id: string) => void;
+  /** Whether an ended id is a session id at all. The sweep ends ones that are NOT on purpose
+   *  (#1533), and `cleanupSession` builds a path out of what it is handed — so the check the boot
+   *  prunes already make before deleting belongs on this route to the same files. Injected like
+   *  `ReapSweepInput.validId`, for its reason. */
+  validId: (id: string) => boolean;
+  log: (line: string) => void;
+  /** `setInterval` in production; a spec hands in a function it can fire itself. */
+  every: (intervalMs: number, tick: () => void) => void;
+}
+
+/**
+ * Run the sweep every so often for as long as the server is up.
+ *
+ * Boot was its only unprompted caller, so a server that does not restart never ended a session —
+ * which is the whole report (#2165). Nothing about WHICH sessions go changes here: the tick calls
+ * the same sweep, whose rule still refuses anything attached, anything a pty of ours holds, and
+ * anything tmux declines to answer for.
+ *
+ * No sweep on arming, unlike the update check's refresh loop: boot has just run one, and a second
+ * pass over the same list would end nothing and say so twice.
+ *
+ * Returns whether a timer was armed, so the caller can say so once in the log.
+ */
+export function startIdleSessionSweep(deps: SweepTimerDeps): boolean {
+  if (!reapTimerEnabled(deps.intervalHours)) return false;
+  deps.every(reapIntervalMs(deps.intervalHours), () => {
+    const idleDays = deps.idleDays();
+    const result = deps.sweep(idleDays);
+    result.reaped.filter(deps.validId).forEach(deps.cleanupSession);
+    // Only when something was ended. Boot prints both lines because a reader there is asking "did
+    // it run at all"; a tick that printed "kept 22" every few hours would answer that question
+    // forever and bury the one line that reports an action.
+    if (result.reaped.length) reapSweepLines(result, idleDays).forEach(deps.log);
+  });
+  return true;
+}
+
+/** Said once at boot, because a timer that has never fired is indistinguishable in the log from one
+ *  that was never armed — the confusion #1467 was filed about, one level up. */
+export const sweepTimerLine = (intervalHours: number): string =>
+  reapTimerEnabled(intervalHours)
+    ? `[tmux] idle-session sweep every ${intervalHours} hour(s) while running`
+    : "[tmux] idle-session sweep runs at start only (sessionReapIntervalHours: 0)";
+
+/** The live timer, for boot. Everything it needs is wired here so index.ts stays boot ORDER. */
+export function startIdleSessionSweepTimer(intervalHours: number, idleDays: () => number): boolean {
+  return startIdleSessionSweep({
+    intervalHours,
+    idleDays,
+    sweep: (days) => sweepIdleSessions(Date.now(), days),
+    cleanupSession: (id) => {
+      cleanupSessionSettings(id);
+      cleanupSessionDrops(id);
+    },
+    validId: (id) => SESSION_ID_RE.test(id),
+    log: (line) => console.log(line),
+    // `unref` so a timer never holds the process open — the update check's rule, for its reason.
+    every: (intervalMs, tick) => {
+      setInterval(tick, intervalMs).unref();
+    },
   });
 }

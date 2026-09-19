@@ -7,7 +7,16 @@
 // while 15 sat idle for hours with nobody attached. Everything below is about NOW instead.
 import { describe, it, expect, vi } from "vitest";
 
-import { reapIdleSessions, reapSweepLines, survivingAfterSweep, type ReapSweepInput } from "../../../server/session/reap-idle-sessions.js";
+import {
+  reapIdleSessions,
+  reapSweepLines,
+  startIdleSessionSweep,
+  survivingAfterSweep,
+  sweepTimerLine,
+  type ReapSweepInput,
+  type ReapSweepResult,
+  type SweepTimerDeps,
+} from "../../../server/session/reap-idle-sessions.js";
 import { reapableTmuxSession, isRestorableSession } from "../../../server/infra/tmux.js";
 import { DEFAULT_REAP_IDLE_DAYS, reapIdleSeconds } from "../../../common/sessionReap.js";
 
@@ -223,5 +232,113 @@ describe("survivingAfterSweep", () => {
 
   it("is the whole list when the sweep ended nothing", () => {
     expect([...survivingAfterSweep(["a", "b"], [])]).toEqual(["a", "b"]);
+  });
+});
+
+// The timer that makes the sweep something other than a restart-only event (#2165). The rule for
+// WHICH sessions go is pinned above; what is pinned here is that the tick runs at all, that it runs
+// against the CURRENT threshold, and that what it ends does not leave its files behind.
+describe("startIdleSessionSweep", () => {
+  const swept = (over: Partial<ReapSweepResult> = {}): ReapSweepResult => ({ reaped: [], heldBack: 0, recent: 0, unclear: 0, ...over });
+
+  const timer = (over: Partial<SweepTimerDeps> = {}) => {
+    const ticks: (() => void)[] = [];
+    const armed: number[] = [];
+    const logged: string[] = [];
+    const cleaned: string[] = [];
+    const deps: SweepTimerDeps = {
+      intervalHours: 6,
+      idleDays: () => DEFAULT_REAP_IDLE_DAYS,
+      sweep: () => swept(),
+      cleanupSession: (id) => void cleaned.push(id),
+      validId: () => true,
+      log: (line) => void logged.push(line),
+      every: (intervalMs, tick) => {
+        armed.push(intervalMs);
+        ticks.push(tick);
+      },
+      ...over,
+    };
+    return { deps, ticks, armed, logged, cleaned, started: startIdleSessionSweep(deps) };
+  };
+
+  it("arms a timer at the configured cadence", () => {
+    const t = timer({ intervalHours: 2 });
+    expect(t.started).toBe(true);
+    expect(t.armed).toEqual([2 * 60 * 60 * 1000]);
+  });
+
+  // Zero is how a user gets the original behaviour back, so it must arm NOTHING rather than arm a
+  // timer that fires immediately and forever.
+  it("arms nothing when the cadence is off", () => {
+    const t = timer({ intervalHours: 0 });
+    expect(t.started).toBe(false);
+    expect(t.armed).toEqual([]);
+  });
+
+  // Read per tick, not captured: the Settings stepper writes this number while the server runs, and
+  // a timer holding the boot value would act on a threshold the list beside it has stopped showing.
+  it("asks for the idle threshold on every tick", () => {
+    const days = vi.fn(() => 3);
+    const sweep = vi.fn(() => swept());
+    const t = timer({ idleDays: days, sweep });
+    t.ticks[0]();
+    t.ticks[0]();
+    expect(days).toHaveBeenCalledTimes(2);
+    expect(sweep).toHaveBeenNthCalledWith(1, 3);
+    days.mockReturnValue(9);
+    t.ticks[0]();
+    expect(sweep).toHaveBeenNthCalledWith(3, 9);
+  });
+
+  // A session settings file can hold a provider's API token. Until this timer existed the only
+  // thing that removed one was the next boot's orphan prune, which on a server up for days never
+  // comes — so the tick drops what it just ended.
+  it("drops the files of each session it ended", () => {
+    const t = timer({ sweep: () => swept({ reaped: ["mt-a", "mt-b"] }) });
+    t.ticks[0]();
+    expect(t.cleaned).toEqual(["mt-a", "mt-b"]);
+  });
+
+  // The sweep ends an unparseable id on purpose — it is unreachable by every route and can only
+  // leak (#1533) — and the cleanup builds a FILE PATH out of what it is handed. So the check the
+  // boot prunes already make before deleting is made here too.
+  it("does not build a path out of an id that is not a session id", () => {
+    const t = timer({ sweep: () => swept({ reaped: ["mt-undefined", "good"] }), validId: (id) => id === "good" });
+    t.ticks[0]();
+    expect(t.cleaned).toEqual(["good"]);
+  });
+
+  it("cleans up nothing when the sweep ended nothing", () => {
+    const t = timer({ sweep: () => swept({ heldBack: 3, recent: 5 }) });
+    t.ticks[0]();
+    expect(t.cleaned).toEqual([]);
+  });
+
+  it("reports what it ended", () => {
+    const t = timer({ sweep: () => swept({ reaped: ["mt-a"], recent: 2 }) });
+    t.ticks[0]();
+    expect(t.logged.join("\n")).toContain("ended 1 idle session");
+  });
+
+  // Silent otherwise. Boot prints both lines because a reader there is asking "did it run at all";
+  // a tick that said "kept 22" every few hours would answer that forever and bury the one line
+  // that reports an action.
+  it("says nothing on a tick that ended nothing", () => {
+    const t = timer({ sweep: () => swept({ heldBack: 4, recent: 9, unclear: 1 }) });
+    t.ticks[0]();
+    expect(t.logged).toEqual([]);
+  });
+});
+
+// A timer that has never fired is indistinguishable in the log from one that was never armed —
+// which is the confusion #1467 was filed about, one level up.
+describe("sweepTimerLine", () => {
+  it("says the cadence when a timer is armed", () => {
+    expect(sweepTimerLine(6)).toContain("every 6 hour(s)");
+  });
+
+  it("says so when the sweep only runs at start", () => {
+    expect(sweepTimerLine(0)).toContain("at start only");
   });
 });

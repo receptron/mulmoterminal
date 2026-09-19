@@ -172,11 +172,18 @@ export function getSystemTaskSwitches(): SystemTaskSwitches {
   return { feedRefresh: config.feedRefreshEnabled, calendarSync: config.calendarSyncEnabled };
 }
 
-// How long a session may sit unused before the boot sweep ends it (#1467). Read live like the rest,
-// though only the boot sweep asks — a POST that changes it takes effect at the next start, which is
-// also when the sweep runs.
+// How long a session may sit unused before the sweep ends it (#1467). Read live, and the periodic
+// sweep asks on every tick — so the stepper beside the list it acts on takes effect without a
+// restart (#2165).
 export function getSessionIdleReapDays(): number {
   return config.sessionIdleReapDays;
+}
+
+// How often that sweep runs while the server is up (#2165). Read at BOOT only, like the worklog
+// cadence and the system-task switches above: the timer is armed once, so a change takes effect at
+// the next start.
+export function getSessionReapIntervalHours(): number {
+  return config.sessionReapIntervalHours;
 }
 
 // The Enter-key submit/newline byte mapping — read live so the phone remote-view submit

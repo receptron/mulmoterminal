@@ -31,7 +31,7 @@ import { setAppendSystemPrompt } from "./appendSystemPrompt";
 import { setDecisionDigest } from "./decisionDigest";
 import { setWorklogEnabled, setWorklogIntervalHours } from "./worklog";
 import { setFeedRefreshEnabled, setCalendarSyncEnabled } from "./systemTasks";
-import { setSessionIdleReapDays } from "./sessionReap";
+import { setSessionIdleReapDays, setSessionReapIntervalHours } from "./sessionReap";
 import { setHeaderConfigSummary } from "./headerConfigSummary";
 import { postConfigField } from "./postConfigField";
 import { fetchWithTimeout } from "../utils/fetchWithTimeout";
@@ -500,6 +500,7 @@ function adoptServerSideSettings(c: Record<string, unknown>): void {
   setFeedRefreshEnabled(c.feedRefreshEnabled);
   setCalendarSyncEnabled(c.calendarSyncEnabled);
   setSessionIdleReapDays(c.sessionIdleReapDays);
+  setSessionReapIntervalHours(c.sessionReapIntervalHours);
 }
 
 // The user's own lists, adopted together — grouped like the sound and repo fields above.

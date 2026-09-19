@@ -267,24 +267,29 @@ for an agent to read before asking something similar.
 - **Off by default**: it writes a file (under `~/.mulmoterminal/decisions/`) that would otherwise
   never exist. `mulmoterminal-decisions` is what READS and curates it; this key is the switch.
 
-### `sessionIdleReapDays` — ending sessions nothing is using
+### `sessionIdleReapDays` / `sessionReapIntervalHours` — ending sessions nothing is using
 
-Terminals survive a server restart (that is tmux persistence), so they accumulate. At each start the
-server ends the ones **nothing is using**: nobody attached, no pty of its own, and no output for this
-many days.
+Terminals survive a server restart (that is tmux persistence), so they accumulate. The server ends
+the ones **nothing is using**: nobody attached, no pty of its own, and no output for this many days.
+It sweeps at each start, and again on a timer while it runs.
 
 ```json
-{ "sessionIdleReapDays": 7 }
+{ "sessionIdleReapDays": 7, "sessionReapIntervalHours": 6 }
 ```
 
-- **Default 7. `0` turns it off** — the only way to disable it, and the value to reach for when
-  someone parks work in a terminal for weeks.
+- **`sessionIdleReapDays` decides WHICH sessions go. Default 7, `0` turns the whole sweep off** —
+  the only way to disable it, and the value to reach for when someone parks work in a terminal for
+  weeks. Whole days, 0–365; anything else falls back to 7.
+- **`sessionReapIntervalHours` decides how often it asks. Default 6, `0` means at start only.**
+  Start-only was the original behaviour, and it means a server that is never restarted never ends
+  anything — which is what a long-running host is. Whole hours, 0–168; anything else falls back to 6.
 - **The conversation is not lost.** A transcript on disk resumes without the tmux session; what ends
-  is the process and its scrollback. Say this before changing the number — it is the fact that makes
-  the sweep safe, and the reason "it has a transcript" is not a reason to keep a session alive.
-- Whole days, 0–365. Anything else falls back to 7.
-- Also a stepper in **Settings → Sessions that survived a restart**, beside the list it acts on; each
-  row there says whether the next start will take it.
+  is the process and its scrollback. Say this before changing either number — it is the fact that
+  makes the sweep safe, and the reason "it has a transcript" is not a reason to keep a session alive.
+- A change to the days takes effect on the next sweep; a change to the interval re-arms the timer at
+  the next server start.
+- Both are steppers in **Settings → Sessions that survived a restart**, beside the list they act on;
+  each row there says whether the sweep will take it.
 
 ### `worklogEnabled` / `worklogIntervalHours` — the periodic dev-work log
 

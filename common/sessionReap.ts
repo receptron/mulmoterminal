@@ -37,3 +37,36 @@ export function sanitizeReapIdleDays(value: unknown): number {
 }
 
 export const reapSweepEnabled = (days: number): boolean => days > REAP_IDLE_DAYS_OFF;
+
+// How often the server runs that sweep while it is up (#2165).
+//
+// Boot was the only caller, so a server that does not restart never ended a session. The detached
+// ones that prompted this were still inside the threshold when they were counted, and nothing was
+// ever going to ask again. The threshold above decides WHICH sessions go; this, how often it asks.
+
+/** On by default: the sweep's rule is unchanged, so this only moves a reaping from "the next
+ *  restart" to "the next tick". Six hours, not minutes — the thing it looks for takes days. */
+export const DEFAULT_REAP_INTERVAL_HOURS = 6;
+/** Zero is OFF, and restores boot-only sweeping. Same off switch as the days above. */
+export const REAP_INTERVAL_OFF = 0;
+export const MIN_REAP_INTERVAL_HOURS = REAP_INTERVAL_OFF;
+/** A week. Past this the timer is indistinguishable from a restart, which is the off state. */
+export const MAX_REAP_INTERVAL_HOURS = 168;
+
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+export const reapIntervalMs = (hours: number): number => hours * MS_PER_HOUR;
+
+/**
+ * Whole hours within range; anything else falls back to the default.
+ *
+ * Fractions fall back rather than round, for `sanitizeReapIdleDays`'s reason: `Math.round(0.4)` is
+ * the off switch, so rounding would let a typo disable the sweep with nothing to show for it.
+ */
+export function sanitizeReapIntervalHours(value: unknown): number {
+  if (typeof value !== "number" || !Number.isInteger(value)) return DEFAULT_REAP_INTERVAL_HOURS;
+  if (value < MIN_REAP_INTERVAL_HOURS || value > MAX_REAP_INTERVAL_HOURS) return DEFAULT_REAP_INTERVAL_HOURS;
+  return value;
+}
+
+export const reapTimerEnabled = (hours: number): boolean => hours > REAP_INTERVAL_OFF;

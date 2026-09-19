@@ -1,10 +1,17 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSurvivingSessions } from "../../composables/useSurvivingSessions";
 import { useSessionStop } from "../../composables/useSessionStop";
-import { sessionIdleReapDays, saveSessionIdleReapDays } from "../../composables/sessionReap";
-import { MAX_REAP_IDLE_DAYS, MIN_REAP_IDLE_DAYS, REAP_IDLE_DAYS_OFF } from "../../../common/sessionReap";
+import { sessionIdleReapDays, saveSessionIdleReapDays, sessionReapIntervalHours, saveSessionReapIntervalHours } from "../../composables/sessionReap";
+import {
+  MAX_REAP_IDLE_DAYS,
+  MAX_REAP_INTERVAL_HOURS,
+  MIN_REAP_IDLE_DAYS,
+  MIN_REAP_INTERVAL_HOURS,
+  REAP_IDLE_DAYS_OFF,
+  reapTimerEnabled,
+} from "../../../common/sessionReap";
 import { relativeTime } from "../cellDisplay";
 import SettingsStepper from "./SettingsStepper.vue";
 import { SETTINGS_LIST } from "./sectionClasses";
@@ -42,6 +49,7 @@ const lastActive = (s: SurvivingSession): string => {
 };
 
 const REAP_STEP_DAYS = 1;
+const SWEEP_STEP_HOURS = 1;
 
 // Re-read after saving: `reapable` is the SERVER's answer against the old threshold, so raising it
 // would otherwise leave rows saying "ends at next start" about a start that will now spare them
@@ -49,6 +57,18 @@ const REAP_STEP_DAYS = 1;
 async function nudgeIdleDays(delta: number): Promise<void> {
   if (await saveSessionIdleReapDays(sessionIdleReapDays.value + delta)) await reload();
 }
+
+// No reload here, unlike the days above: the cadence does not change WHICH rows are reapable, only
+// how soon the sweep asks — so `reapable` is still the server's current answer (#2165).
+const nudgeSweepHours = (delta: number): void => void saveSessionReapIntervalHours(sessionReapIntervalHours.value + delta);
+
+// What a doomed row promises. With the timer armed the sweep comes round on its own, so "ends at
+// next start" would be the one thing the row says that a running server makes false.
+const sweeping = computed(() => reapTimerEnabled(sessionReapIntervalHours.value));
+
+// Nothing is swept at any cadence when the threshold above is off, so the cadence row says that
+// rather than promising a sweep every few hours that will never end anything.
+const sweepDisabled = computed(() => sessionIdleReapDays.value === REAP_IDLE_DAYS_OFF);
 </script>
 
 <template>
@@ -78,8 +98,12 @@ async function nudgeIdleDays(delta: number): Promise<void> {
         v-if="s.reapable"
         data-testid="surviving-doomed"
         class="flex-none text-[11px] text-dim"
-        :title="t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })"
-        >{{ t("settings.surviving.doomed") }}</span
+        :title="
+          sweeping
+            ? t('settings.surviving.doomedSoonTitle', { days: sessionIdleReapDays, hours: sessionReapIntervalHours })
+            : t('settings.surviving.doomedTitle', { days: sessionIdleReapDays })
+        "
+        >{{ sweeping ? t("settings.surviving.doomedSoon") : t("settings.surviving.doomed") }}</span
       >
       <span v-if="s.attached" data-testid="surviving-open" class="flex-none text-[11px] text-amber" :title="t('settings.surviving.openTitle')">{{
         t("settings.surviving.open")
@@ -115,9 +139,32 @@ async function nudgeIdleDays(delta: number): Promise<void> {
       </template>
       <i18n-t v-else keypath="settings.surviving.reapHint" tag="span">
         <template #ended>
-          <strong class="text-fg">{{ t("settings.surviving.reapEnded") }}</strong>
+          <strong class="text-fg">{{ sweeping ? t("settings.surviving.reapEndedSweep") : t("settings.surviving.reapEnded") }}</strong>
         </template>
       </i18n-t>
+    </span>
+  </div>
+
+  <!-- How often that threshold is applied. Its own row because it is the other half of one
+       decision: the days say WHICH sessions go, this says how long a running server waits before
+       asking (#2165). -->
+  <div class="mb-3 flex items-center gap-3">
+    <SettingsStepper
+      :value="sessionReapIntervalHours"
+      :unit="t('settings.surviving.sweepUnit')"
+      :min="MIN_REAP_INTERVAL_HOURS"
+      :max="MAX_REAP_INTERVAL_HOURS"
+      :step="SWEEP_STEP_HOURS"
+      :label="t('settings.surviving.sweepStepper')"
+      :disabled="sweepDisabled"
+      @nudge="nudgeSweepHours"
+    />
+    <span class="text-[12px] text-dim">
+      <template v-if="sweepDisabled">{{ t("settings.surviving.sweepDisabledHint") }}</template>
+      <template v-else-if="sweeping">{{ t("settings.surviving.sweepHint", { hours: sessionReapIntervalHours }) }}</template>
+      <template v-else>
+        <strong class="text-fg">{{ t("settings.surviving.sweepOffTitle") }}</strong> {{ t("settings.surviving.sweepOffHint") }}
+      </template>
     </span>
   </div>
 </template>

@@ -121,6 +121,8 @@ export const en = {
       notResumableTitle: "Nothing on disk to resume this from",
       doomed: "ends at next start",
       doomedTitle: "Nothing is using it and it has been silent for {days} day(s) — the server ends it at its next start",
+      doomedSoon: "ends on the next sweep",
+      doomedSoonTitle: "Nothing is using it and it has been silent for {days} day(s) — the sweep ends it, and it runs every {hours} hour(s)",
       open: "● open",
       openTitle: "A terminal is holding it — close it there",
       stopTitle: "Stop this session",
@@ -129,11 +131,18 @@ export const en = {
       none: "None — nothing is running from an earlier server.",
       reapStepper: "the idle days before a session is ended",
       reapUnit: " days",
+      sweepStepper: "how often the sweep runs",
+      sweepUnit: " hours",
+      sweepHint: "The sweep runs every {hours} hour(s) for as long as the server is up.",
+      sweepOffTitle: "Only when the server starts.",
+      sweepOffHint: "A server left running never ends one — raise this to sweep while it runs.",
+      sweepDisabledHint: "The sweep is off above, so there is nothing for this to run.",
       neverTitle: "Never ended automatically.",
       neverHint: "They stay until you stop one here, or end it from the terminal holding it.",
       reapHint:
         "A session nothing is using — nobody attached, no output for this long — is {ended}. Its conversation is kept. Set this to 0 to never end one automatically.",
       reapEnded: "ended when the server next starts",
+      reapEndedSweep: "ended on the next sweep",
     },
 
     sounds: {

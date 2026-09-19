@@ -57,6 +57,7 @@ const REACHABLE_BY: Record<string, Reachable> = {
   feedRefreshEnabled: { ui: true, skill: CONFIG_SKILL },
   calendarSyncEnabled: { ui: true, skill: CONFIG_SKILL },
   sessionIdleReapDays: { ui: true, skill: CONFIG_SKILL },
+  sessionReapIntervalHours: { ui: true, skill: CONFIG_SKILL },
   terminalSubmit: { ui: true, skill: "mulmoterminal-keys" },
   keymap: { skill: "mulmoterminal-keys" },
   copyOnSelect: { ui: true, skill: "mulmoterminal-keys" },

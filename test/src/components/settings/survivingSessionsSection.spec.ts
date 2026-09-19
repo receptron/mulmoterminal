@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 
 import SurvivingSessionsSection from "../../../../src/components/settings/SurvivingSessionsSection.vue";
+import { setSessionIdleReapDays } from "../../../../src/composables/sessionReap";
 import type { SurvivingSession } from "../../../../common/survivingSessions";
 
 // The one screen that reaches a session left behind by a restart in a directory you no longer open
@@ -125,6 +126,44 @@ describe("the surviving-sessions section", () => {
       .map((c) => c[1] as { body?: string } | undefined)
       .find((init) => init?.body?.includes("sessionIdleReapDays"));
     expect(post?.body).toContain("sessionIdleReapDays");
+  });
+
+  // The other half of the same decision: the days say WHICH sessions go, the hours say how long a
+  // running server waits before asking (#2165).
+  it("writes the sweep cadence to its own config field", async () => {
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    await w.get('[aria-label="Increase how often the sweep runs"]').trigger("click");
+    await flushPromises();
+    const bodies = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => (c[1] as { body?: string } | undefined)?.body);
+    expect(bodies.some((b) => b?.includes("sessionReapIntervalHours"))).toBe(true);
+    // The cadence does not change WHICH rows are reapable, so it must not trigger the re-read the
+    // threshold does — that reload exists to correct `reapable`, and nothing here invalidates it.
+    expect(bodies.filter((b) => b?.includes("sessionIdleReapDays"))).toHaveLength(0);
+  });
+
+  // "ends at next start" is the one thing a row says that a RUNNING server makes false once the
+  // sweep comes round on its own, so the mark follows the cadence rather than being a fixed string.
+  it("promises the next sweep, not the next start, while the timer is armed", async () => {
+    serve([row({ reapable: true })]);
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    expect(w.get('[data-testid="surviving-doomed"]').text()).toBe("ends on the next sweep");
+  });
+
+  // Turning the threshold off turns the whole sweep off, so a cadence promising a sweep every few
+  // hours would contradict the row directly above it — which is the row that just said "never".
+  it("does not promise a cadence when the sweep itself is off", async () => {
+    setSessionIdleReapDays(0);
+    try {
+      const w = mount(SurvivingSessionsSection);
+      await flushPromises();
+      expect(w.text()).toContain("nothing for this to run");
+      expect(w.text()).not.toContain("for as long as the server is up");
+      expect(w.get('[aria-label="Increase how often the sweep runs"]').attributes("disabled")).toBeDefined();
+    } finally {
+      setSessionIdleReapDays(7);
+    }
   });
 
   it("says the list could not be read instead of claiming there is nothing", async () => {

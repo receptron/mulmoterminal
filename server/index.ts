@@ -10,7 +10,7 @@ import { toolSummaries } from "./infra/plugins-registry.js";
 import { initMarkdownBackend } from "./backends/markdown.js";
 import { initArtifactsBackend } from "./backends/artifacts.js";
 import { initOpenPathBackend } from "./backends/openPath.js";
-import { getUserMcpServers, getTerminalSubmit, getQuickCommands, getSessionIdleReapDays, APP_CONFIG_FILE } from "./config/config-routes.js";
+import { getUserMcpServers, getTerminalSubmit, getQuickCommands, APP_CONFIG_FILE } from "./config/config-routes.js";
 // Its own line: folding it into the import above pushes that line past the print width, and the
 // eight-line import prettier then writes is seven code lines this file has no room for.
 import { getCwdPresets } from "./config/config-routes.js";
@@ -20,7 +20,6 @@ import { submitSequenceForAgent } from "../common/terminalSubmit.js";
 import { sessionDisplayName } from "../common/sessionMemo.js";
 import { startUpdateStatusRefresh } from "./config/update-status.js";
 import {
-  tmuxAvailable,
   tmuxHasSession,
   tmuxKillSession,
   tmuxListSessionIds,
@@ -146,7 +145,7 @@ import { allowedToolNames, autoAllowedToolNames } from "./infra/plugins-registry
 import { GUI_SERVER_ID } from "../common/toolGroups.js";
 
 import { resumableSessionPredicate } from "./session/resumable-sessions.js";
-import { reapSweepLines, survivingAfterSweep, sweepIdleSessions } from "./session/reap-idle-sessions.js";
+import { startTmuxSessionUpkeep } from "./session/session-upkeep.js";
 import { installProcessGuards } from "./infra/process-guards.js";
 import { pruneOrphanSettings } from "./session/session-settings.js";
 import { earliestStartedAt, liveInstances, registerInstance } from "../bin/instances.js";
@@ -977,22 +976,10 @@ server.listen(Number(PORT), BIND_HOST, () => {
   if (!isLoopbackBinding(server.address())) {
     console.warn(bindSecurityWarning(BIND_HOST, PORT, browserHostnames));
   }
-  const surviving = tmuxAvailable() ? tmuxListSessionIds() : [];
-  const reaped: string[] = [];
-  if (tmuxAvailable()) {
-    const detail = surviving.length ? ` — ${surviving.length} session(s) survived; reattach on connect` : "";
-    console.log(`[tmux] persistence on${detail}`);
-    // Then end the ones nothing is using. Here rather than on a timer: a restart is when none of
-    // OUR ptys hold anything, so "in use" means somebody else's, and it is the moment the pile is
-    // largest. `cleanup-orphans` has existed since #367 with no caller — this is that caller, with
-    // a rule that is about now instead of about the past (#1467).
-    const idleDays = getSessionIdleReapDays();
-    const sweep = sweepIdleSessions(Date.now(), idleDays);
-    reaped.push(...sweep.reaped);
-    reapSweepLines(sweep, idleDays).forEach((line) => console.log(line));
-  } else {
-    console.log("[tmux] not found — terminals are not persistent across a server restart");
-  }
+  // Report what survived, end the ones nothing is using, and keep ending them on a timer — then
+  // hand back what is still standing, which is what the orphan prunes below decide from
+  // (session/session-upkeep.ts carries the why).
+  const liveSessionIds = startTmuxSessionUpkeep();
   // Say we are here, so a later launcher can warn about a second instance and a later boot can
   // tell our live files from a dead server's leftovers (#1061).
   const unregisterInstance = registerInstance(Number(PORT));
@@ -1006,15 +993,13 @@ server.listen(Number(PORT), BIND_HOST, () => {
   // session is an orphan: a PTY without tmux died with the server that owned it.
   //
   // …but only for OUR previous lifetime. A peer running right now has live PTYs, and without
-  // tmux `surviving` is empty, so its files looked like leftovers and were deleted underneath it
-  // (#1061). Files older than the earliest live peer cannot be theirs; newer ones might be — and
-  // that cutoff applies to every sweep here, not just the one the bug was reported against.
+  // tmux the surviving list is empty, so its files looked like leftovers and were deleted
+  // underneath it (#1061). Files older than the earliest live peer cannot be theirs; newer ones
+  // might be — and that cutoff applies to every sweep here, not just the one it was reported on.
+  // The set above is already minus what the sweep just ended: those are orphans as of a moment
+  // ago, and one of them may hold a provider's API token.
   const peers = liveInstances();
   const peerCutoff = earliestStartedAt(peers);
-  // Minus what the sweep just ended: those files are orphans as of a moment ago, and one of them
-  // may hold a provider's API token — waiting a whole boot to remove it is the cost of using the
-  // list as it was read (#1467).
-  const liveSessionIds = survivingAfterSweep(surviving, reaped);
   const droppedSettings = pruneOrphanSettings(liveSessionIds, undefined, peerCutoff);
   if (droppedSettings.length) console.log(`[settings] removed ${droppedSettings.length} orphaned session settings file(s)`);
   // Dropped files are the same story: copies in tmp that only their session referred to.
