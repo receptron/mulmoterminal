@@ -1,10 +1,18 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useI18n } from "vue-i18n";
 import { useSurvivingSessions } from "../../composables/useSurvivingSessions";
 import { useSessionStop } from "../../composables/useSessionStop";
-import { sessionIdleReapDays, saveSessionIdleReapDays } from "../../composables/sessionReap";
-import { MAX_REAP_IDLE_DAYS, MIN_REAP_IDLE_DAYS, REAP_IDLE_DAYS_OFF } from "../../../common/sessionReap";
+import { sessionIdleReapDays, saveSessionIdleReapDays, sessionReapIntervalHours, saveSessionReapIntervalHours } from "../../composables/sessionReap";
+import {
+  MAX_REAP_IDLE_DAYS,
+  MAX_REAP_INTERVAL_HOURS,
+  MIN_REAP_IDLE_DAYS,
+  MIN_REAP_INTERVAL_HOURS,
+  REAP_IDLE_DAYS_OFF,
+  reapSweepEnabled,
+  reapTimerEnabled,
+} from "../../../common/sessionReap";
 import { relativeTime } from "../cellDisplay";
 import SettingsStepper from "./SettingsStepper.vue";
 import { SETTINGS_LIST } from "./sectionClasses";
@@ -42,6 +50,7 @@ const lastActive = (s: SurvivingSession): string => {
 };
 
 const REAP_STEP_DAYS = 1;
+const REAP_STEP_HOURS = 1;
 
 // Re-read after saving: `reapable` is the SERVER's answer against the old threshold, so raising it
 // would otherwise leave rows saying "ends at next start" about a start that will now spare them
@@ -49,6 +58,30 @@ const REAP_STEP_DAYS = 1;
 async function nudgeIdleDays(delta: number): Promise<void> {
   if (await saveSessionIdleReapDays(sessionIdleReapDays.value + delta)) await reload();
 }
+
+const sweepOn = computed(() => reapSweepEnabled(sessionIdleReapDays.value));
+
+// Whether the sweep is ASKED to repeat while the server is up (#2167) — which is not the same as
+// whether it IS repeating. `startReapSchedule` arms the timer once, from the value read at boot,
+// and `config-routes.ts` says why: re-arming on every POST would let a stream of edits reset the
+// countdown forever. So this value describes the NEXT start, and the wording below says so.
+//
+// It is also why the rows still say "ends at next start": switching them on this value would put a
+// fresh false sentence on the row for anyone who has set the interval and not restarted, which is
+// the defect #2177 is about. Saying it truthfully needs the server to report what it armed, and
+// nothing records that yet — filed separately.
+const timerOn = computed(() => reapTimerEnabled(sessionReapIntervalHours.value));
+
+async function nudgeIntervalHours(delta: number): Promise<void> {
+  await saveSessionReapIntervalHours(sessionReapIntervalHours.value + delta);
+}
+
+// Three states, not two: an interval is meaningless while the threshold is 0, and saying "only at
+// server start" there would describe a sweep that never runs at all.
+const intervalHintKey = computed(() => {
+  if (!sweepOn.value) return "settings.surviving.reapIntervalNeedsThreshold";
+  return timerOn.value ? "settings.surviving.reapIntervalOn" : "settings.surviving.reapIntervalOff";
+});
 </script>
 
 <template>
@@ -119,5 +152,25 @@ async function nudgeIdleDays(delta: number): Promise<void> {
         </template>
       </i18n-t>
     </span>
+  </div>
+
+  <!-- The cadence, under the threshold it depends on. Greyed while the threshold is 0 AND disabled
+       on the stepper itself: the container stops the mouse and nothing else, so a keyboard user
+       would otherwise tab in and save a number the screen calls unavailable. -->
+  <div class="mb-3 mt-2" :class="sweepOn ? '' : 'pointer-events-none opacity-50'">
+    <p class="mb-1.5 text-[12px] text-dim">{{ t("settings.surviving.reapIntervalLabel") }}</p>
+    <div class="flex items-center gap-3">
+      <SettingsStepper
+        :value="sessionReapIntervalHours"
+        :unit="t('settings.surviving.reapIntervalUnit')"
+        :min="MIN_REAP_INTERVAL_HOURS"
+        :max="MAX_REAP_INTERVAL_HOURS"
+        :step="REAP_STEP_HOURS"
+        :label="t('settings.surviving.reapIntervalStepper')"
+        :disabled="!sweepOn"
+        @nudge="nudgeIntervalHours"
+      />
+      <span data-testid="surviving-interval-hint" class="text-[12px] text-dim">{{ t(intervalHintKey, { hours: sessionReapIntervalHours }) }}</span>
+    </div>
   </div>
 </template>

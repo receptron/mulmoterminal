@@ -305,9 +305,14 @@ sessions that go idle after boot sit there until the next restart. This repeats 
 - `sessionIdleReapDays` is still the threshold — this key only says how often to look. With the
   threshold at `0` the sweep is off and this changes nothing.
 - Whole hours, 0–168. Anything else falls back to 0 (off).
-- **Takes effect at the next server start**: the timer is armed once, at boot.
-- Config-file only; there is no Settings control. The stepper in **Settings → Sessions that
-  survived a restart** sets the THRESHOLD, not how often the server looks.
+- **Takes effect at the next server start**: the timer is armed once, at boot. Saving a new value
+  — from this file or from Settings — does not re-arm the running server, and that is deliberate:
+  re-arming on every write would let a stream of edits reset the countdown forever.
+- Also a stepper in **Settings → Sessions that survived a restart**, under the threshold's, and
+  greyed out while the threshold is `0` because an interval on a sweep that never runs decides
+  nothing. It says which start the value applies from, for the reason above.
+- Because of that, the **row badges still say "ends at next start"** even with an interval saved.
+  They describe what this running server will do, and this server was armed at ITS boot.
 
 ### `worklogEnabled` / `worklogIntervalHours` — the periodic dev-work log
 

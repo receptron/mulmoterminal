@@ -134,6 +134,12 @@ export const en = {
       reapHint:
         "A session nothing is using — nobody attached, no output for this long — is {ended}. Its conversation is kept. Set this to 0 to never end one automatically.",
       reapEnded: "ended when the server next starts",
+      reapIntervalLabel: "Run the sweep again while the server is up",
+      reapIntervalStepper: "the hours between sweeps while the server is up",
+      reapIntervalUnit: " hours",
+      reapIntervalOff: "Only at server start.",
+      reapIntervalOn: "From the next server start, also every {hours} hour(s).",
+      reapIntervalNeedsThreshold: "Nothing to repeat while sessions are never ended automatically.",
     },
 
     sounds: {

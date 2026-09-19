@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 
 import SurvivingSessionsSection from "../../../../src/components/settings/SurvivingSessionsSection.vue";
+import { setSessionIdleReapDays, setSessionReapIntervalHours } from "../../../../src/composables/sessionReap";
+import { DEFAULT_REAP_IDLE_DAYS, DEFAULT_REAP_INTERVAL_HOURS, REAP_IDLE_DAYS_OFF } from "../../../../common/sessionReap";
 import type { SurvivingSession } from "../../../../common/survivingSessions";
 
 // The one screen that reaches a session left behind by a restart in a directory you no longer open
@@ -24,10 +26,17 @@ const serve = (sessions: unknown) => {
 
 const posts = (): string[] => (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String(c[0]));
 
+// The two reap numbers live in module state, so a test that raises one would otherwise hand it to
+// the next test. Back to the shipped defaults before each.
 beforeEach(() => {
   vi.restoreAllMocks();
   serve([]);
+  setSessionIdleReapDays(DEFAULT_REAP_IDLE_DAYS);
+  setSessionReapIntervalHours(DEFAULT_REAP_INTERVAL_HOURS);
 });
+
+const bodies = (): string[] =>
+  (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.map((c) => String((c[1] as { body?: string } | undefined)?.body ?? ""));
 
 describe("the surviving-sessions section", () => {
   it("says so when nothing survived, rather than showing an empty box", async () => {
@@ -136,5 +145,73 @@ describe("the surviving-sessions section", () => {
     await flushPromises();
     expect(w.text()).toContain("Could not read them");
     expect(w.text()).not.toContain("None —");
+  });
+
+  // #2177. The row deliberately does NOT change with the interval, and this pins that rather than
+  // leaving it to be "fixed" later: `startReapSchedule` arms the timer once from the value read at
+  // boot, so a session whose interval was raised in Settings and never restarted is still ended at
+  // the next start. A badge switching on the saved value would be a new false sentence — the exact
+  // defect this issue is about — and saying it truthfully needs the server to report what it armed.
+  it("keeps the row's wording on the next start even when an interval is saved", async () => {
+    setSessionReapIntervalHours(6);
+    serve([row({ reapable: true })]);
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    const badge = w.get('[data-testid="surviving-doomed"]');
+    expect(badge.text()).toBe("ends at next start");
+    expect(badge.attributes("title")).toContain("at its next start");
+    expect(w.text()).toContain("ended when the server next starts");
+  });
+
+  it("writes the sweep interval to its own config field", async () => {
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    await w.get('[aria-label="Increase the hours between sweeps while the server is up"]').trigger("click");
+    await flushPromises();
+    expect(bodies().some((b) => b.includes("sessionReapIntervalHours"))).toBe(true);
+  });
+
+  // The interval decides nothing while the threshold is 0, and `pointer-events-none` on the
+  // container stops the mouse only — a keyboard user would still tab in and save a number the
+  // screen calls unavailable.
+  it("disables the interval stepper, and writes nothing, while sessions are never ended", async () => {
+    setSessionIdleReapDays(REAP_IDLE_DAYS_OFF);
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    const plus = w.get('[aria-label="Increase the hours between sweeps while the server is up"]');
+    expect(plus.attributes("disabled")).toBeDefined();
+    await plus.trigger("click");
+    await flushPromises();
+    expect(bodies().some((b) => b.includes("sessionReapIntervalHours"))).toBe(false);
+  });
+
+  it("says which of the three states the interval is in", async () => {
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    const hint = () => w.get('[data-testid="surviving-interval-hint"]').text();
+    expect(hint()).toBe("Only at server start.");
+
+    // Says WHEN it starts applying, because the timer is armed at boot and not on save.
+    setSessionReapIntervalHours(6);
+    await flushPromises();
+    expect(hint()).toBe("From the next server start, also every 6 hour(s).");
+
+    setSessionIdleReapDays(REAP_IDLE_DAYS_OFF);
+    await flushPromises();
+    expect(hint()).toContain("Nothing to repeat");
+  });
+
+  // Raising the interval changes only what the rows SAY. Which rows the sweep takes is the
+  // threshold's question and the server already answered it, so re-reading the list here would be
+  // a request that can return nothing new.
+  it("does not re-read the list when only the interval changes", async () => {
+    const w = mount(SurvivingSessionsSection);
+    await flushPromises();
+    const listReads = () =>
+      (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => String(c[0]).includes("/api/tmux/sessions")).length;
+    const before = listReads();
+    await w.get('[aria-label="Increase the hours between sweeps while the server is up"]').trigger("click");
+    await flushPromises();
+    expect(listReads()).toBe(before);
   });
 });

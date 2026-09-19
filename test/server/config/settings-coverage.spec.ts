@@ -59,7 +59,7 @@ const REACHABLE_BY: Record<string, Reachable> = {
   sessionIdleReapDays: { ui: true, skill: CONFIG_SKILL },
   // Config-file only (#2165): arming a timer that ends sessions is a start-up decision, and
   // the stepper beside the surviving-sessions list sets the THRESHOLD, not how often we look.
-  sessionReapIntervalHours: { skill: CONFIG_SKILL },
+  sessionReapIntervalHours: { ui: true, skill: CONFIG_SKILL },
   terminalSubmit: { ui: true, skill: "mulmoterminal-keys" },
   keymap: { skill: "mulmoterminal-keys" },
   copyOnSelect: { ui: true, skill: "mulmoterminal-keys" },

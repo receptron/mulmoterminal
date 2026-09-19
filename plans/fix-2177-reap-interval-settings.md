@@ -11,23 +11,36 @@ interval has nothing. `settings-coverage.spec.ts` records this: `sessionIdleReap
 `ui: true` and `sessionReapIntervalHours` does not. The default is `0` (off), so a feature that
 must be turned on is reachable only by hand-editing a file.
 
-**2. With the timer on, the row lies.** Three strings say the session ends at the next server
-START — the `doomed` badge, its tooltip, and the hint under the stepper. Once the interval is
-non-zero the session ends at the next SWEEP, which does not wait for a restart.
+**2. The issue also asks for the row's wording to change, and that half is NOT done here** —
+because doing it as specified would ship a second false sentence. See below.
 
-Neither is cosmetic: both mislead exactly the person who turned the feature on.
+## The part worth checking, which changed what this PR does
 
-## Why the new wording is true, which was the part worth checking
+The issue proposes switching three strings — the `doomed` badge, its tooltip, and the hint under
+the stepper — to "next sweep" whenever `sessionReapIntervalHours > 0`. Checking whether that is
+true turned up two facts that pull in opposite directions.
 
-The badge already answers the same question the sweep does. `surviving-sessions.ts` computes
+**True:** the badge and the sweep answer the same question. `surviving-sessions.ts` computes
 `reapable` with `reapableTmuxSession({ liveHere: ptys.has(key), … })`, and
 `reap-idle-sessions.ts` calls that same predicate with the same `ptys` registry. So the timer
 sweep being *weaker* than the boot sweep — it cannot touch a session this process holds a pty
-for — does not make "ends on the next sweep" a lie on a row that shows the badge: a row holding
-a live pty here never shows it in the first place.
+for — would not make "ends on the next sweep" a lie: a row holding a live pty here never shows
+the badge at all.
 
-Had the badge been computed any other way, the honest wording would have been conditional
-("unless this server is holding it"), so this is the fact the change rests on.
+**False, and decisive:** the timer is armed ONCE, at boot. `startReapSchedule` takes
+`intervalHours` as a plain number while it takes `idleDays` as a function, and
+`config-routes.ts` spells out why — *"re-arming on every config POST would let a stream of edits
+reset the countdown forever."* So a saved interval is a statement about the NEXT start, and
+between saving and restarting no sweep repeats at all.
+
+Switching the badge on the saved value would therefore put "ends on the next sweep" on a row
+that will not be swept until the next start — a new false sentence, for exactly the person who
+just turned the feature on, which is the defect this issue is about. Saying it truthfully needs
+the server to report what it ARMED, and nothing records that anywhere.
+
+So this PR does item 1, tells the truth about when the value applies, and leaves item 2 to a
+follow-up that can add the boot signal. The component spec pins the badge's current wording with
+that reasoning attached, so the next reader does not "fix" it back.
 
 ## What changed
 
@@ -40,8 +53,12 @@ Had the badge been computed any other way, the honest wording would have been co
   because an interval on a sweep that never runs decides nothing. Disabling is both the
   `pointer-events-none` container and the stepper's own `:disabled` — the latter is what stops a
   keyboard user tabbing into a control the screen calls unavailable.
-- The three "next start" strings gain a timer variant each, chosen by `reapTimerEnabled`.
-- `settings-coverage.spec.ts` records the key as having UI.
+- The hint beside it says which start the value applies from, rather than implying it is
+  already in force.
+- `settings-coverage.spec.ts` records the key as having UI — not a bookkeeping flip: the check
+  greps the UI tree for a real `postConfigField("…")` write, and fails without one.
+- `mulmoterminal-config`'s SKILL.md loses its "Config-file only; there is no Settings control"
+  bullet and gains the reason the badges still say "next start".
 
 Nothing server-side changed. `app-config.ts` and `config-routes.ts` already carried the field
 end to end.
@@ -51,12 +68,25 @@ end to end.
 The default stays `0`. #2167 decided that a running server should not start ending sessions
 because someone upgraded, and a Settings control does not change the argument.
 
+The row wording (issue item 2) — see above. It needs a boot-time signal, and the files that
+would carry it are where #2178 is working.
+
 ## Verification
 
-- The row's two wordings are pinned in both directions in the component spec: with the timer off
-  the badge says next start, with it on it says next sweep. Written to fail against the old
-  single-string version.
-- The interval stepper's write path is pinned the way the threshold's already was — the POST
-  names `sessionReapIntervalHours` — plus the disabled case, where a nudge must write nothing.
-- The section is driven in a real browser against a running server, since `run` is what this
-  repo asks for before a non-trivial UI change.
+Break-verified rather than assumed — three mutations, each turning a test red, source restored
+byte-identical after:
+
+- the wording switch reinstated (2 red), the `:disabled` dropped (1 red), and the save pointed at
+  the wrong config field (1 red, and it also fails `settings-coverage.spec.ts`, which is how that
+  `ui: true` flip was shown to be a real check rather than bookkeeping).
+
+Driven in a real browser against a real server, with `HOME` pointed at a scratch dir so the
+maintainer's own config is never touched — worth saying twice, because the first attempt was NOT
+isolated: `npx` resets `HOME`, the backend came up on the real `~/.mulmoterminal/config.json`,
+and it was caught by the directory list showing 28 real presets. Running the binary directly
+instead of through `npx` fixed it, and isolation was then confirmed by asking the server
+(`cwdPresets: 0`) before clicking anything.
+
+What the browser checked: the stepper exists; the hint reads "Only at server start." at 0 and
+names the next start once raised; the value reaches `config.json` on disk; and with the
+threshold at 0 the stepper is disabled, says why, and a forced click writes nothing.

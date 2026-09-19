@@ -130,6 +130,12 @@ export const ja: Messages = {
       neverHint: "ここで止めるか、掴んでいるターミナルから終わらせるまで残ります。",
       reapHint: "誰も使っておらず、この日数だけ出力の無いセッションは{ended}。会話は残ります。0 にすると自動終了しません。",
       reapEnded: "次のサーバ起動時に終了されます",
+      reapIntervalLabel: "サーバの稼働中もスイープを繰り返す",
+      reapIntervalStepper: "稼働中にスイープを繰り返す間隔（時間）",
+      reapIntervalUnit: " 時間",
+      reapIntervalOff: "サーバ起動時のみ。",
+      reapIntervalOn: "次回のサーバ起動から、{hours} 時間ごとにも実行します。",
+      reapIntervalNeedsThreshold: "自動終了が無効なので、繰り返すものがありません。",
     },
 
     sounds: {
