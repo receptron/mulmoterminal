@@ -62,5 +62,5 @@ export interface RemoteHostHandlerDeps {
   // Open a new grid terminal in the directory of the session the phone is looking at
   // (#831). Answered in server/index.ts, which owns the PTY table and the pub/sub the
   // grid listens on. Resolves to an error string when it could not be started.
-  launchTerminal: (agent: unknown, sessionId: unknown) => { ok: true } | { ok: false; error: string };
+  launchTerminal: (agent: unknown, sessionId: unknown) => Promise<{ ok: true } | { ok: false; error: string }>;
 }

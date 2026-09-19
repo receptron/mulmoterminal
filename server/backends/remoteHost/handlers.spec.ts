@@ -19,7 +19,7 @@ const unusedTerminalDeps = {
   canClearBox: () => false,
   submitSequence: () => "\r",
   sessionAgent: () => "claude" as const,
-  launchTerminal: () => ({ ok: true }) as const,
+  launchTerminal: async () => ({ ok: true }) as const,
   openQuestion: async () => null,
   answerQuestion: async (): Promise<AnswerResult> => ({ ok: true }),
 };
@@ -383,5 +383,43 @@ describe("question commands", () => {
     await expect(handlers.getOpenQuestion({})).rejects.toThrow(/sessionId is required/);
     await expect(handlers.answerQuestion({ sessionId: "a" })).rejects.toThrow(/sessionId and toolUseId are required/);
     await expect(handlers.answerQuestion({ toolUseId: "t1" })).rejects.toThrow(/sessionId and toolUseId are required/);
+  });
+});
+
+// The launch command is the one place a refusal has to become a THROW: the command layer turns a
+// rejection into the sentence the phone shows, so a handler that returned the refusal instead
+// would report success and the user would watch for a cell that never opens. Nothing else covers
+// it — the rule and the binding have their own specs and neither goes through the handler
+// (Codex review, PR #2190 round 5).
+describe("launchTerminal", () => {
+  const handlersFor = (launchTerminal: (agent: unknown, sessionId: unknown) => Promise<{ ok: true } | { ok: false; error: string }>) =>
+    createRemoteHostHandlers({
+      workspace: "/nowhere",
+      spawnChat: () => ({ chatId: "x" }),
+      ingest: async () => ({ attachments: [], cleanupStaging: async () => {} }),
+      ...unusedTerminalDeps,
+      launchTerminal,
+    });
+
+  it("hands the agent and session straight to the host and answers ok", async () => {
+    const seen: unknown[][] = [];
+    const handlers = handlersFor(async (agent, sessionId) => {
+      seen.push([agent, sessionId]);
+      return { ok: true };
+    });
+    expect(await handlers.launchTerminal({ agent: "shell", sessionId: "s1" })).toEqual({ ok: true });
+    expect(seen).toEqual([["shell", "s1"]]);
+  });
+
+  // Awaiting the host is what makes this work: a promise is truthy, so an un-awaited refusal reads
+  // as `ok` and the phone would be told the terminal opened.
+  it("turns a refusal into a throw carrying the host's reason", async () => {
+    const handlers = handlersFor(async () => ({ ok: false, error: "no working directory known for session 's1'" }));
+    await expect(handlers.launchTerminal({ agent: "shell", sessionId: "s1" })).rejects.toThrow(/no working directory known/);
+  });
+
+  it("reports a session that is gone with the host's own wording", async () => {
+    const handlers = handlersFor(async () => ({ ok: false, error: "session 's1' is no longer running here" }));
+    await expect(handlers.launchTerminal({ agent: "shell", sessionId: "s1" })).rejects.toThrow(/no longer running here/);
   });
 });

@@ -19,6 +19,16 @@ export interface LaunchTerminalInput {
   // The session's working directory, or null when the host has none for it — a session that
   // outlived a restart exists only in tmux and no PtyEntry remembers where it runs.
   cwdOf: (sessionId: string) => string | null;
+  // Whether that session still EXISTS here — a live pty, or a tmux session that survived a
+  // restart. Asked separately from the directory because the two answers have different
+  // lifetimes: the remembered-cwd log is append-only, so it keeps answering for ids that
+  // stopped existing weeks ago (#2181, Codex review on PR #2190). Without this the phone could
+  // name any id it had ever seen and start a process in whatever that path is NOW — a wider set
+  // than the sessions its own list offers, which is built from live ptys and tmux.
+  //
+  // A FACT rather than a lookup, unlike `cwdOf`: answering it exactly needs an await (see the
+  // caller), and a rule that cannot be resolved synchronously should not pretend otherwise.
+  sessionExists: boolean;
   // Browsers subscribed to the launch channel. The grid is browser state, so with none
   // listening nothing can open the cell and the phone must be told, not left waiting.
   listenerCount: number;
@@ -28,9 +38,12 @@ export interface LaunchTerminalInput {
 // in between makes delivery fail after this said yes. Both paths report the same thing.
 export const NO_BROWSER_ERROR = "no MulmoTerminal browser is open — the grid opens the terminal, so a tab must be connected";
 
-export function decideLaunchTerminal({ agent, sessionId, cwdOf, listenerCount }: LaunchTerminalInput): LaunchTerminalDecision {
+export function decideLaunchTerminal({ agent, sessionId, cwdOf, sessionExists, listenerCount }: LaunchTerminalInput): LaunchTerminalDecision {
   if (!isLaunchAgent(agent)) return { ok: false, error: `agent must be one of: ${LAUNCH_AGENTS.join(", ")}` };
   if (typeof sessionId !== "string" || !sessionId) return { ok: false, error: "sessionId is required" };
+  // Before the directory, and with its own message: "that session is gone" and "nobody wrote down
+  // where it ran" are different things to be told on a phone.
+  if (!sessionExists) return { ok: false, error: `session '${sessionId}' is no longer running here` };
   const cwd = cwdOf(sessionId);
   if (!cwd) return { ok: false, error: `no working directory known for session '${sessionId}'` };
   if (listenerCount < 1) return { ok: false, error: NO_BROWSER_ERROR };
