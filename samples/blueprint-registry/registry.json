@@ -5,7 +5,7 @@
       "slug": "sample-hello",
       "kind": "usecase",
       "title": "サンプル: あいさつページを足す",
-      "description": "マーケットの取り込みを試すためのダミーのパック。Firebase の工程の最後に、あいさつのページを一枚足すだけの工程を加える。",
+      "description": "マーケットの取り込みを試すためのダミーのパック。Firebase の工程のログインの後ろに、あいさつのページを一枚足すだけの工程を加える。",
       "repo": "https://github.com/receptron/mulmoterminal.git",
       "ref": "experiment/blueprint",
       "path": "samples/blueprint-registry/packs/sample-hello"

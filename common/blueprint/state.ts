@@ -77,6 +77,9 @@ const TRANSITIONS: Readonly<Record<string, StepTransition>> = {
   "awaiting-approval:approve": (_step, current) => ({ ...current, status: "running", approved: true }),
   "awaiting-approval:reject": (_step, current, event) => ({ ...current, status: "failed", reason: event.type === "reject" ? event.reason : "rejected" }),
   "running:ask": (_step, current, event) => ({ ...current, status: "awaiting-answer", question: event.type === "ask" ? event.question : undefined }),
+  // Asking again before an answer came replaces the question: the agent corrected itself, and the
+  // person should see what it asks now — not a stale first try that nothing can move past.
+  "awaiting-answer:ask": (_step, current, event) => ({ ...current, question: event.type === "ask" ? event.question : current.question }),
   "awaiting-answer:answer": answer,
   "running:check": check,
   // Approval survives a retry: a billing step whose check failed is not a new billing decision.

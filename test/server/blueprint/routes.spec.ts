@@ -28,8 +28,8 @@ const executor: BlueprintExecutor = {
     if (stepId === "refused") throw new BlueprintRefusal("cannot approve a step that is pending");
     throw new Error("unexpected");
   },
-  ask: async (runId, stepId, question) => {
-    calls.push(["ask", runId, stepId, question]);
+  ask: async (runId, stepId, question, sessionId) => {
+    calls.push(["ask", runId, stepId, question, sessionId]);
     throw new BlueprintRefusal("no agent is working on this build");
   },
   list: async () => [],
@@ -163,7 +163,7 @@ describe("POST /api/blueprints/runs/:id/events and /ask", () => {
   });
 
   it("answers 409 to a question nobody is working on", async () => {
-    expect((await post("/api/blueprints/runs/run-00000001/ask", { stepId: "x", question: "q" })).status).toBe(409);
+    expect((await post("/api/blueprints/runs/run-00000001/ask", { stepId: "x", sessionId: "s1", question: "q" })).status).toBe(409);
   });
 
   it("answers 409 for a run that does not exist", async () => {

@@ -33,7 +33,7 @@ const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("retry"), stepId: z.string() }),
 ]);
 
-const askSchema = z.object({ stepId: z.string(), question: z.string().trim().min(1) });
+const askSchema = z.object({ stepId: z.string(), sessionId: z.string(), question: z.string().trim().min(1) });
 
 type ParsedEvent = z.infer<typeof eventSchema>;
 
@@ -151,9 +151,9 @@ function mountMoveRoutes(app: Express, deps: BlueprintRouteDeps): void {
 
   app.post("/api/blueprints/runs/:id/ask", async (req, res) => {
     const parsed = askSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "expected { stepId, question }" });
+    if (!parsed.success) return res.status(400).json({ error: "expected { stepId, sessionId, question }" });
     try {
-      await deps.executor.ask(req.params.id, parsed.data.stepId, parsed.data.question);
+      await deps.executor.ask(req.params.id, parsed.data.stepId, parsed.data.question, parsed.data.sessionId);
       return res.json({ ok: true, message: "Asked. Stop now; the answer will come in a new session." });
     } catch (err) {
       return fail(res, err);

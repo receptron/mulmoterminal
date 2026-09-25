@@ -158,6 +158,7 @@ describe("applyEvent — refusals", () => {
     "awaiting-approval:approve",
     "awaiting-approval:reject",
     "running:ask",
+    "awaiting-answer:ask",
     "awaiting-answer:answer",
     "running:check",
     "failed:retry",

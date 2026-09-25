@@ -5,13 +5,13 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRunStore } from "../../../server/blueprint/runStore";
 import { runCheck } from "../../../server/blueprint/checkRunner";
 import { askCommand } from "../../../server/blueprint/wiring";
-import { isTrustedByClaude } from "../../../server/blueprint/trust";
+import { gitRootOf, isTrustedByClaude } from "../../../server/blueprint/trust";
 import { initialState } from "../../../common/blueprint/state";
 import type { BlueprintRun } from "../../../common/blueprint/run";
 
@@ -108,7 +108,24 @@ describe.skipIf(process.platform === "win32")("askCommand", () => {
     [34999, "run-00000001", "a;rm"],
     ["1; rm", "run-00000001", "a"],
   ])("refuses to build a command from unsafe arguments (%s, %s, %s)", (port, runId, stepId) => {
-    expect(() => askCommand(port, runId, stepId)).toThrow("unsafe");
+    expect(() => askCommand(port, runId, stepId, "sess-1")).toThrow("unsafe");
+  });
+
+  it("fails, with the server's reason, when the question is refused", async () => {
+    server = createServer((_req, res) => {
+      res.statusCode = 409;
+      res.end(JSON.stringify({ error: "this session is not the one working on the step" }));
+    });
+    await new Promise<void>((resolve) => server?.listen(0, "127.0.0.1", resolve));
+    const address = server.address();
+    const port = typeof address === "object" && address ? address.port : 0;
+    const outcome = await new Promise<{ failed: boolean; stdout: string }>((resolve) =>
+      execFile("/bin/sh", ["-c", `QUESTION='q' ${askCommand(port, "run-00000001", "projects", "sess-1")}`], (err, stdout) =>
+        resolve({ failed: err !== null, stdout }),
+      ),
+    );
+    expect(outcome.failed).toBe(true);
+    expect(outcome.stdout).toContain("not the one working");
   });
 
   it("delivers the question intact, quotes and all, to the run's ask route", async () => {
@@ -126,11 +143,35 @@ describe.skipIf(process.platform === "win32")("askCommand", () => {
     const port = typeof address === "object" && address ? address.port : 0;
     const question = `Use "asia-northeast1" or it's 'us-central1'? $HOME \`x\``;
     await new Promise<void>((resolve, reject) =>
-      execFile("/bin/sh", ["-c", askCommand(port, "run-00000001", "projects")], { env: { ...process.env, QUESTION: question } }, (err) =>
+      execFile("/bin/sh", ["-c", askCommand(port, "run-00000001", "projects", "sess-1")], { env: { ...process.env, QUESTION: question } }, (err) =>
         err ? reject(err) : resolve(),
       ),
     );
-    expect(received).toEqual([{ url: "/api/blueprints/runs/run-00000001/ask", body: { stepId: "projects", question } }]);
+    // Exactly as the step prompt tells the agent to type it: the variable as a PREFIX, not in the
+    // environment — the form a real run broke on.
+    const withoutQuestion = Object.fromEntries(Object.entries(process.env).filter(([key]) => key !== "QUESTION"));
+    await new Promise<void>((resolve, reject) =>
+      execFile(
+        "/bin/sh",
+        ["-c", `QUESTION='Which region, Tokyo?' ${askCommand(port, "run-00000001", "projects", "sess-1")}`],
+        { env: withoutQuestion },
+        (err) => (err ? reject(err) : resolve()),
+      ),
+    );
+    expect(received).toEqual([
+      { url: "/api/blueprints/runs/run-00000001/ask", body: { stepId: "projects", sessionId: "sess-1", question } },
+      { url: "/api/blueprints/runs/run-00000001/ask", body: { stepId: "projects", sessionId: "sess-1", question: "Which region, Tokyo?" } },
+    ]);
+  });
+});
+
+describe("gitRootOf", () => {
+  it("finds the nearest directory holding .git, and none outside a repository", async () => {
+    const root = await tempDir();
+    await mkdir(path.join(root, "repo", ".git"), { recursive: true });
+    await mkdir(path.join(root, "repo", "src"), { recursive: true });
+    expect(await gitRootOf(path.join(root, "repo", "src"))).toBe(path.join(root, "repo"));
+    expect(await gitRootOf(root)).not.toBe(path.join(root, "repo"));
   });
 });
 
@@ -146,6 +187,16 @@ describe("isTrustedByClaude", () => {
     ["the root", "/", false],
   ])("%s", (_label, dir, expected) => {
     expect(isTrustedByClaude(dir, projects)).toBe(expected);
+  });
+
+  it.each([
+    ["a repository root under a trusted parent", "/Users/me/ss/app", "/Users/me/ss/app", false],
+    ["a subdirectory of that repository", "/Users/me/ss/app/src", "/Users/me/ss/app", false],
+    ["a subdirectory of a trusted repository root", "/Users/me/ss/src", "/Users/me/ss", true],
+    ["a directory in no repository", "/Users/me/ss/app", null, true],
+    ["a git root that is not above the directory", "/Users/me/ss/app", "/elsewhere/repo", false],
+  ])("%s", (_label, dir, gitRoot, expected) => {
+    expect(isTrustedByClaude(dir, projects, gitRoot)).toBe(expected);
   });
 
   it.each([null, undefined, [], "x", { "/": { hasTrustDialogAccepted: "true" } }])("trusts nothing from %o", (value) => {

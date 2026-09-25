@@ -53,11 +53,8 @@ beforeEach(() => {
   store = memoryStore();
   deps = {
     store,
-    spawnStepSession: (cwd, prompt) => {
-      const sessionId = `s${spawned.length + 1}`;
-      spawned.push({ cwd, prompt, sessionId });
-      return sessionId;
-    },
+    spawnStepSession: (cwd, prompt, sessionId) => void spawned.push({ cwd, prompt, sessionId }),
+    newSessionId: () => `s${spawned.length + 1}`,
     onTurnEnded: (sessionId, callback) => void turnHooks.set(sessionId, callback),
     runCheck: async ({ command }) => {
       checksRun.push(command);
@@ -65,7 +62,7 @@ beforeEach(() => {
       const ok = checkResults[command]?.shift() ?? true;
       return { ok, output: ok ? "" : `${command} failed` };
     },
-    askCommand: (runId, stepId) => `ask ${runId} ${stepId}`,
+    askCommand: (runId, stepId, sessionId) => `ask ${runId} ${stepId} ${sessionId}`,
     newRunId: () => "run-00000001",
     now: () => ++clock,
   };
@@ -131,7 +128,7 @@ describe("blueprint executor", () => {
 
   it("does not check a session that stopped to ask, and hands the answer to a new one", async () => {
     await create();
-    await executor.ask("run-00000001", "a", "Which region?");
+    await executor.ask("run-00000001", "a", "Which region?", "s1");
     await endTurn("s1");
     expect(checksRun).toEqual([]);
     expect(await statusOf("a")).toBe("awaiting-answer");
@@ -143,16 +140,37 @@ describe("blueprint executor", () => {
   it("does not count a session that stopped to ask as a failed attempt", async () => {
     checkResults["check-a"] = Array.from({ length: MAX_FAILED_CHECKS - 1 }, () => false);
     await create();
-    await executor.ask("run-00000001", "a", "Which region?");
+    await executor.ask("run-00000001", "a", "Which region?", "s1");
     await endTurn("s1");
     await executor.humanEvent("run-00000001", "a", { type: "answer", answer: "Tokyo", atMs: 0 });
     for (let session = 2; session <= MAX_FAILED_CHECKS + 1; session++) await endTurn(`s${session}`);
     expect(await statusOf("a")).toBe("passed");
   });
 
+  it("checks the session that received an answer, however the clocks line up", async () => {
+    await create();
+    await executor.ask("run-00000001", "a", "Which region?", "s1");
+    await endTurn("s1");
+    // An answer stamped at or after the next session's start (a tie to the millisecond, or a clock
+    // step) must not be mistaken for an answer that arrived DURING that session.
+    await executor.humanEvent("run-00000001", "a", { type: "answer", answer: "Tokyo", atMs: 10 ** 13 });
+    await endTurn("s2");
+    expect(checksRun).toEqual(["check-a"]);
+  });
+
+  it("still checks a session recorded before the answer count existed", async () => {
+    await create();
+    const saved = store.saved.get("run-00000001");
+    if (!saved) throw new Error("not saved");
+    const legacySessions = saved.run.sessions.map(({ answersAtStart: _count, ...rest }) => rest);
+    store.saved.set("run-00000001", { run: { ...saved.run, sessions: legacySessions }, state: saved.state });
+    await endTurn("s1");
+    expect(checksRun).toEqual(["check-a"]);
+  });
+
   it("does not check a session answered before its turn ended", async () => {
     await create();
-    await executor.ask("run-00000001", "a", "Which region?");
+    await executor.ask("run-00000001", "a", "Which region?", "s1");
     await executor.humanEvent("run-00000001", "a", { type: "answer", answer: "Tokyo", atMs: clock + 1 });
     await endTurn("s1");
     expect(checksRun).toEqual([]);
@@ -176,10 +194,45 @@ describe("blueprint executor", () => {
     expect(checksRun).toEqual(["check-a"]);
   });
 
+  it("lets the working agent replace a question nobody has answered yet", async () => {
+    await create();
+    await executor.ask("run-00000001", "a", "x", "s1");
+    await executor.ask("run-00000001", "a", "Link billing at these URLs, then say done.", "s1");
+    const { state } = await executor.view("run-00000001");
+    expect(state.steps.a).toMatchObject({ status: "awaiting-answer", question: "Link billing at these URLs, then say done." });
+  });
+
+  it("stops without starting a session when the folder is no longer trusted, until a person retries", async () => {
+    let trusted = true;
+    executor = createExecutor({ ...deps, isTrusted: async () => trusted });
+    await create();
+    trusted = false;
+    await endTurn("s1");
+    const stopped = await executor.view("run-00000001");
+    expect(spawned).toHaveLength(1);
+    expect(stopped.state.steps.b.status).toBe("awaiting-approval");
+    await executor.humanEvent("run-00000001", "b", { type: "approve" });
+    const refused = await executor.view("run-00000001");
+    expect(spawned).toHaveLength(1);
+    expect(refused.state.steps.b).toMatchObject({ status: "failed", lastCheck: { ok: false, output: expect.stringContaining("does not trust /work/app") } });
+    trusted = true;
+    await executor.humanEvent("run-00000001", "b", { type: "retry" });
+    expect(spawned).toHaveLength(2);
+  });
+
+  it("refuses a question from a session that is not the one working on the step", async () => {
+    checkResults["check-a"] = [false];
+    await create();
+    await endTurn("s1");
+    await expect(executor.ask("run-00000001", "a", "stale?", "s1")).rejects.toThrow("not the one working");
+    await executor.ask("run-00000001", "a", "fresh?", "s2");
+    expect((await executor.view("run-00000001")).state.steps.a.question).toBe("fresh?");
+  });
+
   it("refuses a question when no agent is working", async () => {
     await create();
     await endTurn("s1");
-    await expect(executor.ask("run-00000001", "b", "?")).rejects.toThrow("no agent is working");
+    await expect(executor.ask("run-00000001", "b", "?", "s1")).rejects.toThrow("no agent is working");
   });
 
   it("refuses a person's event the rules do not allow", async () => {

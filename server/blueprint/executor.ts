@@ -7,7 +7,7 @@
 // both read the same state and each write their own successor.
 import path from "node:path";
 import { applyEvent, initialState, type BlueprintState, type StepEvent } from "../../common/blueprint/state.js";
-import { nextAction, type ExecutorAction } from "../../common/blueprint/executorPolicy.js";
+import { MAX_FAILED_CHECKS, nextAction, type ExecutorAction } from "../../common/blueprint/executorPolicy.js";
 import { stepPrompt } from "../../common/blueprint/stepPrompt.js";
 import { summarizeRun, type BlueprintRun, type BlueprintRunSummary } from "../../common/blueprint/run.js";
 import type { ComposedStep } from "../../common/blueprint/plan.js";
@@ -16,16 +16,22 @@ import type { CheckRequest, CheckResult } from "./checkRunner.js";
 
 export interface ExecutorDeps {
   store: RunStore;
-  /** Start an agent session in `cwd` that runs `prompt`; returns its session id. */
-  spawnStepSession: (cwd: string, prompt: string) => string;
+  /** Start agent session `sessionId` in `cwd`, running `prompt`. */
+  spawnStepSession: (cwd: string, prompt: string, sessionId: string) => void;
+  newSessionId: () => string;
   /** Call `callback` once when that session's turn ends — `didError` when it ended without one
    *  (killed, reaped, crashed) rather than by finishing a turn. */
   onTurnEnded: (sessionId: string, callback: (outcome: { didError: boolean }) => Promise<void>) => void;
   runCheck: (request: CheckRequest) => Promise<CheckResult>;
-  /** The shell command a step's agent runs to ask the user `$QUESTION`. */
-  askCommand: (runId: string, stepId: string) => string;
+  /** The shell command a step's agent runs to ask the user `$QUESTION` — carrying its session id,
+   *  so only the session working on the step can ask. */
+  askCommand: (runId: string, stepId: string, sessionId: string) => string;
   newRunId: () => string;
   now: () => number;
+  /** Whether an agent can start in the project without a trust prompt nobody is there to answer.
+   *  Asked before EVERY session: a step can make the folder a git repository, which takes the
+   *  trust it had from its parent away. */
+  isTrusted?: (dir: string) => Promise<boolean>;
 }
 
 // A person's events. The agent has its own door (`ask`), and checks are run here, never reported.
@@ -40,13 +46,18 @@ export class BlueprintRefusal extends Error {}
 // A session that asked, and was answered before its turn ended, stopped to wait for that answer —
 // its work is not finished, so checking it would only burn an attempt. The answer goes to a new
 // session instead.
-function needsCheck(state: BlueprintState, session: { stepId: string; atMs: number }): boolean {
+function needsCheck(state: BlueprintState, session: { stepId: string; atMs: number; answersAtStart?: number | undefined }): boolean {
   const stepState = state.steps[session.stepId];
   if (stepState?.status !== "running") return false;
-  return !stepState.answers.some((entry) => entry.atMs >= session.atMs);
+  // Runs recorded before the count existed fall back to comparing times.
+  if (session.answersAtStart === undefined) return !stepState.answers.some((entry) => entry.atMs >= session.atMs);
+  return stepState.answers.length <= session.answersAtStart;
 }
 
 type Loaded = { run: BlueprintRun; state: BlueprintState };
+
+export const untrustedOutput = (dir: string): string =>
+  `Claude Code does not trust ${dir} (a step may have made it a git repository, which needs its own trust). Open a terminal there, accept the trust prompt, then retry this step.`;
 
 // Recorded as the check output when a step's session ended without finishing a turn. The check
 // script is NOT run for such a session: whatever it left behind was not claimed as done.
@@ -104,11 +115,12 @@ class Executor {
     });
   }
 
-  /** The agent working on `stepId` needs a decision. */
-  ask(runId: string, stepId: string, question: string): Promise<Loaded> {
+  /** The agent working on `stepId` needs a decision. Only that session may ask. */
+  ask(runId: string, stepId: string, question: string, sessionId: string): Promise<Loaded> {
     return this.serially(runId, async () => {
       const loaded = await this.mustLoad(runId);
       if (loaded.run.activeSessionId === null) throw new BlueprintRefusal("no agent is working on this build");
+      if (loaded.run.activeSessionId !== sessionId) throw new BlueprintRefusal("this session is not the one working on the step");
       const asked = applied(loaded, stepId, { type: "ask", question });
       await this.deps.store.save(asked.run, asked.state);
       return asked;
@@ -166,12 +178,24 @@ class Executor {
   private async advance(initial: Loaded): Promise<Loaded> {
     let current = initial;
     for (let pass = 0; pass < MAX_PASSES_PER_ADVANCE; pass++) {
-      const next = this.perform(current, actionFor(current));
+      const action = actionFor(current);
+      const next = action.kind === "spawn" && !(await this.trusted(current.run)) ? this.untrusted(current, action.stepId) : this.perform(current, action);
       if (!next) return current;
       await this.deps.store.save(next.run, next.state);
       current = next;
     }
     throw new Error(`blueprint run ${initial.run.id} did not settle`);
+  }
+
+  private async trusted(run: BlueprintRun): Promise<boolean> {
+    return this.deps.isTrusted ? this.deps.isTrusted(run.projectDir) : true;
+  }
+
+  // The step fails with the reason, and with no automatic retries left: a retry cannot trust the
+  // folder, only a person can. Their retry resets the count and asks again.
+  private untrusted(loaded: Loaded, stepId: string): Loaded {
+    const failed = this.recordCheck(loaded, stepId, { ok: false, output: untrustedOutput(loaded.run.projectDir) });
+    return { run: { ...failed.run, failedChecks: { ...failed.run.failedChecks, [stepId]: MAX_FAILED_CHECKS } }, state: failed.state };
   }
 
   // Performs one action; null means "stop here".
@@ -187,16 +211,17 @@ class Executor {
     if (!step) throw new BlueprintRefusal(`no step ${stepId}`);
     const packDir = step.origin === "base" ? run.basePackDir : run.usecasePackDir;
     const skillFile = path.join(packDir, step.skill, "SKILL.md");
+    const sessionId = this.deps.newSessionId();
     const prompt = stepPrompt({
       step,
       skillFile,
       packDirs: { base: run.basePackDir, usecase: run.usecasePackDir },
       stepState: state.steps[stepId],
-      askCommand: this.deps.askCommand(run.id, stepId),
+      askCommand: this.deps.askCommand(run.id, stepId, sessionId),
     });
-    const sessionId = this.deps.spawnStepSession(run.projectDir, prompt);
+    this.deps.spawnStepSession(run.projectDir, prompt, sessionId);
     this.deps.onTurnEnded(sessionId, ({ didError }) => this.turnEnded(run.id, sessionId, didError));
-    const sessions = [...run.sessions, { stepId, sessionId, atMs: this.deps.now() }];
+    const sessions = [...run.sessions, { stepId, sessionId, atMs: this.deps.now(), answersAtStart: state.steps[stepId]?.answers.length ?? 0 }];
     return { run: { ...run, activeSessionId: sessionId, sessions }, state };
   }
 

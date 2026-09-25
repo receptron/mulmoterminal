@@ -21,7 +21,11 @@ export const blueprintRunSchema = z.object({
   failedChecks: z.record(z.string(), z.number().int().nonnegative()).default({}),
   // The session working on the current step, if one is. Its turn ending is what triggers a check.
   activeSessionId: z.string().nullable().default(null),
-  sessions: z.array(z.object({ stepId: z.string(), sessionId: z.string(), atMs: z.number() })).default([]),
+  // `answersAtStart`: how many answers the step had when the session began, so an answer that came
+  // DURING it is told apart by count — a timestamp can tie with the spawn to the millisecond.
+  sessions: z
+    .array(z.object({ stepId: z.string(), sessionId: z.string(), atMs: z.number(), answersAtStart: z.number().int().nonnegative().optional() }))
+    .default([]),
   createdAtMs: z.number(),
 });
 
