@@ -14,9 +14,18 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 // The tool name is a caller-supplied argument, not a string literal, so this isn't a
 // spawn-of-a-string-literal from PATH. Never rejects: a spawn failure (or timeout) resolves
 // ok:false with `errorStderr`, so callers branch on the result instead of catching.
-export function spawnCollect(bin: string, args: string[], opts: { cwd?: string; errorStderr: string; timeoutMs?: number }): Promise<SpawnResult> {
+export function spawnCollect(
+  bin: string,
+  args: string[],
+  opts: { cwd?: string; errorStderr: string; timeoutMs?: number; env?: NodeJS.ProcessEnv },
+): Promise<SpawnResult> {
   return new Promise((resolve) => {
-    const child = spawn(bin, args, { cwd: opts.cwd, stdio: ["ignore", "pipe", "pipe"], timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS });
+    const child = spawn(bin, args, {
+      cwd: opts.cwd,
+      env: opts.env ?? process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: opts.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    });
     // Collect bytes and decode ONCE at the end: a chunk boundary can fall inside a
     // multibyte UTF-8 character (a Japanese PR title, branch, or commit message), and
     // per-chunk toString() would corrupt it into replacement characters.

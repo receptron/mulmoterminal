@@ -2,6 +2,9 @@
 // decides it is done, and the gates that must be approved before it may start. Steps run strictly
 // in order — a non-engineer follows one line of progress, not a graph.
 import { z } from "zod";
+import { isContainedRelativePath } from "./relativePath.js";
+
+const SKILL_SEGMENT_RE = /^[a-z0-9][a-z0-9_-]*$/;
 
 // Operations the agent may never decide on its own. A step declaring one cannot start until a
 // human approves it, whatever the agent thinks of the risk. `review` is the person reading what the
@@ -15,8 +18,9 @@ export const planStepSchema = z.object({
   id: stepId,
   title: z.string().min(1),
   description: z.string().default(""),
-  // Skill directory, relative to the pack that declares the step.
-  skill: z.string().min(1),
+  // Skill directory, relative to the pack that declares the step — and inside it: no `..`, no
+  // leading slash, so a pack installed from elsewhere cannot point its agent at another file.
+  skill: z.string().refine((value) => isContainedRelativePath(value, SKILL_SEGMENT_RE), "skill must be a path inside the pack"),
   // Shell command run in the project directory; exit 0 means the step is done. The agent's own
   // claim that it finished is never what decides. The executor sets BLUEPRINT_BASE and
   // BLUEPRINT_USECASE to the two pack directories, so a check can call a script shipped in either.

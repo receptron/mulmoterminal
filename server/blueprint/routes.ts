@@ -5,7 +5,7 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import type { Express, Response } from "express";
 import { z } from "zod";
-import { listPacks, loadPackPair, type PackPair } from "./packs.js";
+import { listPacks, loadPackPair, type PackPair, type PackRoot } from "./packs.js";
 import { writeAnswers } from "./answersFile.js";
 import { answerProblems, askedQuestions, hearingAnswersSchema, unansweredQuestions, type HearingAnswers } from "../../common/blueprint/hearing.js";
 import { BlueprintRefusal, type BlueprintExecutor, type HumanEvent } from "./executor.js";
@@ -13,7 +13,7 @@ import { BLUEPRINT_SLUG_RE } from "../../common/blueprint/manifest.js";
 
 export interface BlueprintRouteDeps {
   executor: BlueprintExecutor;
-  packsRoot: string;
+  packRoots: readonly PackRoot[];
   now: () => number;
   /** Whether an agent can start in `dir` without a trust prompt nobody is there to answer. */
   isTrusted: (dir: string) => Promise<boolean>;
@@ -61,7 +61,7 @@ async function projectDirProblem(projectDir: string): Promise<string | null> {
 
 function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
   app.get("/api/blueprints/packs", async (_req, res) => {
-    res.json({ packs: await listPacks(deps.packsRoot) });
+    res.json({ packs: await listPacks(deps.packRoots) });
   });
 
   app.get("/api/blueprints/runs", async (_req, res) => {
@@ -74,7 +74,7 @@ function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
 
   // What the new-build form needs for a base/usecase pair: its interview and the steps it will run.
   app.get("/api/blueprints/pairs/:base/:usecase", async (req, res) => {
-    const pair = await loadPackPair(deps.packsRoot, req.params.base, req.params.usecase);
+    const pair = await loadPackPair(deps.packRoots, req.params.base, req.params.usecase);
     if (!pair.ok) return res.status(400).json({ error: pair.problems.join("; ") });
     return res.json({ hearing: pair.hearing, steps: pair.steps });
   });
@@ -110,7 +110,7 @@ async function checkCreate(deps: BlueprintRouteDeps, body: unknown): Promise<Che
   if (dirProblem) return refused(400, dirProblem);
   if (!(await deps.isTrusted(projectDir)))
     return refused(409, `Claude Code does not trust ${projectDir} yet. Open a terminal there once and accept the trust prompt, then start again.`);
-  const pair = await loadPackPair(deps.packsRoot, base, usecase);
+  const pair = await loadPackPair(deps.packRoots, base, usecase);
   if (!pair.ok) return refused(400, pair.problems.join("; "));
   const problem = answersProblem(pair, answers);
   if (problem) return refused(400, problem);

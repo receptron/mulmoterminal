@@ -11,6 +11,10 @@ import { createExecutor } from "./executor.js";
 import { createRunStore } from "./runStore.js";
 import { runCheck } from "./checkRunner.js";
 import { mountBlueprintRoutes } from "./routes.js";
+import type { PackRoot } from "./packs.js";
+import { mountMarketRoutes } from "./marketRoutes.js";
+import { registriesFile } from "./registry.js";
+import { cloneRepo } from "./installer.js";
 import { claudeTrusts } from "./trust.js";
 import { registerCompletionHook } from "../session/completion-hooks.js";
 import { markUnplacedSession } from "../session/registry.js";
@@ -22,6 +26,12 @@ type SpawnClaude = (sessionId: string, ws: null, resumeId: null, options: { init
 // The packs shipped in this checkout. A marketplace install would add a second root; not yet.
 const PACKS_ROOT = path.join(import.meta.dirname, "..", "..", "blueprints");
 const RUNS_ROOT = path.join(MULMOTERMINAL_HOME, "blueprints", "runs");
+// Packs installed from a registry. After the shipped ones, so they can never replace one.
+export const INSTALLED_PACKS_DIR = path.join(MULMOTERMINAL_HOME, "blueprints", "packs");
+const PACK_ROOTS: readonly PackRoot[] = [
+  { dir: PACKS_ROOT, source: "builtin" },
+  { dir: INSTALLED_PACKS_DIR, source: "installed" },
+];
 
 // The question travels in $QUESTION and is JSON-encoded by node, so no quoting in it can break
 // the request — the agent writes prose, not JSON.
@@ -57,5 +67,12 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void
   executor
     .recover(endOrphanedSession)
     .catch((err: unknown) => console.error(`[blueprint] recovery failed: ${err instanceof Error ? err.message : String(err)}`));
-  mountBlueprintRoutes(app, { executor, packsRoot: PACKS_ROOT, now: () => Date.now(), isTrusted: (dir) => claudeTrusts(dir) });
+  mountMarketRoutes(app, {
+    builtinRoot: PACK_ROOTS[0] ?? { dir: PACKS_ROOT, source: "builtin" },
+    packsDir: INSTALLED_PACKS_DIR,
+    registriesFile: registriesFile(MULMOTERMINAL_HOME),
+    clone: cloneRepo,
+    now: () => Date.now(),
+  });
+  mountBlueprintRoutes(app, { executor, packRoots: PACK_ROOTS, now: () => Date.now(), isTrusted: (dir) => claudeTrusts(dir) });
 }
