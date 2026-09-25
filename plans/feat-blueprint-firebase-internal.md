@@ -146,6 +146,9 @@ usecase-internal/                     用途パック
 
 一つずつ単独で取り込め、単独で戻せる単位に分ける。
 
+実験なので `main` には直接入れない。各 PR は実験用ブランチ `experiment/blueprint` に向けて作り、
+形になった段階で `experiment/blueprint` から `main` への PR を別に立てる。
+
 1. **パック形式のスキーマと検証** — `common/blueprint/`。`manifest` / `hearing` / `plan` / `state` のスキーマ、基盤と用途を組み合わせる純粋関数、状態遷移の規則。試験のみで画面なし
 2. **Firebase × 社内向けパックの中身** — 雛形・スキル・rules・判定スクリプト。置き場所は下の「未決事項」
 3. **実行器** — `state.json` の見張り、判定の実行、セルへのスキルの受け渡し、止まる操作の強制
