@@ -44,6 +44,7 @@ export function stepPrompt({ step, skillFile, packDirs, stepState, askCommand }:
     `  QUESTION='your question' ${askCommand}`,
     "",
     `When the work is done, stop. The executor then runs the step's check itself: ${step.check}`,
+    "Finish everything within this turn: leave no background task or subagent running when you stop — this session is closed when its turn ends, and the next step may start in the same folder.",
     ...answeredSection(stepState),
     ...failureSection(stepState),
   ].join("\n");

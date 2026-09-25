@@ -71,7 +71,7 @@ function endOrphanedSession(sessionId: string): void {
   if (tmuxHasSession(sessionId)) tmuxKillSession(sessionId);
 }
 
-export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void {
+export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap: (sessionId: string) => void): void {
   const executor = createExecutor({
     store: createRunStore(RUNS_ROOT),
     spawnStepSession: (cwd, prompt, sessionId) => {
@@ -86,6 +86,8 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void
     now: () => Date.now(),
     isTrusted: (dir) => claudeTrusts(dir),
     projectFiles,
+    // The app's own teardown: the pty, the tmux session and everything it remembered about it.
+    closeSession: (sessionId) => reap(sessionId),
   });
   executor
     .recover(endOrphanedSession)

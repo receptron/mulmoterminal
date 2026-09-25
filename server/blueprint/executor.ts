@@ -35,6 +35,9 @@ export interface ExecutorDeps {
   isTrusted?: (dir: string) => Promise<boolean>;
   /** Files the build keeps in the project (the spec, the agent's reply), read and removed by path. */
   projectFiles: ProjectFiles;
+  /** End a session this build started and no longer needs (its terminal closes). Closing one that
+   *  is already gone does nothing. */
+  closeSession: (sessionId: string) => void;
 }
 
 export interface ProjectFiles {
@@ -113,6 +116,12 @@ function applied(loaded: Loaded, stepId: string, event: StepEvent): Loaded {
 const actionFor = ({ run, state }: Loaded): ExecutorAction =>
   nextAction({ steps: run.steps, state, failedChecks: run.failedChecks, sessionActive: run.activeSessionId !== null });
 
+// Whether the build, as it stands, stops on this step's failure for a person (rather than retrying).
+const waitsOnFailure = (loaded: Loaded, stepId: string): boolean => {
+  const action = actionFor(loaded);
+  return action.kind === "wait" && action.on === "failure" && action.stepId === stepId;
+};
+
 class Executor {
   private readonly queues = new Map<string, Promise<unknown>>();
 
@@ -151,6 +160,7 @@ class Executor {
       const before = await this.mustLoad(runId);
       if (before.run.revisionSessionId !== null) throw new BlueprintRefusal("the spec is still being revised; wait for the reply");
       const loaded = applied(before, stepId, event);
+      if (event.type === "retry") this.closeSessionsOf(before.run, stepId);
       // A person's retry is a fresh start for the automatic retries, too.
       const run = event.type === "retry" ? { ...loaded.run, failedChecks: { ...loaded.run.failedChecks, [stepId]: 0 } } : loaded.run;
       await this.deps.store.save(run, loaded.state);
@@ -236,12 +246,23 @@ class Executor {
     return this.serially(runId, async () => {
       const { run, state } = await this.mustLoad(runId);
       if (run.revisionSessionId !== sessionId) return;
-      const reply = didError ? null : ((await this.deps.projectFiles.read(run.projectDir, replyFile(sessionId))) ?? "").trim();
-      await this.deps.projectFiles.remove(run.projectDir, replyFile(sessionId));
-      const outcome = replyOutcome(didError, reply);
-      const specChat = [...run.specChat, { role: "agent" as const, text: reply ?? "", atMs: this.deps.now(), outcome }];
-      await this.deps.store.save({ ...run, revisionSessionId: null, specChat }, state);
+      try {
+        const reply = didError ? null : ((await this.deps.projectFiles.read(run.projectDir, replyFile(sessionId))) ?? "").trim();
+        await this.deps.projectFiles.remove(run.projectDir, replyFile(sessionId));
+        const outcome = replyOutcome(didError, reply);
+        const specChat = [...run.specChat, { role: "agent" as const, text: reply ?? "", atMs: this.deps.now(), outcome }];
+        await this.deps.store.save({ ...run, revisionSessionId: null, specChat }, state);
+      } finally {
+        this.deps.closeSession(sessionId);
+      }
     });
+  }
+
+  // The sessions a step used; a failed step's last one was kept open for the person to look into.
+  private closeSessionsOf(run: BlueprintRun, stepId: string): void {
+    run.sessions
+      .filter((entry) => entry.stepId === stepId && entry.sessionId !== run.activeSessionId)
+      .forEach((entry) => this.deps.closeSession(entry.sessionId));
   }
 
   // The agent's session stopped. If it stopped to ask, the state already says so and there is
@@ -252,10 +273,22 @@ class Executor {
       if (loaded.run.activeSessionId !== sessionId) return;
       const released: Loaded = { run: { ...loaded.run, activeSessionId: null }, state: loaded.state };
       const session = loaded.run.sessions.findLast((entry) => entry.sessionId === sessionId);
-      const settled = session && needsCheck(released.state, session) ? await this.settleTurn(released, session.stepId, didError) : released;
-      await this.deps.store.save(settled.run, settled.state);
+      // Closed BEFORE advancing: a session whose turn ended can still have background work running,
+      // and a retry started beside it would have two agents rewriting one folder. Only one that failed
+      // and now waits for a person stays open, to be looked into; a person's retry closes it.
+      const settled = await this.settleAndSave(released, session, didError).catch((err: unknown) => {
+        this.deps.closeSession(sessionId);
+        throw err;
+      });
+      if (!session || !waitsOnFailure(settled, session.stepId)) this.deps.closeSession(sessionId);
       await this.advance(settled);
     });
+  }
+
+  private async settleAndSave(released: Loaded, session: BlueprintRun["sessions"][number] | undefined, didError: boolean): Promise<Loaded> {
+    const settled = session && needsCheck(released.state, session) ? await this.settleTurn(released, session.stepId, didError) : released;
+    await this.deps.store.save(settled.run, settled.state);
+    return settled;
   }
 
   private serially<T>(runId: string, work: () => Promise<T>): Promise<T> {
