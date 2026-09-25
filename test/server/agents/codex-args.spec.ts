@@ -1,8 +1,9 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { buildCodexArgs } from "../../../server/agents/codex-args.js";
+import { codexPermissionHookOverride } from "../../../server/agents/codex-hook.js";
 
-const base = { resume: null, model: null, guiMcpServers: [] };
+const base = { resume: null, model: null, guiMcpServers: [], permissionHook: false };
 
 describe("buildCodexArgs", () => {
   it("passes no id for a fresh session (codex mints its own)", () => {
@@ -57,7 +58,12 @@ describe("buildCodexArgs", () => {
   });
 
   it("orders model, GUI MCP, then the resume subcommand (no positional prompt)", () => {
-    const args = buildCodexArgs({ resume: "id1", model: "gpt-5.4", guiMcpServers: [{ id: "mulmoterminal-gui", url: "gui-mcp-endpoint", autoApprove: true }] });
+    const args = buildCodexArgs({
+      resume: "id1",
+      model: "gpt-5.4",
+      permissionHook: false,
+      guiMcpServers: [{ id: "mulmoterminal-gui", url: "gui-mcp-endpoint", autoApprove: true }],
+    });
     expect(args.slice(0, 2)).toEqual(["--model", "gpt-5.4"]);
     expect(args).toContain("-c");
     expect(args.slice(-2)).toEqual(["resume", "id1"]);
@@ -69,5 +75,13 @@ describe("buildCodexArgs", () => {
     const args = buildCodexArgs({ ...base, guiMcpServers: [{ id: "mulmoterminal-media", url: "media-endpoint", autoApprove: false }] });
     expect(args).toEqual(["-c", `mcp_servers.mulmoterminal-media.url="media-endpoint"`]);
     expect(args.join(" ")).not.toContain("approval_mode");
+  });
+
+  // The hook override is the same string for every session (see codex-hook.ts), and like every
+  // other global flag it has to precede the resume subcommand.
+  it("registers the permission hook ahead of the resume subcommand when asked", () => {
+    const args = buildCodexArgs({ ...base, resume: "id1", permissionHook: true });
+    expect(args).toEqual(["-c", codexPermissionHookOverride(), "resume", "id1"]);
+    expect(buildCodexArgs({ ...base, resume: "id1" })).toEqual(["resume", "id1"]);
   });
 });

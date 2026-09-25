@@ -68,8 +68,8 @@ export function applyBoundary(sessionId: string, boundary: CodexTurnBoundary, de
     if (eff.kind === "working") deps.setWorking(sessionId, eff.value, event);
     else deps.setWaiting(sessionId, eff.value, event);
   }
-  // Nothing to hand over: codex has no Notification equivalent, and no hook that could carry a
-  // finished turn's reply — that one is read back out of the rollout.
+  // Nothing to hand over: a blocked turn arrives through the hook route instead (codex-hook.ts),
+  // and a finished turn's reply is read back out of the rollout.
   if (push) void notifyTaskFinished(sessionId, push, { message: "" }, deps.uiPort);
 }
 

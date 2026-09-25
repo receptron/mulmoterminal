@@ -7,6 +7,7 @@ import { SESSION_ID_RE } from "../config/env.js";
 import { isRecord } from "../../common/isRecord.js";
 import { copilotHookBody } from "../agents/copilot-hook.js";
 import { cursorHookBody } from "../agents/cursor-hook.js";
+import { codexHookBody } from "../agents/codex-hook.js";
 import { recordCursorStop } from "../agents/cursor-usage.js";
 import { ASK_QUESTION_TOOL, parseAskQuestions, type AskQuestionDone, type AskQuestionEvent } from "../../common/askQuestion.js";
 import { watchOtherWrites } from "../session/write-to-session.js";
@@ -249,6 +250,7 @@ const readHeader = (value: string | string[] | undefined): string | undefined =>
 const TRANSLATE_HOOK = new Map<string, (hookName: string | undefined, payload: unknown) => Record<string, unknown> | null>([
   ["copilot", copilotHookBody],
   ["cursor", cursorHookBody],
+  ["codex", codexHookBody],
 ]);
 
 async function handleHookRequest(deps: HookDeps, req: Request, res: Response) {
