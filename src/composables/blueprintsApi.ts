@@ -6,7 +6,7 @@ import { jsonBody } from "../jsonBody";
 import { blueprintManifestSchema } from "../../common/blueprint/manifest";
 import { hearingSchema, type HearingAnswers } from "../../common/blueprint/hearing";
 import { planStepSchema } from "../../common/blueprint/plan";
-import { blueprintRunSummarySchema, blueprintRunViewSchema, type BlueprintRunView } from "../../common/blueprint/run";
+import { blueprintRunSchema, blueprintRunSummarySchema, blueprintRunViewSchema, type BlueprintRunView } from "../../common/blueprint/run";
 import { presetListingSchema, type PresetListing } from "../../common/blueprint/presets";
 import { catalogSchema, installRecordSchema, type Catalog, type InstallRecord } from "../../common/blueprint/registry";
 
@@ -73,3 +73,16 @@ export const installPack = (registryUrl: string, slug: string): Promise<ApiResul
 
 export const uninstallPack = (slug: string): Promise<ApiResult<{ ok: boolean }>> =>
   call(z.object({ ok: z.boolean() }), "/api/blueprints/market/uninstall", postJson({ slug }));
+
+const specViewSchema = z.object({
+  spec: z.string().nullable(),
+  openQuestions: z.string().nullable(),
+  chat: blueprintRunSchema.shape.specChat,
+  revising: z.boolean(),
+});
+export type SpecView = z.infer<typeof specViewSchema>;
+
+export const loadSpec = (runId: string): Promise<ApiResult<SpecView>> => call(specViewSchema, `/api/blueprints/runs/${encodeURIComponent(runId)}/spec`);
+
+export const sendSpecMessage = (runId: string, message: string): Promise<ApiResult<BlueprintRunView>> =>
+  call(blueprintRunViewSchema, `/api/blueprints/runs/${encodeURIComponent(runId)}/spec/messages`, postJson({ message }));

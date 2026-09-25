@@ -21,7 +21,7 @@ const step = (id: string, gates: ComposedStep["gates"] = []): ComposedStep => ({
   origin: "base",
 });
 
-const STEPS = [step("a"), step("b", ["billing"]), step("c")];
+const STEPS = [step("a"), step("b", ["billing", "review"]), step("c")];
 
 function memoryStore(): RunStore & { saved: Map<string, { run: BlueprintRun; state: BlueprintState }> } {
   const saved = new Map<string, { run: BlueprintRun; state: BlueprintState }>();
@@ -38,6 +38,7 @@ let turnHooks: Map<string, (outcome: { didError: boolean }) => Promise<void>>;
 let store: ReturnType<typeof memoryStore>;
 let deps: ExecutorDeps;
 let checkGate: Promise<void> | null;
+let files: Map<string, string>;
 let checkResults: Record<string, boolean[]>;
 let checksRun: string[];
 let executor: BlueprintExecutor;
@@ -50,11 +51,16 @@ beforeEach(() => {
   checksRun = [];
   clock = 1000;
   checkGate = null;
+  files = new Map();
   store = memoryStore();
   deps = {
     store,
     spawnStepSession: (cwd, prompt, sessionId) => void spawned.push({ cwd, prompt, sessionId }),
     newSessionId: () => `s${spawned.length + 1}`,
+    projectFiles: {
+      read: async (_dir, relativePath) => files.get(relativePath) ?? null,
+      remove: async (_dir, relativePath) => void files.delete(relativePath),
+    },
     onTurnEnded: (sessionId, callback) => void turnHooks.set(sessionId, callback),
     runCheck: async ({ command }) => {
       checksRun.push(command);
@@ -227,6 +233,89 @@ describe("blueprint executor", () => {
     await expect(executor.ask("run-00000001", "a", "stale?", "s1")).rejects.toThrow("not the one working");
     await executor.ask("run-00000001", "a", "fresh?", "s2");
     expect((await executor.view("run-00000001")).state.steps.a.question).toBe("fresh?");
+  });
+
+  describe("talking the spec over at its review gate", () => {
+    // b carries the review gate here: a passes, then the build waits for b's approval.
+    const atReview = async () => {
+      executor = createExecutor(deps);
+      await create();
+      await endTurn("s1");
+    };
+
+    it("hands the message to a new session, then records the reply it wrote and clears the file", async () => {
+      await atReview();
+      await executor.say("run-00000001", "本の削除も入れて");
+      expect(spawned[1].prompt).toContain("本の削除も入れて");
+      files.set(".blueprint/reply-s2.md", "削除を足しました。");
+      await endTurn("s2");
+      const { run } = await executor.view("run-00000001");
+      expect(run.specChat.map((entry) => [entry.role, entry.text, entry.outcome])).toEqual([
+        ["person", "本の削除も入れて", undefined],
+        ["agent", "削除を足しました。", "reply"],
+      ]);
+      expect(run.revisionSessionId).toBeNull();
+      expect(files.has(".blueprint/reply-s2.md")).toBe(false);
+    });
+
+    it("carries the conversation so far into the next message's session", async () => {
+      await atReview();
+      await executor.say("run-00000001", "first");
+      files.set(".blueprint/reply-s2.md", "done first");
+      await endTurn("s2");
+      await executor.say("run-00000001", "second");
+      expect(spawned[2].prompt).toContain("User: first");
+      expect(spawned[2].prompt).toContain("You: done first");
+    });
+
+    it("records a session that wrote no reply, and one that died, without inventing words", async () => {
+      await atReview();
+      await executor.say("run-00000001", "one");
+      await endTurn("s2");
+      await executor.say("run-00000001", "two");
+      await endTurn("s3", true);
+      const outcomes = (await executor.view("run-00000001")).run.specChat.filter((entry) => entry.role === "agent").map((entry) => entry.outcome);
+      expect(outcomes).toEqual(["no-reply", "lost"]);
+    });
+
+    it("ignores a reply written by an earlier session into its own file", async () => {
+      await atReview();
+      await executor.say("run-00000001", "one");
+      await endTurn("s2", true);
+      await executor.say("run-00000001", "two");
+      files.set(".blueprint/reply-s2.md", "late words from the lost session");
+      files.set(".blueprint/reply-s3.md", "the real reply");
+      await endTurn("s3");
+      expect((await executor.view("run-00000001")).run.specChat.at(-1)?.text).toBe("the real reply");
+      expect(spawned[2].prompt).toContain(".blueprint/reply-s3.md");
+    });
+
+    it("refuses a message while one is being answered, and approval until the reply is in", async () => {
+      await atReview();
+      await executor.say("run-00000001", "one");
+      await expect(executor.say("run-00000001", "two")).rejects.toThrow("still being answered");
+      await expect(executor.humanEvent("run-00000001", "b", { type: "approve" })).rejects.toThrow("still being revised");
+    });
+
+    it("refuses a message when the build is not waiting at a review gate", async () => {
+      await create();
+      await expect(executor.say("run-00000001", "hi")).rejects.toThrow("waits for review");
+    });
+
+    it("on recovery, records a reply the restart cut off as lost", async () => {
+      await atReview();
+      await executor.say("run-00000001", "one");
+      await createExecutor(deps).recover(() => undefined);
+      const { run } = await executor.view("run-00000001");
+      expect(run.revisionSessionId).toBeNull();
+      expect(run.specChat.at(-1)?.outcome).toBe("lost");
+    });
+
+    it("shows the spec and the open questions from the project", async () => {
+      await atReview();
+      files.set(".blueprint/spec.md", "# おうち図書館");
+      expect(await executor.specView("run-00000001")).toEqual({ spec: "# おうち図書館", openQuestions: null, chat: [], revising: false });
+    });
   });
 
   it("refuses a question when no agent is working", async () => {

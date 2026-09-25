@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from "vue";
 import { useSessionFeed } from "../composables/useSessionFeed";
+import { readToolCall, type ToolCall } from "./toolCall";
 import { onToolGroupsAnnounced } from "../composables/useToolGroupsAnnounce";
 import { isRecord, optionalString } from "../../common/isRecord";
 import { isUnknownArray } from "../../common/isUnknownArray";
@@ -24,16 +25,6 @@ interface AvailableTool {
 // type would be asserted as a string and rendered.
 const isAvailableTool = (value: unknown): value is AvailableTool =>
   isRecord(value) && typeof value.toolName === "string" && optionalString(value.title) && optionalString(value.description);
-
-interface ToolCall {
-  toolUseId?: string;
-  toolName: string;
-  toolInput?: unknown;
-  toolOutput?: unknown;
-  status: "running" | "completed" | "failed";
-  at: number;
-  durationMs?: number;
-}
 
 const props = defineProps<{
   sessionId: string | null;
@@ -67,23 +58,6 @@ const availableTools = computed<AvailableTool[]>(() => forThisSession.value?.too
 const guiOnlyHistory = computed(() => forThisSession.value?.guiOnlyHistory ?? false);
 const toolCalls = ref<ToolCall[]>([]);
 
-// One call off the live channel. `toolName`, `status` and `at` are what every row renders from;
-// without them there is no row to draw.
-const CALL_STATUSES: readonly ToolCall["status"][] = ["running", "completed", "failed"];
-function readToolCall(raw: unknown): ToolCall | null {
-  if (!isRecord(raw) || typeof raw.toolName !== "string" || typeof raw.at !== "number") return null;
-  const status = CALL_STATUSES.find((known) => known === raw.status);
-  if (!status) return null;
-  return {
-    toolName: raw.toolName,
-    status,
-    at: raw.at,
-    ...(typeof raw.toolUseId === "string" ? { toolUseId: raw.toolUseId } : {}),
-    ...(raw.toolInput !== undefined ? { toolInput: raw.toolInput } : {}),
-    ...(raw.toolOutput !== undefined ? { toolOutput: raw.toolOutput } : {}),
-    ...(typeof raw.durationMs === "number" ? { durationMs: raw.durationMs } : {}),
-  };
-}
 const expandedTools = ref<Set<string>>(new Set());
 const expandedCalls = ref<Set<string>>(new Set());
 

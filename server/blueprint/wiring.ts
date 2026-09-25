@@ -7,7 +7,8 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
-import { createExecutor } from "./executor.js";
+import { createExecutor, type ProjectFiles } from "./executor.js";
+import { readFile, rm, stat } from "node:fs/promises";
 import { createRunStore } from "./runStore.js";
 import { runCheck } from "./checkRunner.js";
 import { mountBlueprintRoutes } from "./routes.js";
@@ -49,6 +50,23 @@ export function askCommand(port: number | string, runId: string, stepId: string,
   return `${body} | curl -sS --fail-with-body -X POST -H 'content-type: application/json' --data-binary @- http://127.0.0.1:${port}/api/blueprints/runs/${runId}/ask`;
 }
 
+// The spec and the reply are small text files the agent writes; one far larger is not what was asked
+// for, and is not read into memory.
+const PROJECT_FILE_MAX_BYTES = 1024 * 1024;
+
+const projectFiles: ProjectFiles = {
+  async read(dir, relativePath) {
+    const file = path.join(dir, relativePath);
+    const info = await stat(file).catch(() => null);
+    if (!info?.isFile()) return null;
+    if (info.size > PROJECT_FILE_MAX_BYTES) return `(${relativePath} is ${info.size} bytes, too large to show)`;
+    return readFile(file, "utf8");
+  },
+  async remove(dir, relativePath) {
+    await rm(path.join(dir, relativePath), { force: true });
+  },
+};
+
 function endOrphanedSession(sessionId: string): void {
   if (tmuxHasSession(sessionId)) tmuxKillSession(sessionId);
 }
@@ -67,6 +85,7 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void
     newRunId: () => randomUUID(),
     now: () => Date.now(),
     isTrusted: (dir) => claudeTrusts(dir),
+    projectFiles,
   });
   executor
     .recover(endOrphanedSession)

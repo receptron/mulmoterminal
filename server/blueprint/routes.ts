@@ -33,6 +33,7 @@ const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("retry"), stepId: z.string() }),
 ]);
 
+const specMessageSchema = z.object({ message: z.string().trim().min(1) });
 const askSchema = z.object({ stepId: z.string(), sessionId: z.string(), question: z.string().trim().min(1) });
 
 type ParsedEvent = z.infer<typeof eventSchema>;
@@ -148,6 +149,25 @@ function mountMoveRoutes(app: Express, deps: BlueprintRouteDeps): void {
     if (!parsed.success) return res.status(400).json({ error: "expected { type: approve | reject | answer | retry, stepId, … }" });
     try {
       return res.json(await deps.executor.humanEvent(req.params.id, parsed.data.stepId, humanEventOf(parsed.data, deps.now())));
+    } catch (err) {
+      return fail(res, err);
+    }
+  });
+
+  app.get("/api/blueprints/runs/:id/spec", async (req, res) => {
+    try {
+      res.json(await deps.executor.specView(req.params.id));
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  // A person's word on the spec while it waits for review; the reply arrives in the spec view.
+  app.post("/api/blueprints/runs/:id/spec/messages", async (req, res) => {
+    const parsed = specMessageSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "expected { message }" });
+    try {
+      return res.json(await deps.executor.say(req.params.id, parsed.data.message));
     } catch (err) {
       return fail(res, err);
     }

@@ -33,6 +33,11 @@ const executor: BlueprintExecutor = {
     throw new BlueprintRefusal("no agent is working on this build");
   },
   list: async () => [],
+  specView: async () => ({ spec: "# spec", openQuestions: null, chat: [], revising: false }),
+  say: async (runId, message) => {
+    calls.push(["say", runId, message]);
+    throw new BlueprintRefusal("the spec can be discussed only while it waits for review");
+  },
   recover: async () => undefined,
 };
 
@@ -116,6 +121,24 @@ describe("POST /api/blueprints/runs", () => {
     ["a directory Claude Code does not trust", { projectDir: path.dirname(tmpdir()), base: "firebase", usecase: "internal", answers: ANSWERS }, 409],
   ])("refuses %s", async (_label, body, status) => {
     expect((await post("/api/blueprints/runs", body)).status).toBe(status);
+  });
+});
+
+describe("the spec conversation routes", () => {
+  it("reads the spec", async () => {
+    const res = await fetch(`${base}/api/blueprints/runs/run-00000001/spec`);
+    expect(await res.json()).toEqual({ spec: "# spec", openQuestions: null, chat: [], revising: false });
+  });
+
+  it("passes a message on, trimmed, and answers a refusal with 409", async () => {
+    calls.length = 0;
+    const res = await post("/api/blueprints/runs/run-00000001/spec/messages", { message: "  本の削除も入れて  " });
+    expect(res.status).toBe(409);
+    expect(calls).toEqual([["say", "run-00000001", "本の削除も入れて"]]);
+  });
+
+  it("refuses an empty message", async () => {
+    expect((await post("/api/blueprints/runs/run-00000001/spec/messages", { message: "   " })).status).toBe(400);
   });
 });
 
