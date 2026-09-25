@@ -8,7 +8,8 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { blueprintManifestSchema, incompatibility, type BaseManifest, type UsecaseManifest } from "../../../common/blueprint/manifest.js";
 import { basePlanSchema, composePlan, usecaseStepsSchema, BLUEPRINT_GATES, type ComposedStep } from "../../../common/blueprint/plan.js";
-import { hearingSchema } from "../../../common/blueprint/hearing.js";
+import { answerProblems, hearingSchema, unansweredQuestions } from "../../../common/blueprint/hearing.js";
+import { presetsFileSchema } from "../../../common/blueprint/presets.js";
 
 const PACKS_DIR = join(import.meta.dirname, "..", "..", "..", "blueprints");
 
@@ -86,7 +87,12 @@ describe.each(pairs.map(({ base, usecase }) => [`${base.dir} x ${usecase.dir}`, 
     expect(scripts.filter((script) => !existsSync(script))).toEqual([]);
   });
 
-  it("stops for billing before anything is built, and publishes to production only after dev", () => {
+  it("writes the spec first, and has a person read it before anything else is built", () => {
+    expect(steps[0]?.id).toBe("spec");
+    expect(steps[1]?.gates).toContain("review");
+  });
+
+  it.runIf(base.dir === "firebase")("stops for billing before anything is built, and publishes to production only after dev", () => {
     const ids = steps.map((step) => step.id);
     const production = steps.findIndex((step) => step.gates.includes("deploy-production"));
     expect(steps.find((step) => step.id === "projects")?.gates).toContain("billing");
@@ -105,6 +111,28 @@ describe.each(pairs.map(({ base, usecase }) => [`${base.dir} x ${usecase.dir}`, 
 
   it("uses only known gates", () => {
     expect(steps.flatMap((step) => step.gates).filter((gate) => !BLUEPRINT_GATES.includes(gate))).toEqual([]);
+  });
+});
+
+// A preset is what someone clicks to watch a build happen; one that the form would refuse, or that
+// names a base its usecase cannot use, is the first thing they try failing.
+const presetCases = usecases.flatMap(({ dir, manifest }) => {
+  const file = join(PACKS_DIR, dir, "presets.json");
+  if (!existsSync(file)) return [];
+  return presetsFileSchema.parse(readJson(dir, "presets.json")).presets.map((preset) => [`${dir}/${preset.id}`, dir, manifest, preset] as const);
+});
+
+describe.each(presetCases)("preset %s", (_label, dir, manifest, preset) => {
+  const hearing = hearingSchema.parse(readJson(dir, "hearing.json"));
+
+  it("is for a base the usecase supports and that exists", () => {
+    expect(manifest.kind === "usecase" && manifest.bases).toContain(preset.base);
+    expect(bases.map((base) => base.dir)).toContain(preset.base);
+  });
+
+  it("answers every question the form would require, with answers it would accept", () => {
+    expect(unansweredQuestions(hearing, preset.answers).map((question) => question.id)).toEqual([]);
+    expect(answerProblems(hearing, preset.answers)).toEqual([]);
   });
 });
 

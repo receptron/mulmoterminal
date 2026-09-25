@@ -2,6 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { basePlanSchema, composePlan, usecaseStepsSchema, type BasePlan, type UsecaseSteps } from "../../../common/blueprint/plan";
 import { isContainedRelativePath } from "../../../common/blueprint/relativePath";
+import { presetsFileSchema } from "../../../common/blueprint/presets";
 import { baseManifestSchema, blueprintManifestSchema, incompatibility, usecaseManifestSchema } from "../../../common/blueprint/manifest";
 
 const step = (id: string, extra: Record<string, unknown> = {}) => ({ id, title: id, skill: `skills/${id}`, check: "true", ...extra });
@@ -132,5 +133,13 @@ describe("isContainedRelativePath", () => {
     [`${"a/".repeat(5000)}!`, false],
   ])("%j -> %s", (value, expected) => {
     expect(isContainedRelativePath(value, SEGMENT)).toBe(expected);
+  });
+});
+
+describe("presetsFileSchema", () => {
+  const preset = (id: string) => ({ id, title: id, base: "local", answers: {} });
+  it("refuses two presets with one id", () => {
+    expect(presetsFileSchema.safeParse({ presets: [preset("a"), preset("a")] }).success).toBe(false);
+    expect(presetsFileSchema.safeParse({ presets: [preset("a"), preset("b")] }).success).toBe(true);
   });
 });
