@@ -21,6 +21,7 @@ import { getSessionIdleReapDays, getQuestionPaneEnabled } from "../config/config
 import { sweepIdleSessions } from "../session/reap-idle-sessions.js";
 import { mountHookRoute } from "../routes/hook-routes.js";
 import { mountPluginRoutes } from "../routes/plugin-routes.js";
+import { mountBlueprints } from "../blueprint/wiring.js";
 import { mountMcpRoutes } from "../routes/mcp-routes.js";
 import { guiCallRecorderFor, historyIsGuiOnly } from "../mcp/gui-call-history.js";
 import type { SessionAgent } from "../../common/sessionAgent.js";
@@ -183,6 +184,8 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     spawnCursorPty: deps.spawnCursorPty,
     registerBackgroundSession: deps.registerBackgroundSession,
   });
+
+  mountBlueprints(app, deps.spawnClaudePty);
 
   // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
   // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName
