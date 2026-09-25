@@ -197,7 +197,8 @@ function commandFor(event: string, host: string, port: string | number): HookCom
   const headers = `-H 'content-type: application/json' -H 'x-mt-agent: copilot' -H 'x-mt-hook: ${event}'`;
   return {
     type: "command",
-    bash: `curl -s -X POST ${url} ${headers} -d @- >/dev/null 2>&1`,
+    // `--noproxy`: curl sends even a loopback URL to an `http_proxy` / `ALL_PROXY` the shell inherited.
+    bash: `curl --noproxy ${host} -s -X POST ${url} ${headers} -d @- >/dev/null 2>&1`,
     // Untested on Windows; written to fail closed-mouthed the way the bash one does. try/catch
     // rather than -ErrorAction because a connection refused is a terminating error here.
     powershell: `$b = $input | Out-String; try { Invoke-WebRequest -Uri '${url}' -Method Post -ContentType 'application/json' -Headers @{'x-mt-agent'='copilot';'x-mt-hook'='${event}'} -Body $b -UseBasicParsing | Out-Null } catch {}`,

@@ -69,7 +69,7 @@ Reach for this when the user asks what their setup looks like, or says a setting
 ### 1. The global config
 
 ```sh
-curl -s "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/config"
+curl --noproxy localhost -s "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/config"
 ```
 
 Falling back to reading `~/.mulmoterminal/config.json` directly is fine, but say which you used.
@@ -79,7 +79,7 @@ Falling back to reading `~/.mulmoterminal/config.json` directly is fine, but say
 Take `cwdPresets` from the global config — the directories the user actually opens — and for each:
 
 ```sh
-curl -sG "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/dir-config-detail" --data-urlencode "cwd=$path"
+curl --noproxy localhost -sG "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/dir-config-detail" --data-urlencode "cwd=$path"
 ```
 
 Let `curl` encode `cwd` (`-G` + `--data-urlencode`). Interpolating the path raw truncates at the

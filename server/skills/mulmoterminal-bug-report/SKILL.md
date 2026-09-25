@@ -43,7 +43,7 @@ next step is judged against, so get them before touching anything else.
 2. Follow its pointers to the **real values**:
    - global config: `~/.mulmoterminal/config.json`
    - directory config: `<the directory in question>/.mulmoterminal.json`
-   - the running server: `curl -s http://localhost:34567/api/config` (34567 is the default port;
+   - the running server: `curl --noproxy localhost -s http://localhost:34567/api/config` (34567 is the default port;
      if the user changed it, it's the port in their browser's address bar). `/api/update-status`,
      `/api/sessions`, `/api/git-status?cwd=<dir>` and `/api/dir-config?cwd=<dir>` answer too.
    - the source files named by the entry, when the question is about accepted values or behaviour
@@ -80,9 +80,9 @@ Only now collect details.
 node -p "require('<install dir>/package.json').version"   # or the version in the web header
 node -v && uname -sm && echo "$SHELL"
 tmux -V; gh --version | head -1; claude --version; codex --version    # each may be absent
-curl -s http://localhost:34567/api/update-status
-curl -s http://localhost:34567/api/sessions      # summarize: cell count, agents, live vs tmux-only
-curl -s "http://localhost:34567/api/git-status?cwd=<dir>"
+curl --noproxy localhost -s http://localhost:34567/api/update-status
+curl --noproxy localhost -s http://localhost:34567/api/sessions      # summarize: cell count, agents, live vs tmux-only
+curl --noproxy localhost -s "http://localhost:34567/api/git-status?cwd=<dir>"
 cat ~/.mulmoterminal/config.json                  # mask before quoting
 cat <dir>/.mulmoterminal.json                     # mask before quoting
 ```

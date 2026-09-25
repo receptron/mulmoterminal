@@ -11,7 +11,7 @@ stop asking in a shape that has already failed here.
 ## Get the digest
 
 ```sh
-curl -s "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/decisions/digest?cwd=$(pwd)"
+curl --noproxy localhost -s "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/decisions/digest?cwd=$(pwd)"
 ```
 
 The reply is JSON:

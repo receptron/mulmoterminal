@@ -81,5 +81,6 @@ export const isProbeReportKey = (value: unknown): value is string => typeof valu
 
 export function statusLineCommand(host: string, port: string | number, probeReportKey?: string): string {
   const query = probeReportKey && isProbeReportKey(probeReportKey) ? `?probe=${probeReportKey}` : "";
-  return `curl -s -X POST http://${host}:${port}/api/rate-limits${query} ` + `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
+  // `--noproxy`: curl sends even a loopback URL to an `http_proxy` / `ALL_PROXY` the pane inherited.
+  return `curl --noproxy ${host} -s -X POST http://${host}:${port}/api/rate-limits${query} ` + `-H 'content-type: application/json' -d @- >/dev/null 2>&1`;
 }

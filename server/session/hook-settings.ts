@@ -33,8 +33,11 @@ export interface HookSettingsInput {
 // from randomUUID() or a SESSION_ID_RE match, so a quote cannot reach here; the assertion is
 // in the tests rather than a runtime check, because a session id that got this far malformed
 // is a bug upstream and not something to paper over.
+//
+// `--noproxy`: curl sends even a loopback URL to an `http_proxy` / `ALL_PROXY` the pane inherited.
 const hookCommand = (host: string, port: string | number, sessionId: string): string =>
-  `curl -s -X POST http://${host}:${port}/api/hook ` + `-H 'content-type: application/json' -H 'x-mt-session: ${sessionId}' -d @- >/dev/null 2>&1`;
+  `curl --noproxy ${host} -s -X POST http://${host}:${port}/api/hook ` +
+  `-H 'content-type: application/json' -H 'x-mt-session: ${sessionId}' -d @- >/dev/null 2>&1`;
 
 export function hookSettingsJson({ host, port, sessionId, env = {} }: HookSettingsInput): string {
   const cmd = hookCommand(host, port, sessionId);
