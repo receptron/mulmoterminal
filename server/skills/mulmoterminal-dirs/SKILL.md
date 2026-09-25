@@ -34,7 +34,7 @@ older entry that still names one is theirs to keep or remove, not this skill's t
 Then, for **each** of those paths:
 
 ```sh
-curl -sG "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/dir-config-detail" --data-urlencode "cwd=$path"
+curl --noproxy localhost -sG "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/dir-config-detail" --data-urlencode "cwd=$path"
 ```
 
 Let `curl` encode `cwd` (`-G` + `--data-urlencode`) rather than interpolating the path into the

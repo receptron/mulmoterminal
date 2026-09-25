@@ -6,6 +6,8 @@
 import { describe, it, expect } from "vitest";
 import { spawn } from "node:child_process";
 import { createServer, type Server } from "node:http";
+import { readdirSync, readFileSync } from "node:fs";
+import path from "node:path";
 import { hookSettingsJson } from "../../../server/session/hook-settings.js";
 import { statusLineCommand } from "../../../server/agents/statusline.js";
 import { copilotHooksJson } from "../../../server/agents/copilot-hooks-file.js";
@@ -75,5 +77,38 @@ describe.skipIf(process.platform === "win32")("a loopback curl ignores an inheri
   it("codex's permission hook", async () => {
     const env = (port: number) => ({ MULMOTERMINAL_PORT: String(port), MULMOTERMINAL_SESSION_ID: SESSION });
     expect(await whereItLands(() => CODEX_PERMISSION_HOOK_COMMAND, env)).toEqual(DIRECT);
+  });
+});
+
+// The bundled skills hand agents curl lines to run against this server. They cannot be executed
+// here (they read a live server), so they are held to the flag by text instead.
+const SKILLS_DIR = path.resolve(__dirname, "../../../server/skills");
+const LOOPBACK_CURL = /\bcurl\b[^\n]*http:\/\/(localhost|127\.0\.0\.1)[:/]/;
+const lacksBypass = (line: string): boolean => LOOPBACK_CURL.test(line) && !/--noproxy\s+(localhost|127\.0\.0\.1)\b/.test(line);
+
+describe("the loopback curl matcher", () => {
+  it("flags a loopback curl without the bypass, and passes one with it", () => {
+    expect(lacksBypass('curl -s "http://localhost:${MULMOTERMINAL_PORT:-34567}/api/config"')).toBe(true);
+    expect(lacksBypass("`curl -s http://127.0.0.1:34567/api/sessions`")).toBe(true);
+    expect(lacksBypass('curl --noproxy localhost -s "http://localhost:34567/api/config"')).toBe(false);
+  });
+
+  it("ignores a curl to anywhere else", () => {
+    expect(lacksBypass("curl -s https://example.com/api/config")).toBe(false);
+    expect(lacksBypass("curl -s http://localhostile.example/api")).toBe(false);
+  });
+});
+
+describe("bundled skills", () => {
+  it("bypass the proxy on every curl back to this server", () => {
+    const offending = readdirSync(SKILLS_DIR, { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".md"))
+      .flatMap((file) =>
+        readFileSync(path.join(SKILLS_DIR, file), "utf8")
+          .split("\n")
+          .filter(lacksBypass)
+          .map((line) => `${file}: ${line.trim()}`),
+      );
+    expect(offending).toEqual([]);
   });
 });
