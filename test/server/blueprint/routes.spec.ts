@@ -119,6 +119,15 @@ describe("POST /api/blueprints/runs", () => {
   });
 });
 
+describe("GET /api/blueprints/presets", () => {
+  it("lists the shipped presets with the usecase each belongs to", async () => {
+    const listing = z
+      .object({ presets: z.array(z.object({ id: z.string(), usecase: z.string(), base: z.string() })) })
+      .parse(await (await fetch(`${base}/api/blueprints/presets`)).json());
+    expect(listing.presets).toContainEqual(expect.objectContaining({ id: "home-library", usecase: "product", base: "local" }));
+  });
+});
+
 describe("GET /api/blueprints/pairs/:base/:usecase", () => {
   it("shows the interview and the composed steps of a real pair", async () => {
     const preview = z

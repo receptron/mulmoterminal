@@ -5,7 +5,7 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import type { Express, Response } from "express";
 import { z } from "zod";
-import { listPacks, loadPackPair, type PackPair, type PackRoot } from "./packs.js";
+import { listPacks, listPresets, loadPackPair, type PackPair, type PackRoot } from "./packs.js";
 import { writeAnswers } from "./answersFile.js";
 import { answerProblems, askedQuestions, hearingAnswersSchema, unansweredQuestions, type HearingAnswers } from "../../common/blueprint/hearing.js";
 import { BlueprintRefusal, type BlueprintExecutor, type HumanEvent } from "./executor.js";
@@ -62,6 +62,10 @@ async function projectDirProblem(projectDir: string): Promise<string | null> {
 function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
   app.get("/api/blueprints/packs", async (_req, res) => {
     res.json({ packs: await listPacks(deps.packRoots) });
+  });
+
+  app.get("/api/blueprints/presets", async (_req, res) => {
+    res.json({ presets: await listPresets(deps.packRoots) });
   });
 
   app.get("/api/blueprints/runs", async (_req, res) => {

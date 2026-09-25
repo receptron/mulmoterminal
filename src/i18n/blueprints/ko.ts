@@ -32,6 +32,9 @@ export const blueprintsKo: Messages["blueprints"] = {
     credential: "이 단계에서는 로그인이 필요합니다.",
   },
   form: {
+    presets: "예시로 시작하기",
+    presetUse: "이 예시로 시작",
+    presetApplied: '"{title}"의 답변을 채웠습니다. 프로젝트 폴더를 입력하고 시작을 누르면 만들어지는 과정을 볼 수 있습니다.',
     title: "새로 만들기",
     projectDir: "프로젝트 폴더",
     projectDirHint: "이미 있는 폴더를 전체 경로로 입력하세요. Claude Code가 이 폴더를 신뢰하고 있어야 합니다.",

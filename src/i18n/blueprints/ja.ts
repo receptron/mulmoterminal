@@ -32,6 +32,9 @@ export const blueprintsJa: Messages["blueprints"] = {
     credential: "この工程ではサインインが必要です。",
   },
   form: {
+    presets: "例から始める",
+    presetUse: "この例で始める",
+    presetApplied: "「{title}」の答えを入れました。フォルダを入れて「始める」を押すと、作られていく様子を見られます。",
     title: "新しく作る",
     projectDir: "プロジェクトのフォルダ",
     projectDirHint: "既にあるフォルダをフルパスで。Claude Code がそのフォルダを信頼済みである必要があります。",

@@ -1,0 +1,68 @@
+{
+  "steps": [
+    {
+      "id": "spec",
+      "title": "仕様書を書く",
+      "description": "ヒアリングの答えから、土台と用途の仕様の雛形を埋める。決まっていない点は一覧にする。",
+      "skill": "skills/spec",
+      "check": "sh \"$BLUEPRINT_BASE/checks/spec.sh\""
+    },
+    {
+      "id": "prerequisites",
+      "title": "道具の確認",
+      "description": "Node（node:sqlite が使える版）と yarn を確かめる。",
+      "skill": "skills/prerequisites",
+      "check": "sh \"$BLUEPRINT_BASE/checks/node-sqlite.sh\"",
+      "gates": ["review"]
+    },
+    {
+      "id": "scaffold",
+      "title": "アプリの雛形",
+      "description": "Express の API、SQLite、Vue の画面、試験の土台を一つのフォルダに作る。",
+      "skill": "skills/scaffold",
+      "check": "sh \"$BLUEPRINT_BASE/checks/scaffold.sh\""
+    },
+    {
+      "id": "data",
+      "title": "データの形",
+      "description": "仕様の「扱うもの」を SQLite の表にし、作り直せるマイグレーションと試験を書く。",
+      "skill": "skills/data",
+      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" data"
+    },
+    {
+      "id": "api",
+      "title": "API",
+      "description": "仕様の操作を API にし、入力を検査し、試験を書く。",
+      "skill": "skills/api",
+      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" api"
+    },
+    {
+      "id": "ui",
+      "title": "画面",
+      "description": "仕様の画面を Vue で作り、API とつなぐ。",
+      "skill": "skills/ui",
+      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" ui"
+    },
+    {
+      "id": "auth",
+      "title": "ログイン",
+      "description": "仕様のログインの方式を入れる（不要なら、このパソコンからしか開けないようにする）。",
+      "skill": "skills/auth",
+      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" auth"
+    },
+    {
+      "id": "run-check",
+      "title": "起動して確かめる",
+      "description": "本番用にビルドして起動し、画面と API が応えることを確かめる。",
+      "skill": "skills/run-check",
+      "check": "sh \"$BLUEPRINT_BASE/checks/smoke.sh\""
+    },
+    {
+      "id": "handover",
+      "title": "使い方の説明とバックアップ",
+      "description": "起動の仕方、データファイルの場所とバックアップの仕方を README に書く。",
+      "skill": "skills/handover",
+      "check": "sh \"$BLUEPRINT_BASE/checks/handover.sh\""
+    }
+  ]
+}

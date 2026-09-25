@@ -92,6 +92,21 @@ describe.skipIf(process.platform === "win32")("runCheck", () => {
     expect(Date.now() - started).toBeLessThan(10_000);
   });
 
+  it("runs checks with colour off, so a number piped between commands stays a number", async () => {
+    process.env.FORCE_COLOR = "3";
+    try {
+      const result = await runCheck({
+        command: 'echo "force=${FORCE_COLOR:-unset} no=${NO_COLOR:-unset}"',
+        cwd: await tempDir(),
+        basePackDir: "/b",
+        usecasePackDir: "/u",
+      });
+      expect(result.output).toContain("force=unset no=1");
+    } finally {
+      delete process.env.FORCE_COLOR;
+    }
+  });
+
   it("fails on a non-zero exit and keeps what the check printed", async () => {
     const result = await runCheck({ command: "echo missing thing >&2; exit 3", cwd: await tempDir(), basePackDir: "/b", usecasePackDir: "/u" });
     expect(result.ok).toBe(false);
