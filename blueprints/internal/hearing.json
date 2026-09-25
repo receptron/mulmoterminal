@@ -1,0 +1,112 @@
+{
+  "questions": [
+    {
+      "id": "appName",
+      "label": "アプリの名前",
+      "why": "画面とプロジェクト名に使う",
+      "kind": "text"
+    },
+    {
+      "id": "appPurpose",
+      "label": "何をするアプリですか（誰が、何を、どうする）",
+      "why": "データの形と画面の数が決まる",
+      "kind": "text"
+    },
+    {
+      "id": "domain",
+      "label": "会社のメールアドレスのドメイン（例: example.co.jp）",
+      "why": "このドメインの人だけがログインできるようにする",
+      "kind": "text"
+    },
+    {
+      "id": "workspace",
+      "label": "会社で Google Workspace を使っていますか",
+      "why": "使っていれば、会社のアカウントでそのままログインできる",
+      "kind": "boolean"
+    },
+    {
+      "id": "external",
+      "label": "社外の人（取引先・業務委託など）も使いますか",
+      "why": "使うなら社内向けの前提が崩れるので、別の設計図を案内する",
+      "kind": "boolean"
+    },
+    {
+      "id": "externalWho",
+      "label": "どんな社外の人が、何をしますか",
+      "why": "別の設計図を選ぶ材料にする",
+      "kind": "text",
+      "showIf": {
+        "id": "external",
+        "equals": true
+      }
+    },
+    {
+      "id": "users",
+      "label": "使う人はおよそ何人ですか",
+      "why": "費用の見積もりと予算アラートの目安",
+      "kind": "number"
+    },
+    {
+      "id": "roles",
+      "label": "役割の種類（当てはまるものすべて）",
+      "why": "誰が何をできるかの規則になる",
+      "kind": "multiselect",
+      "options": ["一般", "承認者", "管理者", "閲覧のみ"]
+    },
+    {
+      "id": "dataSensitivity",
+      "label": "扱う情報でいちばん機密性が高いもの",
+      "why": "監査ログ・保持期間・置き場所の厳しさが決まる",
+      "kind": "select",
+      "options": ["公開してよい情報のみ", "社内限りの情報", "個人情報を含む", "人事・給与・顧客の機密情報"]
+    },
+    {
+      "id": "region",
+      "label": "データを置く場所",
+      "why": "作成後は変更できない",
+      "kind": "select",
+      "options": ["asia-northeast1（東京）", "asia-northeast2（大阪）", "us-central1（米国）", "europe-west1（ベルギー）"]
+    },
+    {
+      "id": "offboarding",
+      "label": "退職・異動したら、その日のうちに使えなくする必要がありますか",
+      "why": "必要なら、ログイン中の人も強制的に締め出す仕組みを入れる",
+      "kind": "boolean"
+    },
+    {
+      "id": "existingProject",
+      "label": "すでに Firebase / Google Cloud のプロジェクトがありますか",
+      "why": "新しく作るか、今あるものを使うか",
+      "kind": "boolean"
+    },
+    {
+      "id": "existingProjectId",
+      "label": "そのプロジェクト ID",
+      "why": "本番用として使う",
+      "kind": "text",
+      "showIf": {
+        "id": "existingProject",
+        "equals": true
+      }
+    },
+    {
+      "id": "billingAccount",
+      "label": "Google Cloud の請求先アカウント（会社のカード等）はありますか",
+      "why": "Firebase の従量課金プランに必要",
+      "kind": "boolean"
+    },
+    {
+      "id": "budget",
+      "label": "月の予算の上限（円）",
+      "why": "この金額に近づいたら通知する",
+      "kind": "number"
+    },
+    {
+      "id": "mainScreens",
+      "label": "主な画面（分かる範囲で）",
+      "why": "最初に作る画面を決める",
+      "kind": "text",
+      "required": false
+    }
+  ]
+}

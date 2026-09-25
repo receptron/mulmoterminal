@@ -1,0 +1,38 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // {{DOMAIN_REGEX}} is the company domain in lower case with its dots escaped, e.g. example\\.co\\.jp
+    function isMember() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower().matches('^[^@]+@{{DOMAIN_REGEX}}$')
+        && notRevoked();
+    }
+
+    // A leaver's tokens stay valid until they expire; this refuses any issued before the revocation.
+    function notRevoked() {
+      let revocation = /databases/$(database)/documents/revocations/$(request.auth.uid);
+      return !exists(revocation) || request.auth.token.auth_time > get(revocation).data.revokedAtSec;
+    }
+
+    function hasRole(role) {
+      return isMember() && request.auth.token.get('roles', []).hasAny([role]);
+    }
+
+    // Written only by Cloud Functions: the Admin SDK does not go through these rules.
+    match /auditLogs/{entry} {
+      allow read: if hasRole('admin');
+      allow write: if false;
+    }
+
+    match /revocations/{uid} {
+      allow read, write: if false;
+    }
+
+    // App collections are opened here, one match block each, from the spec's table.
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

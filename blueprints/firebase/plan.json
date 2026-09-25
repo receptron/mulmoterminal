@@ -1,0 +1,64 @@
+{
+  "steps": [
+    {
+      "id": "prerequisites",
+      "title": "Tools and sign-in",
+      "description": "Install the CLIs and sign in to Firebase and Google Cloud.",
+      "skill": "skills/prerequisites",
+      "check": "sh \"$BLUEPRINT_BASE/checks/prerequisites.sh\"",
+      "gates": ["credential"]
+    },
+    {
+      "id": "projects",
+      "title": "Dev and production projects",
+      "description": "Create or pick two Firebase projects and put them on the Blaze plan.",
+      "skill": "skills/projects",
+      "check": "sh \"$BLUEPRINT_BASE/checks/projects.sh\"",
+      "gates": ["billing"]
+    },
+    {
+      "id": "scaffold",
+      "title": "App skeleton",
+      "description": "Web app, Cloud Functions workspace, emulator config and the rules test harness.",
+      "skill": "skills/scaffold",
+      "check": "sh \"$BLUEPRINT_BASE/checks/scaffold.sh\""
+    },
+    {
+      "id": "auth",
+      "title": "Sign-in",
+      "description": "Google sign-in in the app, proven against the Auth emulator.",
+      "skill": "skills/auth",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" auth"
+    },
+    {
+      "id": "data-rules",
+      "title": "Data model and security rules",
+      "description": "Collections from the spec, each opened explicitly in firestore.rules; everything else denied.",
+      "skill": "skills/data-rules",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" rules"
+    },
+    {
+      "id": "deploy-dev",
+      "title": "Publish to dev",
+      "description": "Deploy rules, functions and hosting to the dev project.",
+      "skill": "skills/deploy-dev",
+      "check": "sh \"$BLUEPRINT_BASE/checks/deploy-check.sh\" dev"
+    },
+    {
+      "id": "protect",
+      "title": "App Check and budget alert",
+      "description": "Turn on App Check and put a budget alert on the production project.",
+      "skill": "skills/protect",
+      "check": "sh \"$BLUEPRINT_BASE/checks/protect.sh\"",
+      "gates": ["billing"]
+    },
+    {
+      "id": "deploy-production",
+      "title": "Publish to production",
+      "description": "Deploy the same build to the production project.",
+      "skill": "skills/deploy-production",
+      "check": "sh \"$BLUEPRINT_BASE/checks/deploy-check.sh\" prod",
+      "gates": ["deploy-production"]
+    }
+  ]
+}

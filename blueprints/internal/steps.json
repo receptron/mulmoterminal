@@ -1,0 +1,53 @@
+{
+  "steps": [
+    {
+      "id": "domain-restriction",
+      "insertAfter": "auth",
+      "title": "会社のドメインだけに限る",
+      "description": "Blocking functions refuse other domains at sign-in; the rules check the domain again.",
+      "skill": "skills/domain-restriction",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" domain"
+    },
+    {
+      "id": "roles",
+      "insertAfter": "data-rules",
+      "title": "役割と権限",
+      "description": "Roles live in custom claims, granted only by an admin-only function.",
+      "skill": "skills/roles",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" roles"
+    },
+    {
+      "id": "offboarding",
+      "insertAfter": "data-rules",
+      "title": "退職・異動時の締め出し",
+      "description": "Revoke refresh tokens, drop claims, and make the rules refuse tokens issued before the revocation.",
+      "skill": "skills/offboarding",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" offboarding"
+    },
+    {
+      "id": "audit-log",
+      "insertAfter": "data-rules",
+      "title": "監査ログ",
+      "description": "Privileged actions are logged by functions into a collection clients cannot write.",
+      "skill": "skills/audit-log",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" audit"
+    },
+    {
+      "id": "verify-dev",
+      "insertAfter": "deploy-dev",
+      "title": "dev でドメイン制限が効いているか",
+      "description": "The blocking functions are registered on the dev project, not only deployed.",
+      "skill": "skills/verify-dev",
+      "check": "sh \"$BLUEPRINT_USECASE/checks/blocking-registered.sh\" dev"
+    },
+    {
+      "id": "production-auth",
+      "insertAfter": "protect",
+      "title": "本番のログイン制限を先に有効にする",
+      "description": "Deploy functions and rules to production and register the blocking functions before the site itself is published.",
+      "skill": "skills/production-auth",
+      "check": "sh \"$BLUEPRINT_USECASE/checks/blocking-registered.sh\" prod",
+      "gates": ["deploy-production"]
+    }
+  ]
+}
