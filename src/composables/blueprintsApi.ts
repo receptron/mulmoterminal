@@ -7,6 +7,7 @@ import { blueprintManifestSchema } from "../../common/blueprint/manifest";
 import { hearingSchema, type HearingAnswers } from "../../common/blueprint/hearing";
 import { planStepSchema } from "../../common/blueprint/plan";
 import { blueprintRunSummarySchema, blueprintRunViewSchema, type BlueprintRunView } from "../../common/blueprint/run";
+import { catalogSchema, installRecordSchema, type Catalog, type InstallRecord } from "../../common/blueprint/registry";
 
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -19,9 +20,9 @@ export type PackList = z.infer<typeof packsSchema>["packs"];
 export type PairPreview = z.infer<typeof pairSchema>;
 export type RunList = z.infer<typeof runsSchema>["runs"];
 
-async function call<T>(schema: z.ZodType<T>, url: string, init?: RequestInit): Promise<ApiResult<T>> {
+async function call<T>(schema: z.ZodType<T>, url: string, init?: RequestInit, timeout_ms?: number): Promise<ApiResult<T>> {
   try {
-    const res = await fetchWithTimeout(url, init);
+    const res = await fetchWithTimeout(url, init, timeout_ms);
     const body = await jsonBody(res);
     if (!res.ok) return { ok: false, error: typeof body.error === "string" ? body.error : `HTTP ${res.status} from ${url}` };
     const parsed = schema.safeParse(body);
@@ -50,3 +51,21 @@ export type PersonEvent = { type: "approve" } | { type: "reject"; reason: string
 
 export const sendEvent = (runId: string, stepId: string, event: PersonEvent): Promise<ApiResult<BlueprintRunView>> =>
   call(blueprintRunViewSchema, `/api/blueprints/runs/${encodeURIComponent(runId)}/events`, postJson({ ...event, stepId }));
+
+const urlsSchema = z.object({ urls: z.array(z.string()) });
+
+export const loadCatalog = (): Promise<ApiResult<Catalog>> => call(catalogSchema, "/api/blueprints/market/catalog");
+
+export const loadRegistryUrls = (): Promise<ApiResult<{ urls: string[] }>> => call(urlsSchema, "/api/blueprints/market/registries");
+
+export const saveRegistryUrls = (urls: readonly string[]): Promise<ApiResult<{ urls: string[] }>> =>
+  call(urlsSchema, "/api/blueprints/market/registries", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ urls }) });
+
+// A clone over the network can take far longer than an ordinary request.
+const INSTALL_TIMEOUT_MS = 180_000;
+
+export const installPack = (registryUrl: string, slug: string): Promise<ApiResult<{ installed: InstallRecord }>> =>
+  call(z.object({ installed: installRecordSchema }), "/api/blueprints/market/install", postJson({ registryUrl, slug }), INSTALL_TIMEOUT_MS);
+
+export const uninstallPack = (slug: string): Promise<ApiResult<{ ok: boolean }>> =>
+  call(z.object({ ok: z.boolean() }), "/api/blueprints/market/uninstall", postJson({ slug }));

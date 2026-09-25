@@ -4,18 +4,21 @@
 // only things the build ever stops for.
 import { onUnmounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { useBlueprintsView, blueprintsViewSelect } from "../../composables/useBlueprintsView";
+import { useBlueprintsView, blueprintsViewMarket, blueprintsViewSelect } from "../../composables/useBlueprintsView";
 import { useEscapeToClose } from "../../composables/useEscapeToClose";
 import { listRuns, type RunList } from "../../composables/blueprintsApi";
 import { waitKey } from "./blueprintView";
 import BlueprintNewBuild from "./BlueprintNewBuild.vue";
 import BlueprintRunView from "./BlueprintRunView.vue";
+import BlueprintMarket from "./BlueprintMarket.vue";
 
 // The list only has to notice a build changing hands between the agent and the person.
 const LIST_POLL_MS = 3000;
 
 const { t } = useI18n();
-const { isOpen, runId, close } = useBlueprintsView();
+const { isOpen, runId, inMarket, close } = useBlueprintsView();
+// Bumped when the market installs or removes a pack, so the new-build form reads the packs again.
+const packsVersion = ref(0);
 useEscapeToClose(isOpen, close);
 
 const runs = ref<RunList>([]);
@@ -74,11 +77,21 @@ const folderName = (dir: string): string => dir.split(/[\\/]/).filter(Boolean).a
           type="button"
           data-testid="blueprint-new"
           class="mb-1 flex cursor-pointer items-center gap-1.5 rounded-[4px] border-none px-2 py-1.5 text-left font-sans text-[12px] hover:bg-hover hover:text-fg"
-          :class="runId === null ? 'bg-hover text-fg' : 'bg-transparent text-secondary'"
+          :class="runId === null && !inMarket ? 'bg-hover text-fg' : 'bg-transparent text-secondary'"
           @click="blueprintsViewSelect(null)"
         >
           <span class="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
           {{ t("blueprints.newBuild") }}
+        </button>
+        <button
+          type="button"
+          data-testid="blueprint-market-nav"
+          class="mb-1 flex cursor-pointer items-center gap-1.5 rounded-[4px] border-none px-2 py-1.5 text-left font-sans text-[12px] hover:bg-hover hover:text-fg"
+          :class="inMarket ? 'bg-hover text-fg' : 'bg-transparent text-secondary'"
+          @click="blueprintsViewMarket()"
+        >
+          <span class="material-symbols-outlined text-[16px]" aria-hidden="true">storefront</span>
+          {{ t("blueprints.market.nav") }}
         </button>
         <p v-if="!runs.length" class="m-0 px-2 py-2 font-sans text-[12px] text-dim">{{ t("blueprints.noBuilds") }}</p>
         <button
@@ -99,8 +112,9 @@ const folderName = (dir: string): string => dir.split(/[\\/]/).filter(Boolean).a
       </nav>
 
       <section class="min-w-0 flex-1 overflow-y-auto">
-        <BlueprintRunView v-if="runId" :key="runId" :run-id="runId" />
-        <BlueprintNewBuild v-else @started="onStarted" />
+        <BlueprintMarket v-if="inMarket" @changed="packsVersion++" />
+        <BlueprintRunView v-else-if="runId" :key="runId" :run-id="runId" />
+        <BlueprintNewBuild v-else :key="packsVersion" @started="onStarted" />
       </section>
     </div>
   </div>

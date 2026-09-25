@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { basePlanSchema, composePlan, usecaseStepsSchema, type BasePlan, type UsecaseSteps } from "../../../common/blueprint/plan";
+import { isContainedRelativePath } from "../../../common/blueprint/relativePath";
 import { baseManifestSchema, blueprintManifestSchema, incompatibility, usecaseManifestSchema } from "../../../common/blueprint/manifest";
 
 const step = (id: string, extra: Record<string, unknown> = {}) => ({ id, title: id, skill: `skills/${id}`, check: "true", ...extra });
@@ -104,5 +105,32 @@ describe("manifests", () => {
     ["null", null],
   ])("rejects %s", (_label, input) => {
     expect(blueprintManifestSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe("step skill paths", () => {
+  it.each(["../outside", "/etc/passwd", "skills/../../x", "skills//x", ""])("refuses %j", (skill) => {
+    expect(basePlanSchema.safeParse({ steps: [step("init", { skill })] }).success).toBe(false);
+  });
+
+  it.each(["skills/init", "skills/deep/nested-step_2"])("accepts %j", (skill) => {
+    expect(basePlanSchema.safeParse({ steps: [step("init", { skill })] }).success).toBe(true);
+  });
+});
+
+describe("isContainedRelativePath", () => {
+  const SEGMENT = /^[a-z0-9][a-z0-9_-]*$/;
+  it.each([
+    ["a/b", true],
+    ["a", true],
+    ["", false],
+    ["a/../b", false],
+    ["./a", false],
+    ["a//b", false],
+    ["/a", false],
+    ["a/", false],
+    [`${"a/".repeat(5000)}!`, false],
+  ])("%j -> %s", (value, expected) => {
+    expect(isContainedRelativePath(value, SEGMENT)).toBe(expected);
   });
 });

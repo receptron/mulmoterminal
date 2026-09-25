@@ -59,7 +59,7 @@ let base = "";
 beforeAll(async () => {
   const app = express();
   app.use(express.json());
-  mountBlueprintRoutes(app, { executor, packsRoot: PACKS_ROOT, now: () => 42, isTrusted: async (dir) => trusted.has(dir) });
+  mountBlueprintRoutes(app, { executor, packRoots: [{ dir: PACKS_ROOT, source: "builtin" }], now: () => 42, isTrusted: async (dir) => trusted.has(dir) });
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   const address = server.address();
