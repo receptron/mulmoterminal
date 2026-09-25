@@ -1,0 +1,71 @@
+{
+  "steps": [
+    {
+      "id": "spec",
+      "title": "仕様書を書く",
+      "description": "ヒアリングの答えから、土台と用途の仕様の雛形を埋める。決まっていない点は一覧にする。",
+      "skill": "skills/spec",
+      "check": "sh \"$BLUEPRINT_BASE/checks/spec.sh\""
+    },
+    {
+      "id": "prerequisites",
+      "title": "道具とサインイン",
+      "description": "CLI を入れ、Firebase と Google Cloud にサインインする。",
+      "skill": "skills/prerequisites",
+      "check": "sh \"$BLUEPRINT_BASE/checks/prerequisites.sh\"",
+      "gates": ["review", "credential"]
+    },
+    {
+      "id": "projects",
+      "title": "開発用と本番用のプロジェクト",
+      "description": "Firebase のプロジェクトを二つ用意し、従量課金（Blaze）プランにする。",
+      "skill": "skills/projects",
+      "check": "sh \"$BLUEPRINT_BASE/checks/projects.sh\"",
+      "gates": ["billing"]
+    },
+    {
+      "id": "scaffold",
+      "title": "アプリの雛形",
+      "description": "画面、Cloud Functions、エミュレータの設定、ルールの試験の土台を作る。",
+      "skill": "skills/scaffold",
+      "check": "sh \"$BLUEPRINT_BASE/checks/scaffold.sh\""
+    },
+    {
+      "id": "auth",
+      "title": "ログイン",
+      "description": "Google でのログインを入れ、Auth エミュレータで確かめる。",
+      "skill": "skills/auth",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" auth"
+    },
+    {
+      "id": "data-rules",
+      "title": "データの形とセキュリティルール",
+      "description": "仕様のコレクションを作り、firestore.rules で一つずつ開ける。それ以外はすべて拒否する。",
+      "skill": "skills/data-rules",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" rules"
+    },
+    {
+      "id": "deploy-dev",
+      "title": "開発用に公開",
+      "description": "ルール・関数・画面を開発用のプロジェクトに公開する。",
+      "skill": "skills/deploy-dev",
+      "check": "sh \"$BLUEPRINT_BASE/checks/deploy-check.sh\" dev"
+    },
+    {
+      "id": "protect",
+      "title": "App Check と予算アラート",
+      "description": "App Check を有効にし、本番のプロジェクトに予算アラートを設定する。",
+      "skill": "skills/protect",
+      "check": "sh \"$BLUEPRINT_BASE/checks/protect.sh\"",
+      "gates": ["billing"]
+    },
+    {
+      "id": "deploy-production",
+      "title": "本番に公開",
+      "description": "開発用で確かめたものと同じビルドを本番に公開する。",
+      "skill": "skills/deploy-production",
+      "check": "sh \"$BLUEPRINT_BASE/checks/deploy-check.sh\" prod",
+      "gates": ["deploy-production"]
+    }
+  ]
+}

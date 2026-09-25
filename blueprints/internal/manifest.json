@@ -1,0 +1,8 @@
+{
+  "kind": "usecase",
+  "slug": "internal",
+  "title": "社内向け業務アプリ",
+  "version": "0.1.0",
+  "description": "Only people with the company's email domain can sign in; roles decide what each can do; leavers lose access at once; every privileged action is logged.",
+  "bases": ["firebase"]
+}

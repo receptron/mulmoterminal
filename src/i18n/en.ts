@@ -11,6 +11,7 @@
 // `groups.*` and `tabs.*` are keyed by the ids in components/settings/settingsTabs.ts, which is why
 // that table holds no words. A spec pins that every id there has a message here and in every other
 // locale.
+import { blueprintsEn } from "./blueprints/en";
 export const en = {
   settings: {
     title: "Settings",
@@ -568,4 +569,5 @@ export const en = {
       exit: "Back to input",
     },
   },
+  blueprints: blueprintsEn,
 } as const;

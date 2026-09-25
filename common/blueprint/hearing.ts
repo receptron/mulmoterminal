@@ -22,8 +22,10 @@ export const hearingSchema = z.object({ questions: z.array(questionSchema).min(1
 
 export type HearingQuestion = z.infer<typeof questionSchema>;
 export type Hearing = z.infer<typeof hearingSchema>;
-export type HearingAnswer = string | number | boolean | string[];
-export type HearingAnswers = Record<string, HearingAnswer>;
+export const hearingAnswersSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.array(z.string())]));
+
+export type HearingAnswers = z.infer<typeof hearingAnswersSchema>;
+export type HearingAnswer = HearingAnswers[string];
 
 const needsOptions = (question: HearingQuestion): boolean => question.kind === "select" || question.kind === "multiselect";
 
@@ -67,3 +69,30 @@ export function askedQuestions(hearing: Hearing, answers: HearingAnswers): Heari
  *  A spec the user already supplied fills `answers` first, so only its gaps are asked. */
 export const unansweredQuestions = (hearing: Hearing, answers: HearingAnswers): HearingQuestion[] =>
   askedQuestions(hearing, answers).filter((question) => question.required && isBlank(answers[question.id]));
+
+type KindCheck = { accepts: (answer: HearingAnswer, options: readonly string[]) => boolean; problem: string };
+
+const KIND_CHECKS: Record<(typeof HEARING_KINDS)[number], KindCheck> = {
+  boolean: { accepts: (answer) => typeof answer === "boolean", problem: "expects yes or no" },
+  number: { accepts: (answer) => typeof answer === "number" && Number.isFinite(answer), problem: "expects a number" },
+  text: { accepts: (answer) => typeof answer === "string", problem: "expects text" },
+  select: { accepts: (answer, options) => typeof answer === "string" && options.includes(answer), problem: "expects one of its options" },
+  multiselect: {
+    accepts: (answer, options) => Array.isArray(answer) && answer.every((choice) => options.includes(choice)),
+    problem: "expects some of its options",
+  },
+};
+
+function kindProblem(question: HearingQuestion, answer: HearingAnswer): string | null {
+  const check = KIND_CHECKS[question.kind];
+  return check.accepts(answer, question.options ?? []) ? null : check.problem;
+}
+
+/** Answers of the wrong kind, or choices a question does not offer — each as "id: why". */
+export function answerProblems(hearing: Hearing, answers: HearingAnswers): string[] {
+  return askedQuestions(hearing, answers).flatMap((question) => {
+    const answer = answers[question.id];
+    const problem = answer === undefined ? null : kindProblem(question, answer);
+    return problem ? [`${question.id}: ${problem}`] : [];
+  });
+}

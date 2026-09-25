@@ -33,6 +33,10 @@ export const routes: RouteRecordRaw[] = [
   // conversation can be linked to and reloaded.
   { path: "/rooms", name: "rooms", component: Stub },
   { path: "/rooms/:room", name: "roomView", component: Stub },
+  // Blueprint builds (#2246): the list and a new-build form, or one build. The open build is the URL
+  // so a build waiting on its owner can be linked to and reloaded.
+  { path: "/blueprints", name: "blueprints", component: Stub },
+  { path: "/blueprints/:run", name: "blueprintRun", component: Stub },
   // Full-screen file explorer + editor, rooted at a project dir (?cwd=). Opened from a
   // terminal header's Files button.
   { path: "/files", name: "files", component: Stub },

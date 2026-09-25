@@ -2,9 +2,11 @@
 // `applyEvent`, which is the one place the rules live: a gated step cannot run unapproved, a step
 // cannot start before the one ahead of it passed, and only a check passes one.
 //
-// These rules hold only if the agent cannot write the state itself: a hand-set `approved: true`
-// is indistinguishable from a real approval here. So the state file lives where the server owns
-// it, not in the project the agent works in, and the agent may only send AGENT_EVENT_TYPES.
+// These rules bind the EXECUTOR — it will not move past a gate on its own — and are not a sandbox
+// around the agent, which acts as the same user and could call any local route or run any CLI
+// itself. What they do rule out is the executor being talked past a gate by the project: the state
+// file lives where the server keeps it, not in the directory the agent is working in, and the
+// route meant for the agent accepts only AGENT_EVENT_TYPES.
 import { z } from "zod";
 import type { PlanStep } from "./plan.js";
 
@@ -137,7 +139,8 @@ export function stateProblems(steps: readonly PlanStep[], state: BlueprintState)
 export const currentStep = (steps: readonly PlanStep[], state: BlueprintState): PlanStep | null =>
   steps.find((step) => state.steps[step.id]?.status !== "passed") ?? null;
 
-export type WaitKind = "approval" | "answer" | "failure";
+export const WAIT_KINDS = ["approval", "answer", "failure"] as const;
+export type WaitKind = (typeof WAIT_KINDS)[number];
 
 const WAIT_KIND_BY_STATUS: Partial<Record<StepStatus, WaitKind>> = {
   "awaiting-approval": "approval",
