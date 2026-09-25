@@ -1,0 +1,6 @@
+{
+  "questions": [
+    { "id": "appName", "label": "アプリの名前", "why": "あいさつのページに出す", "kind": "text" },
+    { "id": "greeting", "label": "あいさつの文", "why": "ページにそのまま出す", "kind": "text" }
+  ]
+}

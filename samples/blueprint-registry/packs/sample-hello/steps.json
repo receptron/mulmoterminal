@@ -1,0 +1,12 @@
+{
+  "steps": [
+    {
+      "id": "hello-page",
+      "insertAfter": "auth",
+      "title": "あいさつのページ",
+      "description": "Add a page that shows the greeting from the interview.",
+      "skill": "skills/hello",
+      "check": "test -s public/hello.html || test -s src/pages/Hello.vue"
+    }
+  ]
+}

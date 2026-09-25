@@ -28,8 +28,9 @@ export const CONTENT_ROUTES = new Set([
 ]);
 
 // Rooms sit with PRs rather than with the content: a room is the record of what the terminals in
-// the grid said to each other, not something the workspace holds independently of them.
-const OVERLAY_ROUTES = new Set([...CONTENT_ROUTES, "github", "rooms", "roomView"]);
+// the grid said to each other, not something the workspace holds independently of them. Blueprint
+// builds sit there too: each step runs as a terminal in the grid, and the build is their record.
+const OVERLAY_ROUTES = new Set([...CONTENT_ROUTES, "github", "rooms", "roomView", "blueprints", "blueprintRun", "blueprintMarket"]);
 
 /** The route an open overlay should return to. */
 export function overlayReturnPath(): string {

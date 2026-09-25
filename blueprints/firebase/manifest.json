@@ -1,0 +1,39 @@
+{
+  "kind": "base",
+  "slug": "firebase",
+  "title": "Firebase",
+  "version": "0.1.0",
+  "description": "Firebase Hosting + Authentication + Firestore + Cloud Functions, with separate dev and production projects.",
+  "platform": "firebase",
+  "requires": [
+    {
+      "command": "node",
+      "probe": "node --version",
+      "installHint": "https://nodejs.org/"
+    },
+    {
+      "command": "yarn",
+      "probe": "yarn --version",
+      "installHint": "corepack enable"
+    },
+    {
+      "command": "firebase",
+      "probe": "firebase --version",
+      "installHint": "yarn global add firebase-tools"
+    },
+    {
+      "command": "gcloud",
+      "probe": "gcloud --version",
+      "installHint": "https://cloud.google.com/sdk/docs/install"
+    },
+    {
+      "command": "java",
+      "probe": "sh \"$BLUEPRINT_BASE/checks/java21.sh\"",
+      "installHint": "The Firebase emulators need JDK 21 or later (macOS: brew install openjdk@21)."
+    }
+  ],
+  "credentials": [
+    "firebase login",
+    "gcloud auth login"
+  ]
+}

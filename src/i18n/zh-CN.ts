@@ -1,4 +1,5 @@
 import type { Messages } from "./messages";
+import { blueprintsZhCN } from "./blueprints/zh-CN";
 
 // 简体中文。`Messages` 就是 en.ts 的形状，少一个键就会编译失败 —— 不会出现运行时悄悄回退到
 // 英文、而谁都没发现的状态。
@@ -536,4 +537,5 @@ export const zhCN: Messages = {
       exit: "返回输入",
     },
   },
+  blueprints: blueprintsZhCN,
 };

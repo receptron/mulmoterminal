@@ -1,4 +1,5 @@
 import type { Messages } from "./messages";
+import { blueprintsJa } from "./blueprints/ja";
 
 // 日本語。`Messages` は en.ts の形そのものなので、キーを一つ落とすと型エラーになる — 実行時に
 // 英語へフォールバックして気づかない、という状態にはならない。
@@ -552,4 +553,5 @@ export const ja: Messages = {
       exit: "入力に戻る",
     },
   },
+  blueprints: blueprintsJa,
 };
