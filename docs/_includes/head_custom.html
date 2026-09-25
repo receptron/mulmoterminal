@@ -33,3 +33,48 @@ just-the-docs が head の末尾に差し込む場所。jekyll-seo-tag は WebSi
 <link rel="alternate" hreflang="ja" href="{{ '/guide/ja/' | absolute_url }}" />
 <link rel="alternate" hreflang="en" href="{{ '/guide/en/' | absolute_url }}" />
 {%- endif -%}
+
+{%- comment -%}
+FAQ ページだけ、見出しから FAQPage を組み立てる。手で書き写すと、質問を足したときに
+黙って古くなる。`###` が質問、その下が答えという構造はページ自身が持っているので、
+そこから作れば二重管理にならない。
+
+疑問符で終わる見出しだけを拾う。この節には見出しでない `###` は今のところ無いが、
+増えたときに黙って混ざるほうが困る。半角と全角の両方を見る -- 日本語版は 24 問すべてが
+全角の `？` で、半角だけを見ていたときは日本語がまるごと落ちた。ビルドは通ったままで。
+{%- endcomment -%}
+{%- if page.url contains "/faq" -%}
+{%- assign chunks = page.content | split: "
+### " -%}
+{%- assign pairs = "" | split: "" -%}
+{%- for chunk in chunks offset: 1 -%}
+  {%- assign lines = chunk | split: "
+" -%}
+  {%- assign question = lines[0] | strip -%}
+  {%- if question contains "?" or question contains "？" -%}
+    {%- assign pairs = pairs | push: chunk -%}
+  {%- endif -%}
+{%- endfor -%}
+{%- if pairs.size > 0 -%}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+{%- for chunk in pairs -%}
+  {%- assign lines = chunk | split: "
+" -%}
+  {%- assign question = lines[0] | strip -%}
+  {%- assign body = chunk | remove_first: lines[0] -%}
+  {%- assign answer = body | markdownify | strip_html | normalize_whitespace | strip -%}
+    {
+      "@type": "Question",
+      "name": {{ question | jsonify }},
+      "acceptedAnswer": { "@type": "Answer", "text": {{ answer | jsonify }} }
+    }{%- unless forloop.last -%},{%- endunless -%}
+{%- endfor %}
+  ]
+}
+</script>
+{%- endif -%}
+{%- endif -%}
