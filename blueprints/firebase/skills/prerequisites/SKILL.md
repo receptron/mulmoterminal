@@ -8,12 +8,17 @@ description: "Check and install the tools a Firebase blueprint needs, and get th
 The user is not an engineer. Explain each thing you install in one plain sentence.
 
 1. For every entry in `requires` of the base manifest, run its `probe`. Install what is missing using its `installHint`.
-2. Sign-in is the **credential** gate: the executor has already asked the user to approve it. Run `firebase login` and
+   The emulators need **JDK 21 or later**; an older `java` on PATH does not count. On macOS
+   `brew install openjdk@21` is enough — the checks find it without changing the user's default `java`.
+2. Firebase and gcloud must be signed in to the **same** account: the checks use both. If they differ, ask
+   which account to use.
+3. Sign-in is the **credential** gate: the executor has already asked the user to approve it. Run `firebase login` and
    `gcloud auth login` in the terminal and tell the user a browser window will open. Never ask the user to paste a
    password, token or key into the chat.
-3. Never create or download a service-account key. Nothing in this blueprint needs one on this machine.
+4. Never create or download a service-account key. Nothing in this blueprint needs one on this machine.
 
-Done when the check passes: every probe succeeds and both CLIs report a signed-in account.
+Done when the check passes: every tool answers, a JDK 21+ is found, and Firebase and gcloud are signed in to
+the same account with a live session.
 
 ## Always
 

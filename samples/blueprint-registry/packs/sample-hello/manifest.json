@@ -1,0 +1,8 @@
+{
+  "kind": "usecase",
+  "slug": "sample-hello",
+  "title": "サンプル: あいさつページを足す",
+  "version": "0.1.0",
+  "description": "A dummy pack for trying the market: adds one step that puts a greeting page into the app.",
+  "bases": ["firebase"]
+}

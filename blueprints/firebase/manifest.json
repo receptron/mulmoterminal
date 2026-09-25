@@ -28,9 +28,12 @@
     },
     {
       "command": "java",
-      "probe": "java -version",
-      "installHint": "The Firestore emulator needs a JDK (11 or later)."
+      "probe": "sh \"$BLUEPRINT_BASE/checks/java21.sh\"",
+      "installHint": "The Firebase emulators need JDK 21 or later (macOS: brew install openjdk@21)."
     }
   ],
-  "credentials": ["firebase login", "gcloud auth login"]
+  "credentials": [
+    "firebase login",
+    "gcloud auth login"
+  ]
 }
