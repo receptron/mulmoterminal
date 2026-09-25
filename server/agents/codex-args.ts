@@ -1,3 +1,5 @@
+import { codexPermissionHookOverride } from "./codex-hook.js";
+
 // Builds the argv for spawning codex as a first-class session. codex mints its own session id
 // (there is no `--session-id` like claude has), so a fresh session passes no id — the id is read
 // back from the rollout file afterwards — while resume replays a known rollout id via the
@@ -29,6 +31,8 @@ export interface CodexArgsInput {
   // contain `${VAR}` and is expanded at connect time. codex has no such expansion, so these
   // arrive already resolved — the port and session id are known by the time we spawn.
   guiMcpServers: readonly GuiMcpServer[];
+  // Register the PermissionRequest hook that reports an approval dialog (see codex-hook.ts).
+  permissionHook: boolean;
 }
 
 // NOTE: a seed prompt is NOT passed here as a positional [PROMPT] — a long collection-action prompt
@@ -54,6 +58,7 @@ export function buildCodexArgs(input: CodexArgsInput): string[] {
     args.push("-c", `mcp_servers.${server.id}.url="${server.url}"`);
     if (server.autoApprove) args.push("-c", `mcp_servers.${server.id}.default_tools_approval_mode="approve"`);
   }
+  if (input.permissionHook) args.push("-c", codexPermissionHookOverride());
   if (input.resume) args.push("resume", input.resume);
   return args;
 }

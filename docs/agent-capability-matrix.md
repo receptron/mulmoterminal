@@ -36,7 +36,7 @@ keeps separate.)
 | **1a — unattended** | a cell that does not silently hang on the agent's own approval prompt | an approval-free mode to pass: claude `--permission-mode`, agy `--dangerously-skip-permissions`, grok `--permission-mode auto`, muse `--yolo`. Codex is passed none | 19 |
 | **2 — identity** | resume after a reload, a survivable session, the "or resume here" history list | the CLI must either take a session id we mint, or write one somewhere we can discover and map | 5-8 |
 | **3 — status** | **the working dot, the "finished" sound, Web Push on a finished turn** | the CLI must announce its own turn boundaries: a hook mechanism, or a log it appends to per turn | 9, 10 |
-| **3a — blocked on input** | **the waiting dot and the "needs you" sound** — the half of #2055 that asks to be told when input is needed | strictly more than 3, and **three of the seven agents prove it costs more than it looks**: the CLI must report being BLOCKED, not merely starting and finishing. Claude's `Notification` hook does. Codex draws its approval prompt in the TUI and says nothing. Copilot and cursor each emit an event that LOOKS like it (`permissionRequest`, `beforeShellExecution`) and fires on every tool call whether or not anyone is asked — which is worse than silence, because mapping it would flag every tool call as needing the user | 9, 10 |
+| **3a — blocked on input** | **the waiting dot and the "needs you" sound** — the half of #2055 that asks to be told when input is needed | strictly more than 3, and **two of the seven agents prove it costs more than it looks**: the CLI must report being BLOCKED, not merely starting and finishing. Claude's `Notification` hook does, and so does codex's `PermissionRequest` hook (0.156+, measured firing only when the dialog is shown). Copilot and cursor each emit an event that LOOKS like it (`permissionRequest`, `beforeShellExecution`) and fires on every tool call whether or not anyone is asked — which is worse than silence, because mapping it would flag every tool call as needing the user | 9, 10 |
 | **3b — the rest of the stream** | tool history, work phase, the `AskUserQuestion` decision log | strictly more than 3: turn edges are not enough — tool and question events have to arrive **and be read**. Claude's hooks carry both (`PreToolUse`, `AskUserQuestion`) and all three of these are built on them. Codex has 3 and none of 3b: its rollout is read here for turn boundaries only, and whether it records tool calls in a usable form is not something this repo has measured | 11, 14 |
 | **4 — panel** | the GUI MCP tools (`presentDocument`, `presentForm`, `presentChart`, `generateImage`, …) | an MCP injection point we can aim at a per-session URL, with its tools auto-approved | 18 |
 | **5 — accounting** | `ctx 33%`, `⇡1.2M ⇣18k` | a readable token record — **per turn is not required**: muse records per model call and agy per generation, and the badge sums whatever granularity it is given. Its own context window is a bonus rather than a requirement — codex, grok and agy publish one, muse does not and the client falls back to a table keyed by model id | 15 |
@@ -44,7 +44,7 @@ keeps separate.)
 
 Tiers 3 and 3a are what issue #2055 asks for, and the split is not pedantry — the issue asks to be
 told "処理が終わったとき" *and* "入力が必要になったとき", which are two different facts a CLI
-either reports or does not. Codex clears the first and not the second. Neither can be bought with
+either reports or does not. Codex clears both, but from two sources: the first from its rollout, the second from a hook the user has to trust once. Neither can be bought with
 configuration:
 **an agent that does not tell anyone when a turn starts or ends cannot drive a notification.** It is
 also the tier where the seven current agents split 4/3 — though for grok and muse what is missing is
@@ -72,8 +72,8 @@ is where to go read why, not a gap nobody noticed.
 | 6 | Resume form | `--resume <id>` | `resume <id>` subcommand | `--conversation <id>` | `--resume <id>` | `resume <id>` + `--workspace` | **the same `--session-id`** — one flag mints and resumes | **the same `--resume`** — a uuid we invent starts a new chat under it |
 | 7 | Conversation history list | `/api/sessions` | `/api/codex/sessions` | `/api/antigravity/sessions` | `/api/grok/sessions` | `/api/muse/sessions` | `/api/copilot/sessions` | `/api/cursor/sessions` |
 | 8 | Survives a server restart | transcript on disk | rollout map | conversation map | key *is* the conversation id | conversation map | key *is* the session id (`session-state/<id>/`) | key *is* the chat id (`projects/<slug>/agent-transcripts/<id>/`) |
-| 9 | **working / waiting flags** | **hooks** (`--settings`) — both | **rollout tail** (1s poll) — **working only** | — | — | — | **hooks** (a machine-global file) — **working only** | **hooks** (a machine-global file) — **both** |
-| 10 | **Attention sound / Web Push** | yes — finished **and** blocked | yes — finished only | — | — | — | yes — finished only | yes — finished only |
+| 9 | **working / waiting flags** | **hooks** (`--settings`) — both | **rollout tail** (1s poll) for working, **`PermissionRequest` hook** (`-c`, trusted once per machine) for waiting — **both** | — | — | — | **hooks** (a machine-global file) — **working only** | **hooks** (a machine-global file) — **both** |
+| 10 | **Attention sound / Web Push** | yes — finished **and** blocked | yes — finished **and** blocked (the latter once its hook is trusted) | — | — | — | yes — finished only | yes — finished only |
 | 11 | Tool-call history (Tools pane) + work phase | yes (from `Pre`/`PostToolUse`) | — | — | — | — | yes (from `preToolUse` / `postToolUse`) | yes (from `preToolUse` / `postToolUse`) |
 | 12 | Last turn → header prompt, handoff, round table, prompts pane | yes | yes | — | — | — | — (its `turns` table would give it) | yes, from the transcript `.jsonl` |
 | 13 | AI-generated session title | yes | — (shows codex's own `/rename` name in the list) | — | — | — | — (the list shows copilot's own `summary`) | — (the list shows the first user message) |
@@ -115,11 +115,14 @@ and end. Only two mechanisms have worked here:
 - **A hook mechanism.** Claude takes `--settings` with hooks that `POST /api/hook`, which is what
   drives the dots, the sound, the push, the tool history and the work phase. It is the richest
   source because it also reports *blocked on input* (`Notification`) — the "waiting" half.
-- **An append-only log with turn records.** Codex has no hooks, so its rollout is tailed on a 1s
-  poll and `turn started` / `turn completed` are translated into the *same* effect table the hooks
-  feed (`server/agents/codex-activity.ts` → `server/session/activity-hook.ts`). The cost of that
-  route is what codex still lacks: its approval prompt is drawn in the TUI and never reaches the
-  rollout, so codex **never reports "waiting"** — only working/finished.
+- **An append-only log with turn records.** Codex's rollout is tailed on a 1s poll and
+  `turn started` / `turn completed` are translated into the *same* effect table the hooks feed
+  (`server/agents/codex-activity.ts` → `server/session/activity-hook.ts`). The rollout records
+  nothing while an approval dialog is up, so "waiting" comes from a **hook** instead:
+  `PermissionRequest`, passed with `-c` (`server/agents/codex-hook.ts`). Codex asks the user to trust
+  a hook once, and again whenever its handler's hash changes, which is why the command is a constant
+  that reads the port and session from the environment. The rollout stays the source for turn
+  boundaries because it needs no trust — declining the dialog costs only the waiting half.
 
 **Cursor is the third agent on the hook route, and measuring it produced three findings a reader
 should have before touching `~/.cursor/hooks.json`. Every one of them fails SILENTLY — no error, no
@@ -310,8 +313,9 @@ explicit answer — claude `--permission-mode` (overridable with `CLAUDE_PERMISS
 `--dangerously-skip-permissions`, grok `--permission-mode auto`, muse `--yolo`, copilot
 `--allow-all-tools`, cursor `--force` (plus `--trust`, which answers a second modal the others do
 not have: an unseen directory's Workspace Trust gate). **Codex is given
-none**, and that combines badly with row 9: its approval prompt is drawn in the TUI, and it is also
-the one thing codex never reports as "waiting". So for a candidate CLI, find the unattended mode and
+none**. An interactive codex cell reports its approval prompt as "waiting" (row 9), but a spawn that
+types a seed prompt is given no hook — the one-time trust dialog would swallow the prompt — so a
+collection action or background chat can still sit on that prompt unreported. So for a candidate CLI, find the unattended mode and
 name it — or record that background runs are unsupported for it, which is a legitimate answer and a
 much better one than discovering it from a hung cell.
 
@@ -398,7 +402,8 @@ tail -f "$store"
 3. **Resume** — flag or subcommand, and does it need the working directory named as well (muse
    does)?
 4. **Turn boundaries** — hooks, or a per-turn append-only log? **Does it report being blocked on
-   input**, or is its approval prompt TUI-only (codex's limitation)? This is the notification
+   input**, or is its approval prompt TUI-only? Check hooks against the CURRENT build — codex gained
+   them after this repo had written it off. This is the notification
    answer; get it explicitly.
 5. **MCP** — flag, directory config file, or per-machine registration? Can its tools be
    auto-approved without a prompt?

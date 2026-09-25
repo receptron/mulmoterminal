@@ -6,7 +6,8 @@ import { PORT } from "../config/env.js";
 import { buildCodexArgs } from "../agents/codex-args.js";
 import { codexAdapter } from "../agents/codex.js";
 import type { ToolGroup } from "../../common/toolGroups.js";
-import { codexGuiMcpServers } from "./mcp-config.js";
+import { codexGuiMcpServers, guiMcpEnv } from "./mcp-config.js";
+import { wantsCodexPermissionHook } from "../agents/codex-hook.js";
 import { snapshotSessions, watchForCodexSession } from "../agents/codex-session.js";
 import { accountSpawnEnv, codexSessionRoot, codexSessionSkillsDir } from "./session-home.js";
 import { codexRolloutPath } from "../agents/codex-sessions.js";
@@ -98,10 +99,12 @@ export function createCodexSpawner(deps: SpawnDeps) {
     // apply half the rule.
     const allTools = claimFullGuiMcp(sessionId, attachGuiMcp, cwd, ptyWouldReattach(sessionId, true), "codex");
     const guiMcpServers = codexGuiMcpServers({ sessionId, port: PORT, groups: mcpGroups, allTools });
-    const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers });
+    const permissionHook = wantsCodexPermissionHook(process.platform, initialPrompt !== null);
+    const args = buildCodexArgs({ resume: resumeRolloutId, model: deps.codexModel, guiMcpServers, permissionHook });
     const { term, tmux, reattached } = ptySpawn(sessionId, deps.codexBin, args, cwd, true, {
       binEnvVar: codexAdapter.binEnvVar,
-      env: accountSpawnEnv("codex", sessionId),
+      // The session id is what the permission hook's constant command posts under.
+      env: { ...guiMcpEnv(sessionId, PORT), ...accountSpawnEnv("codex", sessionId) },
     });
     const spawnedAtMs = Date.now();
     const note = resumeRolloutId ? `resume ${resumeRolloutId}` : null;

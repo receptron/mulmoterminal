@@ -256,9 +256,9 @@ merge recognise our own past output by it, and dropping it strands an entry on s
 
 Seven agent CLIs are hosted today and they answer that question seven different ways. Claude drives
 the working/waiting dots and the attention sound from its hooks; **cursor drives both dots but not
-the sound for input** — its `stop` hook ends the turn, and nothing reports being blocked; codex and
-copilot drive the **working half only** — codex because its approval prompt never leaves the TUI,
-copilot because the event that looks like "blocked" (`permissionRequest`) fires on every tool call
+the sound for input** — its `stop` hook ends the turn, and nothing reports being blocked; codex drives
+both from two sources — the rollout for turns and a `PermissionRequest` hook for its approval dialog;
+copilot drives the **working half only**, because the event that looks like "blocked" (`permissionRequest`) fires on every tool call
 whether or not anyone is asked, which is cursor's `beforeShellExecution` trap as well; agy, grok and
 muse drive neither — and for grok and muse that is a missing WIRE, not a missing
 record, since this repo already parses their own per-turn logs for the token badges (on a badge poll,

@@ -221,6 +221,7 @@ describe.skipIf(!isWindows)("spawnPty on Windows", () => {
     const args = buildCodexArgs({
       resume: null,
       model: "gpt-5",
+      permissionHook: false,
       guiMcpServers: [{ id: "mulmoterminal-gui", url: "http://127.0.0.1:34567/api/mcp/abc-123", autoApprove: true }],
     });
     expect(args.some((a) => a.includes('"'))).toBe(true); // the case only exists while they are quoted

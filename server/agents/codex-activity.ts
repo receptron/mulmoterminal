@@ -1,7 +1,7 @@
-// Reading turn boundaries out of a codex rollout as it is appended to. codex has no
-// hook mechanism — claude reports its own turns via `--settings` hooks, and there is no
-// equivalent flag to pass codex (see docs/codex-vs-claude.md) — so the rollout is the
-// only place a codex turn announces that it started or finished.
+// Reading turn boundaries out of a codex rollout as it is appended to. The rollout, not a
+// hook, is the source for these because it needs no trust: codex's hooks (0.156+) run only
+// after the user approves them, and the one we register — codex-hook.ts — reports the
+// approval dialog alone, so declining it costs the blocked signal and nothing else.
 //
 // Everything here is pure: the tailing itself lives in session/codex-activity-watch.ts.
 
@@ -13,8 +13,8 @@ export type CodexTurnBoundary = "started" | "completed";
 
 // codex boundaries are routed through the SAME effect table as claude's hooks, so what a
 // turn boundary does to the working / attention flags is defined once rather than per
-// agent. codex never reports being blocked on input — its approval prompt is drawn in the
-// TUI and never reaches the rollout — so there is deliberately no Notification here.
+// agent. The rollout records nothing while an approval dialog is up, so there is no
+// Notification here: that arrives through the PermissionRequest hook (codex-hook.ts).
 export const HOOK_EVENT_FOR: Record<CodexTurnBoundary, string> = {
   started: "UserPromptSubmit",
   completed: "Stop",
