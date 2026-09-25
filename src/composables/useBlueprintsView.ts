@@ -20,10 +20,17 @@ export function blueprintsViewSelect(runId: string | null): void {
   void router.replace({ ...to, state: overlayOriginState() });
 }
 
-export function useBlueprintsView(): { isOpen: ComputedRef<boolean>; runId: ComputedRef<string | null>; close: () => void } {
+export function blueprintsViewMarket(): void {
+  void router.replace({ name: "blueprintMarket", state: overlayOriginState() });
+}
+
+const ROUTE_NAMES = new Set(["blueprints", "blueprintRun", "blueprintMarket"]);
+
+export function useBlueprintsView(): { isOpen: ComputedRef<boolean>; runId: ComputedRef<string | null>; inMarket: ComputedRef<boolean>; close: () => void } {
   const route = computed(() => router.currentRoute.value);
   return {
-    isOpen: computed(() => route.value.name === "blueprints" || route.value.name === "blueprintRun"),
+    isOpen: computed(() => ROUTE_NAMES.has(String(route.value.name))),
+    inMarket: computed(() => route.value.name === "blueprintMarket"),
     runId: computed(() => {
       const raw = route.value.params.run;
       return typeof raw === "string" && RUN_ID_RE.test(raw) ? raw : null;
