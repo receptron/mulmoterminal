@@ -82,6 +82,7 @@ export async function loadPackPair(roots: readonly PackRoot[], baseSlug: string,
     const composed = composePlan(
       basePlanSchema.parse(await readJson(path.join(basePackDir, "plan.json"))),
       usecaseStepsSchema.parse(await readJson(path.join(usecasePackDir, "steps.json"))),
+      baseSlug,
     );
     if (!composed.ok) return composed;
     const hearing = hearingSchema.parse(await readJson(path.join(usecasePackDir, "hearing.json")));

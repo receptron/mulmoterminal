@@ -1,0 +1,26 @@
+{
+  "presets": [
+    {
+      "id": "ringi",
+      "title": "稟議（申請と承認）",
+      "description": "社員が稟議を起票し、承認者が順に承認・差し戻しする。会社のドメインの人だけがログインでき、誰がいつ承認したかが監査ログに残る。Firebase で動く社内向けの例。",
+      "base": "firebase",
+      "answers": {
+        "appName": "稟議ワークフロー",
+        "appPurpose": "社員が購入や契約の稟議を起票し、上長と部長が順に承認・差し戻しする。承認済みの稟議は一覧で探せる",
+        "domain": "example.co.jp",
+        "workspace": true,
+        "external": false,
+        "users": 50,
+        "roles": ["一般", "承認者", "管理者"],
+        "dataSensitivity": "社内限りの情報",
+        "region": "asia-northeast1（東京）",
+        "offboarding": true,
+        "existingProject": false,
+        "billingAccount": true,
+        "budget": 3000,
+        "mainScreens": "起票フォーム、自分の稟議の一覧、承認待ちの一覧、稟議の詳細（承認・差し戻し・コメント）、承認済みの検索"
+      }
+    }
+  ]
+}

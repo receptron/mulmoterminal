@@ -29,7 +29,8 @@ export const planStepSchema = z.object({
 });
 
 // A usecase step is spliced into the base plan after the step it names; none means at the end.
-export const usecaseStepSchema = planStepSchema.extend({ insertAfter: stepId.optional() });
+// `bases` limits it to those bases: a usecase that works on several builds differently on each.
+export const usecaseStepSchema = planStepSchema.extend({ insertAfter: stepId.optional(), bases: z.array(stepId).min(1).optional() });
 
 export const basePlanSchema = z.object({ steps: z.array(planStepSchema).min(1) });
 export const usecaseStepsSchema = z.object({ steps: z.array(usecaseStepSchema).default([]) });
@@ -72,8 +73,12 @@ function splice(base: readonly PlanStep[], extra: readonly UsecaseStep[]): Compo
   return [...base.flatMap((step) => [fromBase(step), ...after(step.id)]), ...after(undefined)];
 }
 
-/** The base plan with the usecase's steps spliced in, or every reason it cannot be built. */
-export function composePlan(base: BasePlan, usecase: UsecaseSteps): ComposeResult {
-  const problems = [...missingAnchors(base.steps, usecase.steps), ...duplicateIds([...base.steps, ...usecase.steps.map(withoutAnchor)])];
-  return problems.length > 0 ? { ok: false, problems } : { ok: true, steps: splice(base.steps, usecase.steps) };
+// Required, not optional: a caller that forgot the base would silently get every base's steps.
+const forBase = (steps: readonly UsecaseStep[], baseSlug: string): UsecaseStep[] => steps.filter((step) => !step.bases || step.bases.includes(baseSlug));
+
+/** The base plan with the usecase's steps for this base spliced in, or every reason it cannot be built. */
+export function composePlan(base: BasePlan, usecase: UsecaseSteps, baseSlug: string): ComposeResult {
+  const steps = forBase(usecase.steps, baseSlug);
+  const problems = [...missingAnchors(base.steps, steps), ...duplicateIds([...base.steps, ...steps.map(withoutAnchor)])];
+  return problems.length > 0 ? { ok: false, problems } : { ok: true, steps: splice(base.steps, steps) };
 }

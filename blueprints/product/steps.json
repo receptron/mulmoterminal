@@ -5,7 +5,26 @@
       "title": "必須の機能を試験で確かめる",
       "description": "Each must-have from the interview gets a test that shows it working end to end through the API.",
       "skill": "skills/acceptance",
-      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" acceptance"
+      "check": "sh \"$BLUEPRINT_BASE/checks/tests-pass.sh\" acceptance",
+      "bases": ["local"]
+    },
+    {
+      "id": "features",
+      "insertAfter": "data-rules",
+      "bases": ["firebase"],
+      "title": "機能と画面",
+      "description": "仕様の必須の機能を、画面とクライアントの処理として作る。Firestore のルールの内側で動くことをエミュレータで確かめる。",
+      "skill": "skills/features-firebase",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" features"
+    },
+    {
+      "id": "acceptance",
+      "insertAfter": "data-rules",
+      "bases": ["firebase"],
+      "title": "必須の機能を試験で確かめる",
+      "description": "Each must-have gets a test against the emulators that walks it end to end as a signed-in user, and is refused for everyone it should be refused for.",
+      "skill": "skills/acceptance-firebase",
+      "check": "sh \"$BLUEPRINT_BASE/checks/emulator-test.sh\" acceptance"
     }
   ]
 }
