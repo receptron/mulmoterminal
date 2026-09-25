@@ -8,6 +8,46 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@6.2.0 — 2026-09-25
+
+> **Setup guide:** [6.2.0 — Codex cells say when they are waiting for your approval](https://receptron.github.io/mulmoterminal/guide/en/v6.2.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v6.2.0.html))
+
+### Codex approval prompts read as "Needs input"
+
+- **[#2245](https://github.com/receptron/mulmoterminal/issues/2245)** ([#2250](https://github.com/receptron/mulmoterminal/pull/2250))
+  — a Codex cell stayed on "working" for as long as Codex sat on its own approval prompt, because
+  its status came from the rollout, which records nothing while the prompt is up. Codex 0.156 has
+  hooks, and its `PermissionRequest` fires only when the prompt is shown (measured: never on a tool
+  call that needed no approval). MulmoTerminal now registers that one hook with `-c` and translates
+  it into Claude's `Notification`. The cell reads "Needs input", beeps when unwatched, and sends the
+  Waiting-for-you push.
+  - Codex asks the user to trust a hook once, and again whenever its content changes. The command
+    is therefore a constant that reads the port and session from `MULMOTERMINAL_PORT` /
+    `MULMOTERMINAL_SESSION_ID`, so one answer covers every later cell. Declining leaves the cell
+    as it was in 6.1.0: the rollout remains the source for turn start and end, and a denied approval
+    ends the turn there with `turn_aborted`.
+  - Not registered for a spawn that types a seed prompt (collection actions, background chats),
+    where the one-time trust dialog would take the prompt, nor on Windows.
+  - The hook discards its stdout (Codex reads it as a decision) and ends with `|| true`, so a
+    stopped server never reads as a refusal.
+
+### Agent hooks no longer go through an inherited proxy
+
+- **[#2253](https://github.com/receptron/mulmoterminal/issues/2253)** ([#2255](https://github.com/receptron/mulmoterminal/pull/2255))
+  — curl sends even a `localhost` / `127.0.0.1` URL to an `http_proxy` or `ALL_PROXY` it
+  inherits, and those variables reach every agent pane. The Claude hook, the rate-limit status
+  line, Copilot's bash hook and the eight `curl` lines in the bundled skills now pass
+  `--noproxy <host>`, like the Codex hook. With a proxy set, a Claude cell's status updates again,
+  and prompts and tool input no longer reach the proxy. One spec runs every such command through
+  `/bin/sh` under a proxy, and fails on any loopback `curl` in a bundled skill that lacks the flag.
+  Copilot's PowerShell variant is unchanged (`-NoProxy` is PowerShell 7 only).
+
+### Docs
+
+- **[#2252](https://github.com/receptron/mulmoterminal/pull/2252)** — the FAQ's questions (English
+  and Japanese) are published as `FAQPage` structured data, built from the page's own headings in
+  Liquid rather than copied by hand.
+
 ## mulmoterminal@6.1.0 — 2026-09-25
 
 > **Setup guide:** [6.1.0 — A picture behind a project's terminals](https://receptron.github.io/mulmoterminal/guide/en/v6.1.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v6.1.0.html))

@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **6.1.0 is out.** A project's `.mulmoterminal.json` can put a picture faintly behind its
-> terminals, at the opacity you choose. [Setup guide](v6.1.0.html)
+> **6.2.0 is out.** A Codex cell waiting on its own approval prompt now reads "Needs input",
+> with the sound and the push, like a Claude cell. [Setup guide](v6.2.0.html)
 
 **New here?** Opening a terminal, installing Node.js / Claude Code / git / gh on macOS and
 Windows, the start command, and what to do when it doesn't work — **installing and launching

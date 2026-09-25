@@ -37,8 +37,9 @@ outside `PATH`.
 **Which ones tell you when they finish.** Claude and Cursor drive both the working dot and the
 finished one, so a cell you are not looking at raises the attention mark and plays the sound.
 Codex and Copilot drive the working half only. Antigravity, Grok and Muse drive neither — their
-cells run fine and simply stay quiet. Only Claude can also tell you it is **blocked waiting for
-you**; for every other agent an approval prompt sits in the cell without a sound.
+cells run fine and simply stay quiet. Claude, and Codex since 6.2.0, can also tell you they are
+**blocked waiting for you** — Codex once you trust its hook, the first time a Codex cell asks
+([6.2.0 guide](v6.2.0.html)). For every other agent an approval prompt sits in the cell without a sound.
 
 Nothing has to be installed for an agent you do not use. **An agent whose command is missing is
 dimmed in the new-cell Agent Picker.** Pick it and the form says why it cannot start, links the
