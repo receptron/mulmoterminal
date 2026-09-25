@@ -9,7 +9,7 @@ import path from "node:path";
 import { applyEvent, initialState, type BlueprintState, type StepEvent } from "../../common/blueprint/state.js";
 import { nextAction, type ExecutorAction } from "../../common/blueprint/executorPolicy.js";
 import { stepPrompt } from "../../common/blueprint/stepPrompt.js";
-import type { BlueprintRun } from "../../common/blueprint/run.js";
+import { summarizeRun, type BlueprintRun, type BlueprintRunSummary } from "../../common/blueprint/run.js";
 import type { ComposedStep } from "../../common/blueprint/plan.js";
 import type { RunStore } from "./runStore.js";
 import type { CheckRequest, CheckResult } from "./checkRunner.js";
@@ -85,6 +85,12 @@ class Executor {
 
   view(runId: string): Promise<Loaded> {
     return this.mustLoad(runId);
+  }
+
+  /** Every build, newest first. One that cannot be read is left out rather than failing the list. */
+  async list(): Promise<BlueprintRunSummary[]> {
+    const loaded = await Promise.all((await this.deps.store.list()).map((runId) => this.deps.store.load(runId).catch(() => null)));
+    return loaded.flatMap((entry) => (entry ? [summarizeRun(entry.run, entry.state)] : [])).sort((a, b) => b.createdAtMs - a.createdAtMs);
   }
 
   /** A person approved, rejected, answered or asked to retry. */
@@ -181,7 +187,13 @@ class Executor {
     if (!step) throw new BlueprintRefusal(`no step ${stepId}`);
     const packDir = step.origin === "base" ? run.basePackDir : run.usecasePackDir;
     const skillFile = path.join(packDir, step.skill, "SKILL.md");
-    const prompt = stepPrompt({ step, skillFile, stepState: state.steps[stepId], askCommand: this.deps.askCommand(run.id, stepId) });
+    const prompt = stepPrompt({
+      step,
+      skillFile,
+      packDirs: { base: run.basePackDir, usecase: run.usecasePackDir },
+      stepState: state.steps[stepId],
+      askCommand: this.deps.askCommand(run.id, stepId),
+    });
     const sessionId = this.deps.spawnStepSession(run.projectDir, prompt);
     this.deps.onTurnEnded(sessionId, ({ didError }) => this.turnEnded(run.id, sessionId, didError));
     const sessions = [...run.sessions, { stepId, sessionId, atMs: this.deps.now() }];
@@ -208,6 +220,6 @@ class Executor {
   }
 }
 
-export type BlueprintExecutor = Pick<Executor, "create" | "view" | "humanEvent" | "ask" | "recover">;
+export type BlueprintExecutor = Pick<Executor, "create" | "view" | "list" | "humanEvent" | "ask" | "recover">;
 
 export const createExecutor = (deps: ExecutorDeps): BlueprintExecutor => new Executor(deps);

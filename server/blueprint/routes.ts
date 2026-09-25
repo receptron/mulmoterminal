@@ -5,7 +5,9 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import type { Express, Response } from "express";
 import { z } from "zod";
-import { listPacks, loadPackPair } from "./packs.js";
+import { listPacks, loadPackPair, type PackPair } from "./packs.js";
+import { writeAnswers } from "./answersFile.js";
+import { answerProblems, askedQuestions, hearingAnswersSchema, unansweredQuestions, type HearingAnswers } from "../../common/blueprint/hearing.js";
 import { BlueprintRefusal, type BlueprintExecutor, type HumanEvent } from "./executor.js";
 import { BLUEPRINT_SLUG_RE } from "../../common/blueprint/manifest.js";
 
@@ -17,16 +19,21 @@ export interface BlueprintRouteDeps {
   isTrusted: (dir: string) => Promise<boolean>;
 }
 
-const createSchema = z.object({ projectDir: z.string().min(1), base: z.string().regex(BLUEPRINT_SLUG_RE), usecase: z.string().regex(BLUEPRINT_SLUG_RE) });
+const createSchema = z.object({
+  projectDir: z.string().min(1),
+  base: z.string().regex(BLUEPRINT_SLUG_RE),
+  usecase: z.string().regex(BLUEPRINT_SLUG_RE),
+  answers: hearingAnswersSchema,
+});
 
 const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("approve"), stepId: z.string() }),
-  z.object({ type: z.literal("reject"), stepId: z.string(), reason: z.string().min(1) }),
-  z.object({ type: z.literal("answer"), stepId: z.string(), answer: z.string().min(1) }),
+  z.object({ type: z.literal("reject"), stepId: z.string(), reason: z.string().trim().min(1) }),
+  z.object({ type: z.literal("answer"), stepId: z.string(), answer: z.string().trim().min(1) }),
   z.object({ type: z.literal("retry"), stepId: z.string() }),
 ]);
 
-const askSchema = z.object({ stepId: z.string(), question: z.string().min(1) });
+const askSchema = z.object({ stepId: z.string(), question: z.string().trim().min(1) });
 
 type ParsedEvent = z.infer<typeof eventSchema>;
 
@@ -57,6 +64,21 @@ function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
     res.json({ packs: await listPacks(deps.packsRoot) });
   });
 
+  app.get("/api/blueprints/runs", async (_req, res) => {
+    try {
+      res.json({ runs: await deps.executor.list() });
+    } catch (err) {
+      fail(res, err);
+    }
+  });
+
+  // What the new-build form needs for a base/usecase pair: its interview and the steps it will run.
+  app.get("/api/blueprints/pairs/:base/:usecase", async (req, res) => {
+    const pair = await loadPackPair(deps.packsRoot, req.params.base, req.params.usecase);
+    if (!pair.ok) return res.status(400).json({ error: pair.problems.join("; ") });
+    return res.json({ hearing: pair.hearing, steps: pair.steps });
+  });
+
   app.get("/api/blueprints/runs/:id", async (req, res) => {
     try {
       res.json(await deps.executor.view(req.params.id));
@@ -66,21 +88,48 @@ function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
   });
 }
 
+type CreateRequest = { projectDir: string; answers: HearingAnswers; pair: Extract<PackPair, { ok: true }> };
+type Checked = { ok: true; request: CreateRequest } | { ok: false; status: number; error: string };
+
+const refused = (status: number, error: string): Checked => ({ ok: false, status, error });
+
+// Only the questions actually asked are kept, so an answer to a question the conditions closed off
+// cannot reach the spec step.
+function answersProblem(pair: Extract<PackPair, { ok: true }>, answers: HearingAnswers): string | null {
+  const missing = unansweredQuestions(pair.hearing, answers);
+  if (missing.length > 0) return `unanswered: ${missing.map((question) => question.id).join(", ")}`;
+  const wrong = answerProblems(pair.hearing, answers);
+  return wrong.length > 0 ? `invalid: ${wrong.join("; ")}` : null;
+}
+
+async function checkCreate(deps: BlueprintRouteDeps, body: unknown): Promise<Checked> {
+  const parsed = createSchema.safeParse(body);
+  if (!parsed.success) return refused(400, "projectDir, base, usecase and answers are required");
+  const { projectDir, base, usecase, answers } = parsed.data;
+  const dirProblem = await projectDirProblem(projectDir);
+  if (dirProblem) return refused(400, dirProblem);
+  if (!(await deps.isTrusted(projectDir)))
+    return refused(409, `Claude Code does not trust ${projectDir} yet. Open a terminal there once and accept the trust prompt, then start again.`);
+  const pair = await loadPackPair(deps.packsRoot, base, usecase);
+  if (!pair.ok) return refused(400, pair.problems.join("; "));
+  const problem = answersProblem(pair, answers);
+  if (problem) return refused(400, problem);
+  const asked: HearingAnswers = Object.fromEntries(
+    askedQuestions(pair.hearing, answers).flatMap((question) => {
+      const answer = answers[question.id];
+      return answer === undefined ? [] : [[question.id, answer]];
+    }),
+  );
+  return { ok: true, request: { projectDir, answers: asked, pair } };
+}
+
 function mountCreateRoute(app: Express, deps: BlueprintRouteDeps): void {
   app.post("/api/blueprints/runs", async (req, res) => {
-    const parsed = createSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "projectDir, base and usecase are required" });
-    const { projectDir, base, usecase } = parsed.data;
-    const dirProblem = await projectDirProblem(projectDir);
-    if (dirProblem) return res.status(400).json({ error: dirProblem });
-    if (!(await deps.isTrusted(projectDir))) {
-      return res
-        .status(409)
-        .json({ error: `Claude Code does not trust ${projectDir} yet. Open a terminal there once and accept the trust prompt, then start again.` });
-    }
-    const pair = await loadPackPair(deps.packsRoot, base, usecase);
-    if (!pair.ok) return res.status(400).json({ error: pair.problems.join("; ") });
+    const checked = await checkCreate(deps, req.body);
+    if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
+    const { projectDir, answers, pair } = checked.request;
     try {
+      await writeAnswers(projectDir, answers);
       const runId = await deps.executor.create({ projectDir, basePackDir: pair.basePackDir, usecasePackDir: pair.usecasePackDir, steps: pair.steps });
       return res.json({ runId });
     } catch (err) {

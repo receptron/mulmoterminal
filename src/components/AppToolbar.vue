@@ -20,6 +20,8 @@ import { useAccountingView, accountingViewOpen } from "../composables/useAccount
 import { useWikiBrowse, wikiGotoIndex, wikiGotoTag } from "../composables/useWikiBrowse";
 import { useGithubView, githubGotoIndex } from "../composables/useGithubView";
 import { useRoomsView, roomsViewOpen } from "../composables/useRoomsView";
+import { useBlueprintsView, blueprintsViewOpen } from "../composables/useBlueprintsView";
+import { useI18n } from "vue-i18n";
 import { useSoundEnabled } from "../composables/useSoundEnabled";
 import { audioBlocked } from "../composables/audioUnlockState";
 import { soundButtonState } from "./soundButtonState";
@@ -67,6 +69,8 @@ const { isOpen: accountingOpen } = useAccountingView();
 const { isOpen: wikiOpen } = useWikiBrowse();
 const { isOpen: prsOpen } = useGithubView();
 const { isOpen: roomsOpen } = useRoomsView();
+const { isOpen: blueprintsOpen } = useBlueprintsView();
+const { t } = useI18n();
 const { enabled: soundEnabled, toggle: toggleSound } = useSoundEnabled();
 const soundButton = computed(() => soundButtonState(soundEnabled.value, audioBlocked.value));
 const { badge: updateBadge } = useUpdateStatus();
@@ -240,6 +244,13 @@ function showRooms(): void {
       <template v-if="onGridRoute">
         <LauncherButton icon="call_merge" title="Pull requests" label="Pull requests" :active="prsActive" @click="showPrs" />
         <LauncherButton icon="forum" title="Rooms — round-table conversations" label="Rooms" :active="roomsActive" @click="showRooms" />
+        <LauncherButton
+          icon="architecture"
+          :title="t('blueprints.toolbar')"
+          :label="t('blueprints.title')"
+          :active="blueprintsOpen"
+          @click="blueprintsViewOpen()"
+        />
         <LauncherButton
           icon="history_edu"
           title="Worklog — the dev work log in the wiki (#worklog)"

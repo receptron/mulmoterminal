@@ -11,6 +11,8 @@ export interface StepPromptInput {
   step: PlanStep;
   /** Absolute path of the step's SKILL.md. */
   skillFile: string;
+  /** The two packs: their spec/ and security/ templates are what a step writes from. */
+  packDirs: { base: string; usecase: string };
   stepState: StepState | undefined;
   /** A shell command that asks the user `$QUESTION` — the executor fills in the run and step. */
   askCommand: string;
@@ -30,12 +32,13 @@ function failureSection(stepState: StepState | undefined): string[] {
   return ["", "The previous attempt did not pass its check. Its output:", "```", tail(check.output, CHECK_OUTPUT_PROMPT_CHARS), "```", "Fix what it reports."];
 }
 
-export function stepPrompt({ step, skillFile, stepState, askCommand }: StepPromptInput): string {
+export function stepPrompt({ step, skillFile, packDirs, stepState, askCommand }: StepPromptInput): string {
   return [
     `Blueprint step "${step.id}": ${step.title}.`,
     step.description,
     "",
     `Read and follow ${skillFile}. Read .blueprint/spec.md for the agreed specification.`,
+    `The user's interview answers are in .blueprint/answers.json. Base pack: ${packDirs.base}. Usecase pack: ${packDirs.usecase}.`,
     "",
     "If you need a decision from the user, run this and then stop — do not guess:",
     `  QUESTION='your question' ${askCommand}`,

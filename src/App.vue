@@ -15,6 +15,7 @@ import AccountingOverlay from "./components/AccountingOverlay.vue";
 import WikiBrowseOverlay from "./components/WikiBrowseOverlay.vue";
 import GithubOverlay from "./components/GithubOverlay.vue";
 import RoomsOverlay from "./components/RoomsOverlay.vue";
+import BlueprintsOverlay from "./components/blueprints/BlueprintsOverlay.vue";
 import FilesOverlay from "./components/FilesOverlay.vue";
 import HoverTip from "./components/HoverTip.vue";
 import ServerStoppedOverlay from "./components/ServerStoppedOverlay.vue";
@@ -90,6 +91,8 @@ useFaviconState(sessions);
   <!-- The conversation rooms a round table writes to; opened by the toolbar's forum button, or
        from a cell's round-table menu on the room that table is filling. -->
   <RoomsOverlay />
+  <!-- Blueprint builds; opened by the toolbar's architecture button. -->
+  <BlueprintsOverlay />
   <!-- Full-screen file explorer + editor; opened by the toolbar's Files button, or by a terminal
        header's Files button rooted at that terminal's own directory. -->
   <FilesOverlay />

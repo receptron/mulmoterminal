@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { hearingSchema, unansweredQuestions, askedQuestions, type Hearing, type HearingAnswers } from "../../../common/blueprint/hearing";
+import { answerProblems, hearingSchema, unansweredQuestions, askedQuestions, type Hearing, type HearingAnswers } from "../../../common/blueprint/hearing";
 
 const hearing: Hearing = hearingSchema.parse({
   questions: [
@@ -85,5 +85,39 @@ describe("hearingSchema", () => {
 
   it("defaults required to true", () => {
     expect(hearingSchema.parse({ questions: [q("a")] }).questions[0].required).toBe(true);
+  });
+});
+
+describe("answerProblems", () => {
+  const typed = hearingSchema.parse({
+    questions: [
+      { id: "t", label: "t", why: "w", kind: "text" },
+      { id: "n", label: "n", why: "w", kind: "number" },
+      { id: "b", label: "b", why: "w", kind: "boolean" },
+      { id: "s", label: "s", why: "w", kind: "select", options: ["a", "b"] },
+      { id: "m", label: "m", why: "w", kind: "multiselect", options: ["a", "b"] },
+      { id: "hidden", label: "h", why: "w", kind: "number", showIf: { id: "b", equals: true } },
+    ],
+  });
+  const good: HearingAnswers = { t: "x", n: 0, b: false, s: "a", m: ["a", "b"] };
+
+  it("accepts answers of the right kind", () => {
+    expect(answerProblems(typed, good)).toEqual([]);
+  });
+
+  it.each([
+    ["text given a number", { t: 3 }, "t: expects text"],
+    ["a number given text", { n: "3" }, "n: expects a number"],
+    ["a boolean given text", { b: "true" }, "b: expects yes or no"],
+    ["a select given an unknown option", { s: "c" }, "s: expects one of its options"],
+    ["a select given a list", { s: ["a"] }, "s: expects one of its options"],
+    ["a multiselect with an unknown option", { m: ["a", "z"] }, "m: expects some of its options"],
+    ["a multiselect given one string", { m: "a" }, "m: expects some of its options"],
+  ])("refuses %s", (_label, patch, problem) => {
+    expect(answerProblems(typed, { ...good, ...patch })).toEqual([problem]);
+  });
+
+  it("ignores a wrong answer to a question that is not asked", () => {
+    expect(answerProblems(typed, { ...good, hidden: "x" })).toEqual([]);
   });
 });

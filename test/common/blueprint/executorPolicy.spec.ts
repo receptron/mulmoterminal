@@ -69,7 +69,13 @@ describe("nextAction", () => {
 
 describe("stepPrompt", () => {
   const prompt = (stepState: StepState | undefined) =>
-    stepPrompt({ step: steps[1], skillFile: "/packs/firebase/skills/b/SKILL.md", stepState, askCommand: "ASK" });
+    stepPrompt({
+      step: steps[1],
+      skillFile: "/packs/firebase/skills/b/SKILL.md",
+      packDirs: { base: "/packs/firebase", usecase: "/packs/internal" },
+      stepState,
+      askCommand: "ASK",
+    });
 
   it("names the skill, the spec, the way to ask and the check", () => {
     const text = prompt(undefined);

@@ -4,8 +4,9 @@
 import { z } from "zod";
 
 // Operations the agent may never decide on its own. A step declaring one cannot start until a
-// human approves it, whatever the agent thinks of the risk.
-export const BLUEPRINT_GATES = ["billing", "deploy-production", "delete", "credential"] as const;
+// human approves it, whatever the agent thinks of the risk. `review` is the person reading what the
+// steps before it produced — the written spec above all — before anything is built on it.
+export const BLUEPRINT_GATES = ["review", "billing", "deploy-production", "delete", "credential"] as const;
 export type BlueprintGate = (typeof BLUEPRINT_GATES)[number];
 
 const stepId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);

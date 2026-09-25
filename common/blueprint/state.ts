@@ -139,7 +139,8 @@ export function stateProblems(steps: readonly PlanStep[], state: BlueprintState)
 export const currentStep = (steps: readonly PlanStep[], state: BlueprintState): PlanStep | null =>
   steps.find((step) => state.steps[step.id]?.status !== "passed") ?? null;
 
-export type WaitKind = "approval" | "answer" | "failure";
+export const WAIT_KINDS = ["approval", "answer", "failure"] as const;
+export type WaitKind = (typeof WAIT_KINDS)[number];
 
 const WAIT_KIND_BY_STATUS: Partial<Record<StepStatus, WaitKind>> = {
   "awaiting-approval": "approval",
