@@ -129,4 +129,33 @@ describe("createFilePathLinkProvider against real xterm", () => {
     expect(provideLinks(term, null, vi.fn())).toBeUndefined();
     term.dispose();
   });
+
+  // #2260. The routes contain `path` within `cwd`, so a path outside the cell handed over with the
+  // cell's cwd came back "path escapes the project root". It goes with its own directory instead.
+  it.each([
+    ["a document", "/tmp/report.md", "/api/files/browse/md?cwd=%2Ftmp&path=report.md"],
+    ["a home-relative document", "~/Downloads/r.md", "/api/files/browse/md?cwd=~%2FDownloads&path=r.md"],
+  ])("opens %s outside the cell against its own directory", async (_case, token, url) => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, `wrote ${token}`);
+    const open = vi.fn();
+    const [link] = provideLinks(term, "/Users/me/proj", open) ?? [];
+    if (!link) throw new Error("expected a link");
+    link.activate(new MouseEvent("click"), link.text);
+    expect(open).toHaveBeenCalledWith(url);
+    term.dispose();
+  });
+
+  it("hands source outside the cell to the Files view rooted at its directory", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "see ../other/notes.ts");
+    const openInFiles = vi.fn();
+    const [link] = provideLinks(term, "/Users/me/proj", vi.fn(), openInFiles) ?? [];
+    if (!link) throw new Error("expected a link");
+    link.activate(new MouseEvent("click"), link.text);
+    expect(openInFiles).toHaveBeenCalledWith("notes.ts", "/Users/me/other");
+    term.dispose();
+  });
 });
