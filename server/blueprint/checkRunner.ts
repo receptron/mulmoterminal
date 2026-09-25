@@ -40,7 +40,10 @@ function killGroup(pid: number | undefined): void {
 }
 
 export function runCheck({ command, cwd, basePackDir, usecasePackDir }: CheckRequest, timeoutMs: number = CHECK_TIMEOUT_MS): Promise<CheckResult> {
-  const env = { ...process.env, BLUEPRINT_BASE: basePackDir, BLUEPRINT_USECASE: usecasePackDir };
+  // Colour off: checks pipe command output into other commands, and a coloured number (FORCE_COLOR
+  // makes node's console.log emit one) is not a number — a real run lost its port that way.
+  const inherited = Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== "FORCE_COLOR"));
+  const env = { ...inherited, NO_COLOR: "1", BLUEPRINT_BASE: basePackDir, BLUEPRINT_USECASE: usecasePackDir };
   return new Promise((resolve) => {
     const child = spawn("/bin/sh", ["-c", command], { cwd, env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
     let output = "";

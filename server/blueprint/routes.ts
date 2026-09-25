@@ -5,7 +5,7 @@ import path from "node:path";
 import { stat } from "node:fs/promises";
 import type { Express, Response } from "express";
 import { z } from "zod";
-import { listPacks, loadPackPair, type PackPair, type PackRoot } from "./packs.js";
+import { listPacks, listPresets, loadPackPair, type PackPair, type PackRoot } from "./packs.js";
 import { writeAnswers } from "./answersFile.js";
 import { answerProblems, askedQuestions, hearingAnswersSchema, unansweredQuestions, type HearingAnswers } from "../../common/blueprint/hearing.js";
 import { BlueprintRefusal, type BlueprintExecutor, type HumanEvent } from "./executor.js";
@@ -33,7 +33,7 @@ const eventSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("retry"), stepId: z.string() }),
 ]);
 
-const askSchema = z.object({ stepId: z.string(), question: z.string().trim().min(1) });
+const askSchema = z.object({ stepId: z.string(), sessionId: z.string(), question: z.string().trim().min(1) });
 
 type ParsedEvent = z.infer<typeof eventSchema>;
 
@@ -62,6 +62,10 @@ async function projectDirProblem(projectDir: string): Promise<string | null> {
 function mountReadRoutes(app: Express, deps: BlueprintRouteDeps): void {
   app.get("/api/blueprints/packs", async (_req, res) => {
     res.json({ packs: await listPacks(deps.packRoots) });
+  });
+
+  app.get("/api/blueprints/presets", async (_req, res) => {
+    res.json({ presets: await listPresets(deps.packRoots) });
   });
 
   app.get("/api/blueprints/runs", async (_req, res) => {
@@ -151,9 +155,9 @@ function mountMoveRoutes(app: Express, deps: BlueprintRouteDeps): void {
 
   app.post("/api/blueprints/runs/:id/ask", async (req, res) => {
     const parsed = askSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "expected { stepId, question }" });
+    if (!parsed.success) return res.status(400).json({ error: "expected { stepId, sessionId, question }" });
     try {
-      await deps.executor.ask(req.params.id, parsed.data.stepId, parsed.data.question);
+      await deps.executor.ask(req.params.id, parsed.data.stepId, parsed.data.question, parsed.data.sessionId);
       return res.json({ ok: true, message: "Asked. Stop now; the answer will come in a new session." });
     } catch (err) {
       return fail(res, err);

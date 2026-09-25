@@ -32,6 +32,9 @@ export const blueprintsZhTW: Messages["blueprints"] = {
     credential: "此步驟需要你登入。",
   },
   form: {
+    presets: "從範例開始",
+    presetUse: "使用此範例",
+    presetApplied: "已填入「{title}」的回答。輸入專案資料夾並按下開始，即可觀看建置過程。",
     title: "新增建置",
     projectDir: "專案資料夾",
     projectDirHint: "已存在的資料夾，請填寫完整路徑。Claude Code 必須已信任該資料夾。",

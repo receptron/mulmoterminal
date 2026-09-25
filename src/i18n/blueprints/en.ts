@@ -32,6 +32,9 @@ export const blueprintsEn = {
     credential: "This step needs you to sign in.",
   },
   form: {
+    presets: "Start from an example",
+    presetUse: "Use this example",
+    presetApplied: 'The answers for "{title}" are filled in. Enter a project folder and press Start to watch it being built.',
     title: "Start a new build",
     projectDir: "Project folder",
     projectDirHint: "An existing folder, as a full path. Claude Code must already trust it.",

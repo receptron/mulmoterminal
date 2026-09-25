@@ -10,6 +10,7 @@ import { access, readdir, readFile } from "node:fs/promises";
 import { blueprintManifestSchema, incompatibility, BLUEPRINT_SLUG_RE, type BlueprintManifest } from "../../common/blueprint/manifest.js";
 import { basePlanSchema, composePlan, usecaseStepsSchema, type ComposedStep } from "../../common/blueprint/plan.js";
 import { hearingSchema, type Hearing } from "../../common/blueprint/hearing.js";
+import { presetsFileSchema, type Preset, type PresetListing } from "../../common/blueprint/presets.js";
 
 export const PACK_SOURCES = ["builtin", "installed"] as const;
 export type PackSource = (typeof PACK_SOURCES)[number];
@@ -93,6 +94,8 @@ export async function loadPackPair(roots: readonly PackRoot[], baseSlug: string,
 async function stepsOf(packDir: string, manifest: BlueprintManifest): Promise<{ id: string; skill: string }[]> {
   if (manifest.kind === "base") return basePlanSchema.parse(await readJson(path.join(packDir, "plan.json"))).steps;
   hearingSchema.parse(await readJson(path.join(packDir, "hearing.json")));
+  // Presets are optional, but a broken one is refused here rather than dropped silently when listed.
+  await readPresets(packDir);
   return usecaseStepsSchema.parse(await readJson(path.join(packDir, "steps.json"))).steps;
 }
 
@@ -107,4 +110,24 @@ export async function packProblems(packDir: string): Promise<string[]> {
   } catch (err) {
     return [err instanceof Error ? err.message : String(err)];
   }
+}
+
+/** A usecase pack's worked examples; a pack without `presets.json` simply has none. */
+export async function readPresets(packDir: string): Promise<Preset[]> {
+  const file = path.join(packDir, "presets.json");
+  if (!(await exists(file))) return [];
+  return presetsFileSchema.parse(await readJson(file)).presets;
+}
+
+/** Every preset of every usecase pack, for the new-build form. A pack whose presets do not parse is left out. */
+export async function listPresets(roots: readonly PackRoot[]): Promise<PresetListing[]> {
+  const usecases = (await listPacks(roots)).filter((pack) => pack.manifest.kind === "usecase");
+  const perPack = await Promise.all(
+    usecases.map(async (pack) => {
+      const dir = await packDirOf(roots, pack.slug);
+      const presets = dir ? await readPresets(dir).catch(() => []) : [];
+      return presets.map((preset) => ({ ...preset, usecase: pack.slug }));
+    }),
+  );
+  return perPack.flat();
 }

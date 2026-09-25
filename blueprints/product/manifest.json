@@ -1,0 +1,8 @@
+{
+  "kind": "usecase",
+  "slug": "product",
+  "title": "自由に作る（どんなアプリでも）",
+  "version": "0.1.0",
+  "description": "Build whatever the user describes: the interview asks what it is for, who uses it, what it handles and what they do, and the must-haves. Each must-have is proven by a test at the end.",
+  "bases": ["local"]
+}

@@ -13,6 +13,9 @@ description: "Create the app skeleton: web app, Cloud Functions workspace, emula
    Every later step adds its own `test/blueprint/<name>.spec.ts`; `checks/emulator-test.sh <name>` runs exactly
    that file against the emulators under the `demo-blueprint` project id, so tests can never touch a real project.
 4. `yarn build` must succeed.
+5. Do NOT run `git init`. A new repository root loses the trust its parent folder gave it, and every later step
+   would stop at Claude Code's trust prompt with nobody there to answer. If the user wants git, they add it
+   themselves after the build.
 
 Done when the check passes: `firebase.json` configures the emulators, `functions/` exists, `@firebase/rules-unit-testing`
 is a dev dependency, `test/blueprint/` exists and `yarn build` succeeds.

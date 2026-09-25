@@ -32,6 +32,9 @@ export const blueprintsZhCN: Messages["blueprints"] = {
     credential: "此步骤需要你登录。",
   },
   form: {
+    presets: "从示例开始",
+    presetUse: "使用此示例",
+    presetApplied: "已填入“{title}”的回答。输入项目文件夹并点击开始，即可观看构建过程。",
     title: "新建构建",
     projectDir: "项目文件夹",
     projectDirHint: "已存在的文件夹，请填写完整路径。Claude Code 必须已信任该文件夹。",

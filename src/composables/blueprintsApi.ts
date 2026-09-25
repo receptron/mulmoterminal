@@ -7,6 +7,7 @@ import { blueprintManifestSchema } from "../../common/blueprint/manifest";
 import { hearingSchema, type HearingAnswers } from "../../common/blueprint/hearing";
 import { planStepSchema } from "../../common/blueprint/plan";
 import { blueprintRunSummarySchema, blueprintRunViewSchema, type BlueprintRunView } from "../../common/blueprint/run";
+import { presetListingSchema, type PresetListing } from "../../common/blueprint/presets";
 import { catalogSchema, installRecordSchema, type Catalog, type InstallRecord } from "../../common/blueprint/registry";
 
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -14,6 +15,7 @@ export type ApiResult<T> = { ok: true; value: T } | { ok: false; error: string }
 const packsSchema = z.object({ packs: z.array(z.object({ slug: z.string(), manifest: blueprintManifestSchema })) });
 const pairSchema = z.object({ hearing: hearingSchema, steps: z.array(planStepSchema.extend({ origin: z.enum(["base", "usecase"]) })) });
 const runsSchema = z.object({ runs: z.array(blueprintRunSummarySchema) });
+const presetsSchema = z.object({ presets: z.array(presetListingSchema) });
 const createdSchema = z.object({ runId: z.string() });
 
 export type PackList = z.infer<typeof packsSchema>["packs"];
@@ -38,6 +40,8 @@ export const listPacks = (): Promise<ApiResult<z.infer<typeof packsSchema>>> => 
 
 export const previewPair = (base: string, usecase: string): Promise<ApiResult<PairPreview>> =>
   call(pairSchema, `/api/blueprints/pairs/${encodeURIComponent(base)}/${encodeURIComponent(usecase)}`);
+
+export const listPresets = (): Promise<ApiResult<{ presets: PresetListing[] }>> => call(presetsSchema, "/api/blueprints/presets");
 
 export const listRuns = (): Promise<ApiResult<z.infer<typeof runsSchema>>> => call(runsSchema, "/api/blueprints/runs");
 

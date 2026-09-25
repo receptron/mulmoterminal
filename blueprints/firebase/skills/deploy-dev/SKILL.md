@@ -5,13 +5,15 @@ description: "Deploy rules, indexes, functions and hosting to the dev project."
 
 # Publish to dev
 
-1. `yarn build`, then `git rev-parse HEAD > dist/blueprint-build.txt`, then `firebase deploy --project dev`.
-   Commit first: the check compares the deployed marker with `HEAD`, so it proves THIS build is live.
+1. `yarn build`, then give this build an id and ship it with the site:
+   `node -e 'console.log(require("crypto").randomUUID())' > .blueprint/build-id && cp .blueprint/build-id dist/blueprint-build.txt`,
+   then `firebase deploy --project dev`. The check compares the served id with `.blueprint/build-id`, so it
+   proves THIS build is live. Git is not needed for this.
 2. Tell the user the URL (`https://<dev-project-id>.web.app`) and what to try there.
 
 Never deploy to `prod` in this step.
 
-Done when the check passes: the dev site serves the marker of the current commit.
+Done when the check passes: the dev site serves the id this deploy wrote to `.blueprint/build-id`.
 
 ## Always
 

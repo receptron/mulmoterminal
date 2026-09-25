@@ -1,0 +1,21 @@
+{
+  "kind": "base",
+  "slug": "local",
+  "title": "ローカル（Express + SQLite + Vue）",
+  "version": "0.1.0",
+  "description": "Runs on this computer only: an Express API, a SQLite file for data (Node's built-in node:sqlite), and a Vue screen. No cloud account, no billing.",
+  "platform": "local",
+  "requires": [
+    {
+      "command": "node",
+      "probe": "sh \"$BLUEPRINT_BASE/checks/node-sqlite.sh\"",
+      "installHint": "Node.js 22.13 or later (https://nodejs.org/). node:sqlite is built in from there."
+    },
+    {
+      "command": "yarn",
+      "probe": "yarn --version",
+      "installHint": "corepack enable"
+    }
+  ],
+  "credentials": []
+}

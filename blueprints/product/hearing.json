@@ -1,0 +1,92 @@
+{
+  "questions": [
+    {
+      "id": "appName",
+      "label": "アプリの名前（仮でよい）",
+      "why": "画面と説明書に出す",
+      "kind": "text"
+    },
+    {
+      "id": "idea",
+      "label": "何を作りたいですか（一言で）",
+      "why": "作るものの芯になる",
+      "kind": "text"
+    },
+    {
+      "id": "problem",
+      "label": "どんな困りごとを解決しますか",
+      "why": "必須の機能を選ぶ基準になる",
+      "kind": "text"
+    },
+    {
+      "id": "audience",
+      "label": "誰が使いますか",
+      "why": "ログインや公開範囲が決まる",
+      "kind": "select",
+      "options": ["自分だけ", "家族・友人など少人数", "社内・チーム", "不特定の人（公開）"]
+    },
+    {
+      "id": "things",
+      "label": "扱うものは何ですか（例: 本、予約、在庫、レシピ）",
+      "why": "データの表になる",
+      "kind": "text"
+    },
+    {
+      "id": "actions",
+      "label": "使う人は何をしますか（例: 登録する、探す、予約する、集計を見る）",
+      "why": "API と画面になる",
+      "kind": "text"
+    },
+    {
+      "id": "mustHaves",
+      "label": "これだけは最初から必要、という機能",
+      "why": "最後に一つずつ動くことを試験で確かめる",
+      "kind": "text"
+    },
+    {
+      "id": "later",
+      "label": "あとでよい機能",
+      "why": "最初の版から外しておく",
+      "kind": "text",
+      "required": false
+    },
+    {
+      "id": "signIn",
+      "label": "ログインはどうしますか",
+      "why": "守り方が決まる",
+      "kind": "select",
+      "options": ["なし（このパソコンからだけ使う）", "共有のパスワード一つ", "一人ずつのアカウント"]
+    },
+    {
+      "id": "roles",
+      "label": "役割は分けますか（例: 管理者と一般）",
+      "why": "だれが何をできるかの規則になる",
+      "kind": "text",
+      "showIf": {
+        "id": "signIn",
+        "equals": "一人ずつのアカウント"
+      }
+    },
+    {
+      "id": "dataSensitivity",
+      "label": "扱う情報でいちばん気をつけるもの",
+      "why": "保存の仕方とバックアップの厳しさが決まる",
+      "kind": "select",
+      "options": ["公開してよい情報のみ", "身内だけの情報", "個人情報を含む", "お金や健康など特に機微な情報"]
+    },
+    {
+      "id": "references",
+      "label": "似ているサービスやイメージ（あれば）",
+      "why": "画面の作りの参考にする",
+      "kind": "text",
+      "required": false
+    },
+    {
+      "id": "uiLanguage",
+      "label": "画面の言葉",
+      "why": "表示の言語",
+      "kind": "select",
+      "options": ["日本語", "English", "両方"]
+    }
+  ]
+}
