@@ -12,7 +12,7 @@ const usecase = (steps: Record<string, unknown>[]): UsecaseSteps => usecaseSteps
 describe("composePlan", () => {
   it("returns the base plan untouched when the usecase adds nothing", () => {
     const result = composePlan(base, usecase([]));
-    expect(result).toEqual({ ok: true, steps: base.steps });
+    expect(result).toEqual({ ok: true, steps: base.steps.map((s) => ({ ...s, origin: "base" })) });
   });
 
   it("splices usecase steps after their anchor, in the order they are listed", () => {
@@ -21,6 +21,11 @@ describe("composePlan", () => {
       usecase([step("domain", { insertAfter: "auth" }), step("audit", { insertAfter: "auth" }), step("offboard", { insertAfter: "init" })]),
     );
     expect(result.ok && result.steps.map((s) => s.id)).toEqual(["init", "offboard", "auth", "domain", "audit", "deploy"]);
+  });
+
+  it("tags each step with the pack it came from", () => {
+    const result = composePlan(base, usecase([step("domain", { insertAfter: "auth" })]));
+    expect(result.ok && result.steps.map((s) => `${s.id}:${s.origin}`)).toEqual(["init:base", "auth:base", "domain:usecase", "deploy:base"]);
   });
 
   it("appends steps without an anchor at the end", () => {

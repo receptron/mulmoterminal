@@ -1,0 +1,9 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Every collection is opened explicitly above this line. Anything not opened is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
