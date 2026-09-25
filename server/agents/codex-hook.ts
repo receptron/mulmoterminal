@@ -13,10 +13,11 @@ export const CODEX_PERMISSION_HOOK = "PermissionRequest";
 // A CONSTANT, with the port and session read from the environment: codex asks the user to trust a
 // hook again whenever its handler's hash changes, so anything per-session in here would re-open that
 // dialog in every new cell. No quotes, so the TOML literal string below needs no escaping; the
-// output is discarded because codex reads a hook's stdout as its decision, and `|| true` because a
-// server that is down must not read as a refusal.
+// output is discarded because codex reads a hook's stdout as its decision, `|| true` because a
+// server that is down must not read as a refusal, and `--noproxy` because curl otherwise sends even
+// a loopback URL to an `http_proxy` the pane inherited.
 export const CODEX_PERMISSION_HOOK_COMMAND =
-  "curl -s -m 5 -X POST -H content-type:application/json -H x-mt-agent:codex " +
+  "curl --noproxy 127.0.0.1 -s -m 5 -X POST -H content-type:application/json -H x-mt-agent:codex " +
   `-H x-mt-hook:${CODEX_PERMISSION_HOOK} -H x-mt-session:$MULMOTERMINAL_SESSION_ID ` +
   "-d @- http://127.0.0.1:$MULMOTERMINAL_PORT/api/hook >/dev/null 2>&1 || true";
 

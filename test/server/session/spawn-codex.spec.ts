@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createCodexSpawner } from "../../../server/session/spawn-codex.js";
 import { ptys } from "../../../server/session/registry.js";
 import type { SpawnDeps } from "../../../server/session/spawn-deps.js";
+import { codexPermissionHookOverride } from "../../../server/agents/codex-hook.js";
 
 const SID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeee01";
 const ROLLOUT_ID = "11111111-2222-4333-8444-555555555555";
@@ -16,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   // What ptySpawn reports back — the reattached flag IS the case under test.
   reattached: false,
   argv: [] as string[][],
+  envs: [] as Record<string, string>[],
   tracked: [] as { sessionId: string; file: string; mode: unknown }[],
   remembered: [] as { sessionId: string; conversationId: string; cwd: string }[],
   watcherRuns: 0,
@@ -24,8 +26,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../../../server/session/pty-spawn.js", () => ({
-  ptySpawn: vi.fn((_id: string, _bin: string, args: string[]) => {
+  ptySpawn: vi.fn((_id: string, _bin: string, args: string[], _cwd: string, _persistent: boolean, options?: { env?: Record<string, string> }) => {
     mocks.argv.push(args);
+    mocks.envs.push(options?.env ?? {});
     return { term: { pid: 1234, onData: vi.fn(), onExit: vi.fn() }, tmux: true, reattached: mocks.reattached };
   }),
   ptyWouldReattach: vi.fn(() => mocks.reattached),
@@ -81,6 +84,7 @@ describe("createCodexSpawner", () => {
     ptys.clear();
     mocks.reattached = false;
     mocks.argv.length = 0;
+    mocks.envs.length = 0;
     mocks.tracked.length = 0;
     mocks.remembered.length = 0;
     mocks.watcherRuns = 0;
@@ -130,5 +134,20 @@ describe("createCodexSpawner", () => {
     spawn()(SID, null, null, "/w", false);
     expect(mocks.tracked).toEqual([]);
     expect(mocks.watcherRuns).toBe(1);
+  });
+
+  // The hook's command is a constant, so what makes it this session's is the environment it runs
+  // in: the override without the id posts nothing anyone can attribute.
+  it.skipIf(process.platform === "win32")("registers the permission hook on an interactive spawn, with the session in the env", () => {
+    spawn()(SID, null, null, "/w", false);
+    expect(mocks.argv.at(-1)).toContain(codexPermissionHookOverride());
+    expect(mocks.envs.at(-1)).toMatchObject({ MULMOTERMINAL_SESSION_ID: SID });
+    expect(mocks.envs.at(-1)?.MULMOTERMINAL_PORT).toMatch(/^\d+$/);
+  });
+
+  // A seed prompt is typed once the screen settles, and the one-time trust dialog would take it.
+  it("registers no permission hook when the spawn types a seed prompt", () => {
+    spawn()(SID, null, null, "/w", false, { initialPrompt: "run the collection action" });
+    expect(mocks.argv.at(-1)).not.toContain(codexPermissionHookOverride());
   });
 });

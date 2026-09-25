@@ -152,4 +152,10 @@ describe("the hook command", () => {
   it.skipIf(process.platform === "win32")("exits 0 when nothing is listening, so a stopped server cannot read as a refusal", async () => {
     expect((await runHook({ MULMOTERMINAL_PORT: "1" })).exitCode).toBe(0);
   });
+
+  it.skipIf(process.platform === "win32")("goes straight to loopback when the pane inherited a proxy", async () => {
+    const proxy = { http_proxy: "http://127.0.0.1:1", HTTP_PROXY: "http://127.0.0.1:1", all_proxy: "http://127.0.0.1:1" };
+    const { received } = await runAgainstServer({ MULMOTERMINAL_SESSION_ID: "4078f9a6-4ce0-4906-a544-ca0cf917eb96", ...proxy });
+    expect(received?.url).toBe("/api/hook");
+  });
 });
