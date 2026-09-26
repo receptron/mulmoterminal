@@ -25,7 +25,15 @@ the mouse, and nothing listed which keys a user had bound, or which actions exis
   "open the palette", runs everything else through `gateShortcut` (the same gate a key goes
   through), and registers itself as the palette's host while mounted. `GridView.vue` uses it in
   place of `usePrefixKeys`; the file stays at its line limit.
-- `CommandPalette.vue` is teleported to body with `font-sans`. Arrows move, Enter runs (a disabled
+- The host also says whether the grid has the keyboard (`available`): the same route / Settings /
+  launch-panel condition that makes the grid leave a key alone (`gridHasKeyboard` in GridView).
+  While it is false, every row is disabled with "Only while the terminal grid is in front", and the
+  host refuses a pick as a backstop. Cross review round 1 found that the toolbar keeps the palette
+  reachable over another view and over the launch panel, where a pick acted on the hidden grid.
+- The checks about the key itself (a text field, an IME confirmation) moved from GridView into
+  `useGridKeys.onKey`, in the same order, which keeps GridView under its line limit.
+- `CommandPalette.vue` is teleported to body with `font-sans`. It scrolls the active row into view,
+  as the file finder does, and leaves Enter and the arrows to an IME that is composing. Arrows move, Enter runs (a disabled
   row keeps the palette open), and Esc or a click on the backdrop closes it.
 - Not extracted: `FileFinder.vue`'s template. Only its pure matcher is shared, so the finder is
   untouched and there is no refactor to prove.
@@ -38,4 +46,4 @@ the mouse, and nothing listed which keys a user had bound, or which actions exis
 - `test/src/composables/useGridKeys.spec.ts`
 - `test/src/components/AppToolbar.spec.ts` (the button)
 
-Six decisions were removed one at a time, and each turned a spec red.
+Twelve decisions were removed one at a time (six in the first version, six from round 1), and each turned a spec red.

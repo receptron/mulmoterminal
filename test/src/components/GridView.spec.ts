@@ -312,6 +312,7 @@ vi.mock("../../../src/composables/useTerminalConnections", async (orig) => ({
 }));
 
 import { setActiveKeymap } from "../../../src/composables/activeKeymap";
+import { paletteHost } from "../../../src/composables/commandPalette";
 import { resetImeComposition } from "../../../src/composables/imeComposition";
 import { PAGE_SIZE } from "../../../src/components/gridTabs";
 
@@ -359,6 +360,24 @@ const gridOf = (w: ReturnType<typeof mount>) => w.findComponent(ShortcutGridStub
 
 // #2265. A two-key sequence through the real handler: the prefix waits with a hint, the next key
 // runs the action, and neither key reaches the terminal underneath.
+// #2266. The command palette's picks reach the grid only while the grid has the keyboard: over the
+// launch panel (or another view) a pick would act on a grid the user is not looking at.
+describe("GridView and the command palette", () => {
+  it("runs a palette pick, and refuses one while the launch panel is open", async () => {
+    const w = await mountShortcutGrid(4, {}, { "terminal-new": "F7" });
+    paletteHost.value?.run("zoom-toggle");
+    await flushPromises();
+    expect(gridOf(w).props("expandedUid")).not.toBeNull();
+    paletteHost.value?.run("zoom-toggle"); // collapse again
+    await flushPromises();
+    await press("F7"); // the launch panel takes the keyboard
+    paletteHost.value?.run("zoom-toggle");
+    await flushPromises();
+    expect(gridOf(w).props("expandedUid")).toBeNull();
+    w.unmount();
+  });
+});
+
 describe("GridView two-key sequences", () => {
   const SEQUENCE_KEYMAP = { "zoom-toggle": "Ctrl+k z" };
   const pressCtrlK = async () => {

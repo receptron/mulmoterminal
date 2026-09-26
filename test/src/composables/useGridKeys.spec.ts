@@ -6,13 +6,17 @@ import { closeCommandPalette, paletteHost, paletteOpen } from "../../../src/comp
 
 // #2266. The grid runs a palette pick through the same gate as a key, and a key bound to
 // `command-palette` opens the palette rather than reaching the grid.
-const mountKeys = (zoomed: boolean) => {
+const mountKeys = (zoomed: boolean, available = true) => {
   const run = vi.fn();
   const holder: { keys: GridKeys | null } = { keys: null };
   const w = mount(
     defineComponent({
       setup() {
-        holder.keys = useGridKeys(run, () => zoomed);
+        holder.keys = useGridKeys(
+          run,
+          () => zoomed,
+          () => available,
+        );
         return () => h("div");
       },
     }),
@@ -21,16 +25,7 @@ const mountKeys = (zoomed: boolean) => {
   if (!keys) throw new Error("not mounted");
   return { run, keys, w };
 };
-const press = (k: string) => ({
-  type: "keydown",
-  key: k,
-  shiftKey: false,
-  altKey: false,
-  ctrlKey: false,
-  metaKey: false,
-  preventDefault: vi.fn(),
-  stopPropagation: vi.fn(),
-});
+const press = (k: string) => new KeyboardEvent("keydown", { key: k, cancelable: true });
 
 afterEach(() => closeCommandPalette());
 
@@ -57,5 +52,21 @@ describe("useGridKeys", () => {
     expect(paletteHost.value).not.toBeNull();
     w.unmount();
     expect(paletteHost.value).toBeNull();
+  });
+
+  it("refuses a palette pick while the grid is not in front", () => {
+    const { run, w } = mountKeys(true, false);
+    paletteHost.value?.run("zoom-toggle");
+    expect(run).not.toHaveBeenCalled();
+    w.unmount();
+  });
+
+  it("leaves a key alone, and drops a waiting sequence, while the grid is not in front", () => {
+    const { run, keys, w } = mountKeys(true, false);
+    const e = press("F1");
+    keys.onKey({ "zoom-toggle": "F1" }, e);
+    expect(run).not.toHaveBeenCalled();
+    expect(e.defaultPrevented).toBe(false);
+    w.unmount();
   });
 });

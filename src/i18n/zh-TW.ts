@@ -544,6 +544,7 @@ export const zhTW: Messages = {
     empty: "沒有符合的動作。",
     needsEnlarged: "僅在放大終端機時",
     needsNothingEnlarged: "僅在未放大時",
+    gridHidden: "僅在終端機網格位於前景時",
     hint: "Enter 執行 · Esc 關閉",
     notSet: "無按鍵",
     descriptions: {

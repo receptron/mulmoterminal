@@ -25,9 +25,18 @@ export interface PaletteText {
   description: (action: KeymapAction) => string;
   needsEnlarged: string;
   needsNothingEnlarged: string;
+  gridHidden: string;
 }
 
-const disabledReason = (action: KeymapAction, zoomed: boolean, text: PaletteText): string | null => {
+/** The grid's state, as far as the rows care. */
+export interface PaletteState {
+  zoomed: boolean;
+  /** Whether the grid is in front and taking keys; false over another view or the launch panel. */
+  available: boolean;
+}
+
+const disabledReason = (action: KeymapAction, { zoomed, available }: PaletteState, text: PaletteText): string | null => {
+  if (!available) return text.gridHidden;
   if (NEEDS_A_CURRENT_TERMINAL.includes(action) && !zoomed) return text.needsEnlarged;
   if (NEEDS_NOTHING_ENLARGED.includes(action) && zoomed) return text.needsNothingEnlarged;
   return null;
@@ -35,7 +44,7 @@ const disabledReason = (action: KeymapAction, zoomed: boolean, text: PaletteText
 
 /** The rows for this query, best first. The action id is searched as well as the name, so typing
  *  the name the config uses (`files-find`) finds it too; only the name is highlighted. */
-export function paletteRows(query: string, keymap: Keymap, zoomed: boolean, text: PaletteText): PaletteRow[] {
+export function paletteRows(query: string, keymap: Keymap, state: PaletteState, text: PaletteText): PaletteRow[] {
   const byCandidate = new Map<string, KeymapAction>(PALETTE_ACTIONS.map((action) => [`${text.label(action)} ${action}`, action]));
   return rankPaths([...byCandidate.keys()], query, PALETTE_ACTIONS.length).flatMap((match) => {
     const action = byCandidate.get(match.path);
@@ -50,7 +59,7 @@ export function paletteRows(query: string, keymap: Keymap, zoomed: boolean, text
         ),
         description: text.description(action),
         binding: keymap[action] ?? null,
-        disabledReason: disabledReason(action, zoomed, text),
+        disabledReason: disabledReason(action, state, text),
       },
     ];
   });

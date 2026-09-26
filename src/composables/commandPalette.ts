@@ -4,10 +4,13 @@
 import { ref, shallowRef } from "vue";
 import type { KeymapAction } from "../../common/keymap";
 
-/** The grid's side: run an action, and say whether a terminal is enlarged (for what is disabled). */
+/** The grid's side: run an action, and say what the rows need to know to be disabled — whether a
+ *  terminal is enlarged, and whether the grid is in front at all. The toolbar (and so the palette)
+ *  stays up over another view and over the launch panel, where the grid does not take keys either. */
 export interface PaletteHost {
   run: (action: KeymapAction) => void;
   zoomed: () => boolean;
+  available: () => boolean;
 }
 
 export const paletteOpen = ref(false);

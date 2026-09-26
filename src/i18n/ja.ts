@@ -555,6 +555,7 @@ export const ja: Messages = {
     empty: "一致する動作はありません。",
     needsEnlarged: "ターミナルの拡大中だけ",
     needsNothingEnlarged: "拡大していないときだけ",
+    gridHidden: "ターミナルのグリッドが前面にあるときだけ",
     hint: "Enter で実行 · Esc で閉じる",
     notSet: "キーなし",
     descriptions: {

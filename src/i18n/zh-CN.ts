@@ -539,6 +539,7 @@ export const zhCN: Messages = {
     empty: "没有匹配的操作。",
     needsEnlarged: "仅在放大终端时",
     needsNothingEnlarged: "仅在未放大时",
+    gridHidden: "仅在终端网格位于前台时",
     hint: "Enter 运行 · Esc 关闭",
     notSet: "无按键",
     descriptions: {

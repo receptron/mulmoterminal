@@ -14,22 +14,35 @@ const { t } = useI18n();
 const query = ref("");
 const active = ref(0);
 const input = useTemplateRef<HTMLInputElement>("input");
+const listEl = useTemplateRef<HTMLElement>("listEl");
 
 // The description's key is the label's last segment, so a new action cannot have one without the
 // other: the label table is a full Record over the actions.
 const descriptionKey = (action: KeymapAction): string => `commandPalette.descriptions.${keymapLabelKey(action).split(".").pop() ?? ""}`;
 
 const rows = computed(() =>
-  paletteRows(query.value, activeKeymap.value, paletteHost.value?.zoomed() ?? false, {
-    label: (action) => t(keymapLabelKey(action)),
-    description: (action) => t(descriptionKey(action)),
-    needsEnlarged: t("commandPalette.needsEnlarged"),
-    needsNothingEnlarged: t("commandPalette.needsNothingEnlarged"),
-  }),
+  paletteRows(
+    query.value,
+    activeKeymap.value,
+    { zoomed: paletteHost.value?.zoomed() ?? false, available: paletteHost.value?.available() ?? false },
+    {
+      label: (action) => t(keymapLabelKey(action)),
+      description: (action) => t(descriptionKey(action)),
+      needsEnlarged: t("commandPalette.needsEnlarged"),
+      needsNothingEnlarged: t("commandPalette.needsNothingEnlarged"),
+      gridHidden: t("commandPalette.gridHidden"),
+    },
+  ),
 );
 
 watch(query, () => {
   active.value = 0;
+  if (listEl.value) listEl.value.scrollTop = 0;
+});
+
+// The list scrolls, and a row the arrows reach below its edge would be picked by Enter unseen.
+watch(active, (index) => {
+  listEl.value?.querySelector(`[data-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
 });
 
 /** Run the row, if it can run now. A disabled row keeps the palette open, with its reason on it. */
@@ -41,6 +54,7 @@ function pick(index: number): void {
 }
 
 function onKeydown(e: KeyboardEvent): void {
+  if (e.isComposing) return; // an IME candidate list owns Enter and the arrows while composing
   if (e.key === "Escape") {
     e.preventDefault();
     closeCommandPalette();
@@ -92,11 +106,12 @@ onMounted(() => input.value?.focus());
           </button>
         </div>
         <p v-if="rows.length === 0" data-testid="command-palette-empty" class="px-3 py-2 text-[12px] text-muted">{{ t("commandPalette.empty") }}</p>
-        <ul v-else id="command-palette-list" role="listbox" class="max-h-[360px] overflow-auto py-1">
+        <ul v-else id="command-palette-list" ref="listEl" role="listbox" class="max-h-[360px] overflow-auto py-1">
           <li
             v-for="(row, index) in rows"
             :id="`command-palette-row-${index}`"
             :key="row.action"
+            :data-index="index"
             data-testid="command-palette-row"
             :data-action="row.action"
             role="option"

@@ -551,6 +551,7 @@ export const ko: Messages = {
     empty: "일치하는 동작이 없습니다.",
     needsEnlarged: "터미널을 확대했을 때만",
     needsNothingEnlarged: "확대하지 않았을 때만",
+    gridHidden: "터미널 그리드가 앞에 있을 때만",
     hint: "Enter 실행 · Esc 닫기",
     notSet: "키 없음",
     descriptions: {

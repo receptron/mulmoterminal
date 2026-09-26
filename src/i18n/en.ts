@@ -571,6 +571,7 @@ export const en = {
     empty: "No action matches that.",
     needsEnlarged: "Needs an enlarged terminal",
     needsNothingEnlarged: "Only while no terminal is enlarged",
+    gridHidden: "Only while the terminal grid is in front",
     hint: "Enter runs · Esc closes",
     notSet: "No key",
     descriptions: {
