@@ -7,7 +7,7 @@
 // The server sanitizes and persists it; the browser matches keydowns against it. One
 // definition here so the accepted syntax can't drift between the two.
 //
-//   "keymap": { "zoom-next": "PageDown", "zoom-prev": "Shift+PageUp" }
+//   "keymap": { "zoom-next": "PageDown", "zoom-prev": "Shift+PageUp", "files-find": "Cmd+K p" }
 
 // Actions a key can be bound to. Adding one here is all it takes for the config to accept it.
 import { isRecord } from "./isRecord.js";
@@ -128,6 +128,9 @@ export function parseKeyBinding(input: string): KeyBinding | null {
   if (parts.length === 0 || parts.some((part) => part === "")) return null;
   const key = parts[parts.length - 1];
   if (key === undefined) return null; // unreachable: parts.length was checked above
+  // No browser reports a key with whitespace in it, so `"Cmd+K p"` read as ONE keystroke named
+  // "K p" was accepted and never fired. A sequence is spelled with a space; see parseKeySequence.
+  if (/\s/.test(key)) return null;
   const binding: KeyBinding = { key, shift: false, alt: false, ctrl: false, meta: false };
   for (const part of parts.slice(0, -1)) {
     const flag = MODIFIERS[part.toLowerCase()];
@@ -136,6 +139,47 @@ export function parseKeyBinding(input: string): KeyBinding | null {
   }
   // A lone modifier ("Shift") binds nothing usable.
   return MODIFIERS[key.toLowerCase()] ? null : binding;
+}
+
+// The most keystrokes one binding can be. Two is a prefix and a key after it, as in tmux or Emacs's
+// `C-x b` — enough to put many actions behind one key the browser lets through (#2265).
+export const MAX_SEQUENCE_STROKES = 2;
+
+// Parse `"Cmd+K p"` into its keystrokes, or null when it is malformed. Strokes are separated by
+// whitespace, which no single keystroke can contain. A single keystroke is a sequence of one.
+export function parseKeySequence(input: string): KeyBinding[] | null {
+  const strokes = input.trim().split(/\s+/);
+  if (strokes.length > MAX_SEQUENCE_STROKES) return null;
+  const parsed = strokes.map(parseKeyBinding);
+  return parsed.every((stroke): stroke is KeyBinding => stroke !== null) ? parsed : null;
+}
+
+// Esc with no modifier always ends a sequence's wait, so it can never be a sequence's second key.
+export const isBareEscape = (e: KeymapKeyEvent): boolean => e.key === "Escape" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
+
+// Actions that can be bound to a sequence. Not `copy` / `paste`: they are decided inside the
+// terminal, one keystroke at a time (TERMINAL_SCOPED_ACTIONS), and nothing there can wait.
+export const takesSequence = (action: KeymapAction): boolean => !TERMINAL_SCOPED_ACTIONS.includes(action);
+
+/** One action bound to two keystrokes. */
+export interface SequenceBinding {
+  action: KeymapAction;
+  first: KeyBinding;
+  second: KeyBinding;
+  /** How the user wrote each keystroke, for the hint shown while waiting for the second. */
+  firstLabel: string;
+  secondLabel: string;
+}
+
+// Every two-keystroke binding in a keymap, in action order.
+export function sequenceBindings(keymap: Keymap): SequenceBinding[] {
+  return KEYMAP_ACTIONS.flatMap((action): SequenceBinding[] => {
+    const raw = keymap[action];
+    const strokes = raw === undefined || !takesSequence(action) ? null : parseKeySequence(raw);
+    const [first, second] = strokes ?? [];
+    const [firstLabel, secondLabel] = raw?.trim().split(/\s+/) ?? [];
+    return first && second && firstLabel && secondLabel ? [{ action, first, second, firstLabel, secondLabel }] : [];
+  });
 }
 
 // The structural shape of a keydown a binding is matched against. A real KeyboardEvent
@@ -159,6 +203,7 @@ export function actionForKey(keymap: Keymap, e: KeymapKeyEvent): KeymapAction | 
   for (const action of KEYMAP_ACTIONS) {
     const raw = keymap[action];
     if (raw === undefined) continue;
+    // A sequence is resolved by prefixStep (src/composables/prefixKeys.ts), never here.
     const binding = parseKeyBinding(raw);
     if (binding && matchesBinding(binding, e)) return action;
   }
@@ -215,25 +260,61 @@ export function validateKeymap(input: unknown): KeymapProblem[] {
   // deliberately, so Ctrl+C stays an interrupt — and the same-key send fires then. Naming `copy`
   // as the winner there tells the user the opposite of what they will see half the time (#1901).
   const bound = new Map<string, Claim[]>();
-  const claim = (parsed: KeyBinding, entry: Claim): void => {
-    const key = canonicalBinding(parsed); // as PARSED: "Shift+PageUp" and "shift+pageup" are one keystroke
+  const claim = (strokes: KeyBinding[], entry: Claim): void => {
+    const key = canonicalSequence(strokes); // as PARSED: "Shift+PageUp" and "shift+pageup" are one keystroke
     bound.set(key, [...(bound.get(key) ?? []), entry]);
   };
-  const problems = entries.flatMap(([action, binding]): KeymapProblem[] => {
-    if (action === "send") return sendProblems(binding, claim);
-    if (!isKeymapAction(action)) {
-      return [{ action, binding, reason: `unknown action (known: ${KEYMAP_ACTIONS.join(", ")}, send)`, fatal: false }];
-    }
-    if (typeof binding !== "string") return [{ action, binding, reason: "binding must be a string", fatal: true }];
-    const parsed = parseKeyBinding(binding);
-    if (parsed === null) {
-      return [{ action, binding, reason: 'unparseable key binding — expected e.g. "PageDown" or "Shift+PageUp"', fatal: true }];
-    }
-    claim(parsed, { label: action, binding, rank: KEYMAP_ACTIONS.indexOf(action), kind: "action" });
-    return unshiftedUnderCmdWarnings(action, binding, parsed);
-  });
-  return [...problems, ...duplicateWarnings(bound)];
+  const problems = entries.flatMap(([action, binding]): KeymapProblem[] =>
+    action === "send" ? sendProblems(binding, claim) : actionProblems(action, binding, claim),
+  );
+  return [...problems, ...duplicateWarnings(bound), ...prefixWarnings(bound)];
 }
+
+// Everything wrong with one action's binding, claiming its keystrokes when it is well-formed.
+function actionProblems(action: string, binding: unknown, claim: (strokes: KeyBinding[], entry: Claim) => void): KeymapProblem[] {
+  if (!isKeymapAction(action)) {
+    return [{ action, binding, reason: `unknown action (known: ${KEYMAP_ACTIONS.join(", ")}, send)`, fatal: false }];
+  }
+  if (typeof binding !== "string") return [{ action, binding, reason: "binding must be a string", fatal: true }];
+  const strokes = parseKeySequence(binding);
+  if (strokes === null) {
+    return [{ action, binding, reason: 'unparseable key binding — expected e.g. "PageDown", "Shift+PageUp" or two keys "Cmd+K p"', fatal: true }];
+  }
+  if (strokes.length > 1 && !takesSequence(action)) {
+    return [{ action, binding, reason: "takes a single keystroke — it is decided inside the terminal, which cannot wait for a second key", fatal: true }];
+  }
+  claim(strokes, { label: action, binding, rank: KEYMAP_ACTIONS.indexOf(action), kind: "action" });
+  return [...strokes.flatMap((stroke) => unshiftedUnderCmdWarnings(action, binding, stroke)), ...escapeSecondWarnings(action, binding, strokes)];
+}
+
+const escapeSecondWarnings = (action: string, binding: string, [, second]: KeyBinding[]): KeymapProblem[] =>
+  second && isBareEscape({ key: second.key, shiftKey: second.shift, altKey: second.alt, ctrlKey: second.ctrl, metaKey: second.meta })
+    ? [{ action, binding, reason: "never fires — a bare Escape always cancels a sequence; add a modifier or pick another second key", fatal: false }]
+    : [];
+
+// A sequence whose FIRST key is also a keystroke of its own. The single keystroke is claimed before
+// any sequence can start (see GridView's handler), so the sequence never gets its first key.
+function prefixWarnings(bound: Map<string, Claim[]>): KeymapProblem[] {
+  return [...bound.entries()].flatMap(([key, claims]) => {
+    const [first, second] = key.split(SEQUENCE_SEPARATOR);
+    const singles = second === undefined || first === undefined ? [] : (bound.get(first) ?? []);
+    if (singles.length === 0) return [];
+    const reason = prefixCollision(singles);
+    return claims.map((claim) => ({ action: claim.label, binding: claim.binding, reason, fatal: false }));
+  });
+}
+
+// Deliberately NOT a prediction of the states the sequence still starts in. Which single binding
+// acts depends on the zoom state, on a selection for `copy`, and on which of several claims dispatch
+// reaches — twice a narrower sentence was wrong for a combination it did not list (codex on #2283).
+// Every claim is named, in dispatch order, and the advice is the one that is always right.
+const prefixCollision = (singles: Claim[]): string => {
+  const names = [...singles]
+    .sort((x, y) => x.rank - y.rank)
+    .map((claim) => `\`${claim.label}\``)
+    .join(", ");
+  return `its first key is also bound on its own, to ${names} — those take the key whenever they act, so this sequence may never start; give it a first key nothing else uses`;
+};
 
 // A binding that says one keystroke and waits for another. While Cmd is held, a macOS browser puts
 // the UNSHIFTED character in `KeyboardEvent.key` — Cmd+Shift+P arrives as `"p"` — so a binding
@@ -273,7 +354,7 @@ interface Claim {
 // Fatal throughout, for the reason the module header gives: a send binding is invisible until
 // the key is pressed, so a dropped one is indistinguishable from a shortcut that "doesn't work".
 // Empty `bytes` is fatal too — it would take the key away from the terminal and put nothing back.
-function sendProblems(input: unknown, claim: (parsed: KeyBinding, entry: Claim) => void): KeymapProblem[] {
+function sendProblems(input: unknown, claim: (strokes: KeyBinding[], entry: Claim) => void): KeymapProblem[] {
   if (!Array.isArray(input)) {
     return [{ action: "send", binding: input, reason: "`send` must be an array of { key, bytes }", fatal: true }];
   }
@@ -288,7 +369,7 @@ function sendProblems(input: unknown, claim: (parsed: KeyBinding, entry: Claim) 
       return [{ action: label, binding: entry.key, reason: "`bytes` is empty — the key would be taken from the terminal and nothing sent", fatal: true }];
     }
     // Ranked after every action, matching who actually wins (see the `bound` comment above).
-    claim(parsed, { label, binding: entry.key, rank: KEYMAP_ACTIONS.length + i, kind: "send" });
+    claim([parsed], { label, binding: entry.key, rank: KEYMAP_ACTIONS.length + i, kind: "send" });
     return unshiftedUnderCmdWarnings(label, entry.key, parsed);
   });
 }
@@ -358,13 +439,25 @@ const collisionReason = (winner: Claim, runnerUp: Claim | null, loser: Claim): s
 // A binding's identity as a keystroke, for spotting two actions that claim the same one.
 const canonicalBinding = (b: KeyBinding): string => `${b.shift ? "S" : ""}${b.alt ? "A" : ""}${b.ctrl ? "C" : ""}${b.meta ? "M" : ""}|${b.key}`;
 
+// The same for a sequence. A keystroke's identity cannot contain the separator, because no key
+// does (parseKeyBinding refuses whitespace), so a sequence's first key splits back out exactly.
+const SEQUENCE_SEPARATOR = " ";
+const canonicalSequence = (strokes: KeyBinding[]): string => strokes.map(canonicalBinding).join(SEQUENCE_SEPARATOR);
+
+// A binding the dispatch can act on: it parses, and it is a single keystroke unless the action can
+// wait for a second one.
+const isUsableBinding = (action: KeymapAction, binding: string): boolean => {
+  const strokes = parseKeySequence(binding);
+  return strokes !== null && (strokes.length === 1 || takesSequence(action));
+};
+
 // Keep only known actions bound to a parseable, non-empty string. Unknown keys and
 // malformed bindings are dropped rather than rejecting the whole map, matching how the
 // rest of the config treats one bad entry.
 export function sanitizeKeymap(input: unknown): Keymap {
   if (!isRecord(input)) return {};
   const entries = Object.entries(input).filter(
-    (entry): entry is [KeymapAction, string] => isKeymapAction(entry[0]) && typeof entry[1] === "string" && parseKeyBinding(entry[1]) !== null,
+    (entry): entry is [KeymapAction, string] => isKeymapAction(entry[0]) && typeof entry[1] === "string" && isUsableBinding(entry[0], entry[1]),
   );
   const send = sanitizeSendBindings(input.send);
   return { ...Object.fromEntries(entries), ...(send.length ? { send } : {}) };

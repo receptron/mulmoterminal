@@ -530,6 +530,11 @@ export const zhCN: Messages = {
     },
   },
 
+  // 双键快捷键等待第二个键时显示的提示（#2265）。
+  prefixKeys: {
+    waiting: "{key} 之后按：",
+    cancel: "按 Esc 取消",
+  },
   terminal: {
     copyMode: {
       message: "正在查看历史 — 输入不会发送到终端。按 q 返回。",

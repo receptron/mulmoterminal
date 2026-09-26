@@ -51,7 +51,9 @@ import {
 import { activityStatus, type AttentionStatus } from "./attentionStatus";
 import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
-import { gridShortcutFor, isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
+import { isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
+import { usePrefixKeys } from "../composables/usePrefixKeys";
+import PrefixKeyHint from "./PrefixKeyHint.vue";
 import { isImeConfirming } from "../composables/imeComposition";
 import { useCaptureKeydown } from "../composables/useCaptureKeydown";
 import { getActiveKeymap } from "../composables/activeKeymap";
@@ -481,31 +483,34 @@ function closeSettings() {
 // CAPTURE phase because xterm binds keydown on its own textarea: capture runs first, so the
 // key can be claimed before the terminal turns it into a page-forward escape sequence.
 function onShortcutKey(e: KeyboardEvent) {
+  if (gridYieldsKey(e)) return prefix.cancel();
+  const shortcut = prefix.claim(getActiveKeymap(), e, expandedUid.value !== null);
+  if (shortcut) runShortcut(shortcut);
+}
+
+// Whether this key belongs to something other than the grid. A sequence waiting for its second key
+// is dropped then, or it would swallow the next key once the grid has the keyboard back (#2265).
+function gridYieldsKey(e: KeyboardEvent): boolean {
   // Only while the grid is what the user is actually LOOKING at. It now stays mounted underneath a
   // full-screen overlay, so without this a keystroke aimed at the collection browser or the wiki
   // reaches the hidden grid — up to `terminal-close` closing its zoomed cell. CodeMirror is the
   // worst of it: its editable surface is contenteditable, which isEditableTarget below does not
   // exclude, so typing in an editor was reaching the shortcuts (Codex, PR #1193).
-  if (!onTerminalsRoute()) return;
-  if (showSettings.value) return;
-  // Same reason, and the launch panel is the same kind of thing: while it is open the keyboard is
-  // its own. Without this a grid shortcut bound to Escape runs its action AND leaves the panel
-  // open, because this handler is capture-phase and the panel's is not (codex [P2], #1890). An
-  // early return rather than a swallow — the event goes on to reach the panel.
-  if (launchPanelOpen.value) return;
-  const target = e.target instanceof HTMLElement ? e.target : null;
-  if (target && isEditableTarget(target.tagName, Array.from(target.classList))) return;
+  // The launch panel is the same kind of thing: while it is open the keyboard is its own. Without
+  // this a grid shortcut bound to Escape runs its action AND leaves the panel open, because this
+  // handler is capture-phase and the panel's is not (codex [P2], #1890). An early return rather
+  // than a swallow — the event goes on to reach the panel.
   // A key confirming an IME candidate is the IME's, not a shortcut. `gridShortcutFor` already
   // refuses `e.isComposing` — this is the Safari case, where compositionend fires first and the
   // flag is already false (#1353). Without it, confirming 変換 anywhere the grid can hear runs
-  // whatever that key is bound to.
-  if (isImeConfirming(e)) return;
-  const shortcut = gridShortcutFor(getActiveKeymap(), e, expandedUid.value !== null);
-  if (!shortcut) return;
-  e.preventDefault();
-  e.stopPropagation();
-  runShortcut(shortcut);
+  // whatever that key is bound to. Checked last and short-circuited, as before.
+  const target = e.target instanceof HTMLElement ? e.target : null;
+  const editable = target !== null && isEditableTarget(target.tagName, Array.from(target.classList));
+  return !onTerminalsRoute() || showSettings.value || launchPanelOpen.value || editable || isImeConfirming(e);
 }
+
+// Two-key sequences (#2265) — see usePrefixKeys for how they share the key with single bindings.
+const prefix = usePrefixKeys();
 
 // gridShortcutFor has already refused the actions that need a terminal to act ON while
 // un-zoomed. The ones that reach here un-zoomed are the ways IN: `terminal-new`, plus
@@ -963,5 +968,6 @@ onBeforeUnmount(detachSpawnedChat);
       @close="closeLaunchPanel"
     />
     <AppSettingsModal v-if="showSettings" :presets="presets" @launch-skill="launchSkill" @close="closeSettings" />
+    <PrefixKeyHint :pending="prefix.pending.value" />
   </div>
 </template>

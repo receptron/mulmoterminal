@@ -46,7 +46,7 @@ export function enforceKeymap(file: string, io: KeymapCheckIo): void {
   if (warnings.length > 0) io.warn(`[config] ${file}: keymap entries that will not do what they say\n${warnings.join("\n")}`);
   if (errors.length > 0) {
     io.fail(
-      `[config] ${file}: invalid keymap — refusing to start\n${errors.join("\n")}\n\nA binding looks like "PageDown" or "Shift+PageUp" (modifiers: Shift, Ctrl, Alt/Option, Cmd).\nFix or remove the entry, then start again.`,
+      `[config] ${file}: invalid keymap — refusing to start\n${errors.join("\n")}\n\nA binding looks like "PageDown" or "Shift+PageUp" (modifiers: Shift, Ctrl, Alt/Option, Cmd), or two keys separated by a space, "Cmd+K p".\nFix or remove the entry, then start again.`,
     );
   }
 }

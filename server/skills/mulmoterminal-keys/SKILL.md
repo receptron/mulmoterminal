@@ -227,6 +227,28 @@ Each is checked against the traps below. The guide documents them at
   on a Mac. For `files-search`, VS Code's is `Cmd+Shift+F` / `Ctrl+Shift+F`, and both are free here —
   write the Mac one `"Cmd+Shift+f"`, lowercase, for the same reason.
 
+### Two-key sequences — `"Cmd+k p"`
+
+A binding may be two keystrokes separated by a space (#2265). The first starts a wait, a box in the
+bottom-right lists what can follow, and the second runs the action; `Esc`, any other key, or three
+seconds ends it. Offer this when the user wants more shortcuts than there are free single keys, or
+asks for tmux / Emacs style.
+
+- **Never for `copy`, `paste` or `send`** — they are decided inside the terminal and take one
+  keystroke. Writing one as a sequence stops the server from starting.
+- **Two keys at most.** Three is a startup error. A bare `Escape` is never a second key — it always
+  cancels (the startup check warns); `Shift+Escape` and the like are fine.
+- **Give a sequence a first key nothing else uses** — not an action, `copy`, `paste` or a `send`. A
+  single binding takes the key whenever it acts, so the sequence may never start; the startup check
+  warns and names every binding on that key. Don't write one.
+- **Every rule above applies to each key**: lowercase letters with `Cmd`, no `Option`+letter on a
+  Mac, no `F1`–`F12` on a Mac without `Fn`.
+- **Pick the first key for the terminal's sake.** None of the keys reaches the terminal. On a Mac,
+  `Cmd+k` costs the terminal nothing. On Windows/Linux, `Ctrl+k` is the shell's kill-line and some
+  browsers' search box — suggest `Ctrl+Alt+k` or a function key there, and ask them to confirm the
+  first key reaches the page with the console snippet before writing it.
+- Settings shows the binding as written; there is nothing else to set.
+
 ### `keymap.send` — raw bytes to the terminal
 
 The actions above drive MulmoTerminal. `send` does the opposite: it puts **bytes straight into the
