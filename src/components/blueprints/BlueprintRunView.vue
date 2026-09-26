@@ -11,6 +11,7 @@ import { elapsedParts, gateKey, rejectionReason, stepLook } from "./blueprintVie
 import { latestOnly } from "./latestOnly";
 import BlueprintLiveActivity from "./BlueprintLiveActivity.vue";
 import BlueprintSpecReview from "./BlueprintSpecReview.vue";
+import MarkdownProse from "../MarkdownProse.vue";
 
 const props = defineProps<{ runId: string }>();
 const { t } = useI18n();
@@ -153,7 +154,10 @@ const statusOf = (stepId: string) => view.value?.state.steps[stepId]?.status ?? 
           class="flex flex-col gap-2"
           @submit.prevent="act({ type: 'answer', answer: answer.trim() })"
         >
-          <p class="m-0 whitespace-pre-wrap font-sans text-[13px] text-fg" data-testid="blueprint-question-text">{{ currentState.question }}</p>
+          <!-- Markdown: a question that walks a person through a console carries numbered steps and links. -->
+          <div class="font-sans text-[13px] text-fg" data-testid="blueprint-question-text">
+            <MarkdownProse :markdown="currentState.question ?? ''" />
+          </div>
           <textarea
             v-model="answer"
             data-testid="blueprint-answer"

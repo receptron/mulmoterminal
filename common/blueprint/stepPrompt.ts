@@ -42,6 +42,7 @@ export function stepPrompt({ step, skillFile, packDirs, stepState, askCommand }:
     "",
     "If you need a decision from the user, run this and then stop — do not guess:",
     `  QUESTION='your question' ${askCommand}`,
+    `The user is not an engineer. When they must do something by hand — a console setting, a sign-in, trying the app — use the matching guide in ${packDirs.base}/guides or ${packDirs.usecase}/guides: put its steps in your question with the {{…}} placeholders filled in, rather than a bare link. The question is shown as Markdown.`,
     "",
     `When the work is done, stop. The executor then runs the step's check itself: ${step.check}`,
     "Finish everything within this turn: leave no background task or subagent running when you stop — this session is closed when its turn ends, and the next step may start in the same folder.",

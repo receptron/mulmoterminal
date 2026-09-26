@@ -9,3 +9,10 @@ id=$(sh "$(dirname "$0")/project-id.sh" "$1")
 expected=$(cat .blueprint/build-id)
 served=$(curl -fsS --max-time 20 "https://$id.web.app/blueprint-build.txt")
 [ "$served" = "$expected" ] || { echo "$id serves build $served, this deploy made $expected" >&2; exit 1; }
+# Firebase Hosting hands the app its config at this reserved URL; the app reads it rather than
+# carrying a key of its own, so the same build works on dev and prod.
+curl -fsS --max-time 20 "https://$id.web.app/__/firebase/init.json" | node -e 'let s="";process.stdin.on("data",(c)=>s+=c).on("end",()=>{
+  if (!JSON.parse(s).apiKey) { console.error("no web app config at /__/firebase/init.json; register a web app in the project"); process.exit(1); }
+})'
+sh "$(dirname "$0")/google-signin.sh" "$1"
+sh "$(dirname "$0")/page-renders.sh" "https://$id.web.app/"

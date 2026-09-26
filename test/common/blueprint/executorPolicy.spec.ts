@@ -77,6 +77,12 @@ describe("stepPrompt", () => {
       askCommand: "ASK",
     });
 
+  it("points a question for a person at both packs' guides", () => {
+    const text = prompt(undefined);
+    expect(text).toContain("/packs/firebase/guides");
+    expect(text).toContain("/packs/internal/guides");
+  });
+
   it("names the skill, the spec, the way to ask and the check", () => {
     const text = prompt(undefined);
     expect(text).toContain("/packs/firebase/skills/b/SKILL.md");

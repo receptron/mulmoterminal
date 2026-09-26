@@ -19,7 +19,14 @@ description: "Limit sign-in to the company's email domain, twice: in blocking fu
    domain in lower case with its dots escaped. First check the domain is only DNS labels
    (`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$` after lower-casing); anything else
    — a `*`, a `|`, a space — could widen the rule, so ask instead of escaping it. Keep every collection already opened by the data-rules step.
-4. Write `test/blueprint/domain.spec.ts`: a verified member of the domain is let in, also with an upper-case
+4. A refused sign-in gets its own screen, not an error code. The blocking functions' refusal reaches the
+   client as `auth/internal-error` whose message carries the `HttpsError` (look for `permission-denied` /
+   `BLOCKING_FUNCTION_ERROR_RESPONSE`), so classify the error in a pure function of its own file
+   (refused-by-domain / cancelled / popup-blocked / other) with a unit test for each kind. The refusal screen says
+   in plain words that only `@<domain>` accounts can use this app, names the account that was refused when the
+   error carries it, and offers a button that opens the account chooser again (`prompt: "select_account"`).
+   Other failures say what happened in words; the raw code may follow in small text, never on its own.
+5. Write `test/blueprint/domain.spec.ts`: a verified member of the domain is let in, also with an upper-case
    address; another domain, an unverified address, and look-alikes (`example.co.jp.evil.com`,
    `evilexample.co.jp`, `@example.co.jp` with nothing before the `@`) are all refused.
 

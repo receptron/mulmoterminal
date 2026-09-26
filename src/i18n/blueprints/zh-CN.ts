@@ -64,7 +64,7 @@ export const blueprintsZhCN: Messages["blueprints"] = {
     retry: "重试",
     checkOutput: "检查结果",
     specFile: "规格说明位于 {file}。",
-    working: "代理正在处理此步骤，它在网格中显示为单独的终端。",
+    working: "代理正在处理此步骤，正在进行的操作显示在下方。",
     finished: "所有步骤已完成。",
   },
   market: {

@@ -13,7 +13,8 @@ description: "Deploy rules, indexes, functions and hosting to the dev project."
 
 Never deploy to `prod` in this step.
 
-Done when the check passes: the dev site serves the id this deploy wrote to `.blueprint/build-id`.
+Done when the check passes: the dev site serves the id this deploy wrote to `.blueprint/build-id`, serves a web
+app config at `/__/firebase/init.json`, has Google sign-in switched on, and the page renders text in headless Chrome (a blank page fails).
 
 ## Always
 

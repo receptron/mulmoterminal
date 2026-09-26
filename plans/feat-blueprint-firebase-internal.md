@@ -169,7 +169,7 @@ usecase-internal/                     用途パック
 
 ### 段階3（実行器）で決めたこと
 
-- **工程ごとに新しい Claude セッション**を、プロジェクトのディレクトリで最初のプロンプト付きで起こす。グリッドに出る（`markUnplacedSession`）。ターンの終わりは Stop フック（`registerCompletionHook`）で受け取る。Claude だけなのは、Stop が確実に届くのが Claude だけだから
+- **工程ごとに新しい Claude セッション**を、プロジェクトのディレクトリで最初のプロンプト付きで起こす。グリッドには出さない（出すと、セルの再接続や別の MulmoTerminal のグリッドが同じ工程を二重に起こす。何をしているかは実行画面で見る）。設計図を動かすのはマシンで一つの MulmoTerminal だけ（`~/.mulmoterminal/blueprints/executor.lock`）で、ほかは表示だけ。ターンの終わりは Stop フック（`registerCompletionHook`）で受け取る。Claude だけなのは、Stop が確実に届くのが Claude だけだから
 - 判定は実行器が回す。落ちた判定は `MAX_FAILED_CHECKS` 回まで、出力を添えた新しいセッションで自動的にやり直す。質問で止まったセッションは失敗に数えない
 - 質問は `curl` で `/api/blueprints/runs/:id/ask` に送る（MCP の道具にはしていない）。人の操作は `/events`。**二つの窓口の分け方は用途の区別であって、権限の仕切りではない**（手元のプロセスならどちらも呼べる）
 - 状態は `~/.mulmoterminal/blueprints/runs/<id>/build.json` に一つのファイルとして原子的に書く

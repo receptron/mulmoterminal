@@ -12,8 +12,12 @@ description: "Create the app skeleton: web app, Cloud Functions workspace, emula
 3. Test harness for rules and functions: `test/blueprint/` with vitest and `@firebase/rules-unit-testing`.
    Every later step adds its own `test/blueprint/<name>.spec.ts`; `checks/emulator-test.sh <name>` runs exactly
    that file against the emulators under the `demo-blueprint` project id, so tests can never touch a real project.
-4. `yarn build` must succeed.
-5. Do NOT run `git init`. A new repository root loses the trust its parent folder gave it, and every later step
+4. The web app's Firebase config: in development, the emulators with a demo project id; on Hosting, fetch
+   `/__/firebase/init.json` (Hosting serves the config of the project it runs in) and initialise from that before
+   mounting. No `.env`, no key written into the code: a production build has no `.env` to read, and a missing key
+   makes the page throw `auth/invalid-api-key` and stay blank. The same build then works on dev and prod.
+5. `yarn build` must succeed.
+6. Do NOT run `git init`. A new repository root loses the trust its parent folder gave it, and every later step
    would stop at Claude Code's trust prompt with nobody there to answer. If the user wants git, they add it
    themselves after the build.
 

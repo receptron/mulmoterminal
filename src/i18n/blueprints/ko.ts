@@ -64,7 +64,7 @@ export const blueprintsKo: Messages["blueprints"] = {
     retry: "다시 시도",
     checkOutput: "검사 결과",
     specFile: "사양서는 {file}에 있습니다.",
-    working: "에이전트가 이 단계를 작업 중입니다. 그리드에 별도의 터미널로 표시됩니다.",
+    working: "에이전트가 이 단계를 작업 중입니다. 하고 있는 일은 아래에 표시됩니다.",
     finished: "모든 단계가 완료되었습니다.",
   },
   market: {

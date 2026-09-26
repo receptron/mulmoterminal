@@ -64,7 +64,7 @@ export const blueprintsEn = {
     retry: "Try again",
     checkOutput: "What the check reported",
     specFile: "The specification is in {file}.",
-    working: "An agent is working on this step. It appears in the grid as its own terminal.",
+    working: "An agent is working on this step. What it is doing is shown below.",
     finished: "Every step is done.",
   },
   market: {
