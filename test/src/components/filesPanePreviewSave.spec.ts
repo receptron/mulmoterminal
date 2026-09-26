@@ -33,13 +33,24 @@ function mockFs() {
           ],
         }),
       };
-    if (url.includes("/text")) return { ok: true, json: async () => ({ text: "# hello", version: "v1" }) };
+    // Each file has a version of its own, so a result that lands on the wrong one is visible.
+    if (url.includes("/text")) return { ok: true, json: async () => ({ text: "# hello", version: url.includes("OTHER.md") ? "o1" : "v1" }) };
     if (url.includes("/write")) return writeReply();
     return { ok: true, json: async () => ({ ok: true }) };
   }) as unknown as typeof fetch;
 }
 
-const calls = () => (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]));
+const fetchCalls = () => (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls;
+const calls = () => fetchCalls().map((c) => String(c[0]));
+/** The `baseVersion` the most recent write claimed to be editing. */
+const lastWriteBase = (): unknown => {
+  const init: unknown = fetchCalls()
+    .filter((c) => String(c[0]).includes("/write"))
+    .at(-1)?.[1];
+  const body = typeof init === "object" && init !== null && "body" in init && typeof init.body === "string" ? init.body : "{}";
+  const parsed: unknown = JSON.parse(body);
+  return typeof parsed === "object" && parsed !== null && "baseVersion" in parsed ? parsed.baseVersion : undefined;
+};
 const writes = () => calls().filter((url) => url.includes("/write"));
 const modeButton = (w: ReturnType<typeof mount>) => w.findAll("button").find((b) => b.text() === "Preview" || b.text() === "Edit");
 const inPreview = (w: ReturnType<typeof mount>) => !(w.find("iframe").attributes("style") ?? "").includes("display: none");
@@ -128,6 +139,59 @@ describe("switching to Preview with unsaved edits", () => {
 
     expect(held).toHaveLength(2);
     expect(inPreview(w)).toBe(false);
+  });
+
+  // What the save learned belongs to the file it saved. Landing on the file opened meanwhile, its
+  // version would become that file's baseline — the next save of it then claims to be editing a
+  // revision it never had — and a 409 would put a banner over a file with nothing in conflict.
+  const heldWrites = () => {
+    const held: Array<(reply: Awaited<ReturnType<WriteReply>>) => void> = [];
+    writeReply = () => new Promise((resolve) => held.push(resolve));
+    return held;
+  };
+  const openOtherWhilePreviewSaves = async () => {
+    const held = heldWrites();
+    const w = await openReadme(true);
+    await modeButton(w)?.trigger("click");
+    await w.findAll('[data-testid="files-row"]')[1].trigger("click");
+    await flushPromises();
+    held[1]?.({ ok: true, status: 200, json: async () => ({ ok: true, version: "v2" }) });
+    await flushPromises();
+    return { w, held };
+  };
+
+  it("does not hand the late save's version to the file opened meanwhile", async () => {
+    const { w, held } = await openOtherWhilePreviewSaves();
+    held[0]?.({ ok: true, status: 200, json: async () => ({ ok: true, version: "v3" }) });
+    await flushPromises();
+    writeReply = saved;
+    onChange();
+    await flushPromises();
+    await w
+      .findAll("button")
+      .find((b) => b.text().startsWith("Save"))
+      ?.trigger("click");
+    await flushPromises();
+
+    expect(lastWriteBase()).toBe("o1");
+  });
+
+  it("does not raise the late save's conflict over the file opened meanwhile", async () => {
+    const { w, held } = await openOtherWhilePreviewSaves();
+    held[0]?.({ ok: false, status: 409, json: async () => ({ error: "conflict", version: "v9" }) });
+    await flushPromises();
+
+    expect(w.find('[data-testid="files-conflict"]').exists()).toBe(false);
+  });
+
+  // A save already out (⌘S, or a first click) is shown as such rather than a click that does nothing.
+  it("cannot be pressed while a save is in flight", async () => {
+    heldWrites();
+    const w = await openReadme(true);
+    await modeButton(w)?.trigger("click");
+    await flushPromises();
+
+    expect(modeButton(w)?.attributes("disabled")).toBeDefined();
   });
 
   it("goes back to the editor without writing anything", async () => {
