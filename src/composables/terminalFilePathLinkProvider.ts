@@ -19,6 +19,7 @@ import type { Terminal, ILinkProvider, ILink } from "@xterm/xterm";
 import { SOURCE_CODE_EXTENSIONS } from "../../common/sourceExtensions";
 import { browserDisplays } from "../../common/rawContentType";
 import { findFilePathLinks } from "./terminalFilePathLinks";
+import { rebaseOutsideCwd } from "./pathWithinCwd";
 
 export interface TerminalCell {
   chars: string;
@@ -167,8 +168,13 @@ export function createFilePathLinkProvider(
         decorations: { pointerCursor: true, underline: true },
         activate: () => {
           if (openInPane(link.text, cwd)) return;
-          const target = fileLinkTarget(link.text, cwd);
-          if (target.kind === "files") openInFiles(link.text, cwd);
+          // A path outside the cell is served relative to its own directory: the routes contain
+          // `path` within `cwd`, so handing them the cell's cwd refused it as an escape (#2260).
+          const rebased = rebaseOutsideCwd(link.text, cwd);
+          const base = rebased?.base ?? cwd;
+          const filePath = rebased?.rel ?? link.text;
+          const target = fileLinkTarget(filePath, base);
+          if (target.kind === "files") openInFiles(filePath, base);
           else openUrl(target.url);
         },
       }));

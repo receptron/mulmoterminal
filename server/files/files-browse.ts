@@ -86,7 +86,8 @@ export function listEntries(absDir: string): BrowseEntry[] {
 
 // Project base + relative path from a browse request's query. browseBase falls back to
 // the server's default cwd; browseRel defaults to "" (the base itself).
-const browseBase = (req: Request, defaultCwd: string): string => resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd);
+const browseBase = (req: Request, defaultCwd: string): string =>
+  resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir());
 const browseRel = (req: Request): string => (typeof req.query.path === "string" ? req.query.path : "");
 
 // Resolve `path` under the request's project base; 403 (and returns null) if it escapes —

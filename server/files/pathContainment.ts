@@ -7,11 +7,13 @@ import fs from "node:fs";
 import { isSamePath, isWithin } from "../infra/path-within.js";
 
 // Resolve a client-supplied project dir: absolute + existing dir, else the default
-// workspace (mirrors index.ts resolveWorkspace).
-export function resolveBase(cwd: string | null, defaultCwd: string): string {
-  if (cwd && path.isAbsolute(cwd)) {
+// workspace (mirrors index.ts resolveWorkspace). A leading `~` is expanded first — the browser
+// cannot, and a clicked `~/Downloads/x.md` arrives with that as its base.
+export function resolveBase(cwd: string | null, defaultCwd: string, homeDir: string): string {
+  const expanded = cwd === null ? null : expandTilde(cwd, homeDir);
+  if (expanded && path.isAbsolute(expanded)) {
     try {
-      if (fs.statSync(cwd).isDirectory()) return cwd;
+      if (fs.statSync(expanded).isDirectory()) return expanded;
     } catch {
       // not a dir / missing — fall through to the default
     }

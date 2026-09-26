@@ -148,11 +148,22 @@ describe("realContainedWithin (symlink-safe containment)", () => {
 describe("resolveBase", () => {
   it("uses an absolute existing dir, else the default", () => {
     const dir = tmp();
-    expect(resolveBase(dir, "/default")).toBe(dir);
-    expect(resolveBase("relative/x", "/default")).toBe("/default");
-    expect(resolveBase(null, "/default")).toBe("/default");
-    expect(resolveBase(path.join(dir, "missing"), "/default")).toBe("/default");
+    expect(resolveBase(dir, "/default", "/home")).toBe(dir);
+    expect(resolveBase("relative/x", "/default", "/home")).toBe("/default");
+    expect(resolveBase(null, "/default", "/home")).toBe("/default");
+    expect(resolveBase(path.join(dir, "missing"), "/default", "/home")).toBe("/default");
     rmSync(dir, { recursive: true, force: true });
+  });
+
+  // #2260: a clicked `~/Downloads/x.md` outside the cell arrives with `~/Downloads` as its base;
+  // without expanding it the base is not absolute and the default workspace is served instead.
+  it("expands a leading ~ in the base", () => {
+    const home = tmp();
+    mkdirSync(path.join(home, "Downloads"));
+    expect(resolveBase("~/Downloads", "/default", home)).toBe(path.join(home, "Downloads"));
+    expect(resolveBase("~", "/default", home)).toBe(home);
+    expect(resolveBase("~/missing", "/default", home)).toBe("/default");
+    rmSync(home, { recursive: true, force: true });
   });
 });
 
