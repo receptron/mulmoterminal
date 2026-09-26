@@ -8,6 +8,7 @@ import { holdCollectionChat, resetCollectionChats } from "../../../src/composabl
 import { collectionChatKey } from "../../../src/composables/collectionChatKey";
 import type { SpawnedChatRequest } from "../../../src/composables/useSpawnedChat";
 import type { Shortcut } from "../../../common/shortcuts";
+import { closeCommandPalette, paletteOpen } from "../../../src/composables/commandPalette";
 
 // The pinned favourites the toolbar draws from (#1984). Stubbed rather than fetched: the real store
 // loads them over /api/shortcuts, which is a request every mount in this file would otherwise make.
@@ -329,5 +330,20 @@ describe("AppToolbar pinned collections", () => {
     setToolbarPins(["collection:works", "collection:deleted"]);
     const group = pinGroup(await mountAt("/terminals"));
     expect(group.findAll("button").map((b) => b.attributes("aria-label"))).toEqual(["Work log"]);
+  });
+});
+
+// #2266. The palette is reachable with no key bound: the toolbar has a button for it.
+describe("AppToolbar — command palette", () => {
+  it("opens the command palette from its button", async () => {
+    const wrapper = await mountAt("/terminals");
+    const button = wrapper.findAll("button").find((b) => (b.attributes("title") ?? "") === "Commands");
+    expect(button).toBeDefined();
+    await button?.trigger("click");
+    await flushPromises();
+    expect(paletteOpen.value).toBe(true);
+    expect(document.querySelector('[data-testid="command-palette"]')).not.toBeNull();
+    closeCommandPalette();
+    wrapper.unmount();
   });
 });

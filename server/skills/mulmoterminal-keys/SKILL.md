@@ -148,6 +148,7 @@ binding you add is a key the program inside the terminal (Claude Code, `vim`, `l
 | `terminal-restart` | Restart the agent in the current terminal — same cell, same directory, same conversation | **yes** |
 | `files-find` | Open a file BY NAME in the Files pane beside the current terminal: a fuzzy search over every file in that project, opening what is picked with the tree expanded to it. Opens the pane first if it is closed | **yes** |
 | `files-search` | Search the CONTENTS of the files in that project — the companion to `files-find`. Results are grouped by file with the matching lines under them; picking one opens the file and puts the editor on that line. Literal by default with regex and match-case toggles, and smart case otherwise (a lower-case query matches either case). In a git repository `.gitignore` applies and files the agent just created are searched too; elsewhere no ignore file is read. Opens the pane first if it is closed | **yes** |
+| `command-palette` | Open the command palette: every grid action by name, with its current binding, disabled with a reason when the view cannot run it. The toolbar's Commands button opens it too, so it is safe to leave unbound; if they want VS Code's key, write it `"Cmd+Shift+p"` (lowercase, see below) | no |
 | `copy` | Copy the terminal's selection. Acts **only** when something is selected, so `Ctrl+C` stays usable as interrupt — with no selection the key reaches the program untouched | no |
 | `paste` | Paste into the terminal | no |
 
@@ -221,10 +222,11 @@ Each is checked against the traps below. The guide documents them at
 - **`files-find` and `files-search` are reachable without a binding** — the Files pane's header has a
   button for each. So both are safe to leave unbound, and worth saying so rather than spending two
   keys by default. If they ask for the VS Code key for `files-find`: `Cmd+P` is Print in a browser
-  and cannot be taken, and `Ctrl+P` is the shell's history-back inside the terminal. VS Code's own
-  command-palette key is free and is what #2125 settled on — write it `"Cmd+Shift+p"`, lowercase,
-  per the rule above. `Ctrl+Alt+P` or a function key otherwise, remembering that `Alt` is `Option`
-  on a Mac. For `files-search`, VS Code's is `Cmd+Shift+F` / `Ctrl+Shift+F`, and both are free here —
+  and cannot be taken, and `Ctrl+P` is the shell's history-back inside the terminal. VS Code's
+  command-palette key (`"Cmd+Shift+p"`, lowercase per the rule above) belongs to `command-palette`
+  now that there is one — offer it there. For `files-find`, `Ctrl+Alt+P` or a function key,
+  remembering that `Alt` is `Option` on a Mac; a user who already bound `Cmd+Shift+p` to
+  `files-find` (#2125) can keep it — only suggest moving it if they ask for the palette. For `files-search`, VS Code's is `Cmd+Shift+F` / `Ctrl+Shift+F`, and both are free here —
   write the Mac one `"Cmd+Shift+f"`, lowercase, for the same reason.
 
 ### Two-key sequences — `"Cmd+k p"`
