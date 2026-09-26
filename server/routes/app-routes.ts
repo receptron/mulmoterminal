@@ -185,7 +185,7 @@ export function mountAppRoutes(app: Express, deps: AppRouteDeps): void {
     registerBackgroundSession: deps.registerBackgroundSession,
   });
 
-  mountBlueprints(app, deps.spawnClaudePty);
+  mountBlueprints(app, deps.spawnClaudePty, deps.reap);
 
   // presentHtml View's source-editor dispatch (loadHtml/saveHtml) on
   // /api/plugin/presentHtml. MUST precede mountAllRoutes' /api/plugin/:toolName

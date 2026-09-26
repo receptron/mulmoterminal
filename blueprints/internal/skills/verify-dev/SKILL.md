@@ -6,8 +6,8 @@ description: "Confirm the company-domain blocking functions are registered and r
 # Domain restriction on dev
 
 1. Open Authentication > Settings > Blocking functions for the dev project and register `beforeUserCreated`
-   and `beforeUserSignedIn`. If the console shows no such section, the project is not yet on Identity Platform —
-   ask the user to upgrade it and wait.
+   and `beforeUserSignedIn`. First run `sh <usecase pack>/checks/identity-platform.sh dev` (with
+   `BLUEPRINT_BASE` / `BLUEPRINT_USECASE` set); only if it fails, ask the user to upgrade at the URL it printed.
 2. Ask the user to try signing in with an account outside the company domain (a personal Gmail) and confirm it is
    refused.
 

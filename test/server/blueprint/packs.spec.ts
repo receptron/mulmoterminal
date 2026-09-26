@@ -29,7 +29,7 @@ const pairs = usecases.flatMap((usecase) =>
 );
 
 const composed = (base: { dir: string }, usecase: { dir: string }): ComposedStep[] => {
-  const result = composePlan(basePlanSchema.parse(readJson(base.dir, "plan.json")), usecaseStepsSchema.parse(readJson(usecase.dir, "steps.json")));
+  const result = composePlan(basePlanSchema.parse(readJson(base.dir, "plan.json")), usecaseStepsSchema.parse(readJson(usecase.dir, "steps.json")), base.dir);
   if (!result.ok) throw new Error(result.problems.join("; "));
   return result.steps;
 };
@@ -100,15 +100,6 @@ describe.each(pairs.map(({ base, usecase }) => [`${base.dir} x ${usecase.dir}`, 
     expect(ids.indexOf("deploy-dev")).toBeGreaterThan(ids.indexOf("scaffold"));
   });
 
-  it("leaves no skill in either pack that no step uses", () => {
-    const used = new Set(steps.map((step) => join(packOf(step), step.skill)));
-    const shipped = [base.dir, usecase.dir].flatMap((dir) => {
-      const skills = join(PACKS_DIR, dir, "skills");
-      return existsSync(skills) ? readdirSync(skills).map((name) => join(dir, "skills", name)) : [];
-    });
-    expect(shipped.filter((skill) => !used.has(skill))).toEqual([]);
-  });
-
   it("uses only known gates", () => {
     expect(steps.flatMap((step) => step.gates).filter((gate) => !BLUEPRINT_GATES.includes(gate))).toEqual([]);
   });
@@ -133,6 +124,25 @@ describe.each(presetCases)("preset %s", (_label, dir, manifest, preset) => {
   it("answers every question the form would require, with answers it would accept", () => {
     expect(unansweredQuestions(hearing, preset.answers).map((question) => question.id)).toEqual([]);
     expect(answerProblems(hearing, preset.answers)).toEqual([]);
+  });
+});
+
+// A skill no pair ever runs is dead weight in a pack. Checked across every pair a pack takes part in:
+// a usecase can carry steps for one base that another base never sees.
+describe.each(packDirs.map((dir) => [dir] as const))("%s: every skill is used by some pair", (dir) => {
+  it("has no skill that no composed plan uses", () => {
+    const used = new Set(
+      pairs
+        .filter(({ base, usecase }) => base.dir === dir || usecase.dir === dir)
+        .flatMap(({ base, usecase }) =>
+          composed(base, usecase)
+            .filter((step) => (step.origin === "base" ? base.dir : usecase.dir) === dir)
+            .map((step) => step.skill),
+        ),
+    );
+    const skills = join(PACKS_DIR, dir, "skills");
+    const shipped = existsSync(skills) ? readdirSync(skills).map((name) => `skills/${name}`) : [];
+    expect(shipped.filter((skill) => !used.has(skill))).toEqual([]);
   });
 });
 

@@ -18,7 +18,7 @@ import { registriesFile } from "./registry.js";
 import { cloneRepo } from "./installer.js";
 import { claudeTrusts } from "./trust.js";
 import { registerCompletionHook } from "../session/completion-hooks.js";
-import { markUnplacedSession } from "../session/registry.js";
+import { markSessionPlaced, markUnplacedSession } from "../session/registry.js";
 import { tmuxHasSession, tmuxKillSession } from "../infra/tmux.js";
 import { MULMOTERMINAL_HOME, PORT } from "../config/env.js";
 
@@ -67,11 +67,14 @@ const projectFiles: ProjectFiles = {
   },
 };
 
+// A step's session is marked unplaced so a grid can show it; one the build has ended must lose that
+// mark too, or the next grid to load adopts it and resumes an agent in the project folder.
 function endOrphanedSession(sessionId: string): void {
+  markSessionPlaced(sessionId);
   if (tmuxHasSession(sessionId)) tmuxKillSession(sessionId);
 }
 
-export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void {
+export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap: (sessionId: string) => void): void {
   const executor = createExecutor({
     store: createRunStore(RUNS_ROOT),
     spawnStepSession: (cwd, prompt, sessionId) => {
@@ -86,6 +89,11 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude): void
     now: () => Date.now(),
     isTrusted: (dir) => claudeTrusts(dir),
     projectFiles,
+    // The app's own teardown: the pty, the tmux session and everything it remembered about it.
+    closeSession: (sessionId) => {
+      markSessionPlaced(sessionId);
+      reap(sessionId);
+    },
   });
   executor
     .recover(endOrphanedSession)

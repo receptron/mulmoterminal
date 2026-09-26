@@ -13,7 +13,7 @@ const usecase = (steps: Record<string, unknown>[]): UsecaseSteps => usecaseSteps
 
 describe("composePlan", () => {
   it("returns the base plan untouched when the usecase adds nothing", () => {
-    const result = composePlan(base, usecase([]));
+    const result = composePlan(base, usecase([]), "local");
     expect(result).toEqual({ ok: true, steps: base.steps.map((s) => ({ ...s, origin: "base" })) });
   });
 
@@ -21,48 +21,62 @@ describe("composePlan", () => {
     const result = composePlan(
       base,
       usecase([step("domain", { insertAfter: "auth" }), step("audit", { insertAfter: "auth" }), step("offboard", { insertAfter: "init" })]),
+      "local",
     );
     expect(result.ok && result.steps.map((s) => s.id)).toEqual(["init", "offboard", "auth", "domain", "audit", "deploy"]);
   });
 
   it("tags each step with the pack it came from", () => {
-    const result = composePlan(base, usecase([step("domain", { insertAfter: "auth" })]));
+    const result = composePlan(base, usecase([step("domain", { insertAfter: "auth" })]), "local");
     expect(result.ok && result.steps.map((s) => `${s.id}:${s.origin}`)).toEqual(["init:base", "auth:base", "domain:usecase", "deploy:base"]);
   });
 
   it("appends steps without an anchor at the end", () => {
-    const result = composePlan(base, usecase([step("handover")]));
+    const result = composePlan(base, usecase([step("handover")]), "local");
     expect(result.ok && result.steps.map((s) => s.id)).toEqual(["init", "auth", "deploy", "handover"]);
   });
 
   it("drops the anchor from the composed steps", () => {
-    const result = composePlan(base, usecase([step("domain", { insertAfter: "auth" })]));
+    const result = composePlan(base, usecase([step("domain", { insertAfter: "auth" })]), "local");
     expect(result.ok && result.steps.every((s) => !("insertAfter" in s))).toBe(true);
   });
 
   it("refuses an anchor the base plan does not have", () => {
-    const result = composePlan(base, usecase([step("domain", { insertAfter: "nope" })]));
+    const result = composePlan(base, usecase([step("domain", { insertAfter: "nope" })]), "local");
     expect(result).toEqual({ ok: false, problems: [expect.stringContaining('"nope"')] });
   });
 
   it("refuses a usecase step anchored on another usecase step", () => {
-    const result = composePlan(base, usecase([step("a", { insertAfter: "auth" }), step("b", { insertAfter: "a" })]));
+    const result = composePlan(base, usecase([step("a", { insertAfter: "auth" }), step("b", { insertAfter: "a" })]), "local");
     expect(result.ok).toBe(false);
   });
 
   it("refuses a usecase step reusing a base id", () => {
-    const result = composePlan(base, usecase([step("auth", { insertAfter: "init" })]));
+    const result = composePlan(base, usecase([step("auth", { insertAfter: "init" })]), "local");
     expect(result).toEqual({ ok: false, problems: ['duplicate step id "auth"'] });
   });
 
   it("reports a missing anchor and a duplicate id together", () => {
-    const result = composePlan(base, usecase([step("x", { insertAfter: "nope" }), step("auth", { insertAfter: "init" })]));
+    const result = composePlan(base, usecase([step("x", { insertAfter: "nope" }), step("auth", { insertAfter: "init" })]), "local");
     expect(result.ok ? [] : result.problems).toHaveLength(2);
+  });
+
+  it("keeps a step limited to other bases out, and a step for every base in", () => {
+    const steps = usecase([step("local-only", { bases: ["local"] }), step("fb-only", { bases: ["firebase"], insertAfter: "auth" }), step("everywhere")]);
+    const onFirebase = composePlan(base, steps, "firebase");
+    expect(onFirebase.ok && onFirebase.steps.map((s) => s.id)).toEqual(["init", "auth", "fb-only", "deploy", "everywhere"]);
+    const onLocal = composePlan(base, steps, "local");
+    expect(onLocal.ok && onLocal.steps.map((s) => s.id)).toEqual(["init", "auth", "deploy", "local-only", "everywhere"]);
+  });
+
+  it("lets two bases each have a step of the same id", () => {
+    const steps = usecase([step("acceptance", { bases: ["local"] }), step("acceptance", { bases: ["firebase"] })]);
+    expect(composePlan(base, steps, "local").ok).toBe(true);
   });
 
   it("refuses duplicate ids within the base plan", () => {
     const duplicated = basePlanSchema.parse({ steps: [step("init"), step("init")] });
-    expect(composePlan(duplicated, usecase([])).ok).toBe(false);
+    expect(composePlan(duplicated, usecase([]), "local").ok).toBe(false);
   });
 });
 
