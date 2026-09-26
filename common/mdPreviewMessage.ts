@@ -24,8 +24,23 @@ export const MD_PREVIEW_EMBED_PARAM = "embed";
 export const MD_PREVIEW_EMBED_ON = "1";
 
 /** What the preview document says. `ready` is a fresh document announcing it can be scrolled;
- *  `scroll` is where the reader now is, in CSS pixels from the top of that document. */
-export type MdPreviewFrameMessage = { kind: "ready" } | { kind: "scroll"; scrollY: number };
+ *  `scroll` is where the reader now is, in CSS pixels from the top of that document; `navigate`
+ *  is a click on an external link, which the HOST opens (#2259) — the sandbox has no
+ *  `allow-popups`, and following it inside the frame is what showed "refused to connect". */
+export type MdPreviewFrameMessage = { kind: "ready" } | { kind: "scroll"; scrollY: number } | { kind: "navigate"; href: string };
+
+/** `value` as an absolute http(s) URL, or null. The only kind of link the host opens on the
+ *  document's behalf: the document is a file this app never sanitised, so a `javascript:` or
+ *  `file:` href it posts must not reach `window.open`. */
+export const externalHref = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+};
 
 /** What the host says back: put the reader here. Sent in answer to `ready`, so the host never has
  *  to guess when the document became scrollable. */
@@ -40,6 +55,10 @@ export interface MdPreviewHostMessage {
 export const mdPreviewFrameMessage = (data: unknown): MdPreviewFrameMessage | null => {
   if (!isRecord(data) || data.source !== MD_PREVIEW_FROM_FRAME) return null;
   if (data.kind === "ready") return { kind: "ready" };
+  if (data.kind === "navigate") {
+    const href = externalHref(data.href);
+    return href === null ? null : { kind: "navigate", href };
+  }
   if (data.kind !== "scroll") return null;
   const scrollY = finiteNumber(data.scrollY);
   // A negative offset is not a place in a document; it would scroll the restore to the top and

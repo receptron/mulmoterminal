@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { defineComponent, h, ref, type Ref } from "vue";
 import { mount } from "@vue/test-utils";
 import { useMdPreviewScroll } from "../../../src/composables/useMdPreviewScroll";
@@ -114,5 +114,22 @@ describe("useMdPreviewScroll", () => {
     host(() => null, scrollTop);
     expect(() => arrive(frame.target, scrolled(42))).not.toThrow();
     expect(scrollTop.value).toBe(0);
+  });
+
+  // #2259. The frame has no `allow-popups`, so it asks; the host opens it, isolated from the app.
+  it("opens an external link its own frame asks for", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    host(iframe, scrollTop);
+    arrive(frame.target, { source: MD_PREVIEW_FROM_FRAME, kind: "navigate", href: "https://www.youtube.com/" });
+    expect(open).toHaveBeenCalledWith("https://www.youtube.com/", "_blank", "noopener,noreferrer");
+    open.mockRestore();
+  });
+
+  it("opens nothing another window asks for", () => {
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    host(iframe, scrollTop);
+    arrive(fakeWindow().target, { source: MD_PREVIEW_FROM_FRAME, kind: "navigate", href: "https://example.com/" });
+    expect(open).not.toHaveBeenCalled();
+    open.mockRestore();
   });
 });

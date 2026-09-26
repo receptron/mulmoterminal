@@ -117,6 +117,17 @@ const reporterSource = (): string =>
     "  applyPlace();",
     "});",
     "new ResizeObserver(() => { if (!readerMoved) applyPlace(); }).observe(document.documentElement);",
+    // An external link is handed to the host rather than followed: the frame has no
+    // `allow-popups`, so following it loads the site INSIDE the preview, and most refuse to be
+    // framed (#2259). Decided on the attribute as written, so a relative link and an anchor keep
+    // their default behaviour.
+    "addEventListener('click', (event) => {",
+    "  const link = event.target instanceof Element ? event.target.closest('a[href]') : null;",
+    "  const href = link ? link.getAttribute('href') : null;",
+    "  if (!href || !/^https?:\\/\\//i.test(href)) return;",
+    "  event.preventDefault();",
+    '  post({ kind: "navigate", href });',
+    "});",
     'post({ kind: "ready" });',
     "})();",
   ].join("\n");
