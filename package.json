@@ -151,5 +151,9 @@
     "vue-eslint-parser": "^10.4.1",
     "vue-tsc": "^3.3.11"
   },
-  "homepage": "https://receptron.github.io/mulmoterminal/"
+  "homepage": "https://receptron.github.io/mulmoterminal/",
+  "resolutions": {
+    "@xmldom/xmldom": "^0.9.12",
+    "lodash-es": "^4.18.1"
+  }
 }
