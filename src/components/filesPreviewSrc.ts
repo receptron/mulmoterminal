@@ -7,6 +7,7 @@
 // WHICH VIEW is up is a different question and lives in `filesPreviewMode.ts` (#2137).
 import { browseQuery } from "./filesPaneApi";
 import { MD_PREVIEW_EMBED_ON, MD_PREVIEW_EMBED_PARAM } from "../../common/mdPreviewMessage";
+import type { PreviewTheme } from "../../common/previewTheme";
 
 /** The version of the open file ON DISK, as the pane currently knows it.
  *
@@ -28,9 +29,12 @@ export function diskVersion(baseVersion: string | null, conflict: { version: str
  *  scroll reporter in it, under a policy that lets that one script run and still nothing from the
  *  file. Only THIS url carries it — the new tab a clicked `.md` opens builds its own, and keeps
  *  the document that has no script in it at all. */
-export function previewQuery(cwd: string | null, pathRel: string, version: string | null): string {
+export function previewQuery(cwd: string | null, pathRel: string, version: string | null, theme: PreviewTheme | null = null): string {
   const params = new URLSearchParams(browseQuery(cwd, pathRel));
   if (version) params.set("v", version);
   params.set(MD_PREVIEW_EMBED_PARAM, MD_PREVIEW_EMBED_ON);
+  // The app's theme (#2263). Part of the URL for the same reason `v` is: a theme change then changes
+  // the src, and the frame fetches the document again in the new colours.
+  if (theme) Object.entries(theme).forEach(([param, colour]) => params.set(param, colour));
   return params.toString();
 }

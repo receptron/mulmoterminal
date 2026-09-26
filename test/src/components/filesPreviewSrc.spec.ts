@@ -82,3 +82,21 @@ describe("previewQuery", () => {
     expect(previewQuery(null, "a&b.md", "v1")).toBe("path=a%26b.md&v=v1&embed=1");
   });
 });
+
+// #2263. The app's theme rides the preview URL, so a theme change is a new src.
+describe("previewQuery with a theme", () => {
+  const theme = { bg: "#1a1a2e", fg: "#e6e6f0", muted: "#a0a0b8", subtle: "#232342", border: "#33335a", link: "#4a8cff" };
+
+  it("carries every colour", () => {
+    const params = new URLSearchParams(previewQuery("/w", "a.md", "v1", theme));
+    expect(Object.fromEntries(Object.keys(theme).map((key) => [key, params.get(key)]))).toEqual(theme);
+  });
+
+  it("changes when the theme does", () => {
+    expect(previewQuery("/w", "a.md", "v1", theme)).not.toBe(previewQuery("/w", "a.md", "v1", { ...theme, bg: "#f4f6fb" }));
+  });
+
+  it("carries nothing when there is no theme to pass on", () => {
+    expect(new URLSearchParams(previewQuery("/w", "a.md", "v1", null)).has("bg")).toBe(false);
+  });
+});

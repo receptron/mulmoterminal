@@ -13,6 +13,8 @@ import { askTheMachine, bankText, browseQuery, writeBuffer } from "../components
 import type { FilesPaneState } from "../components/filesPaneState";
 import { restoresPreview, staysOnSameFile } from "../components/filesPreviewMode";
 import { diskVersion, previewQuery } from "../components/filesPreviewSrc";
+import { activeThemeVars } from "./useTheme";
+import { previewThemeFromVars } from "../../common/previewTheme";
 import { absoluteUnder } from "./canvasOpenFile";
 import { watchExternalFileChanges } from "./externalFileChanges";
 import { MARKDOWN_FILE_SCOPE, fileChannelPath, pluginFileChannel } from "../../common/fileChannel";
@@ -377,6 +379,10 @@ export interface OpenFile extends OpenFileBuffer {
   place: () => FilePlace;
 }
 
+// The app's theme as the preview's colours (#2263) — null when there is none to pass on, and the
+// document then follows the reader's system theme as it always did.
+const previewTheme = computed(() => (activeThemeVars.value ? previewThemeFromVars(activeThemeVars.value) : null));
+
 export function useOpenFile(cwd: () => string | null): OpenFile {
   const openPath = ref<string | null>(null);
   const openName = computed(() => (openPath.value ? (openPath.value.split("/").pop() ?? "") : ""));
@@ -416,7 +422,9 @@ export function useOpenFile(cwd: () => string | null): OpenFile {
   return {
     ...buffer,
     previewSrc: computed(() =>
-      openPath.value ? `/api/files/browse/md?${previewQuery(cwd(), openPath.value, diskVersion(buffer.baseVersion.value, buffer.conflict.value))}` : "",
+      openPath.value
+        ? `/api/files/browse/md?${previewQuery(cwd(), openPath.value, diskVersion(buffer.baseVersion.value, buffer.conflict.value), previewTheme.value)}`
+        : "",
     ),
     generation: () => ctx.reqId.n,
     attach: (host) =>

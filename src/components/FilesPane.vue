@@ -399,7 +399,7 @@ defineExpose({
         <iframe
           v-show="openPath && !unpreviewable && showPreview"
           ref="previewFrame"
-          class="flex-auto border-0 bg-white"
+          class="flex-auto border-0 bg-[var(--bg-base)]"
           :src="previewSrc"
           sandbox="allow-scripts"
           title="Markdown preview"

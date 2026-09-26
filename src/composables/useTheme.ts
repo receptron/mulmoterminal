@@ -169,6 +169,17 @@ function applyTheme(id: string) {
 
 // The xterm palette for the active theme; Terminal.vue feeds this into the
 // terminal's `theme` option and refreshes it whenever the theme changes.
+/** The variables of the theme actually painted: the selected one, or the default `applyTheme` falls
+ *  back to when it does not resolve. Reactive on the selection AND on the custom themes arriving
+ *  from the server, so what reads it follows a theme change (the Markdown preview, #2263). Null
+ *  where the stylesheet is not loaded (a spec), which callers treat as "no theme to pass on". */
+export const activeThemeVars = computed<ThemeVars | null>(() => {
+  const id = themeId.value;
+  const custom = isThemeId(id) ? null : (customThemeList.value.find((theme) => theme.id === id) ?? null);
+  const vars = custom ? resolveThemeVars(custom, builtins()) : null;
+  return vars ?? builtins()[isThemeId(id) ? id : DEFAULT_THEME] ?? null;
+});
+
 export function currentTermTheme(): Theme["term"] {
   return termThemeFor(themeId.value);
 }

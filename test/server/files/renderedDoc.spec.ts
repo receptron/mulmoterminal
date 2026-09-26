@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { escapeHtml, htmlDoc, jsonHtmlDoc, tableHtmlDoc, parseDelimited, delimiterForExtension } from "../../../server/files/renderedDoc";
+import { escapeHtml, htmlDoc, jsonHtmlDoc, tableHtmlDoc, parseDelimited, delimiterForExtension, themeStyle } from "../../../server/files/renderedDoc";
 
 describe("escapeHtml", () => {
   it("escapes everything that can break out of text or an attribute", () => {
@@ -170,5 +170,28 @@ describe("tableHtmlDoc", () => {
   // A wide table has to scroll inside its own box; the page must not scroll sideways.
   it("wraps the table in its own scroll container", () => {
     expect(tableHtmlDoc("a\n1", "x.csv", ",")).toContain('<div class="wrap">');
+  });
+});
+
+// #2263. The app's theme as the document's own rules, appended after the system-theme ones.
+describe("themeStyle", () => {
+  const dark = { bg: "#1a1a2e", fg: "#e6e6f0", muted: "#a0a0b8", subtle: "#232342", border: "#33335a", link: "#4a8cff" };
+
+  it("paints the body, code, links, quotes and tables in the theme's colours", () => {
+    const css = themeStyle(dark);
+    expect(css).toContain("body{color:#e6e6f0;background:#1a1a2e}");
+    expect(css).toContain("pre{background:#232342}");
+    expect(css).toContain("a{color:#4a8cff}");
+    expect(css).toContain("th,td{border-color:#33335a}");
+  });
+
+  it("sets the colour scheme from the background, so controls match it", () => {
+    expect(themeStyle(dark)).toContain(":root{color-scheme:dark}");
+    expect(themeStyle({ ...dark, bg: "#f4f6fb" })).toContain(":root{color-scheme:light}");
+  });
+
+  it("comes after the system-theme rules in the document, so it wins", () => {
+    const doc = htmlDoc("<p>x</p>", "a.md", themeStyle(dark));
+    expect(doc.indexOf("background:#1a1a2e")).toBeGreaterThan(doc.indexOf("prefers-color-scheme"));
   });
 });
