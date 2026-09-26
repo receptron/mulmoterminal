@@ -39,7 +39,10 @@ export function useMdPreviewScroll(frame: () => HTMLIFrameElement | null, scroll
   const receive = (data: unknown): void => {
     const message = mdPreviewFrameMessage(data);
     if (!message) return;
-    if (message.kind === "scroll") scrollTop.value = message.scrollY;
+    // The document cannot open a tab itself (no `allow-popups`); the click's activation reaches
+    // this window, so the popup blocker lets this through.
+    if (message.kind === "navigate") window.open(message.href, "_blank", "noopener,noreferrer");
+    else if (message.kind === "scroll") scrollTop.value = message.scrollY;
     // `"*"` because an opaque origin cannot be named as a target: `postMessage` takes a URL, and
     // "null" is not one. What it carries is a scroll offset, into the frame whose window the
     // listener just identified.

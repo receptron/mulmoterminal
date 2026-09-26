@@ -48,4 +48,17 @@ describe("mdPreviewFrameMessage", () => {
   it("refuses a position above the top of the document", () => {
     expect(mdPreviewFrameMessage(frame({ kind: "scroll", scrollY: -1 }))).toBeNull();
   });
+
+  // #2259. The host opens what this lets through with `window.open`, and the document is a file
+  // nobody sanitised — so only an absolute http(s) URL is a link to follow.
+  it.each([["https://www.youtube.com/watch?v=x"], ["http://example.com/a b"]])("accepts %s to open", (href) => {
+    expect(mdPreviewFrameMessage(frame({ kind: "navigate", href }))).toEqual({ kind: "navigate", href: new URL(href).href });
+  });
+
+  it.each([["javascript:alert(1)"], ["file:///etc/passwd"], ["data:text/html,x"], ["docs/a.md"], ["#top"], [""], [7], [undefined]])(
+    "refuses %j as a link to open",
+    (href) => {
+      expect(mdPreviewFrameMessage(frame({ kind: "navigate", href }))).toBeNull();
+    },
+  );
 });
