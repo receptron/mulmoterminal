@@ -231,6 +231,22 @@ async function save(ctx: OpenFileCtx): Promise<void> {
   ctx.conflict.value = null;
 }
 
+/** Edit ↔ Preview. Preview renders the file ON DISK, so unsaved edits are saved first — the same
+ *  promise the pane keeps whenever it is left (#2262). A save that did not land (a conflict, an
+ *  error) keeps the editor up: its banner or message is where the reader has to be, and a preview
+ *  would show text they did not write. */
+async function togglePreview(ctx: OpenFileCtx): Promise<void> {
+  if (ctx.showPreview.value) {
+    ctx.showPreview.value = false;
+    return;
+  }
+  const pathRel = ctx.openPath.value;
+  if (ctx.dirty.value) await save(ctx);
+  // The save is a round trip; the reader may have opened another file meanwhile.
+  if (ctx.dirty.value || ctx.openPath.value !== pathRel) return;
+  ctx.showPreview.value = true;
+}
+
 /** Conflict banner — take the disk's copy. The buffer is banked first, so "discard" costs
  *  nothing that can't be fetched back out of the backup store. */
 async function discardAndReload(ctx: OpenFileCtx): Promise<void> {
@@ -345,6 +361,8 @@ export interface OpenFile extends OpenFileBuffer {
   load: (pathRel: string, force?: boolean, remembered?: FilesPaneState | null) => Promise<void>;
   flush: () => Promise<boolean>;
   save: () => Promise<void>;
+  /** Switch between Edit and Preview, saving unsaved edits before Preview. */
+  togglePreview: () => Promise<void>;
   discardAndReload: () => Promise<void>;
   overwrite: () => void;
   openInOs: () => Promise<void>;
@@ -408,6 +426,7 @@ export function useOpenFile(cwd: () => string | null): OpenFile {
     load: (pathRel, force = false, remembered = null) => loadFile(ctx, pathRel, force, remembered),
     flush: () => flush(ctx),
     save: () => save(ctx),
+    togglePreview: () => togglePreview(ctx),
     discardAndReload: () => discardAndReload(ctx),
     overwrite: () => overwrite(ctx),
     openInOs: () => openInOs(ctx),
