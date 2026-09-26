@@ -9,7 +9,8 @@ This step carries the **deploy-production** gate; the user approved it. It deplo
 when the site is published in the next step the domain restriction is already enforced.
 
 1. `firebase deploy --project prod --only functions,firestore`. Do NOT deploy hosting here.
-2. Make sure the production project is on Identity Platform, then register `beforeUserCreated` and
+2. Make sure the production project is on Identity Platform — `sh <usecase pack>/checks/identity-platform.sh prod`
+   (with `BLUEPRINT_BASE` / `BLUEPRINT_USECASE` set) reads it; ask for the upgrade only if that fails. Then register `beforeUserCreated` and
    `beforeUserSignedIn` under Authentication > Settings > Blocking functions. Give the user the URL and wait.
 3. There is nothing for the user to try yet — the site is not published. The check reads the registration from
    the project itself.

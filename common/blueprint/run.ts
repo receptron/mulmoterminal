@@ -27,6 +27,14 @@ export const blueprintRunSchema = z.object({
     .array(z.object({ stepId: z.string(), sessionId: z.string(), atMs: z.number(), answersAtStart: z.number().int().nonnegative().optional() }))
     .default([]),
   createdAtMs: z.number(),
+  // The conversation that refines the spec while its review gate is open, and the session answering
+  // the latest message, if one is. Kept here, not in the project, like the rest of the bookkeeping.
+  // `outcome` on an agent entry says why its text may be empty: it wrote no reply, or its session
+  // ended first. The UI words those; the server does not.
+  specChat: z
+    .array(z.object({ role: z.enum(["person", "agent"]), text: z.string(), atMs: z.number(), outcome: z.enum(["reply", "no-reply", "lost"]).optional() }))
+    .default([]),
+  revisionSessionId: z.string().nullable().default(null),
 });
 
 export type BlueprintRun = z.infer<typeof blueprintRunSchema>;

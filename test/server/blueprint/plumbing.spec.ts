@@ -33,6 +33,8 @@ const run = (id: string): BlueprintRun => ({
   usecasePackDir: "/u",
   steps,
   failedChecks: {},
+  specChat: [],
+  revisionSessionId: null,
   activeSessionId: null,
   sessions: [],
   createdAtMs: 1,

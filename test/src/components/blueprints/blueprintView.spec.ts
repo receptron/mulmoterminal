@@ -2,6 +2,8 @@
 import { describe, it, expect } from "vitest";
 import {
   answerFromInput,
+  elapsedParts,
+  toolCallSummary,
   basePacks,
   gateKey,
   rejectionReason,
@@ -91,5 +93,43 @@ describe("rejectionReason", () => {
     expect(rejectionReason({ status: "failed", approved: false, answers: [], reason: "too expensive" })).toBe("too expensive");
     expect(rejectionReason({ status: "failed", approved: true, answers: [], reason: "check failed" })).toBeNull();
     expect(rejectionReason(undefined)).toBeNull();
+  });
+});
+
+describe("toolCallSummary", () => {
+  it.each([
+    ["the command a Bash call runs", { command: "yarn test", description: "" }, "yarn test"],
+    ["its description over the command", { command: "yarn test --run", description: "Run the tests" }, "Run the tests"],
+    ["the file a Read call opens", { file_path: "/p/server/app.ts" }, "/p/server/app.ts"],
+    ["a search pattern", { pattern: "TODO", path: "" }, "TODO"],
+    ["a plain string input", "hello   world", "hello world"],
+    ["nothing it recognises", { other: 1 }, ""],
+    ["no input at all", undefined, ""],
+  ])("shows %s", (_label, input, expected) => {
+    expect(toolCallSummary(input)).toBe(expected);
+  });
+
+  it("keeps a long input to one short line", () => {
+    const summary = toolCallSummary({ command: `echo ${"x".repeat(500)}\nnext line` });
+    expect(summary.length).toBeLessThanOrEqual(120);
+    expect(summary).not.toContain("\n");
+    expect(summary.endsWith("…")).toBe(true);
+  });
+});
+
+describe("elapsedParts", () => {
+  it.each([
+    [0, 0, { minutes: 0, seconds: 0 }],
+    [0, 59_999, { minutes: 0, seconds: 59 }],
+    [0, 133_000, { minutes: 2, seconds: 13 }],
+    [5_000, 0, { minutes: 0, seconds: 0 }],
+  ])("from %i to %i", (from, to, expected) => {
+    expect(elapsedParts(from, to)).toEqual(expected);
+  });
+});
+
+describe("stepLook motion", () => {
+  it("moves only while something is happening or waiting", () => {
+    expect(STEP_STATUSES.filter((status) => stepLook(status).motion !== "")).toEqual(["awaiting-approval", "running", "awaiting-answer"]);
   });
 });

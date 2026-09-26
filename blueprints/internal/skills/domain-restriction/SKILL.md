@@ -5,9 +5,11 @@ description: "Limit sign-in to the company's email domain, twice: in blocking fu
 
 # Company domain only
 
-0. Blocking functions need the projects upgraded to **Firebase Authentication with Identity Platform** (console:
-   Authentication > Settings). It is free at this size but it is an upgrade the user must click — give them the
-   URL for each project and wait.
+0. Blocking functions need the projects upgraded to **Firebase Authentication with Identity Platform**. Run
+   `sh <usecase pack>/checks/identity-platform.sh dev prod` (with `BLUEPRINT_BASE` / `BLUEPRINT_USECASE` set to
+   the two pack paths): it reads each project and names only the ones not upgraded yet. Ask the user only if it
+   fails, giving them exactly the URLs it printed — the upgrade is free at this size, but it is a click only they
+   can make.
 1. In `functions/`, add `beforeUserCreated` and `beforeUserSignedIn` (from `firebase-functions/v2/identity`).
    Both throw `HttpsError("permission-denied")` unless `event.data.email` ends with `@<domain>` AND
    `event.data.emailVerified` is true. Compare lower-cased.

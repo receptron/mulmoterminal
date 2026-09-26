@@ -6,7 +6,8 @@
 // One run's work is serialised: a turn ending and a person approving at the same moment must not
 // both read the same state and each write their own successor.
 import path from "node:path";
-import { applyEvent, initialState, type BlueprintState, type StepEvent } from "../../common/blueprint/state.js";
+import { applyEvent, currentStep, initialState, type BlueprintState, type StepEvent } from "../../common/blueprint/state.js";
+import { OPEN_QUESTIONS_FILE, SPEC_FILE, replyFile, specRevisionPrompt } from "../../common/blueprint/specRevisionPrompt.js";
 import { MAX_FAILED_CHECKS, nextAction, type ExecutorAction } from "../../common/blueprint/executorPolicy.js";
 import { stepPrompt } from "../../common/blueprint/stepPrompt.js";
 import { summarizeRun, type BlueprintRun, type BlueprintRunSummary } from "../../common/blueprint/run.js";
@@ -32,6 +33,40 @@ export interface ExecutorDeps {
    *  Asked before EVERY session: a step can make the folder a git repository, which takes the
    *  trust it had from its parent away. */
   isTrusted?: (dir: string) => Promise<boolean>;
+  /** Files the build keeps in the project (the spec, the agent's reply), read and removed by path. */
+  projectFiles: ProjectFiles;
+  /** End a session this build started and no longer needs (its terminal closes). Closing one that
+   *  is already gone does nothing. */
+  closeSession: (sessionId: string) => void;
+}
+
+export interface ProjectFiles {
+  read: (dir: string, relativePath: string) => Promise<string | null>;
+  remove: (dir: string, relativePath: string) => Promise<void>;
+}
+
+type ChatOutcome = NonNullable<BlueprintRun["specChat"][number]["outcome"]>;
+
+function replyOutcome(didError: boolean, reply: string | null): ChatOutcome {
+  if (didError) return "lost";
+  return reply ? "reply" : "no-reply";
+}
+
+export interface SpecView {
+  spec: string | null;
+  openQuestions: string | null;
+  chat: BlueprintRun["specChat"];
+  revising: boolean;
+}
+
+// The spec may be talked over only while the build waits for a person to read it: at a review gate,
+// with no agent working and no earlier message still being answered.
+function specChatRefusal({ run, state }: { run: BlueprintRun; state: BlueprintState }): string | null {
+  const step = currentStep(run.steps, state);
+  if (!step || state.steps[step.id]?.status !== "awaiting-approval" || !step.gates.includes("review"))
+    return "the spec can be discussed only while it waits for review";
+  if (run.revisionSessionId !== null) return "the previous message is still being answered";
+  return run.activeSessionId === null ? null : "an agent is working on the build";
 }
 
 // A person's events. The agent has its own door (`ask`), and checks are run here, never reported.
@@ -81,13 +116,28 @@ function applied(loaded: Loaded, stepId: string, event: StepEvent): Loaded {
 const actionFor = ({ run, state }: Loaded): ExecutorAction =>
   nextAction({ steps: run.steps, state, failedChecks: run.failedChecks, sessionActive: run.activeSessionId !== null });
 
+// Whether the build, as it stands, stops on this step's failure for a person (rather than retrying).
+const waitsOnFailure = (loaded: Loaded, stepId: string): boolean => {
+  const action = actionFor(loaded);
+  return action.kind === "wait" && action.on === "failure" && action.stepId === stepId;
+};
+
 class Executor {
   private readonly queues = new Map<string, Promise<unknown>>();
 
   constructor(private readonly deps: ExecutorDeps) {}
 
   async create(request: CreateRunRequest): Promise<string> {
-    const run: BlueprintRun = { id: this.deps.newRunId(), ...request, failedChecks: {}, activeSessionId: null, sessions: [], createdAtMs: this.deps.now() };
+    const run: BlueprintRun = {
+      id: this.deps.newRunId(),
+      ...request,
+      failedChecks: {},
+      activeSessionId: null,
+      sessions: [],
+      createdAtMs: this.deps.now(),
+      specChat: [],
+      revisionSessionId: null,
+    };
     const state = initialState(request.steps);
     await this.deps.store.save(run, state);
     await this.serially(run.id, () => this.advance({ run, state }));
@@ -107,7 +157,10 @@ class Executor {
   /** A person approved, rejected, answered or asked to retry. */
   humanEvent(runId: string, stepId: string, event: HumanEvent): Promise<Loaded> {
     return this.serially(runId, async () => {
-      const loaded = applied(await this.mustLoad(runId), stepId, event);
+      const before = await this.mustLoad(runId);
+      if (before.run.revisionSessionId !== null) throw new BlueprintRefusal("the spec is still being revised; wait for the reply");
+      const loaded = applied(before, stepId, event);
+      if (event.type === "retry") this.closeSessionsOf(before.run, stepId);
       // A person's retry is a fresh start for the automatic retries, too.
       const run = event.type === "retry" ? { ...loaded.run, failedChecks: { ...loaded.run.failedChecks, [stepId]: 0 } } : loaded.run;
       await this.deps.store.save(run, loaded.state);
@@ -140,9 +193,76 @@ class Executor {
         return this.turnEnded(runId, sessionId, true);
       }),
     );
+    // A spec reply cut off by the restart is recorded as lost; the person can simply send again.
+    const revising = loadedRuns.flatMap((loaded) => (loaded?.run.revisionSessionId ? [{ runId: loaded.run.id, sessionId: loaded.run.revisionSessionId }] : []));
+    await Promise.all(
+      revising.map(({ runId, sessionId }) => {
+        endSession(sessionId);
+        return this.revisionEnded(runId, sessionId, true);
+      }),
+    );
     // A run the server stopped mid-advance (a step started, no session yet) is picked up again.
     const idle = loadedRuns.flatMap((loaded) => (loaded && !loaded.run.activeSessionId ? [loaded.run.id] : []));
     await Promise.all(idle.map((runId) => this.serially(runId, async () => this.advance(await this.mustLoad(runId)))));
+  }
+
+  /** The spec as it stands, its open questions, and the conversation about it. */
+  async specView(runId: string): Promise<SpecView> {
+    const { run } = await this.mustLoad(runId);
+    const [spec, openQuestions] = await Promise.all([
+      this.deps.projectFiles.read(run.projectDir, SPEC_FILE),
+      this.deps.projectFiles.read(run.projectDir, OPEN_QUESTIONS_FILE),
+    ]);
+    return { spec, openQuestions, chat: run.specChat, revising: run.revisionSessionId !== null };
+  }
+
+  /** A person's message about the spec: a fresh session changes the spec and writes a reply. */
+  say(runId: string, message: string): Promise<Loaded> {
+    return this.serially(runId, async () => {
+      const loaded = await this.mustLoad(runId);
+      const refusal = specChatRefusal(loaded);
+      if (refusal) throw new BlueprintRefusal(refusal);
+      const { run } = loaded;
+      if (!(await this.trusted(run))) throw new BlueprintRefusal(untrustedOutput(run.projectDir));
+      const sessionId = this.deps.newSessionId();
+      const prompt = specRevisionPrompt({
+        chat: run.specChat,
+        message,
+        packDirs: { base: run.basePackDir, usecase: run.usecasePackDir },
+        replyPath: replyFile(sessionId),
+      });
+      const specChat = [...run.specChat, { role: "person" as const, text: message, atMs: this.deps.now() }];
+      const next: Loaded = { run: { ...run, revisionSessionId: sessionId, specChat }, state: loaded.state };
+      // Saved BEFORE the spawn: a crash in between leaves a recorded revision that recovery settles as
+      // lost, rather than a session running that no record knows about.
+      await this.deps.store.save(next.run, next.state);
+      this.deps.spawnStepSession(run.projectDir, prompt, sessionId);
+      this.deps.onTurnEnded(sessionId, ({ didError }) => this.revisionEnded(runId, sessionId, didError));
+      return next;
+    });
+  }
+
+  private revisionEnded(runId: string, sessionId: string, didError: boolean): Promise<void> {
+    return this.serially(runId, async () => {
+      const { run, state } = await this.mustLoad(runId);
+      if (run.revisionSessionId !== sessionId) return;
+      try {
+        const reply = didError ? null : ((await this.deps.projectFiles.read(run.projectDir, replyFile(sessionId))) ?? "").trim();
+        await this.deps.projectFiles.remove(run.projectDir, replyFile(sessionId));
+        const outcome = replyOutcome(didError, reply);
+        const specChat = [...run.specChat, { role: "agent" as const, text: reply ?? "", atMs: this.deps.now(), outcome }];
+        await this.deps.store.save({ ...run, revisionSessionId: null, specChat }, state);
+      } finally {
+        this.deps.closeSession(sessionId);
+      }
+    });
+  }
+
+  // The sessions a step used; a failed step's last one was kept open for the person to look into.
+  private closeSessionsOf(run: BlueprintRun, stepId: string): void {
+    run.sessions
+      .filter((entry) => entry.stepId === stepId && entry.sessionId !== run.activeSessionId)
+      .forEach((entry) => this.deps.closeSession(entry.sessionId));
   }
 
   // The agent's session stopped. If it stopped to ask, the state already says so and there is
@@ -153,10 +273,22 @@ class Executor {
       if (loaded.run.activeSessionId !== sessionId) return;
       const released: Loaded = { run: { ...loaded.run, activeSessionId: null }, state: loaded.state };
       const session = loaded.run.sessions.findLast((entry) => entry.sessionId === sessionId);
-      const settled = session && needsCheck(released.state, session) ? await this.settleTurn(released, session.stepId, didError) : released;
-      await this.deps.store.save(settled.run, settled.state);
+      // Closed BEFORE advancing: a session whose turn ended can still have background work running,
+      // and a retry started beside it would have two agents rewriting one folder. Only one that failed
+      // and now waits for a person stays open, to be looked into; a person's retry closes it.
+      const settled = await this.settleAndSave(released, session, didError).catch((err: unknown) => {
+        this.deps.closeSession(sessionId);
+        throw err;
+      });
+      if (!session || !waitsOnFailure(settled, session.stepId)) this.deps.closeSession(sessionId);
       await this.advance(settled);
     });
+  }
+
+  private async settleAndSave(released: Loaded, session: BlueprintRun["sessions"][number] | undefined, didError: boolean): Promise<Loaded> {
+    const settled = session && needsCheck(released.state, session) ? await this.settleTurn(released, session.stepId, didError) : released;
+    await this.deps.store.save(settled.run, settled.state);
+    return settled;
   }
 
   private serially<T>(runId: string, work: () => Promise<T>): Promise<T> {
@@ -245,6 +377,6 @@ class Executor {
   }
 }
 
-export type BlueprintExecutor = Pick<Executor, "create" | "view" | "list" | "humanEvent" | "ask" | "recover">;
+export type BlueprintExecutor = Pick<Executor, "create" | "view" | "list" | "humanEvent" | "ask" | "recover" | "specView" | "say">;
 
 export const createExecutor = (deps: ExecutorDeps): BlueprintExecutor => new Executor(deps);
