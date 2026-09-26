@@ -64,7 +64,7 @@ export const blueprintsJa: Messages["blueprints"] = {
     retry: "もう一度",
     checkOutput: "判定の結果",
     specFile: "仕様書は {file} にあります。",
-    working: "この工程はエージェントが作業中です。グリッドに専用のターミナルとして表示されています。",
+    working: "この工程はエージェントが作業中です。していることは下に表示されます。",
     finished: "すべての工程が完了しました。",
   },
   market: {

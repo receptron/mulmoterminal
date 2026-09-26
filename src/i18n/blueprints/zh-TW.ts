@@ -64,7 +64,7 @@ export const blueprintsZhTW: Messages["blueprints"] = {
     retry: "重試",
     checkOutput: "檢查結果",
     specFile: "規格文件位於 {file}。",
-    working: "代理正在處理此步驟，它在網格中顯示為獨立的終端機。",
+    working: "代理正在處理此步驟，正在進行的操作顯示在下方。",
     finished: "所有步驟已完成。",
   },
   market: {
