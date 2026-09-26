@@ -106,6 +106,32 @@ describe("mdPreviewReporterTag", () => {
     expect(mdPreviewReporterTag("AAAA").replace("AAAA", "BBBB")).toBe(mdPreviewReporterTag("BBBB"));
   });
 
+  // #2259. An external link is posted to the host, which opens it; the frame itself has no
+  // `allow-popups`. Behaviour was checked in a real browser (see the PR); this pins the pieces.
+  it("hands an external link to the host instead of following it", () => {
+    const source = reporterSourceOf("n1");
+    expect(source).toContain("addEventListener('click'");
+    expect(source).toContain("closest('a[href]')");
+    expect(source).toContain("event.preventDefault()");
+    expect(source).toContain('post({ kind: "navigate", href })');
+  });
+
+  // Decided on the attribute AS WRITTEN: a relative link resolves to this server's own URL, and
+  // must keep its default until #2268 gives it somewhere to go.
+  it("recognises only an absolute http(s) href as external", () => {
+    const pattern = /if \(!href \|\| !(\/.+\/i)\.test\(href\)\) return;/.exec(reporterSourceOf("n1"))?.[1] ?? "";
+    const external = new RegExp(pattern.slice(1, -2), "i");
+    expect(["https://a.example/", "HTTP://a.example"].map((href) => external.test(href))).toEqual([true, true]);
+    expect(["docs/a.md", "/abs", "#top", "mailto:a@b", "javascript:void(0)", "//cdn.example/x"].map((href) => external.test(href))).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  });
+
   // A closing tag anywhere in the source would end the element early and drop the rest of the
   // script into the page as text.
   it("does not end its own element", () => {

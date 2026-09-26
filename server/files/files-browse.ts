@@ -9,13 +9,14 @@
 import path from "node:path";
 import fs from "node:fs";
 import { createHash } from "node:crypto";
-import { marked } from "marked";
+import { Marked, type Token, type Tokens } from "marked";
 import type { Express, Request, Response } from "express";
 import os from "node:os";
 import { hasErrnoCode } from "../errors.js";
 import { backupCurrentFile, storeBackup } from "./backup-store.js";
 import { losslessText } from "./editableText.js";
-import { resolveBase, resolveContained } from "./pathContainment.js";
+import { containedPath, expandTilde, resolveBase, resolveContained } from "./pathContainment.js";
+import { servedImageSrc, type ServedDoc } from "./mdImageSrc.js";
 import { listProjectFiles } from "./project-files.js";
 import { answered, modeFromProbe, parseSearchOutput, searchArgv, SEARCH_TIMEOUT_MS } from "./file-search.js";
 import { CONTEXT_RADIUS_LINES, isSearchable, lineWindow, type SearchRequest, type SearchResult } from "../../common/fileSearch.js";
@@ -87,7 +88,8 @@ export function listEntries(absDir: string): BrowseEntry[] {
 
 // Project base + relative path from a browse request's query. browseBase falls back to
 // the server's default cwd; browseRel defaults to "" (the base itself).
-const browseBase = (req: Request, defaultCwd: string): string => resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd);
+const browseBase = (req: Request, defaultCwd: string): string =>
+  resolveBase(typeof req.query.cwd === "string" ? req.query.cwd : null, defaultCwd, os.homedir());
 const browseRel = (req: Request): string => (typeof req.query.path === "string" ? req.query.path : "");
 
 // Resolve `path` under the request's project base; 403 (and returns null) if it escapes —
@@ -101,11 +103,21 @@ function containedFor(req: Request, res: Response, defaultCwd: string): string |
   return abs;
 }
 
-type RenderDoc = (text: string, title: string) => string | Promise<string>;
+type RenderDoc = (text: string, title: string, doc: ServedDoc) => string | Promise<string>;
 
 /** The same document for a host that will embed it, carrying the nonce the one permitted script
  *  has to declare. A route that has no reason to be embedded does not define one. */
-type EmbedDoc = (text: string, title: string, nonce: string) => string | Promise<string>;
+type EmbedDoc = (text: string, title: string, nonce: string, doc: ServedDoc) => string | Promise<string>;
+
+/** Where the served document sits, measured LEXICALLY from the request rather than from the real
+ *  path: a browser resolves a relative `src` against where the document appears to be, and a
+ *  symlinked document appears where the link is. */
+function servedDoc(req: Request, defaultCwd: string): ServedDoc {
+  const base = browseBase(req, defaultCwd);
+  const lexical = containedPath(base, expandTilde(browseRel(req), os.homedir())) ?? path.resolve(base);
+  const dirRel = path.relative(path.resolve(base), path.dirname(lexical)).split(path.sep).join("/");
+  return { base, dirRel };
+}
 
 // The file's text, or null with the response already answered. Shared by the rendered views
 // so "directory / too large / missing" reads the same from every one of them.
@@ -153,6 +165,7 @@ function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string,
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("X-Content-Type-Options", "nosniff");
     const title = path.basename(abs);
+    const doc = servedDoc(req, defaultCwd);
     if (embed && wantsMdPreviewEmbed(req.query[MD_PREVIEW_EMBED_PARAM])) {
       // One nonce per response, never reused and never derived from anything in the file: it is
       // what separates the one script this server wrote from every script the file contains.
@@ -165,11 +178,11 @@ function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string,
       // looks exactly like a preview that has quietly stopped remembering.
       const nonce = newPreviewNonce();
       res.setHeader("Content-Security-Policy", mdPreviewEmbedCsp(nonce));
-      res.send(await embed(text, title, nonce));
+      res.send(await embed(text, title, nonce, doc));
       return;
     }
     res.setHeader("Content-Security-Policy", "sandbox");
-    res.send(await render(text, title));
+    res.send(await render(text, title, doc));
   });
 }
 
@@ -306,18 +319,31 @@ function mountLinesRoute(app: Express, defaultCwd: string): void {
   });
 }
 
-/** The body a reader sees: front matter is metadata, and rendered as Markdown its closing `---`
- *  turns the whole block into a heading (#2264). Only a block that parses as YAML counts, as on
- *  the Canvas and in MulmoClaude — a document may open with a `---` rule, and that is body. */
-const mdBody = async (text: string): Promise<string> => marked.parse(splitFrontmatter(text).body);
+// marked's union carries a generic token whose fields are `any`, so `type === "image"` alone
+// does not narrow it.
+const isImageToken = (token: Token): token is Tokens.Image => token.type === "image";
+
+/** Markdown to HTML with each relative image pointed at the raw route, beside the document
+ *  rather than under `/api/files/browse/` (#2261). A fresh instance per document, because the
+ *  rewrite depends on where THIS document sits. Front matter is metadata, not body (#2264): only a
+ *  block that parses as YAML counts, as on the Canvas and in MulmoClaude — a document may open
+ *  with a `---` rule, and that is body. */
+const mdBody = async (text: string, doc: ServedDoc): Promise<string> =>
+  new Marked({
+    walkTokens(token) {
+      if (!isImageToken(token)) return;
+      token.href = servedImageSrc(token.href, doc) ?? token.href;
+    },
+  }).parse(splitFrontmatter(text).body);
 
 /** The Markdown document every caller has always had. */
-const renderMd = async (text: string, title: string): Promise<string> => htmlDoc(await mdBody(text), title);
+const renderMd = async (text: string, title: string, doc: ServedDoc): Promise<string> => htmlDoc(await mdBody(text, doc), title);
 
 /** The same document with the scroll reporter as its last body element (#2157). Composed here
  *  rather than inside `htmlDoc` so the shared document shell stays a shell that never runs
  *  anything, whoever calls it. */
-const embedMd = async (text: string, title: string, nonce: string): Promise<string> => htmlDoc((await mdBody(text)) + mdPreviewReporterTag(nonce), title);
+const embedMd = async (text: string, title: string, nonce: string, doc: ServedDoc): Promise<string> =>
+  htmlDoc((await mdBody(text, doc)) + mdPreviewReporterTag(nonce), title);
 
 export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   const { defaultCwd, backupRoot } = deps;

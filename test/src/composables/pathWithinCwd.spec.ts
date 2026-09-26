@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { pathWithinCwd } from "../../../src/composables/pathWithinCwd";
+import { pathWithinCwd, rebaseOutsideCwd } from "../../../src/composables/pathWithinCwd";
 
 // #910. This is the gate that decides whether a clicked path can open in the pane beside an
 // enlarged cell — the pane is rooted at that cell's directory and cannot walk above it. A
@@ -71,5 +71,46 @@ describe("pathWithinCwd", () => {
   // case-sensitive filesystem, and accepting either would open the wrong one.
   it("does not fold case under a POSIX cwd", () => {
     expect(pathWithinCwd("/users/me/proj/src/main.ts", CWD)).toBeNull();
+  });
+});
+
+// #2260. The browser cannot expand `~`, so it cannot show such a path is inside the cwd. Treating
+// it as cwd-relative sent `~/Downloads/x.md` to the pane, which the server refused once it
+// expanded the tilde. A `~` path inside the cell now opens in a tab rather than the pane.
+it("does not claim a home-relative path is inside the cwd", () => {
+  expect(pathWithinCwd("~/Downloads/report.md", "/Users/me/proj")).toBeNull();
+  expect(pathWithinCwd("~", "/Users/me/proj")).toBeNull();
+});
+
+describe("rebaseOutsideCwd", () => {
+  const CWD = "/Users/me/proj";
+
+  it.each([
+    ["an absolute path elsewhere", "/tmp/report.md", { base: "/tmp", rel: "report.md" }],
+    ["a file at the filesystem root", "/report.md", { base: "/", rel: "report.md" }],
+    ["a home-relative path", "~/Downloads/report.md", { base: "~/Downloads", rel: "report.md" }],
+    ["a relative path that climbs out", "../other/notes.ts", { base: "/Users/me/other", rel: "notes.ts" }],
+    ["a climb past the filesystem root", "../../../../x.md", { base: "/", rel: "x.md" }],
+    ["a sibling whose name starts like the cwd", "/Users/me/projector/a.md", { base: "/Users/me/projector", rel: "a.md" }],
+    ["a dot segment in an absolute path", "/tmp/./a/../report.md", { base: "/tmp", rel: "report.md" }],
+  ])("rebases %s onto its own directory", (_case, token, expected) => {
+    expect(rebaseOutsideCwd(token, CWD)).toEqual(expected);
+  });
+
+  it.each([
+    ["a relative path inside", "src/main.ts"],
+    ["an absolute path inside", "/Users/me/proj/README.md"],
+    ["a directory", "/tmp/"],
+    ["the home directory itself", "~"],
+  ])("leaves %s alone", (_case, token) => {
+    expect(rebaseOutsideCwd(token, CWD)).toBeNull();
+  });
+
+  it("does nothing without a cwd", () => {
+    expect(rebaseOutsideCwd("/tmp/report.md", null)).toBeNull();
+  });
+
+  it("climbs out of a Windows cwd with forward slashes", () => {
+    expect(rebaseOutsideCwd("../x.md", "C:\\Users\\me\\proj")).toEqual({ base: "C:/Users/me", rel: "x.md" });
   });
 });

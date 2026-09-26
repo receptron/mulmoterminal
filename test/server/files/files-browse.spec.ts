@@ -437,10 +437,6 @@ describe("GET /api/files/browse/index", () => {
   });
 });
 
-// #2157. The route serves TWO documents now: the one every caller has always had, and the one the
-// Files pane embeds, which carries a script that reports where the reader is. The second exists
-// because the first cannot be read from — and the whole design is that asking for the second
-// changes nothing about the first.
 // #2264. Front matter is metadata; rendered as Markdown, its closing `---` makes the whole block a
 // heading under a rule. Both documents the route serves start at the body.
 describe("GET /api/files/browse/md — front matter", () => {
@@ -475,6 +471,30 @@ describe("GET /api/files/browse/md — front matter", () => {
   });
 });
 
+// #2261. The document's URL is under `/api/files/browse/`, so a relative image resolved there and
+// 404'd. The route points it at the raw route, beside the document — in both documents it serves.
+describe("GET /api/files/browse/md — relative images", () => {
+  const BODY = "![a](../images/x.png)\n\n![b](../../../secret.png)\n\n![c](https://example.com/y.png)\n";
+
+  it.each([[""], ["&embed=1"]])("rewrites a relative src to the raw route (%s)", async (param) => {
+    const dir = tmp();
+    mkdirSync(path.join(dir, "docs", "guide"), { recursive: true });
+    writeFileSync(path.join(dir, "docs", "guide", "a.md"), BODY);
+    try {
+      const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=docs/guide/a.md${param}`);
+      expect(res.text).toContain(`src="/api/files/raw?cwd=${encodeURIComponent(dir)}&amp;path=${encodeURIComponent("docs/images/x.png")}"`);
+      expect(res.text).toContain('src="../../../secret.png"'); // above the base: left to 404
+      expect(res.text).toContain('src="https://example.com/y.png"');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+// #2157. The route serves TWO documents now: the one every caller has always had, and the one the
+// Files pane embeds, which carries a script that reports where the reader is. The second exists
+// because the first cannot be read from — and the whole design is that asking for the second
+// changes nothing about the first.
 describe("GET /api/files/browse/md", () => {
   const HOSTILE = '# title\n\n<script>document.title = "ran"</script>\n\n<img src=x onerror="document.title = \'ran\'">\n';
   const withMd = async (body: string, run: (call: ReturnType<typeof routeCall>, query: string) => Promise<void>) => {

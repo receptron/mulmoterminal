@@ -164,26 +164,25 @@ function placeApi(view: EditorView): Pick<CmEditor, "caretAt" | "goTo" | "topLin
   };
 }
 
-// `onChange` fires only on USER edits — loading a file (setDoc) is programmatic and
-// must not mark the buffer dirty, so it's suppressed with a flag.
+// `onChange` fires only on USER edits. Loading a file replaces the whole EditorState rather than
+// dispatching into it, so the load is neither a change the listener sees nor a step Undo can take
+// back — undoing one emptied the buffer, marked it dirty, and the pane saved that on leaving (#2258).
 export function createEditor(parent: HTMLElement, onChange: () => void): CmEditor {
   const lang = new Compartment();
-  let loading = false;
-  const view = new EditorView({
-    parent,
-    state: EditorState.create({
-      doc: "",
+  const stateFor = (doc: string, mode: Extension): EditorState =>
+    EditorState.create({
+      doc,
       extensions: [
         basicSetup,
         oneDark,
-        lang.of([]),
+        lang.of(mode),
         EditorView.lineWrapping,
         EditorView.updateListener.of((u) => {
-          if (u.docChanged && !loading) onChange();
+          if (u.docChanged) onChange();
         }),
       ],
-    }),
-  });
+    });
+  const view = new EditorView({ parent, state: stateFor("", []) });
   // Which file the editor is showing NOW. A lazily-imported grammar can land after the user has
   // already opened something else, and applying it then would colour the new file as the old
   // one's language — the same staleness guard the fetch-per-cwd code uses.
@@ -192,17 +191,10 @@ export function createEditor(parent: HTMLElement, onChange: () => void): CmEdito
   return {
     setDoc(text, filename) {
       const seq = ++docSeq;
-      const kind = langKindForFilename(filename);
-      const mode = langExtensionForKind(kind);
-      loading = true;
-      view.dispatch({
-        changes: { from: 0, to: view.state.doc.length, insert: text },
-        // A bundled mode is applied with the text, in one transaction. A lazy one starts as no
-        // highlighting and arrives below — the file is readable either way, it just goes from
-        // plain to coloured.
-        effects: lang.reconfigure(mode instanceof Promise ? [] : mode),
-      });
-      loading = false;
+      const mode = langExtensionForKind(langKindForFilename(filename));
+      // A bundled mode is applied with the text. A lazy one starts as no highlighting and arrives
+      // below — the file is readable either way, it just goes from plain to coloured.
+      view.setState(stateFor(text, mode instanceof Promise ? [] : mode));
       if (mode instanceof Promise) {
         void mode
           .then((extension) => {
