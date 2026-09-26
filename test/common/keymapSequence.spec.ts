@@ -51,19 +51,28 @@ describe("validateKeymap with sequences", () => {
   it("warns when a sequence's first key is bound on its own", () => {
     const problems = validateKeymap({ "zoom-toggle": "Cmd+k", "files-find": "Cmd+k p" });
     expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("`zoom-toggle`") }]);
+    expect(problems[0]?.reason).toContain("may never start");
   });
 
   it.each([["copy"], ["paste"]])("warns when a sequence's first key is %s's", (action) => {
     const problems = validateKeymap({ [action]: "Cmd+k", "files-find": "Cmd+k p" });
-    expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("never starts") }]);
+    expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("may never start") }]);
   });
 
-  // An action that declines by view state leaves the key alive in the other state, and the
-  // sequence starts there — "never" would be the wrong thing to tell the user (codex on #2283).
-  it("says when a sequence still starts if its first key belongs to an action that declines by state", () => {
-    const [problem] = validateKeymap({ "files-search": "Cmd+k", "files-find": "Cmd+k p" });
-    expect(problem?.reason).toContain("only while a terminal is enlarged");
-    expect(problem?.reason).toContain("starts only when none is");
+  // The warning does not predict WHICH states a sequence still starts in: several single claims on
+  // one key (an action that declines by zoom state plus a `send`, or two actions) make that a
+  // puzzle it got wrong twice (codex on #2283). It names every claim, in dispatch order.
+  it("names every single binding on the first key, in dispatch order, and does not promise a state", () => {
+    const [problem] = validateKeymap({ "focus-next": "Cmd+k", "zoom-next": "Cmd+k", "files-find": "Cmd+k p" }).filter((p) => p.action === "files-find");
+    expect(problem?.reason).toContain("`zoom-next`, `focus-next`");
+    expect(problem?.reason).toContain("may never start");
+  });
+
+  it("counts a send on the first key alongside an action that declines by state", () => {
+    const problems = validateKeymap({ "zoom-next": "Cmd+k", "files-find": "Cmd+k p", send: [{ key: "Cmd+k", bytes: "x" }] });
+    const [problem] = problems.filter((p) => p.action === "files-find");
+    expect(problem?.reason).toContain("`zoom-next`, `send[0]`");
+    expect(problem?.reason).not.toContain("starts only");
   });
 
   it("warns when a sequence's first key is a send binding", () => {

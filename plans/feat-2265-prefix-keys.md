@@ -14,10 +14,12 @@ startup check reported nothing, and the binding never fired.
   `send` and the single-stroke paths reject `"Cmd+K p"` instead of accepting a dead binding.
 - `copy`, `paste` and `send` stay single-stroke: they are decided inside the terminal, which
   cannot wait. A sequence for them is a fatal startup error.
-- Validation warns when a sequence's first key is also bound on its own or used by `send` (that
-  binding wins and the sequence never starts), when two actions claim the same sequence (the
-  existing duplicate check, keyed on the whole sequence), and about uppercase-with-Cmd on either
-  keystroke (#2125).
+- Validation warns when a sequence's first key is also bound on its own (an action, `copy`, `paste`
+  or a `send`): it names every such binding in dispatch order and says the sequence may never start,
+  without predicting in which states. Twice a narrower sentence was wrong for a combination it did not
+  list. It also warns when two actions claim the same sequence (the existing duplicate check, keyed on
+  the whole sequence), about uppercase-with-Cmd on either keystroke (#2125), and about a bare `Escape`
+  as a second key.
 - Dispatch: `src/composables/prefixKeys.ts` is a pure step function (pass / wait / run / cancel /
   ignore); `usePrefixKeys` holds the pending state and its 3-second lapse, and `claim` decides
   single vs sequence:

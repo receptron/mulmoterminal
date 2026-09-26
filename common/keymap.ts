@@ -297,17 +297,23 @@ const escapeSecondWarnings = (action: string, binding: string, [, second]: KeyBi
 function prefixWarnings(bound: Map<string, Claim[]>): KeymapProblem[] {
   return [...bound.entries()].flatMap(([key, claims]) => {
     const [first, second] = key.split(SEQUENCE_SEPARATOR);
-    const single = second === undefined || first === undefined ? undefined : bound.get(first)?.[0];
-    return single ? claims.map((claim) => ({ action: claim.label, binding: claim.binding, reason: prefixCollision(single), fatal: false })) : [];
+    const singles = second === undefined || first === undefined ? [] : (bound.get(first) ?? []);
+    if (singles.length === 0) return [];
+    const reason = prefixCollision(singles);
+    return claims.map((claim) => ({ action: claim.label, binding: claim.binding, reason, fatal: false }));
   });
 }
 
-// An action that declines by view state leaves its key alive in the other state, and the sequence
-// starts there. `copy` / `paste` / `send` are decided in the terminal and always keep the key.
-const prefixCollision = (single: Claim): string => {
-  const aside = single.kind === "action" && single.label !== "copy" ? standsAside(single.label) : null;
-  const taken = `its first key is also bound to \`${single.label}\` on its own`;
-  return aside ? `${taken}, which acts ${aside.acts} — this sequence starts only ${aside.otherwise}` : `${taken}, which takes it — this sequence never starts`;
+// Deliberately NOT a prediction of the states the sequence still starts in. Which single binding
+// acts depends on the zoom state, on a selection for `copy`, and on which of several claims dispatch
+// reaches — twice a narrower sentence was wrong for a combination it did not list (codex on #2283).
+// Every claim is named, in dispatch order, and the advice is the one that is always right.
+const prefixCollision = (singles: Claim[]): string => {
+  const names = [...singles]
+    .sort((x, y) => x.rank - y.rank)
+    .map((claim) => `\`${claim.label}\``)
+    .join(", ");
+  return `its first key is also bound on its own, to ${names} — those take the key whenever they act, so this sequence may never start; give it a first key nothing else uses`;
 };
 
 // A binding that says one keystroke and waits for another. While Cmd is held, a macOS browser puts

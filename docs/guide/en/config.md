@@ -1357,10 +1357,9 @@ far more shortcuts than there are free single keys.
   decided inside the terminal, which cannot wait for a second key. Writing one as a sequence stops
   the server from starting, naming the entry. A bare `Esc` cannot be a second key either — it always
   cancels, so the startup check warns if a sequence ends in it.
-- **A key bound on its own wins.** If the first key of a sequence is also bound by itself — as an
-  action, `copy`, `paste` or a `send` — that binding keeps the key and the sequence never starts; the
-  startup check warns. The one exception is an action that only works with (or without) an enlarged
-  terminal: in the other state it lets the key go, and the sequence starts there.
+- **Give a sequence a first key nothing else uses.** A key bound on its own — as an action, `copy`,
+  `paste` or a `send` — takes the key whenever it acts, so a sequence sharing it may never start. The
+  startup check warns and names every binding on that key.
 - **Choose a first key the browser lets through**, and one you do not need inside the terminal. On a
   Mac a `Cmd` combination is a good fit (write the letter lowercase, [as explained below](#macos-keys)): the
   terminal does not use `Cmd`. `Ctrl`+`K` is **kill-to-end-of-line** in most shells, and some

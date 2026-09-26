@@ -238,9 +238,9 @@ asks for tmux / Emacs style.
   keystroke. Writing one as a sequence stops the server from starting.
 - **Two keys at most.** Three is a startup error. A bare `Escape` is never a second key — it always
   cancels (the startup check warns); `Shift+Escape` and the like are fine.
-- **Do not also bind the first key on its own** — as an action, `copy`, `paste` or a `send`: the
-  single binding keeps the key and the sequence never starts (for an action that declines by zoom
-  state, it starts only in the other state). The startup check warns; don't write one.
+- **Give a sequence a first key nothing else uses** — not an action, `copy`, `paste` or a `send`. A
+  single binding takes the key whenever it acts, so the sequence may never start; the startup check
+  warns and names every binding on that key. Don't write one.
 - **Every rule above applies to each key**: lowercase letters with `Cmd`, no `Option`+letter on a
   Mac, no `F1`–`F12` on a Mac without `Fn`.
 - **Pick the first key for the terminal's sake.** None of the keys reaches the terminal. On a Mac,
