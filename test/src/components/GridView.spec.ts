@@ -389,6 +389,23 @@ describe("GridView two-key sequences", () => {
     w.unmount();
   });
 
+  // The grid yields the keyboard to a text field, a modal, the launch panel, another view and an
+  // IME confirmation. A wait left pending across that would swallow the next key once the grid has
+  // the keyboard back (codex on #2283).
+  it("drops the wait when a key goes to a text field instead", async () => {
+    const w = await mountShortcutGrid(4, {}, SEQUENCE_KEYMAP);
+    await pressCtrlK();
+    const input = document.createElement("input");
+    document.body.append(input);
+    input.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    await flushPromises();
+    input.remove();
+    expect(w.find('[data-testid="prefix-key-hint"]').exists()).toBe(false);
+    await press("z"); // not after a prefix any more
+    expect(gridOf(w).props("expandedUid")).toBeNull();
+    w.unmount();
+  });
+
   it("ends the wait on Escape without acting", async () => {
     const w = await mountShortcutGrid(4, {}, SEQUENCE_KEYMAP);
     await pressCtrlK();

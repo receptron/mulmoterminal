@@ -72,4 +72,14 @@ describe("prefixStep", () => {
   it("passes everything when nothing is bound to a sequence", () => {
     expect(prefixStep({ "zoom-next": "F8" }, null, CTRL_K, 0)).toEqual({ kind: "pass" });
   });
+
+  // The terminal decides these itself, after the grid. A sequence taking the key would disable an
+  // existing copy / paste / send binding — and with it Ctrl+C's interrupt (codex on #2283).
+  it.each([
+    ["copy", { copy: "Ctrl+k", "files-find": "Ctrl+k p" }],
+    ["paste", { paste: "Ctrl+k", "files-find": "Ctrl+k p" }],
+    ["a send binding", { "files-find": "Ctrl+k p", send: [{ key: "Ctrl+k", bytes: "\u000b" }] }],
+  ])("does not start a sequence on a key %s already takes", (_case, keymap) => {
+    expect(prefixStep(keymap, null, CTRL_K, 0)).toEqual({ kind: "pass" });
+  });
 });

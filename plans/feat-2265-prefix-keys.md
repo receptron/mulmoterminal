@@ -21,11 +21,14 @@ startup check reported nothing, and the binding never fired.
 - Dispatch: `src/composables/prefixKeys.ts` is a pure step function (pass / wait / run / cancel /
   ignore); `usePrefixKeys` holds the pending state and its 3-second lapse, and `claim` decides
   single vs sequence:
-  - A single binding wins when nothing is pending.
+  - A single binding wins when nothing is pending. This includes `copy` / `paste` / `send` on the
+    same key, which the terminal decides after the grid, so the sequence does not start on it.
   - While pending, the next key belongs to the sequence.
   - A lone modifier keeps the wait.
   - `Esc`, or any key that is not a candidate, ends it.
   - Every claimed key is stopped, so none of them reaches the terminal.
+  - When the grid yields the keyboard (another view, Settings, the launch panel, a text field, an
+    IME confirmation), a pending wait is dropped, so it cannot swallow a key later.
   - The resolved action goes through the same zoom gate as single bindings (`gateShortcut`,
     extracted from `gridShortcutFor`).
 - `PrefixKeyHint.vue` shows, bottom-right, the first key and each candidate with its action name

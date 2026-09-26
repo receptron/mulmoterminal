@@ -1,7 +1,16 @@
 // A two-keystroke binding, resolved (#2265): the first key starts a short wait, and the next key
 // picks the action — tmux's prefix, or Emacs's `C-x b`. Decided without touching the DOM or the
 // clock, so every step is a spec; the wait itself lives in usePrefixKeys.
-import { matchesBinding, sequenceBindings, type Keymap, type KeymapAction, type SequenceBinding } from "../../common/keymap";
+import {
+  actionForKey,
+  matchesBinding,
+  sendBytesFor,
+  sequenceBindings,
+  TERMINAL_SCOPED_ACTIONS,
+  type Keymap,
+  type KeymapAction,
+  type SequenceBinding,
+} from "../../common/keymap";
 import type { ShortcutKeyEvent } from "./gridShortcut";
 
 /** How long the first key waits for the second. Long enough to read the hint, short enough that a
@@ -29,7 +38,15 @@ export function prefixStep(keymap: Keymap, pending: PendingPrefix | null, e: Sho
   return live ? secondKey(live, e) : firstKey(keymap, e, now_ms);
 }
 
+// A key the terminal side decides on — `copy`, `paste`, a `send` — runs after the grid, so a sequence
+// that took it would silently disable that binding, and Ctrl+C's interrupt with it.
+const terminalTakes = (keymap: Keymap, e: ShortcutKeyEvent): boolean => {
+  const action = actionForKey(keymap, e);
+  return (action !== null && TERMINAL_SCOPED_ACTIONS.includes(action)) || sendBytesFor(keymap, e) !== null;
+};
+
 function firstKey(keymap: Keymap, e: ShortcutKeyEvent, now_ms: number): PrefixStep {
+  if (terminalTakes(keymap, e)) return { kind: "pass" };
   const candidates = sequenceBindings(keymap).filter((binding) => matchesBinding(binding.first, e));
   const [head] = candidates;
   return head ? { kind: "wait", pending: { candidates, firstLabel: head.firstLabel, startedAt_ms: now_ms } } : { kind: "pass" };

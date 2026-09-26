@@ -14,6 +14,8 @@ export interface PrefixKeys {
    *  sequence's first key, a cancelled one, one that declines in this view state); undefined
    *  when it is not the grid's at all. */
   shortcutFor: (keymap: Keymap, e: ShortcutKeyEvent, zoomed: boolean) => GridShortcut | null | undefined;
+  /** End a wait without acting — the grid is giving the keyboard to something else. */
+  cancel: () => void;
   /** `shortcutFor`, and a key the grid claims is stopped here so it never reaches the terminal. */
   claim: (keymap: Keymap, e: ShortcutKeyEvent & ClaimableEvent, zoomed: boolean) => GridShortcut | null;
 }
@@ -58,5 +60,5 @@ export function usePrefixKeys(now_ms: () => number = Date.now): PrefixKeys {
     return shortcut;
   };
   onBeforeUnmount(clear);
-  return { pending, handle, shortcutFor, claim };
+  return { pending, handle, shortcutFor, cancel: clear, claim };
 }

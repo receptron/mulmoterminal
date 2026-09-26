@@ -290,16 +290,17 @@ function prefixWarnings(bound: Map<string, Claim[]>): KeymapProblem[] {
   return [...bound.entries()].flatMap(([key, claims]) => {
     const [first, second] = key.split(SEQUENCE_SEPARATOR);
     const single = second === undefined || first === undefined ? undefined : bound.get(first)?.[0];
-    return single
-      ? claims.map((claim) => ({
-          action: claim.label,
-          binding: claim.binding,
-          reason: `its first key is also bound to \`${single.label}\` on its own, which takes it — this sequence never starts`,
-          fatal: false,
-        }))
-      : [];
+    return single ? claims.map((claim) => ({ action: claim.label, binding: claim.binding, reason: prefixCollision(single), fatal: false })) : [];
   });
 }
+
+// An action that declines by view state leaves its key alive in the other state, and the sequence
+// starts there. `copy` / `paste` / `send` are decided in the terminal and always keep the key.
+const prefixCollision = (single: Claim): string => {
+  const aside = single.kind === "action" && single.label !== "copy" ? standsAside(single.label) : null;
+  const taken = `its first key is also bound to \`${single.label}\` on its own`;
+  return aside ? `${taken}, which acts ${aside.acts} — this sequence starts only ${aside.otherwise}` : `${taken}, which takes it — this sequence never starts`;
+};
 
 // A binding that says one keystroke and waits for another. While Cmd is held, a macOS browser puts
 // the UNSHIFTED character in `KeyboardEvent.key` — Cmd+Shift+P arrives as `"p"` — so a binding

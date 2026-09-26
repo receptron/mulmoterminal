@@ -237,8 +237,9 @@ asks for tmux / Emacs style.
 - **Never for `copy`, `paste` or `send`** — they are decided inside the terminal and take one
   keystroke. Writing one as a sequence stops the server from starting.
 - **Two keys at most.** Three is a startup error.
-- **Do not also bind the first key on its own** (or as a `send`): the single binding wins and the
-  sequence never starts. The startup check warns; don't write one.
+- **Do not also bind the first key on its own** — as an action, `copy`, `paste` or a `send`: the
+  single binding keeps the key and the sequence never starts (for an action that declines by zoom
+  state, it starts only in the other state). The startup check warns; don't write one.
 - **Every rule above applies to each key**: lowercase letters with `Cmd`, no `Option`+letter on a
   Mac, no `F1`–`F12` on a Mac without `Fn`.
 - **Pick the first key for the terminal's sake.** None of the keys reaches the terminal. On a Mac,

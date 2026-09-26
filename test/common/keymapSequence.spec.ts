@@ -53,6 +53,19 @@ describe("validateKeymap with sequences", () => {
     expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("`zoom-toggle`") }]);
   });
 
+  it.each([["copy"], ["paste"]])("warns when a sequence's first key is %s's", (action) => {
+    const problems = validateKeymap({ [action]: "Cmd+k", "files-find": "Cmd+k p" });
+    expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("never starts") }]);
+  });
+
+  // An action that declines by view state leaves the key alive in the other state, and the
+  // sequence starts there — "never" would be the wrong thing to tell the user (codex on #2283).
+  it("says when a sequence still starts if its first key belongs to an action that declines by state", () => {
+    const [problem] = validateKeymap({ "files-search": "Cmd+k", "files-find": "Cmd+k p" });
+    expect(problem?.reason).toContain("only while a terminal is enlarged");
+    expect(problem?.reason).toContain("starts only when none is");
+  });
+
   it("warns when a sequence's first key is a send binding", () => {
     const problems = validateKeymap({ "files-find": "Cmd+k p", send: [{ key: "Cmd+k", bytes: "x" }] });
     expect(problems).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("`send[0]`") }]);

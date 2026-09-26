@@ -1356,8 +1356,10 @@ far more shortcuts than there are free single keys.
 - **Two keys at most.** `copy`, `paste` and `send` take a **single** keystroke only: they are
   decided inside the terminal, which cannot wait for a second key. Writing one as a sequence stops
   the server from starting, naming the entry.
-- **A key bound on its own wins.** If the first key of a sequence is also bound by itself (or used by
-  a `send`), that binding fires and the sequence never starts — the startup check warns.
+- **A key bound on its own wins.** If the first key of a sequence is also bound by itself — as an
+  action, `copy`, `paste` or a `send` — that binding keeps the key and the sequence never starts; the
+  startup check warns. The one exception is an action that only works with (or without) an enlarged
+  terminal: in the other state it lets the key go, and the sequence starts there.
 - **Choose a first key the browser lets through**, and one you do not need inside the terminal. On a
   Mac a `Cmd` combination is a good fit (write the letter lowercase, [as explained below](#macos-keys)): the
   terminal does not use `Cmd`. `Ctrl`+`K` is **kill-to-end-of-line** in most shells, and some
