@@ -24,7 +24,7 @@ import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./ren
 import { mdPreviewEmbedCsp, mdPreviewReporterTag, newPreviewNonce, wantsMdPreviewEmbed } from "./mdPreviewEmbed.js";
 import { MD_PREVIEW_EMBED_PARAM } from "../../common/mdPreviewMessage.js";
 import { requestBody } from "../routes/requestBody.js";
-import { stripFrontmatter } from "../../common/frontmatter.js";
+import { splitFrontmatter } from "@mulmoclaude/markdown-utils/markdown/frontmatter";
 
 // Cap on the bytes served to the editor / accepted on write — a text editor, not a
 // blob store. Large/binary files are refused rather than streamed into a textarea.
@@ -307,8 +307,9 @@ function mountLinesRoute(app: Express, defaultCwd: string): void {
 }
 
 /** The body a reader sees: front matter is metadata, and rendered as Markdown its closing `---`
- *  turns the whole block into a heading (#2264). */
-const mdBody = async (text: string): Promise<string> => marked.parse(stripFrontmatter(text));
+ *  turns the whole block into a heading (#2264). Only a block that parses as YAML counts, as on
+ *  the Canvas and in MulmoClaude — a document may open with a `---` rule, and that is body. */
+const mdBody = async (text: string): Promise<string> => marked.parse(splitFrontmatter(text).body);
 
 /** The Markdown document every caller has always had. */
 const renderMd = async (text: string, title: string): Promise<string> => htmlDoc(await mdBody(text), title);

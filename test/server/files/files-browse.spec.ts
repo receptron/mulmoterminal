@@ -457,13 +457,18 @@ describe("GET /api/files/browse/md — front matter", () => {
     }
   });
 
-  it("keeps a rule in the middle of the body", async () => {
+  // Only a block that parses as YAML is front matter — the rule the Canvas and MulmoClaude use.
+  // A document may open with a thematic break, and a malformed header is better shown than lost.
+  it.each([
+    ["a rule in the middle of the body", "# Top\n\n---\n\ntitle: kept\n", "title: kept"],
+    ["a document that opens with a rule", "---\n# Intro\n---\nbody\n", "Intro"],
+    ["a header whose YAML does not parse", "---\ntitle: [unclosed\n---\n# Body\n", "title: [unclosed"],
+  ])("keeps %s", async (_case, body, kept) => {
     const dir = tmp();
-    writeFileSync(path.join(dir, "a.md"), "# Top\n\n---\n\ntitle: kept\n");
+    writeFileSync(path.join(dir, "a.md"), body);
     try {
       const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md`);
-      expect(res.text).toContain("<hr>");
-      expect(res.text).toContain("title: kept");
+      expect(res.text).toContain(kept);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

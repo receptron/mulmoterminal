@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from "vitest";
-import { renderWikiHtml } from "../../src/wikiMarkdown.js";
+import { renderWikiHtml, stripFrontmatter } from "../../src/wikiMarkdown.js";
 
 function parse(html: string): Document {
   return new DOMParser().parseFromString(html, "text/html");
 }
+
+describe("stripFrontmatter", () => {
+  it("drops a leading YAML frontmatter block (and BOM)", () => {
+    expect(stripFrontmatter("---\ntitle: X\n---\n# Body\n")).toBe("# Body\n");
+    expect(stripFrontmatter("﻿---\ntitle: X\n---\nhi")).toBe("hi");
+  });
+  it("leaves a body without frontmatter untouched", () => {
+    expect(stripFrontmatter("# Body\n")).toBe("# Body\n");
+  });
+});
 
 describe("renderWikiHtml", () => {
   it("renders a prose [[link]] as a focusable wiki-link", () => {

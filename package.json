@@ -87,6 +87,7 @@
     "@mulmoclaude/google-plugin": "^4.1.0",
     "@mulmoclaude/html-plugin": "^5.0.1",
     "@mulmoclaude/markdown-plugin": "^5.1.0",
+    "@mulmoclaude/markdown-utils": "^3.0.1",
     "@mulmoclaude/mulmoscript-plugin": "^5.0.1",
     "@mulmoclaude/shapescript-plugin": "^7.1.0",
     "@mulmoclaude/x-plugin": "^1.0.4",

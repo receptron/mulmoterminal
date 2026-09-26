@@ -7,19 +7,19 @@ its closing `---` as a setext heading, so `docs/guide/en/basics.md` began with
 `<hr><h2>title: … layout: default …</h2>`.
 
 ## Fix
-- `stripFrontmatter` (leading BOM + a leading `---` … `---` block) moves verbatim from
-  `src/wikiMarkdown.ts` to `common/frontmatter.ts`. The wiki page view and the Files preview now
-  share one rule for where the body starts.
-- `/api/files/browse/md` renders `stripFrontmatter(text)` in both the plain and the embed
-  document. The block is dropped, not shown; the issue asked only for that first.
+`/api/files/browse/md` renders `splitFrontmatter(text).body` in both the plain and the embed
+document. `splitFrontmatter` comes from `@mulmoclaude/markdown-utils` (now a direct dependency;
+it was already installed through the markdown plugin, and `yarn.lock` does not change), imported
+from its `markdown/frontmatter` subpath as the Canvas plugin does. It strips a block only when it
+parses as YAML. The block is dropped, not shown; the issue asked only for that first.
 
-## Not matched with the Canvas plugin
-The markdown plugin uses `parseFrontmatter` from `@mulmoclaude/markdown-utils`, which strips only
-when the YAML parses. That package is not a direct dependency here, so this keeps the repo's
-existing rule rather than adding one. A malformed block is therefore stripped here and kept there.
+## Why not the wiki's regex
+The first version moved the wiki's `stripFrontmatter` into `common/` and used it here. Cross review
+found that it strips ANY leading `---` … `---`, so a document that opens with a thematic break, or
+has a malformed header, lost content up to the next `---`. The maintainer chose the canonical
+parser, the one MulmoClaude and the Canvas use. The wiki keeps its own rule, unchanged.
 
 ## Spec
-- `test/common/frontmatter.spec.ts`: the existing wiki cases, plus a mid-document `---`, CRLF,
-  and an unclosed block
-- `test/server/files/files-browse.spec.ts`: both documents start at the body; a rule in the middle
-  of the body stays
+`test/server/files/files-browse.spec.ts`:
+- both documents start at the body
+- kept: a rule in the middle, a document opening with a rule, a header whose YAML does not parse
