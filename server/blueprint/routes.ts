@@ -13,6 +13,8 @@ import { BLUEPRINT_SLUG_RE } from "../../common/blueprint/manifest.js";
 
 export interface BlueprintRouteDeps {
   executor: BlueprintExecutor;
+  /** Refuses (BlueprintRefusal) when another MulmoTerminal drives the runs — asked before a create writes anything. */
+  ensureOwner: () => Promise<void>;
   packRoots: readonly PackRoot[];
   now: () => number;
   /** Whether an agent can start in `dir` without a trust prompt nobody is there to answer. */
@@ -134,6 +136,7 @@ function mountCreateRoute(app: Express, deps: BlueprintRouteDeps): void {
     if (!checked.ok) return res.status(checked.status).json({ error: checked.error });
     const { projectDir, answers, pair } = checked.request;
     try {
+      await deps.ensureOwner();
       await writeAnswers(projectDir, answers);
       const runId = await deps.executor.create({ projectDir, basePackDir: pair.basePackDir, usecasePackDir: pair.usecasePackDir, steps: pair.steps });
       return res.json({ runId });

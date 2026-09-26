@@ -14,6 +14,7 @@ import { BlueprintRefusal, type BlueprintExecutor } from "../../../server/bluepr
 const PACKS_ROOT = path.join(import.meta.dirname, "..", "..", "..", "blueprints");
 const calls: unknown[][] = [];
 const trusted = new Set<string>([tmpdir()]);
+let ownerRefusal: string | null = null;
 
 const executor: BlueprintExecutor = {
   create: async (request) => {
@@ -64,7 +65,15 @@ let base = "";
 beforeAll(async () => {
   const app = express();
   app.use(express.json());
-  mountBlueprintRoutes(app, { executor, packRoots: [{ dir: PACKS_ROOT, source: "builtin" }], now: () => 42, isTrusted: async (dir) => trusted.has(dir) });
+  mountBlueprintRoutes(app, {
+    executor,
+    packRoots: [{ dir: PACKS_ROOT, source: "builtin" }],
+    now: () => 42,
+    isTrusted: async (dir) => trusted.has(dir),
+    ensureOwner: async () => {
+      if (ownerRefusal) throw new BlueprintRefusal(ownerRefusal);
+    },
+  });
   server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
   const address = server.address();
@@ -89,6 +98,22 @@ describe("POST /api/blueprints/runs", () => {
     const written = JSON.parse(await readFile(path.join(project, ".blueprint", "answers.json"), "utf8"));
     expect(written).toEqual(ANSWERS);
     await rm(project, { recursive: true, force: true });
+  });
+
+  it("refuses on a server that does not drive the runs, before writing anything into the project", async () => {
+    calls.length = 0;
+    const project = await mkdtemp(path.join(tmpdir(), "blueprint-route-"));
+    trusted.add(project);
+    ownerRefusal = "run by the MulmoTerminal on port 34567";
+    try {
+      const res = await post("/api/blueprints/runs", { projectDir: project, base: "firebase", usecase: "internal", answers: ANSWERS });
+      expect(res).toEqual({ status: 409, body: { error: "run by the MulmoTerminal on port 34567" } });
+      expect(calls).toEqual([]);
+      await expect(readFile(path.join(project, ".blueprint", "answers.json"), "utf8")).rejects.toThrow();
+    } finally {
+      ownerRefusal = null;
+      await rm(project, { recursive: true, force: true });
+    }
   });
 
   it("names the questions left unanswered", async () => {

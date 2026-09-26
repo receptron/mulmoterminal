@@ -10,7 +10,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
 import { BlueprintRefusal, createExecutor, type BlueprintExecutor, type ProjectFiles } from "./executor.js";
-import { acquireLock } from "./executorLock.js";
+import { acquireLock, confirmLock, holdsLock } from "./executorLock.js";
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { createRunStore } from "./runStore.js";
 import { runCheck } from "./checkRunner.js";
@@ -31,6 +31,8 @@ type SpawnClaude = (sessionId: string, ws: null, resumeId: null, options: { init
 const PACKS_ROOT = path.join(import.meta.dirname, "..", "..", "blueprints");
 const RUNS_ROOT = path.join(MULMOTERMINAL_HOME, "blueprints", "runs");
 const LOCK_FILE = path.join(MULMOTERMINAL_HOME, "blueprints", "executor.lock");
+// Far longer than the gap between reading a stale lock and replacing it.
+const TAKEOVER_SETTLE_MS = 250;
 // Packs installed from a registry. After the shipped ones, so they can never replace one.
 export const INSTALLED_PACKS_DIR = path.join(MULMOTERMINAL_HOME, "blueprints", "packs");
 const PACK_ROOTS: readonly PackRoot[] = [
@@ -108,22 +110,40 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap:
     clone: cloneRepo,
     now: () => Date.now(),
   });
-  mountBlueprintRoutes(app, { executor: ownedExecutor.executor, packRoots: PACK_ROOTS, now: () => Date.now(), isTrusted: (dir) => claudeTrusts(dir) });
+  mountBlueprintRoutes(app, {
+    executor: ownedExecutor.executor,
+    ensureOwner: ownedExecutor.ensureOwner,
+    packRoots: PACK_ROOTS,
+    now: () => Date.now(),
+    isTrusted: (dir) => claudeTrusts(dir),
+  });
 }
 
 // Taking the lock recovers the runs, so a server that takes over from a dead holder first settles the
-// sessions that holder left behind. Reads work either way; a change is refused while another holds it.
+// sessions that holder left behind. Every change re-reads the lock: one lost to another server is
+// noticed, and refused, rather than acted on. Reads work either way.
 function lockedExecutor(executor: BlueprintExecutor): { executor: BlueprintExecutor; ensureOwner: () => Promise<void> } {
+  const self = { pid: process.pid, port: String(PORT), token: randomUUID() };
   let owning: Promise<void> | null = null;
+  const refuseFor = (holder: { port: string }): BlueprintRefusal =>
+    new BlueprintRefusal(`blueprints on this machine are run by the MulmoTerminal on port ${holder.port}; make changes there`);
   const takeOwnership = async (): Promise<void> => {
     await mkdir(path.dirname(LOCK_FILE), { recursive: true });
-    const decision = await acquireLock(LOCK_FILE, { pid: process.pid, port: String(PORT) });
-    if (decision.kind === "held") {
-      throw new BlueprintRefusal(`blueprints on this machine are run by the MulmoTerminal on port ${decision.holder.port}; make changes there`);
-    }
+    const decision = await acquireLock(LOCK_FILE, self);
+    if (decision.kind === "held") throw refuseFor(decision.holder);
+    // Two servers replacing a dead holder's lock at once can each delete the other's; the one whose
+    // lock survives a moment later is the owner, and only it recovers.
+    await new Promise((resolve) => setTimeout(resolve, TAKEOVER_SETTLE_MS));
+    const settled = await confirmLock(LOCK_FILE, self);
+    if (settled.kind === "held") throw refuseFor(settled.holder);
     await executor.recover(endOrphanedSession);
   };
-  const ensureOwner = (): Promise<void> => {
+  const ensureOwner = async (): Promise<void> => {
+    if (owning) {
+      await owning;
+      if (await holdsLock(LOCK_FILE, self)) return;
+      owning = null;
+    }
     owning ??= takeOwnership().catch((err: unknown) => {
       owning = null;
       throw err;
@@ -142,7 +162,7 @@ function lockedExecutor(executor: BlueprintExecutor): { executor: BlueprintExecu
       view: (runId) => executor.view(runId),
       list: () => executor.list(),
       specView: (runId) => executor.specView(runId),
-      recover: (endSession) => executor.recover(endSession),
+      recover: owned((endSession: Parameters<BlueprintExecutor["recover"]>[0]) => executor.recover(endSession)),
       create: owned((request: Parameters<BlueprintExecutor["create"]>[0]) => executor.create(request)),
       humanEvent: owned((...args: Parameters<BlueprintExecutor["humanEvent"]>) => executor.humanEvent(...args)),
       ask: owned((...args: Parameters<BlueprintExecutor["ask"]>) => executor.ask(...args)),
