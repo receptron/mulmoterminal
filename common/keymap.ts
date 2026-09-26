@@ -26,6 +26,7 @@ export const KEYMAP_ACTIONS = [
   "terminal-restart",
   "files-find",
   "files-search",
+  "command-palette",
   "copy",
   "paste",
 ] as const;

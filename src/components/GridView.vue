@@ -52,7 +52,7 @@ import { activityStatus, type AttentionStatus } from "./attentionStatus";
 import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
 import { isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
-import { usePrefixKeys } from "../composables/usePrefixKeys";
+import { useGridKeys } from "../composables/useGridKeys";
 import PrefixKeyHint from "./PrefixKeyHint.vue";
 import { isImeConfirming } from "../composables/imeComposition";
 import { useCaptureKeydown } from "../composables/useCaptureKeydown";
@@ -483,9 +483,8 @@ function closeSettings() {
 // CAPTURE phase because xterm binds keydown on its own textarea: capture runs first, so the
 // key can be claimed before the terminal turns it into a page-forward escape sequence.
 function onShortcutKey(e: KeyboardEvent) {
-  if (gridYieldsKey(e)) return prefix.cancel();
-  const shortcut = prefix.claim(getActiveKeymap(), e, expandedUid.value !== null);
-  if (shortcut) runShortcut(shortcut);
+  if (gridYieldsKey(e)) return keys.cancel();
+  keys.onKey(getActiveKeymap(), e);
 }
 
 // Whether this key belongs to something other than the grid. A sequence waiting for its second key
@@ -509,8 +508,8 @@ function gridYieldsKey(e: KeyboardEvent): boolean {
   return !onTerminalsRoute() || showSettings.value || launchPanelOpen.value || editable || isImeConfirming(e);
 }
 
-// Two-key sequences (#2265) — see usePrefixKeys for how they share the key with single bindings.
-const prefix = usePrefixKeys();
+// Single keys, two-key sequences (#2265) and the command palette's picks (#2266) — see useGridKeys.
+const keys = useGridKeys(runShortcut, () => expandedUid.value !== null);
 
 // gridShortcutFor has already refused the actions that need a terminal to act ON while
 // un-zoomed. The ones that reach here un-zoomed are the ways IN: `terminal-new`, plus
@@ -968,6 +967,6 @@ onBeforeUnmount(detachSpawnedChat);
       @close="closeLaunchPanel"
     />
     <AppSettingsModal v-if="showSettings" :presets="presets" @launch-skill="launchSkill" @close="closeSettings" />
-    <PrefixKeyHint :pending="prefix.pending.value" />
+    <PrefixKeyHint :pending="keys.pending.value" />
   </div>
 </template>

@@ -8,6 +8,9 @@ import MachineLoadGauge from "./MachineLoadGauge.vue";
 import { showLoadAverage } from "../composables/showLoadAverage";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
+import CommandPalette from "./CommandPalette.vue";
+import { openCommandPalette, paletteOpen } from "../composables/commandPalette";
+import { useI18n } from "vue-i18n";
 import { CONTENT_ROUTES } from "../composables/overlayOrigin";
 import { useCollectionBrowse, browseGotoIndex, browseGotoDetail } from "../composables/useCollectionBrowse";
 import { useShortcuts } from "../composables/useShortcuts";
@@ -47,6 +50,7 @@ const props = defineProps<{
   listMode?: boolean;
 }>();
 const emit = defineEmits<{ (e: "add-terminal" | "toggle-sort" | "toggle-view" | "settings"): void }>();
+const { t } = useI18n();
 const sortButton = computed(() => sortModeButton(props.sortMode ?? "manual"));
 
 const route = useRoute();
@@ -335,6 +339,8 @@ function showRooms(): void {
       :label="listMode ? 'Show thumbnail strip' : 'Show list roster'"
       @click="emit('toggle-view')"
     />
+    <LauncherButton icon="keyboard_command_key" :title="t('commandPalette.open')" :label="t('commandPalette.open')" @click="openCommandPalette" />
     <LauncherButton icon="settings" title="Settings" label="Settings" @click="emit('settings')" />
+    <CommandPalette v-if="paletteOpen" />
   </header>
 </template>
