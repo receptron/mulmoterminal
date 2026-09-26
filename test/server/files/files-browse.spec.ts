@@ -437,10 +437,40 @@ describe("GET /api/files/browse/index", () => {
   });
 });
 
-// #2157. The route serves TWO documents now: the one every caller has always had, and the one the
-// Files pane embeds, which carries a script that reports where the reader is. The second exists
-// because the first cannot be read from — and the whole design is that asking for the second
-// changes nothing about the first.
+// #2264. Front matter is metadata; rendered as Markdown, its closing `---` makes the whole block a
+// heading under a rule. Both documents the route serves start at the body.
+describe("GET /api/files/browse/md — front matter", () => {
+  it.each([[""], ["&embed=1"]])("does not render the front matter as body (%s)", async (param) => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "a.md"), "---\ntitle: Basics\nlayout: default\n---\n\n# Body\n");
+    try {
+      const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md${param}`);
+      expect(res.text).toContain("<h1>Body</h1>");
+      expect(res.text).not.toContain("title: Basics");
+      expect(res.text).not.toContain("<hr>");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  // Only a block that parses as YAML is front matter — the rule the Canvas and MulmoClaude use.
+  // A document may open with a thematic break, and a malformed header is better shown than lost.
+  it.each([
+    ["a rule in the middle of the body", "# Top\n\n---\n\ntitle: kept\n", "title: kept"],
+    ["a document that opens with a rule", "---\n# Intro\n---\nbody\n", "Intro"],
+    ["a header whose YAML does not parse", "---\ntitle: [unclosed\n---\n# Body\n", "title: [unclosed"],
+  ])("keeps %s", async (_case, body, kept) => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "a.md"), body);
+    try {
+      const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md`);
+      expect(res.text).toContain(kept);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 // #2261. The document's URL is under `/api/files/browse/`, so a relative image resolved there and
 // 404'd. The route points it at the raw route, beside the document — in both documents it serves.
 describe("GET /api/files/browse/md — relative images", () => {
@@ -461,6 +491,10 @@ describe("GET /api/files/browse/md — relative images", () => {
   });
 });
 
+// #2157. The route serves TWO documents now: the one every caller has always had, and the one the
+// Files pane embeds, which carries a script that reports where the reader is. The second exists
+// because the first cannot be read from — and the whole design is that asking for the second
+// changes nothing about the first.
 describe("GET /api/files/browse/md", () => {
   const HOSTILE = '# title\n\n<script>document.title = "ran"</script>\n\n<img src=x onerror="document.title = \'ran\'">\n';
   const withMd = async (body: string, run: (call: ReturnType<typeof routeCall>, query: string) => Promise<void>) => {

@@ -25,6 +25,7 @@ import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./ren
 import { mdPreviewEmbedCsp, mdPreviewReporterTag, newPreviewNonce, wantsMdPreviewEmbed } from "./mdPreviewEmbed.js";
 import { MD_PREVIEW_EMBED_PARAM } from "../../common/mdPreviewMessage.js";
 import { requestBody } from "../routes/requestBody.js";
+import { splitFrontmatter } from "@mulmoclaude/markdown-utils/markdown/frontmatter";
 
 // Cap on the bytes served to the editor / accepted on write — a text editor, not a
 // blob store. Large/binary files are refused rather than streamed into a textarea.
@@ -318,20 +319,22 @@ function mountLinesRoute(app: Express, defaultCwd: string): void {
   });
 }
 
-/** Markdown to HTML with each relative image pointed at the raw route, beside the document
- *  rather than under `/api/files/browse/` (#2261). A fresh instance per document, because the
- *  rewrite depends on where THIS document sits. */
 // marked's union carries a generic token whose fields are `any`, so `type === "image"` alone
 // does not narrow it.
 const isImageToken = (token: Token): token is Tokens.Image => token.type === "image";
 
+/** Markdown to HTML with each relative image pointed at the raw route, beside the document
+ *  rather than under `/api/files/browse/` (#2261). A fresh instance per document, because the
+ *  rewrite depends on where THIS document sits. Front matter is metadata, not body (#2264): only a
+ *  block that parses as YAML counts, as on the Canvas and in MulmoClaude — a document may open
+ *  with a `---` rule, and that is body. */
 const mdBody = async (text: string, doc: ServedDoc): Promise<string> =>
   new Marked({
     walkTokens(token) {
       if (!isImageToken(token)) return;
       token.href = servedImageSrc(token.href, doc) ?? token.href;
     },
-  }).parse(text);
+  }).parse(splitFrontmatter(text).body);
 
 /** The Markdown document every caller has always had. */
 const renderMd = async (text: string, title: string, doc: ServedDoc): Promise<string> => htmlDoc(await mdBody(text, doc), title);
