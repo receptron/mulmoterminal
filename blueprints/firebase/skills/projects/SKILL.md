@@ -17,6 +17,8 @@ Read `.blueprint/spec.md` for `existingProject`, `existingProjectId` and `region
    link billing from the CLI on their behalf.
 4. Create Firestore in `region` for BOTH projects. The region cannot be changed later — read it back from the spec,
    never assume a default.
+5. Each project needs a registered web app — Hosting serves its config at `/__/firebase/init.json`, which the app
+   reads. `firebase apps:list WEB --project <id>`; if none, `firebase apps:create WEB <app name> --project <id>`.
 
 Done when the check passes: `.firebaserc` has distinct `dev` and `prod` projects, both exist, both have billing
 enabled and both have a Firestore database.
