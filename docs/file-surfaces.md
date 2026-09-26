@@ -58,8 +58,9 @@ one tool call cannot mean two different things in the two apps.
 The right pane can open a document **on the canvas**, which mounts the markdown plugin's view: an
 in-app Shadow DOM component that registers marked extensions and renders mermaid, maths and the
 rest. The full-screen view has no canvas to open into, so a `.md` goes to the **preview**, which is
-an iframe served from `/api/files/browse/md` and built by a **stock `marked.parse` with no
-extensions at all**. A mermaid fence therefore renders as a code block there, and does so by
+an iframe served from `/api/files/browse/md` and built by a **stock `marked` with no
+extensions at all** — it only drops a YAML front matter block and points relative images at the raw
+route, and the embedded document hands external link clicks to the pane. A mermaid fence therefore renders as a code block there, and does so by
 design rather than by failure — nothing tries to load mermaid, which is why no error appears
 either.
 

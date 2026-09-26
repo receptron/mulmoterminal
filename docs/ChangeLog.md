@@ -8,6 +8,64 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@6.3.0 — 2026-09-26
+
+> **Setup guide:** [6.3.0 — the Markdown preview shows what you wrote](https://receptron.github.io/mulmoterminal/guide/en/v6.3.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v6.3.0.html))
+
+### The Markdown preview
+
+- **[#2261](https://github.com/receptron/mulmoterminal/issues/2261)** ([#2278](https://github.com/receptron/mulmoterminal/pull/2278))
+  — relative images 404'd, because the preview document is served from `/api/files/browse/md` and
+  the browser resolved `src` under `/api/files/browse/`. The server now rewrites a relative image
+  `src` to `/api/files/raw?cwd=<base>&path=<resolved>`, resolved against the document's own
+  directory (measured from the requested path, not the real path, since that is where the browser
+  resolves it). Schemes, root- and protocol-relative paths, `#` / `?` references, malformed
+  escapes, and paths that climb above the base are left as written. The raw route's
+  `authorizedServingBase` is unchanged, so an image resolves only under the workspace or a live
+  session's directory.
+- **[#2264](https://github.com/receptron/mulmoterminal/issues/2264)** ([#2280](https://github.com/receptron/mulmoterminal/pull/2280))
+  — a leading YAML front matter block rendered as a rule and a heading made of its keys. The
+  preview now renders `splitFrontmatter(text).body` from `@mulmoclaude/markdown-utils`, the parser
+  MulmoClaude and the Canvas markdown plugin use, so a block is dropped only when it parses as
+  YAML, and a document that opens with a `---` rule keeps it. `@mulmoclaude/markdown-utils` becomes
+  a direct dependency (already installed through the markdown plugin). The wiki keeps its own rule.
+- **[#2259](https://github.com/receptron/mulmoterminal/issues/2259)** ([#2279](https://github.com/receptron/mulmoterminal/pull/2279))
+  — an external link loaded inside the preview iframe (`sandbox="allow-scripts"`, no
+  `allow-popups`), where most sites show "refused to connect". The preview's nonce'd reporter now
+  catches a click on a link whose attribute is `http(s)://…` and posts `navigate`; the pane
+  re-validates it as http/https and opens it with `noopener,noreferrer`. Measured in Chrome with
+  the popup blocker on: the click's activation reaches the parent, so the sandbox is not loosened.
+  `target="_blank"` was deliberately not added to the plain document (the new tab a clicked `.md`
+  opens): under CSP `sandbox` it opens nothing. Relative links and anchors are unchanged.
+- **[#2262](https://github.com/receptron/mulmoterminal/issues/2262)** ([#2282](https://github.com/receptron/mulmoterminal/pull/2282))
+  — Preview showed the file on disk, not unsaved edits. Switching to Preview now saves first and
+  switches only if the save landed; a 409 keeps the editor with the conflict banner, an error keeps
+  it with the message, and the button is disabled while a save is in flight. Found in review and
+  fixed for Save / ⌘S too: a save whose write came back after another file had been opened applied
+  its version, conflict or error to that file. `save()` now drops an outcome whose read generation
+  has moved on.
+
+### Files pane
+
+- **[#2260](https://github.com/receptron/mulmoterminal/issues/2260)** ([#2276](https://github.com/receptron/mulmoterminal/pull/2276))
+  — clicking a terminal path outside the cell's directory returned `path escapes the project root`,
+  because the link sent the cell's cwd as the base. A path outside the cwd (absolute, `~`, or a
+  `..` climb) is now sent as its parent directory plus its name, and the server's `resolveBase`
+  expands a leading `~`. A `~/…` path is no longer claimed by the pane beside the cell (the browser
+  cannot tell whether it is inside), so it opens in a tab even when it is inside the cell.
+- **[#2258](https://github.com/receptron/mulmoterminal/issues/2258)** ([#2275](https://github.com/receptron/mulmoterminal/pull/2275))
+  — undo right after opening a file undid the load: the editor emptied (or went back to the
+  previous file), was marked dirty, and the pane saved it on the way out. Loading a file now
+  replaces the whole `EditorState`, so the load is not in the undo history and never reaches the
+  change listener.
+
+### Dependencies
+
+- ([#2281](https://github.com/receptron/mulmoterminal/pull/2281)) — `resolutions` pin
+  `@xmldom/xmldom` to `^0.9.12` and `lodash-es` to `^4.18.1`, clearing `yarn audit` advisories that
+  their parents (`speech-rule-engine`, `chevrotain` via mermaid) pin to vulnerable exact versions.
+  This affects the repository's own lockfile only.
+
 ## mulmoterminal@6.2.0 — 2026-09-25
 
 > **Setup guide:** [6.2.0 — Codex cells say when they are waiting for your approval](https://receptron.github.io/mulmoterminal/guide/en/v6.2.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v6.2.0.html))

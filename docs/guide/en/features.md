@@ -145,11 +145,15 @@ file may appear as plain text for a moment before the colours arrive. Anything e
 
 ![The Files view with a .vue file open — the file tree on the left, and the editor colouring imports, types and strings](../images/editor-syntax-highlight.png)
 
+**A Markdown file can be read in Preview.** Relative images are shown, a YAML front matter block
+is left out, and external links open in a new browser tab. Mermaid and maths stay as code there;
+**Canvas** in the pane's header renders them.
+
 **Editing is safe against the agent working in the same directory.**
 
 | What happens | Why |
 |---|---|
-| **Leaving an open file saves it** — switching files, moving the zoom, closing the pane, navigating away, closing the tab | The editor sits beside a terminal you are working in; a `Discard unsaved changes?` dialog would interrupt that flow every time the enlargement moved |
+| **Leaving an open file saves it** — switching files, switching to **Preview**, moving the zoom, closing the pane, navigating away, closing the tab | The editor sits beside a terminal you are working in; a `Discard unsaved changes?` dialog would interrupt that flow every time the enlargement moved |
 | A save is **refused (409)** if the file changed on disk since you opened it | An agent rewriting the file you have open is normal here. A banner then offers to reload the disk's copy or to overwrite deliberately |
 | Opening a file, and replacing one, keep **three generations** under `~/.mulmoterminal/backups/` | Not asking is only defensible if what a save replaced can be fetched back. Outside the project, so no `.bak` reaches `git status` or the agent |
 | If neither the save nor the backup can be written, nothing moves on | With no copy anywhere, walking away is the one outcome that loses what you typed |
