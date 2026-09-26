@@ -15,16 +15,7 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { renderWikiLinks } from "@mulmoclaude/core/wiki";
 import { rewriteWikiImageSrc } from "./wikiImageSrc";
-
-// Leading YAML frontmatter delimited by `---` lines (page format in helps/wiki.md).
-const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
-// A leading byte-order mark, stripped before frontmatter detection.
-const BOM_RE = /^\uFEFF/;
-
-/** Drop a leading BOM + the frontmatter block so neither renders as stray content. */
-export function stripFrontmatter(content: string): string {
-  return content.replace(BOM_RE, "").replace(FRONTMATTER_RE, "");
-}
+import { stripFrontmatter } from "../common/frontmatter";
 
 /** Render a page body to sanitized HTML with `[[links]]` and rewritten image refs. */
 export function renderWikiHtml(content: string): string {

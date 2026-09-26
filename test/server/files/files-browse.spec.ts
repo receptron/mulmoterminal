@@ -441,6 +441,35 @@ describe("GET /api/files/browse/index", () => {
 // Files pane embeds, which carries a script that reports where the reader is. The second exists
 // because the first cannot be read from — and the whole design is that asking for the second
 // changes nothing about the first.
+// #2264. Front matter is metadata; rendered as Markdown, its closing `---` makes the whole block a
+// heading under a rule. Both documents the route serves start at the body.
+describe("GET /api/files/browse/md — front matter", () => {
+  it.each([[""], ["&embed=1"]])("does not render the front matter as body (%s)", async (param) => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "a.md"), "---\ntitle: Basics\nlayout: default\n---\n\n# Body\n");
+    try {
+      const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md${param}`);
+      expect(res.text).toContain("<h1>Body</h1>");
+      expect(res.text).not.toContain("title: Basics");
+      expect(res.text).not.toContain("<hr>");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps a rule in the middle of the body", async () => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "a.md"), "# Top\n\n---\n\ntitle: kept\n");
+    try {
+      const res = await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md`);
+      expect(res.text).toContain("<hr>");
+      expect(res.text).toContain("title: kept");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("GET /api/files/browse/md", () => {
   const HOSTILE = '# title\n\n<script>document.title = "ran"</script>\n\n<img src=x onerror="document.title = \'ran\'">\n';
   const withMd = async (body: string, run: (call: ReturnType<typeof routeCall>, query: string) => Promise<void>) => {

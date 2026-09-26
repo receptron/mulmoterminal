@@ -24,6 +24,7 @@ import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./ren
 import { mdPreviewEmbedCsp, mdPreviewReporterTag, newPreviewNonce, wantsMdPreviewEmbed } from "./mdPreviewEmbed.js";
 import { MD_PREVIEW_EMBED_PARAM } from "../../common/mdPreviewMessage.js";
 import { requestBody } from "../routes/requestBody.js";
+import { stripFrontmatter } from "../../common/frontmatter.js";
 
 // Cap on the bytes served to the editor / accepted on write — a text editor, not a
 // blob store. Large/binary files are refused rather than streamed into a textarea.
@@ -305,13 +306,17 @@ function mountLinesRoute(app: Express, defaultCwd: string): void {
   });
 }
 
+/** The body a reader sees: front matter is metadata, and rendered as Markdown its closing `---`
+ *  turns the whole block into a heading (#2264). */
+const mdBody = async (text: string): Promise<string> => marked.parse(stripFrontmatter(text));
+
 /** The Markdown document every caller has always had. */
-const renderMd = async (text: string, title: string): Promise<string> => htmlDoc(await marked.parse(text), title);
+const renderMd = async (text: string, title: string): Promise<string> => htmlDoc(await mdBody(text), title);
 
 /** The same document with the scroll reporter as its last body element (#2157). Composed here
  *  rather than inside `htmlDoc` so the shared document shell stays a shell that never runs
  *  anything, whoever calls it. */
-const embedMd = async (text: string, title: string, nonce: string): Promise<string> => htmlDoc((await marked.parse(text)) + mdPreviewReporterTag(nonce), title);
+const embedMd = async (text: string, title: string, nonce: string): Promise<string> => htmlDoc((await mdBody(text)) + mdPreviewReporterTag(nonce), title);
 
 export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   const { defaultCwd, backupRoot } = deps;
