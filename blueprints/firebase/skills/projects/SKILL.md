@@ -19,6 +19,9 @@ Read `.blueprint/spec.md` for `existingProject`, `existingProjectId` and `region
    never assume a default.
 5. Each project needs a registered web app — Hosting serves its config at `/__/firebase/init.json`, which the app
    reads. `firebase apps:list WEB --project <id>`; if none, `firebase apps:create WEB <app name> --project <id>`.
+6. Google sign-in must be switched on in each project. `sh <base pack>/checks/google-signin.sh dev` (and `prod`)
+   reads it; for each that fails, give the user the URL it printed and wait — enabling it creates an OAuth
+   client, which only the console can do.
 
 Done when the check passes: `.firebaserc` has distinct `dev` and `prod` projects, both exist, both have billing
 enabled and both have a Firestore database.
