@@ -25,7 +25,8 @@ startup check reported nothing, and the binding never fired.
     same key, which the terminal decides after the grid, so the sequence does not start on it.
   - While pending, the next key belongs to the sequence.
   - A lone modifier keeps the wait.
-  - `Esc`, or any key that is not a candidate, ends it.
+  - `Esc`, or any key that is not a candidate, ends it. A bare `Esc` always cancels, even when a
+    sequence names it as its second key; validation warns about such a sequence.
   - Every claimed key is stopped, so none of them reaches the terminal.
   - When the grid yields the keyboard (another view, Settings, the launch panel, a text field, an
     IME confirmation), a pending wait is dropped, so it cannot swallow a key later.

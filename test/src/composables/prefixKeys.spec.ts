@@ -34,8 +34,16 @@ describe("prefixStep", () => {
     expect(prefixStep(KEYMAP, started(), key("f"), 10)).toEqual({ kind: "run", action: "files-search" });
   });
 
-  it("lets Escape be a second key when it is bound as one", () => {
-    expect(prefixStep(KEYMAP, started(), key("Escape"), 10)).toEqual({ kind: "run", action: "zoom-toggle" });
+  // Esc is the way out, promised by the hint, so it cancels even when a sequence names it (codex on #2283).
+  it("cancels on a bare Escape even when a sequence names it as its second key", () => {
+    expect(prefixStep(KEYMAP, started(), key("Escape"), 10)).toEqual({ kind: "cancel" });
+  });
+
+  it("still lets a modified Escape be a second key", () => {
+    const keymap = { "zoom-toggle": "Ctrl+k Shift+Escape" };
+    const step = prefixStep(keymap, null, CTRL_K, 0);
+    if (step.kind !== "wait") throw new Error("the prefix did not start");
+    expect(prefixStep(keymap, step.pending, key("Escape", { shiftKey: true }), 10)).toEqual({ kind: "run", action: "zoom-toggle" });
   });
 
   it("cancels on a key nothing follows the prefix with", () => {

@@ -12,6 +12,7 @@ import {
   type SequenceBinding,
 } from "../../common/keymap";
 import type { ShortcutKeyEvent } from "./gridShortcut";
+import { isBareEscape } from "../../common/keymap";
 
 /** How long the first key waits for the second. Long enough to read the hint, short enough that a
  *  forgotten prefix does not swallow a key typed much later. */
@@ -56,6 +57,8 @@ function firstKey(keymap: Keymap, e: ShortcutKeyEvent, now_ms: number): PrefixSt
 // moment after the prefix, it was meant for the grid, not for the terminal.
 function secondKey(pending: PendingPrefix, e: ShortcutKeyEvent): PrefixStep {
   if (MODIFIER_KEYS.includes(e.key)) return { kind: "ignore" };
+  // The way out the hint promises, so a sequence cannot take it (validateKeymap warns if one tries).
+  if (isBareEscape(e)) return { kind: "cancel" };
   const match = pending.candidates.find((binding) => matchesBinding(binding.second, e));
   return match ? { kind: "run", action: match.action } : { kind: "cancel" };
 }

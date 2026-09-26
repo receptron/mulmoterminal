@@ -1355,7 +1355,8 @@ far more shortcuts than there are free single keys.
   `Shift+p` works.
 - **Two keys at most.** `copy`, `paste` and `send` take a **single** keystroke only: they are
   decided inside the terminal, which cannot wait for a second key. Writing one as a sequence stops
-  the server from starting, naming the entry.
+  the server from starting, naming the entry. A bare `Esc` cannot be a second key either — it always
+  cancels, so the startup check warns if a sequence ends in it.
 - **A key bound on its own wins.** If the first key of a sequence is also bound by itself — as an
   action, `copy`, `paste` or a `send` — that binding keeps the key and the sequence never starts; the
   startup check warns. The one exception is an action that only works with (or without) an enlarged

@@ -236,7 +236,8 @@ asks for tmux / Emacs style.
 
 - **Never for `copy`, `paste` or `send`** — they are decided inside the terminal and take one
   keystroke. Writing one as a sequence stops the server from starting.
-- **Two keys at most.** Three is a startup error.
+- **Two keys at most.** Three is a startup error. A bare `Escape` is never a second key — it always
+  cancels (the startup check warns); `Shift+Escape` and the like are fine.
 - **Do not also bind the first key on its own** — as an action, `copy`, `paste` or a `send`: the
   single binding keeps the key and the sequence never starts (for an action that declines by zoom
   state, it starts only in the other state). The startup check warns; don't write one.

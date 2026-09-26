@@ -79,6 +79,11 @@ describe("validateKeymap with sequences", () => {
     expect(validateKeymap({ "files-find": "Cmd+k p", "files-search": "cmd+k p" })).toMatchObject([{ action: "files-search", fatal: false }]);
   });
 
+  it("warns that a bare Escape as the second key never fires — it always cancels", () => {
+    expect(validateKeymap({ "files-find": "Cmd+k Escape" })).toMatchObject([{ action: "files-find", fatal: false, reason: expect.stringContaining("Escape") }]);
+    expect(validateKeymap({ "files-find": "Cmd+k Shift+Escape" })).toEqual([]);
+  });
+
   it("applies the macOS uppercase warning to the second keystroke too (#2125)", () => {
     expect(validateKeymap({ "files-find": "Cmd+k Cmd+Shift+P" })).toMatchObject([
       { action: "files-find", fatal: false, reason: expect.stringContaining('"p"') },

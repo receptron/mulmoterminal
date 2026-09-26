@@ -154,6 +154,9 @@ export function parseKeySequence(input: string): KeyBinding[] | null {
   return parsed.every((stroke): stroke is KeyBinding => stroke !== null) ? parsed : null;
 }
 
+// Esc with no modifier always ends a sequence's wait, so it can never be a sequence's second key.
+export const isBareEscape = (e: KeymapKeyEvent): boolean => e.key === "Escape" && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey;
+
 // Actions that can be bound to a sequence. Not `copy` / `paste`: they are decided inside the
 // terminal, one keystroke at a time (TERMINAL_SCOPED_ACTIONS), and nothing there can wait.
 export const takesSequence = (action: KeymapAction): boolean => !TERMINAL_SCOPED_ACTIONS.includes(action);
@@ -281,8 +284,13 @@ function actionProblems(action: string, binding: unknown, claim: (strokes: KeyBi
     return [{ action, binding, reason: "takes a single keystroke — it is decided inside the terminal, which cannot wait for a second key", fatal: true }];
   }
   claim(strokes, { label: action, binding, rank: KEYMAP_ACTIONS.indexOf(action), kind: "action" });
-  return strokes.flatMap((stroke) => unshiftedUnderCmdWarnings(action, binding, stroke));
+  return [...strokes.flatMap((stroke) => unshiftedUnderCmdWarnings(action, binding, stroke)), ...escapeSecondWarnings(action, binding, strokes)];
 }
+
+const escapeSecondWarnings = (action: string, binding: string, [, second]: KeyBinding[]): KeymapProblem[] =>
+  second && isBareEscape({ key: second.key, shiftKey: second.shift, altKey: second.alt, ctrlKey: second.ctrl, metaKey: second.meta })
+    ? [{ action, binding, reason: "never fires — a bare Escape always cancels a sequence; add a modifier or pick another second key", fatal: false }]
+    : [];
 
 // A sequence whose FIRST key is also a keystroke of its own. The single keystroke is claimed before
 // any sequence can start (see GridView's handler), so the sequence never gets its first key.
