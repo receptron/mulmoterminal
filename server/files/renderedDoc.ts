@@ -7,11 +7,13 @@
 //     emits, and it has not changed: the Markdown route appends one nonce'd script of its own
 //     for the Files pane to hear scrolling through, under a policy of its own (#2157),
 //   - colours follow the READER's system theme, since the page cannot ask the app which
-//     theme is on,
+//     theme is on — except in the Files pane, which says so on the URL (#2263, themeStyle),
 //   - and every value taken from the file is escaped, because "the sandbox will catch it"
 //     is not a reason to emit broken markup.
 //
 // Pure: text in, HTML string out. The routes own the reading, the caps and the headers.
+import type { PreviewTheme } from "../../common/previewTheme.js";
+import { isLightColor } from "../../common/themeVars.js";
 
 /** HTML-escape a value that lands in text content or an attribute. */
 export const escapeHtml = (s: string): string =>
@@ -42,6 +44,19 @@ const TABLE_STYLE = [
   "tbody tr:nth-child(even){background:#f7f7fa}",
   "@media(prefers-color-scheme:dark){thead th{background:#16161a}tbody tr:nth-child(even){background:#1d1d23}}",
 ].join("");
+
+/** The app's theme, as the document's own rules. Appended after STYLE, so it wins over the
+ *  system-theme rules there; `color-scheme` follows the background so form controls and
+ *  scrollbars match it. Every value was checked to be a hex colour (previewThemeFromQuery). */
+export function themeStyle(theme: PreviewTheme): string {
+  return [
+    `:root{color-scheme:${isLightColor(theme.bg) ? "light" : "dark"}}`,
+    `body{color:${theme.fg};background:${theme.bg}}`,
+    `pre{background:${theme.subtle}}`,
+    `a{color:${theme.link}}blockquote{border-left-color:${theme.border};color:${theme.muted}}`,
+    `th,td{border-color:${theme.border}}`,
+  ].join("");
+}
 
 /** Wrap rendered body HTML in the shared document shell. */
 export function htmlDoc(bodyHtml: string, title: string, extraStyle = ""): string {

@@ -129,9 +129,14 @@ export function relativeLuminance(color: string): number | null {
 // thinks about it still gets legible pills.
 const LIGHT_LUMINANCE_THRESHOLD = 0.4;
 
-export function isLightTheme(vars: ThemeVars): boolean {
-  const luminance = relativeLuminance(vars["--bg-base"]);
+/** Whether a background colour reads as light — the same line `isLightTheme` draws for the chrome. */
+export function isLightColor(color: string): boolean {
+  const luminance = relativeLuminance(color);
   return luminance !== null && luminance > LIGHT_LUMINANCE_THRESHOLD;
+}
+
+export function isLightTheme(vars: ThemeVars): boolean {
+  return isLightColor(vars["--bg-base"]);
 }
 
 /** The xterm palette a theme's variables imply. xterm draws on a canvas and cannot read CSS

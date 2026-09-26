@@ -495,6 +495,35 @@ describe("GET /api/files/browse/md — relative images", () => {
 // Files pane embeds, which carries a script that reports where the reader is. The second exists
 // because the first cannot be read from — and the whole design is that asking for the second
 // changes nothing about the first.
+// #2263. The pane passes the app's theme on the embed URL; the document paints with it. The new
+// tab a clicked `.md` opens has no host to ask, and keeps following the system theme.
+describe("GET /api/files/browse/md — the app's theme", () => {
+  const THEME = "bg=%231a1a2e&fg=%23e6e6f0&muted=%23a0a0b8&subtle=%23232342&border=%2333335a&link=%234a8cff";
+  const serve = async (extra: string) => {
+    const dir = tmp();
+    writeFileSync(path.join(dir, "a.md"), "# hi\n");
+    try {
+      return (await routeCall(serveProject(dir))(`/api/files/browse/md?cwd=${encodeURIComponent(dir)}&path=a.md${extra}`)).text;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  };
+
+  it("paints the embedded document in the theme it was given", async () => {
+    expect(await serve(`&embed=1&${THEME}`)).toContain("body{color:#e6e6f0;background:#1a1a2e}");
+  });
+
+  it("ignores a theme with a value that is not a hex colour", async () => {
+    const text = await serve(`&embed=1&${THEME.replace("%234a8cff", "%23000%3B%7Dbody%7Bdisplay%3Anone")}`);
+    expect(text).not.toContain("background:#1a1a2e");
+    expect(text).not.toContain("display:none");
+  });
+
+  it("leaves the plain document on the system theme", async () => {
+    expect(await serve(`&${THEME}`)).not.toContain("background:#1a1a2e");
+  });
+});
+
 describe("GET /api/files/browse/md", () => {
   const HOSTILE = '# title\n\n<script>document.title = "ran"</script>\n\n<img src=x onerror="document.title = \'ran\'">\n';
   const withMd = async (body: string, run: (call: ReturnType<typeof routeCall>, query: string) => Promise<void>) => {

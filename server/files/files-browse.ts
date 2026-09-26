@@ -21,7 +21,8 @@ import { listProjectFiles } from "./project-files.js";
 import { answered, modeFromProbe, parseSearchOutput, searchArgv, SEARCH_TIMEOUT_MS } from "./file-search.js";
 import { CONTEXT_RADIUS_LINES, isSearchable, lineWindow, type SearchRequest, type SearchResult } from "../../common/fileSearch.js";
 import { git } from "../git/worktrees.js";
-import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension } from "./renderedDoc.js";
+import { htmlDoc, jsonHtmlDoc, tableHtmlDoc, delimiterForExtension, themeStyle } from "./renderedDoc.js";
+import { previewThemeFromQuery, type PreviewTheme } from "../../common/previewTheme.js";
 import { mdPreviewEmbedCsp, mdPreviewReporterTag, newPreviewNonce, wantsMdPreviewEmbed } from "./mdPreviewEmbed.js";
 import { MD_PREVIEW_EMBED_PARAM } from "../../common/mdPreviewMessage.js";
 import { requestBody } from "../routes/requestBody.js";
@@ -107,7 +108,7 @@ type RenderDoc = (text: string, title: string, doc: ServedDoc) => string | Promi
 
 /** The same document for a host that will embed it, carrying the nonce the one permitted script
  *  has to declare. A route that has no reason to be embedded does not define one. */
-type EmbedDoc = (text: string, title: string, nonce: string, doc: ServedDoc) => string | Promise<string>;
+type EmbedDoc = (text: string, title: string, nonce: string, doc: ServedDoc, theme: PreviewTheme | null) => string | Promise<string>;
 
 /** Where the served document sits, measured LEXICALLY from the request rather than from the real
  *  path: a browser resolves a relative `src` against where the document appears to be, and a
@@ -178,7 +179,9 @@ function mountRenderedRoute(app: Express, routePath: string, defaultCwd: string,
       // looks exactly like a preview that has quietly stopped remembering.
       const nonce = newPreviewNonce();
       res.setHeader("Content-Security-Policy", mdPreviewEmbedCsp(nonce));
-      res.send(await embed(text, title, nonce, doc));
+      // The pane's theme, when it sent one (#2263). A value that is not a hex colour drops the
+      // whole theme, so the document falls back to the reader's system colours.
+      res.send(await embed(text, title, nonce, doc, previewThemeFromQuery(req.query)));
       return;
     }
     res.setHeader("Content-Security-Policy", "sandbox");
@@ -342,8 +345,8 @@ const renderMd = async (text: string, title: string, doc: ServedDoc): Promise<st
 /** The same document with the scroll reporter as its last body element (#2157). Composed here
  *  rather than inside `htmlDoc` so the shared document shell stays a shell that never runs
  *  anything, whoever calls it. */
-const embedMd = async (text: string, title: string, nonce: string, doc: ServedDoc): Promise<string> =>
-  htmlDoc((await mdBody(text, doc)) + mdPreviewReporterTag(nonce), title);
+const embedMd = async (text: string, title: string, nonce: string, doc: ServedDoc, theme: PreviewTheme | null): Promise<string> =>
+  htmlDoc((await mdBody(text, doc)) + mdPreviewReporterTag(nonce), title, theme ? themeStyle(theme) : "");
 
 export function mountFilesBrowseRoutes(app: Express, deps: BrowseDeps): void {
   const { defaultCwd, backupRoot } = deps;
