@@ -394,6 +394,8 @@ describe("GridView two-key sequences", () => {
     expect(gridOf(w).props("expandedUid")).toBeNull();
     const hint = w.find('[data-testid="prefix-key-hint"]');
     expect(hint.text()).toContain("Ctrl+k");
+    // The app sets no font on the page; each surface names its own, or it falls back to serif.
+    expect(hint.classes()).toContain("font-sans");
     expect(hint.text()).toContain("z");
     await press("z");
     expect(gridOf(w).props("expandedUid")).not.toBeNull();

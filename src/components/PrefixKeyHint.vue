@@ -15,7 +15,7 @@ const { t } = useI18n();
     role="status"
     aria-live="polite"
     data-testid="prefix-key-hint"
-    class="pointer-events-none fixed bottom-4 right-4 z-[70] min-w-[200px] rounded-lg border border-border bg-panel px-3 py-2 text-[12px] text-fg shadow-xl"
+    class="pointer-events-none fixed bottom-4 right-4 z-[70] min-w-[200px] font-sans rounded-lg border border-border bg-panel px-3 py-2 text-[12px] text-fg shadow-xl"
   >
     <p class="mb-1.5 text-secondary">
       <i18n-t keypath="prefixKeys.waiting">
