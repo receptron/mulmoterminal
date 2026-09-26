@@ -1,5 +1,7 @@
-// Builds the blueprint executor out of this server's real parts: a claude session per step, placed
-// on the grid like any spawned chat, and the Stop hook as the end of its turn.
+// Builds the blueprint executor out of this server's real parts: a claude session per step and the
+// Stop hook as the end of its turn. A step's session stays OFF the grid: a grid cell reconnects and
+// relaunches what it shows, and another MulmoTerminal's grid adopts what this one marks — both put a
+// second agent in the project folder behind the executor's back. The run view shows what it does.
 //
 // Claude only, deliberately: the executor learns that a step's turn ended from the Stop hook, and
 // claude is the one agent whose hooks are guaranteed to be its own for a given spawn (see the
@@ -7,8 +9,9 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { Express } from "express";
-import { createExecutor, type ProjectFiles } from "./executor.js";
-import { readFile, rm, stat } from "node:fs/promises";
+import { BlueprintRefusal, createExecutor, type BlueprintExecutor, type ProjectFiles } from "./executor.js";
+import { acquireLock } from "./executorLock.js";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { createRunStore } from "./runStore.js";
 import { runCheck } from "./checkRunner.js";
 import { mountBlueprintRoutes } from "./routes.js";
@@ -18,7 +21,7 @@ import { registriesFile } from "./registry.js";
 import { cloneRepo } from "./installer.js";
 import { claudeTrusts } from "./trust.js";
 import { registerCompletionHook } from "../session/completion-hooks.js";
-import { markSessionPlaced, markUnplacedSession } from "../session/registry.js";
+import { markSessionPlaced } from "../session/registry.js";
 import { tmuxHasSession, tmuxKillSession } from "../infra/tmux.js";
 import { MULMOTERMINAL_HOME, PORT } from "../config/env.js";
 
@@ -27,6 +30,7 @@ type SpawnClaude = (sessionId: string, ws: null, resumeId: null, options: { init
 // The packs shipped in this checkout. A marketplace install would add a second root; not yet.
 const PACKS_ROOT = path.join(import.meta.dirname, "..", "..", "blueprints");
 const RUNS_ROOT = path.join(MULMOTERMINAL_HOME, "blueprints", "runs");
+const LOCK_FILE = path.join(MULMOTERMINAL_HOME, "blueprints", "executor.lock");
 // Packs installed from a registry. After the shipped ones, so they can never replace one.
 export const INSTALLED_PACKS_DIR = path.join(MULMOTERMINAL_HOME, "blueprints", "packs");
 const PACK_ROOTS: readonly PackRoot[] = [
@@ -79,7 +83,6 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap:
     store: createRunStore(RUNS_ROOT),
     spawnStepSession: (cwd, prompt, sessionId) => {
       spawnClaudePty(sessionId, null, null, { initialPrompt: prompt, cwd });
-      markUnplacedSession(sessionId, "claude");
     },
     newSessionId: () => randomUUID(),
     onTurnEnded: (sessionId, callback) => registerCompletionHook(sessionId, (outcome) => callback(outcome)),
@@ -89,15 +92,15 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap:
     now: () => Date.now(),
     isTrusted: (dir) => claudeTrusts(dir),
     projectFiles,
-    // The app's own teardown: the pty, the tmux session and everything it remembered about it.
+    // The app's own teardown: the pty, the tmux session and everything it remembered about it. Marked
+    // placed as well, for a session an earlier version put on the grid.
     closeSession: (sessionId) => {
       markSessionPlaced(sessionId);
       reap(sessionId);
     },
   });
-  executor
-    .recover(endOrphanedSession)
-    .catch((err: unknown) => console.error(`[blueprint] recovery failed: ${err instanceof Error ? err.message : String(err)}`));
+  const ownedExecutor = lockedExecutor(executor);
+  ownedExecutor.ensureOwner().catch((err: unknown) => console.error(`[blueprint] not driving runs: ${err instanceof Error ? err.message : String(err)}`));
   mountMarketRoutes(app, {
     builtinRoot: PACK_ROOTS[0] ?? { dir: PACKS_ROOT, source: "builtin" },
     packsDir: INSTALLED_PACKS_DIR,
@@ -105,5 +108,45 @@ export function mountBlueprints(app: Express, spawnClaudePty: SpawnClaude, reap:
     clone: cloneRepo,
     now: () => Date.now(),
   });
-  mountBlueprintRoutes(app, { executor, packRoots: PACK_ROOTS, now: () => Date.now(), isTrusted: (dir) => claudeTrusts(dir) });
+  mountBlueprintRoutes(app, { executor: ownedExecutor.executor, packRoots: PACK_ROOTS, now: () => Date.now(), isTrusted: (dir) => claudeTrusts(dir) });
+}
+
+// Taking the lock recovers the runs, so a server that takes over from a dead holder first settles the
+// sessions that holder left behind. Reads work either way; a change is refused while another holds it.
+function lockedExecutor(executor: BlueprintExecutor): { executor: BlueprintExecutor; ensureOwner: () => Promise<void> } {
+  let owning: Promise<void> | null = null;
+  const takeOwnership = async (): Promise<void> => {
+    await mkdir(path.dirname(LOCK_FILE), { recursive: true });
+    const decision = await acquireLock(LOCK_FILE, { pid: process.pid, port: String(PORT) });
+    if (decision.kind === "held") {
+      throw new BlueprintRefusal(`blueprints on this machine are run by the MulmoTerminal on port ${decision.holder.port}; make changes there`);
+    }
+    await executor.recover(endOrphanedSession);
+  };
+  const ensureOwner = (): Promise<void> => {
+    owning ??= takeOwnership().catch((err: unknown) => {
+      owning = null;
+      throw err;
+    });
+    return owning;
+  };
+  const owned =
+    <A extends unknown[], R>(action: (...args: A) => Promise<R>) =>
+    async (...args: A): Promise<R> => {
+      await ensureOwner();
+      return action(...args);
+    };
+  return {
+    ensureOwner,
+    executor: {
+      view: (runId) => executor.view(runId),
+      list: () => executor.list(),
+      specView: (runId) => executor.specView(runId),
+      recover: (endSession) => executor.recover(endSession),
+      create: owned((request: Parameters<BlueprintExecutor["create"]>[0]) => executor.create(request)),
+      humanEvent: owned((...args: Parameters<BlueprintExecutor["humanEvent"]>) => executor.humanEvent(...args)),
+      ask: owned((...args: Parameters<BlueprintExecutor["ask"]>) => executor.ask(...args)),
+      say: owned((...args: Parameters<BlueprintExecutor["say"]>) => executor.say(...args)),
+    },
+  };
 }
