@@ -51,7 +51,9 @@ import {
 import { activityStatus, type AttentionStatus } from "./attentionStatus";
 import { collectionTerminalClaim, publishGridSessions } from "../composables/collectionTerminalClaim";
 import { cellsToDisplay } from "./displayCells";
-import { gridShortcutFor, isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
+import { isEditableTarget, type GridShortcut } from "../composables/gridShortcut";
+import { usePrefixKeys } from "../composables/usePrefixKeys";
+import PrefixKeyHint from "./PrefixKeyHint.vue";
 import { isImeConfirming } from "../composables/imeComposition";
 import { useCaptureKeydown } from "../composables/useCaptureKeydown";
 import { getActiveKeymap } from "../composables/activeKeymap";
@@ -500,12 +502,12 @@ function onShortcutKey(e: KeyboardEvent) {
   // flag is already false (#1353). Without it, confirming 変換 anywhere the grid can hear runs
   // whatever that key is bound to.
   if (isImeConfirming(e)) return;
-  const shortcut = gridShortcutFor(getActiveKeymap(), e, expandedUid.value !== null);
-  if (!shortcut) return;
-  e.preventDefault();
-  e.stopPropagation();
-  runShortcut(shortcut);
+  const shortcut = prefix.claim(getActiveKeymap(), e, expandedUid.value !== null);
+  if (shortcut) runShortcut(shortcut);
 }
+
+// Two-key sequences (#2265) — see usePrefixKeys for how they share the key with single bindings.
+const prefix = usePrefixKeys();
 
 // gridShortcutFor has already refused the actions that need a terminal to act ON while
 // un-zoomed. The ones that reach here un-zoomed are the ways IN: `terminal-new`, plus
@@ -963,5 +965,6 @@ onBeforeUnmount(detachSpawnedChat);
       @close="closeLaunchPanel"
     />
     <AppSettingsModal v-if="showSettings" :presets="presets" @launch-skill="launchSkill" @close="closeSettings" />
+    <PrefixKeyHint :pending="prefix.pending.value" />
   </div>
 </template>

@@ -542,6 +542,11 @@ export const ko: Messages = {
     },
   },
 
+  // 2타 단축키가 두 번째 키를 기다리는 동안 보이는 안내 (#2265).
+  prefixKeys: {
+    waiting: "{key} 다음에 누를 키:",
+    cancel: "Esc로 취소",
+  },
   terminal: {
     copyMode: {
       message: "기록 보는 중 — 입력이 터미널로 전달되지 않습니다. q를 눌러 돌아갑니다.",

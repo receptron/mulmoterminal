@@ -357,6 +357,49 @@ const mountShortcutGrid = async (count: number, extra: Record<string, unknown> =
 
 const gridOf = (w: ReturnType<typeof mount>) => w.findComponent(ShortcutGridStub);
 
+// #2265. A two-key sequence through the real handler: the prefix waits with a hint, the next key
+// runs the action, and neither key reaches the terminal underneath.
+describe("GridView two-key sequences", () => {
+  const SEQUENCE_KEYMAP = { "zoom-toggle": "Ctrl+k z" };
+  const pressCtrlK = async () => {
+    const e = new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(e);
+    await flushPromises();
+    return e;
+  };
+
+  it("enlarges on Ctrl+K then z, and shows what can follow while it waits", async () => {
+    const w = await mountShortcutGrid(4, {}, SEQUENCE_KEYMAP);
+    const prefix = await pressCtrlK();
+    expect(prefix.defaultPrevented).toBe(true); // the prefix never reaches the terminal
+    expect(gridOf(w).props("expandedUid")).toBeNull();
+    const hint = w.find('[data-testid="prefix-key-hint"]');
+    expect(hint.text()).toContain("Ctrl+k");
+    expect(hint.text()).toContain("z");
+    await press("z");
+    expect(gridOf(w).props("expandedUid")).not.toBeNull();
+    expect(w.find('[data-testid="prefix-key-hint"]').exists()).toBe(false);
+    w.unmount();
+  });
+
+  it("does nothing on the second key alone", async () => {
+    const w = await mountShortcutGrid(4, {}, SEQUENCE_KEYMAP);
+    await press("z");
+    expect(gridOf(w).props("expandedUid")).toBeNull();
+    w.unmount();
+  });
+
+  it("ends the wait on Escape without acting", async () => {
+    const w = await mountShortcutGrid(4, {}, SEQUENCE_KEYMAP);
+    await pressCtrlK();
+    await press("Escape");
+    expect(w.find('[data-testid="prefix-key-hint"]').exists()).toBe(false);
+    await press("z"); // no longer after the prefix
+    expect(gridOf(w).props("expandedUid")).toBeNull();
+    w.unmount();
+  });
+});
+
 describe("GridView keyboard shortcuts (#829)", () => {
   beforeEach(() => {
     focused.length = 0;

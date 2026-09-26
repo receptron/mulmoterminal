@@ -26,6 +26,9 @@ const LABEL_KEYS: Record<KeymapAction, string> = {
   paste: "settings.shortcuts.actions.paste",
 };
 
+/** The i18n key naming `action`, for a caller outside the settings list. */
+export const keymapLabelKey = (action: KeymapAction): string => LABEL_KEYS[action];
+
 export interface KeymapRow {
   action: KeymapAction;
   /** The i18n key, not the words: this module has no `t`, and the one caller is a component that

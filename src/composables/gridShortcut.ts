@@ -30,7 +30,12 @@ export function gridShortcutFor(keymap: Keymap, e: ShortcutKeyEvent, zoomed: boo
   // keystroke belongs to the composition, never to us.
   if (e.isComposing) return null;
   const action = actionForKey(keymap, e);
-  if (action === null) return null;
+  return action === null ? null : gateShortcut(action, zoomed);
+}
+
+/** Whether the grid acts on `action` in this view state — the second half of `gridShortcutFor`,
+ *  shared with a sequence's action, which is resolved without a single keystroke to match. */
+export function gateShortcut(action: KeymapAction, zoomed: boolean): GridShortcut | null {
   // Terminal-scoped actions are decided inside the terminal (common/terminalClipboard.ts) and
   // must never reach this handler, which ends every match with preventDefault() — fatal for
   // `paste`, whose whole mechanism is the browser's own default action.

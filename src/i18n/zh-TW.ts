@@ -535,6 +535,11 @@ export const zhTW: Messages = {
     },
   },
 
+  // 雙鍵快捷鍵等待第二個鍵時顯示的提示（#2265）。
+  prefixKeys: {
+    waiting: "{key} 之後按：",
+    cancel: "按 Esc 取消",
+  },
   terminal: {
     copyMode: {
       message: "正在檢視歷史 — 輸入不會送到終端機。按 q 返回。",

@@ -546,6 +546,11 @@ export const ja: Messages = {
     },
   },
 
+  // 2打のショートカットが2打目を待っている間に出す案内（#2265）。
+  prefixKeys: {
+    waiting: "{key} のあとに押すキー:",
+    cancel: "Esc で取り消し",
+  },
   terminal: {
     copyMode: {
       message: "履歴を表示中 — 入力は端末に届きません。q で戻ります。",

@@ -562,6 +562,11 @@ export const en = {
     },
   },
 
+  // The hint shown while a two-key shortcut waits for its second key (#2265).
+  prefixKeys: {
+    waiting: "After {key}, press:",
+    cancel: "Esc cancels",
+  },
   terminal: {
     copyMode: {
       message: "Viewing history — what you type doesn't reach the terminal. Press q to return.",
