@@ -1,0 +1,46 @@
+{
+  "presets": [
+    {
+      "id": "tidy-all",
+      "title": "おまかせで整える（見張り役付き）",
+      "description": "品質が下がらない仕組み（ever-better）を入れてから、長い関数・重複・テストのない大事なところ・使われていないコード・型を、一つずつ PR にして整える。前後の点数を scoria で比べる。",
+      "base": "repo",
+      "answers": {
+        "goals": [
+          "長すぎる・複雑な関数を分ける",
+          "同じことをしている重複をまとめる",
+          "テストのない大事なところにテストを書く",
+          "使われていないコードを片付ける",
+          "型と入力の検査を整える"
+        ],
+        "maxChanges": 5,
+        "merge": "CI が緑なら自動でマージする",
+        "ratchet": true
+      }
+    },
+    {
+      "id": "tests-only",
+      "title": "テストだけ足す",
+      "description": "コードは動かさず、テストのない大事なところにテストを書くだけ。いちばん安全に始められる。",
+      "base": "repo",
+      "answers": {
+        "goals": ["テストのない大事なところにテストを書く"],
+        "maxChanges": 3,
+        "merge": "PR まで（マージは自分でする）",
+        "ratchet": false
+      }
+    },
+    {
+      "id": "ratchet-only",
+      "title": "見張り役だけ入れる",
+      "description": "ever-better を入れて、今ある違反の数を上限として記録するだけ。これから先、悪くならない状態を作る。",
+      "base": "repo",
+      "answers": {
+        "goals": ["型と入力の検査を整える"],
+        "maxChanges": 2,
+        "merge": "PR まで（マージは自分でする）",
+        "ratchet": true
+      }
+    }
+  ]
+}
