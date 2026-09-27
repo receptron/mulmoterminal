@@ -96,6 +96,30 @@ describe("targets.mjs survey", () => {
     expect(targets("survey").code).toBe(0);
   });
 
+  it("puts the ever-better tooling first when the ratchet was asked for and the repository has none", () => {
+    write(".blueprint/answers.json", { ratchet: true });
+    write(".blueprint/targets.json", { targets: [target("a"), target("bootstrap", { kind: "tooling" })] });
+    expect(targets("survey")).toMatchObject({ code: 1, stderr: expect.stringContaining('"tooling"') });
+    write(".blueprint/targets.json", { targets: [target("bootstrap", { kind: "tooling" }), target("a")] });
+    expect(targets("survey").code).toBe(0);
+  });
+
+  it("lets the tooling sit behind the CI target", () => {
+    write(".blueprint/answers.json", { ratchet: true });
+    write(".blueprint/ci.json", { gaps: ["typecheck is not run"], defaultBranchGreen: true });
+    write(".blueprint/targets.json", { targets: [target("ci", { kind: "ci" }), target("bootstrap", { kind: "tooling" }), target("a")] });
+    expect(targets("survey").code).toBe(0);
+  });
+
+  it("does not ask for tooling when the ratchet was declined, or the repository already has one", () => {
+    write(".blueprint/targets.json", { targets: [target("a")] });
+    write(".blueprint/answers.json", { ratchet: false });
+    expect(targets("survey").code).toBe(0);
+    write(".blueprint/answers.json", { ratchet: true });
+    write("eslint-suppressions.json", "{}");
+    expect(targets("survey").code).toBe(0);
+  });
+
   it.each([
     ["no file", null],
     ["not JSON", "{"],
@@ -187,6 +211,37 @@ describe("targets.mjs report", () => {
     write(".blueprint/refactor-report.md", "a を分けた。");
     expect(targets("report")).toMatchObject({ code: 1, stderr: expect.stringContaining("b") });
     write(".blueprint/refactor-report.md", "a を分けた。b は見送った。");
+    expect(targets("report").code).toBe(0);
+  });
+});
+
+describe("targets.mjs report — scoria before and after", () => {
+  const scoria = (scores: Record<string, number | null>) => ({
+    dimensions: Object.entries(scores).map(([dimension, score]) => ({ dimension, score })),
+  });
+
+  beforeEach(() => {
+    write(".blueprint/targets.json", { targets: [done("a")] });
+  });
+
+  it("needs the after measurement once there was a before", () => {
+    write(".blueprint/scoria-before.json", scoria({ readability: 80 }));
+    write(".blueprint/refactor-report.md", "a");
+    expect(targets("report")).toMatchObject({ code: 1, stderr: expect.stringContaining("scoria-after.json") });
+  });
+
+  it("requires every dimension that fell to be named, and only those", () => {
+    write(".blueprint/scoria-before.json", scoria({ readability: 80, security: 100, correctness: 60, "ui-consistency": null }));
+    write(".blueprint/scoria-after.json", scoria({ readability: 70, security: 100, correctness: 65, "ui-consistency": 10, architecture: 1 }));
+    write(".blueprint/refactor-report.md", "a");
+    expect(targets("report")).toMatchObject({ code: 1, stderr: expect.stringContaining("readability") });
+    expect(targets("report").stderr).not.toContain("correctness");
+    write(".blueprint/refactor-report.md", "a — readability は測る尺度が変わったため下がった");
+    expect(targets("report").code).toBe(0);
+  });
+
+  it("asks nothing of scoria when it never measured", () => {
+    write(".blueprint/refactor-report.md", "a");
     expect(targets("report").code).toBe(0);
   });
 });
@@ -313,6 +368,20 @@ describe.skipIf(process.platform === "win32")("ci-check.sh", () => {
   it("names a gate no workflow runs — a longer script with the same prefix does not count", () => {
     workflow("ci.yml", WORKFLOW.replace("yarn lint", "yarn lint:fix"));
     expect(ciCheck()).toMatchObject({ code: 1, stderr: expect.stringContaining('"lint"') });
+  });
+
+  it("finds a gate that is not a package script by its ciMatch text", () => {
+    write(".blueprint/gates.json", {
+      install: "true",
+      gates: [
+        { name: "lint", command: "yarn lint" },
+        { name: "ever-better check", command: "npx -y ever-better check --no-write", ciMatch: "ever-better check" },
+      ],
+    });
+    workflow("ci.yml");
+    expect(ciCheck()).toMatchObject({ code: 1, stderr: expect.stringContaining('"ever-better check"') });
+    workflow("ci.yml", `${WORKFLOW}      - run: npx ever-better check\n`);
+    expect(ciCheck().code).toBe(0);
   });
 
   it("fails when CI on the default branch is not green, or has not run", () => {

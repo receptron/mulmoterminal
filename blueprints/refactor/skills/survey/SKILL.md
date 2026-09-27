@@ -19,6 +19,26 @@ In order, because they conflict:
 The last beats the third. "A lint bound cleared" is not on the list: a bound tells you where to look,
 never what good looks like. Readable beats short.
 
+## Measure first, with the two tools made for this
+
+Both only read; neither changes the repository (`--no-write`, and `CI=true` keeps scoria from writing its
+config).
+
+- **scoria** scores the repository per dimension and lists findings:
+  `CI=true npx -y scoria --json --no-write > .blueprint/scoria-before.json`. This is the "before" the report
+  compares against, so take it now, on the untouched code. Its `error`-severity findings are candidates in
+  their own right; its warnings are hints, not a to-do list.
+- **ever-better** reports the quality tooling the repository is missing:
+  `npx -y ever-better diagnose --json > .blueprint/ever-better-diagnose.json`. If the repository has already
+  adopted it (an `eslint-suppressions.json` and a CI step running `ever-better check`), read
+  `npx -y ever-better next --json` too — its drain order is where the ceiling comes down cheapest.
+
+If `ratchet` in the answers is true and the repository has not adopted ever-better, the plan starts —
+right after any `ci` target — with two `tooling` targets, one pull request each: `ever-better bootstrap`
+(install what diagnose found missing, and the CI step that runs `ever-better check`), then
+`ever-better freeze` (record today's violations as the ceiling). From then on nothing can get worse
+unnoticed, which is what makes the later refactors safe to merge on CI's word.
+
 ## Finding candidates
 
 Use what the repository already measures, then read the code yourself:
@@ -66,7 +86,7 @@ magnitude. Pinning those buys a test that goes red when someone adjusts a layout
        "status": "todo" }
    ] }
    ```
-   `kind` is one of `ci`, `decompose`, `dedupe`, `test`, `dead-code`, `types`, `other`. Every target starts
+   `kind` is one of `ci`, `tooling`, `decompose`, `dedupe`, `test`, `dead-code`, `types`, `other`. Every target starts
    `todo`. No more targets than `maxChanges`.
    - If `.blueprint/ci.json` lists gaps, the **first** target is a `ci` one that closes them: every later
      change is merged on CI's word, so CI has to be checking the gates before anything else moves.

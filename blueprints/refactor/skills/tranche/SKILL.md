@@ -26,6 +26,24 @@ workflow gets a top-level `permissions:` block (default `contents: read`; a job 
 it) and `actions/checkout` gets `persist-credentials: false`. Then continue from step 8 — the pull request's
 own checks are the proof that the new CI runs and passes.
 
+## A `tooling` target (ever-better)
+
+- `bootstrap`: `npx -y ever-better bootstrap --dry-run` first and read the plan; then run it without
+  `--dry-run`. Read every file it wrote before committing — it generates configs and a workflow, and you
+  are answerable for them. Keep the change to what bootstrap produced.
+- `freeze`: `npx -y ever-better freeze`, then commit what it recorded. It is a ledger, not a code change.
+- After the pull request merges, add the ratchet to `.blueprint/gates.json` so every later round is held to
+  it: `{ "name": "ever-better check", "command": "npx -y ever-better check --no-write", "ciMatch": "ever-better check" }`
+  (`--no-write`: a gate must not change the tree; `ciMatch`: the text CI's workflow runs it by).
+
+## When the repository runs ever-better
+
+- Before writing a helper, `npx -y ever-better catalog`: a sixth copy of something is the opposite of tidying.
+- For a change that should touch types only, `npx -y ever-better emit-diff --against origin/<default>`
+  proves the emitted JavaScript did not change — a stronger proof than a replica, and cheaper.
+- After a fix that removes violations, `npx -y ever-better prune` lowers the ceiling; commit it in the same
+  pull request, so the ceiling falls with the change that earned it.
+
 ## 1. Start clean, and check nobody else is in the file
 
 - On the default branch, `git pull --ff-only`. Branch: `blueprint/<target id>`.

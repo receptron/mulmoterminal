@@ -15,13 +15,19 @@ while IFS= read -r file; do
 done < .blueprint/.workflows
 [ -z "$missing" ] || { echo "workflows without a top-level permissions: block:$missing" >&2; exit 1; }
 [ -n "$runs_on_pr" ] || { echo "no workflow runs on pull_request" >&2; exit 1; }
+# A gate is found by its package script name run through the package manager, or — for a gate that is
+# not a script, such as `npx ever-better check` — by the literal text its `ciMatch` names.
 node -e '
 const g = JSON.parse(require("fs").readFileSync(".blueprint/gates.json", "utf8"));
-for (const gate of g.gates) console.log(gate.name);
-' | while IFS= read -r name; do
+for (const gate of g.gates) console.log(`${gate.name}\t${gate.ciMatch ?? ""}`);
+' | while IFS="	" read -r name literal; do
   found=""
   while IFS= read -r file; do
-    grep -Eq "(yarn|npm run|pnpm( run)?|bun run) +$name([^a-zA-Z0-9:_-]|$)" "$file" && found=yes
+    if [ -n "$literal" ]; then
+      grep -Fq -- "$literal" "$file" && found=yes
+    else
+      grep -Eq "(yarn|npm run|pnpm( run)?|bun run) +$name([^a-zA-Z0-9:_-]|$)" "$file" && found=yes
+    fi
   done < .blueprint/.workflows
   [ -n "$found" ] || { echo "no workflow runs the \"$name\" gate" >&2; exit 1; }
 done
