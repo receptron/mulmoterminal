@@ -3,7 +3,7 @@
     {
       "id": "help-pages",
       "title": "ヘルプのページに chaff を入れる",
-      "description": "見本のヘルプ（login.md と export.md）を「手順書・ヘルプ・マニュアル」として測り、今ある長すぎる文の指摘を棚に上げて、以後は新しい指摘だけが出るようにする。GitHub の PR に指摘を出すワークフローも作る。原本は変えない。",
+      "description": "見本のヘルプ（login.md と export.md）を「手順書・ヘルプ・マニュアル」として測り、今ある指摘（ら抜き言葉や、行き先の分からない「こちら」のリンク）を棚に上げて、以後は新しい指摘だけが出るようにする。GitHub の PR に指摘を出すワークフローも作る。原本は変えない。",
       "base": "docs",
       "answers": {
         "places": "login.md\nexport.md",

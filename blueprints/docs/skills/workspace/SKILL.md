@@ -12,7 +12,7 @@ repository, `.git/info/exclude`) until the person has approved the models.
 1. `.blueprint/` already exists (the build created it). Everything this build records goes there.
 2. Run chaff once through the base pack's wrapper, so its first download happens now and not in the
    middle of a later step: `sh <base pack>/checks/chaff.sh rules --json > /dev/null`. The wrapper runs the
-   pinned chaff (`npx -y chaffjs@0.18`) unless `CHAFF_BIN` names another. If it fails, show the person the
+   pinned chaff (`npx -y chaffjs@0.21`) unless `CHAFF_BIN` names another. If it fails, show the person the
    error and stop — do not work around it.
 3. If the folder is a git repository, add `.blueprint/` to `.git/info/exclude`. That keeps the build's
    working files out of commits without touching `.gitignore`, which belongs to the person.

@@ -61,7 +61,7 @@
   "presets": {
     "help-pages": {
       "title": "Bring chaff into help pages",
-      "description": "Measures the sample help pages (login.md and export.md) as \"Procedure, help or manual\", shelves today's findings of sentences that are too long, and from then on only new findings appear. It also makes a workflow that shows findings on GitHub PRs. The originals do not change."
+      "description": "Measures the sample help pages (login.md and export.md) as \"Procedure, help or manual\", shelves today's findings (a dropped-ら verb form and a \"here\" link that does not say where it goes), and from then on only new findings appear. It also makes a workflow that shows findings on GitHub PRs. The originals do not change."
     }
   }
 }

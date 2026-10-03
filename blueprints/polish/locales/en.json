@@ -91,7 +91,7 @@
   "presets": {
     "oshirase": {
       "title": "Polish a company notice",
-      "description": "In the sample notice (oshirase.md), splits the sentences chaff finds too long so they read easily, without changing what they say. The original is kept. Run the \"Make a style\" example in the same folder first and choose its style, and the notice follows that style."
+      "description": "In the sample notice (oshirase.md), fixes what chaff finds (such as an intensifier that says nothing) so it reads easily, without changing what it says. The original is kept. Run the \"Make a style\" example in the same folder first and choose its style, and the notice follows that style."
     },
     "houkoku": {
       "title": "Polish a report as a report",
@@ -103,7 +103,7 @@
     },
     "tejun": {
       "title": "Polish a procedure as a procedure",
-      "description": "Reads the sample procedure (tejun.md) as a manual. Sentences that are too long are split without changing what they say. It looks at what you need before starting, whether one step holds two actions, and how to tell a step worked; where something needs adding, it becomes a question for the author in the report. The original is kept."
+      "description": "Reads the sample procedure (tejun.md) as a manual. What chaff finds (such as a \"here\" link that does not say where it goes) is fixed without changing what it says. It looks at what you need before starting, whether one step holds two actions, and how to tell a step worked; where something needs adding, it becomes a question for the author in the report. The original is kept."
     },
     "shayo": {
       "title": "Polish a regulation as a regulation",
@@ -111,7 +111,7 @@
     },
     "english-blog": {
       "title": "Polish an English blog post",
-      "description": "Reads the sample English technical blog post (post.md) as a technical article. The post stays in English: overlong sentences are split, and an opening that would fit any post or a stock closing line is cut. Where something needs adding, such as a closing that only summarises, it becomes a question for the author in the report. The report comes back in your report language. The original is kept."
+      "description": "Reads the sample English technical blog post (post.md) as a technical article. The post stays in English: an opening that would fit any post or a stock closing line is cut. Where something needs adding, such as a closing that only summarises, it becomes a question for the author in the report. The report comes back in your report language. The original is kept."
     }
   }
 }

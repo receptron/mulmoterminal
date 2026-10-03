@@ -55,7 +55,7 @@ describe("the pack's workflow template", () => {
 
   it("runs on pull requests, the pinned chaff on the places, and uploads the SARIF with an action pinned to a commit", () => {
     expect(lines.map((line) => line.trim())).toContain("pull_request:");
-    expect(TEMPLATE).toContain("npx -y chaffjs@0.18 {{PATHS}} --sarif chaff.sarif");
+    expect(TEMPLATE).toContain("npx -y chaffjs@0.21 {{PATHS}} --sarif chaff.sarif");
     expect(TEMPLATE).toMatch(/uses: github\/codeql-action\/upload-sarif@[0-9a-f]{40}\b/u);
     expect(TEMPLATE).toContain("sarif_file: chaff.sarif");
   });

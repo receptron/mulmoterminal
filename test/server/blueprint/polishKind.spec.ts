@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import { CHAFF_DEFAULT_STYLE, FIX_SHELVED, FOLDER_STYLE, genreArgs, genreOf, readKinds, shelvedArgs } from "../../../blueprints/polish/checks/kind.mjs";
 import { PACKS } from "./docsPackHarness";
 
-// `npx chaffjs@0.18 genres`. A kind naming a genre chaff lacks stops every chaff run of the build (chaff refuses an
+// `npx chaffjs@0.21 genres`. A kind naming a genre chaff lacks stops every chaff run of the build (chaff refuses an
 // unknown genre), so a genre renamed upstream shows here first.
 const CHAFF_GENRES = [
   "technical/spec",
