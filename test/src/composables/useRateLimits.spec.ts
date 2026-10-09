@@ -148,6 +148,23 @@ describe("useRateLimits polling lifecycle", () => {
     stop();
   });
 
+  it("carries an account's last-read windows, and none when the row sends none or garbage", async () => {
+    const last = { fiveHour: { usedPercentage: 100, resetsAt_sec: 1_800_000_000 }, sevenDay: null };
+    const accounts = [
+      { id: "held", label: "Held", agent: "claude", limits: null, probing: false, lastLimits: last },
+      { id: "plain", label: "Plain", agent: "claude", limits: null, probing: false },
+      { id: "junk", label: "Junk", agent: "claude", limits: null, probing: false, lastLimits: "soon" },
+    ];
+    fetchMock.mockImplementation(() => respond({ claude: null, codex: null, probing: false, accounts }));
+    const { start, stop, snapshot } = useRateLimits();
+    start();
+    await vi.advanceTimersByTimeAsync(0);
+    const rows = snapshot.value?.accounts ?? [];
+    expect(rows[0]?.lastLimits).toEqual(last);
+    expect(rows.slice(1).map((row) => "lastLimits" in row)).toEqual([false, false]);
+    stop();
+  });
+
   it("polls again soon while an ACCOUNT's probe is running", async () => {
     fetchMock.mockImplementation(() =>
       respond({ claude: null, codex: null, probing: false, accounts: [{ id: "work", label: "Work", agent: "claude", limits: null, probing: true }] }),
