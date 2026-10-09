@@ -11,5 +11,6 @@ export const usageViewZhCN = {
     "at-limit": "已达到用量上限，在重置之前不会被选用。",
     "no-answer": "上次检查没有得到回应。正在以逐渐拉长的间隔重试。",
   },
+  limitReset: "{window}：约 {at} 重置（最后一次读取的值）",
   empty: "尚未配置令牌。",
 };

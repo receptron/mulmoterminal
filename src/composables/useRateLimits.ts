@@ -8,7 +8,7 @@
 // leaving safe methods open — so a GET that triggered a probe could be fired by any page the user
 // happens to visit, at their expense.
 import { ref } from "vue";
-import { parseRateLimits } from "../../common/rateLimits";
+import { parseRateLimits, type RateLimits } from "../../common/rateLimits";
 import { isRecord } from "../../common/isRecord";
 import type { AccountReading, ClaudeProbeStall, ClaudeProbeState, RateLimitSnapshot } from "./rateLimitGauge";
 import { isAccountId } from "../../common/agentAccounts";
@@ -67,6 +67,11 @@ async function load(): Promise<boolean> {
 // makes is one the server may answer by spending a Claude query, so a leaked chain quietly doubles
 // the cost of the thing being measured.
 // An account's reading (#2215). Rows that do not parse are dropped one by one, not the list.
+const lastLimitsOf = (raw: unknown): { lastLimits?: RateLimits } => {
+  const lastLimits = parseRateLimits(raw);
+  return lastLimits ? { lastLimits } : {};
+};
+
 const accountReadingsOf = (raw: unknown): (AccountReading & { probing: boolean })[] =>
   Array.isArray(raw)
     ? raw.flatMap((row: unknown) =>
@@ -82,6 +87,7 @@ const accountReadingsOf = (raw: unknown): (AccountReading & { probing: boolean }
                 probing: row.probing === true,
                 ...(typeof row.email === "string" ? { email: row.email } : {}),
                 ...(row.rotation === true ? { rotation: true } : {}),
+                ...lastLimitsOf(row.lastLimits),
               },
             ]
           : [],

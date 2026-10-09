@@ -11,11 +11,12 @@ import { useRateLimits } from "../../composables/useRateLimits";
 import { resetsIn } from "../../composables/rateLimitGauge";
 import { tokenUsageRows, type TokenUsageRow, type TokenUsageWindow } from "../../composables/tokenUsageRows";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 const { isOpen, close } = useUsageView();
 useEscapeToClose(isOpen, close);
 
 const { snapshot, start, stop } = useRateLimits();
+const MS_PER_SEC = 1000;
 const CLOCK_TICK_MS = 30_000;
 const LOW_LEFT_PERCENT = 10;
 const now_ms = ref(Date.now());
@@ -44,6 +45,21 @@ const windowsOf = (row: TokenUsageRow) => [
 
 const leftText = (window: TokenUsageWindow): string => (window.leftPercent === null ? "—" : `${window.leftPercent}%`);
 const resetText = (window: TokenUsageWindow): string => resetsIn(window.resetsAt_sec, now_ms.value, t);
+const RESET_DATE_FORMAT: Intl.DateTimeFormatOptions = { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" };
+const limitResetLines = (row: TokenUsageRow): string[] =>
+  [
+    { column: "fiveHour", reset_sec: row.limitResets?.fiveHour_sec ?? null },
+    { column: "sevenDay", reset_sec: row.limitResets?.sevenDay_sec ?? null },
+  ].flatMap(({ column, reset_sec }) =>
+    reset_sec === null
+      ? []
+      : [
+          t("usageView.limitReset", {
+            window: t(`usageView.column.${column}`),
+            at: new Date(reset_sec * MS_PER_SEC).toLocaleString(locale.value, RESET_DATE_FORMAT),
+          }),
+        ],
+  );
 const barClass = (window: TokenUsageWindow): string => ((window.leftPercent ?? 0) <= LOW_LEFT_PERCENT ? "bg-amber" : "bg-accent");
 </script>
 
@@ -80,7 +96,10 @@ const barClass = (window: TokenUsageWindow): string => ((window.leftPercent ?? 0
                 <div class="text-[11px] text-secondary">{{ resetText(window) }}</div>
               </td>
             </template>
-            <td v-else colspan="2" class="py-2 pr-4 align-top text-secondary">{{ t(`usageView.state.${row.state}`) }}</td>
+            <td v-else colspan="2" class="py-2 pr-4 align-top text-secondary">
+              <div>{{ t(`usageView.state.${row.state}`) }}</div>
+              <div v-for="line in limitResetLines(row)" :key="line" class="text-[11px]">{{ line }}</div>
+            </td>
           </tr>
           <tr v-if="rows.length === 0">
             <td colspan="3" class="py-3 text-secondary">{{ t("usageView.empty") }}</td>

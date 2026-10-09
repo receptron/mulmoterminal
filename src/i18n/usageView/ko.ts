@@ -11,5 +11,6 @@ export const usageViewKo = {
     "at-limit": "사용 한도에 도달했습니다. 초기화될 때까지 선택되지 않습니다.",
     "no-answer": "마지막 확인에 응답이 없었습니다. 간격을 늘려 가며 다시 시도합니다.",
   },
+  limitReset: "{window}: {at} 무렵 초기화 (마지막으로 확인한 값)",
   empty: "등록된 토큰이 없습니다.",
 };

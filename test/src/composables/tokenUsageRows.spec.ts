@@ -54,6 +54,19 @@ describe("tokenUsageRows (#2919)", () => {
     expect(tokenUsageRows([token(over)], NOW_MS)[0]?.state).toBe(state);
   });
 
+  it("carries the last-read reset times of a row at its limit, dropping those already past", () => {
+    const lastLimits = {
+      fiveHour: { usedPercentage: 100, resetsAt_sec: NOW_SEC - 1 },
+      sevenDay: { usedPercentage: 100, resetsAt_sec: NOW_SEC + 24 * HOUR },
+    };
+    const atLimit = { limits: null, probe: "no-report" as const, probeStall: "usage-limit" as const, lastLimits };
+    expect(tokenUsageRows([token(atLimit)], NOW_MS)[0]?.limitResets).toEqual({ fiveHour_sec: null, sevenDay_sec: NOW_SEC + 24 * HOUR });
+  });
+
+  it("has no reset times on a row that is not at its limit", () => {
+    expect(tokenUsageRows([token()], NOW_MS)[0]?.limitResets).toBeNull();
+  });
+
   it("is empty with nothing to list", () => {
     expect(tokenUsageRows([], NOW_MS)).toEqual([]);
   });
