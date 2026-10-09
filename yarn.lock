@@ -1929,10 +1929,10 @@
   dependencies:
     zod "^4.4.3"
 
-"@mulmocast/types@^2.17.0":
-  version "2.17.0"
-  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.17.0.tgz#5a4a841f06164d5def38ea6c8febc7095d739507"
-  integrity sha512-zF3q/XUlEgRWCvUnIk3aZCUHN4enYbNLqfZyqwXfidllXgzrukT8ukui3sgWQi2QgJgX91Bq8x9SqjwirtOZjg==
+"@mulmocast/types@^2.19.0":
+  version "2.19.0"
+  resolved "https://registry.yarnpkg.com/@mulmocast/types/-/types-2.19.0.tgz#68e6f32ba8b507a11bcc65fa25ee6addc067e893"
+  integrity sha512-hdkmoO0iImNXRVYaFCfPuMoUx49GkQC1B7MIrMyOh2YGN9EqDDJN0pwgIl6nDdRxZ4KQFQULz/Orsa0MuvFLkg==
   dependencies:
     "@mulmocast/deck" "^2.0.0"
     zod "^4.4.3"
@@ -6666,10 +6666,10 @@ mulmocast-vision@^1.0.12:
     puppeteer "^25.3.0"
     yauzl "^3.4.0"
 
-mulmocast@^2.17.0:
-  version "2.17.0"
-  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.17.0.tgz#34cfba6c00ab38fe50c79eb743046c17f8fb0e31"
-  integrity sha512-PicO/ibw8+IHcvA+hARiHtNt+X4YBU8U/B99sgEYoFcF/GOaVTec21EfTKyw10FLFSqNy2gahIbesPznC5fqwA==
+mulmocast@^2.19.0:
+  version "2.19.0"
+  resolved "https://registry.yarnpkg.com/mulmocast/-/mulmocast-2.19.0.tgz#e86819c02671298242729c1f71c38c138a044298"
+  integrity sha512-XLLLoLA8s8Ll2ceWNR8Qf8sU3+Mf4grlP/3v3owR8RwRDcmfu667XbIgu+4+MQ3KYwTLBvZ7Yl0DapLIh8lXmg==
   dependencies:
     "@google-cloud/text-to-speech" "^6.4.1"
     "@google/genai" "^2.24.0"
@@ -6693,6 +6693,7 @@ mulmocast@^2.17.0:
     clipboardy "^5.3.2"
     dotenv "^17.4.2"
     graphai "^2.0.18"
+    jinglescript "^0.6.0"
     js-tiktoken "^1.0.21"
     jsdom "^29.1.1"
     marked "^18.1.0"

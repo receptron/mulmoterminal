@@ -12,6 +12,10 @@ Entries here are folded into the next release's heading when it ships.
 
 - `@gui-chat-plugin/jinglescript` and `jinglescript` ^0.4.0 -> ^0.6.0. 0.5.0 adds MIDI export (a "Download MIDI" link in the player); 0.6.0 lets `checkScore` / `renderScore` take `path`, a `.json` score file, instead of the score inline, so a long score need not travel in every tool call. The plugin reads that file through the host's `files.byPath`, so this host now hands `manageJingleScript` a `.json`-scoped one (`jingleScriptByPath`, `server/backends/files/openPath.ts`) and lists the tool in `PRESENT_PATH_EXTENSIONS`, so a relative `path` names the file in the session's own directory, as presentDocument's does. Without the binding the plugin refuses `path` and asks for the score inline.
 
+### mulmocast 2.19.0
+
+- `mulmocast` and `@mulmocast/types` ^2.17.0 -> ^2.19.0. 2.18.0 makes `gemini-omni-1.1-flash` the default Gemini API video model (the Veo 3.1 previews shut down on 2026-10-22; a script that names one gets an error pointing at the replacement) and adds an opt-in strict network mode for the HTML renderers and PDF. 2.19.0 adds `beat.soundEffects` (sound effects at a chosen time inside a beat), lets a sound effect's source be a JingleScript score (`{ "kind": "jinglescript", "score": … }`, which is why mulmocast now peer-requires `jinglescript ^0.6.0`, the version above), and moves to avatarscript 0.4.0. Nothing in this repo names a Veo preview model.
+
 ## mulmoterminal@9.6.0 — 2026-10-09
 
 > **Setup guide:** [9.6.0 — Move a session to another subscription from its header, and JingleScript](https://receptron.github.io/mulmoterminal/guide/en/v9.6.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.6.0.html))
