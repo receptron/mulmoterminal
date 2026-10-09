@@ -97,6 +97,10 @@ describe("the /api/plugin middleware", () => {
     // The pair has to agree: presenting and RENDERING the same relative path must
     // name the same file, or an agent checks one model and shows another.
     expect((await call("renderShapeScript", { path: "models/lamp.shape" }, SESSION)).path).toBe(path.resolve(CWD, "models/lamp.shape"));
+    // A score file for manageJingleScript, whichever action reads it.
+    expect((await call("manageJingleScript", { action: "renderScore", path: "scores/opening.json" }, SESSION)).path).toBe(
+      path.resolve(CWD, "scores/opening.json"),
+    );
   });
 
   // Byte-identical, NOT "resolved to the same file": an absolute document path breaks the
