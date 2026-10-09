@@ -1296,10 +1296,10 @@
   resolved "https://registry.yarnpkg.com/@gui-chat-plugin/common/-/common-0.1.0.tgz#96d8a7a1cf1a2a806bbc2ee5ba296b69a59b0350"
   integrity sha512-OF+/XxKWBU50ijjygO+QrMsJjKn+2b1jtA7ouerBJThFT6sR1ZSwJDp+wj6FKBMXY8pPveJcXCBDQHl/qILmrg==
 
-"@gui-chat-plugin/jinglescript@^0.4.0":
-  version "0.4.0"
-  resolved "https://registry.yarnpkg.com/@gui-chat-plugin/jinglescript/-/jinglescript-0.4.0.tgz#b33f458b17521d91cabba9b84a8548141c5d9797"
-  integrity sha512-2T/7uql82zdjvkVw3STU6u+37+GC7SWpjSyMh3PxiHHPMvuIYnzngtaPS8mun2DiuSLu6XSGxONCRbjNrFdkRg==
+"@gui-chat-plugin/jinglescript@^0.6.0":
+  version "0.6.0"
+  resolved "https://registry.yarnpkg.com/@gui-chat-plugin/jinglescript/-/jinglescript-0.6.0.tgz#24227b5cc2df3d7d71c37c4fb398e0c471d146f7"
+  integrity sha512-GB72BxdKq9RAcmu97zeYeXpZGq0RaE+c39Ui/Jp86qry13voRIOGcfNMVxiWHRvm/vRb89Fq2TGuw8dhIqFKIg==
 
 "@gui-chat-plugin/shapescript@^8.2.2":
   version "8.2.2"
