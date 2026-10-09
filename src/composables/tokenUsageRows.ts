@@ -23,6 +23,18 @@ export interface TokenUsageRow {
   fiveHour: TokenUsageWindow;
   sevenDay: TokenUsageWindow;
   state: TokenUsageState;
+  /** Only for "at-limit": when each window last reported it would reset, if that is still ahead. */
+  limitResets: { fiveHour_sec: number | null; sevenDay_sec: number | null } | null;
+}
+
+function futureReset(window: RateLimitWindow | null | undefined, now_ms: number): number | null {
+  const reset = window?.resetsAt_sec ?? null;
+  return reset !== null && reset * MS_PER_SEC > now_ms ? reset : null;
+}
+
+function limitResetsOf(reading: AccountReading, state: TokenUsageState, now_ms: number): TokenUsageRow["limitResets"] {
+  if (state !== "at-limit") return null;
+  return { fiveHour_sec: futureReset(reading.lastLimits?.fiveHour, now_ms), sevenDay_sec: futureReset(reading.lastLimits?.sevenDay, now_ms) };
 }
 
 /** A window as what is left of it. One whose reset has passed holds nothing back. */
@@ -44,12 +56,16 @@ function stateOf(reading: AccountReading): TokenUsageState {
 export function tokenUsageRows(readings: readonly AccountReading[], now_ms: number): TokenUsageRow[] {
   return readings
     .filter((reading) => reading.rotation === true)
-    .map((reading) => ({
-      id: reading.id,
-      label: reading.label,
-      email: reading.email ?? null,
-      fiveHour: windowLeft(reading.limits?.fiveHour ?? null, now_ms),
-      sevenDay: windowLeft(reading.limits?.sevenDay ?? null, now_ms),
-      state: stateOf(reading),
-    }));
+    .map((reading) => {
+      const state = stateOf(reading);
+      return {
+        id: reading.id,
+        label: reading.label,
+        email: reading.email ?? null,
+        fiveHour: windowLeft(reading.limits?.fiveHour ?? null, now_ms),
+        sevenDay: windowLeft(reading.limits?.sevenDay ?? null, now_ms),
+        state,
+        limitResets: limitResetsOf(reading, state, now_ms),
+      };
+    });
 }

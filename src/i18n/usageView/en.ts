@@ -11,5 +11,6 @@ export const usageViewEn = {
     "at-limit": "At its usage limit — skipped until it resets.",
     "no-answer": "The last check got no answer. Retrying, less often each time.",
   },
+  limitReset: "{window}: resets around {at} (as last read)",
   empty: "No tokens are configured.",
 };

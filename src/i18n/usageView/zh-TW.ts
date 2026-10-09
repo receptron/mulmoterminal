@@ -11,5 +11,6 @@ export const usageViewZhTW = {
     "at-limit": "已達用量上限，在重置之前不會被選用。",
     "no-answer": "上次檢查沒有得到回應。正在以逐漸拉長的間隔重試。",
   },
+  limitReset: "{window}：約 {at} 重置（最後一次讀取的值）",
   empty: "尚未設定權杖。",
 };

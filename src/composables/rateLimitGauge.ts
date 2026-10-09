@@ -30,6 +30,8 @@ export interface AccountReading {
   /** Why a claude account's figures are missing, as for the default login. */
   probe?: ClaudeProbeState | undefined;
   probeStall?: ClaudeProbeStall | undefined;
+  /** The windows as last read when `limits` is gone stale; what says when a held-out login resets. */
+  lastLimits?: RateLimits | null | undefined;
   /** Whose subscription a rotation token is (#2919), shown beside its label where there is room. */
   email?: string | undefined;
   /** A rotation token rather than an account (#2919). */

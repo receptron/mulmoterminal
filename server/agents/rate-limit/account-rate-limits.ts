@@ -26,6 +26,9 @@ export interface AccountRateLimitReading {
   probing: boolean;
   probe: ProbeState["kind"];
   probeStall: ProbeStall | undefined;
+  /** The windows as last read, however old; sent only while `limits` is null, so a login held out at
+   *  its limit can still say when its windows were due to reset. */
+  lastLimits?: RateLimits;
   /** The sign-in address a rotation token's entry names (#2919); absent for an account. */
   email?: string;
   /** A rotation token rather than an account (#2919) — what the token usage screen lists. */
@@ -58,15 +61,18 @@ export interface AccountRateLimitDeps<T extends MeteredLogin = AgentAccount> {
 function readingOf(account: MeteredLogin, store: RateLimitStore, now_ms: number): AccountRateLimitReading {
   const snapshot = store.snapshot();
   const state = store.probeState();
+  const limits = account.agent === "claude" ? currentClaudeLimits(snapshot, now_ms) : (snapshot.codex?.limits ?? null);
+  const lastLimits = limits === null && account.agent === "claude" ? snapshot.claude?.limits : undefined;
   return {
     id: account.id,
     label: account.label,
     agent: account.agent,
-    limits: account.agent === "claude" ? currentClaudeLimits(snapshot, now_ms) : (snapshot.codex?.limits ?? null),
+    limits,
     probing: store.isProbing(),
     probe: state.kind,
     probeStall: state.kind === "no-report" ? state.stall : undefined,
     ...(account.email ? { email: account.email } : {}),
+    ...(lastLimits ? { lastLimits } : {}),
   };
 }
 
