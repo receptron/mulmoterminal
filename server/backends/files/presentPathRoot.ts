@@ -22,6 +22,7 @@ import { MARKDOWN_EXTENSIONS, HTML_EXTENSIONS } from "@mulmoclaude/core/files";
 import { isPresentableHtmlPath } from "@mulmoclaude/html-plugin";
 import { SHAPE_EXTENSIONS } from "@gui-chat-plugin/shapescript";
 import { isRecord } from "../../../common/isRecord.js";
+import { JINGLESCRIPT_SCORE_EXTENSIONS } from "./openPath.js";
 import { SESSION_ID_RE } from "../../config/env.js";
 import { isSamePath } from "../../infra/fs/path-within.js";
 
@@ -67,6 +68,9 @@ export const PRESENT_PATH_EXTENSIONS = new Map<string, readonly string[]>([
   ["exportShapeScriptStl", SHAPE_EXTENSIONS],
   // manageShapeScript (publish / update by `path`) — fourth.
   ["manageShapeScript", SHAPE_EXTENSIONS],
+  // manageJingleScript's checkScore / renderScore read a score file by `path`; a relative one
+  // names the file in the project the agent is working in, as presentDocument's does.
+  ["manageJingleScript", JINGLESCRIPT_SCORE_EXTENSIONS],
 ]);
 
 // `artifacts/…` is the workspace's own output area: the plugins route those values to

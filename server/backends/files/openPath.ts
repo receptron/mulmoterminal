@@ -54,6 +54,17 @@ export const htmlByPath = createByPathFileOps({ rootFor, extensions: HTML_EXTENS
  *  `presentShapeScript(path: "models/lamp.shape")` is refused. */
 export const shapeScriptByPath = createByPathFileOps({ rootFor, extensions: SHAPE_EXTENSIONS }) satisfies FileOps;
 
+/** The score files `manageJingleScript` reads by `path` (@gui-chat-plugin/jinglescript 0.6.0).
+ *  Declared here rather than imported: the package checks the same `.json` rule itself but does not
+ *  export it, and this list is also what presentPathRoot.ts re-roots a relative `path` with. */
+export const JINGLESCRIPT_SCORE_EXTENSIONS = [".json"] as const;
+
+/** `files.byPath` for manageJingleScript — READS the `.json` score a `checkScore` / `renderScore`
+ *  call names instead of passing it inline, so a long score need not travel in the tool call. The
+ *  plugin never writes through it. Without it the plugin refuses `path` and asks for the score
+ *  inline. */
+export const jingleScriptByPath = createByPathFileOps({ rootFor, extensions: JINGLESCRIPT_SCORE_EXTENSIONS }) satisfies FileOps;
+
 /** `files.byPath` for presentMulmoScript — reads/overwrites any `.json` MulmoScript the tool
  *  named by ABSOLUTE path (mulmoscript-plugin 4.6.0). It is the host's opt-in: without it the
  *  plugin refuses an absolute `filePath` outright and keeps its stories-only behaviour.
