@@ -8,7 +8,7 @@ import type { AgentAccount } from "../../../../common/agentAccounts.js";
 import { isRecord } from "../../../../common/isRecord.js";
 import type { RateLimits } from "../../../../common/rateLimits.js";
 import { createAccountRateLimits, type AccountRateLimitDeps } from "../../../../server/agents/rate-limit/account-rate-limits.js";
-import { createRateLimitStore } from "../../../../server/agents/rate-limit/rate-limit-store.js";
+import { CLAUDE_READING_MAX_AGE_MS, createRateLimitStore } from "../../../../server/agents/rate-limit/rate-limit-store.js";
 import { mountRateLimitRoutes } from "../../../../server/agents/rate-limit/rate-limit-routes.js";
 import { rateLimitCacheFile } from "../../../../server/agents/rate-limit/rate-limit-persist.js";
 import { statusLineCommand } from "../../../../server/agents/statusline.js";
@@ -105,6 +105,15 @@ describe("createAccountRateLimits (#2215)", () => {
   });
 
   // On the real clock: a settled probe is stamped with Date.now(), as in production.
+  it("sends a claude login's last windows only once they are too old to vouch for", () => {
+    const m = meters([WORK]);
+    m.refresh(NOW);
+    m.reportClaudeStatus(probes[0]?.key ?? "", { limits: LIMITS, afterApiResponse: true }, NOW);
+    expect(m.readings(NOW)[0]).not.toHaveProperty("lastLimits");
+    const later = NOW + CLAUDE_READING_MAX_AGE_MS + 1;
+    expect(m.readings(later)[0]).toMatchObject({ limits: null, lastLimits: LIMITS });
+  });
+
   it("counts a probe that never answered as a failure, and backs off", () => {
     const m = meters([WORK]);
     const start = Date.now();
