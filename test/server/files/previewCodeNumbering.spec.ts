@@ -25,6 +25,8 @@ const PIECES = [
   "<div>\n```\nnot a block inside html\n```\n</div>",
   "| a | b |\n|---|---|\n| `x` | y |",
   "```js\n\n\nblank lines around\n\n```",
+  // A diagram's block is drawn inside a disclosure beside its placeholder (#2991); its number must not move.
+  "```mermaid\ngraph TD\n  A-->B\n```",
 ];
 const FRONT_MATTER = "---\ntitle: t\nbody: |\n  ```\n  in front matter\n  ```\n---\n";
 

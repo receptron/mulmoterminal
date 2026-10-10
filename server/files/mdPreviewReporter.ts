@@ -126,6 +126,7 @@ const MESSAGE_LISTENER = [
   "  const data = event.data;",
   `  if (!data || data.source !== ${JSON.stringify(MD_PREVIEW_FROM_HOST)}) return;`,
   "  if (typeof data.codeCopyLabel === 'string') nameCopyButtons(data.codeCopyLabel);",
+  "  if (typeof data.diagramSourceLabel === 'string') nameDiagramSources(data.diagramSourceLabel);",
   "  if (typeof data.heading === 'number' && typeof data.headingText === 'string') {",
   "    const occurrence = typeof data.headingOccurrence === 'number' ? data.headingOccurrence : 0;",
   "    const target = headingFor(data.heading, data.headingText, occurrence);",
@@ -177,6 +178,8 @@ const reporterSource = (token: string | null): string =>
     // Declared before the listener that names the buttons; filled in last (see CODE_COPY).
     "let copyButtons = [];",
     "let nameCopyButtons = () => {};",
+    // The disclosure under each diagram (#2991) is in the document from the start, so it is named outright.
+    "const nameDiagramSources = (label) => Array.from(Document.prototype.querySelectorAll.call(document, 'details.mermaid-source > summary')).forEach((summary) => { summary.textContent = label; });",
     ...MESSAGE_LISTENER,
     ...GROWTH_WATCH,
     // A link is handed to the host rather than followed, decided on the attribute as written. An

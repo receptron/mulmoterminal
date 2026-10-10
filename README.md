@@ -172,7 +172,7 @@ than as bytes (files within the session's working directory only):
 
 | A clicked … | opens as |
 |---|---|
-| `.md` `.markdown` | **rendered** markdown in a new tab — the same sandboxed `…/md` HTML the Files preview renders, minus the one script the preview needs to report where you are reading. It follows your system light/dark setting, since under the sandbox CSP it can't ask the app which theme is on |
+| `.md` `.markdown` | **rendered** markdown in a new tab — the same sandboxed `…/md` HTML the Files preview renders, minus the scripts the preview needs (the one that reports where you are reading, and the one that draws mermaid diagrams — so a mermaid fence stays a code block here). It follows your system light/dark setting, since under the sandbox CSP it can't ask the app which theme is on |
 | `.json` | **indented** in a new tab (Chrome and Safari otherwise show one long line) |
 | `.csv` `.tsv` | a **table** in a new tab, with a sticky header that scrolls inside its own box |
 | source, config, logs, and `.txt` — 46 extensions | the app's own **Files** view (`/files?path=`), where CodeMirror highlights it, the tree is right there, and it can be edited |
@@ -1301,7 +1301,8 @@ rooted at **that terminal's project directory** — so after Claude says "wrote 
 you can jump straight there to read or edit it. The left pane is a lazy-loaded directory
 tree; clicking a file opens it in a **CodeMirror** editor (Markdown / JS-TS / JSON
 highlighting, everything else as plain text). Markdown files get a **Preview** toggle
-that renders via the server's sandboxed `…/md` HTML; a `.csv` / `.tsv` previews as a table (the
+that renders via the server's sandboxed `…/md` HTML, with a ` ```mermaid ` fence drawn as a diagram
+(its code block stays under it, folded, so the copy button is still there); a `.csv` / `.tsv` previews as a table (the
 same `…/table` document a clicked path opens, in the app's colours), and an `.html` / `.svg` as the
 page or picture it is. **Save** (or ⌘/Ctrl-S) writes back. **History** lists the versions the pane
 kept of the file (in `~/.mulmoterminal/backups`, taken when it is opened or reloaded here and before a save

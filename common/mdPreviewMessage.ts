@@ -79,13 +79,16 @@ export interface MdPreviewHostMessage {
   scrollY: number;
   /** The accessible name for the code blocks' copy buttons, in the app's language (#2615). */
   codeCopyLabel?: string;
+  /** What the disclosure under a rendered diagram is called (#2991). */
+  diagramSourceLabel?: string;
 }
 
-/** A new name for the code blocks' copy buttons: the app's language changed while this document was
- *  open (the first name comes with the answer to `ready`). */
+/** New names for the code blocks' copy buttons and the diagrams' source disclosures: the app's
+ *  language changed while this document was open (the first names come with the answer to `ready`). */
 export interface MdPreviewLabelMessage {
   source: typeof MD_PREVIEW_FROM_HOST;
   codeCopyLabel: string;
+  diagramSourceLabel: string;
 }
 
 /** Take the reader to a heading (#2576): the `heading`-th one in the document (0-based) when it reads

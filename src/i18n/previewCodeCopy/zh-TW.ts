@@ -2,6 +2,7 @@
 export const previewCodeCopyZhTW = {
   previewCodeCopy: {
     button: "複製此程式碼區塊…",
+    diagramSource: "圖表原始碼",
     title: "程式碼區塊",
     hint: "這是從檔案讀取的文字。確認後再複製——這裡看到的內容就是將被複製的內容。",
     copy: "複製",

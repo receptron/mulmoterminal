@@ -188,8 +188,9 @@ opens it here, drawn, when the pane is up.
 **A Markdown file can be read in Preview.** Relative images are shown, a YAML front matter block
 is left out, and external links open in a new browser tab. A link to another file (`./b.md`,
 `../README.md`) opens it in a new tab of the pane — in Preview when it is Markdown; a link that
-climbs above the pane's folder says so instead. Mermaid and maths stay as code there;
-**Canvas** in the pane's header renders them. A code block is coloured for its language (the
+climbs above the pane's folder says so instead. A ` ```mermaid ` fence is drawn as a diagram,
+with its code folded under it (open **Diagram source** to see or copy it); maths stays as code
+there, and **Canvas** in the pane's header renders both. A code block is coloured for its language (the
 editor's languages — JavaScript/TypeScript, Python, JSON, CSS, HTML, YAML, XML, Rust, Go, Java,
 C/C++, PHP, SQL, Markdown; others stay plain). The small copy button at a block's top right opens
 the block in a dialog of the app's own, read from the file, with **Copy** there: a Markdown file

@@ -28,6 +28,6 @@ export function useFilesPreviewWire(file: PreviewedFile, openLink: (href: string
     file.previewScrollTop,
     openLink,
     () => file.previewToken.value,
-    { cwd, openPath: () => file.openPath.value, label: () => t("previewCodeCopy.button") },
+    { cwd, openPath: () => file.openPath.value, label: () => t("previewCodeCopy.button"), diagramSourceLabel: () => t("previewCodeCopy.diagramSource") },
   );
 }

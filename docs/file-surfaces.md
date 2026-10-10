@@ -58,22 +58,31 @@ one tool call cannot mean two different things in the two apps.
 The right pane can open a document **on the canvas**, which mounts the markdown plugin's view: an
 in-app Shadow DOM component that registers marked extensions and renders mermaid, maths and the
 rest. The full-screen view has no canvas to open into, so a `.md` goes to the **preview**, which is
-an iframe served from `/api/files/browse/md` and built by a **stock `marked` with no
-extensions at all** — it only drops a YAML front matter block and points relative images at the raw
-route, and the embedded document hands external link clicks to the pane. A mermaid fence therefore renders as a code block there, and does so by
-design rather than by failure — nothing tries to load mermaid, which is why no error appears
-either.
+an iframe served from `/api/files/browse/md` and built by a **`marked` of the server's own, with
+none of the plugin's extensions** — it drops a YAML front matter block, points relative images at
+the raw route, numbers code blocks for the copy button, and the embedded document hands external
+link clicks to the pane. Maths therefore renders as code there.
 
-The preview is also served under `sandbox allow-scripts; script-src 'nonce-…'` with no
-`allow-same-origin`. That is what keeps a previewed file's own scripts inert, and it blocks both
-external scripts and dynamic `import()` — so the plugin's lazy `import("mermaid")` cannot work
-there even if the extension were registered.
+A mermaid fence is the one diagram the preview draws itself (#2991), and how it does so is set by
+the sandbox. The preview is served under `sandbox allow-scripts; script-src 'nonce-…'` with no
+`allow-same-origin`: that keeps a previewed file's own scripts inert and blocks any external
+script that carries no nonce. It does **not** block a `<script type="module">` that carries the
+nonce, nor the imports that script makes — a static or dynamic import inherits the importing
+script's nonce (measured in Chromium and WebKit; `plans/feat-files-preview-mermaid.md` describes
+the probe). What DOES stop an import from this document is CORS: the origin is opaque, so a module
+fetch goes out with `Origin: null` and needs `Access-Control-Allow-Origin` on the answer. So the
+server serves mermaid's own ESM build under `/api/files/mermaid/<version>/…` with that header
+(`server/files/mermaidAssets.ts`), and the embedded document ends with a nonce'd module script
+that imports it and draws each fence, folding the numbered code block under the diagram
+(`server/files/previewMermaid.ts`). The plain `…/md` document a new tab opens is served under a
+bare `sandbox` and runs nothing, so there the fence stays a code block.
 
 **So "make both surfaces render the same" is a containment decision before it is a rendering
 one.** Moving the plugin's renderer to the full-screen view would render a file chosen through a
-query string with the machinery built for a file an agent named. Adding diagrams to the preview
-instead keeps the isolation and costs a second rendering path that will drift again the next time
-the plugin gains a feature. Both are defensible; neither is a refactor.
+query string with the machinery built for a file an agent named. The preview's own diagram path
+keeps the isolation at the cost of a second rendering path that drifts when the plugin gains a
+feature — a trade taken knowingly for mermaid, and the reason maths is still code there. Both are
+defensible; neither is a refactor.
 
 ## An HTML page, an image, a PDF or media in the pane serves bytes, so it takes the raw route's base
 

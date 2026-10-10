@@ -24,7 +24,7 @@ function mountHost(openPath = ref<string | null>("a.md"), cwd = ref("/proj"), la
           ref(0),
           () => {},
           () => TOKEN,
-          { cwd: () => cwd.value, openPath: () => openPath.value, label: () => label.value },
+          { cwd: () => cwd.value, openPath: () => openPath.value, label: () => label.value, diagramSourceLabel: () => "Diagram source" },
         );
         return () => h("div");
       },
@@ -153,7 +153,7 @@ describe("a Preview code block's copy button", () => {
     const sent = vi.spyOn(target, "postMessage");
     label.value = "このコードブロックをコピー";
     await flushPromises();
-    expect(sent).toHaveBeenCalledWith({ source: MD_PREVIEW_FROM_HOST, codeCopyLabel: "このコードブロックをコピー" }, "*");
+    expect(sent).toHaveBeenCalledWith({ source: MD_PREVIEW_FROM_HOST, codeCopyLabel: "このコードブロックをコピー", diagramSourceLabel: "Diagram source" }, "*");
   });
 
   // An HTML page runs its own scripts; nothing is posted into its frame (#2269).
@@ -177,6 +177,6 @@ describe("a Preview code block's copy button", () => {
     const event = new MessageEvent("message", { data: { source: MD_PREVIEW_FROM_FRAME, kind: "ready", token: TOKEN } });
     Object.defineProperty(event, "source", { value: host.frame.contentWindow });
     window.dispatchEvent(event);
-    expect(sent).toHaveBeenCalledWith(expect.objectContaining({ codeCopyLabel: "Copy this code block" }), "*");
+    expect(sent).toHaveBeenCalledWith(expect.objectContaining({ codeCopyLabel: "Copy this code block", diagramSourceLabel: "Diagram source" }), "*");
   });
 });

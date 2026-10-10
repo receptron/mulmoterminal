@@ -2,6 +2,7 @@
 export const previewCodeCopyZhCN = {
   previewCodeCopy: {
     button: "复制此代码块…",
+    diagramSource: "图表源码",
     title: "代码块",
     hint: "这是从文件读取的文本。确认后再复制——这里看到的内容就是将被复制的内容。",
     copy: "复制",
