@@ -31,6 +31,7 @@ import type { AgentAccount } from "../../common/agentAccounts.js";
 import type { PlayfulEffects } from "../../common/playfulEffects.js";
 import { systemTaskSettingsChanged } from "./system-task-settings.js";
 import { setAccountsProvider } from "../session/session-home.js";
+import { setTmuxPrefix } from "../infra/process/tmux.js";
 import type { TokenRotation } from "../../common/tokenRotation.js";
 import { installBundledSkills } from "../infra/fs/install-bundled-skills.js";
 import type { SystemTaskSwitches } from "../backends/scheduler/system-tasks.js";
@@ -59,6 +60,8 @@ import { lastSegment } from "../../common/pathSegments.js";
 export const APP_CONFIG_FILE = path.join(os.homedir(), ".mulmoterminal", "config.json");
 const CONFIG_FILE = APP_CONFIG_FILE;
 let config: AppConfig = loadAppConfig(CONFIG_FILE);
+// Before anything asks whether tmux is there: that first answer writes the conf file this feeds.
+setTmuxPrefix(config.tmuxPrefix);
 
 // The repos the cross-repo PR view aggregates — read live so a POST /api/config that
 // changes them takes effect on the next /api/prs without a restart.
@@ -212,6 +215,7 @@ export function onSystemTaskSettingsChanged(listener: () => void): void {
 function notifySavedChanges(previous: AppConfig, next: AppConfig, onCwdPresetsChanged?: CwdPresetsChanged): void {
   if (!samePresets(previous.cwdPresets, next.cwdPresets)) notifyPresetsChanged(onCwdPresetsChanged);
   if (systemTaskSettingsChanged(previous, next)) notifySystemTaskSettingsChanged();
+  if (previous.tmuxPrefix !== next.tmuxPrefix) setTmuxPrefix(next.tmuxPrefix);
   if (previous.sessionReapIntervalHours !== next.sessionReapIntervalHours) notifyReapIntervalChanged(next.sessionReapIntervalHours);
 }
 

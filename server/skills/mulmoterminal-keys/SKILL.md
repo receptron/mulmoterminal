@@ -1,6 +1,6 @@
 ---
 name: mulmoterminal-keys
-description: Bind keyboard shortcuts and fix keyboard/clipboard behaviour in MulmoTerminal. **Writes `keymap`** — Settings → Keyboard shortcuts also sets or clears ONE action's key by pressing it (single keystrokes; a two-key sequence and the `send` list are still written here), and its Recommended keys block adds this platform's starter set. **Explains `copyOnSelect`, `questionPaneEnabled` and `terminalSubmit`**, which have their own Settings controls (two checkboxes and a picker) — point the user at those, and write the key yourself only when they have no browser to hand. Covers zooming a cell, jumping to whichever agent is waiting for you, opening and closing terminals, copy/paste, sending raw bytes to the terminal so a key the shell understands can be reached from a key your keyboard has (Cmd+Right for end-of-line), copying by selecting with no key pressed, and the Enter-vs-newline binding. Use when the user wants a shortcut or hotkey, wants to switch cells or reach a waiting agent without the mouse, wants selecting text to copy it, or reports that Shift+Enter submits their prompt instead of adding a line, that Enter drops to a new line instead of sending, that Ctrl+C stopped interrupting, that a shortcut does nothing, or that on a Mac Cmd+Left / Cmd+Right / Cmd+Delete behave as though the Cmd were ignored — moving or deleting one character, the same as the unmodified key.
+description: Bind keyboard shortcuts and fix keyboard/clipboard behaviour in MulmoTerminal. **Writes `keymap`** — Settings → Keyboard shortcuts also sets or clears ONE action's key by pressing it (single keystrokes; a two-key sequence and the `send` list are still written here), and its Recommended keys block adds this platform's starter set. **Explains `copyOnSelect`, `questionPaneEnabled`, `terminalSubmit` and `tmuxPrefix`**, which have their own Settings controls (two checkboxes and a picker) — point the user at those, and write the key yourself only when they have no browser to hand. Covers zooming a cell, jumping to whichever agent is waiting for you, opening and closing terminals, copy/paste, sending raw bytes to the terminal so a key the shell understands can be reached from a key your keyboard has (Cmd+Right for end-of-line), copying by selecting with no key pressed, and the Enter-vs-newline binding. Use when the user wants a shortcut or hotkey, wants to switch cells or reach a waiting agent without the mouse, wants selecting text to copy it, or reports that Shift+Enter submits their prompt instead of adding a line, that Enter drops to a new line instead of sending, that Ctrl+C stopped interrupting, that a shortcut does nothing, or that on a Mac Cmd+Left / Cmd+Right / Cmd+Delete behave as though the Cmd were ignored — moving or deleting one character, the same as the unmodified key.
 ---
 
 # Keyboard, shortcuts and clipboard
@@ -48,6 +48,7 @@ below belongs to one of them:
 | "selecting text doesn't copy" | [`copyOnSelect`](#copyonselect--copy-just-by-selecting) |
 | anything about the question pane | [`questionPaneEnabled`](#questionpaneenabled--answer-a-question-from-a-side-pane) |
 | "Shift+Enter submits", "Enter makes a newline" | [`terminalSubmit`](#terminalsubmit--enter-vs-newline) |
+| "Ctrl+B does nothing / needs two presses", "the next key after Ctrl+B is eaten" | [`tmuxPrefix`](#tmuxprefix--the-tmux-prefix-key) |
 | "Ctrl+C stopped interrupting" | **the diagnostic below — not this section, and not `terminalSubmit`** |
 
 ### "Ctrl+C stopped interrupting" — diagnose, do not propose
@@ -479,3 +480,24 @@ button type the text without submitting it.
 - **Settings → Terminal keys offers both modes**, worded as behaviour rather than as byte names.
   Confirm the symptom first either way — the control makes it easy to set wrongly too.
 - Takes effect after a **tab reload** (keyboard) and a **server restart** (phone remote view).
+
+## `tmuxPrefix` — the tmux prefix key
+
+Reach for this when the user says **Ctrl+B "does nothing", needs two presses, or eats the next key**
+(`c`, `%`, `d` suddenly behave as commands). Each cell runs inside a dedicated tmux, whose default
+prefix `C-b` is also "one character left" in readline, in Claude Code's input and in the macOS text
+system. MulmoTerminal never uses the prefix, so it ships **off**: every key reaches the agent.
+
+```jsonc
+{ "tmuxPrefix": "none" }   // default: no prefix, every key goes to the agent
+{ "tmuxPrefix": "C-b" }    // tmux's own default, for someone who attaches with tmux and uses it
+{ "tmuxPrefix": "C-]" }    // a prefix that does not collide with cursor keys
+```
+
+- Accepted values are `none` or Control plus one of `a`-`z`, `Space`, `]`, `_`, `^`, `@`. Anything else
+  falls back to `none`.
+- **Only write a key other than `none` for someone who attaches to the sessions themselves**
+  (`tmux -L mulmoterminal attach`) and wants detach or scrollback from the keyboard.
+- Applied to the running tmux server when saved, no restart. **Settings → Terminal keys has a picker**
+  for the three values above; write the key here for any other.
+- The mouse wheel still scrolls the terminal's history in every setting.

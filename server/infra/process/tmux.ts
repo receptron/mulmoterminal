@@ -15,6 +15,7 @@ import { PORT } from "../../config/env.js";
 import { isLauncherEnvVar } from "./pty-env.js";
 import { spawnCapture, spawnCaptureAsync } from "./spawnCapture.js";
 import { splitLines } from "../fs/split-lines.js";
+import { TMUX_PREFIX_DEFAULT, TMUX_PREFIX_NONE, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 
 const SERVER_SOCKET = "mulmoterminal";
 const SESSION_PREFIX = "mt-";
@@ -24,6 +25,22 @@ const tmux = (args: string[]) => spawnCapture("tmux", ["-L", SERVER_SOCKET, ...a
 const tmuxAsync = (args: string[]) => spawnCaptureAsync("tmux", ["-L", SERVER_SOCKET, ...args]);
 
 let cachedAvailable: boolean | null = null;
+
+// Set from config before the first tmuxAvailable() when the config is read at boot, and again when
+// the user saves a different one. Its commands go in the conf file (a fresh server) and are run live
+// (a server that outlived this process, which ignores the conf).
+let tmuxPrefix: string = TMUX_PREFIX_DEFAULT;
+
+export function setTmuxPrefix(prefix: string): void {
+  if (prefix === tmuxPrefix) return;
+  const previous = tmuxPrefix;
+  tmuxPrefix = prefix;
+  if (cachedAvailable !== true) return;
+  // The old custom key stays bound in the prefix table otherwise; inert without a prefix, but it
+  // would still answer if the user switches back to it later with a stale binding underneath.
+  if (previous !== TMUX_PREFIX_NONE && previous !== "C-b") tmux(["unbind-key", previous]);
+  ensureConf();
+}
 
 // Detected once. Absent (or non-unix) → callers use a direct pty.spawn. On first
 // detection the isolated config is written so `new-session` picks it up via `-f`.
@@ -141,6 +158,7 @@ function applyLiveTmuxOptions(): void {
   // client's forever and every resize would read as a disagreement. A tmux server that predates
   // the conf keeps its status bar across every node restart, so it has to be set live too.
   tmux(["set", "-g", "status", "off"]);
+  tmuxPrefixCommands(tmuxPrefix).forEach((command) => tmux(command.split(" ")));
   // Rebinding is idempotent, so this needs no "is it already ours?" check (unlike the
   // append-only overrides below). A tmux server started before this shipped keeps the
   // five-line jump until it is rebound here — it outlives every node restart.
@@ -274,7 +292,7 @@ export function tmuxScrubEnvNames(names: readonly string[]): void {
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });
-    writeFileSync(CONF_FILE, TMUX_CONF_LINES.join("\n") + "\n");
+    writeFileSync(CONF_FILE, [...TMUX_CONF_LINES, ...tmuxPrefixCommands(tmuxPrefix)].join("\n") + "\n");
     if (tmux(["list-sessions"]).status === 0) {
       applyLiveTmuxOptions();
       scrubGlobalEnvironment();

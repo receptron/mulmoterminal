@@ -418,6 +418,7 @@ describe("loadAppConfig / saveAppConfig", () => {
     sessionReapIntervalHours: 0,
     providers: [],
     terminalSubmit: "cr",
+    tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
     decisionDigest: false,
@@ -473,6 +474,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       sessionReapIntervalHours: 12, // opt-in (#2165): defaults to 0/off, so only a non-zero proves it persisted
       providers: [],
       terminalSubmit: "esc-cr" as const, // a non-default value must round-trip through the file
+      tmuxPrefix: "C-]", // a non-default key must round-trip through the file (#2981)
       keymap: { "zoom-next": "PageDown" }, // a bound shortcut must survive the round-trip too
       copyOnSelect: true,
       decisionDigest: true, // opt-in, so only `true` proves it persisted rather than defaulted
@@ -559,6 +561,7 @@ describe("loadAppConfig / saveAppConfig", () => {
       sessionReapIntervalHours: 0,
       providers: [],
       terminalSubmit: "cr",
+      tmuxPrefix: "none",
       copyOnSelect: false,
       decisionDigest: false,
       questionPaneEnabled: false,
@@ -686,6 +689,7 @@ describe("#741 corrupt config is not silently wiped by a partial update", () => 
     sessionReapIntervalHours: 0,
     providers: [],
     terminalSubmit: "cr" as const,
+    tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
     decisionDigest: false,
@@ -781,6 +785,7 @@ describe("mergeConfigUpdate", () => {
     sessionReapIntervalHours: 0,
     providers: [],
     terminalSubmit: "cr",
+    tmuxPrefix: "none",
     keymap: {},
     copyOnSelect: false,
     decisionDigest: false,
@@ -823,6 +828,13 @@ describe("mergeConfigUpdate", () => {
     expect(next.worklogIntervalHours).toBe(12);
     // a chips-only update must not reset worklog
     expect(mergeConfigUpdate(baseConfig({ worklogEnabled: true }), { chips: ["git"] }).worklogEnabled).toBe(true);
+  });
+
+  it("applies tmuxPrefix from the body (sanitized) and keeps it when omitted (#2981)", () => {
+    expect(emptyConfig().tmuxPrefix).toBe("none");
+    expect(mergeConfigUpdate(baseConfig(), { tmuxPrefix: "C-b" }).tmuxPrefix).toBe("C-b");
+    expect(mergeConfigUpdate(baseConfig(), { tmuxPrefix: "C-; kill-server" }).tmuxPrefix).toBe("none"); // not a key => default
+    expect(mergeConfigUpdate(baseConfig({ tmuxPrefix: "C-]" }), { chips: ["git"] }).tmuxPrefix).toBe("C-]");
   });
 
   it("applies terminalSubmit from the body (sanitized) and keeps it when omitted", () => {
