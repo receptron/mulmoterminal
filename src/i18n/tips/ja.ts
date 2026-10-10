@@ -343,5 +343,8 @@ export const tipsJa: Messages["tips"] = {
     windowUsedResets: "{window} {percent}% 使用、{resets}",
     title: "{agent} の利用上限 — {windows}",
     accountAgent: "{account}（{agent}）",
+    atLimit: "上限",
+    windowResets: "{window} {resets}",
+    noteResets: "{note}{resets}。",
   },
 };

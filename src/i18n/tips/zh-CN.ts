@@ -339,5 +339,8 @@ export const tipsZhCN: Messages["tips"] = {
     windowUsedResets: "{window} 已用 {percent}%，{resets}",
     title: "{agent} 用量上限 — {windows}",
     accountAgent: "{account}（{agent}）",
+    atLimit: "已达上限",
+    windowResets: "{window} {resets}",
+    noteResets: "{note}{resets}。",
   },
 };

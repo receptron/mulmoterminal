@@ -7,6 +7,7 @@
 // before (anthropics/claude-code#40094). Missing renders nothing at all.
 
 import type { RateLimits, RateLimitWindow } from "../../common/rateLimits";
+import { DEFAULT_LOGIN_SHORT_LABEL } from "../../common/tokenRotation";
 import type { Translate } from "../i18n/translate";
 
 export interface RateLimitSnapshot {
@@ -44,6 +45,10 @@ export type ClaudeProbeState = "ok" | "no-claude" | "no-windows" | "no-report";
  *  general no-report line — a wrong reason costs more than a vague one. */
 export type ClaudeProbeStall = "trust-prompt" | "usage-limit" | "unknown";
 
+/** The one silence that is a reading in itself: the subscription is OUT, not unmeasured (#2995). */
+export const atUsageLimit = (probe: ClaudeProbeState | undefined, stall: ClaudeProbeStall | undefined): boolean =>
+  probe === "no-report" && stall === "usage-limit";
+
 // What to put where the Claude figures would be. Silence is right for "we simply have not
 // measured yet", and wrong for the two states that will not resolve on their own: #1011 was a
 // probe loop nobody could see, burning the budget the gauge exists to report.
@@ -60,24 +65,16 @@ const PROBE_NOTES: Record<ClaudeProbeState, string | null> = {
 const TRUST_PROMPT_NOTE = "tips.rateLimit.trustPrompt";
 const USAGE_LIMIT_NOTE = "tips.rateLimit.usageLimit";
 
-/** A short line explaining an absent Claude gauge, or null when there is nothing worth saying —
- *  either it is showing, or it has simply not been measured yet.
- *
- *  Keyed on whether anything is actually DRAWN, not on whether a reading is held: a reading whose
- *  window has already reset is held but not drawn, and that is exactly when the reader most needs
- *  the reason. Checking `snapshot.claude` instead let a stale cached figure suppress the note —
- *  uninstall `claude` and the gauge would go on showing yesterday's percentage, silently. */
-function claudeProbeNote(snapshot: RateLimitSnapshot | null, now_ms: number, translate: Translate): string | null {
-  if (!snapshot) return null;
-  const key = probeNoteKey(snapshot.claude, snapshot.claudeProbe, snapshot.claudeStall, now_ms, TRUST_PROMPT_NOTE);
-  return key && translate(key, {});
-}
-
 // An account's probe runs in the same folder under the account's own login, whose trust answers
 // start empty — so a new claude account meets this prompt first, and it is cleared from a cell ON it.
 const ACCOUNT_TRUST_PROMPT_NOTE = "tips.rateLimit.accountTrustPrompt";
 
-/** The message key for why a claude gauge is absent, or null when there is nothing to say. */
+/** The message key for why a claude gauge is absent, or null when there is nothing to say.
+ *
+ *  Keyed on whether anything is actually DRAWN, not on whether a reading is held: a reading whose
+ *  window has already reset is held but not drawn, and that is exactly when the reader most needs
+ *  the reason. Checking the limits instead let a stale cached figure suppress the note —
+ *  uninstall `claude` and the gauge would go on showing yesterday's percentage, silently. */
 function probeNoteKey(
   limits: RateLimits | null,
   probe: ClaudeProbeState | undefined,
@@ -87,15 +84,39 @@ function probeNoteKey(
 ): string | null {
   if (gaugeWindows(limits, now_ms).length > 0) return null;
   if (probe === "no-report" && stall === "trust-prompt") return trustNote;
-  if (probe === "no-report" && stall === "usage-limit") return USAGE_LIMIT_NOTE;
+  if (atUsageLimit(probe, stall)) return USAGE_LIMIT_NOTE;
   return PROBE_NOTES[probe ?? "ok"];
 }
 
-/** A claude account's gauge that cannot be drawn, and why — named, since several can share the row. */
+/** A claude login's gauge that cannot be drawn, and why — named, since several can share the row. */
 export interface AccountNote {
   key: string;
   label: string;
+  /** Hover text: the login's name and why its figures are missing. */
   note: string;
+  /** Drawn where the figures would be: `n/a`, or the word for a subscription that is out. */
+  status: string;
+  /** At its usage limit — the state that stops the work, drawn in the warning colour (#2995). */
+  warn: boolean;
+}
+
+/** One named entry without figures. `n/a` stays notation, like the figures beside it; the word for
+ *  a login that is out is a word, so it is translated. */
+function loginNote(key: string, label: string, reason: string, warn: boolean, translate: Translate): AccountNote {
+  const note = translate("tips.rateLimit.accountNote", { account: label, note: reason });
+  return { key, label, note, status: warn ? translate("tips.rateLimit.atLimit", {}) : "n/a", warn };
+}
+
+/** Why a subscription is out and, where its last reading still says so, when its windows reset.
+ *  `lastLimits` is sent exactly while a login is held out; a window whose reset has passed is left
+ *  off, since it tells the reader nothing about now. */
+function atLimitReason(lastLimits: RateLimits | null, now_ms: number, translate: Translate): string {
+  const note = translate(USAGE_LIMIT_NOTE, {});
+  const resets = liveWindows(lastLimits, now_ms).flatMap(({ label, window }) => {
+    const resetsText = resetsIn(window.resetsAt_sec, now_ms, translate);
+    return resetsText ? [translate("tips.rateLimit.windowResets", { window: label, resets: resetsText })] : [];
+  });
+  return resets.length ? translate("tips.rateLimit.noteResets", { note, resets: resets.join(" · ") }) : note;
 }
 
 function accountNotes(readings: readonly AccountReading[], now_ms: number, translate: Translate): AccountNote[] {
@@ -103,9 +124,28 @@ function accountNotes(readings: readonly AccountReading[], now_ms: number, trans
     if (reading.agent !== "claude") return [];
     const key = probeNoteKey(reading.limits, reading.probe, reading.probeStall, now_ms, ACCOUNT_TRUST_PROMPT_NOTE);
     if (!key) return [];
-    const note = translate("tips.rateLimit.accountNote", { account: reading.label, note: translate(key, {}) });
-    return [{ key: `account:${reading.id}`, label: reading.label, note }];
+    const warn = atUsageLimit(reading.probe, reading.probeStall);
+    const reason = warn ? atLimitReason(reading.lastLimits ?? null, now_ms, translate) : translate(key, {});
+    return [loginNote(`account:${reading.id}`, reading.label, reason, warn, translate)];
   });
+}
+
+/** The default login's missing-claude line, in whichever of its two forms the row calls for.
+ *
+ *  Alone it is the unnamed `claude usage n/a` with the reason on hover. Once a NAMED claude login
+ *  shares the row it becomes a named entry like theirs, `/login n/a` — beside `a at limit` an
+ *  unnamed line reads as the row's general state rather than as one more login's (#2995). */
+function defaultClaudeNote(
+  snapshot: RateLimitSnapshot | null,
+  now_ms: number,
+  translate: Translate,
+  named: boolean,
+): { note: string | null; entry: AccountNote | null } {
+  const key = snapshot && probeNoteKey(snapshot.claude, snapshot.claudeProbe, snapshot.claudeStall, now_ms, TRUST_PROMPT_NOTE);
+  if (!key) return { note: null, entry: null };
+  if (!named) return { note: translate(key, {}), entry: null };
+  const warn = atUsageLimit(snapshot?.claudeProbe, snapshot?.claudeStall);
+  return { note: null, entry: loginNote("claude", DEFAULT_LOGIN_SHORT_LABEL, translate(key, {}), warn, translate) };
 }
 
 export interface GaugeWindow {
@@ -161,7 +201,8 @@ export interface AgentGauge {
   /** Unique on the row: the agent for the default login, `account:<id>` for an account. */
   key: string;
   agent: "claude" | "codex";
-  /** The account's name, drawn before its figures; absent for the default login. */
+  /** The login's name, drawn before its figures: an account's label, or `/login` for the default
+   *  login once a named login of the same agent shares the row; absent for a default login alone. */
   label?: string;
   /** Hover text and aria-label, from the same windows the figures come from (see gaugeTitle). */
   title: string;
@@ -178,6 +219,10 @@ export interface RateLimitReadout {
   gauges: AgentGauge[];
 }
 
+/** Which agents have a NAMED login on the row — an account's gauge, or a claude login's note. */
+const namedAgents = (accounts: readonly AgentGauge[], notes: readonly AccountNote[]): Set<AgentGauge["agent"]> =>
+  new Set([...accounts.map((gauge) => gauge.agent), ...(notes.length ? ["claude" as const] : [])]);
+
 /**
  * The whole header readout, decided in ONE pass.
  *
@@ -191,23 +236,37 @@ export interface RateLimitReadout {
  * tool still gets no mark — a symbol that distinguishes nothing is one more thing to read.
  */
 export function rateLimitReadout(snapshot: RateLimitSnapshot | null, now_ms: number, translate: Translate): RateLimitReadout {
-  const note = claudeProbeNote(snapshot, now_ms, translate);
-  const claude = gaugeWindows(snapshot?.claude ?? null, now_ms);
-  const codex = gaugeWindows(snapshot?.codex ?? null, now_ms);
-  const accounts = accountGauges(snapshot?.accounts ?? [], now_ms, translate);
-  const notes = accountNotes(snapshot?.accounts ?? [], now_ms, translate);
+  const readings = snapshot?.accounts ?? [];
+  const accounts = accountGauges(readings, now_ms, translate);
+  const notes = accountNotes(readings, now_ms, translate);
+  const named = namedAgents(accounts, notes);
+  const defaultNote = defaultClaudeNote(snapshot, now_ms, translate, named.has("claude"));
+  const allNotes = defaultNote.entry ? [defaultNote.entry, ...notes] : notes;
+  const claude = defaultGauge("claude", snapshot?.claude ?? null, now_ms, named.has("claude"), translate);
+  const codex = defaultGauge("codex", snapshot?.codex ?? null, now_ms, named.has("codex"), translate);
   // An account's gauge or note on the row is one more thing the default's figures could be mistaken for.
-  const marked = note !== null || (claude.length > 0 && codex.length > 0) || accounts.length > 0 || notes.length > 0;
-  const titleOf = (agent: "claude" | "codex") => gaugeTitle(agent, snapshot?.[agent] ?? null, now_ms, translate);
-  return {
-    note,
-    accountNotes: notes,
-    gauges: [
-      ...(claude.length ? [{ key: "claude", agent: "claude" as const, marked, title: titleOf("claude"), windows: claude }] : []),
-      ...(codex.length ? [{ key: "codex", agent: "codex" as const, marked, title: titleOf("codex"), windows: codex }] : []),
-      ...accounts,
-    ],
-  };
+  const marked = defaultNote.note !== null || (claude.length > 0 && codex.length > 0) || accounts.length > 0 || allNotes.length > 0;
+  const mark = (gauge: Omit<AgentGauge, "marked">): AgentGauge => ({ ...gauge, marked });
+  return { note: defaultNote.note, accountNotes: allNotes, gauges: [...claude.map(mark), ...codex.map(mark), ...accounts] };
+}
+
+/** The default login's gauge for one agent, or nothing when it has nothing to show.
+ *
+ *  Unnamed on its own. Once a NAMED login of the same agent shares the row it is labelled `/login`:
+ *  beside `b 5h 2% 7d 0%`, an unnamed `5h 2% 7d 0%` reads as a second copy of b rather than as the
+ *  `/login` account's own figures (#2995). */
+function defaultGauge(
+  agent: AgentGauge["agent"],
+  limits: RateLimits | null,
+  now_ms: number,
+  named: boolean,
+  translate: Translate,
+): Omit<AgentGauge, "marked">[] {
+  const windows = gaugeWindows(limits, now_ms);
+  if (!windows.length) return [];
+  if (!named) return [{ key: agent, agent, title: gaugeTitle(agent, limits, now_ms, translate), windows }];
+  const agentName = translate("tips.rateLimit.accountAgent", { account: DEFAULT_LOGIN_SHORT_LABEL, agent });
+  return [{ key: agent, agent, label: DEFAULT_LOGIN_SHORT_LABEL, title: gaugeTitle(agentName, limits, now_ms, translate), windows }];
 }
 
 /** One gauge per account that has something to show (#2215) — always marked and named, since it

@@ -41,21 +41,26 @@ const accountNotes = computed(() => view.value.accountNotes);
     v-if="probeNote"
     class="ml-1.5 inline-flex flex-none items-center border-l border-border pl-2.5 font-mono text-[12px] leading-none text-dim"
     role="note"
+    :aria-label="probeNote"
     :data-tip="probeNote"
     data-testid="rate-limit-note"
     >claude usage n/a</span
   >
+  <!-- A login that is OUT is the state that stops the work, so it takes the warning colour the
+       gauge gives a window near its ceiling, rather than the muted one for "not measured" (#2995). -->
   <span
     v-for="entry in accountNotes"
     :key="entry.key"
-    class="ml-1.5 inline-flex flex-none items-center gap-1.5 border-l border-border pl-2.5 font-mono text-[12px] leading-none text-dim"
+    class="ml-1.5 inline-flex flex-none items-center gap-1.5 border-l border-border pl-2.5 font-mono text-[12px] leading-none"
+    :class="entry.warn ? 'text-amber' : 'text-dim'"
     role="note"
+    :aria-label="entry.note"
     :data-tip="entry.note"
     data-testid="rate-limit-account-note"
   >
-    <AgentMark agent="claude" class="text-muted" />
+    <AgentMark agent="claude" :class="entry.warn ? 'text-amber' : 'text-muted'" />
     <span class="max-w-[10ch] truncate">{{ entry.label }}</span>
-    <span>n/a</span>
+    <span>{{ entry.status }}</span>
   </span>
   <span
     v-for="gauge in gauges"
@@ -64,7 +69,7 @@ const accountNotes = computed(() => view.value.accountNotes);
     role="img"
     :aria-label="gauge.title"
     :data-tip="gauge.title"
-    :data-testid="gauge.label ? 'rate-limit-account' : undefined"
+    :data-testid="gauge.key.startsWith('account:') ? 'rate-limit-account' : undefined"
   >
     <AgentMark v-if="gauge.marked" :agent="gauge.agent" :class="gauge.windows.some((w) => w.warn) ? 'text-amber' : 'text-muted'" />
     <span v-if="gauge.label" class="max-w-[10ch] truncate font-mono text-[12px] leading-none text-dim" aria-hidden="true">{{ gauge.label }}</span>

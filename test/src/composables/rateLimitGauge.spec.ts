@@ -209,9 +209,10 @@ describe("rateLimitReadout with accounts", () => {
   it("adds a named, marked gauge per account, after the default login's", () => {
     const gauges = gaugesOf({ ...claudeOnly, accounts: [work] }, NOW);
     expect(gauges.map((g) => [g.key, g.label, g.marked])).toEqual([
-      ["claude", undefined, true],
+      ["claude", "/login", true],
       ["account:work", "Work", true],
     ]);
+    expect(gauges[0]?.title).toContain("/login (claude) rate limit");
     expect(gauges[1]?.title).toContain("Work (claude) rate limit");
   });
 
@@ -256,5 +257,77 @@ describe("rateLimitReadout with accounts", () => {
     expect(notesOf({ ...claudeOnly, accounts: [{ ...work, limits: null }] })).toEqual([]);
     expect(notesOf({ ...claudeOnly, accounts: [{ ...stuck, agent: "codex" }] })).toEqual([]);
     expect(notesOf({ ...claudeOnly })).toEqual([]);
+  });
+});
+
+// #2995: an at-limit subscription is a state, not an absence — and the default login is named once
+// it has named company, because an unnamed `5h 2% 7d 0%` beside `b 5h 2% 7d 0%` reads as b twice.
+describe("rateLimitReadout beside named logins (#2995)", () => {
+  const readout = (snapshot: RateLimitSnapshot) => rateLimitReadout(snapshot, NOW, t);
+  const inMinutes = (m: number) => Math.floor(NOW / 1000) + m * 60;
+  const figures = { fiveHour: window(2), sevenDay: window(0) };
+  const a = { id: "a", label: "a", agent: "claude" as const, limits: null, probe: "no-report" as const, probeStall: "usage-limit" as const, rotation: true };
+  const b = { id: "b", label: "b", agent: "claude" as const, limits: figures, probe: "ok" as const, rotation: true };
+
+  it("draws the reporter's row: a says it is out, and the /login figures are named", () => {
+    const { note, accountNotes, gauges } = readout({ claude: figures, codex: null, accounts: [a, b] });
+    expect(note).toBeNull();
+    expect(accountNotes).toMatchObject([{ key: "account:a", label: "a", status: "at limit", warn: true }]);
+    expect(gauges.map((g) => [g.key, g.label])).toEqual([
+      ["claude", "/login"],
+      ["account:b", "b"],
+    ]);
+    expect(gauges[0]?.title).toContain("/login (claude) rate limit");
+  });
+
+  it("says when an at-limit login's windows were last due to reset, leaving out one already past", () => {
+    const lastLimits = { fiveHour: window(100, inMinutes(-5)), sevenDay: window(100, inMinutes(3 * 1440 + 60)) };
+    const [entry] = readout({ claude: null, codex: null, accounts: [{ ...a, lastLimits }] }).accountNotes;
+    expect(entry?.note).toMatch(/^a: .*usage limit.* 7d resets in 3d 1h 0m\.$/);
+    expect(entry?.note).not.toContain("5h");
+  });
+
+  it("gives no reset when none was ever read", () => {
+    const [entry] = readout({ claude: null, codex: null, accounts: [a] }).accountNotes;
+    expect(entry?.note).toMatch(/usage limit/);
+    expect(entry?.note).not.toContain("resets in");
+  });
+
+  it("keeps a login that is merely unmeasured in the muted n/a", () => {
+    const stuck = { ...a, probeStall: "trust-prompt" as const };
+    expect(readout({ claude: null, codex: null, accounts: [stuck] }).accountNotes).toMatchObject([{ status: "n/a", warn: false }]);
+  });
+
+  // The default login's own silence takes the same named form, so a /login account that is out
+  // reads as one more login at its limit rather than as the row's general state.
+  it("names the /login note once a named claude login shares the row", () => {
+    const out = readout({ claude: null, codex: null, claudeProbe: "no-report", claudeStall: "usage-limit", accounts: [b] });
+    expect(out.note).toBeNull();
+    expect(out.accountNotes).toMatchObject([{ key: "claude", label: "/login", status: "at limit", warn: true }]);
+    expect(out.accountNotes[0]?.note).toMatch(/^\/login: .*usage limit/);
+    expect(out.gauges.map((g) => [g.key, g.marked])).toEqual([["account:b", true]]);
+  });
+
+  it("names the /login gauge when the named company is only a note", () => {
+    const { gauges, accountNotes } = readout({ claude: figures, codex: null, accounts: [a] });
+    expect(accountNotes.map((n) => n.key)).toEqual(["account:a"]);
+    expect(gauges.map((g) => [g.key, g.label, g.marked])).toEqual([["claude", "/login", true]]);
+  });
+
+  it("names a default login only beside its own agent's accounts", () => {
+    const work = { id: "work", label: "Work", agent: "codex" as const, limits: figures };
+    const gauges = readout({ claude: figures, codex: figures, accounts: [work] }).gauges;
+    expect(gauges.map((g) => [g.key, g.label])).toEqual([
+      ["claude", undefined],
+      ["codex", "/login"],
+      ["account:work", "Work"],
+    ]);
+  });
+
+  it("leaves a default login on its own exactly as before", () => {
+    const alone = readout({ claude: figures, codex: null, claudeProbe: "ok" });
+    expect(alone.gauges.map((g) => [g.key, g.label, g.marked])).toEqual([["claude", undefined, false]]);
+    expect(alone.accountNotes).toEqual([]);
+    expect(readout({ claude: null, codex: null, claudeProbe: "no-report", claudeStall: "usage-limit" }).note).toMatch(/usage limit/);
   });
 });

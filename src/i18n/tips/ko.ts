@@ -342,5 +342,8 @@ export const tipsKo: Messages["tips"] = {
     windowUsedResets: "{window} {percent}% 사용, {resets}",
     title: "{agent} 사용 한도 — {windows}",
     accountAgent: "{account}({agent})",
+    atLimit: "한도 도달",
+    windowResets: "{window} {resets}",
+    noteResets: "{note} {resets}.",
   },
 };

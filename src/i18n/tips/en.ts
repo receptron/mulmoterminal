@@ -340,5 +340,8 @@ export const tipsEn = {
     windowUsedResets: "{window} {percent}% used, {resets}",
     title: "{agent} rate limit — {windows}",
     accountAgent: "{account} ({agent})",
+    atLimit: "at limit",
+    windowResets: "{window} {resets}",
+    noteResets: "{note} {resets}.",
   },
 } as const;

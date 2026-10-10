@@ -45,6 +45,10 @@ export const ROTATION_TOKEN_EMAIL_MAX = 254;
 /** What a terminal line calls the `/login` credential. */
 export const DEFAULT_LOGIN_LABEL = "the /login account";
 
+/** The same credential where a label-sized word has to do: the header gauge, beside the labels the
+ *  user gave their accounts and tokens. */
+export const DEFAULT_LOGIN_SHORT_LABEL = "/login";
+
 /** What a terminal line calls a credential: its label and address, the `/login` one by name, and a
  *  token gone from the config by its id. */
 export function rotationLoginLabel(rotation: TokenRotation, tokenId: string): string {
