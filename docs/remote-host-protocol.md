@@ -390,7 +390,7 @@ interface TranscriptPage {
 
 `getPastTranscript` reads one page, newest first: omit `before` for the newest page, then hand back
 `older` until it is null. A `pastSessionId` that is not in that directory's list is refused (thrown),
-and so is a cursor this host did not give out.
+and so is a malformed cursor. The cursor is an opaque position, not a capability: it is only ever read inside the session the list already allowed.
 
 ### `MobileFileListing` / `MobileFileContent`
 

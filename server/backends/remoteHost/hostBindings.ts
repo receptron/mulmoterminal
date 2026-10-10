@@ -93,11 +93,12 @@ const launchTerminal = async (deps: RemoteHostDeps, agent: unknown, sessionId: u
   return deps.publishToOne(LAUNCH_TERMINAL_CHANNEL, decision.request) ? { ok: true as const } : { ok: false as const, error: NO_BROWSER_ERROR };
 };
 
-// The directory of a session this host knows — the lookup the phone's list was built from, so a
-// session that outlived a restart still answers (#2181). An empty cwd must never reach a reader:
-// the project directory would resolve against the server process's own.
-const knownCwdOf = (sessionId: string): string => {
-  const cwd = cwdOfSession(sessionId);
+// The directory of a session this host holds RIGHT NOW — the same live-pty-or-tmux test the phone's
+// list is drawn from. `cwdOfSession` alone would answer for any id ever seen, since the remembered
+// directories outlive their sessions. An empty cwd must never reach a reader: the project directory
+// would resolve against the server process's own.
+const knownCwdOf = async (sessionId: string): Promise<string> => {
+  const cwd = (await sessionExistsHere(sessionId)) ? cwdOfSession(sessionId) : "";
   if (!cwd) throw new Error("This host does not know that session.");
   return cwd;
 };
@@ -118,10 +119,10 @@ export function initRemoteHost(deps: RemoteHostDeps): void {
     // which reader answers.
     captureTerminalTranscript: (sessionId) => sessionTranscriptView(cwdOfSession(sessionId), sessionId, { agentOf: agentOfSession }),
     listPastSessions: async (sessionId) => {
-      const cwd = knownCwdOf(sessionId);
+      const cwd = await knownCwdOf(sessionId);
       return { cwd, sessions: await listPastSessions(cwd) };
     },
-    readPastTranscript: async (sessionId, pastSessionId, before) => pastTranscriptPage(knownCwdOf(sessionId), pastSessionId, before),
+    readPastTranscript: async (sessionId, pastSessionId, before) => pastTranscriptPage(await knownCwdOf(sessionId), pastSessionId, before),
     writeToSession,
     // The same two functions the browser's pane reaches through /api/question (#1685): one place
     // decides whether a dialog is still open, and one place decides which bytes reach the PTY.

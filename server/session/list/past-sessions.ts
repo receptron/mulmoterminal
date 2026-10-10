@@ -17,13 +17,15 @@ import {
   antigravityConversationsHydrated,
   backgroundSessionsHydrated,
   isBackgroundSession,
+  refreshAgentConversations,
   sessionMemosHydrated,
   translationWorkerIds,
 } from "../registry.js";
 import { claudeDiskStats, readSessionMeta, transcriptFilesIn } from "../session-reads.js";
 import { agentHomeChoices, codexSessionsUnder } from "../session-home.js";
 import { hasReader, parseTranscriptCursor, sessionTranscriptPage } from "../transcript/transcript-view-read.js";
-import { findPastSession, mergePastSessionRows, type AgentSessionRow, type PastSessionRow } from "./past-session-rows.js";
+import { mergePastSessionRows, type AgentSessionRow, type PastSessionRow } from "./past-session-rows.js";
+import { gatedPastTranscriptPage } from "./past-transcript-gate.js";
 
 /** Rows per agent and in the merged list — the browser's per-agent picker shows the same number. */
 export const PAST_SESSION_LIMIT = 50;
@@ -60,6 +62,9 @@ async function codexRows(cwd: string): Promise<AgentSessionRow[]> {
 
 async function antigravityRows(cwd: string): Promise<AgentSessionRow[]> {
   await antigravityConversationsHydrated;
+  // The rows are drawn from the conversation map, so a conversation another MulmoTerminal process
+  // started since hydration has to be folded in first or it is missing from the list.
+  await refreshAgentConversations();
   return listAntigravitySessions(antigravityBrainRoot(), antigravityConversations.values(), cwd, PAST_SESSION_LIMIT);
 }
 
@@ -101,15 +106,15 @@ export async function listPastSessions(cwd: string): Promise<PastSessionRow[]> {
   return mergePastSessionRows(perAgent, hasReader, PAST_SESSION_LIMIT);
 }
 
-const NOT_SUPPORTED_PAGE: TranscriptPage = { view: { status: "not-supported" }, older: null };
-
-/** One page of a past session's conversation, read only when `cwd`'s own list holds `pastSessionId`.
- *  The list is the containment: codex locates a rollout by id alone, so without it any codex
- *  conversation on this machine would be readable through any open session. */
-export async function pastTranscriptPage(cwd: string, pastSessionId: string, before: string | null): Promise<TranscriptPage> {
-  if (before !== null && parseTranscriptCursor(before) === null) throw new Error("That page cursor is not one this host gave out.");
-  const row = findPastSession(await listPastSessions(cwd), pastSessionId);
-  if (row === null) throw new Error("That session is not among this directory's past sessions.");
-  if (!row.readable) return NOT_SUPPORTED_PAGE;
-  return sessionTranscriptPage(cwd, row.id, before, { agentOf: () => row.agent });
-}
+/** One page of a past session's conversation, read only when `cwd`'s own list holds it. */
+export const pastTranscriptPage = (cwd: string, pastSessionId: string, before: string | null): Promise<TranscriptPage> =>
+  gatedPastTranscriptPage(
+    {
+      listPastSessions,
+      readPage: (dir, id, cursor, agent) => sessionTranscriptPage(dir, id, cursor, { agentOf: () => agent }),
+      isCursor: (cursor) => parseTranscriptCursor(cursor) !== null,
+    },
+    cwd,
+    pastSessionId,
+    before,
+  );
