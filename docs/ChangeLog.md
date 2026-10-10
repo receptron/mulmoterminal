@@ -8,6 +8,18 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@9.9.0 — 2026-10-10
+
+> **Setup guide:** [9.9.0 — Mermaid diagrams in the Files preview](https://receptron.github.io/mulmoterminal/guide/en/v9.9.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.9.0.html))
+
+### Mermaid fences are drawn as diagrams in the Files pane's Preview (#2994)
+
+- A ` ```mermaid ` fence in a Markdown file's Preview (and the side-by-side view) is drawn as a diagram, in the app's theme. The numbered code block stays under it, folded in a **Diagram source** disclosure, so the copy button and the pane's block numbering are untouched; a fence mermaid cannot parse keeps its block open with the error above it (#2991).
+- The Preview's sandbox is unchanged. The server serves mermaid's own ESM build from the installed package under `/api/files/mermaid/<version>/…` (`server/files/mermaidAssets.ts`: an allowlist of the entry and its chunk directory, the CORS header an opaque-origin module fetch needs, immutable caching keyed by the version in the URL), and a Preview document that drew at least one fence ends with a nonce'd `<script type="module">` that imports it and draws each placeholder (`server/files/previewMermaid.ts`). The script draws nothing until the document has a width: the pane loads the Markdown frame while the editor is up, and a document with no layout measures text as zero-size, on which mermaid draws an empty diagram or throws.
+- The plain `…/md` document a new tab opens runs no script, so there the fence stays a code block.
+- The disclosure's label comes from the host in the app's language (`previewCodeCopy.diagramSource`, every locale), through the same message that names the copy buttons.
+- The docs said the Preview's CSP blocks a dynamic import; measured in Chromium and WebKit, an import made by a nonce'd script inherits the nonce, and what blocked it was CORS from the opaque origin. `CLAUDE.md` and `docs/file-surfaces.md` now say so.
+
 ### Bracketed paste is restored after a reload; only the latest tmux is supported (#2990)
 
 - A program that turns bracketed paste (mode 2004) on once at startup lost it from the browser after a reload or reconnect once the replay's bounded tail no longer began at that sequence, so a multi-line paste reached the program as bare CRs. The modes read back from tmux ahead of the replay now include `bracket_paste_flag` (`TERMINAL_MODE_FLAGS` in `server/infra/process/tmux.ts`). The variable exists from tmux 3.7 and an older tmux renders it empty, which reads as off: only the latest tmux release is supported (3.8 as of 2026-10-10), and the README, the getting-started pages, `docs/facts.json` and the bug-report skill now say so.

@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **9.8.0 is out.** A help icon in the toolbar opens a help desk that answers questions about MulmoTerminal, Ctrl+B
-> now reaches your agent instead of tmux, and two layout and connection fixes. [Setup guide](v9.8.0.html)
+> **9.9.0 is out.** A ` ```mermaid ` fence in a Markdown file is drawn as a diagram in the Files pane's Preview, with
+> its code folded underneath, and bracketed paste survives a reload. [Setup guide](v9.9.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
