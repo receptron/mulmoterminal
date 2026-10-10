@@ -26,7 +26,7 @@ const ANSWER_REFUSED = {
 //
 // So the check is not per handler any more. One reader, used by all of them, is what stops the next
 // command being added with the judgement call made again.
-const sessionIdOf = (params: JsonObject): string => {
+export const sessionIdOf = (params: JsonObject): string => {
   const sessionId = typeof params.sessionId === "string" ? params.sessionId : "";
   if (!sessionId) throw new Error("sessionId is required");
   if (!SESSION_ID_RE.test(sessionId)) throw new Error("sessionId is not a session id");

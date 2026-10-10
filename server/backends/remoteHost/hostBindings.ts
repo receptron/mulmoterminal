@@ -15,6 +15,7 @@ import { agentOfSession, cwdOfSession } from "../../session/list/session-lookup.
 import type { SpawnIssueSession } from "../../session/spawn/issue-session-spawn.js";
 import type { SpawnedSession } from "../../git/issue-work.js";
 import { sessionTranscriptView } from "../../session/transcript/transcript-view-read.js";
+import { listPastSessions, pastTranscriptPage } from "../../session/list/past-sessions.js";
 import { writeToSession } from "../../session/write-to-session.js";
 import { answerQuestionOnHost } from "../../session/answerQuestionOnHost.js";
 import type { SpawnClaudePty } from "../../session/spawn/agents/spawn-claude.js";
@@ -92,6 +93,16 @@ const launchTerminal = async (deps: RemoteHostDeps, agent: unknown, sessionId: u
   return deps.publishToOne(LAUNCH_TERMINAL_CHANNEL, decision.request) ? { ok: true as const } : { ok: false as const, error: NO_BROWSER_ERROR };
 };
 
+// The directory of a session this host holds RIGHT NOW — the same live-pty-or-tmux test the phone's
+// list is drawn from. `cwdOfSession` alone would answer for any id ever seen, since the remembered
+// directories outlive their sessions. An empty cwd must never reach a reader: the project directory
+// would resolve against the server process's own.
+const knownCwdOf = async (sessionId: string): Promise<string> => {
+  const cwd = (await sessionExistsHere(sessionId)) ? cwdOfSession(sessionId) : "";
+  if (!cwd) throw new Error("This host does not know that session.");
+  return cwd;
+};
+
 export function initRemoteHost(deps: RemoteHostDeps): void {
   const { spawnClaudePty, toolStores } = deps;
   initRemoteHostBackend({
@@ -107,6 +118,11 @@ export function initRemoteHost(deps: RemoteHostDeps): void {
     // "nothing written" and "this agent's conversation is not readable here yet" (#1822), never
     // which reader answers.
     captureTerminalTranscript: (sessionId) => sessionTranscriptView(cwdOfSession(sessionId), sessionId, { agentOf: agentOfSession }),
+    listPastSessions: async (sessionId) => {
+      const cwd = await knownCwdOf(sessionId);
+      return { cwd, sessions: await listPastSessions(cwd) };
+    },
+    readPastTranscript: async (sessionId, pastSessionId, before) => pastTranscriptPage(await knownCwdOf(sessionId), pastSessionId, before),
     writeToSession,
     // The same two functions the browser's pane reaches through /api/question (#1685): one place
     // decides whether a dialog is still open, and one place decides which bytes reach the PTY.

@@ -11,7 +11,8 @@ import type { TerminalSessionListing } from "../dirIcons.js";
 import type { IngestResult } from "../ingestAttachments.js";
 import type { MobileFileStager } from "../mobileFileStaging.js";
 import type { SessionScreen } from "../terminalScreen.js";
-import type { TranscriptView } from "../../../../common/transcriptView.js";
+import type { TranscriptPage, TranscriptView } from "../../../../common/transcriptView.js";
+import type { PastSessionRow } from "../../../session/list/past-session-rows.js";
 import type { AskQuestionEvent } from "../../../../common/askQuestion.js";
 import type { AnswerResult } from "../../../../common/askQuestion.js";
 
@@ -35,6 +36,10 @@ export interface RemoteHostHandlerDeps {
   // reason above and one more: the transcript lives under the SESSION's directory, so the same
   // lookup that gives the list its cwd is what points this at the right project.
   captureTerminalTranscript: (sessionId: string) => Promise<TranscriptView>;
+  // The past sessions of an open session's DIRECTORY, and one of their conversations (#2999). The
+  // phone names the open session, never the directory — the same boundary as launchTerminal.
+  listPastSessions: (sessionId: string) => Promise<{ cwd: string; sessions: PastSessionRow[] }>;
+  readPastTranscript: (sessionId: string, pastSessionId: string, before: string | null) => Promise<TranscriptPage>;
   // Type into one session's live PTY (#445). Returns false when no PTY is attached
   // in this process — a tmux session that outlived a restart stays viewable but not
   // writable from here.
