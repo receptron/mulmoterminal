@@ -5,7 +5,7 @@ import { questionPaneEnabled, saveQuestionPaneEnabled } from "../../composables/
 import { terminalSubmitMode, saveTerminalSubmitMode } from "../../composables/terminalSubmitMode";
 import { TERMINAL_SUBMIT_MODES, isTerminalSubmitMode } from "../../../common/terminalSubmit";
 import { tmuxPrefix, saveTmuxPrefix } from "../../composables/tmuxPrefix";
-import { TMUX_PREFIX_CHOICES, TMUX_PREFIX_LABEL_KEYS, isTmuxPrefix } from "../../../common/tmuxPrefix";
+import { TMUX_PREFIX_LABEL_KEYS, isTmuxPrefix, tmuxPrefixChoicesFor } from "../../../common/tmuxPrefix";
 
 // The key-behaviour settings that are a single value each, so they get a control here rather
 // than the skill the keymap needs. The keymap itself stays read-only in KeyboardShortcutsSection:
@@ -80,8 +80,8 @@ function onTmuxPrefixChange(e: Event) {
     :aria-label="t('settingsControls.tmuxPrefix.field')"
     @change="onTmuxPrefixChange"
   >
-    <option v-for="choice in TMUX_PREFIX_CHOICES" :key="choice" :value="choice">
-      {{ t(`settingsControls.tmuxPrefix.options.${TMUX_PREFIX_LABEL_KEYS[choice]}`) }}
+    <option v-for="choice in tmuxPrefixChoicesFor(tmuxPrefix)" :key="choice" :value="choice">
+      {{ TMUX_PREFIX_LABEL_KEYS[choice] ? t(`settingsControls.tmuxPrefix.options.${TMUX_PREFIX_LABEL_KEYS[choice]}`) : choice }}
     </option>
   </select>
 </template>

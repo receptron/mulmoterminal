@@ -20,6 +20,11 @@ export const isTmuxPrefix = (input: unknown): input is string => input === TMUX_
 
 export const sanitizeTmuxPrefix = (input: unknown): string => (isTmuxPrefix(input) ? input : TMUX_PREFIX_DEFAULT);
 
+/** The offered choices, plus the value in force when config.json holds a valid key the dropdown does
+ *  not list, so the control shows what is running instead of a blank. */
+export const tmuxPrefixChoicesFor = (current: string): readonly string[] =>
+  TMUX_PREFIX_CHOICES.includes(current) ? TMUX_PREFIX_CHOICES : [...TMUX_PREFIX_CHOICES, current];
+
 const TMUX_OWN_DEFAULT_PREFIX = "C-b";
 
 // The commands that put a prefix in force. Idempotent, so the same lines serve the conf file of a

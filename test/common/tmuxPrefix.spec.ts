@@ -3,6 +3,7 @@ import {
   isTmuxPrefix,
   sanitizeTmuxPrefix,
   staleSendPrefixKeys,
+  tmuxPrefixChoicesFor,
   tmuxPrefixCommands,
   TMUX_PREFIX_CHOICES,
   TMUX_PREFIX_LABEL_KEYS,
@@ -24,6 +25,12 @@ describe("tmuxPrefix (#2981)", () => {
 
   it("has a label key for every choice, none of which holds a path character", () => {
     expect(TMUX_PREFIX_CHOICES.map((choice) => TMUX_PREFIX_LABEL_KEYS[choice])).toEqual(["none", "ctrlB", "ctrlBracket"]);
+  });
+
+  it("adds a valid key the dropdown does not list, so the control can show it", () => {
+    expect(tmuxPrefixChoicesFor("none")).toEqual(TMUX_PREFIX_CHOICES);
+    expect(tmuxPrefixChoicesFor("C-]")).toEqual(TMUX_PREFIX_CHOICES);
+    expect(tmuxPrefixChoicesFor("C-a")).toEqual([...TMUX_PREFIX_CHOICES, "C-a"]);
   });
 
   it("turns the prefix off and unbinds C-b for none", () => {

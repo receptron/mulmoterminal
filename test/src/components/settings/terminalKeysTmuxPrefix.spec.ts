@@ -26,6 +26,13 @@ describe("Terminal keys: tmux prefix", () => {
     expect(tmuxPrefix.value).toBe("C-]");
   });
 
+  it("shows a custom key from config.json as the current choice instead of a blank", () => {
+    setTmuxPrefix("C-a");
+    const select = mount(TerminalKeysSection).findAll("select")[1];
+    expect(select?.element instanceof HTMLSelectElement && select.element.value).toBe("C-a");
+    expect(select?.findAll("option").map((option) => option.element.value)).toEqual(["none", "C-b", "C-]", "C-a"]);
+  });
+
   it("falls back to none for a value the server should never send", () => {
     setTmuxPrefix("C-; kill-server");
     expect(tmuxPrefix.value).toBe("none");
