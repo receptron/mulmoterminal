@@ -79,7 +79,7 @@ Only now collect details.
 ```bash
 node -p "require('<install dir>/package.json').version"   # or the version in the web header
 node -v && uname -sm && echo "$SHELL"
-tmux -V; gh --version | head -1; claude --version; codex --version    # each may be absent
+tmux -V; gh --version | head -1; claude --version; codex --version    # each may be absent; only the latest tmux is supported, so an older one is the first thing to update
 curl --noproxy localhost -s http://localhost:34567/api/update-status
 curl --noproxy localhost -s http://localhost:34567/api/sessions      # summarize: cell count, agents, live vs tmux-only
 curl --noproxy localhost -s "http://localhost:34567/api/git-status?cwd=<dir>"

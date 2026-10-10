@@ -286,7 +286,7 @@ Needs **Node ≥ 22.12**, plus these CLIs — on your `PATH`, or named by the ma
 | **Required** | `git` | [worktree isolation](#git-worktrees--pull-requests), each cell's branch / unsaved-dot / diff readout, the PR footer | `brew install git` · `sudo apt install git` · `sudo dnf install git` · Windows: [git-scm.com](https://git-scm.com/download/win) |
 | **Required** | `gh` | the cross-repo **PRs & Issues** view and one-click PR creation — it uses your `gh` login, so no token is stored | [cli.github.com](https://cli.github.com), then `gh auth login` |
 | Optional | `glab` | the same for **GitLab** projects (#981) — gitlab.com, and a self-hosted instance you declare in `gitlabHosts` (#1332). Same arrangement: the CLI holds the credentials, this app stores no token | `brew install glab`, then `glab auth login` (self-hosted: `glab auth login --hostname gitlab.example.com`) |
-| Recommended | `tmux` | [session persistence](#session-persistence-tmux) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · `sudo dnf install tmux` · no native Windows build (falls back to plain PTYs) |
+| Recommended | `tmux` — the **latest release** (3.8 as of 2026-10-10); older ones are not supported | [session persistence](#session-persistence-tmux) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · `sudo dnf install tmux` · no native Windows build (falls back to plain PTYs) |
 | Optional | any other agent CLI | a cell can run **Codex**, **Antigravity** (`agy`), **Grok**, **Muse**, **GitHub Copilot CLI** or **Cursor CLI** instead of Claude — install only the ones you use, and a missing one simply fails to start that cell. What each can do is [the capability matrix](docs/agent-capability-matrix.md); how to install and pick one is the [agents guide](https://receptron.github.io/mulmoterminal/guide/en/agents.html) | e.g. `npm i -g @openai/codex` |
 | Optional | `ffmpeg` | video rendering from the [mulmo-script panel](#wiki-collections--the-gui-panel) (its plugin ships enabled) | `brew install ffmpeg` · `sudo apt install ffmpeg` · `sudo dnf install ffmpeg` |
 | Optional | `remotion` packages | MulmoCast's `remotion` beats, where Claude Code writes each scene as a Remotion component (mulmocast 2.13.0). Not a dependency of this app: install them yourself, into your home directory so an `npx` upgrade does not lose them — `init` reports whether mulmocast can see them | [Remotion scenes](https://receptron.github.io/mulmoterminal/guide/en/mulmocast.html#remotion) · [日本語](https://receptron.github.io/mulmoterminal/guide/ja/mulmocast.html#remotion) |
@@ -692,6 +692,11 @@ brew install tmux            # macOS (Homebrew)
 sudo apt install tmux        # Debian / Ubuntu
 sudo dnf install tmux        # Fedora
 ```
+
+Use the **latest tmux release** (3.8 as of 2026-10-10); older versions are not supported. Some
+things MulmoTerminal asks tmux for, such as restoring bracketed paste after a reload, need 3.7 or
+newer. A distribution's package is often older, so check `tmux -V` and take a newer build from
+[tmux releases](https://github.com/tmux/tmux/releases) when it is.
 
 On Windows there's no native tmux, so sessions use the non-persistent fallback — run the
 server under **WSL** if you want persistence. Nothing else is required: MulmoTerminal

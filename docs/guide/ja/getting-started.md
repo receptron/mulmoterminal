@@ -207,7 +207,7 @@ claude --version
 |---|---|
 | `git` | [worktree による作業の隔離](features.html)、セルのブランチ表示・未保存ドット・差分パネル、PR フッター |
 | `gh` | [PR / Issue 横断ビュー](github.html)、セルからのワンクリック PR 作成 |
-| `tmux`（推奨） | [セッション永続化](features.html) — サーバを再起動してもターミナルが生き残る |
+| `tmux`（推奨・最新版） | [セッション永続化](features.html) — サーバを再起動してもターミナルが生き残る |
 
 ### git
 
@@ -243,6 +243,10 @@ MulmoTerminal は**この `gh` のログインをそのまま使います**。�
 - **Linux** — `sudo apt install tmux`
 - **Windows** — ネイティブ版はありません。入れなくても動きますが、
   サーバを再起動するとセッションは残りません。
+
+**最新の tmux** を使ってください（2026-10-10 時点で 3.8）。古い版はサポートしません。MulmoTerminal が tmux に尋ねることのうち、
+再読み込み後に括弧付き貼り付けを元に戻すことなどは、3.7 以降が必要です。ディストリビューションのパッケージは古いことが多いので、`tmux -V` で
+確かめ、古ければ [tmux のリリース](https://github.com/tmux/tmux/releases)から新しい版を入れてください。
 
 ---
 
@@ -417,7 +421,7 @@ MulmoTerminal は普段の開発ツールを操縦するコックピットなの
 | **必須** | `git` | [worktree 分離](features.html)、セルのブランチ / 未保存ドット / 差分表示、PR フッター | [ステップ 3](#step3) |
 | **必須** | `gh` | [PR / Issue 横断ビュー](github.html)とワンクリック PR 作成 | [ステップ 3](#step3) |
 | 任意 | `glab` | 同じことを **gitlab.com** のプロジェクトでも — 一覧・issue から着手・MR 作成 | `brew install glab` のあと `glab auth login` |
-| 推奨 | `tmux` | [セッション永続化](features.html) — サーバ再起動でもターミナルが生き残る | `brew install tmux` · `sudo apt install tmux` · Windows ネイティブ版は無し（通常ターミナルにフォールバック） |
+| 推奨 | `tmux`（最新版。2026-10-10 時点で 3.8） | [セッション永続化](features.html) — サーバ再起動でもターミナルが生き残る | `brew install tmux` · `sudo apt install tmux` · Windows ネイティブ版は無し（通常ターミナルにフォールバック） |
 | 任意 | `codex` | セルで [Codex セッション](basics.html#claude-and-codex)を Claude と並べて動かす | `npm i -g @openai/codex` |
 | 任意 | `ffmpeg` | [GUI パネル](features.html)の mulmo-script プラグインからの動画生成 | `brew install ffmpeg` · `sudo apt install ffmpeg` |
 | 任意 | `ollama` | [claude-ollama](claude-ollama.html) — 完全ローカルのモデルで Claude Code を動かす | [ollama.com/download](https://ollama.com/download) |

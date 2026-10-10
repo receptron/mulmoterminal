@@ -240,6 +240,11 @@ MulmoTerminal **uses that `gh` login as-is** — no access token is stored anywh
 - **Windows** — no native build. Everything still works; sessions just don't survive a
   server restart.
 
+Use the **latest tmux** (3.8 as of 2026-10-10); older versions are not supported. Some things
+MulmoTerminal asks tmux for, such as restoring bracketed paste after a reload, need 3.7 or newer. A
+distribution's package is often older, so run `tmux -V` and, if it is, take a newer build from
+[tmux releases](https://github.com/tmux/tmux/releases).
+
 ---
 
 ## Step 4 — start it {#step4}
@@ -416,7 +421,7 @@ costs you that one feature.
 | **Required** | `git` | [worktree isolation](features.html), each cell's branch / unsaved-dot / diff readout, the PR footer | [Step 3](#step3) |
 | **Required** | `gh` | the [cross-repo PRs & Issues view](github.html) and one-click PR creation | [Step 3](#step3) |
 | Optional | `glab` | the same for **gitlab.com** projects — list, start work on an issue, open a merge request | `brew install glab`, then `glab auth login` |
-| Recommended | `tmux` | [session persistence](features.html) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · no native Windows build (plain terminals instead) |
+| Recommended | `tmux` (the latest release, 3.8 as of 2026-10-10) | [session persistence](features.html) — terminals survive a server restart | `brew install tmux` · `sudo apt install tmux` · no native Windows build (plain terminals instead) |
 | Optional | `codex` | [Codex sessions](basics.html#claude-and-codex) in a cell, alongside Claude | `npm i -g @openai/codex` |
 | Optional | `ffmpeg` | video rendering from the [GUI panel](features.html)'s mulmo-script plugin | `brew install ffmpeg` · `sudo apt install ffmpeg` |
 | Optional | `ollama` | [claude-ollama](claude-ollama.html) — Claude Code against a fully local model | [ollama.com/download](https://ollama.com/download) |

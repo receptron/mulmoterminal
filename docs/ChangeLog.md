@@ -8,6 +8,10 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### Bracketed paste is restored after a reload; only the latest tmux is supported (#2990)
+
+- A program that turns bracketed paste (mode 2004) on once at startup lost it from the browser after a reload or reconnect once the replay's bounded tail no longer began at that sequence, so a multi-line paste reached the program as bare CRs. The modes read back from tmux ahead of the replay now include `bracket_paste_flag` (`TERMINAL_MODE_FLAGS` in `server/infra/process/tmux.ts`). The variable exists from tmux 3.7 and an older tmux renders it empty, which reads as off: only the latest tmux release is supported (3.8 as of 2026-10-10), and the README, the getting-started pages, `docs/facts.json` and the bug-report skill now say so.
+
 ## mulmoterminal@9.8.0 — 2026-10-10
 
 > **Setup guide:** [9.8.0 — A help desk, and Ctrl+B reaches your agent](https://receptron.github.io/mulmoterminal/guide/en/v9.8.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.8.0.html))
