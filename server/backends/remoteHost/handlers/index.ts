@@ -26,6 +26,7 @@ import { createListShortcuts } from "./listShortcuts.js";
 import { createListSkills } from "./listSkills.js";
 import { createMobileFileHandlers } from "./mobileFiles.js";
 import { mutateRemoteViewItem } from "./mutateRemoteView.js";
+import { createPastSessionHandlers } from "./pastSessions.js";
 import { createStartChat } from "./startChat.js";
 import { createTerminalSessionHandlers } from "./terminalSession.js";
 import type { RemoteHostHandlerDeps } from "./deps.js";
@@ -68,6 +69,8 @@ export function createRemoteHostHandlers(deps: RemoteHostHandlerDeps): CommandHa
     ...createIssueWorkHandlers(deps),
 
     ...createTerminalSessionHandlers(deps),
+    // Earlier sessions of an open terminal's directory, read as conversations (#2999).
+    ...createPastSessionHandlers(deps),
 
     // Files a project declares under `mobileFiles` in its .mulmoterminal.json (#2911).
     ...createMobileFileHandlers({ workspace, stager: deps.mobileFileStager }),

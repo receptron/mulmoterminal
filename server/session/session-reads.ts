@@ -13,6 +13,7 @@ import type { FileHandle } from "node:fs/promises";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { isRecord } from "../../common/isRecord.js";
+import { hasErrnoCode } from "../errors.js";
 import {
   userPromptText,
   latestMeaningfulUserPromptFromParsed,
@@ -627,6 +628,16 @@ export async function collectOnDiskSessionStats(dir: string, files: string[], ac
     }),
   );
   return stats.filter((s): s is DiskStat => s !== null);
+}
+
+// The transcripts in one project directory; a directory that does not exist yet has none.
+export async function transcriptFilesIn(dir: string): Promise<string[]> {
+  try {
+    return (await fs.readdir(dir)).filter((f) => f.endsWith(".jsonl"));
+  } catch (err) {
+    if (!hasErrnoCode(err) || err.code !== "ENOENT") throw err;
+    return [];
+  }
 }
 
 /** One directory's claude transcripts in EVERY home (#2215), each stat carrying the folder it is in

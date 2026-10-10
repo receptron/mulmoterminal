@@ -37,6 +37,8 @@ grouped in `handlers/terminalSession.ts`.
 | `listTerminalSessions` | — | `{ sessions: TerminalSessionSummary[], icons: Record<string, string> }` |
 | `getTerminalScreen` | `sessionId` | `SessionScreen` |
 | `getTerminalTranscript` | `sessionId` | `TranscriptView` |
+| `listPastSessions` | `sessionId` | `{ cwd, sessions: PastSessionRow[] }` — that session's directory's past sessions |
+| `getPastTranscript` | `sessionId`, `pastSessionId`, `before?` | `TranscriptPage` |
 | `sendTerminalInput` | `sessionId`, `text` | `{ sent: true }` |
 | `launchTerminal` | `agent`, `sessionId` | `{ ok: true }` |
 | `startChat` | `message`, `attachments?` | `{ started: true, chatId }` |
@@ -363,6 +365,32 @@ for; "what did I ask for" is a different question (`PromptsPane`, desktop only).
 **Sub-agents are not expanded.** They live in `<sessionId>/subagents/agent-*.jsonl`, one file each,
 and range from 284 to 20,614 lines — far past any budget. The `Task` tool's own `tool_result` in the
 main file IS the sub-agent's final report, so its opening lines appear in the flow anyway.
+
+### `PastSessionRow` / `TranscriptPage` — a directory's past sessions (#2999)
+
+`listPastSessions` lists the earlier sessions of the directory the named session runs in — every
+hosted agent's, the rows the grid's "or resume here" picker reads — merged newest first and capped.
+The phone names an open session, never a directory, as with `launchTerminal`.
+
+```ts
+interface PastSessionRow {
+  id: string;
+  title: string;
+  mtime: number;       // epoch ms
+  agent: "claude" | "codex" | "antigravity" | "grok" | "muse" | "copilot" | "cursor";
+  readable: boolean;   // false: listed, but no reader here yet — getPastTranscript answers not-supported
+  account?: string;    // the second login it lives under; absent for the default one
+}
+
+interface TranscriptPage {
+  view: TranscriptView;  // as above
+  older: string | null;  // opaque; send back as `before` for the page before this one
+}
+```
+
+`getPastTranscript` reads one page, newest first: omit `before` for the newest page, then hand back
+`older` until it is null. A `pastSessionId` that is not in that directory's list is refused (thrown),
+and so is a cursor this host did not give out.
 
 ### `MobileFileListing` / `MobileFileContent`
 
