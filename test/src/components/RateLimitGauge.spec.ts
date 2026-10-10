@@ -113,3 +113,33 @@ describe("RateLimitGauge", () => {
     expect(note(wrapper).exists()).toBe(false);
   });
 });
+
+// #2995, as reported: `a n/a | 5h 2% 7d 0% | b 5h 2% 7d 0%`, with a out of its week. The reader
+// has to see that a is OUT, not unknown, and which of the two identical figures is the /login one.
+describe("RateLimitGauge beside rotation tokens", () => {
+  it("draws an at-limit token in the warning colour and names the /login figures", async () => {
+    const lastLimits = { fiveHour: null, sevenDay: { usedPercentage: 100, resetsAt_sec: inHours(70) } };
+    const accounts = [
+      { id: "a", label: "a", agent: "claude", limits: null, probing: false, probe: "no-report", probeStall: "usage-limit", lastLimits, rotation: true },
+      { id: "b", label: "b", agent: "claude", limits, probing: false, probe: "ok", rotation: true },
+    ];
+    const wrapper = await showGauge(body({ claude: limits, accounts }));
+
+    const out = wrapper.get('[data-testid="rate-limit-account-note"]');
+    expect(out.text()).toContain("at limit");
+    expect(out.text()).not.toContain("n/a");
+    expect(out.classes()).toContain("text-amber");
+    expect(out.attributes("data-tip")).toMatch(/usage limit.*7d resets in/);
+
+    // Whitespace between the label and the figures is flex gap, not text, so the spans are read one by one.
+    const named = wrapper.findAll('[role="img"]').map((gauge) =>
+      gauge
+        .findAll("span")
+        .map((part) => part.text())
+        .join(" "),
+    );
+    expect(named).toEqual(["/login 5h 12%", "b 5h 12%"]);
+    expect(wrapper.findAll('[data-testid="rate-limit-account"]')).toHaveLength(1);
+    wrapper.unmount();
+  });
+});

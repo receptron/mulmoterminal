@@ -123,7 +123,9 @@ too, the session stays where it is, with Claude Code's own limit message.
   Each shows how much of its weekly allowance is left, and how long until that window resets, taken from the same readings as the toolbar gauge
   (so it is blank until those have been measured, and "At its limit" when it is out).
 - **The toolbar's usage gauge** gets one entry per subscription; hover it for the name and address.
-  A subscription that is out of its allowance says so instead of "no answer".
+  A subscription that is out of its allowance shows `at limit` in the warning colour instead of
+  figures; hover it for when its windows were last due to reset. The `/login` account's own figures
+  are labelled `/login`, so they cannot be read as a second copy of a token's.
 - **"More features" → "Token usage"** lists every subscription with what is left of its 5-hour and
   weekly windows and when each resets. It is in the menu only while token rotation is on.
 

@@ -1,7 +1,7 @@
 // The token usage screen's rows (#2919): what each rotation token has LEFT of its 5h and 7d windows.
 // Pure — the readings and the clock come in.
 import type { RateLimitWindow } from "../../common/rateLimits";
-import type { AccountReading } from "./rateLimitGauge";
+import { atUsageLimit, type AccountReading } from "./rateLimitGauge";
 
 const FULL_PERCENT = 100;
 const MS_PER_SEC = 1000;
@@ -48,7 +48,7 @@ export function windowLeft(window: RateLimitWindow | null, now_ms: number): Toke
 
 function stateOf(reading: AccountReading): TokenUsageState {
   if (reading.limits) return "ok";
-  if (reading.probe === "no-report" && reading.probeStall === "usage-limit") return "at-limit";
+  if (atUsageLimit(reading.probe, reading.probeStall)) return "at-limit";
   return reading.probe === "no-report" ? "no-answer" : "measuring";
 }
 

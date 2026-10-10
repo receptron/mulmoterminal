@@ -115,10 +115,12 @@ session there.
 |---|---|
 | `Work 5h 12% 7d 40%` | The account's windows, named with its label |
 | `Work n/a` | A Claude account that cannot be measured yet. The hover text says why: the trust prompt (step 4), no answer yet (not logged in, or the check is retrying), or API-key billing (no windows) |
+| `Work at limit` | A Claude account that is out of its allowance, in the warning colour. The hover text says when its windows were last due to reset |
+| `/login 5h 2% 7d 0%` | Your usual login's windows, labelled `/login` once an account or a rotation token is on the row |
 | nothing for an account | Not measured yet, or a Codex account with no session yet |
 
-Once any account is on the row, every set of figures carries its tool's mark, so the figures of your
-usual login cannot be mistaken for an account's.
+Once any account is on the row, every set of figures carries its tool's mark and your usual login's
+own entry is labelled `/login`, so its figures cannot be mistaken for an account's.
 
 ## Things that do not work, on purpose
 
