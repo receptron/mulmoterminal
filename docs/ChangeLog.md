@@ -12,6 +12,13 @@ Entries here are folded into the next release's heading when it ships.
 
 - New `tmuxPrefix` setting (`"none"` by default, `"C-b"`, or a control key such as `"C-]"`) for the dedicated tmux server's prefix. The tmux default `C-b` swallowed the first Ctrl+B in a cell and read the next key as a tmux command, which collides with "one character left" in readline, Claude Code's input and the macOS text system. Nothing here uses the prefix, so it is off by default. The lines (`set -g prefix …`, `unbind-key C-b`, `bind-key … send-prefix`) go in `tmux.conf` and are also run on a tmux server that outlived the process, both at boot and when the setting is saved (`common/tmuxPrefix.ts`, `setTmuxPrefix` in `server/infra/process/tmux.ts`). Settings → Terminal keys has a picker. Someone who attaches with tmux and wants `Ctrl+B d` sets `"C-b"`.
 
+### A help desk you can ask about MulmoTerminal (#2984)
+
+- A bundled skill, `mulmoterminal-help`, answers questions about the app — what it can do, how a feature or a part of the screen works, how to set something up, what is new in the running version and in the latest one — from the shipped guide, changelog, source and the running server, never from memory, naming where each fact was checked. It hands "it is broken" to `mulmoterminal-bug-report` and "change it for me" to `mulmoterminal-config`.
+- A **help** icon in the toolbar, next to the gear, opens it in one press; Settings → Help has the same button under its guide links. Both start a terminal in the workspace, and neither asks first, since the skill edits nothing (`src/components/helpChat.ts`). `SkillLaunchButton` takes a `hint` for the same reason: its shared sentence promises config edits.
+- `GET /api/help/sources` tells the skill where the running install keeps its docs and source (`server/help/`), so it reads the version that is actually running rather than a path it guessed.
+- The npm package now ships every guide page (`docs/guide/{en,ja}/*.md`, not only the dated release pages), `docs/ChangeLog.md` and `docs/facts.json`, so the skill works offline and version-exact.
+
 ## mulmoterminal@9.7.0 — 2026-10-10
 
 > **Setup guide:** [9.7.0 — See when a token at its limit resets, and JingleScript reads scores from files](https://receptron.github.io/mulmoterminal/guide/en/v9.7.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.7.0.html))

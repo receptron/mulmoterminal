@@ -13,6 +13,7 @@ import { themeEditorKo } from "./themeEditor/ko";
 import { headerChipsKo } from "./headerChips/ko";
 import { headerButtonsKo } from "./headerButtons/ko";
 import { settingsControlsKo } from "./settingsControls/ko";
+import { settingsHelpKo } from "./settingsHelp/ko";
 import { shortcutsKo } from "./shortcuts/ko";
 import { filesTreeKo } from "./filesTree/ko";
 import { previewCodeCopyKo } from "./previewCodeCopy/ko";
@@ -171,9 +172,7 @@ export const ko: Messages = {
       },
     },
 
-    guide: {
-      prompt: "MulmoTerminal을 어떻게 쓰는지 모르겠다면 가이드를 보세요 ——",
-    },
+    ...settingsHelpKo,
 
     push: {
       intro:

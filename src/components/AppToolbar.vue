@@ -11,6 +11,7 @@ import PaletteSearchBox from "./PaletteSearchBox.vue";
 import RemoteHostControl from "./RemoteHostControl.vue";
 import LauncherButton from "./LauncherButton.vue";
 import CommandPalette from "./CommandPalette.vue";
+import { openHelpChat } from "./helpChat";
 import { openCommandPalette, paletteOpen } from "../composables/commandPalette";
 import { usePaletteKeyAnywhere } from "../composables/usePaletteKeyAnywhere";
 import { useI18n } from "vue-i18n";
@@ -61,6 +62,7 @@ const props = defineProps<{
   listMode?: boolean;
 }>();
 const emit = defineEmits<{ (e: "add-terminal" | "toggle-view" | "settings"): void; (e: "set-sort", mode: SortMode): void }>();
+const openHelp = (): void => void openHelpChat();
 const { t } = useI18n();
 
 const route = useRoute();
@@ -374,6 +376,9 @@ const FEATURE_ACTIONS: Record<FeatureMenuEntry, () => void> = {
         :label="t('commandPalette.open')"
         @click="openCommandPalette"
       />
+      <!-- One press, no dialog: the help desk reads and answers, it edits nothing, so there is no
+           change to warn about before it starts. -->
+      <LauncherButton icon="help" :title="t('tips.toolbar.help')" :label="t('tips.toolbar.help')" data-testid="toolbar-help" @click="openHelp" />
       <LauncherButton icon="settings" :title="t('tips.toolbar.settings')" :label="t('tips.toolbar.settings')" @click="emit('settings')" />
     </div>
     <CommandPalette v-if="paletteOpen" />

@@ -13,6 +13,14 @@ import { UI_LOCALES } from "../../../src/composables/uiLanguage";
 import { closeSettings, openSettingsAt, requestedSettingsTab, settingsOpen } from "../../../src/composables/settingsOpener";
 
 const filesOpened = vi.hoisted(() => [] as [string | null, string][]);
+const helpOpened = vi.hoisted(() => ({ count: 0 }));
+vi.mock("../../../src/components/helpChat", () => ({
+  HELP_SKILL: "mulmoterminal-help",
+  openHelpChat: async () => {
+    helpOpened.count += 1;
+    return null;
+  },
+}));
 vi.mock("../../../src/composables/useFilesView", () => ({
   filesGotoFile: (cwd: string | null, path: string) => {
     filesOpened.push([cwd, path]);
@@ -657,21 +665,30 @@ describe("SettingsModal skill launch confirmation", () => {
   });
 
   // Enumerated from what renders rather than from a list typed here: a button wired straight to the
-  // old path would start a session with no dialog, and only this notices.
-  it("routes every skill button in the modal through it", async () => {
+  // old path would start a session with no dialog, and only this notices. The help desk is the one
+  // deliberate exception (it edits nothing; see "Settings Help tab"), named here so a second one
+  // cannot join it unnoticed.
+  it("routes every skill button in the modal through it, except the help desk", async () => {
     stubServer(true);
     const w = mountModal();
     await flushPromises();
+    // A Set: visited panes stay mounted (v-show), so the same button is met again on every later tab.
+    const exempt = new Set<string>();
     for (const tab of SETTINGS_TABS) {
       await openTab(w, tab);
       await flushPromises();
       for (const button of w.findAllComponents(SkillLaunchButton)) {
+        if (button.props("skill") === "mulmoterminal-help") {
+          exempt.add(button.props("skill"));
+          continue;
+        }
         await button.find("button").trigger("click");
         expect(w.find('[data-testid="skill-launch-confirm"]').exists(), `${tab} did not confirm`).toBe(true);
         expect(w.emitted("launch-skill"), `${tab} started without asking`).toBeUndefined();
         await w.get('[data-testid="skill-launch-cancel"]').trigger("click");
       }
     }
+    expect([...exempt]).toEqual(["mulmoterminal-help"]);
   });
 });
 
@@ -727,5 +744,23 @@ describe("a section asked for by name", () => {
     w.unmount();
     expect(requestedSettingsTab.value).toBeNull();
     expect(settingsOpen.value).toBe(false);
+  });
+});
+
+// The one skill button that does NOT ask first (#2984): the confirm exists to warn before an agent
+// edits the config file, and the help desk only reads. The modal closes and the chat starts at once.
+describe("Settings Help tab", () => {
+  it("starts the help desk on the press, without the confirmation, and closes", async () => {
+    helpOpened.count = 0;
+    const w = await mountTab("help");
+    await flushPromises();
+    const button = w.findAllComponents(SkillLaunchButton).find((b) => b.props("skill") === "mulmoterminal-help");
+    if (!button) throw new Error("no help button on the Help tab");
+    expect(button.text()).toContain(en.settings.help.hint);
+    await button.find("button").trigger("click");
+    expect(w.find('[data-testid="skill-launch-confirm"]').exists()).toBe(false);
+    expect(w.emitted("launch-skill")).toBeUndefined();
+    expect(helpOpened.count).toBe(1);
+    expect(w.emitted("close")).toHaveLength(1);
   });
 });

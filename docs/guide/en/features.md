@@ -230,6 +230,7 @@ so a very large unsaved buffer may not get out.
 | Voice input | Dictate into the prompt via microphone transcription. Settings picks **the language you dictate in** (per browser) — your browser's, per-clip detection, or a fixed one; speaking a language the mic isn't expecting comes back **translated** into the one it is |
 | MCP servers | Join your own HTTP MCP servers to sessions via the MCP SERVERS setting |
 | `/mulmoterminal-bug-report` | Something looks broken? The bundled skill hears the symptom, checks whether it is actually configuration or by design (reading your real config and version), searches the existing issues, and only then helps you file one — with the environment collected and secrets masked |
+| `/mulmoterminal-help` / the toolbar's help icon | Ask anything about MulmoTerminal — what it can do, how a feature or a part of the screen works, how to set something up, what is new in your version and in the latest one — answered from the shipped guide, changelog and source, with the place each fact was checked. The icon next to the gear opens it in one press; it changes nothing |
 
 ![A cell header with the Mulmo dropdown open beside the Skill menu, listing two decks — one declared by the project, one from the workspace's stories directory](../images/mulmo-menu.png)
 

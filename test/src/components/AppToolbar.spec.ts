@@ -21,6 +21,15 @@ vi.mock("../../../src/composables/useShortcuts", async () => {
   return { useShortcuts: () => ({ shortcuts: computed(() => pinned.current) }) };
 });
 
+const helpOpened = vi.hoisted(() => ({ count: 0 }));
+vi.mock("../../../src/components/helpChat", () => ({
+  HELP_SKILL: "mulmoterminal-help",
+  openHelpChat: async () => {
+    helpOpened.count += 1;
+    return null;
+  },
+}));
+
 // The toolbar is ONE component rendered by both views (GridView and App), so which buttons
 // it offers is decided by the route, not by a prop (#886).
 const settle = () => flushPromises();
@@ -508,6 +517,19 @@ describe("AppToolbar — command palette", () => {
     expect(paletteOpen.value).toBe(true);
     expect(document.querySelector('[data-testid="command-palette"]')).not.toBeNull();
     closeCommandPalette();
+    wrapper.unmount();
+  });
+});
+
+// One press, no dialog (#2984): the help desk reads and edits nothing, so there is nothing to confirm.
+describe("AppToolbar help icon", () => {
+  it("sits beside the gear and opens the help desk on the press", async () => {
+    helpOpened.count = 0;
+    const wrapper = await mountAt("/terminals");
+    const help = wrapper.get('[data-testid="toolbar-help"]');
+    expect(help.attributes("aria-label")).toBe("Help — ask about MulmoTerminal");
+    await help.trigger("click");
+    expect(helpOpened.count).toBe(1);
     wrapper.unmount();
   });
 });

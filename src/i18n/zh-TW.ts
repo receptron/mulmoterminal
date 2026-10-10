@@ -13,6 +13,7 @@ import { themeEditorZhTW } from "./themeEditor/zh-TW";
 import { headerChipsZhTW } from "./headerChips/zh-TW";
 import { headerButtonsZhTW } from "./headerButtons/zh-TW";
 import { settingsControlsZhTW } from "./settingsControls/zh-TW";
+import { settingsHelpZhTW } from "./settingsHelp/zh-TW";
 import { shortcutsZhTW } from "./shortcuts/zh-TW";
 import { filesTreeZhTW } from "./filesTree/zh-TW";
 import { previewCodeCopyZhTW } from "./previewCodeCopy/zh-TW";
@@ -171,9 +172,7 @@ export const zhTW: Messages = {
       },
     },
 
-    guide: {
-      prompt: "不確定 MulmoTerminal 怎麼用？看看指南 ——",
-    },
+    ...settingsHelpZhTW,
 
     push: {
       intro: "背景作業完成時，向你註冊過的裝置推播。需要 {remoteHost} 連線 —— 通知的驗證來自它的登入，所以只有在連線時才會送出。",

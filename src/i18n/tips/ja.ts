@@ -315,6 +315,7 @@ export const tipsJa: Messages["tips"] = {
     showStrip: "サムネイル欄を表示",
     showRoster: "一覧を表示",
     settings: "設定",
+    help: "ヘルプ — MulmoTerminal について質問",
     notifications: "通知",
     notificationsOne: "通知 1 件",
     notificationsMany: "通知 {count} 件",

@@ -313,6 +313,7 @@ export const tipsEn = {
     showStrip: "Show thumbnail strip",
     showRoster: "Show list roster",
     settings: "Settings",
+    help: "Help — ask about MulmoTerminal",
     notifications: "Notifications",
     notificationsOne: "1 notification",
     notificationsMany: "{count} notifications",

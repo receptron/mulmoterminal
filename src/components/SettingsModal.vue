@@ -48,6 +48,7 @@ import ModelsSection from "./settings/ModelsSection.vue";
 import TerminalKeysSection from "./settings/TerminalKeysSection.vue";
 import KeyboardShortcutsSection from "./settings/KeyboardShortcutsSection.vue";
 import HelpSection from "./settings/HelpSection.vue";
+import { openHelpChat } from "./helpChat";
 import LanguageSection from "./settings/LanguageSection.vue";
 import SkillLaunchConfirm from "./settings/SkillLaunchConfirm.vue";
 import { SECTION_HEADING } from "./settings/sectionClasses";
@@ -218,6 +219,13 @@ function closeTopmost() {
     return;
   }
   dismissConfirm();
+}
+
+// No confirmation, unlike the skill buttons above: that dialog warns before an agent edits the
+// config file, and the help desk edits nothing. The button's own hint says a terminal opens.
+function startHelp() {
+  emit("close");
+  void openHelpChat();
 }
 
 function startPendingSkill() {
@@ -413,7 +421,7 @@ useModalKeyboard({
             <QuitSection />
           </div>
           <div v-if="visitedTabs.has('help')" v-show="activeTab === 'help'" data-testid="settings-pane-help">
-            <HelpSection />
+            <HelpSection @launch-help="startHelp" />
           </div>
           <div v-if="visitedTabs.has('releaseNotes')" v-show="activeTab === 'releaseNotes'" data-testid="settings-pane-releaseNotes">
             <ReleaseNotesSection />

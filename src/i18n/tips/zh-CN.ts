@@ -313,6 +313,7 @@ export const tipsZhCN: Messages["tips"] = {
     showStrip: "显示缩略图栏",
     showRoster: "显示列表",
     settings: "设置",
+    help: "帮助 —— 询问 MulmoTerminal",
     notifications: "通知",
     notificationsOne: "1 条通知",
     notificationsMany: "{count} 条通知",
