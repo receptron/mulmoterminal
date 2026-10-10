@@ -1,4 +1,10 @@
 export const settingsControlsKo = {
+  tmuxPrefix: {
+    title: "tmux prefix 키",
+    hint: '각 셀 아래의 터미널 멀티플렉서가 명령을 기다리게 하는 키입니다. MulmoTerminal은 사용하지 않으며, 기본 Ctrl+B는 셸과 Claude Code에서도 "한 글자 왼쪽"이므로 기본적으로 꺼 두고 모든 키를 에이전트에 전달합니다. tmux에 직접 접속해 쓸 때만 바꾸세요.',
+    field: "tmux prefix 키",
+    options: { none: "끔: 모든 키를 에이전트에 전달 (기본)", ctrlB: "Ctrl+B (tmux 기본값, 셀에서 Ctrl+B가 소비됨)", ctrlBracket: "Ctrl+]" },
+  },
   defaultAgent: {
     title: "기본 에이전트",
     hint: "새 셀의 실행 폼에서 직접 고르기 전까지 처음 선택되어 있는 에이전트이며, MulmoTerminal이 시작할 때 설치 여부를 확인하는 에이전트이기도 합니다.",

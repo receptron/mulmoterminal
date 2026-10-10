@@ -129,7 +129,7 @@ git チェックアウトならその横に `commit a1b2c3d` のチップが並�
 | **Directory settings** | 各ディレクトリの `.mulmoterminal.json` が**実際に何をしているか**。行を開くと、効いている値（色は見本付き）・**どのファイル由来か**・**検証で落ちたキー**・**このアプリが読まないキー**が出ます。下の **ここで変える** で名前・色・状態の色・テーマ・配色・フォント・優先順・モデル・終わりの要約・追加のディレクトリ・アイコン・背景・音・ヘッダーのボタン・チップ・コマンドを変えられます（→ [プロジェクトごとの設定](#per-dir)）。「Explain my settings…」で `mulmoterminal-config` スキルが同じものを読み、理由を説明して直します（→ [設定が効かないとき](#dir-settings-preview)） |
 | **Launch commands** | グリッドセルでエージェント以外に起動できるコマンド（`{ label, command }`）。素のシェルは登録不要 — ランチャの **Shell** トグルが無設定で `$SHELL` を開く |
 | **Header buttons and chips** | グローバル設定のヘッダーのボタンとチップを、ここで編集します — 追加・編集・削除、ボタンをフォルダにまとめる操作、状態ごとの色、ヘッダーの状態の色づけも。「Set up header buttons…」で `mulmoterminal-header` スキルを起動（→ [ヘッダーのカスタマイズ](#header)） |
-| **Terminal keys** | [選ぶだけでコピー](#copy-on-select)（`copyOnSelect`、既定 OFF）、[質問ペイン](#question-pane)（`questionPaneEnabled`）、あなたの Claude が**送信**として読むバイト（[Enter — 送信と改行](#terminal-submit)、`terminalSubmit`） |
+| **Terminal keys** | [選ぶだけでコピー](#copy-on-select)（`copyOnSelect`、既定 OFF）、[質問ペイン](#question-pane)（`questionPaneEnabled`）、あなたの Claude が**送信**として読むバイト（[Enter — 送信と改行](#terminal-submit)、`terminalSubmit`）、[tmux の prefix キー](#tmux-prefix)（`tmuxPrefix`、既定は無効） |
 | **Keyboard shortcuts** | 全アクションと `send` の行を、割り当ての有無にかかわらず並べる一覧（読み取り専用）。**既定は全部 Not set** — **おすすめのキー** を押すと、このプラットフォーム向けの入門セットが一度に入ります（まだ割り当てのない動作と、使われていないキーにだけ）。それ以外は「Set up shortcuts…」で `mulmoterminal-keys` スキルが `keymap` に書きます（→ [キーボードショートカット](#keymap)） |
 | **Voice input** | 音声入力で**話す言語**（ブラウザの言語 / 発話ごとの自動検出 / 固定）。文字起こしできるマシンでだけ表示されます |
 | **Models and backends** | セッションを動かせるバックエンドと、**今それぞれ到達できるか**（読み取り専用）。「Add a backend…」で `mulmoterminal-model` スキルを起動（→ [別のモデルで動かす](providers.html)） |
@@ -998,6 +998,26 @@ Shift+Enter が改行ではなく*送信*になってしまう場合だけ**で�
   画面上のキーボードから改行は入れられません。複数行はリモートビューの入力欄から送ってください。
 - **日本語などの IME 入力** — 変換中の **Enter は変換確定**として扱われ、どちらのモードでも送信/改行
   にはなりません。日本語入力に影響はありません。
+
+## tmux の prefix キー（`tmuxPrefix`） {#tmux-prefix}
+
+各セルは、再起動してもセッションが残るように、専用の tmux の中で動いています。tmux は **prefix キー**（標準は **Ctrl+B**）を
+待ち受け、その次のキーを tmux のコマンドとして読みます。これが **Ctrl+B ＝「1文字左」** と重なります。シェルの行編集、
+Claude Code の入力欄、macOS のテキスト入力のどれもこの割り当てで、1回目は無視されたように見え、次に押したキー（`c`、`%`、`d`）は
+エージェントに届かず tmux のコマンドになってしまいます。MulmoTerminal は prefix を使わないので、**既定では無効**にして、
+すべてのキーをエージェントへ渡します。
+
+```jsonc
+{ "tmuxPrefix": "none" }   // 既定: prefix なし。すべてのキーがエージェントへ
+{ "tmuxPrefix": "C-b" }    // tmux 本来の既定
+{ "tmuxPrefix": "C-]" }    // カーソル操作と重ならない prefix
+```
+
+- 値は `none`、または Control と `a`-`z`・`Space`・`]`・`_`・`^`・`@` のいずれか 1 つです。それ以外は `none` に戻ります。
+- 変えるのは、自分でセッションに接続して（`tmux -L mulmoterminal attach`）`Ctrl+B d`（デタッチ）などの tmux のキー操作を使いたいときだけです。
+  マウスのホイールによる履歴のスクロールは、どの設定でも使えます。
+- 保存すると、すでに動いている tmux サーバーへ反映されます。再起動は要りません。**Settings -> Terminal keys** に、上の 3 つから選ぶ項目があります。
+
 
 ## 通知音（`soundKinds` / `sounds`） {#sounds}
 

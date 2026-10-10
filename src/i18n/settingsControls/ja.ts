@@ -1,4 +1,10 @@
 export const settingsControlsJa = {
+  tmuxPrefix: {
+    title: "tmux の prefix キー",
+    hint: "各セルの下で動く端末多重化ソフトが、コマンドを待ち受けるキーです。MulmoTerminal はこれを使いません。標準の Ctrl+B はシェルや Claude Code でも「1文字左」なので、既定では無効にして、すべてのキーをエージェントへ渡します。tmux に自分で接続して使う場合だけ変えてください。",
+    field: "tmux の prefix キー",
+    options: { none: "無効：すべてのキーをエージェントへ渡す（既定）", ctrlB: "Ctrl+B（tmux 本来の既定。セルで Ctrl+B が吸われます）", ctrlBracket: "Ctrl+]" },
+  },
   defaultAgent: {
     title: "既定のエージェント",
     hint: "新しいセルの起動フォームで、そこで選ぶまで最初に選ばれているエージェント。MulmoTerminal が起動するときにインストールされているかを確かめるのもこのエージェントです。",

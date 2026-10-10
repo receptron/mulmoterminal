@@ -1,4 +1,10 @@
 export const settingsControlsEn = {
+  tmuxPrefix: {
+    title: "tmux prefix key",
+    hint: 'the key that makes the terminal multiplexer under each cell wait for a command. MulmoTerminal never uses it, and the usual Ctrl+B is also "one character left" in the shell and in Claude Code, so it is off by default and every key reaches the agent. Change it only if you attach to the sessions yourself with tmux.',
+    field: "Which key is the tmux prefix",
+    options: { none: "Off: every key goes to the agent (default)", ctrlB: "Ctrl+B (tmux's own default; swallows Ctrl+B in the cell)", ctrlBracket: "Ctrl+]" },
+  },
   defaultAgent: {
     title: "Default agent",
     hint: "What a new cell's launch form starts on until you pick something there, and the agent MulmoTerminal checks is installed when it starts.",
