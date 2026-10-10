@@ -17,4 +17,9 @@ export const previewCodeCopyKo = {
     manualMarked: "선택되어 있으니 평소 쓰는 키로 복사하세요. <U+…> 표기는 원래 문자가 아니라 적힌 그대로의 문자열로 복사됩니다.",
     continuesBelow: "아래에 내용이 더 있습니다. 끝까지 스크롤해 확인한 뒤 복사하세요.",
   },
+  // The copy button on a code block in rendered markdown (#2998), worded as MulmoClaude's.
+  markdownCodeCopy: {
+    copyLabel: "코드 복사",
+    copiedLabel: "복사됨",
+  },
 };

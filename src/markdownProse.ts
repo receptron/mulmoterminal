@@ -9,8 +9,8 @@
 // input is LLM-authored and reaches the DOM through `v-html`. Same sanitizer, same defaults, so a
 // hardening applied to one is not silently missing from the other — the one thing worth keeping
 // identical between them.
-import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { parseMarkdown } from "./appMarked";
 
 export interface ProseOptions {
   /** The one remote origin whose images may load. Only for markdown this repo ships (the release
@@ -23,10 +23,6 @@ export interface ProseOptions {
 
 /** Render `markdown` to HTML that is safe to hand to `v-html`.
  *
- *  `{ async: false }` makes marked return synchronously, but its declared return type is still
- *  `string | Promise<string>` — checked rather than asserted, so a future default flip cannot hand
- *  DOMPurify a Promise (which sanitizes to the string "[object Promise]").
- *
  *  EVERY LINK IS SENT TO A NEW TAB, and that is not decoration: MulmoTerminal is a single page
  *  holding live terminals, open panes and unsaved editor buffers, so an ordinary in-page navigation
  *  out of an agent's reply takes all of it with it and offers no way back. Agent replies are full of
@@ -34,8 +30,7 @@ export interface ProseOptions {
  *  — and it is set AFTER sanitizing so DOMPurify cannot be asked to allow an attribute we then have
  *  to trust it stripped correctly (Claude review, round 1). */
 export function renderMarkdownProse(markdown: string, options: ProseOptions = {}): string {
-  const parsed = marked.parse(markdown, { async: false });
-  const clean = DOMPurify.sanitize(typeof parsed === "string" ? parsed : "");
+  const clean = DOMPurify.sanitize(parseMarkdown(markdown));
   const doc = new DOMParser().parseFromString(clean, "text/html");
   doc.body.querySelectorAll("*").forEach(keepPermittedAttributes);
   doc.querySelectorAll("img[src]").forEach((image) => {
@@ -67,7 +62,12 @@ export function renderMarkdownProse(markdown: string, options: ProseOptions = {}
  *  What each entry is for: `a` carries the link (which fetches only when a reader opens it), `img`
  *  the picture, `input` the task-list checkbox GFM emits, `th`/`td` the table alignment, `ol` a list
  *  that starts at something other than 1. `code`'s `class="language-ts"` is dropped deliberately —
- *  nothing here highlights, and `.md-prose pre code` styles by tag. */
+ *  nothing here highlights, and `.md-prose pre code` styles by tag.
+ *
+ *  The rest is the code-block copy button (#2998): the wrapper's marker, the button's nonce and
+ *  labels, and its icon's geometry. No `class` among them — the button is styled by attribute in
+ *  src/style.css — so an author still cannot lay a decoy over a block. A forged button is inert: the
+ *  click listener copies nothing without this document's nonce. */
 const PERMITTED_ATTRIBUTES: Record<string, readonly string[]> = {
   A: ["href", "title"],
   IMG: ["src", "alt", "title"],
@@ -75,6 +75,11 @@ const PERMITTED_ATTRIBUTES: Record<string, readonly string[]> = {
   TH: ["align", "colspan", "rowspan"],
   TD: ["align", "colspan", "rowspan"],
   OL: ["start"],
+  DIV: ["data-code-copy-block"],
+  BUTTON: ["type", "data-code-copy", "data-code-copy-idle", "data-code-copy-copied", "aria-label", "title"],
+  svg: ["viewbox", "fill", "stroke", "stroke-width", "stroke-linecap", "stroke-linejoin", "aria-hidden"],
+  rect: ["x", "y", "width", "height", "rx"],
+  path: ["d"],
 };
 
 function keepPermittedAttributes(element: Element): void {

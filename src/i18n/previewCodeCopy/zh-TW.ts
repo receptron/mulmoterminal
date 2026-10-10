@@ -17,4 +17,9 @@ export const previewCodeCopyZhTW = {
     manualMarked: "已選取，請用慣用的快捷鍵複製。<U+…> 標記會按寫出的文字複製，而不是它所代表的字元。",
     continuesBelow: "下方還有內容——請捲動到結尾確認後再複製。",
   },
+  // The copy button on a code block in rendered markdown (#2998), worded as MulmoClaude's.
+  markdownCodeCopy: {
+    copyLabel: "複製程式碼",
+    copiedLabel: "已複製",
+  },
 };

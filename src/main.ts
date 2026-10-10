@@ -12,6 +12,7 @@ import { installFileDropGuard } from "./composables/useFileDropGuard";
 import { installPageZoomGuard } from "./composables/usePageZoomGuard";
 import { router } from "./router";
 import { i18n } from "./i18n";
+import { installMarkdownCodeCopy } from "./appMarked";
 import { enableManifoldCsg } from "@gui-chat-plugin/shapescript";
 import App from "./App.vue";
 
@@ -28,6 +29,10 @@ installFileDropGuard();
 // layout and xterm's fit out from under the user. Same window-level shape as the drop guard;
 // keyboard zoom stays available for anyone who wants it on purpose.
 installPageZoomGuard();
+
+// The copy button on every code block in rendered markdown copies through one listener on the
+// document, which checks the button's nonce before writing anything to the clipboard.
+installMarkdownCodeCopy(document);
 
 // Mount only AFTER the router's initial (async) navigation resolves. On a hard
 // reload / deep-link to /terminals, mounting eagerly would first render the single
