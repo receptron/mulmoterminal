@@ -481,7 +481,7 @@ defineExpose({
 
 <template>
   <div class="relative flex min-h-0 min-w-0 flex-auto flex-col" @keydown="onKeydown">
-    <header class="flex flex-none items-center gap-2.5 border-b border-border bg-panel px-4 py-2">
+    <header class="flex flex-none flex-wrap items-center justify-end gap-x-2.5 gap-y-1.5 border-b border-border bg-panel px-4 py-2">
       <slot name="title" />
       <span class="flex-auto" />
       <span v-if="openPath && !showStrip" class="min-w-0 truncate font-mono text-[12px]" :class="dirty ? 'text-fg' : 'text-secondary'"
