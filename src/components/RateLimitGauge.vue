@@ -41,6 +41,7 @@ const accountNotes = computed(() => view.value.accountNotes);
     v-if="probeNote"
     class="ml-1.5 inline-flex flex-none items-center border-l border-border pl-2.5 font-mono text-[12px] leading-none text-dim"
     role="note"
+    :aria-label="probeNote"
     :data-tip="probeNote"
     data-testid="rate-limit-note"
     >claude usage n/a</span
@@ -53,6 +54,7 @@ const accountNotes = computed(() => view.value.accountNotes);
     class="ml-1.5 inline-flex flex-none items-center gap-1.5 border-l border-border pl-2.5 font-mono text-[12px] leading-none"
     :class="entry.warn ? 'text-amber' : 'text-dim'"
     role="note"
+    :aria-label="entry.note"
     :data-tip="entry.note"
     data-testid="rate-limit-account-note"
   >

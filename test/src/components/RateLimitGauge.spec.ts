@@ -98,7 +98,7 @@ describe("RateLimitGauge", () => {
 
     expect(note(wrapper).exists()).toBe(true);
     expect(wrapper.text()).toContain("7d 71%");
-    expect(wrapper.get("[aria-label]").attributes("aria-label")).toContain("codex rate limit");
+    expect(wrapper.get('[role="img"]').attributes("aria-label")).toContain("codex rate limit");
     expect(wrapper.findComponent({ name: "AgentMark" }).props("agent")).toBe("codex");
     wrapper.unmount();
   });
@@ -130,6 +130,8 @@ describe("RateLimitGauge beside rotation tokens", () => {
     expect(out.text()).not.toContain("n/a");
     expect(out.classes()).toContain("text-amber");
     expect(out.attributes("data-tip")).toMatch(/usage limit.*7d resets in/);
+    // The same text is the accessible name, so a screen reader hears the reset without a mouse.
+    expect(out.attributes("aria-label")).toBe(out.attributes("data-tip"));
 
     // Whitespace between the label and the figures is flex gap, not text, so the spans are read one by one.
     const named = wrapper.findAll('[role="img"]').map((gauge) =>
