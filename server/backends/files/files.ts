@@ -16,7 +16,9 @@
 //   - `Content-Security-Policy: sandbox` + `X-Content-Type-Options: nosniff` so an
 //     `.svg`/`.html` with embedded JS can't run in the app origin via direct
 //     navigation or <iframe>; PDFs skip the sandbox CSP (WebKit refuses to render
-//     sandbox-opaque PDFs) but keep nosniff. Matches MulmoClaude's RAW_SECURITY_HEADERS.
+//     sandbox-opaque PDFs) but keep nosniff, and so do audio / video (Chrome's media page
+//     cannot fetch the file from the sandbox's opaque origin, so it never plays). The PDF rule
+//     matches MulmoClaude's RAW_SECURITY_HEADERS; the media one is ours — see rawServingPlan.
 import path from "node:path";
 import os from "node:os";
 import type { Express, Request, Response } from "express";
@@ -102,8 +104,8 @@ export function mountFilesRoutes(app: Express, deps: { workspace: string; sessio
 
     res.setHeader("Content-Type", plan.contentType);
     res.setHeader("X-Content-Type-Options", "nosniff");
-    // An SVG/HTML with embedded JS must not escape into the app origin; PDFs are the sole
-    // exception (WebKit won't render a sandbox-opaque PDF). See rawServingPlan.
+    // An SVG/HTML with embedded JS must not escape into the app origin; PDFs and audio/video are
+    // the exceptions (a browser cannot show them sandboxed). See rawServingPlan.
     if (plan.sandbox) res.setHeader("Content-Security-Policy", "sandbox");
     res.setHeader("Accept-Ranges", "bytes");
     // The name a save from the browser gets. Without it the browser falls back to the URL's last

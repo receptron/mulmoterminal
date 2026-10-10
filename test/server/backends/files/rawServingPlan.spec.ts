@@ -53,13 +53,19 @@ describe("rawServingPlan — the sandbox boundary", () => {
     for (const p of ["/w/x.png", "/w/x.txt", "/w/x.xyz"]) expect(rawServingPlan(p, 1).sandbox).toBe(true);
   });
 
-  // The deliberate exception — and the only one. WebKit won't render a sandbox-opaque PDF.
+  // The deliberate exceptions. WebKit won't render a sandbox-opaque PDF.
   it("does NOT sandbox a PDF", () => {
     expect(rawServingPlan("/w/x.pdf", 1).sandbox).toBe(false);
   });
 
-  it("still sandboxes everything that is not a PDF", () => {
-    for (const p of ["/w/x.mp4", "/w/x.json", "/w/x.gif"]) expect(rawServingPlan(p, 1).sandbox).toBe(true);
+  // Chrome's media page re-fetches the file from the sandbox's `null` origin, CORS blocks it, and
+  // the player opens with nothing to play — a collection's MP3 link did exactly that.
+  it.each(["/w/x.mp3", "/w/x.m4a", "/w/x.wav", "/w/x.ogg", "/w/x.mp4", "/w/x.webm", "/w/X.MOV"])("does NOT sandbox the media file %s", (p) => {
+    expect(rawServingPlan(p, 1).sandbox).toBe(false);
+  });
+
+  it("still sandboxes everything that is not a PDF or media", () => {
+    for (const p of ["/w/x.json", "/w/x.gif", "/w/x.html", "/w/x.svg"]) expect(rawServingPlan(p, 1).sandbox).toBe(true);
   });
 });
 
