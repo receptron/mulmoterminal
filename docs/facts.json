@@ -12,7 +12,7 @@
   "requires": {
     "node": ">=22.12",
     "agentCli": ["claude", "codex"],
-    "tmux": "optional — required for session persistence"
+    "tmux": "optional — required for session persistence; the latest release only (3.8 as of 2026-10-10)"
   },
   "interface": {
     "type": "browser",

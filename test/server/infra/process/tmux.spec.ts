@@ -432,7 +432,7 @@ describe("parseTmuxClientSessions", () => {
 });
 
 // Fields, in order: alternate_on, mouse_standard_flag, mouse_button_flag, mouse_all_flag,
-// mouse_utf8_flag, mouse_sgr_flag.
+// mouse_utf8_flag, mouse_sgr_flag, bracket_paste_flag.
 describe("parseTmuxTerminalModes", () => {
   // Measured on a live Claude Code 2.1.220 pane under tmux 3.6a.
   it("reads a mouse TUI's pane as the alternate buffer plus its tracking and SGR modes", () => {
@@ -440,7 +440,23 @@ describe("parseTmuxTerminalModes", () => {
   });
 
   it("reads a plain shell's pane as nothing to restore", () => {
-    expect(parseTmuxTerminalModes("0,0,0,0,0,0\n")).toEqual([]);
+    expect(parseTmuxTerminalModes("0,0,0,0,0,0,0\n")).toEqual([]);
+  });
+
+  // #2990: a program that turned bracketed paste on once, long before the replay's tail begins.
+  it("restores bracketed paste, alone or with the screen and mouse modes", () => {
+    expect(parseTmuxTerminalModes("0,0,0,0,0,0,1\n")).toEqual([2004]);
+    expect(parseTmuxTerminalModes("1,0,1,0,0,1,1\n")).toEqual([1049, 1002, 1006, 2004]);
+  });
+
+  it("does not restore bracketed paste once the program turned it off", () => {
+    expect(parseTmuxTerminalModes("1,0,1,0,0,1,0\n")).toEqual([1049, 1002, 1006]);
+  });
+
+  // A tmux older than the variable renders it empty: the other modes still come back, and
+  // bracketed paste is simply not restored there.
+  it("leaves bracketed paste out when this tmux has no such variable", () => {
+    expect(parseTmuxTerminalModes("1,0,1,0,0,1,\n")).toEqual([1049, 1002, 1006]);
   });
 
   it("maps the older tracking flags too", () => {

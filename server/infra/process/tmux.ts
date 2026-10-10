@@ -407,6 +407,10 @@ export function tmuxPaneCommand(id: string): string | null {
 //
 // 1001/1015/1016 are in the client's swallow set but tmux has no flag for them. No agent we run
 // asks for them, and the client needs 1006 plus one tracking mode — which this covers.
+//
+// 2004 (bracketed paste) is set once at startup like the rest, and without it a multi-line paste
+// after a reload reaches the program as bare CRs (#2990). `bracket_paste_flag` exists from tmux 3.7;
+// we support the latest tmux only, and an older one renders it empty, which parses as "off".
 const TERMINAL_MODE_FLAGS = [
   { flag: "alternate_on", mode: 1049 },
   { flag: "mouse_standard_flag", mode: 1000 },
@@ -414,6 +418,7 @@ const TERMINAL_MODE_FLAGS = [
   { flag: "mouse_all_flag", mode: 1003 },
   { flag: "mouse_utf8_flag", mode: 1005 },
   { flag: "mouse_sgr_flag", mode: 1006 },
+  { flag: "bracket_paste_flag", mode: 2004 },
 ] as const;
 
 // Comma-separated, not space: a variable an older tmux doesn't know renders EMPTY, and only a
