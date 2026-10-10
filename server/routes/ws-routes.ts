@@ -11,8 +11,7 @@ import type { IncomingMessage, Server } from "node:http";
 import type { Duplex } from "node:stream";
 import { randomUUID } from "node:crypto";
 import { messageOf } from "../errors.js";
-import { CLAUDE_CWD, SESSION_ID_RE } from "../config/env.js";
-import { workspaceRequest } from "../config/workspace.js";
+import { SESSION_ID_RE } from "../config/env.js";
 import { getHeaderConfig } from "../config/config-routes.js";
 import { buildHeaderContext, loadHeaderConfig } from "../config/header/header-context.js";
 import { resolveButtonCommand } from "../config/header/header-resolve.js";
@@ -42,14 +41,15 @@ import {
   ptys,
 } from "../session/registry.js";
 import { ptyWouldReattach } from "../session/pty/pty-spawn.js";
-import { bufferEarlyFrames, type EarlyFrames } from "../session/pty/early-frames.js";
+import type { EarlyFrames } from "../session/pty/early-frames.js";
+import { acceptTerminalConnection, type WsUpgradeRequest } from "./ws-accept.js";
 // Re-exported so the endpoint guard keeps its long-standing import path (its spec, and any reader
 // looking for it where it has always been).
 export { settledEntry, startFailureMessageFor, wrongEndpointReason } from "./ws-endpoint-guard.js";
 import { claudeStartFailureMessage, settledEntry, startFailureMessageFor } from "./ws-endpoint-guard.js";
 import { registeredGuiMcpGroups } from "../infra/process/gui-mcp-registration.js";
 import { TOOL_GROUPS, type ToolGroup } from "../../common/toolGroups.js";
-import { parseTerminalSize, type TerminalSize } from "../../common/terminalSize.js";
+import type { TerminalSize } from "../../common/terminalSize.js";
 import { handleCommandFrame } from "../session/pty/pty-connection.js";
 import { closeWithError } from "../session/ws-frames.js";
 import { settleCredential } from "../session/credentials/credential-announce.js";
@@ -156,37 +156,6 @@ export function effectiveSessionCwd(liveCwd: string | undefined, requestCwd: str
   return liveCwd ?? requestCwd;
 }
 
-// The slice of Node's IncomingMessage the upgrade handlers read. Structural rather than the
-// real type so a test can hand over a literal; `| undefined` because IncomingMessage.url is
-// genuinely absent on some upgrades.
-type WsUpgradeRequest = { url?: string | undefined; headers?: unknown };
-
-// The default is still what an unusable `?cwd=` resolves to, because a REATTACH is allowed to
-// proceed on it (see refuseUnusableWorkspace) and handing tmux a directory that is not there
-// would break the one path this must not break.
-export function workspaceFromUrl(url: URL): { cwd: string; unusable: string | null } {
-  // getAll, not get: a repeated `?cwd=a&cwd=b` names two directories, and `get` would silently
-  // pick the first — the same swap this exists to stop, and the HTTP routes already refuse it
-  // (express hands them the array). Passing the array on keeps ONE rule for both transports.
-  const values = url.searchParams.getAll("cwd");
-  const request = workspaceRequest(values.length > 1 ? values : values[0]);
-  if (request.kind === "unusable") return { cwd: CLAUDE_CWD, unusable: request.problem };
-  return { cwd: request.cwd, unusable: null };
-}
-
-function wsConnectionContext(req: WsUpgradeRequest): { url: URL; requested: string | null; cwd: string; unusable: string | null; size: TerminalSize | null } {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const raw = url.searchParams.get("session");
-  const requested = raw && SESSION_ID_RE.test(raw) ? raw : null;
-  return { url, requested, size: sizeFromUrl(url), ...workspaceFromUrl(url) };
-}
-
-/** The geometry the browser has already fitted its terminal to, or null when it sent none it can
- *  stand behind — the same bounds a `resize` frame is held to. */
-function sizeFromUrl(url: URL): TerminalSize | null {
-  return parseTerminalSize(url.searchParams.get("cols"), url.searchParams.get("rows"));
-}
-
 // Put the browser's geometry on the pty the moment it exists. A pty is created at the server's
 // default and learns the real size from the first `resize` frame — a SEPARATE message, which has to
 // survive the spawn to be heard at all (#1178). Applying the URL's size here means the program
@@ -267,7 +236,7 @@ async function refuseSecondWorktreeSession(
  * be recorded on every attach — new, resumed or reattached — which is what makes this the single
  * choke point for the chat sidebar's exclusion list (see devTerminalSessions).
  *
- * Returns null when the socket was refused and closed: the caller must return without spawning.
+ * Returns false when the socket was refused and closed: the caller must return without spawning.
  */
 async function admitAgentSession(
   ws: WebSocket,
@@ -282,9 +251,11 @@ async function admitAgentSession(
     /** False for a launcher, which runs a command rather than an agent session and so is free of
      *  the one-session-per-worktree rule. Every agent path leaves it at the default. */
     worktreeLimited?: boolean;
+    /** What the socket has sent since it was accepted (acceptTerminalSocket); dropped on a refusal. */
+    early: EarlyFrames;
   },
-): Promise<EarlyFrames | null> {
-  const { requested, sessionId, live, cwd, devTerminal, worktreeLimited = true } = session;
+): Promise<boolean> {
+  const { requested, sessionId, live, cwd, devTerminal, worktreeLimited = true, early } = session;
   // A live entry is already agent-checked by settledEntry (wrongEndpointReason); a tmux-only
   // survivor — a reconnect after a server restart — has no entry to check, and `tmux
   // new-session -A` would attach whatever runs in the pane under THIS endpoint's identity.
@@ -296,15 +267,20 @@ async function admitAgentSession(
     if (foreign) {
       console.warn(`[ws/${kind}] refusing ${sessionId} — ${foreign}`);
       closeWithError(ws, `${foreign} — open it from its own agent's cell.`);
-      return null;
+      early.discard();
+      return false;
     }
   }
-  if (worktreeLimited && (await refuseSecondWorktreeSession(ws, kind, cwd, { requested, sessionId }))) return null;
+  if (worktreeLimited && (await refuseSecondWorktreeSession(ws, kind, cwd, { requested, sessionId }))) {
+    early.discard();
+    return false;
+  }
   if (devTerminal) markDevTerminalSession(sessionId, effectiveSessionCwd(live?.cwd, cwd));
   markAttachedSessionPlaced(sessionId, requested);
   // The EFFECTIVE cwd, not this request's: on a reattach the live PTY's own directory is where the
   // agent really runs, and the request's `?cwd=` is ignored by everything downstream.
-  return announceSession(ws, sessionId, live?.cwd ?? cwd);
+  announceSession(ws, sessionId, live?.cwd ?? cwd);
+  return true;
 }
 
 async function resolveButtonRun(url: URL, cwd: string): Promise<{ command: string; cwd: string } | null> {
@@ -358,16 +334,16 @@ export async function reserveWorktreeEnvForSpawn(cwd: string, session: { id: str
   await ensureWorktreeEnv(cwd);
 }
 
-async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, url: URL): Promise<void> {
+async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest): Promise<void> {
   // No session to reattach: /ws/run is ephemeral, so an unusable directory is always a refusal.
-  const { cwd, unusable } = workspaceFromUrl(url);
+  const { url, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "run", unusable, null)) return;
   const resolved = await resolveRunTarget(url, cwd);
   if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
   // Against `resolved.cwd`, not the URL's: a header button's command can resolve a different
   // directory, and the pty gets that one. /ws/run never reattaches, so it always reserves.
   await reserveWorktreeEnvForSpawn(resolved.cwd, null);
-  beginRunTerminal(deps, ws, resolved, sizeFromUrl(url));
+  beginRunTerminal(deps, ws, resolved, { size, early });
 }
 
 // Spawn the ephemeral Run PTY and wire its lifecycle. resolveRunTarget above can await a git
@@ -376,17 +352,24 @@ async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, url: URL): Pro
 // is ephemeral: no reattach, no reap/grace, so its only kill is the close handler below). Bail
 // if the socket has since closed — the same guard the agent handlers apply after their
 // admission awaits (clientStillConnected).
-export function beginRunTerminal(deps: WsRouteDeps, ws: WebSocket, resolved: { command: string; cwd: string }, size: TerminalSize | null = null): void {
-  if (ws.readyState !== ws.OPEN) return;
+/** What the accept handed the command endpoint: the URL's geometry, and the frames buffered since. */
+type RunAcceptance = { size?: TerminalSize | null; early?: EarlyFrames | null };
+export function beginRunTerminal(deps: WsRouteDeps, ws: WebSocket, resolved: { command: string; cwd: string }, accepted: RunAcceptance = {}): void {
+  const { size = null, early = null } = accepted;
+  if (ws.readyState !== ws.OPEN) return early?.discard();
   let term: IPty;
   try {
     term = deps.spawnCommandPty(resolved.command, resolved.cwd, ws);
   } catch (err) {
     console.error(`[ws/run] failed to start command: ${messageOf(err)}`);
+    early?.discard();
     return closeWithError(ws, `Failed to start the command: ${messageOf(err)}`);
   }
   applyClientSize(term, size, "run", "command");
-  ws.on("message", (raw) => handleCommandFrame(term, raw));
+  // The same order startAndWire keeps: the real listener first, then the replay into it.
+  const deliver = (raw: { toString(): string }) => handleCommandFrame(term, raw);
+  ws.on("message", deliver);
+  early?.release(deliver);
   // Ephemeral: no reattach/grace window — the viewer is gone, so end the process, escalating to
   // SIGKILL if it ignores SIGHUP (#2401). The GROUP, because the command runs under `$SHELL -c`
   // and what it started there is what the user asked to run.
@@ -502,7 +485,7 @@ export async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, r
   // ?session=<id> resumes an existing conversation; absent => fresh session. For
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "claude", unusable, requested)) return;
   // A bad id is never silently reused — closing the socket without a replacement
   // makes the client auto-reconnect with the same bad id forever, so we warn and
@@ -554,12 +537,8 @@ export async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, r
     // under this very id — gating on the stale reattachId admitted with `live` absent and announced
     // (and recorded) the request/default cwd instead of the running terminal's (review on #1534).
     const live = ptys.get(sessionId);
-    // Buffered from the announcement on, like every other terminal endpoint: the browser's first
-    // frame is the terminal's geometry and it arrives while this handler may still be awaiting the
-    // Keychain — /ws was the one route that let it fall on the floor (#1178, see early-frames.ts).
     await reserveWorktreeEnvForSpawn(cwd, { id: sessionId, live });
-    const early = await admitAgentSession(ws, "claude", { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp });
-    if (!early) return;
+    if (!(await admitAgentSession(ws, "claude", { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp, early }))) return;
 
     // A project cell on a second login is handed its directory's GUI tools (#2215, account-mcp.ts).
     const directoryMcpGroups = await accountDirectoryMcpGroups(sessionId, cwd, attachGuiMcp, !!live);
@@ -591,7 +570,7 @@ export async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, r
 // agent&model` runs a header run:"shell" button, re-resolved from config against the session context with
 // shell-escaped ${vars}. When the socket closes, the process is killed.
 function handleRunConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  void startRunTerminal(deps, ws, new URL(req.url ?? "/", "http://localhost"));
+  void startRunTerminal(deps, ws, req);
 }
 
 // Start the pty for a resolved session, then hand the socket to it — or fail the socket cleanly.
@@ -634,12 +613,10 @@ export function startAndWire(
   session.early.release(deliver);
 }
 
-// Tell the browser which session this is, and from that moment collect what it sends: its first
-// frame is the terminal's real geometry, and it arrives while the caller is still reading config
-// files, so without this it lands on the floor (see early-frames.ts).
-function announceSession(ws: WebSocket, sessionId: string, cwd: string): EarlyFrames {
+// Tell the browser which session this is. What it sends meanwhile is already being collected —
+// since the socket was accepted, not since here (acceptTerminalSocket).
+function announceSession(ws: WebSocket, sessionId: string, cwd: string): void {
   ws.send(JSON.stringify({ type: "session", id: sessionId, cwd }));
-  return bufferEarlyFrames(ws);
 }
 
 // False when the client left during those reads — the caller must return WITHOUT spawning. A spawn
@@ -657,7 +634,7 @@ function clientStillConnected(ws: WebSocket, tag: string, sessionId: string, ear
 // lifecycle (reattach + reap grace + handleClientClose) but with no hooks/transcript,
 // and is marked a dev-terminal session so it stays out of the chat sidebar.
 async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "launch", unusable, requested)) return;
   const index = parseIndexParam(url.searchParams.get("launcher"));
   const shell = url.searchParams.get("shell") === "1";
@@ -681,8 +658,7 @@ async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
     // own. The corpse fallback keeps the reaped-mid-admission case on settledEntry's close path.
     const live = ptys.get(sessionId) ?? resolvedLive;
     await reserveWorktreeEnvForSpawn(cwd, { id: sessionId, live });
-    const early = await admitAgentSession(ws, "launch", { requested, sessionId, live, cwd, devTerminal: true, worktreeLimited: false });
-    if (!early) return;
+    if (!(await admitAgentSession(ws, "launch", { requested, sessionId, live, cwd, devTerminal: true, worktreeLimited: false, early }))) return;
 
     if (!clientStillConnected(ws, "launch", sessionId, early)) return;
 
@@ -714,7 +690,7 @@ async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
 // codex without the GUI MCP and keeps it out of the sidebar; absent (single view) attaches the GUI
 // MCP so codex drives the GUI panel like claude.
 export async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "codex", unusable, requested)) return;
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
@@ -731,8 +707,7 @@ export async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, re
     // Same re-read as the launch handler above, for the same review finding.
     const live = ptys.get(sessionId) ?? resolvedLive;
     await reserveWorktreeEnvForSpawn(cwd, { id: sessionId, live });
-    const early = await admitAgentSession(ws, "codex", { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp });
-    if (!early) return;
+    if (!(await admitAgentSession(ws, "codex", { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp, early }))) return;
 
     // A grid cell's GUI tools are whatever its DIRECTORY registered — the same switches claude's
     // cells read, in the same file. claude picks them up itself; codex is handed resolved URLs at
@@ -783,7 +758,7 @@ export async function resolveCopilotSession(requested: string | null, cwd: strin
 }
 
 type SessionDirAdmission = { requested: string | null; sessionId: string; resolvedLive: PtyEntry | undefined; cwd: string; devTerminal: boolean };
-type SessionDirAdmitted = { live: PtyEntry | undefined; sessionDir: string; early: EarlyFrames };
+type SessionDirAdmitted = { live: PtyEntry | undefined; sessionDir: string };
 
 /**
  * `admitAgentSession` run in the SESSION's directory rather than the request's. A reconnect often
@@ -797,13 +772,12 @@ type SessionDirAdmitted = { live: PtyEntry | undefined; sessionDir: string; earl
  * Call it inside `sessionConnects`: the live entry is read here, after the per-session lock.
  * Returns null when the socket was refused and closed.
  */
-async function admitInSessionDir(ws: WebSocket, kind: TerminalWsKind, session: SessionDirAdmission): Promise<SessionDirAdmitted | null> {
+async function admitInSessionDir(ws: WebSocket, kind: TerminalWsKind, session: SessionDirAdmission, early: EarlyFrames): Promise<SessionDirAdmitted | null> {
   const { requested, sessionId, resolvedLive, cwd, devTerminal } = session;
   const live = ptys.get(sessionId) ?? resolvedLive;
   const sessionDir = live?.cwd ?? sessionCwd(sessionId) ?? cwd;
   await reserveWorktreeEnvForSpawn(sessionDir, { id: sessionId, live });
-  const early = await admitAgentSession(ws, kind, { requested, sessionId, live, cwd: sessionDir, devTerminal });
-  return early ? { live, sessionDir, early } : null;
+  return (await admitAgentSession(ws, kind, { requested, sessionId, live, cwd: sessionDir, devTerminal, early })) ? { live, sessionDir } : null;
 }
 
 // copilot connects like CODEX, not like agy/grok/muse: it takes its GUI tools from a per-spawn flag
@@ -811,7 +785,7 @@ async function admitInSessionDir(ws: WebSocket, kind: TerminalWsKind, session: S
 // DirectoryMcpWsAgent for the line between the two groups. What it does NOT share with codex is the
 // rollout hydration and the separate resume id; both are absent here on purpose.
 export async function handleCopilotConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "copilot", unusable, requested)) return;
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   // The remembered-cwd map the resolver reads is hydrated from disk; a reconnect arriving mid-read
@@ -820,9 +794,9 @@ export async function handleCopilotConnection(deps: WsRouteDeps, ws: WebSocket, 
   await devTerminalCwdsHydrated;
   const { sessionId, live: resolvedLive } = await resolveCopilotSession(requested, cwd);
   await sessionConnects(sessionId, async () => {
-    const admitted = await admitInSessionDir(ws, "copilot", { requested, sessionId, resolvedLive, cwd, devTerminal: !attachGuiMcp });
+    const admitted = await admitInSessionDir(ws, "copilot", { requested, sessionId, resolvedLive, cwd, devTerminal: !attachGuiMcp }, early);
     if (!admitted) return;
-    const { live, sessionDir, early } = admitted;
+    const { live, sessionDir } = admitted;
     // A project cell's GUI tools are whatever its DIRECTORY registered, read here for the reason
     // codex's handler states: the spawner is sync and this reads Claude Code's config files.
     const mcpGroups = !attachGuiMcp && !live ? await registeredGuiMcpGroups(sessionDir, TOOL_GROUPS).catch(() => []) : [];
@@ -853,7 +827,7 @@ export async function resolveCursorSession(requested: string | null, cwd: string
 }
 
 export async function handleCursorConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, "cursor", unusable, requested)) return;
   // `?gui=` carries TWO things for the other agents — whether to attach the GUI MCP, and whether
   // this socket is the actively-viewed pane — and cursor reads it only for the second, because it
@@ -865,9 +839,9 @@ export async function handleCursorConnection(deps: WsRouteDeps, ws: WebSocket, r
   await devTerminalCwdsHydrated;
   const { sessionId, live: resolvedLive } = await resolveCursorSession(requested, cwd);
   await sessionConnects(sessionId, async () => {
-    const admitted = await admitInSessionDir(ws, "cursor", { requested, sessionId, resolvedLive, cwd, devTerminal: !singleView });
+    const admitted = await admitInSessionDir(ws, "cursor", { requested, sessionId, resolvedLive, cwd, devTerminal: !singleView }, early);
     if (!admitted) return;
-    const { live, sessionDir, early } = admitted;
+    const { live, sessionDir } = admitted;
     // The directory's registered groups, written into `.cursor/mcp.json` and approved before the
     // agent reads either. Not for a live REATTACH, and not merely because it would be wasted: the
     // file is shared by every cursor session in the directory, so rewriting it speaks for terminals
@@ -1016,7 +990,7 @@ export const MUSE_WS_AGENT: DirectoryMcpWsAgent = {
 // GUI tools from what the DIRECTORY registered rather than from a per-spawn flag; where they differ
 // is only in what the spawner then does with that list.
 export async function handleDirectoryMcpAgentConnection(agent: DirectoryMcpWsAgent, deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
-  const { url, requested, cwd, unusable, size } = wsConnectionContext(req);
+  const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
   if (refuseUnusableWorkspace(ws, agent.kind, unusable, requested)) return;
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   if (agent.hydrated) await agent.hydrated;
@@ -1027,8 +1001,7 @@ export async function handleDirectoryMcpAgentConnection(agent: DirectoryMcpWsAge
     // The directory's per-tree PORT / DB_NAME (#1367), like every other spawn path — a cell in a
     // worktree gets that tree's own values, not the ones another tree is already serving on.
     await reserveWorktreeEnvForSpawn(cwd, { id: sessionId, live });
-    const early = await admitAgentSession(ws, agent.kind, { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp });
-    if (!early) return;
+    if (!(await admitAgentSession(ws, agent.kind, { requested, sessionId, live, cwd, devTerminal: !attachGuiMcp, early }))) return;
 
     // The directory's registered groups, read here because the lookup reads Claude Code's config
     // files and the spawner is sync. Not for a live REATTACH: that session keeps the tools its

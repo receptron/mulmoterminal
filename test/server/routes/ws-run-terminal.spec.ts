@@ -4,6 +4,7 @@ import type { WebSocket } from "ws";
 import type { IPty } from "node-pty";
 
 import { beginRunTerminal, type WsRouteDeps } from "../../../server/routes/ws-routes.js";
+import { bufferEarlyFrames } from "../../../server/session/pty/early-frames.js";
 import { killPty } from "../../../server/session/pty/pty-kill.js";
 
 vi.mock("../../../server/session/pty/pty-kill.js", async (importOriginal) => ({
@@ -11,8 +12,8 @@ vi.mock("../../../server/session/pty/pty-kill.js", async (importOriginal) => ({
   killPty: vi.fn(),
 }));
 
-// A minimal ws stand-in: just the readyState + OPEN the guard reads and an on/emit pair so a
-// test can fire the "close" event the handler wires.
+// A minimal ws stand-in: just the readyState + OPEN the guard reads and an on/off/emit trio so a
+// test can fire the "close" event the handler wires, and feed it frames.
 function fakeWs(readyState: number) {
   const listeners = new Map<string, ((...args: unknown[]) => void)[]>();
   return {
@@ -23,8 +24,14 @@ function fakeWs(readyState: number) {
       list.push(cb);
       listeners.set(event, list);
     },
-    emit(event: string) {
-      (listeners.get(event) ?? []).forEach((cb) => cb());
+    off(event: string, cb: (...args: unknown[]) => void) {
+      listeners.set(
+        event,
+        (listeners.get(event) ?? []).filter((l) => l !== cb),
+      );
+    },
+    emit(event: string, ...args: unknown[]) {
+      [...(listeners.get(event) ?? [])].forEach((cb) => cb(...args));
     },
   };
 }
@@ -57,5 +64,19 @@ describe("beginRunTerminal", () => {
     beginRunTerminal({ spawnCommandPty } as unknown as WsRouteDeps, ws as unknown as WebSocket, RESOLVED);
 
     expect(spawnCommandPty).not.toHaveBeenCalled();
+  });
+
+  // The browser's first frame is the terminal's geometry, sent the instant the socket opens —
+  // during that same git-backed resolve. It is collected from the accept and replayed into the pty
+  // once there is one, the same way the agent endpoints do it (#2986).
+  it("replays a resize that arrived while the command was still being resolved", () => {
+    const term = { kill: vi.fn(), resize: vi.fn(), write: vi.fn() } as unknown as IPty;
+    const ws = fakeWs(OPEN);
+    const early = bufferEarlyFrames(ws as unknown as WebSocket);
+    ws.emit("message", JSON.stringify({ type: "resize", cols: 140, rows: 45 }));
+
+    beginRunTerminal({ spawnCommandPty: vi.fn(() => term) } as unknown as WsRouteDeps, ws as unknown as WebSocket, RESOLVED, { early });
+
+    expect(term.resize).toHaveBeenCalledWith(140, 45);
   });
 });

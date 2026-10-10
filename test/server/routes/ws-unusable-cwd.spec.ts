@@ -15,7 +15,8 @@ vi.mock("../../../server/infra/process/tmux.js", async (importOriginal) => ({
   tmuxHasSession: (id: string) => tmuxSessions.has(id),
 }));
 
-const { workspaceFromUrl, refuseUnusableWorkspace } = await import("../../../server/routes/ws-routes.js");
+const { refuseUnusableWorkspace } = await import("../../../server/routes/ws-routes.js");
+const { workspaceFromUrl } = await import("../../../server/routes/ws-accept.js");
 const { ptys } = await import("../../../server/session/registry.js");
 const { CLAUDE_CWD } = await import("../../../server/config/env.js");
 
