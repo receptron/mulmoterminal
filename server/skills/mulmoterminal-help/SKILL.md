@@ -82,10 +82,10 @@ Area pages, all under `GUIDE`: `basics.md` (grid, cells, the zoomed views), `hea
 `header-reference.md` (a cell's buttons and chips), `worktree.md` (git worktrees), `github.md` (PRs
 and issues), `notifications.md` (sounds, push), `phone.md`, `conversation.md` (cells talking to each
 other), `from-collection.md` and `shared-apps.md` (collections and the apps built from them),
-`blueprints.md`, `mulmocast.md`, `remote.md`, `config.md` (the config files and every global key).
+`blueprints.md`, `mulmocast.md`, `remote.md`, `config.md` (the config files and the global keys).
 
 The other bundled skills are documentation too: `files.skillsDir/mulmoterminal-config/SKILL.md`
-lists every global setting and which skill owns it; `mulmoterminal-bug-report/faq.md` is an index of
+lists the global settings and which skill owns each; `mulmoterminal-bug-report/faq.md` is an index of
 symptoms to config keys and source files.
 
 ## What is new — the running version, and the one after it
@@ -105,9 +105,17 @@ symptoms to config keys and source files.
    an `npm` install, nothing under it is running.
 3. **A newer release** (`latest` from `/api/update-status` is non-null): its page is not on this
    machine. If the network is allowed, read `urls.guide` + `<lang>/v<latest>.html`, or the raw page
-   at `https://raw.githubusercontent.com/receptron/mulmoterminal/<latest>/docs/guide/<lang>/v<latest>.md`
-   (the release tag is the bare version). Then say plainly: what the user has, what the newer one
-   adds, and the update command from `notice`. If it cannot be fetched, say that rather than guessing.
+   at `https://raw.githubusercontent.com/receptron/mulmoterminal/<latest>/docs/guide/<lang>/v<latest>.md`.
+   The release tag is the bare version (`9.7.0`); only releases up to 1.12.0 were tagged
+   `mulmoterminal@<version>`, so do not read that older form in `git tag` as the rule. A tag can be
+   confirmed before fetching:
+
+   ```sh
+   gh api repos/receptron/mulmoterminal/git/matching-refs/tags/<latest> --jq '.[].ref'
+   ```
+
+   Then say plainly: what the user has, what the newer one adds, and the update command from
+   `notice`. If it cannot be fetched, say that rather than guessing.
 4. **"Since version X"**: the release pages between X and the running version are
    `ls "$GUIDE"/v*.md`, and `feature-list.md` marks each capability with the release it arrived in.
 
