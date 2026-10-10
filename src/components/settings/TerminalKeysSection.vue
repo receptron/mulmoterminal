@@ -4,6 +4,8 @@ import { copyOnSelect, saveCopyOnSelect } from "../../composables/copyOnSelect";
 import { questionPaneEnabled, saveQuestionPaneEnabled } from "../../composables/questionPane";
 import { terminalSubmitMode, saveTerminalSubmitMode } from "../../composables/terminalSubmitMode";
 import { TERMINAL_SUBMIT_MODES, isTerminalSubmitMode } from "../../../common/terminalSubmit";
+import { tmuxPrefix, saveTmuxPrefix } from "../../composables/tmuxPrefix";
+import { TMUX_PREFIX_LABEL_KEYS, isTmuxPrefix, tmuxPrefixChoicesFor } from "../../../common/tmuxPrefix";
 
 // The key-behaviour settings that are a single value each, so they get a control here rather
 // than the skill the keymap needs. The keymap itself stays read-only in KeyboardShortcutsSection:
@@ -21,6 +23,10 @@ function onQuestionPaneToggle(e: Event) {
 
 function onSubmitModeChange(e: Event) {
   if (e.target instanceof HTMLSelectElement && isTerminalSubmitMode(e.target.value)) void saveTerminalSubmitMode(e.target.value);
+}
+
+function onTmuxPrefixChange(e: Event) {
+  if (e.target instanceof HTMLSelectElement && isTmuxPrefix(e.target.value)) void saveTmuxPrefix(e.target.value);
 }
 </script>
 
@@ -63,5 +69,19 @@ function onSubmitModeChange(e: Event) {
     @change="onSubmitModeChange"
   >
     <option v-for="mode in TERMINAL_SUBMIT_MODES" :key="mode" :value="mode">{{ t(`settings.terminalKeys.modes.${mode}`) }}</option>
+  </select>
+
+  <p class="mb-1.5 mt-3 text-[12px] text-dim">
+    <strong class="text-fg">{{ t("settingsControls.tmuxPrefix.title") }}</strong> — {{ t("settingsControls.tmuxPrefix.hint") }}
+  </p>
+  <select
+    class="mb-1 w-full cursor-pointer rounded-lg border border-border bg-elevated px-2 py-1.5 text-[12px] text-fg"
+    :value="tmuxPrefix"
+    :aria-label="t('settingsControls.tmuxPrefix.field')"
+    @change="onTmuxPrefixChange"
+  >
+    <option v-for="choice in tmuxPrefixChoicesFor(tmuxPrefix)" :key="choice" :value="choice">
+      {{ TMUX_PREFIX_LABEL_KEYS[choice] ? t(`settingsControls.tmuxPrefix.options.${TMUX_PREFIX_LABEL_KEYS[choice]}`) : choice }}
+    </option>
   </select>
 </template>

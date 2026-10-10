@@ -1,4 +1,10 @@
 export const settingsControlsZhTW = {
+  tmuxPrefix: {
+    title: "tmux 前綴鍵",
+    hint: "每個儲存格下方的終端多工器用來等待命令的按鍵。MulmoTerminal 不使用它，而預設的 Ctrl+B 在 shell 與 Claude Code 中也是「向左一個字元」，因此預設關閉，所有按鍵都會傳給代理程式。只有在你自己用 tmux 連線工作階段時才需要修改。",
+    field: "tmux 前綴鍵",
+    options: { none: "關閉：所有按鍵都傳給代理程式（預設）", ctrlB: "Ctrl+B（tmux 內建預設，會在儲存格中吃掉 Ctrl+B）", ctrlBracket: "Ctrl+]" },
+  },
   defaultAgent: {
     title: "預設代理",
     hint: "新儲存格的啟動表單中，在你自行選擇之前預先選取的代理；MulmoTerminal 啟動時也會檢查它是否已安裝。",

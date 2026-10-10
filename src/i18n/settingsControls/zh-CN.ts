@@ -1,4 +1,10 @@
 export const settingsControlsZhCN = {
+  tmuxPrefix: {
+    title: "tmux 前缀键",
+    hint: '每个单元格下方的终端复用器用来等待命令的按键。MulmoTerminal 不使用它，而默认的 Ctrl+B 在 shell 和 Claude Code 中也是"向左一个字符"，因此默认关闭，所有按键都会传给智能体。只有在你自己用 tmux 连接会话时才需要修改。',
+    field: "tmux 前缀键",
+    options: { none: "关闭：所有按键都传给智能体（默认）", ctrlB: "Ctrl+B（tmux 自带默认值，会在单元格中吞掉 Ctrl+B）", ctrlBracket: "Ctrl+]" },
+  },
   defaultAgent: {
     title: "默认代理",
     hint: "新单元格的启动表单中，在你自己选择之前默认选中的代理；MulmoTerminal 启动时也会检查它是否已安装。",

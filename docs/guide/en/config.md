@@ -132,7 +132,7 @@ English, and the line under the picker says so.
 | **Directory settings** | What each directory's `.mulmoterminal.json` is **actually doing**. Expand a row for the values in force (colors with a swatch), **which file each came from**, **keys dropped in validation**, and **keys this app never reads**. **Change here** below it edits the name, colours, status colours, theme, palette, font, grid priority, model, closing summary, extra directories, icon, background, sounds and header buttons / chips / commands (→ [Per-project settings](#per-dir)). "Explain my settings…" starts the `mulmoterminal-config` skill to say why and fix it (→ [When a setting isn't working](#dir-settings-preview)) |
 | **Launch commands** | Commands you can launch besides the agents in a grid cell (`{ label, command }`). A plain shell needs no entry — the launcher's **Shell** toggle opens `$SHELL` unconfigured |
 | **Header buttons and chips** | Your global header buttons and chips, edited right here — add, edit, remove, and group buttons into folders — plus the colour per status and the status colour on the header. "Set up header buttons…" starts the `mulmoterminal-header` skill (→ [Customizing the header](#header)) |
-| **Terminal keys** | [Copy on select](#copy-on-select) (`copyOnSelect`, off), the [question pane](#question-pane) (`questionPaneEnabled`), and which bytes your Claude reads as **submit** ([Enter — submit vs. newline](#terminal-submit), `terminalSubmit`) |
+| **Terminal keys** | [Copy on select](#copy-on-select) (`copyOnSelect`, off), the [question pane](#question-pane) (`questionPaneEnabled`), and which bytes your Claude reads as **submit** ([Enter — submit vs. newline](#terminal-submit), `terminalSubmit`), and the [tmux prefix key](#tmux-prefix) (`tmuxPrefix`, off) |
 | **Keyboard shortcuts** | Every action and the `send` row, bound or not, read-only. **Everything starts as Not set** — **Recommended keys** adds a starter set for this platform in one click (only to unbound actions and unused keys), and "Set up shortcuts…" starts the `mulmoterminal-keys` skill to bind anything else in `keymap` (→ [Keyboard shortcuts](#keymap)) |
 | **Voice input** | The language you **dictate in** (your browser's, per-clip detection, or a fixed one). Shown only on a machine that can transcribe |
 | **Models and backends** | The backends a session can run on and whether each can be **reached right now**, read-only. "Add a backend…" starts the `mulmoterminal-model` skill (→ [Using another model](providers.html)) |
@@ -1047,6 +1047,28 @@ An invalid value (a typo, or anything other than `"cr"` / `"esc-cr"`) is ignored
   the remote view's text box instead.
 - **Japanese / other IME input** — while the IME is composing, **Enter confirms the candidate** and
   is never taken as submit or newline, in either mode. Your CJK input is unaffected.
+
+## The tmux prefix key (`tmuxPrefix`) {#tmux-prefix}
+
+Each cell runs inside a dedicated tmux so the session survives a restart. tmux listens for a **prefix
+key** (by default **Ctrl+B**) and reads the key after it as a tmux command. That collides with
+**Ctrl+B = "one character left"**, which the shell's line editor, Claude Code's input box and the macOS
+text system all use: the first press looks ignored, and the key you press next (`c`, `%`, `d`) runs a
+tmux command instead of reaching your agent. MulmoTerminal never uses the prefix, so it is **off by
+default** and every key goes to the agent.
+
+```jsonc
+{ "tmuxPrefix": "none" }   // default: no prefix, every key goes to the agent
+{ "tmuxPrefix": "C-b" }    // tmux's own default
+{ "tmuxPrefix": "C-]" }    // a prefix that does not collide with cursor keys
+```
+
+- A value is `none`, or Control plus one of `a`-`z`, `Space`, `]`, `_`, `^`, `@`. Anything else falls back to `none`.
+- Change it only if you attach to the sessions yourself (`tmux -L mulmoterminal attach`) and want tmux's
+  keyboard commands, such as detach with `Ctrl+B d`. The mouse wheel scrolls history in every setting.
+- Saving applies to the tmux server already running; no restart. **Settings -> Terminal keys** has a picker for
+  the three values above.
+
 
 ## Notification sounds (`soundKinds` / `sounds`) {#sounds}
 

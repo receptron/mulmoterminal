@@ -28,6 +28,7 @@ import {
   type HeaderChip,
   type CustomTheme,
 } from "./config-schema.js";
+import { sanitizeTmuxPrefix, TMUX_PREFIX_DEFAULT } from "../../common/tmuxPrefix.js";
 import { DEFAULT_TERMINAL_SUBMIT_MODE, isTerminalSubmitMode, type TerminalSubmitMode } from "../../common/terminalSubmit.js";
 import type { QuickCommand } from "../../common/quickCommands.js";
 import { CUSTOM_AGENT_COMMAND_MAX, CUSTOM_AGENT_LABEL_MAX, CUSTOM_AGENTS_MAX, isCustomAgentId, type CustomAgent } from "../../common/customAgents.js";
@@ -140,6 +141,8 @@ export interface AppConfig {
   // Which received bytes the host's Claude reads as "submit" vs "newline" (#772). Drives
   // both the browser key handler and the phone remote-view submit. Default "cr".
   terminalSubmit: TerminalSubmitMode;
+  /** The dedicated tmux server's prefix key: "none", or a control key such as "C-b" (#2981). */
+  tmuxPrefix: string;
   // User-defined keyboard shortcuts (#829). NO defaults: an empty map means the shortcuts
   // are off, because every binding takes that key away from the terminal underneath.
   keymap: Keymap;
@@ -569,6 +572,7 @@ export const emptyConfig = (): AppConfig => ({
   sessionReapIntervalHours: DEFAULT_REAP_INTERVAL_HOURS,
   providers: [],
   terminalSubmit: DEFAULT_TERMINAL_SUBMIT_MODE,
+  tmuxPrefix: TMUX_PREFIX_DEFAULT,
   keymap: {},
   copyOnSelect: false,
   decisionDigest: false,
@@ -672,6 +676,7 @@ function sanitizeAppConfig(raw: unknown): AppConfig {
     sessionReapIntervalHours: sanitizeReapIntervalHours(o.sessionReapIntervalHours),
     providers: sanitizeProviders(o.providers),
     terminalSubmit: sanitizeTerminalSubmit(o.terminalSubmit),
+    tmuxPrefix: sanitizeTmuxPrefix(o.tmuxPrefix),
     keymap: sanitizeKeymap(o.keymap),
     copyOnSelect: sanitizeCopyOnSelect(o.copyOnSelect),
     decisionDigest: sanitizeDecisionDigest(o.decisionDigest),
@@ -803,6 +808,7 @@ export function mergeConfigUpdate(base: AppConfig, body: Record<string, unknown>
     sessionReapIntervalHours: updated("sessionReapIntervalHours", sanitizeReapIntervalHours, base.sessionReapIntervalHours),
     providers: updated("providers", sanitizeProviders, base.providers),
     terminalSubmit: updated("terminalSubmit", sanitizeTerminalSubmit, base.terminalSubmit),
+    tmuxPrefix: updated("tmuxPrefix", sanitizeTmuxPrefix, base.tmuxPrefix),
     keymap: updated("keymap", sanitizeKeymap, base.keymap),
     copyOnSelect: updated("copyOnSelect", sanitizeCopyOnSelect, base.copyOnSelect),
     decisionDigest: updated("decisionDigest", sanitizeDecisionDigest, base.decisionDigest),
@@ -859,6 +865,7 @@ export function toPublicAppConfig(config: AppConfig): AppConfig {
     sessionIdleReapDays: config.sessionIdleReapDays,
     sessionReapIntervalHours: config.sessionReapIntervalHours,
     terminalSubmit: config.terminalSubmit,
+    tmuxPrefix: config.tmuxPrefix,
     keymap: config.keymap,
     copyOnSelect: config.copyOnSelect,
     decisionDigest: config.decisionDigest,
