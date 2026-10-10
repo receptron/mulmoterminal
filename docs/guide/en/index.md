@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **9.7.0 is out.** A token held out at its usage limit now shows when it resets, JingleScript can read a score from a
-> file, and `mulmocast` moves to 2.19.0. [Setup guide](v9.7.0.html)
+> **9.8.0 is out.** A help icon in the toolbar opens a help desk that answers questions about MulmoTerminal, Ctrl+B
+> now reaches your agent instead of tmux, and two layout and connection fixes. [Setup guide](v9.8.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 

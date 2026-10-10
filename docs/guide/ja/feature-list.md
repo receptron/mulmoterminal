@@ -4,7 +4,7 @@ nav_title: 全機能リスト
 layout: default
 parent: 日本語
 nav_order: 6.5
-as_of: 9.7.0
+as_of: 9.8.0
 description: MulmoTerminal のいまある機能を、入った版つきで領域ごとに一行ずつ並べた一覧（9.1.0 時点）。
 ---
 
@@ -225,6 +225,8 @@ description: MulmoTerminal のいまある機能を、入った版つきで領�
 
 詳しく: [設定](config.html)
 
+- ツールバーのヘルプアイコンから、同梱のヘルプ係を開ける。同梱のガイド・変更履歴・ソースをもとに MulmoTerminal への質問に答える (v9.8.0)
+- `tmuxPrefix` で専用 tmux サーバーの prefix キーを決める。既定は無効で Ctrl+B がエージェントへ届き、`C-b` や別の Control キーにもでき、Settings -> Terminal keys のドロップダウンで選べる (v9.8.0)
 - 「Directory settings」の「Change here」で .mulmoterminal.json の全キーをフォームで編集する (v8.0.0)
 - 設定からヘッダーに開くボタン（URL・フォルダ・シェル・画面・PR・ピッカー）と操作のボタンを足せる (v7.3.0)
 - Playful effects に UFO の絵があり、`random` で選ばれるほか `"playfulEffects": "ufo"` で固定できる (v9.5.0)

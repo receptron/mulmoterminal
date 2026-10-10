@@ -4,7 +4,7 @@ nav_title: Feature list
 layout: default
 parent: English
 nav_order: 6.5
-as_of: 9.7.0
+as_of: 9.8.0
 description: "Every capability MulmoTerminal has today, one line each with the release it arrived in, grouped by area (as of 9.1.0)."
 ---
 
@@ -225,6 +225,8 @@ More: [Configuration](config.html)
 
 More: [Configuration](config.html)
 
+- A help icon in the toolbar opens a bundled help desk that answers questions about MulmoTerminal from the shipped guide, changelog and source (v9.8.0)
+- `tmuxPrefix` sets the dedicated tmux server's prefix key: off by default so Ctrl+B reaches the agent, or `C-b` / another control key; Settings -> Terminal keys has a dropdown (v9.8.0)
 - Directory settings → Change here edits every .mulmoterminal.json key in a form; Use global removes one (v8.0.0)
 - Settings adds open buttons (URL, folder, shell, view, PR, picker) and action buttons to the header (v7.3.0)
 - Default agent, header status-colour mode and Playful effects are selectable in Settings (v7.2.0)

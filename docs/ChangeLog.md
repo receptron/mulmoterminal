@@ -8,6 +8,10 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@9.8.0 — 2026-10-10
+
+> **Setup guide:** [9.8.0 — A help desk, and Ctrl+B reaches your agent](https://receptron.github.io/mulmoterminal/guide/en/v9.8.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.8.0.html))
+
 ### tmux prefix key setting; Ctrl+B reaches the agent (#2981)
 
 - New `tmuxPrefix` setting (`"none"` by default, `"C-b"`, or a control key such as `"C-]"`) for the dedicated tmux server's prefix. The tmux default `C-b` swallowed the first Ctrl+B in a cell and read the next key as a tmux command, which collides with "one character left" in readline, Claude Code's input and the macOS text system. Nothing here uses the prefix, so it is off by default. The lines (`set -g prefix …`, `unbind-key C-b`, `bind-key … send-prefix`) go in `tmux.conf` and are also run on a tmux server that outlived the process, both at boot and when the setting is saved (`common/tmuxPrefix.ts`, `setTmuxPrefix` in `server/infra/process/tmux.ts`). Settings → Terminal keys has a picker. Someone who attaches with tmux and wants `Ctrl+B d` sets `"C-b"`.
@@ -18,6 +22,11 @@ Entries here are folded into the next release's heading when it ships.
 - A **help** icon in the toolbar, next to the gear, opens it in one press; Settings → Help has the same button under its guide links. Both start a terminal in the workspace, and neither asks first, since the skill edits nothing (`src/components/helpChat.ts`). `SkillLaunchButton` takes a `hint` for the same reason: its shared sentence promises config edits.
 - `GET /api/help/sources` tells the skill where the running install keeps its docs and source (`server/help/`), so it reads the version that is actually running rather than a path it guessed.
 - The npm package now ships every guide page (`docs/guide/{en,ja}/*.md`, not only the dated release pages), `docs/ChangeLog.md` and `docs/facts.json`, so the skill works offline and version-exact.
+
+### Session width and the Files pane header
+
+- [#2989](https://github.com/receptron/mulmoterminal/pull/2989) — a session started from the header while the Files pane was open came up at the width the terminal had beside the pane: the browser's first `resize`, sent the instant the socket opened, was dropped because the early-frame buffer was only attached after the admission's awaits. The buffer now starts when the socket is accepted (`acceptTerminalConnection` in `server/routes/ws-accept.ts`, first thing every connection handler does) and is handed down to the admission, which discards it on a refusal. `/ws/run` had the same gap. Closes #2986.
+- [#2988](https://github.com/receptron/mulmoterminal/pull/2988) — the Files pane header is one flex row that could not wrap, so with a Markdown file open its last buttons, Close among them, sat past the pane's edge at a narrow split. It now wraps (`flex-wrap`, `justify-end`); nothing is hidden or reordered. Closes #2983.
 
 ## mulmoterminal@9.7.0 — 2026-10-10
 
