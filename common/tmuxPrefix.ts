@@ -30,3 +30,23 @@ export function tmuxPrefixCommands(prefix: string): string[] {
   if (prefix === TMUX_OWN_DEFAULT_PREFIX) return [`set -g prefix ${prefix}`, `bind-key ${prefix} send-prefix`];
   return [`set -g prefix ${prefix}`, `unbind-key ${TMUX_OWN_DEFAULT_PREFIX}`, `bind-key ${prefix} send-prefix`];
 }
+
+// `list-keys -T prefix` prints one `bind-key [-r] -T prefix <key> <command>` per binding. Every key in
+// the prefix table that sends the prefix on, other than the one now in force, is left over from an
+// earlier setting - possibly from an earlier PROCESS, which is why this reads the server's own table
+// instead of remembering what was set last.
+// Read as words, not a pattern: flags such as `-r` may precede `-T prefix`.
+const sendPrefixKeyOf = (line: string): string | undefined => {
+  const words = line.trim().split(/\s+/u);
+  const tableAt = words.indexOf("-T");
+  const isPrefixTable = words[0] === "bind-key" && tableAt > 0 && words[tableAt + 1] === "prefix";
+  const sendsPrefix = words.length === tableAt + 4 && words[tableAt + 3] === "send-prefix";
+  return isPrefixTable && sendsPrefix ? words[tableAt + 2] : undefined;
+};
+
+export function staleSendPrefixKeys(listKeysOutput: string, prefix: string): string[] {
+  return listKeysOutput
+    .split("\n")
+    .map(sendPrefixKeyOf)
+    .filter((key): key is string => key !== undefined && key !== prefix);
+}

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { isTmuxPrefix, sanitizeTmuxPrefix, tmuxPrefixCommands, TMUX_PREFIX_CHOICES, TMUX_PREFIX_LABEL_KEYS } from "../../common/tmuxPrefix";
+import {
+  isTmuxPrefix,
+  sanitizeTmuxPrefix,
+  staleSendPrefixKeys,
+  tmuxPrefixCommands,
+  TMUX_PREFIX_CHOICES,
+  TMUX_PREFIX_LABEL_KEYS,
+} from "../../common/tmuxPrefix";
 
 describe("tmuxPrefix (#2981)", () => {
   it.each(["none", "C-b", "C-]", "C-a", "C-Space", "C-_", "C-^", "C-@"])("accepts %s", (key) => {
@@ -29,5 +36,26 @@ describe("tmuxPrefix (#2981)", () => {
 
   it("moves the prefix to another key and frees C-b", () => {
     expect(tmuxPrefixCommands("C-]")).toEqual(["set -g prefix C-]", "unbind-key C-b", "bind-key C-] send-prefix"]);
+  });
+
+  describe("staleSendPrefixKeys", () => {
+    const table = [
+      "bind-key    -T prefix C-b     send-prefix",
+      "bind-key -r -T prefix C-]   send-prefix",
+      "bind-key    -T prefix c       new-window",
+      "bind-key    -T root   C-a     send-prefix",
+      "",
+    ].join("\n");
+
+    it("lists every prefix-table send-prefix key but the one in force", () => {
+      expect(staleSendPrefixKeys(table, "C-b")).toEqual(["C-]"]);
+      expect(staleSendPrefixKeys(table, "none")).toEqual(["C-b", "C-]"]);
+    });
+
+    it("ignores other commands, other tables, blank output and noise", () => {
+      expect(staleSendPrefixKeys("", "none")).toEqual([]);
+      expect(staleSendPrefixKeys("no server running on /tmp/x", "none")).toEqual([]);
+      expect(staleSendPrefixKeys("bind-key -T prefix c new-window", "none")).toEqual([]);
+    });
   });
 });

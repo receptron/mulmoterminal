@@ -18,10 +18,12 @@ const scratch = await vi.hoisted(async () => {
 });
 
 const calls: string[][] = [];
+// What `list-keys -T prefix` answers: the running server's own table, which outlives this process.
+let prefixTable = "";
 vi.mock("../../../../server/infra/process/spawnCapture.js", () => ({
   spawnCapture: (_bin: string, args: string[]) => {
     calls.push(args);
-    return { status: 0, stdout: "", stderr: "" };
+    return { status: 0, stdout: args[2] === "list-keys" ? prefixTable : "", stderr: "" };
   },
   spawnCaptureAsync: async () => ({ status: 0, stdout: "", stderr: "" }),
 }));
@@ -29,7 +31,10 @@ vi.mock("../../../../server/infra/process/spawnCapture.js", () => ({
 const { tmuxAvailable, setTmuxPrefix } = await import("../../../../server/infra/process/tmux.js");
 
 afterAll(() => rmSync(scratch.home, { recursive: true, force: true }));
-beforeEach(() => calls.splice(0));
+beforeEach(() => {
+  calls.splice(0);
+  prefixTable = "";
+});
 
 const liveCommands = (): string[] =>
   calls
@@ -63,14 +68,22 @@ describe("setTmuxPrefix", () => {
   });
 
   it("unbinds the old custom key when it moves on, and restores C-b", () => {
+    prefixTable = "bind-key    -T prefix C-]   send-prefix\nbind-key    -T prefix c     new-window";
     setTmuxPrefix("C-b");
     expect(liveCommands()).toEqual(expect.arrayContaining(["unbind-key C-]", "set -g prefix C-b", "bind-key C-b send-prefix"]));
     expect(confPrefixLines()).toEqual(["set -g prefix C-b", "bind-key C-b send-prefix"]);
   });
 
-  it("does not unbind C-b or none as an old key", () => {
-    setTmuxPrefix("none");
-    expect(liveCommands()).not.toContain("unbind-key none");
-    expect(liveCommands().filter((command) => command === "unbind-key C-b")).toHaveLength(1);
+  it("unbinds a send-prefix key left by an EARLIER process, which nothing here remembers", () => {
+    prefixTable = "bind-key    -T prefix C-a   send-prefix\nbind-key    -T prefix C-]   send-prefix";
+    setTmuxPrefix("C-]");
+    expect(liveCommands()).toContain("unbind-key C-a");
+    expect(liveCommands()).not.toContain("unbind-key C-]");
+  });
+
+  it("leaves every other prefix-table binding alone", () => {
+    prefixTable = "bind-key    -T prefix c   new-window\nbind-key    -T prefix d   detach-client";
+    setTmuxPrefix("C-b");
+    expect(calls.filter((args) => args[2] === "unbind-key").map((args) => args[3])).toEqual([]);
   });
 });
