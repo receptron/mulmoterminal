@@ -128,6 +128,7 @@ describe("every connection handler", () => {
     const start = source.indexOf(`function ${name}(`);
     expect(start, `${name} is no longer in ws-routes.ts — rename it here too`).toBeGreaterThan(-1);
     const firstAwait = source.indexOf("await ", start);
+    expect(firstAwait, `${name} has no await — the check does not apply`).toBeGreaterThan(start);
     return source.slice(start, firstAwait);
   };
   it.each(handlers)("%s takes the early-frame buffer before its first await", (name) => {

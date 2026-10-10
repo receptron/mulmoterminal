@@ -337,9 +337,12 @@ export async function reserveWorktreeEnvForSpawn(cwd: string, session: { id: str
 async function startRunTerminal(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest): Promise<void> {
   // No session to reattach: /ws/run is ephemeral, so an unusable directory is always a refusal.
   const { url, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "run", unusable, null)) return;
+  if (refuseUnusableWorkspace(ws, "run", unusable, null)) return early.discard();
   const resolved = await resolveRunTarget(url, cwd);
-  if (!resolved) return closeWithError(ws, "Command not found — check your config / script.json.");
+  if (!resolved) {
+    early.discard();
+    return closeWithError(ws, "Command not found — check your config / script.json.");
+  }
   // Against `resolved.cwd`, not the URL's: a header button's command can resolve a different
   // directory, and the pty gets that one. /ws/run never reattaches, so it always reserves.
   await reserveWorktreeEnvForSpawn(resolved.cwd, null);
@@ -486,7 +489,7 @@ export async function handleClaudeConnection(deps: WsRouteDeps, ws: WebSocket, r
   // new sessions we generate the id ourselves (--session-id) so the server always
   // knows the current session's id, even before any file exists.
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "claude", unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, "claude", unusable, requested)) return early.discard();
   // A bad id is never silently reused — closing the socket without a replacement
   // makes the client auto-reconnect with the same bad id forever, so we warn and
   // fall through to mint a fresh session, then tell the browser the new id.
@@ -635,12 +638,15 @@ function clientStillConnected(ws: WebSocket, tag: string, sessionId: string, ear
 // and is marked a dev-terminal session so it stays out of the chat sidebar.
 async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "launch", unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, "launch", unusable, requested)) return early.discard();
   const index = parseIndexParam(url.searchParams.get("launcher"));
   const shell = url.searchParams.get("shell") === "1";
 
   const resolved = resolveLaunchSession(deps, requested, index, shell);
-  if (!resolved) return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
+  if (!resolved) {
+    early.discard();
+    return closeWithError(ws, "Launcher not found — check Settings → Launch commands.");
+  }
   const { sessionId, live: resolvedLive, target } = resolved;
   // Never worktree-limited. The rule is one AGENT SESSION per worktree, and a launcher is not one:
   // it is a command line this app does not read. It used to read it — a command starting with the
@@ -691,7 +697,7 @@ async function handleLaunchConnection(deps: WsRouteDeps, ws: WebSocket, req: WsU
 // MCP so codex drives the GUI panel like claude.
 export async function handleCodexConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "codex", unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, "codex", unusable, requested)) return early.discard();
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
 
   // Before resolving, not after: the mapping this reads lives on disk, and a reconnect that
@@ -786,7 +792,7 @@ async function admitInSessionDir(ws: WebSocket, kind: TerminalWsKind, session: S
 // rollout hydration and the separate resume id; both are absent here on purpose.
 export async function handleCopilotConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "copilot", unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, "copilot", unusable, requested)) return early.discard();
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   // The remembered-cwd map the resolver reads is hydrated from disk; a reconnect arriving mid-read
   // would see nothing remembered and fall back to the request's directory, which is the case the
@@ -828,7 +834,7 @@ export async function resolveCursorSession(requested: string | null, cwd: string
 
 export async function handleCursorConnection(deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, "cursor", unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, "cursor", unusable, requested)) return early.discard();
   // `?gui=` carries TWO things for the other agents — whether to attach the GUI MCP, and whether
   // this socket is the actively-viewed pane — and cursor reads it only for the second, because it
   // has no per-spawn MCP to attach either way. Hard-coding the view half was a real defect and not
@@ -991,7 +997,7 @@ export const MUSE_WS_AGENT: DirectoryMcpWsAgent = {
 // is only in what the spawner then does with that list.
 export async function handleDirectoryMcpAgentConnection(agent: DirectoryMcpWsAgent, deps: WsRouteDeps, ws: WebSocket, req: WsUpgradeRequest) {
   const { url, requested, cwd, unusable, size, early } = acceptTerminalConnection(ws, req);
-  if (refuseUnusableWorkspace(ws, agent.kind, unusable, requested)) return;
+  if (refuseUnusableWorkspace(ws, agent.kind, unusable, requested)) return early.discard();
   const attachGuiMcp = url.searchParams.get("gui") !== "0";
   if (agent.hydrated) await agent.hydrated;
   const { sessionId, live: resolvedLive, resumeConversationId } = await agent.resolveSession(requested, cwd);
