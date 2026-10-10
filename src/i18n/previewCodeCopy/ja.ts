@@ -2,6 +2,7 @@
 export const previewCodeCopyJa = {
   previewCodeCopy: {
     button: "このコードブロックをコピー…",
+    diagramSource: "図のソース",
     title: "コードブロック",
     hint: "ファイルから読んだ文字です。確かめてからコピーしてください。ここに見えているものが、そのままコピーされます。",
     copy: "コピー",

@@ -85,9 +85,14 @@ says so in its own header; `backends/files/fileOps.ts` exists to do the opposite
 
 This is why the same `.md` renders differently in the right pane and at `/files`: only the right
 pane can open it on the canvas, where the markdown plugin's view runs. The full-screen view falls
-to the preview iframe, which is a stock `marked.parse` with no extensions and a CSP that blocks
-the plugin's lazy `import("mermaid")` regardless. A mermaid fence renders as a code block there
-BY DESIGN — nothing tries to load mermaid, which is why no error appears either.
+to the preview iframe, which is a `marked` of the server's own with none of the plugin's
+extensions, so maths stays as code there. A mermaid fence IS drawn there (#2991), but by the
+preview's own nonce'd module script importing mermaid from this server
+(`server/files/previewMermaid.ts`, `server/files/mermaidAssets.ts`) — the plugin's renderer is
+never brought to that surface. Do not "fix" the sandbox to get there: the CSP does NOT block an
+import made by a nonce'd script (the import inherits the nonce; measured in Chromium and WebKit).
+What stops one from this opaque-origin document is CORS, which is why the asset route answers
+with `Access-Control-Allow-Origin` and nothing in the policy changed.
 
 So "make both surfaces render the same" is a containment decision before it is a rendering one.
 Read [`docs/file-surfaces.md`](docs/file-surfaces.md) before moving a renderer between surfaces

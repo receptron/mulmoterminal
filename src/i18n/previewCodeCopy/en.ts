@@ -2,6 +2,7 @@
 export const previewCodeCopyEn = {
   previewCodeCopy: {
     button: "Copy this code block…",
+    diagramSource: "Diagram source",
     title: "Code block",
     hint: "This is the text from the file. Check it, then copy — what you see here is exactly what is copied.",
     copy: "Copy",

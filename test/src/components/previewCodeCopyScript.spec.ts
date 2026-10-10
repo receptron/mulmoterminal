@@ -89,4 +89,19 @@ describe("the Preview's code-block buttons", () => {
     preview.window.dispatchEvent(new preview.window.MessageEvent("message", { data, source: preview.window }));
     expect(preview.buttons()[0]?.getAttribute("aria-label")).toBe("Copy this code block");
   });
+
+  // #2991. The disclosure that keeps a diagram's block reachable is named by the same message, and the
+  // block inside it keeps its button.
+  it("name the diagrams' source disclosures from the host's label, and keep the block's button", () => {
+    const preview = previewOf(
+      '<div class="mermaid-fence"><pre class="mermaid" data-mermaid-pending="1">graph TD</pre>' +
+        '<details class="mermaid-source" open><summary>Diagram source</summary><pre data-code-block="0"><code>graph TD</code></pre></details></div>',
+    );
+    const data = { source: MD_PREVIEW_FROM_HOST, scrollY: 0, codeCopyLabel: "Copy", diagramSourceLabel: "図のソース" };
+    preview.window.dispatchEvent(new preview.window.MessageEvent("message", { data, source: preview.window }));
+    expect(preview.window.document.querySelector("details.mermaid-source > summary")?.textContent).toBe("図のソース");
+    expect(preview.buttons()).toHaveLength(1);
+    preview.buttons()[0]?.click();
+    expect(preview.posted.at(-1)).toMatchObject({ kind: "code-block", index: 0 });
+  });
 });

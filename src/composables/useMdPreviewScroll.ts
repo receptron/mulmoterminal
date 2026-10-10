@@ -24,12 +24,17 @@ import {
   type MdPreviewLabelMessage,
 } from "../../common/mdPreviewMessage";
 import { listenToPreviewFrame } from "../utils/sharedAppPreviewChannel";
-import { usePreviewCodeBlock, type PreviewCodeBlockDialogState, type PreviewCodeBlockDeps } from "./usePreviewCodeBlock";
+import { usePreviewCodeBlock, type PreviewCodeBlockDialogState, type PreviewCodeBlockDeps, type PreviewCodeBlockHost } from "./usePreviewCodeBlock";
 
-const restoreTo = (scrollY: number, codeCopyLabel?: string): MdPreviewHostMessage => ({
+/** The names the document takes from the host, in the app's language. */
+type PreviewLabels = Pick<MdPreviewLabelMessage, "codeCopyLabel" | "diagramSourceLabel">;
+
+const labelsOf = (host: PreviewCodeBlockHost): PreviewLabels => ({ codeCopyLabel: host.label(), diagramSourceLabel: host.diagramSourceLabel() });
+
+const restoreTo = (scrollY: number, labels?: PreviewLabels): MdPreviewHostMessage => ({
   source: MD_PREVIEW_FROM_HOST,
   scrollY,
-  ...(codeCopyLabel === undefined ? {} : { codeCopyLabel }),
+  ...(labels ?? {}),
 });
 
 /** Keep `scrollTop` following the preview frame, and tell a fresh document where to go.
@@ -70,10 +75,13 @@ export function useMdPreviewScroll(
   const codeBlocks = codeBlock?.host;
   // A language switch renames the buttons of the document already open; a new one gets it with `ready`.
   if (codeBlocks) {
-    watch(codeBlocks.label, (codeCopyLabel) => {
-      const renamed: MdPreviewLabelMessage = { source: MD_PREVIEW_FROM_HOST, codeCopyLabel };
-      frame()?.contentWindow?.postMessage(renamed, "*");
-    });
+    watch(
+      () => labelsOf(codeBlocks),
+      (labels) => {
+        const renamed: MdPreviewLabelMessage = { source: MD_PREVIEW_FROM_HOST, ...labels };
+        frame()?.contentWindow?.postMessage(renamed, "*");
+      },
+    );
   }
   let stopListening: (() => void) | null = null;
   const readyListeners: (() => void)[] = [];
@@ -94,7 +102,7 @@ export function useMdPreviewScroll(
     // "null" is not one. What it carries is a scroll offset, into the frame whose window the
     // listener just identified.
     else {
-      frame()?.contentWindow?.postMessage(restoreTo(scrollTop.value, codeBlocks?.label()), "*");
+      frame()?.contentWindow?.postMessage(restoreTo(scrollTop.value, codeBlocks ? labelsOf(codeBlocks) : undefined), "*");
       readyListeners.forEach((listener) => listener());
     }
   };
