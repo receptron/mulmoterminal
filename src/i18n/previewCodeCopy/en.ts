@@ -17,4 +17,9 @@ export const previewCodeCopyEn = {
     manualMarked: "Selected — copy it with your usual key. The <U+…> markers are copied as written, not as the characters they stand for.",
     continuesBelow: "The text continues below — scroll to the end before copying.",
   },
+  // The copy button on a code block in rendered markdown (#2998), worded as MulmoClaude's.
+  markdownCodeCopy: {
+    copyLabel: "Copy code",
+    copiedLabel: "Copied",
+  },
 };

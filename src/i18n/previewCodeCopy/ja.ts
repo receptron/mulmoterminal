@@ -17,4 +17,9 @@ export const previewCodeCopyJa = {
     manualMarked: "選択してあるので、いつものキーでコピーしてください。<U+…> の表記は、元の文字ではなく書いてあるとおりの文字列としてコピーされます。",
     continuesBelow: "下に続きがあります。最後までスクロールして確かめてからコピーしてください。",
   },
+  // The copy button on a code block in rendered markdown (#2998), worded as MulmoClaude's.
+  markdownCodeCopy: {
+    copyLabel: "コードをコピー",
+    copiedLabel: "コピーしました",
+  },
 };

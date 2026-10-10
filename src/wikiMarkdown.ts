@@ -7,14 +7,16 @@
 //      code block / code span ends up as inert escaped text after marked, NOT a live
 //      link — running it on marked's HTML output would instead inject a clickable link
 //      inside `<code>` and corrupt the snippet.
-//   3. marked → HTML.
+//   3. marked → HTML, through the app's own instance (./appMarked): code blocks get a copy
+//      button, and author raw HTML loses `class` / `style` — the wiki-link spans from step 2
+//      included, so step 5 puts their class back.
 //   4. DOMPurify → sanitize (LLM-authored content over a shared workspace).
 //   5. rewrite <img> srcs to MT's raw-file route (core ships no rewriter); make
 //      `.wiki-link` spans keyboard-focusable (activated in WikiPageView).
-import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { renderWikiLinks } from "@mulmoclaude/core/wiki";
 import { rewriteWikiImageSrc } from "./wikiImageSrc";
+import { parseMarkdown } from "./appMarked";
 
 // Leading YAML frontmatter delimited by `---` lines (page format in helps/wiki.md).
 const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---\r?\n/;
@@ -29,12 +31,7 @@ export function stripFrontmatter(content: string): string {
 /** Render a page body to sanitized HTML with `[[links]]` and rewritten image refs. */
 export function renderWikiHtml(content: string): string {
   // renderWikiLinks first (it escapes the text), then marked — see the file header.
-  const linked = renderWikiLinks(stripFrontmatter(content));
-  // `{ async: false }` makes marked return synchronously, but its declared return type is still
-  // `string | Promise<string>`; check rather than assert so a future default flip cannot hand
-  // DOMPurify a Promise (which sanitizes to the string "[object Promise]").
-  const parsed = marked.parse(linked, { async: false });
-  const html = typeof parsed === "string" ? parsed : "";
+  const html = parseMarkdown(renderWikiLinks(stripFrontmatter(content)));
   // DOMPurify keeps class + data-* by default (so the data-page hook survives).
   const clean = DOMPurify.sanitize(html, { ADD_ATTR: ["target"] });
   const doc = new DOMParser().parseFromString(clean, "text/html");
@@ -43,9 +40,15 @@ export function renderWikiHtml(content: string): string {
     const src = img.getAttribute("src");
     if (src) img.setAttribute("src", rewriteWikiImageSrc(src));
   }
+  // The copy button's own utility classes would outrank its rules in style.css (those sit in the
+  // base layer); a reply keeps no class at all, and the wiki's button should look the same.
+  for (const element of Array.from(doc.querySelectorAll("[data-code-copy-block], [data-code-copy-block] button, [data-code-copy-block] button *"))) {
+    element.removeAttribute("class");
+  }
   // Make [[wiki links]] reachable + activatable without a mouse (the delegated
   // click/keydown handler in WikiPageView reads data-page).
-  for (const link of Array.from(doc.querySelectorAll(".wiki-link"))) {
+  for (const link of Array.from(doc.querySelectorAll("span[data-page]"))) {
+    link.classList.add("wiki-link");
     link.setAttribute("role", "link");
     link.setAttribute("tabindex", "0");
   }

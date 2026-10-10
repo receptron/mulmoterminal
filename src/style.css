@@ -257,6 +257,46 @@
     padding: 0;
     white-space: pre;
   }
+  /* The copy button on a code block (#2998), markup from @mulmoclaude/markdown-utils. Styled by
+     attribute, not by the utility classes it ships with: a rendered reply keeps no `class` at all
+     (that is what stops an author's decoy overlay), so a class would style nothing. */
+  .wiki-body [data-code-copy-block],
+  .md-prose [data-code-copy-block] {
+    position: relative;
+  }
+  .wiki-body [data-code-copy],
+  .md-prose [data-code-copy] {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    display: inline-flex;
+    padding: 4px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .wiki-body [data-code-copy]:hover,
+  .md-prose [data-code-copy]:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+  .wiki-body [data-code-copy]:focus-visible,
+  .md-prose [data-code-copy]:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .wiki-body [data-code-copy] svg,
+  .md-prose [data-code-copy] svg {
+    width: 16px;
+    height: 16px;
+  }
+  /* The class the package's click handler adds for a moment after a copy succeeds. */
+  .wiki-body [data-code-copy].text-green-600,
+  .md-prose [data-code-copy].text-green-600 {
+    color: var(--ok);
+  }
   .wiki-body img,
   .md-prose img {
     max-width: 100%;
