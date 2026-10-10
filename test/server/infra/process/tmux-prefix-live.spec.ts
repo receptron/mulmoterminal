@@ -4,7 +4,8 @@
 // server that is already up. tmux itself is replaced by a recorder; test/common/tmuxPrefix.spec.ts has
 // the commands, and a real tmux was driven by hand for what they do.
 import { describe, it, expect, vi, afterAll, beforeEach } from "vitest";
-import { readFileSync, rmSync } from "node:fs";
+import path from "node:path";
+import { readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 
 const scratch = await vi.hoisted(async () => {
   const { mkdtempSync } = await import("node:fs");
@@ -52,7 +53,11 @@ describe("setTmuxPrefix", () => {
   });
 
   it("moves to a custom key: conf rewritten, running server told", () => {
+    const inodeBefore = statSync(scratch.conf).ino;
     setTmuxPrefix("C-]");
+    // A new file renamed over the old one, so a sibling process starting tmux with -f never reads a half-written conf.
+    expect(statSync(scratch.conf).ino).not.toBe(inodeBefore);
+    expect(readdirSync(path.dirname(scratch.conf))).toEqual(["tmux.conf"]);
     expect(confPrefixLines()).toEqual(["set -g prefix C-]", "unbind-key C-b", "bind-key C-] send-prefix"]);
     expect(liveCommands()).toContain("set -g prefix C-]");
   });

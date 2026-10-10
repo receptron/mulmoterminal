@@ -5,7 +5,7 @@
 //
 // Isolation: we use our OWN tmux server (`-L mulmoterminal`) and config file, so none
 // of this touches the user's own tmux sessions, keybindings, or status bar.
-import { writeFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 // The bind port, to tell OUR leaked PORT from the user's own (see isOwnPort). config/ is
@@ -15,6 +15,7 @@ import { PORT } from "../../config/env.js";
 import { isLauncherEnvVar } from "./pty-env.js";
 import { spawnCapture, spawnCaptureAsync } from "./spawnCapture.js";
 import { splitLines } from "../fs/split-lines.js";
+import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, TMUX_PREFIX_NONE, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 
 const SERVER_SOCKET = "mulmoterminal";
@@ -292,7 +293,8 @@ export function tmuxScrubEnvNames(names: readonly string[]): void {
 function ensureConf(): void {
   try {
     mkdirSync(path.dirname(CONF_FILE), { recursive: true });
-    writeFileSync(CONF_FILE, [...TMUX_CONF_LINES, ...tmuxPrefixCommands(tmuxPrefix)].join("\n") + "\n");
+    // Atomic: a sibling mulmoterminal may start the tmux server with `-f` while a saved setting rewrites this.
+    writeFileAtomicSync(CONF_FILE, [...TMUX_CONF_LINES, ...tmuxPrefixCommands(tmuxPrefix)].join("\n") + "\n");
     if (tmux(["list-sessions"]).status === 0) {
       applyLiveTmuxOptions();
       scrubGlobalEnvironment();
