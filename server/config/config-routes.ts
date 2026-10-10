@@ -439,6 +439,7 @@ async function mutateConfigOnDisk(res: Response, onCwdPresetsChanged: CwdPresets
       // hear about the projects they now serve.
       const presetsMoved = !samePresets(config.cwdPresets, next.cwdPresets);
       config = next;
+      setTmuxPrefix(next.tmuxPrefix);
       if (presetsMoved) notifyPresetsChanged(onCwdPresetsChanged);
       return answer(next);
     });
