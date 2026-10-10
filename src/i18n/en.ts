@@ -26,6 +26,7 @@ import { themeEditorEn } from "./themeEditor/en";
 import { headerChipsEn } from "./headerChips/en";
 import { headerButtonsEn } from "./headerButtons/en";
 import { settingsControlsEn } from "./settingsControls/en";
+import { settingsHelpEn } from "./settingsHelp/en";
 import { shortcutsEn } from "./shortcuts/en";
 import { filesTreeEn } from "./filesTree/en";
 import { previewCodeCopyEn } from "./previewCodeCopy/en";
@@ -181,9 +182,7 @@ export const en = {
       },
     },
 
-    guide: {
-      prompt: "Not sure how to use MulmoTerminal? Read the guide —",
-    },
+    ...settingsHelpEn,
 
     push: {
       intro:

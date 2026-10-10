@@ -13,6 +13,7 @@ import { themeEditorJa } from "./themeEditor/ja";
 import { headerChipsJa } from "./headerChips/ja";
 import { headerButtonsJa } from "./headerButtons/ja";
 import { settingsControlsJa } from "./settingsControls/ja";
+import { settingsHelpJa } from "./settingsHelp/ja";
 import { shortcutsJa } from "./shortcuts/ja";
 import { filesTreeJa } from "./filesTree/ja";
 import { previewCodeCopyJa } from "./previewCodeCopy/ja";
@@ -173,9 +174,7 @@ export const ja: Messages = {
       },
     },
 
-    guide: {
-      prompt: "MulmoTerminal の使い方が分からないときはガイドをどうぞ —",
-    },
+    ...settingsHelpJa,
 
     push: {
       intro:

@@ -330,6 +330,11 @@ skill hears the symptom out, checks your real config and version to see whether 
 configuration or by design, searches the existing issues, and only helps you file one if
 none of that explains it — environment collected, secrets masked.
 
+Not broken, just unsure how something works? Press the **help** icon in the toolbar (next to the
+gear), or type **`/mulmoterminal-help`** in any session: a terminal opens where the agent answers
+questions about MulmoTerminal — features, the screen, settings, what is new — from the guide,
+changelog and source shipped with your version, naming where each fact was checked.
+
 ---
 
 ## Once you're running {#for-power-users}

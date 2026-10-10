@@ -9,7 +9,9 @@ import { useI18n } from "vue-i18n";
 import SettingsButton from "./SettingsButton.vue";
 import type { BundledSkillName } from "../../common/bundledSkills";
 
-defineProps<{ skill: BundledSkillName; icon: string; label: string }>();
+// `hint` replaces the shared sentence, which promises config edits: a skill that only answers
+// questions (the help desk) must not be introduced as one that writes a file.
+defineProps<{ skill: BundledSkillName; icon: string; label: string; hint?: string }>();
 const emit = defineEmits<{ (e: "launch", skill: BundledSkillName): void }>();
 
 const { t } = useI18n();
@@ -21,5 +23,5 @@ const { t } = useI18n();
   </SettingsButton>
   <!-- The button was an icon and a label, and pressing it started a live session. The sentence is
        the same for every one of them, so it lives here rather than in seven sections (#1564). -->
-  <p class="mt-1 text-[11px] text-muted">{{ t("settings.skillLaunch.hint") }}</p>
+  <p class="mt-1 text-[11px] text-muted">{{ hint ?? t("settings.skillLaunch.hint") }}</p>
 </template>

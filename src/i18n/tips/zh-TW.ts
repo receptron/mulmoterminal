@@ -313,6 +313,7 @@ export const tipsZhTW: Messages["tips"] = {
     showStrip: "顯示縮圖列",
     showRoster: "顯示清單",
     settings: "設定",
+    help: "說明 —— 詢問 MulmoTerminal",
     notifications: "通知",
     notificationsOne: "1 則通知",
     notificationsMany: "{count} 則通知",

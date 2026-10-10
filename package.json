@@ -33,8 +33,10 @@
     "server/",
     "plugins/",
     "blueprints/",
-    "docs/guide/en/v*.md",
-    "docs/guide/ja/v*.md"
+    "docs/guide/en/*.md",
+    "docs/guide/ja/*.md",
+    "docs/ChangeLog.md",
+    "docs/facts.json"
   ],
   "engines": {
     "node": ">=22.12"

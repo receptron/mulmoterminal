@@ -314,6 +314,7 @@ export const tipsKo: Messages["tips"] = {
     showStrip: "썸네일 줄 표시",
     showRoster: "목록 표시",
     settings: "설정",
+    help: "도움말 — MulmoTerminal에 대해 질문",
     notifications: "알림",
     notificationsOne: "알림 1개",
     notificationsMany: "알림 {count}개",

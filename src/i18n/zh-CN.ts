@@ -13,6 +13,7 @@ import { themeEditorZhCN } from "./themeEditor/zh-CN";
 import { headerChipsZhCN } from "./headerChips/zh-CN";
 import { headerButtonsZhCN } from "./headerButtons/zh-CN";
 import { settingsControlsZhCN } from "./settingsControls/zh-CN";
+import { settingsHelpZhCN } from "./settingsHelp/zh-CN";
 import { shortcutsZhCN } from "./shortcuts/zh-CN";
 import { filesTreeZhCN } from "./filesTree/zh-CN";
 import { previewCodeCopyZhCN } from "./previewCodeCopy/zh-CN";
@@ -168,9 +169,7 @@ export const zhCN: Messages = {
       },
     },
 
-    guide: {
-      prompt: "不确定 MulmoTerminal 怎么用？看看指南 ——",
-    },
+    ...settingsHelpZhCN,
 
     push: {
       intro: "后台任务完成时，向你注册过的设备发送推送。需要 {remoteHost} 连接 —— 通知的鉴权来自它的登录，所以只在连接着的时候才会发出。",
