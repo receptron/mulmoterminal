@@ -9,7 +9,7 @@
 // goes with that button: an author's `class` / `style` could lay a decoy over a block, so the reader
 // sees one command while the button copies another (receptron/mulmoclaude#3151).
 import { Marked } from "marked";
-import { codeCopyExtension, setCodeCopyLabelProvider } from "@mulmoclaude/markdown-utils/markdown/codeCopyExtension";
+import { codeCopyExtension, setCodeCopyLabelProvider, type CodeCopyLabels } from "@mulmoclaude/markdown-utils/markdown/codeCopyExtension";
 import { installCodeCopyHandler } from "@mulmoclaude/markdown-utils/markdown/codeCopyClipboard";
 import { rawHtmlPolicyExtension } from "@mulmoclaude/markdown-utils/markdown/rawHtmlPolicy";
 import { i18n } from "./i18n";
@@ -20,13 +20,20 @@ export const appMarked = new Marked(rawHtmlPolicyExtension, codeCopyExtension);
  *  checked rather than asserted, so a future default flip cannot hand DOMPurify a Promise (which
  *  sanitizes to the string "[object Promise]"). */
 export function parseMarkdown(markdown: string): string {
+  // The label provider is module state shared with the markdown plugin, which installs its own
+  // whenever its View mounts (and has no `zh-CN` / `zh-TW`). Set ours for the render it labels.
+  setCodeCopyLabelProvider(appCodeCopyLabels);
   const parsed = appMarked.parse(markdown, { async: false });
   return typeof parsed === "string" ? parsed : "";
 }
 
-/** Labels the buttons in the UI language and starts the one document-wide click listener that
- *  copies. The provider is read at render time, so a language switch relabels on the next render. */
+/** Read inside the render, so a language switch relabels the buttons on the next one. */
+const appCodeCopyLabels = (): CodeCopyLabels => ({
+  copy: i18n.global.t("markdownCodeCopy.copyLabel"),
+  copied: i18n.global.t("markdownCodeCopy.copiedLabel"),
+});
+
+/** Starts the one document-wide click listener that copies. */
 export function installMarkdownCodeCopy(doc: Document): void {
-  setCodeCopyLabelProvider(() => ({ copy: i18n.global.t("markdownCodeCopy.copyLabel"), copied: i18n.global.t("markdownCodeCopy.copiedLabel") }));
   installCodeCopyHandler(doc);
 }

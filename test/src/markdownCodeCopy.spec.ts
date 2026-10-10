@@ -7,10 +7,11 @@
 // button stays inert, and an author's class / style cannot lay a decoy over a block.
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { marked } from "marked";
-import { codeCopyExtension } from "@mulmoclaude/markdown-utils/markdown/codeCopyExtension";
+import { codeCopyExtension, setCodeCopyLabelProvider } from "@mulmoclaude/markdown-utils/markdown/codeCopyExtension";
 import { renderMarkdownProse } from "../../src/markdownProse";
 import { renderWikiHtml } from "../../src/wikiMarkdown";
 import { installMarkdownCodeCopy } from "../../src/appMarked";
+import { i18n } from "../../src/i18n";
 
 const MARKDOWN_BLOCK = "# Title\n\n- item one\n- item two";
 const REPLY = ["Here is the note:", "", "```markdown", MARKDOWN_BLOCK, "```", ""].join("\n");
@@ -62,6 +63,17 @@ describe.each(RENDERERS)("%s — code block copy", (_name, render) => {
   it("labels the button", () => {
     const button = mount(render(REPLY)).querySelector("[data-code-copy]");
     expect(button?.getAttribute("aria-label")).toBe("Copy code");
+  });
+
+  it("keeps the app's labels after the markdown plugin installs its own", () => {
+    // The plugin's View sets the shared provider on mount, and its table has no zh-CN.
+    setCodeCopyLabelProvider(() => ({ copy: "Copy code", copied: "Copied" }));
+    i18n.global.locale.value = "zh-CN";
+    try {
+      expect(mount(render(REPLY)).querySelector("[data-code-copy]")?.getAttribute("aria-label")).toBe("复制代码");
+    } finally {
+      i18n.global.locale.value = "en";
+    }
   });
 
   it("leaves prose without a code block alone", () => {
