@@ -8,6 +8,10 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+### JingleScript scores carry an author and a copyright
+
+- `@gui-chat-plugin/jinglescript` and `jinglescript` ^0.6.0 -> ^0.7.0. 0.7.0 adds optional `author` and `copyright` to a score, next to `title`; all three are written into the rendered audio's tags (WAV, MP3, OGG — including the player's embedded audio) and, for the copyright, the MIDI file. The tool tells the model to fill them only with what the user gives. No host changes: the tool and its player view come from the plugin.
+
 ## mulmoterminal@9.9.0 — 2026-10-10
 
 > **Setup guide:** [9.9.0 — Mermaid diagrams in the Files preview](https://receptron.github.io/mulmoterminal/guide/en/v9.9.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.9.0.html))

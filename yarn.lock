@@ -1296,10 +1296,10 @@
   resolved "https://registry.yarnpkg.com/@gui-chat-plugin/common/-/common-0.1.0.tgz#96d8a7a1cf1a2a806bbc2ee5ba296b69a59b0350"
   integrity sha512-OF+/XxKWBU50ijjygO+QrMsJjKn+2b1jtA7ouerBJThFT6sR1ZSwJDp+wj6FKBMXY8pPveJcXCBDQHl/qILmrg==
 
-"@gui-chat-plugin/jinglescript@^0.6.0":
-  version "0.6.0"
-  resolved "https://registry.yarnpkg.com/@gui-chat-plugin/jinglescript/-/jinglescript-0.6.0.tgz#24227b5cc2df3d7d71c37c4fb398e0c471d146f7"
-  integrity sha512-GB72BxdKq9RAcmu97zeYeXpZGq0RaE+c39Ui/Jp86qry13voRIOGcfNMVxiWHRvm/vRb89Fq2TGuw8dhIqFKIg==
+"@gui-chat-plugin/jinglescript@^0.7.0":
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/@gui-chat-plugin/jinglescript/-/jinglescript-0.7.0.tgz#627e9f58ec74cf8058580d4b0a3e847ac1888b9d"
+  integrity sha512-zFhe+t3JrKB8dBqX9WXcqaQk17Vkru7jWrq/DuQVOpBRrRWUe6zeu+adD7yJcl7oOTL3Z+ECLxj7SAC6AYf1cQ==
 
 "@gui-chat-plugin/shapescript@^8.2.2":
   version "8.2.2"
@@ -5940,6 +5940,14 @@ jinglescript@^0.6.0:
   version "0.6.0"
   resolved "https://registry.yarnpkg.com/jinglescript/-/jinglescript-0.6.0.tgz#2ba37b6b2f149acfcb69967c1cf89c09d9a5704d"
   integrity sha512-TlVas9hUd3q8r/vfrbC/hRG7hfmUE4Zgyg1+m2b62g+ZT66fTSX9nmPUa/vl4OmLLGWTPSBN/07N/lDZRu7qeQ==
+  dependencies:
+    "@modelcontextprotocol/sdk" "^1.32.1"
+    zod "^4.6.5"
+
+jinglescript@^0.7.0:
+  version "0.7.0"
+  resolved "https://registry.yarnpkg.com/jinglescript/-/jinglescript-0.7.0.tgz#2c0ec1c8597b25cb46f3ace2782681265dd51f90"
+  integrity sha512-4GatPDuSThsQwXIdDejkWLq5UeaAoKIYfI05jtaTiEz+9C4HidUzx8E6vRCfS7CDWdIoPInYdzuzwkxpMqfY2Q==
   dependencies:
     "@modelcontextprotocol/sdk" "^1.32.1"
     zod "^4.6.5"
