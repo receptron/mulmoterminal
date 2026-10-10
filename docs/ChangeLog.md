@@ -8,6 +8,14 @@ This file records **what changed and why**. For **how to actually use** a new fe
 
 Entries here are folded into the next release's heading when it ships.
 
+## mulmoterminal@9.7.0 — 2026-10-10
+
+> **Setup guide:** [9.7.0 — See when a token at its limit resets, and JingleScript reads scores from files](https://receptron.github.io/mulmoterminal/guide/en/v9.7.0.html) ([日本語](https://receptron.github.io/mulmoterminal/guide/ja/v9.7.0.html))
+
+### Token usage: when an at-limit token resets (#2976)
+
+- [#2977](https://github.com/receptron/mulmoterminal/pull/2977) — a token held out at its usage limit used to read only "At its usage limit — skipped until it resets". The row now adds, per window (5h / weekly), the reset time that window last reported, if still ahead, in the interface language and labelled as last read. Both windows are listed because the probe cannot say which one blocked. The server sends the windows as last read (`lastLimits`) only while the current ones are too old to vouch for; the toolbar gauge and the default login are unchanged.
+
 ### JingleScript reads a score from a file
 
 - `@gui-chat-plugin/jinglescript` and `jinglescript` ^0.4.0 -> ^0.6.0. 0.5.0 adds MIDI export (a "Download MIDI" link in the player); 0.6.0 lets `checkScore` / `renderScore` take `path`, a `.json` score file, instead of the score inline, so a long score need not travel in every tool call. The plugin reads that file through the host's `files.byPath`, so this host now hands `manageJingleScript` a `.json`-scoped one (`jingleScriptByPath`, `server/backends/files/openPath.ts`) and lists the tool in `PRESENT_PATH_EXTENSIONS`, so a relative `path` names the file in the session's own directory, as presentDocument's does. Without the binding the plugin refuses `path` and asks for the score inline.
@@ -15,6 +23,12 @@ Entries here are folded into the next release's heading when it ships.
 ### mulmocast 2.19.0
 
 - `mulmocast` and `@mulmocast/types` ^2.17.0 -> ^2.19.0. 2.18.0 makes `gemini-omni-1.1-flash` the default Gemini API video model (the Veo 3.1 previews shut down on 2026-10-22; a script that names one gets an error pointing at the replacement) and adds an opt-in strict network mode for the HTML renderers and PDF. 2.19.0 adds `beat.soundEffects` (sound effects at a chosen time inside a beat), lets a sound effect's source be a JingleScript score (`{ "kind": "jinglescript", "score": … }`, which is why mulmocast now peer-requires `jinglescript ^0.6.0`, the version above), and moves to avatarscript 0.4.0. Nothing in this repo names a Veo preview model.
+
+### Dependencies and guide upkeep
+
+- [#2978](https://github.com/receptron/mulmoterminal/pull/2978), [#2980](https://github.com/receptron/mulmoterminal/pull/2980) — package updates, including the JingleScript plugin and library.
+- [#2982](https://github.com/receptron/mulmoterminal/pull/2982) — `material-symbols` ^0.47.6 -> ^0.48.0 (the icon font); the stylesheet import and class name are unchanged.
+- [#2965](https://github.com/receptron/mulmoterminal/pull/2965), [#2967](https://github.com/receptron/mulmoterminal/pull/2967), [#2969](https://github.com/receptron/mulmoterminal/pull/2969), [#2971](https://github.com/receptron/mulmoterminal/pull/2971), [#2972](https://github.com/receptron/mulmoterminal/pull/2972), [#2973](https://github.com/receptron/mulmoterminal/pull/2973), [#2974](https://github.com/receptron/mulmoterminal/pull/2974) — the guide: a 9.6.0 screenshot, a new opening that says what MulmoTerminal is, old 4.x notes dropped from the English top, every page in the reading list, pages brought in line with the code (agent lists, notification kinds, Settings, worktree limit), the Japanese shared-apps page filled out, and a table row that showed literal `**`.
 
 ## mulmoterminal@9.6.0 — 2026-10-09
 

@@ -8,8 +8,8 @@ description: A browser-terminal cockpit for running several AI coding agents in 
 
 # MulmoTerminal Guide (English)
 
-> **9.6.0 is out.** Click the subscription name on a cell to move that session to another subscription, with each one's
-> weekly room and time to reset beside it, and agents can write jingles with JingleScript. [Setup guide](v9.6.0.html)
+> **9.7.0 is out.** A token held out at its usage limit now shows when it resets, JingleScript can read a score from a
+> file, and `mulmocast` moves to 2.19.0. [Setup guide](v9.7.0.html)
 
 ## What is MulmoTerminal? {#what-is}
 
