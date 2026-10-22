@@ -297,7 +297,7 @@ description: MulmoTerminal のいまある機能を、入った版つきで領�
 詳しく: [コレクションから作る](from-collection.html) · [MulmoCast の動画](mulmocast.html) · [表計算とグラフ](spreadsheet.html)
 
 - 表の計算式が、隣のセルまで埋める表を返せる（SORT、FILTER、UNIQUE、GROUPBY、PIVOTBY）。LET と LAMBDA、LINEST、FREQUENCY、FORECAST.ETS、検定も増える (v11.2.0)
-- グラフに日本地図・世界地図、まとまり分け、列ごとの箱ひげ図、表を追いかける曲線とヒストグラム、ワードクラウド、3D、SVG・CSV での保存、カードの横並びが加わる (v11.1.0)
+- グラフに日本地図・世界地図、まとまり分け、列ごとの箱ひげ図、表を追いかける曲線とヒストグラム、ワードクラウド、3D、SVG・CSV での保存（ワードクラウドと 3D は SVG を除く）、カードの横並びが加わる (v11.1.0)
 - グラフが表の範囲から描け、表を直すと描き直される（presentChart の `source`） (v10.10.0)
 - 開いている表が、エージェントやほかのプログラムがファイルを変えると読み直す (v10.10.0)
 - 表に自分の関数を JavaScript で持たせられ、ブラウザの中で閉じ込めて動く (v10.10.0)
