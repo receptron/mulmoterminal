@@ -10,6 +10,11 @@
 // are the same class of leak: run-script context that a user terminal — or a
 // claude session — should never inherit. Strip it all so spawned PTYs start
 // from an environment a fresh login shell would recognize.
+//
+// Claude Code's CLAUDE_CODE_ENTRYPOINT is the same class from another launcher: a claude
+// that started the server exports how IT was started (`cli`, an SDK's `sdk-cli`), and a
+// claude in a cell that inherits the value registers as that instead of as the terminal's,
+// which is what the peer chip reads (#3244).
 
 // All lowercase: matching is case-insensitive, since Windows env names are.
 const REMOVED_NAMES = new Set([
@@ -21,13 +26,14 @@ const REMOVED_NAMES = new Set([
   "npm_execpath",
   "npm_node_execpath",
   "npm_command",
+  "claude_code_entrypoint", // an ancestor claude's own entrypoint (see header comment)
   "_volta_tool_recursion", // `volta run` marks its node; a shim that sees it skips Volta's version choice (#3233)
 ]);
 
 const REMOVED_PREFIXES = ["npm_config_", "npm_package_", "npm_lifecycle_"];
 
-// Is this env var package-manager launcher context (vs. real user environment)?
-// Deliberately narrow: HOMEBREW_PREFIX / CONDA_PREFIX etc. must survive.
+// Is this env var launcher context (a package manager's, or an ancestor claude's) rather than
+// real user environment? Deliberately narrow: HOMEBREW_PREFIX / CONDA_PREFIX etc. must survive.
 export function isLauncherEnvVar(name: string): boolean {
   const lower = name.toLowerCase();
   return REMOVED_NAMES.has(lower) || REMOVED_PREFIXES.some((prefix) => lower.startsWith(prefix));

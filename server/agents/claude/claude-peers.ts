@@ -15,13 +15,29 @@ export interface ClaudePeer {
   sessionId: string | null;
   /** The tmux session the process runs in, without the window and pane Claude Code appends. */
   tmuxSession: string | null;
+  /** Who the entry says started the process: the terminal (`entrypoint: "cli"`), nobody it names
+   *  (the field absent or empty), or a program — an SDK's `sdk-cli`, or a value that is not even
+   *  a string, which no Claude Code writes and is not trusted to be the terminal's. */
+  startedBy: PeerStarter;
   /** When Claude Code last wrote the entry, for choosing between two that claim one cell. */
   updatedAt: number;
   /** When the claude registered itself, by its own clock, for checking the process against. */
   startedAt: number | null;
 }
 
+export type PeerStarter = "terminal" | "unsaid" | "program";
+
 const stringOrNull = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+
+/** What Claude Code writes for the claude a person types into. A program run from inside a cell
+ *  (a plugin driving `claude -p` over stream-json) inherits the pane and registers on it too, as
+ *  `sdk-cli`, and rewrites its entry more often than an idle terminal does. */
+const INTERACTIVE_ENTRYPOINT = "cli";
+
+const starterOf = (entrypoint: unknown): PeerStarter => {
+  if (entrypoint === undefined || entrypoint === "") return "unsaid";
+  return entrypoint === INTERACTIVE_ENTRYPOINT ? "terminal" : "program";
+};
 
 /** A name is typed into another session's message tool and shown on a tooltip, so it is bounded
  *  here whatever the registry holds: Claude Code derives `<folder>-<two hex digits>`, and a name
@@ -55,6 +71,7 @@ export function parseClaudePeer(value: unknown): ClaudePeer | null {
     pid,
     sessionId: stringOrNull(value.sessionId),
     tmuxSession: tmuxSessionOf(value.tmux),
+    startedBy: starterOf(value.entrypoint),
     updatedAt: finiteOr(value.updatedAt, finiteOr(value.startedAt, 0)),
     startedAt: typeof value.startedAt === "number" && Number.isFinite(value.startedAt) ? value.startedAt : null,
   };
@@ -100,13 +117,16 @@ export interface PeerKeys {
 const latestOf = (peers: readonly ClaudePeer[]): ClaudePeer | null =>
   peers.reduce<ClaudePeer | null>((best, peer) => (best === null || peer.updatedAt > best.updatedAt ? peer : best), null);
 
+const runsTheTerminal = (peer: ClaudePeer): boolean => peer.startedBy !== "program";
+
 /** The name of the peer running this cell's session: the one in its tmux session, else — for a
  *  claude started without tmux, which names no tmux session at all — the one claude knows by its
  *  id. A peer that names ANOTHER tmux session is another cell's whatever its id says: the same
- *  conversation resumed elsewhere. Of several claiming the cell — an entry a crashed process left
- *  behind, a resumed session — the one written last. */
+ *  conversation resumed elsewhere. One that says a program started it is not the cell's either,
+ *  however recently written (#3244); one that does not say is kept. Of several claiming the cell —
+ *  an entry a crashed process left behind, a resumed session — the one written last. */
 export function peerNameFor(peers: readonly ClaudePeer[], keys: PeerKeys): string | null {
   const inTmux = peers.filter((peer) => peer.tmuxSession === keys.tmuxSession);
   const claiming = inTmux.length > 0 ? inTmux : peers.filter((peer) => peer.tmuxSession === null && peer.sessionId === keys.sessionId);
-  return latestOf(claiming)?.name ?? null;
+  return latestOf(claiming.filter(runsTheTerminal))?.name ?? null;
 }
