@@ -10,7 +10,7 @@ import { isRecord } from "./isRecord.js";
 export const MAX_HEADER_CHIPS = 16;
 
 /** The built-in chips a terminal cell draws, in the order an unconfigured header shows them. */
-export const CELL_CHIP_IDS = ["git", "work", "diff", "ctx", "usage", "env"] as const;
+export const CELL_CHIP_IDS = ["git", "work", "diff", "ctx", "usage", "env", "peer"] as const;
 export type CellChipId = (typeof CELL_CHIP_IDS)[number];
 export const isCellChipId = (value: unknown): value is CellChipId => CELL_CHIP_IDS.some((id) => id === value);
 

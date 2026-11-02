@@ -261,7 +261,7 @@ describe("dirConfigJsonSchema", () => {
     expect(json).toContain('"required":["id","label","run","open"]'); // open needs open
     expect(json).toContain('"required":["id","label","run","action"]'); // action needs action
     expect(json).toContain(`"enum":${JSON.stringify(HEADER_ACTIONS)}`); // …and only the actions the client can dispatch
-    expect(json).toContain('"enum":["dir","git","work","ctx","usage","status","diff","tools","env"]'); // chip string = builtin ids only
+    expect(json).toContain('"enum":["dir","git","work","ctx","usage","status","diff","tools","env","peer"]'); // chip string = builtin ids only
   });
 
   // A folder (#2366) is written as id + label + a non-empty `items` of plain buttons, which is what

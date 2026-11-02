@@ -590,7 +590,7 @@ One of them no longer matches its menu item. *Browse files in the app* **in the 
 { "chips": ["ctx", "git", { "label": "env", "text": "⎇ ${branch}", "when": "isGitRepo" }] }
 ```
 
-- **Only `git` / `work` / `diff` / `ctx` / `usage` / [`env`](#worktree-env) respond** — shown in the order you list them; omit one to hide it.
+- **Only `git` / `work` / `diff` / `ctx` / `usage` / [`env`](#worktree-env) / `peer` respond** — shown in the order you list them; omit one to hide it. `peer` is the name the other Claude Code sessions on this machine message this one by, as an icon that copies it; nothing on a cell that is not a Claude session.
 - `dir` (the project badge), `status` (the status dot) and `tools` (the row-2 tool timeline) are **structural to the cell**:
   listing them does nothing and omitting them hides nothing. The schema accepts them, so it is not an error — they are silently ignored.
 - Custom `{ label, text, when }` … read-only text. **`text` is what's displayed** (it expands `${variables}`);

@@ -5,6 +5,7 @@ import TerminalCell from "./TerminalCell.vue";
 import CommandCell from "./CommandCell.vue";
 import LauncherCell from "./LauncherCell.vue";
 import CockpitRowMenu from "./CockpitRowMenu.vue";
+import PeerNameChip from "./PeerNameChip.vue";
 import CockpitHeader from "./CockpitHeader.vue";
 import * as conn from "../composables/useTerminalConnections";
 import { trackStyle, layoutForCount } from "./gridLayout";
@@ -101,6 +102,7 @@ export interface CockpitRow {
   agent: SessionAgent | null;
   status: AttentionStatus;
   memo: string | null; // the user's own one-line note (#1084)
+  peerName: string | null; // what the other Claude Code sessions call this one (#3237); null for every other agent
   summary: string | null; // AI title
   prompt: string | null; // current user prompt
   response: string | null; // tail of the agent's latest reply
@@ -1766,6 +1768,9 @@ function onRosterDragLeave(event: DragEvent) {
             @dragstart="reorderable && onRowDragStart($event, row.uid)"
             @dragend="reorderable && commitRosterDrag()"
           >
+            <!-- The name other Claude Code sessions message this cell by (#3237): an icon that copies
+                 it, at the end of the header bar so the text lines below stay the agent's. -->
+            <PeerNameChip :name="row.peerName" />
             <CockpitRowMenu
               :can-up="canMoveCell(cells, row.uid, -1)"
               :can-down="canMoveCell(cells, row.uid, 1)"

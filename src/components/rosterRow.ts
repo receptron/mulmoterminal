@@ -86,6 +86,7 @@ export function rosterRow(c: Cell, look: RosterLookups): CockpitRow {
     agent: rosterAgent(c),
     status: look.status(c.uid) ?? NO_STATUS,
     memo: meta.memo,
+    peerName: meta.peerName,
     // Claude's AI title first, then what the agent's own store calls the session (#2123). The two
     // answer the same question — on the default title source claude's is written ONCE and never
     // updated, so that row is already "what this session was about near its beginning", which is
