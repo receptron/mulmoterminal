@@ -20,7 +20,6 @@ import {
   tmuxClientUnsetNames,
   tmuxHasSession,
   tmuxNewSessionArgs,
-  tmuxPsmuxScrubbedNames,
   tmuxPsmuxVtInput,
   tmuxScrubEnvNames,
 } from "../../infra/process/tmux.js";
@@ -263,14 +262,13 @@ export function ptySpawn(
     // is NOT ours (`PORT=3000 mulmoterminal --port 34601`) is the user's and still travels (#1873).
     //
     // A psmux client is started on its VT input route, so a bracketed paste keeps its markers and
-    // the Enter after it is not taken into the paste (see psmuxVtInputFor), and without the names in
-    // PSMUX_SCRUBBED_NAMES (a running psmux server loses them in ensureConf). A real tmux gets neither.
+    // the Enter after it is not taken into the paste (see psmuxVtInputFor). A real tmux gets neither.
     return {
       term: spawnPty(
         "tmux",
         tmuxNewSessionArgs(sessionId, pane.file, pane.args, cwd, { ...env, ...pane.env }),
         TMUX_CLIENT_CWD,
-        [...unset, ...tmuxClientUnsetNames(process.env.PORT, ownBindPort()), ...tmuxPsmuxScrubbedNames()],
+        [...unset, ...tmuxClientUnsetNames(process.env.PORT, ownBindPort())],
         tmuxPsmuxVtInput() ? PSMUX_VT_INPUT_ENV : {},
       ),
       tmux: true,

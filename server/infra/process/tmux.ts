@@ -16,16 +16,7 @@ import { HOME_SCOPE_SUFFIX, PORT } from "../../config/env.js";
 import { isLauncherEnvVar } from "./pty-env.js";
 import { spawnCapture, spawnCaptureAsync } from "./spawnCapture.js";
 import { splitLines } from "../fs/split-lines.js";
-import {
-  PSMUX_SCRUBBED_NAMES,
-  isPsmuxVersion,
-  psmuxConfLine,
-  psmuxGlobalOptions,
-  psmuxVersionOf,
-  psmuxVtInputFor,
-  type PsmuxGlobalOption,
-  type PsmuxVersion,
-} from "./psmux.js";
+import { isPsmuxVersion, psmuxConfLine, psmuxGlobalOptions, psmuxVersionOf, psmuxVtInputFor, type PsmuxGlobalOption, type PsmuxVersion } from "./psmux.js";
 import { writeFileAtomicSync } from "../../files/atomic-write.js";
 import { TMUX_PREFIX_DEFAULT, staleSendPrefixKeys, tmuxPrefixCommands } from "../../../common/tmuxPrefix.js";
 import { liveServerFrom, type LiveTmuxServer } from "./tmuxLiveServer.js";
@@ -74,9 +65,6 @@ export const tmuxPsmuxVersion = (): PsmuxVersion | null => cachedPsmuxVersion;
 
 /** Whether tmux clients are started with `PSMUX_VT_INPUT=1`. Always false for a real tmux. */
 export const tmuxPsmuxVtInput = (): boolean => cachedPsmux && psmuxVtInputFor(cachedPsmuxVersion, process.env.PSMUX_VT_INPUT);
-
-/** Names kept off a psmux client and out of a running psmux server. Empty for a real tmux. */
-export const tmuxPsmuxScrubbedNames = (): readonly string[] => (cachedPsmux ? PSMUX_SCRUBBED_NAMES : []);
 
 /** Global options for psmux alone. Empty for a real tmux, which has no such options and rejects them. */
 const tmuxPsmuxGlobalOptions = (): readonly PsmuxGlobalOption[] => (cachedPsmux ? psmuxGlobalOptions(cachedPsmuxVersion) : []);
@@ -308,8 +296,8 @@ export function isOwnBindPort(value: string | undefined, boundPort: string): boo
 }
 
 /** Must this entry go from a RUNNING tmux server's global environment? */
-export function isScrubbedGlobalEnvEntry(name: string, value: string, boundPort: string, extraNames: readonly string[] = []): boolean {
-  if (isLauncherEnvVar(name) || SCRUBBED_NAMES.has(name) || extraNames.includes(name)) return true;
+export function isScrubbedGlobalEnvEntry(name: string, value: string, boundPort: string): boolean {
+  if (isLauncherEnvVar(name) || SCRUBBED_NAMES.has(name)) return true;
   return name === "PORT" && isOwnBindPort(value, boundPort);
 }
 
@@ -329,9 +317,8 @@ function scrubGlobalEnvironment(): void {
   const r = tmux(["show-environment", "-g"]);
   if (r.status !== 0) return;
   const boundPort = ownBindPort();
-  const extraNames = tmuxPsmuxScrubbedNames();
   for (const [name, value] of parseTmuxEnvironment(r.stdout)) {
-    if (isScrubbedGlobalEnvEntry(name, value, boundPort, extraNames)) tmux(["set-environment", "-g", "-r", name]);
+    if (isScrubbedGlobalEnvEntry(name, value, boundPort)) tmux(["set-environment", "-g", "-r", name]);
   }
 }
 
