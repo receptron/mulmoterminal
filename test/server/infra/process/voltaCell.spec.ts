@@ -28,10 +28,13 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
     expect(process.env._VOLTA_TOOL_RECURSION).toBe("1");
   });
 
-  it("starts from a PATH that names a Volta image dir ahead of the shims", () => {
+  it("starts from a PATH that names a Volta image dir ahead of its shim dir", () => {
     const entries = (process.env.PATH ?? "").split(path.delimiter);
-    expect(entries.some((entry) => entry.includes(path.join("tools", "image")))).toBe(true);
-    expect(entries.some((entry) => entry.endsWith(path.join("volta", "bin")) || entry.endsWith(path.join(".volta", "bin")))).toBe(true);
+    const imageMarker = `${path.sep}tools${path.sep}image${path.sep}`;
+    const image = entries.find((entry) => entry.includes(imageMarker));
+    expect(image).toBeDefined();
+    const voltaHome = (image ?? "").split(imageMarker)[0] ?? "";
+    expect(entries).toContain(path.join(voltaHome, "bin"));
   });
 
   it("resolves node and npm through Volta's shims, not an image dir", async () => {
