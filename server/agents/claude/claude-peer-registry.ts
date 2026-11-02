@@ -18,6 +18,16 @@ export const MAX_ENTRY_BYTES = 64 * 1024;
  *  the rest are left unread. A bound on the work, not a selection: which ones are read past it
  *  is whatever order the folder lists them in. */
 export const MAX_ENTRIES = 256;
+/** How many names of the folder are looked at before the listing stops, entries or not: the
+ *  registry keeps a key file beside each entry and little else, so a folder with more names than
+ *  this is not one, and listing it to the end is work the route must not do. */
+export const MAX_SCANNED = MAX_ENTRIES * 4;
+
+export interface RegistryLimits {
+  entries: number;
+  scanned: number;
+}
+const REGISTRY_LIMITS: RegistryLimits = { entries: MAX_ENTRIES, scanned: MAX_SCANNED };
 /** How long one read answers for: the grid asks once per cell, and nine cells ask within a few
  *  milliseconds of each other on mount. */
 export const PEERS_CACHE_MS = 2000;
@@ -45,19 +55,31 @@ async function readEntry(file: string): Promise<ClaudePeer | null> {
   }
 }
 
+// The folder is listed incrementally and the listing stops at the first bound it meets, so a
+// folder that has gone strange costs the route a bounded number of names rather than all of them.
+// Leaving the loop closes the handle: the iterator's return() does that.
+async function entryNamesIn(dir: string, limits: RegistryLimits): Promise<string[]> {
+  const names: string[] = [];
+  let scanned = 0;
+  try {
+    for await (const dirent of await fs.opendir(dir)) {
+      if (names.length >= limits.entries || scanned >= limits.scanned) break;
+      scanned++;
+      if (ENTRY_FILE.test(dirent.name)) names.push(dirent.name);
+    }
+  } catch {
+    return names; // no registry, or one that stopped being readable partway
+  }
+  return names;
+}
+
 /** The live entries in one home's registry; none where there is no registry to read. The files
  *  are read one at a time: a few hundred bytes each, and the hot route this serves must not fan
  *  out into hundreds of concurrent reads when a folder has gone strange. */
-export async function readPeersIn(home: string, alive: (pid: number) => boolean): Promise<ClaudePeer[]> {
+export async function readPeersIn(home: string, alive: (pid: number) => boolean, limits: RegistryLimits = REGISTRY_LIMITS): Promise<ClaudePeer[]> {
   const dir = path.join(home, SESSIONS_DIR);
-  let names: string[];
-  try {
-    names = await fs.readdir(dir);
-  } catch {
-    return [];
-  }
   const peers: ClaudePeer[] = [];
-  for (const name of names.filter((entry) => ENTRY_FILE.test(entry)).slice(0, MAX_ENTRIES)) {
+  for (const name of await entryNamesIn(dir, limits)) {
     const peer = await readEntry(path.join(dir, name));
     if (peer !== null && alive(peer.pid)) peers.push(peer);
   }

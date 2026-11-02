@@ -10,6 +10,7 @@ import {
   isProcessAlive,
   MAX_ENTRIES,
   MAX_ENTRY_BYTES,
+  MAX_SCANNED,
   PEERS_CACHE_MS,
   readClaudePeers,
   readPeersIn,
@@ -92,10 +93,24 @@ describe("readPeersIn", () => {
     const extra = 3;
     await Promise.all(
       Array.from({ length: MAX_ENTRIES + extra }, (_, i) =>
-        write(defaultHome(), `${String(i + 1)}.json`, JSON.stringify(entry({ pid: i + 1, name: `p${String(i + 1)}` }))),
+        write(defaultHome(), `${String(i + 1000)}.json`, JSON.stringify(entry({ pid: i + 1000, name: `p${String(i + 1000)}` }))),
       ),
     );
     expect(await readPeersIn(defaultHome(), alive)).toHaveLength(MAX_ENTRIES);
+  });
+
+  // The listing itself is bounded, not only the files opened: a folder full of names that are not
+  // entries is not read to its end. The scan bound is below the entry bound here, so the order the
+  // folder lists its names in cannot make the assertion flap.
+  it("stops listing a folder after a bounded number of names, entries or not", async () => {
+    const total = 10;
+    await Promise.all(
+      Array.from({ length: total }, (_, i) => write(defaultHome(), `${String(i + 1)}.json`, JSON.stringify(entry({ pid: i + 1, name: `p${String(i + 1)}` })))),
+    );
+    const scanned = 4;
+    expect((await readPeersIn(defaultHome(), alive, { entries: MAX_ENTRIES, scanned })).length).toBeLessThanOrEqual(scanned);
+    expect(await readPeersIn(defaultHome(), alive, { entries: 2, scanned })).toHaveLength(2);
+    expect(MAX_SCANNED).toBeGreaterThanOrEqual(MAX_ENTRIES);
   });
 });
 
