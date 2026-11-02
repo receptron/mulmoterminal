@@ -911,7 +911,15 @@ async function restartWith(reap: (sessionId: string) => Promise<boolean>): Promi
         working.value = false;
         waiting.value = false;
         activityEvent.value = null;
+        // So did the name other sessions messaged it by: it belongs to the process, and the
+        // replacement registers under its own a few seconds in. Forget it, and ask again with the
+        // fresh cell's tries, since the remount below is not a reconnect of the pub/sub socket and
+        // re-seeds nothing by itself.
+        peerName.value = null;
+        clearTimeout(peerRetryTimer);
+        peerRetriesLeft = PEER_NAME_RETRIES;
         connectKey.value++;
+        void refreshUsage();
       },
     });
     // Nothing was reconnected and the old agent is probably still running, which looks identical to
