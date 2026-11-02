@@ -23,7 +23,10 @@ describe("listEntries — linked folders", () => {
     mkdirSync(path.join(dir, "target"));
     writeFileSync(path.join(dir, "b.txt"), "hello");
     symlinkSync(path.join(dir, "target"), path.join(dir, "linked"), "junction");
-    symlinkSync(path.join(dir, "nowhere"), path.join(dir, "broken"), "junction");
+    // Windows makes a junction only to a folder that exists, so the target goes after the link.
+    mkdirSync(path.join(dir, "gone"));
+    symlinkSync(path.join(dir, "gone"), path.join(dir, "broken"), "junction");
+    rmSync(path.join(dir, "gone"), { recursive: true });
     expect(listEntries(dir)).toEqual([
       { name: "linked", dir: true, size: 0 },
       { name: "target", dir: true, size: 0 },
