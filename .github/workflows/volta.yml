@@ -41,6 +41,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y tmux
 
+      # The issue's machine has no yarn but Volta's pin. A runner ships one, and with it the shim's
+      # fallback "next yarn on PATH" would find it and hide the failure.
+      - name: Remove the system yarn
+        run: |
+          which -a yarn || true
+          sudo rm -f /usr/local/bin/yarn /usr/local/bin/yarnpkg /usr/bin/yarn /usr/bin/yarnpkg
+          sudo rm -f "$(dirname "$(command -v node)")"/yarn "$(dirname "$(command -v node)")"/yarnpkg
+          which -a yarn || echo "no yarn left outside Volta"
+
       # `volta run` is what puts the marker and the image dirs in the environment, which is the
       # launch the issue describes. The spec itself checks that the marker arrived.
       - name: Run the cell spec under volta run
