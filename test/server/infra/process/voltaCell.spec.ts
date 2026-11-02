@@ -28,6 +28,29 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
     expect(process.env._VOLTA_TOOL_RECURSION).toBe("1");
   });
 
+  it("starts from a PATH that names a Volta image dir ahead of the shims", () => {
+    const entries = (process.env.PATH ?? "").split(path.delimiter);
+    expect(entries.some((entry) => entry.includes(path.join("tools", "image")))).toBe(true);
+    expect(entries.some((entry) => entry.endsWith(path.join("volta", "bin")) || entry.endsWith(path.join(".volta", "bin")))).toBe(true);
+  });
+
+  it("resolves node and npm through Volta's shims, not an image dir", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "mt-volta-path-"));
+    try {
+      const out = path.join(dir, "out.txt");
+      const script = `command -v node npm > ${out}.tmp 2>&1; mv ${out}.tmp ${out}`;
+      const tmux = throwawayTmux(dir);
+      const started = await tmux.run(["new-session", "-d", "-s", "cell", "-c", dir, `sh -c '${script}'`]);
+      expect(started.ok).toBe(true);
+      const report = await waitForFile(out);
+      await tmux.run(["kill-server"]);
+      expect(report).not.toContain(path.join("tools", "image"));
+      expect(report.trim().split("\n")).toHaveLength(2);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("runs a project's pinned yarn through Volta's shim, and sees no marker", async () => {
     const dir = mkdtempSync(path.join(tmpdir(), "mt-volta-"));
     try {
