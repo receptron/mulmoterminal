@@ -200,6 +200,17 @@ describe("TerminalGrid (page renderer)", () => {
     expect(rows[0].classes()).not.toContain("opacity-45");
   });
 
+  // The name other Claude Code sessions message a cell by (#3237) rides the row's meta into its
+  // header bar as the copy chip; a row without one shows nothing there.
+  it("shows the peer-name chip on the roster row that has a name, and not on one that does not", async () => {
+    const cells = [cell(0, "s0"), cell(1, "s1")];
+    const w = mountCockpit(cells, 0, [rosterRow(0, { peerName: "proj-7f" }), rosterRow(1)]);
+    await nextTick();
+    const rows = w.findAll('[data-testid="cockpit-row"]');
+    expect(rows[0].get('[data-testid="cell-peer-chip"]').attributes("data-tip")).toContain("proj-7f");
+    expect(rows[1].find('[data-testid="cell-peer-chip"]').exists()).toBe(false);
+  });
+
   // #2299: the ⋮ is the row's action menu now, so it is on every row whatever the sort; only its
   // move items depend on manual mode.
   it("puts a ⋮ menu on every cockpit row, with move items only in manual mode", async () => {

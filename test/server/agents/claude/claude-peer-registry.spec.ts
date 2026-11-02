@@ -40,6 +40,9 @@ async function write(claudeHome: string, file: string, body: string): Promise<vo
 }
 
 const alive = (pid: number): boolean => pid !== 99;
+// Whether this box can be asked when a process started: not on Windows, and not where a sandbox
+// refuses `/bin/ps`. Where it cannot, the "cannot be asked" path is the one under test, not this.
+const psAnswers = (await processStartTimes([process.pid])) !== null;
 /** No OS answer about starts: the registry specs above are about the files. */
 const unknownStarts = async (): Promise<null> => null;
 
@@ -164,7 +167,7 @@ describe("readClaudePeers — the process behind the entry", () => {
   });
 
   // The real `ps`, on this process: the spec runner started well within the tolerance of "now".
-  it.skipIf(process.platform === "win32")("agrees with the OS about this process, and not about an entry claiming an old start", async () => {
+  it.skipIf(!psAnswers)("agrees with the OS about this process, and not about an entry claiming an old start", async () => {
     const starts = await processStartTimes([process.pid]);
     expect(starts?.get(process.pid)).toBeDefined();
     await write(defaultHome(), `${String(process.pid)}.json`, JSON.stringify(entry({ pid: process.pid, name: "this-process", startedAt: Date.now() })));
@@ -203,7 +206,7 @@ describe("readClaudePeers — the process behind the entry", () => {
     expect(await processStartTimes([])).toBeNull();
     // A number no process can have: ps refuses the whole call with nothing listed, which is "cannot
     // be asked", not "none of them is running".
-    if (process.platform !== "win32") expect(await processStartTimes([2_147_483_647])).toBeNull();
+    expect(await processStartTimes([2_147_483_647])).toBeNull();
   });
 });
 
