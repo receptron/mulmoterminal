@@ -12,6 +12,10 @@
 // A location right after the path (`:42`, `:42:7`, `(12,5)`) joins the link's range and is
 // reported beside it, so the click can open the file at that line.
 //
+// A path holding a space is linked whole only when something encloses it — quotes, backticks or
+// brackets (`Read(/Users/me/My Docs/a.md)`) — and the enclosed text reads as one path: anchored
+// (`/`, `~/`, `./`, `../`, a drive), ending in an extension, no earlier word ending in one.
+//
 // With `windowsPaths`, `\` separates too and a one-letter drive (`C:\x\a.md`, `D:/w/b.ts`) stays on
 // the token. It is opt-in because on macOS and Linux `\` is an ordinary character in a file name.
 
@@ -57,8 +61,61 @@ function isUrlLike(text: string, before: string | undefined, windowsPaths: boole
   return text.startsWith("//") || (windowsPaths && text.startsWith("\\\\")) || before === ":";
 }
 
+const ENCLOSURE_CLOSERS: Record<string, string> = { '"': '"', "'": "'", "`": "`", "(": ")", "（": "）", "「": "」" };
+const POSIX_ANCHOR = /^(?:\/(?!\/)|~\/|\.\.?\/)/;
+const WINDOWS_ANCHOR = /^(?:\/(?!\/)|~[\\/]|\.\.?[\\/]|[A-Za-z]:[\\/])/;
+
+const toSlashes = (text: string): string => text.replace(/\\/g, "/");
+
+// Where the path ends inside `content` when the rest is a location (`…/a.ts:12`), or the whole of it.
+function splitLocation(content: string): { pathLength: number; location?: FileLocation } {
+  const lastDot = content.lastIndexOf(".");
+  for (let k = lastDot + 1; lastDot !== -1 && k < content.length; k += 1) {
+    const located = locationAfterPath(content.slice(k));
+    if (located?.length === content.length - k) return { pathLength: k, location: located.location };
+  }
+  return { pathLength: content.length };
+}
+
+// The enclosed text as one path, or null when it reads as words (`see src/a.ts for details`) or
+// as several paths (`./a.md and ./b.md`).
+function enclosedPath(content: string, windowsPaths: boolean): { path: string; location?: FileLocation } | null {
+  if (!content.includes(" ")) return null;
+  if (!(windowsPaths ? WINDOWS_ANCHOR : POSIX_ANCHOR).test(content)) return null;
+  const { pathLength, location } = splitLocation(content);
+  const path = content.slice(0, pathLength);
+  const words = path.split(" ");
+  if (!endsInFileExtension(path) || words.slice(0, -1).some(endsInFileExtension)) return null;
+  const opened = windowsPaths ? toSlashes(path) : path;
+  return location ? { path: opened, location } : { path: opened };
+}
+
+const OPENER = /["'`(（「]/g;
+
+function enclosedLinkAt(line: string, open: number, windowsPaths: boolean): FilePathLink[] {
+  const opener = line[open] ?? "";
+  const closer = ENCLOSURE_CLOSERS[opener];
+  const close = closer === undefined ? -1 : line.indexOf(closer, open + 1);
+  const content = close === -1 ? "" : line.slice(open + 1, close);
+  const found = content.includes(opener) ? null : enclosedPath(content, windowsPaths);
+  if (!found) return [];
+  return [{ start: open + 1, end: close, text: found.path, ...(found.location ? { location: found.location } : {}) }];
+}
+
+function findEnclosedFilePaths(line: string, windowsPaths: boolean): FilePathLink[] {
+  return [...line.matchAll(OPENER)].flatMap((match) => enclosedLinkAt(line, match.index, windowsPaths));
+}
+
+const insideAny = (start: number, spans: FilePathLink[]): boolean => spans.some((span) => start >= span.start && start < span.end);
+
 export function findFilePathLinks(line: string, options: FilePathLinkOptions = {}): FilePathLink[] {
   const windowsPaths = options.windowsPaths === true;
+  const enclosed = line.includes(" ") ? findEnclosedFilePaths(line, windowsPaths) : [];
+  const tokens = findPathTokens(line, windowsPaths).filter((link) => !insideAny(link.start, enclosed));
+  return [...enclosed, ...tokens].sort((a, b) => a.start - b.start);
+}
+
+function findPathTokens(line: string, windowsPaths: boolean): FilePathLink[] {
   const separator = windowsPaths ? SLASH_OR_BACKSLASH : SLASH_ONLY;
   const token = windowsPaths ? WINDOWS_PATH_TOKEN : PATH_TOKEN;
   const links: FilePathLink[] = [];
@@ -69,7 +126,7 @@ export function findFilePathLinks(line: string, options: FilePathLinkOptions = {
     const text = withoutTrailingPeriods(match[0]);
     const end = start + text.length;
     if (isUrlLike(text, line[start - 1], windowsPaths) || !separator.test(text) || !endsInFileExtension(text)) continue;
-    const path = windowsPaths ? text.replace(/\\/g, "/") : text;
+    const path = windowsPaths ? toSlashes(text) : text;
     const located = locationAfterPath(line.slice(end));
     links.push(located ? { start, end: end + located.length, text: path, location: located.location } : { start, end, text: path });
   }
