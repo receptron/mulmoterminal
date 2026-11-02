@@ -15,7 +15,8 @@ Claude Code 自身が `<Claude のホーム>/sessions/<pid>.json` に書いて�
 - `tmux`: `mt-<MulmoTerminal のセッション ID>:@0.%0`。tmux のセッション名は MulmoTerminal が付けたもの
   （`tmuxSessionName(id)`）なので、セルとの対応はこれで引ける。
 - `sessionId`: Claude 自身のセッション ID。起動時は MulmoTerminal の ID と同じで、`/clear` や
-  `/compact` で変わる。tmux の欄が無いとき（tmux なしの起動）の予備。
+  `/compact` で変わる。tmux の欄が無い項目（tmux なしの起動）だけの予備。別の tmux セッションを名指す
+  項目は、ID が同じでも別のセル（同じ会話を別のセルで再開したもの）なので採らない。
 - `pid`、`updatedAt`: 生きていない pid の項目は読まない。同じセルを名乗る項目が複数あれば
   `updatedAt` の新しい方。
 
@@ -45,6 +46,10 @@ Claude Code 自身が `<Claude のホーム>/sessions/<pid>.json` に書いて�
 - 記録の読み取りの守り（Codex の第 1 ラウンド）: 読むのは `<pid>.json` と名付けられた通常ファイルだけ
   （`lstat`、シンボリックリンクは追わない。隣の `.key` は送信の秘密）、`MAX_ENTRY_BYTES` を超える
   ファイルは開かず、一つのフォルダから読むのは `MAX_ENTRIES` 件まで、読み取りは一件ずつ。
+- 読み取りの形（第 3 ラウンド）: ファイルの中身が入る経路は一つだけ。`O_NOFOLLOW` で開いた記述子
+  （リンクは open 自体が拒む）を `fstat` し、その記述子から `MAX_ENTRY_BYTES` まで読む。Windows には
+  `O_NOFOLLOW` が無いので、そこだけ open の前の `lstat` で判定する。名前は読み取り時に区切る
+  （空でなく、`MAX_PEER_NAME_CHARS` 以内、制御文字なし）。
 - フォルダの一覧も有限（第 2 ラウンド）: `fs.opendir` で少しずつ読み、項目名が `MAX_ENTRIES` 件になるか
   名前を `MAX_SCANNED` 個見た時点で止める。項目でない名前で埋まったフォルダを最後まで読まない。
 

@@ -1,7 +1,8 @@
 // Claude Code's registry of the sessions running on this machine, read for the name each one
 // answers to (#3237): `<claude home>/sessions/<pid>.json`, in every home a claude session may be
 // on. The `.key` beside each entry is that session's messaging secret and is never opened.
-import { promises as fs } from "node:fs";
+import { constants, promises as fs } from "node:fs";
+import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { hasErrnoCode } from "../../errors.js";
 import { agentHomeChoices } from "../../session/session-home.js";
@@ -43,15 +44,31 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
-// `lstat`, not `stat`: a symlink named like an entry must not be followed to whatever it points at —
-// a `.key` beside it, or any file at all — so only a regular file of an entry's size is opened.
+// The one way bytes enter from the folder: a descriptor opened WITHOUT following links, checked
+// to be a regular file of an entry's size through that same descriptor, and read through it for at
+// most MAX_ENTRY_BYTES. So a symlink named like an entry is refused by the open itself (ELOOP),
+// not by a check a moment earlier that a swapped link could outrun. Windows has no O_NOFOLLOW; there
+// the link check is the `lstat` before the open, a step apart, which is the platform's best.
+const NO_FOLLOW: number | undefined = constants.O_NOFOLLOW;
+
+async function openEntry(file: string): Promise<FileHandle> {
+  if (NO_FOLLOW === undefined && !(await fs.lstat(file)).isFile()) throw new Error(`${file} is not a regular file`);
+  return fs.open(file, constants.O_RDONLY | (NO_FOLLOW ?? 0));
+}
+
 async function readEntry(file: string): Promise<ClaudePeer | null> {
+  let handle: FileHandle | undefined;
   try {
-    const stat = await fs.lstat(file);
+    handle = await openEntry(file);
+    const stat = await handle.stat();
     if (!stat.isFile() || stat.size > MAX_ENTRY_BYTES) return null;
-    return parseClaudePeer(JSON.parse(await fs.readFile(file, "utf8")));
+    const bytes = Buffer.alloc(MAX_ENTRY_BYTES);
+    const { bytesRead } = await handle.read(bytes, 0, MAX_ENTRY_BYTES, 0);
+    return parseClaudePeer(JSON.parse(bytes.subarray(0, bytesRead).toString("utf8")));
   } catch {
-    return null; // half-written, or not one of Claude Code's
+    return null; // a link, half-written, or not one of Claude Code's
+  } finally {
+    await handle?.close();
   }
 }
 

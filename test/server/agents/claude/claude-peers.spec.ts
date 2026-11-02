@@ -2,7 +2,7 @@
 // The name other Claude Code sessions message one of ours by (#3237): read from Claude Code's own
 // registry entry, and matched to a cell through the tmux session MulmoTerminal named for it.
 import { describe, it, expect } from "vitest";
-import { parseClaudePeer, peerNameFor, tmuxSessionOf, type ClaudePeer } from "../../../../server/agents/claude/claude-peers";
+import { MAX_PEER_NAME_CHARS, parseClaudePeer, peerNameFor, tmuxSessionOf, type ClaudePeer } from "../../../../server/agents/claude/claude-peers";
 
 // One entry as Claude Code 2.1.292 writes it, the fields this reads and a few it does not.
 const ENTRY = {
@@ -43,6 +43,22 @@ describe("parseClaudePeer", () => {
     expect(parseClaudePeer(value)).toBeNull();
   });
 
+  // The name goes onto the wire, a tooltip, an aria-label and the clipboard, so a file whose name
+  // is not one Claude Code would write is not an entry at all.
+  it.each([
+    ["a name past the bound", "x".repeat(MAX_PEER_NAME_CHARS + 1)],
+    ["a name holding a newline", "proj-ab\nmore"],
+    ["a name holding another control character", "proj\u0007ab"],
+    ["a name that is only whitespace", "   "],
+  ])("is nothing with %s", (_what, name) => {
+    expect(parseClaudePeer({ ...ENTRY, name })).toBeNull();
+  });
+
+  it("keeps a name at the bound, trimmed", () => {
+    const name = "y".repeat(MAX_PEER_NAME_CHARS);
+    expect(parseClaudePeer({ ...ENTRY, name: ` ${name} ` })?.name).toBe(name);
+  });
+
   it("has no tmux session and no id for a claude started outside both", () => {
     expect(parseClaudePeer({ pid: 7, name: "proj-ab" })).toEqual({ name: "proj-ab", pid: 7, sessionId: null, tmuxSession: null, updatedAt: 0 });
   });
@@ -81,6 +97,14 @@ describe("peerNameFor", () => {
     const byId = peer({ name: "by-id", sessionId: "s-1" });
     expect(peerNameFor([byId, byTmux], keys)).toBe("in-tmux");
     expect(peerNameFor([byId], keys)).toBe("by-id");
+  });
+
+  // The same conversation resumed in another cell has this id and that cell's tmux session. It is
+  // that cell's peer, not this one's, so the id alone does not claim it.
+  it("does not take a peer that names another tmux session, whatever its id says", () => {
+    const elsewhere = peer({ name: "elsewhere", sessionId: "s-1", tmuxSession: "mt-s-2" });
+    expect(peerNameFor([elsewhere], keys)).toBeNull();
+    expect(peerNameFor([elsewhere, peer({ name: "no-tmux", sessionId: "s-1" })], keys)).toBe("no-tmux");
   });
 
   it("is nothing when no peer runs the session", () => {

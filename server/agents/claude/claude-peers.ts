@@ -20,6 +20,19 @@ export interface ClaudePeer {
 }
 
 const stringOrNull = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
+
+/** A name is typed into another session's message tool and shown on a tooltip, so it is bounded
+ *  here whatever the registry holds: Claude Code derives `<folder>-<two hex digits>`, and a name
+ *  somebody set by hand is short too. One past this, or holding a control character, is not an
+ *  entry of ours and the file is ignored. */
+export const MAX_PEER_NAME_CHARS = 128;
+const CONTROL_CHARACTER = /\p{Cc}/u;
+
+const peerNameOrNull = (value: unknown): string | null => {
+  const name = stringOrNull(value)?.trim() ?? "";
+  if (name === "" || name.length > MAX_PEER_NAME_CHARS || CONTROL_CHARACTER.test(name)) return null;
+  return name;
+};
 const finiteOr = (value: unknown, fallback: number): number => (typeof value === "number" && Number.isFinite(value) ? value : fallback);
 
 /** `mt-abc:@1.%1` → `mt-abc`: the registry writes the whole pane target. */
@@ -32,7 +45,7 @@ export function tmuxSessionOf(target: unknown): string | null {
 /** One registry entry, or null for a file that is not one (no name, no usable pid). */
 export function parseClaudePeer(value: unknown): ClaudePeer | null {
   if (!isRecord(value)) return null;
-  const name = stringOrNull(value.name);
+  const name = peerNameOrNull(value.name);
   const pid = value.pid;
   if (name === null || typeof pid !== "number" || !Number.isInteger(pid) || pid <= 0) return null;
   return {
@@ -54,11 +67,13 @@ export interface PeerKeys {
 const latestOf = (peers: readonly ClaudePeer[]): ClaudePeer | null =>
   peers.reduce<ClaudePeer | null>((best, peer) => (best === null || peer.updatedAt > best.updatedAt ? peer : best), null);
 
-/** The name of the peer running this cell's session: the one in its tmux session, else the one
- *  claude knows by its id. Of several claiming it — an entry a crashed process left behind, a
- *  resumed session — the one written last. */
+/** The name of the peer running this cell's session: the one in its tmux session, else — for a
+ *  claude started without tmux, which names no tmux session at all — the one claude knows by its
+ *  id. A peer that names ANOTHER tmux session is another cell's whatever its id says: the same
+ *  conversation resumed elsewhere. Of several claiming the cell — an entry a crashed process left
+ *  behind, a resumed session — the one written last. */
 export function peerNameFor(peers: readonly ClaudePeer[], keys: PeerKeys): string | null {
   const inTmux = peers.filter((peer) => peer.tmuxSession === keys.tmuxSession);
-  const claiming = inTmux.length > 0 ? inTmux : peers.filter((peer) => peer.sessionId === keys.sessionId);
+  const claiming = inTmux.length > 0 ? inTmux : peers.filter((peer) => peer.tmuxSession === null && peer.sessionId === keys.sessionId);
   return latestOf(claiming)?.name ?? null;
 }
