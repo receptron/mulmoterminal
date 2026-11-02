@@ -32,6 +32,15 @@ describe("isLauncherEnvVar", () => {
     }
   });
 
+  // An ancestor claude exports how IT was started; a claude in a cell that inherits it registers
+  // as that, and the peer chip then takes the cell's own session for a program's (#3244). Only
+  // the entrypoint: CLAUDECODE says a claude is an ancestor, which stays true in the cell.
+  it("flags an ancestor claude's own entrypoint, and only that", () => {
+    expect(isLauncherEnvVar("CLAUDE_CODE_ENTRYPOINT")).toBe(true);
+    expect(isLauncherEnvVar("claude_code_entrypoint")).toBe(true);
+    expect(isLauncherEnvVar("CLAUDECODE")).toBe(false);
+  });
+
   it("matches case-insensitively (Windows env names are case-insensitive)", () => {
     for (const name of ["Prefix", "prefix", "Init_Cwd", "Node", "NPM_CONFIG_REGISTRY", "Npm_Package_Name", "NPM_EXECPATH"]) {
       expect(isLauncherEnvVar(name), name).toBe(true);
@@ -122,6 +131,11 @@ describe("sanitizePtyEnv", () => {
     expect(out.PATH).toBe("/Users/u/.nvm/versions/node/v22.18.0/bin:/usr/bin");
     expect(env.PREFIX).toBe("/opt/homebrew");
     expect(env.PATH).toContain("/repo/node_modules/.bin");
+  });
+
+  it("drops the entrypoint an SDK-driven claude would hand the server, keeping the rest", () => {
+    const out = sanitizePtyEnv({ CLAUDE_CODE_ENTRYPOINT: "sdk-cli", CLAUDECODE: "1", HOME: "/home/me" }, ":");
+    expect(out).toEqual({ CLAUDECODE: "1", HOME: "/home/me" });
   });
 
   it("cleans a windows-cased Path key", () => {
