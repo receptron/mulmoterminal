@@ -33,7 +33,7 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
     try {
       const project = path.join(dir, "project");
       mkdirSync(project);
-      writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "volta-cell", volta: { yarn: PINNED_YARN } }));
+      writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "volta-cell", volta: { node: process.versions.node, yarn: PINNED_YARN } }));
       const out = path.join(dir, "out.txt");
       const script = `yarn -v > ${out}.tmp 2>&1; echo "marker=\${_VOLTA_TOOL_RECURSION:-unset}" >> ${out}.tmp; mv ${out}.tmp ${out}`;
       const tmux = throwawayTmux(dir);
