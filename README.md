@@ -739,8 +739,8 @@ What MulmoTerminal does differently behind psmux, and only there:
   after it is not taken into it. `PSMUX_VT_INPUT=0` in the server's environment turns this off;
 - counts emoji two cells wide in the browser (Unicode 11), as Claude Code and psmux do — otherwise
   each emoji shifts the rest of its row by one column;
-- keeps Volta's `_VOLTA_TOOL_RECURSION` out of psmux's environment, so `node` in a cell resolves through
-  Volta's shim again;
+- keeps Volta's `_VOLTA_TOOL_RECURSION` out of every cell's environment (psmux and real tmux alike), so
+  `node` in a cell resolves through Volta's shim again;
 - turns psmux's warm pool off (`set -g warm off`, psmux 3.3.1+), in new servers and in the ones
   already running. Every cell starts with `-e`, which never claims a spare shell, so the spares
   only held memory and were restarted on every resize;

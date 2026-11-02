@@ -50,6 +50,12 @@ describe("isLauncherEnvVar", () => {
   // NODE_ENV stays on this list on purpose. It reached PTYs as "production" until #955, which
   // was the launcher exporting it — fixed there. Adding it here instead would take away the
   // NODE_ENV of a user who exports one, which is a different bug with the same shape.
+  // Volta marks the node it launches; a shim that sees it skips Volta's own version choice, so
+  // `yarn` fails with "Node is not available" in a cell under `volta run` (#3233).
+  it("flags the marker `volta run` sets on the process it launches", () => {
+    expect(isLauncherEnvVar("_VOLTA_TOOL_RECURSION")).toBe(true);
+  });
+
   it("keeps real user environment, including other *_PREFIX vars", () => {
     for (const name of ["HOMEBREW_PREFIX", "CONDA_PREFIX", "HOME", "SHELL", "PATH", "NVM_DIR", "NODE_ENV", "NODE_OPTIONS"]) {
       expect(isLauncherEnvVar(name), name).toBe(false);
@@ -98,6 +104,58 @@ describe("sanitizePathEntries", () => {
   it("drops a relative node_modules/.bin entry (no leading separator)", () => {
     expect(sanitizePathEntries("node_modules/.bin:/usr/bin", ":")).toBe("/usr/bin");
   });
+
+  // `volta run` prepends the image dir of the tool it picked. A cell that keeps it runs that `node` /
+  // `npm` directly, past the shim and so past a project's `volta` pin (#3233) — but the dir goes only
+  // while Volta's own shim dir is on the PATH to find a `node`.
+  describe("Volta's image dirs", () => {
+    const VOLTA = "/home/u/.volta";
+
+    it("does not take a relative entry for the absolute one beside the shim dir", () => {
+      const relative = "volta/tools/image/node/24.21.0/bin";
+      expect(sanitizePathEntries([relative, "/volta/bin"].join(":"), ":", "linux")).toBe([relative, "/volta/bin"].join(":"));
+      expect(sanitizePathEntries(["/volta/tools/image/node/24.21.0/bin", "volta/bin"].join(":"), ":", "linux")).toBe(
+        ["/volta/tools/image/node/24.21.0/bin", "volta/bin"].join(":"),
+      );
+    });
+
+    it("treats a backslash as part of a name on POSIX, not as a separator", () => {
+      const literal = "/home/u/tools\\image\\node\\24.21.0";
+      expect(sanitizePathEntries([literal, "/home/u/bin"].join(":"), ":", "linux")).toBe([literal, "/home/u/bin"].join(":"));
+    });
+
+    it("drops every tool's image dir beside Volta's shim dir", () => {
+      const dirty = [
+        `${VOLTA}/tools/image/node/24.21.0/bin`,
+        `${VOLTA}/tools/image/npm/12.2.1/bin`,
+        `${VOLTA}/tools/image/yarn/1.22.22/bin`,
+        `${VOLTA}/tools/image/pnpm/10.0.0/bin`,
+        `${VOLTA}/bin`,
+        "/usr/bin",
+      ];
+      expect(sanitizePathEntries(dirty.join(":"), ":", "linux")).toBe([`${VOLTA}/bin`, "/usr/bin"].join(":"));
+    });
+
+    it("keeps the image dir when Volta's shim dir is not on the PATH", () => {
+      const p = [`${VOLTA}/tools/image/node/24.21.0/bin`, "/usr/bin"].join(":");
+      expect(sanitizePathEntries(p, ":", "linux")).toBe(p);
+    });
+
+    it("keeps the image dir when the shim dir on the PATH belongs to another Volta", () => {
+      const p = [`${VOLTA}/tools/image/node/24.21.0/bin`, "/opt/volta/bin"].join(":");
+      expect(sanitizePathEntries(p, ":", "linux")).toBe(p);
+    });
+
+    it("keeps a dir that only looks like one", () => {
+      const p = [`${VOLTA}/tools/image/python/3.12/bin`, `${VOLTA}/tools/image/node/24.21.0/lib`, `${VOLTA}/bin`].join(":");
+      expect(sanitizePathEntries(p, ":", "linux")).toBe(p);
+    });
+
+    it("drops a Windows image dir, which has no bin, matching case-insensitively", () => {
+      const dirty = ["C:\\Users\\u\\AppData\\Local\\Volta\\tools\\image\\node\\24.21.0", "c:\\users\\u\\appdata\\local\\volta\\bin", "C:\\Windows"];
+      expect(sanitizePathEntries(dirty.join(";"), ";", "win32")).toBe(dirty.slice(1).join(";"));
+    });
+  });
 });
 
 describe("isPathVar", () => {
@@ -136,6 +194,13 @@ describe("sanitizePtyEnv", () => {
   it("drops the entrypoint an SDK-driven claude would hand the server, keeping the rest", () => {
     const out = sanitizePtyEnv({ CLAUDE_CODE_ENTRYPOINT: "sdk-cli", CLAUDECODE: "1", HOME: "/home/me" }, ":");
     expect(out).toEqual({ CLAUDECODE: "1", HOME: "/home/me" });
+  });
+
+  it("drops Volta's recursion marker but keeps the user's other VOLTA_ settings (#3233)", () => {
+    const out = sanitizePtyEnv({ _VOLTA_TOOL_RECURSION: "1", VOLTA_HOME: "/home/u/.volta", VOLTA_FEATURE_PNPM: "1" }, ":");
+    expect(out._VOLTA_TOOL_RECURSION).toBeUndefined();
+    expect(out.VOLTA_HOME).toBe("/home/u/.volta");
+    expect(out.VOLTA_FEATURE_PNPM).toBe("1");
   });
 
   it("cleans a windows-cased Path key", () => {
