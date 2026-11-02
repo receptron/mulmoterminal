@@ -5,7 +5,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { forgetClaudePeers, isProcessAlive, PEERS_CACHE_MS, readClaudePeers, readPeersIn } from "../../../../server/agents/claude/claude-peer-registry";
+import {
+  forgetClaudePeers,
+  isProcessAlive,
+  MAX_ENTRIES,
+  MAX_ENTRY_BYTES,
+  PEERS_CACHE_MS,
+  readClaudePeers,
+  readPeersIn,
+} from "../../../../server/agents/claude/claude-peer-registry";
 import { setAccountsProvider } from "../../../../server/session/session-home";
 
 let home = "";
@@ -56,6 +64,38 @@ describe("readPeersIn", () => {
 
   it("answers none where there is no registry", async () => {
     expect(await readPeersIn(defaultHome(), alive)).toEqual([]);
+  });
+
+  // The `.key` beside an entry is that session's messaging secret. A symlink named like an entry
+  // must not be followed to it — nor to anything else — so the reader opens regular files only.
+  it("does not follow a symlink named like an entry", async () => {
+    await write(defaultHome(), "9.abcdef.key", JSON.stringify(entry({ pid: 9, name: "via-symlink" })));
+    await fs.symlink(path.join(defaultHome(), "sessions", "9.abcdef.key"), path.join(defaultHome(), "sessions", "9.json"));
+    expect(await readPeersIn(defaultHome(), alive)).toEqual([]);
+  });
+
+  it("reads only files named the way the registry names them", async () => {
+    await write(defaultHome(), "notes.json", JSON.stringify(entry({ pid: 5, name: "not-an-entry" })));
+    await write(defaultHome(), "5.json.bak", JSON.stringify(entry({ pid: 5, name: "not-an-entry" })));
+    await write(defaultHome(), "5.json", JSON.stringify(entry({ pid: 5, name: "an-entry" })));
+    expect((await readPeersIn(defaultHome(), alive)).map((peer) => peer.name)).toEqual(["an-entry"]);
+  });
+
+  it("leaves a file too large to be an entry unread", async () => {
+    const padded = JSON.stringify(entry({ pid: 6, name: "huge" })) + " ".repeat(MAX_ENTRY_BYTES);
+    await write(defaultHome(), "6.json", padded);
+    await write(defaultHome(), "7.json", JSON.stringify(entry({ pid: 7, name: "small" })));
+    expect((await readPeersIn(defaultHome(), alive)).map((peer) => peer.name)).toEqual(["small"]);
+  });
+
+  it("reads at most MAX_ENTRIES files of a folder that has gone strange", async () => {
+    const extra = 3;
+    await Promise.all(
+      Array.from({ length: MAX_ENTRIES + extra }, (_, i) =>
+        write(defaultHome(), `${String(i + 1)}.json`, JSON.stringify(entry({ pid: i + 1, name: `p${String(i + 1)}` }))),
+      ),
+    );
+    expect(await readPeersIn(defaultHome(), alive)).toHaveLength(MAX_ENTRIES);
   });
 });
 

@@ -39,6 +39,12 @@ Claude Code 自身が `<Claude のホーム>/sessions/<pid>.json` に書いて�
   `CockpitRow.peerName`、セルは詳細の取得で `peerName` を取り込む。
 - 組み込みチップ `peer`（`CELL_CHIP_IDS` と `BUILTIN_CHIPS` に追加、既定の並びの末尾）。
   `PeerNameChip.vue` は名前が無ければ何も描かない。ロスターの行の見出しの右端にも置く。
+- 起動直後のセルは、Claude が自分を登録する前に最初の詳細取得が終わるので、答えが明示的な `null` の
+  間は間を空けて数回だけ聞き直す（`PEER_NAME_RETRIES`、`PEER_NAME_RETRY_MS`）。登録しない古い
+  Claude Code でも、いちばん忙しい経路を叩き続けない。
+- 記録の読み取りの守り（Codex の第 1 ラウンド）: 読むのは `<pid>.json` と名付けられた通常ファイルだけ
+  （`lstat`、シンボリックリンクは追わない。隣の `.key` は送信の秘密）、`MAX_ENTRY_BYTES` を超える
+  ファイルは開かず、一つのフォルダから読むのは `MAX_ENTRIES` 件まで、読み取りは一件ずつ。
 
 ## 範囲外
 

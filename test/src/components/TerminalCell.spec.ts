@@ -1192,6 +1192,65 @@ describe("TerminalCell", () => {
     expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(true);
   });
 
+  // A claude registers itself a few seconds after its cell starts, so the first answer of a fresh
+  // cell is "nobody yet". The cell asks again, spaced, and stops once named — or after a few tries.
+  it("asks again a few times while a fresh cell's claude has not registered itself yet", async () => {
+    vi.useFakeTimers();
+    try {
+      const id = "dddddddd-dddd-dddd-dddd-dddddddddddd";
+      let detailCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+        if (u.includes(`/api/session/${id}`)) {
+          detailCalls++;
+          return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, peerName: detailCalls >= 3 ? "proj-7f" : null }) };
+        }
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+      }) as unknown as typeof fetch;
+
+      const w = mountCell(id);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false);
+      await vi.advanceTimersByTimeAsync(4000);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false); // the second answer is still null
+      await vi.advanceTimersByTimeAsync(4000);
+      await flushPromises();
+      expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(true); // the third names it
+      await vi.advanceTimersByTimeAsync(60000);
+      await flushPromises();
+      expect(detailCalls).toBe(3); // named: no more asking
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops asking after a few tries when no claude ever registers", async () => {
+    vi.useFakeTimers();
+    try {
+      const id = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+      let detailCalls = 0;
+      globalThis.fetch = vi.fn(async (url: string) => {
+        const u = String(url);
+        if (u.includes("/api/sessions")) return { ok: true, json: async () => ({ sessions: [] }) };
+        if (u.includes(`/api/session/${id}`)) {
+          detailCalls++;
+          return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, peerName: null }) };
+        }
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null }) };
+      }) as unknown as typeof fetch;
+
+      mountCell(id);
+      await flushPromises();
+      await vi.advanceTimersByTimeAsync(60000);
+      await flushPromises();
+      expect(detailCalls).toBe(4); // the first ask and three more
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("drops the peer-name chip when the detail says no claude answers to the id", async () => {
     const id = "cccccccc-cccc-cccc-cccc-cccccccccccc";
     let call = 0;

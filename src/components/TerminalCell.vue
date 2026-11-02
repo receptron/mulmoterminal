@@ -278,6 +278,14 @@ const aiTitle = ref<string | null>(null);
 // detail fetch rather than the live push, so a push that omits it leaves it standing.
 const customTitle = ref<string | null>(null);
 const peerName = ref<string | null>(null);
+// A claude registers itself a few seconds after its cell starts, so a fresh cell's first detail
+// answer says nobody answers to the id yet, and the next ask would otherwise be the end of its
+// first turn. Ask again a few times, spaced, and then stop: a claude that never registers (an
+// older Claude Code) must not keep the busiest route busy.
+const PEER_NAME_RETRY_MS = 4000;
+const PEER_NAME_RETRIES = 3;
+let peerRetriesLeft = PEER_NAME_RETRIES;
+let peerRetryTimer: ReturnType<typeof setTimeout> | undefined;
 // The user's own one-line note on this session (#1084). It outranks both of the above in the
 // header: they say what the agent said, this says what the cell is FOR — the question six open
 // cells stop answering. Null until the server pushes one.
@@ -454,10 +462,17 @@ function applyCustomTitle(data: Record<string, unknown>) {
 // applied whatever the clear generation says; an explicit null means no claude answers to this id.
 function applyPeerName(data: Record<string, unknown>) {
   if (data.peerName === null || typeof data.peerName === "string") peerName.value = data.peerName;
+  if (data.peerName !== null || agent.value !== "claude" || peerRetriesLeft === 0) return;
+  peerRetriesLeft--;
+  clearTimeout(peerRetryTimer);
+  peerRetryTimer = setTimeout(() => void refreshUsage(), PEER_NAME_RETRY_MS);
 }
+onUnmounted(() => clearTimeout(peerRetryTimer));
 
 async function loadInitial(id: string) {
   const seedId = ++latestSeed;
+  peerRetriesLeft = PEER_NAME_RETRIES; // a new session gets its own tries
+  clearTimeout(peerRetryTimer);
   const badgeReq = ++latestBadgeReq;
   const genBeforeFetch = activityGen;
   const clearGenBeforeFetch = clearGen;
@@ -829,6 +844,7 @@ function teardown() {
   aiTitle.value = null;
   customTitle.value = null;
   peerName.value = null;
+  clearTimeout(peerRetryTimer);
   // The memo belongs to the SESSION, not to the cell — it stays on disk and comes back when that
   // session is resumed. What must not survive is showing it against whatever this cell runs next.
   memo.value = null;

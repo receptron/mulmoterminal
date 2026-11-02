@@ -9,6 +9,15 @@ import { tmuxSessionName } from "../../infra/process/tmux.js";
 import { parseClaudePeer, peerNameFor, type ClaudePeer } from "./claude-peers.js";
 
 const SESSIONS_DIR = "sessions";
+/** The registry's own naming: one `<pid>.json` per process. Anything else in the folder — the
+ *  `.key` files, a name somebody made up — is not an entry. */
+const ENTRY_FILE = /^\d+\.json$/;
+/** An entry is a few hundred bytes. A file past this is not one, and is not read. */
+export const MAX_ENTRY_BYTES = 64 * 1024;
+/** One file per running claude, so a folder holding more than this is not the registry it was;
+ *  the rest are left unread. A bound on the work, not a selection: which ones are read past it
+ *  is whatever order the folder lists them in. */
+export const MAX_ENTRIES = 256;
 /** How long one read answers for: the grid asks once per cell, and nine cells ask within a few
  *  milliseconds of each other on mount. */
 export const PEERS_CACHE_MS = 2000;
@@ -24,15 +33,21 @@ export function isProcessAlive(pid: number): boolean {
   }
 }
 
+// `lstat`, not `stat`: a symlink named like an entry must not be followed to whatever it points at —
+// a `.key` beside it, or any file at all — so only a regular file of an entry's size is opened.
 async function readEntry(file: string): Promise<ClaudePeer | null> {
   try {
+    const stat = await fs.lstat(file);
+    if (!stat.isFile() || stat.size > MAX_ENTRY_BYTES) return null;
     return parseClaudePeer(JSON.parse(await fs.readFile(file, "utf8")));
   } catch {
     return null; // half-written, or not one of Claude Code's
   }
 }
 
-/** The live entries in one home's registry; none where there is no registry to read. */
+/** The live entries in one home's registry; none where there is no registry to read. The files
+ *  are read one at a time: a few hundred bytes each, and the hot route this serves must not fan
+ *  out into hundreds of concurrent reads when a folder has gone strange. */
 export async function readPeersIn(home: string, alive: (pid: number) => boolean): Promise<ClaudePeer[]> {
   const dir = path.join(home, SESSIONS_DIR);
   let names: string[];
@@ -41,8 +56,12 @@ export async function readPeersIn(home: string, alive: (pid: number) => boolean)
   } catch {
     return [];
   }
-  const entries = await Promise.all(names.filter((name) => name.endsWith(".json")).map((name) => readEntry(path.join(dir, name))));
-  return entries.filter((peer): peer is ClaudePeer => peer !== null && alive(peer.pid));
+  const peers: ClaudePeer[] = [];
+  for (const name of names.filter((entry) => ENTRY_FILE.test(entry)).slice(0, MAX_ENTRIES)) {
+    const peer = await readEntry(path.join(dir, name));
+    if (peer !== null && alive(peer.pid)) peers.push(peer);
+  }
+  return peers;
 }
 
 let cached: { at: number; peers: Promise<ClaudePeer[]> } | null = null;
