@@ -48,12 +48,13 @@ const CRASH_SIGNALS = new Set(["SIGABRT", "SIGSEGV", "SIGBUS", "SIGILL", "SIGFPE
 /**
  * Whether this platform can tell a stop from a crash at all.
  *
- * Windows cannot. Node has no real signals there, so `mulmoterminal stop`, the browser's Stop
- * button and a `taskkill` all TERMINATE the process instead of delivering something its handler
- * runs — bin/stop.js says so in its own note. The server therefore never reaches the `exit(0)`
- * that means "somebody asked for this", and the exit arrives as a bare non-zero code with no
- * signal: the exact shape of the crash this module exists to recover from. Restarting on it would
- * resurrect a server the user just stopped, and leave them no way to stop it at all.
+ * Windows cannot. Node has no real signals there, so a `taskkill` — or a `mulmoterminal stop` the
+ * server did not answer over HTTP, which falls back to a signal — TERMINATES the process instead of
+ * delivering something its handler runs. The server then never reaches the `exit(0)` that means
+ * "somebody asked for this", and the exit arrives as a bare non-zero code with no signal: the exact
+ * shape of the crash this module exists to recover from. Restarting on it would resurrect a server
+ * the user just stopped, and leave them no way to stop it at all. (The Stop button and an answered
+ * `stop` do reach `exit(0)` there since #3234; the fallbacks are what still look like a crash.)
  *
  * So Windows keeps the behaviour it had before supervision existed — the launcher leaves with its
  * server — and says nothing new about it. Fixing it properly means giving `stop` a way to reach
@@ -86,7 +87,7 @@ const canTellStopFromCrash = (platform) => platform !== "win32";
 export function planAfterServerExit({ code, signal, everServed, consecutiveFailures, platform }) {
   // A port that is taken will still be taken next time; the caller names who has it and stops.
   if (code === PORT_IN_USE_EXIT_CODE) return { action: "port-in-use", delayMs: 0, reason: null };
-  // `mulmoterminal stop` and the browser's Stop button both SIGTERM the server, whose handler
+  // `mulmoterminal stop` and the browser's Stop button both end in the server's own shutdown, which
   // exits 0 (server/infra/process/shutdown.ts). Restarting that is the product's stop button not stopping.
   if (code === 0) return { action: "stop", delayMs: 0, reason: null };
   // Nothing below can be decided on a platform where a stop and a crash arrive identically, so it

@@ -18,6 +18,7 @@
 // covers every state-changing method, which is the whole point of it being central — a route added
 // today is covered by default rather than by memory.
 import type { Express } from "express";
+import { requestShutdown } from "../infra/process/shutdown.js";
 
 // Zero would race the response: the socket can close before the browser has read it, and the user
 // sees a failed request from a button that in fact worked. Same value as MulmoClaude's
@@ -30,11 +31,11 @@ export interface ShutdownRouteDeps {
   delayMs: number;
 }
 
-// SIGTERM to ourselves rather than a second shutdown implementation: infra/process/shutdown.ts already
-// handles it — it stops the whisper sidecar and exits 0 — so the button provably does what Ctrl+C
-// does. Duplicating any of that here is how the two copies start to disagree.
+// The same function the signal handlers call, so the button provably does what Ctrl+C does. Not a
+// SIGTERM to ourselves: on Windows that is TerminateProcess even for our own pid, so the drain
+// never ran (#3234).
 const defaultDeps: ShutdownRouteDeps = {
-  stop: () => process.kill(process.pid, "SIGTERM"),
+  stop: requestShutdown,
   delayMs: SHUTDOWN_RESPONSE_GRACE_MS,
 };
 
@@ -43,7 +44,7 @@ const defaultDeps: ShutdownRouteDeps = {
  *  a failure. */
 export function mountShutdownRoute(app: Express, deps: ShutdownRouteDeps = defaultDeps): void {
   app.post("/api/shutdown", (_req, res) => {
-    console.log("[shutdown] stop requested from the browser");
+    console.log("[shutdown] stop requested (the Stop button or `mulmoterminal stop`)");
     res.json({ stopping: true });
     // unref so a pending stop is not itself the reason the process stays alive.
     setTimeout(deps.stop, deps.delayMs).unref();
