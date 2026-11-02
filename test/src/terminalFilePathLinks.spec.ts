@@ -109,3 +109,46 @@ describe("a location after the path", () => {
     ]);
   });
 });
+
+// #3236. A Windows cell prints `\`-separated paths, often with a drive. Opt-in, because on macOS and
+// Linux `\` is an ordinary file-name character.
+describe("Windows paths", () => {
+  const windows = (line: string) => findFilePathLinks(line, { windowsPaths: true });
+  const windowsTexts = (line: string) => windows(line).map((l) => l.text);
+
+  it.each([
+    ["see .claude\\evidence\\test\\test.md now", ".claude/evidence/test/test.md", ".claude\\evidence\\test\\test.md"],
+    ["edit C:\\work\\app\\src\\a.ts here", "C:/work/app/src/a.ts", "C:\\work\\app\\src\\a.ts"],
+    ["open D:/w/b.ts", "D:/w/b.ts", "D:/w/b.ts"],
+    ["mixed C:\\w/x\\y.md.", "C:/w/x/y.md", "C:\\w/x\\y.md"],
+  ])("links %j as the printed span, handing over the `/` form", (line, path, printed) => {
+    const [hit] = windows(line);
+    expect(hit?.text).toBe(path);
+    expect(hit ? line.slice(hit.start, hit.end) : null).toBe(printed);
+  });
+
+  it("keeps the location after a drive path", () => {
+    const line = "C:\\w\\a.ts:12:3: error";
+    expect(windows(line)).toEqual([{ start: 0, end: 14, text: "C:/w/a.ts", location: { line: 12, col: 3 } }]);
+  });
+
+  it("takes a drive only when it is one letter standing alone", () => {
+    expect(windowsTexts("ab:/x/y.ts")).toEqual([]);
+    expect(windowsTexts("a.ts:12")).toEqual([]);
+    expect(windowsTexts("x1C:\\w\\a.ts")).toEqual([]);
+  });
+
+  it("still leaves URLs, UNC shares and bare names alone", () => {
+    expect(windowsTexts("https://example.com/img/a.png")).toEqual([]);
+    expect(windowsTexts("file:///C:/x/a.md")).toEqual([]);
+    expect(windowsTexts("\\\\server\\share\\a.md")).toEqual([]);
+    expect(windowsTexts("just a.md")).toEqual([]);
+    expect(windowsTexts("C:\\work\\src\\")).toEqual([]);
+  });
+
+  it("is off by default: a backslash is part of the name", () => {
+    expect(texts(".claude\\evidence\\test.md")).toEqual([]);
+    expect(texts("C:\\work\\a.ts")).toEqual([]);
+    expect(texts("odd\\name/a.md")).toEqual(["odd\\name/a.md"]);
+  });
+});
