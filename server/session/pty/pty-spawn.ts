@@ -262,7 +262,7 @@ export function ptySpawn(
     // is NOT ours (`PORT=3000 mulmoterminal --port 34601`) is the user's and still travels (#1873).
     //
     // A psmux client is started on its VT input route, so a bracketed paste keeps its markers and
-    // the Enter after it is not taken into the paste (see psmuxVtInputFor). A real tmux gets neither.
+    // the Enter after it is not taken into the paste (see psmuxVtInputFor). A real tmux gets no such override.
     return {
       term: spawnPty(
         "tmux",
