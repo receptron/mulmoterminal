@@ -286,3 +286,19 @@ describe("Windows paths against real xterm", () => {
     term.dispose();
   });
 });
+
+// #3246. A path holding a space, enclosed as an agent's tool line prints it, is one link over the
+// columns it was printed in, and the click hands the pane the whole path.
+describe("a path holding a space against real xterm", () => {
+  it("links it whole and hands the whole path to the pane", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, "Read(/Users/me/proj/My Docs/a.md)");
+    const openInPane = vi.fn(() => true);
+    const links = provideLinks(term, "/Users/me/proj", vi.fn(), () => {}, openInPane) ?? [];
+    expect(links.map((l) => [l.text, l.range.start.x, l.range.end.x])).toEqual([["/Users/me/proj/My Docs/a.md", 6, 32]]);
+    links.forEach((link) => link.activate(new MouseEvent("click"), link.text));
+    expect(openInPane.mock.calls).toEqual([["/Users/me/proj/My Docs/a.md", "/Users/me/proj", undefined, false]]);
+    term.dispose();
+  });
+});

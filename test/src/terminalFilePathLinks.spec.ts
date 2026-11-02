@@ -152,3 +152,70 @@ describe("Windows paths", () => {
     expect(texts("odd\\name/a.md")).toEqual(["odd\\name/a.md"]);
   });
 });
+
+// #3246. Whitespace ends a token, so a path holding a space linked only its tail, which then opened
+// as a cwd-relative file. Enclosed, it is linked whole — and only when it reads as ONE path.
+describe("a path holding a space", () => {
+  const spans = (line: string, windowsPaths = false) => findFilePathLinks(line, { windowsPaths }).map((l) => [l.text, line.slice(l.start, l.end)]);
+
+  it.each([
+    ["Read(/Users/me/My Docs/a.md)", "/Users/me/My Docs/a.md"],
+    ['"/Users/me/My Docs/a.md"', "/Users/me/My Docs/a.md"],
+    ["'./My Docs/a.md'", "./My Docs/a.md"],
+    ["`~/My Docs/a.md`", "~/My Docs/a.md"],
+    ["「/Users/me/資料 2024/a.md」", "/Users/me/資料 2024/a.md"],
+    ["（../My Docs/a.md）", "../My Docs/a.md"],
+  ])("links %j whole", (line, path) => {
+    expect(spans(line)).toEqual([[path, path]]);
+  });
+
+  it("keeps a location inside the enclosure on the link", () => {
+    const line = "`~/My Docs/a.ts:12:3`";
+    expect(findFilePathLinks(line)).toEqual([{ start: 1, end: 20, text: "~/My Docs/a.ts", location: { line: 12, col: 3 } }]);
+  });
+
+  it.each([
+    ["Read(/Users/me/My Docs/a.ts):12:3", { line: 12, col: 3 }],
+    ["Read(/Users/me/My Docs/a.ts)(12,5)", { line: 12, col: 5 }],
+  ])("keeps a location printed after the enclosure: %j", (line, location) => {
+    const [hit] = findFilePathLinks(line);
+    expect(hit).toEqual({ start: 5, end: line.length, text: "/Users/me/My Docs/a.ts", location });
+  });
+
+  it("links a Windows path with spaces whole, handing over the `/` form", () => {
+    expect(spans('"C:\\Program Files (x86)\\app\\a.ts"', true)).toEqual([["C:/Program Files (x86)/app/a.ts", "C:\\Program Files (x86)\\app\\a.ts"]]);
+  });
+
+  it("links the enclosed path and the plain token beside it", () => {
+    expect(spans('Write(/tmp/a b/c.md) and "src/c.ts"')).toEqual([
+      ["/tmp/a b/c.md", "/tmp/a b/c.md"],
+      ["src/c.ts", "src/c.ts"],
+    ]);
+  });
+
+  it.each([
+    ["words around a path", "(see src/a.ts for details)", [["src/a.ts", "src/a.ts"]]],
+    [
+      "two paths",
+      "(./a.md and ./b.md)",
+      [
+        ["./a.md", "./a.md"],
+        ["./b.md", "./b.md"],
+      ],
+    ],
+    ["an unanchored start", '"My Docs/a.md"', [["Docs/a.md", "Docs/a.md"]]],
+    ["a URL", '"https://x.com/a b.md"', []],
+    ["a command in backticks", "`/usr/bin/grep foo.md`", []],
+    ["a command line with a flag", "`/bin/bash -lc cat /tmp/My Docs/a.md`", [["Docs/a.md", "Docs/a.md"]]],
+    ["a command string in JSON", '{"cmd": "/usr/bin/foo bar.md"}', []],
+    ["a space in the file name itself", '"/x/My File.md"', []],
+    ["across a nested bracket", "(/x/a b(/y/c d/e.md)", [["/y/c d/e.md", "/y/c d/e.md"]]],
+    ["apostrophes, not quotes", "don't open /a/My Docs/b.md it's", [["Docs/b.md", "Docs/b.md"]]],
+  ])("does not join %s", (_case, line, expected) => {
+    expect(spans(line)).toEqual(expected);
+  });
+
+  it("leaves an unenclosed path with a space as before: only the tail", () => {
+    expect(spans("/Users/me/My Docs/a.md")).toEqual([["Docs/a.md", "Docs/a.md"]]);
+  });
+});
