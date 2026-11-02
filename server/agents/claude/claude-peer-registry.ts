@@ -113,12 +113,18 @@ const PS = "/bin/ps";
 /** When each of `pids` started, by the OS's account: one `ps` for all of them, read whatever its
  *  exit code (a pid gone meanwhile makes it non-zero while the others still print). Null where the
  *  OS cannot be asked — Windows has no `ps`, and a box without one answers nothing. */
-export function processStartTimes(pids: readonly number[]): Promise<Map<number, number> | null> {
+export function processStartTimes(pids: readonly number[], spawner: typeof spawn = spawn): Promise<Map<number, number> | null> {
   if (process.platform === "win32" || pids.length === 0) return Promise.resolve(null);
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
-    const ps = spawn(PS, ["-o", "pid=,lstart=", "-p", pids.join(",")], { stdio: ["ignore", "pipe", "ignore"], timeout: PS_TIMEOUT_MS });
-    ps.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    let ps: ReturnType<typeof spawn>;
+    try {
+      ps = spawner(PS, ["-o", "pid=,lstart=", "-p", pids.join(",")], { stdio: ["ignore", "pipe", "ignore"], timeout: PS_TIMEOUT_MS });
+    } catch {
+      resolve(null); // refused before it ran (a sandbox's EPERM): the OS cannot be asked
+      return;
+    }
+    ps.stdout?.on("data", (chunk: Buffer) => chunks.push(chunk));
     ps.on("error", () => resolve(null));
     ps.on("close", (code, signal) => {
       const stdout = Buffer.concat(chunks).toString("utf8");
@@ -144,7 +150,13 @@ export function readClaudePeers(
   if (cached !== null && now - cached.at < PEERS_CACHE_MS) return cached.peers;
   const peers = Promise.all(agentHomeChoices("claude").map(({ home }) => readPeersIn(home, alive)))
     .then((perHome) => perHome.flat())
-    .then(async (live) => withVerifiedStarts(live, await starts(live.map((peer) => peer.pid))));
+    .then(async (live) => withVerifiedStarts(live, await starts(live.map((peer) => peer.pid))))
+    .catch((): ClaudePeer[] => {
+      // Nothing above is meant to reject, and a chip is not worth a failed detail route if something
+      // does: answer no peers, and do not keep the failure for the cells asking next.
+      if (cached?.peers === peers) cached = null;
+      return [];
+    });
   cached = { at: now, peers };
   return peers;
 }

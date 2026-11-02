@@ -2,6 +2,7 @@
 // Reading Claude Code's session registry (#3237): every claude home, live processes only, and one
 // read shared by the cells that ask within a moment of each other.
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { spawn } from "node:child_process";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -175,6 +176,27 @@ describe("readClaudePeers — the process behind the entry", () => {
       JSON.stringify(entry({ pid: process.pid, name: "an-old-start", startedAt: Date.now() - 86_400_000 })),
     );
     expect(await readClaudePeers(() => true, 0)).toEqual([]);
+  });
+
+  // A sandbox may refuse the spawn itself, before any child exists: that is "cannot be asked" too,
+  // and it must not reach the route as a rejection.
+  it("answers nothing about starts when ps cannot even be started", async () => {
+    const refused = (): never => {
+      throw new Error("spawn EPERM");
+    };
+    expect(await processStartTimes([process.pid], refused as unknown as typeof spawn)).toBeNull();
+  });
+
+  it("answers no peers, and forgets the read, when a read fails outright", async () => {
+    await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "live", startedAt: 5_000_000 })));
+    let calls = 0;
+    const starts = async (): Promise<Map<number, number>> => {
+      calls++;
+      if (calls === 1) throw new Error("ps exploded");
+      return new Map([[1, 5_000_000]]);
+    };
+    expect(await readClaudePeers(alive, 0, starts)).toEqual([]);
+    expect((await readClaudePeers(alive, 0, starts)).map((peer) => peer.name)).toEqual(["live"]); // not the failure again
   });
 
   it("answers nothing about starts where there is nothing to ask, or where ps cannot answer", async () => {
