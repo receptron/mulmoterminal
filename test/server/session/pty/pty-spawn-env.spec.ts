@@ -401,7 +401,7 @@ describe("ptySpawn — the psmux VT input route", () => {
   });
 });
 
-describe("ptySpawn — Volta's marker on a psmux client", () => {
+describe("ptySpawn — Volta's marker", () => {
   beforeEach(() => vi.stubEnv("_VOLTA_TOOL_RECURSION", "1"));
   afterEach(() => vi.unstubAllEnvs());
 
@@ -412,16 +412,16 @@ describe("ptySpawn — Volta's marker on a psmux client", () => {
     expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
   });
 
-  it("leaves it on a real tmux client", () => {
+  it("keeps it off a real tmux client too, which hands it to the server and every pane (#3233)", () => {
     tmuxOn = true;
     ptySpawn(S1, "claude", [], EXISTING_CWD, true);
-    expect(envOf()._VOLTA_TOOL_RECURSION).toBe("1");
+    expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
   });
 
-  it("leaves it on a spawn without tmux", () => {
+  it("keeps it off a spawn without tmux", () => {
     psmuxOn = true;
     ptySpawn(S1, "claude", [], EXISTING_CWD, true);
-    expect(envOf()._VOLTA_TOOL_RECURSION).toBe("1");
+    expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
   });
 });
 
