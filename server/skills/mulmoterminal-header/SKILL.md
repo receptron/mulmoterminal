@@ -246,12 +246,15 @@ now and then, which does not deserve an icon on every header.
 An array, ≤ 16 entries. Each is either a built-in id or a custom read-only chip.
 
 Built-ins, shown in the order you list them (omit one to hide it):
-`"dir"` `"git"` `"work"` `"ctx"` `"usage"` `"status"` `"diff"` `"tools"`.
+`"dir"` `"git"` `"work"` `"ctx"` `"usage"` `"status"` `"diff"` `"tools"` `"env"` `"peer"`.
 
 `work` is the one people miss: it names the PR or issue the cell is on. It is in the client's
 default set, so a header nobody has configured shows it — but the moment you write `chips` at all,
 **you must list it or it disappears**, and that reads as a feature breaking rather than a chip
 being deselected.
+
+`peer` is the name the other Claude Code sessions on this machine message this one by (what their
+`ListAgents` lists, `myrepo-66`): an icon that copies it, drawn on Claude cells only.
 
 Custom:
 

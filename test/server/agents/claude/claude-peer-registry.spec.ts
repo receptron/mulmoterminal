@@ -1,0 +1,86 @@
+// @vitest-environment node
+// Reading Claude Code's session registry (#3237): every claude home, live processes only, and one
+// read shared by the cells that ask within a moment of each other.
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { promises as fs } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { forgetClaudePeers, isProcessAlive, PEERS_CACHE_MS, readClaudePeers, readPeersIn } from "../../../../server/agents/claude/claude-peer-registry";
+import { setAccountsProvider } from "../../../../server/session/session-home";
+
+let home = "";
+const defaultHome = () => path.join(home, ".claude");
+
+const entry = (over: Record<string, unknown>): Record<string, unknown> => ({
+  pid: 4321,
+  sessionId: "s-1",
+  cwd: "/x",
+  name: "proj-ab",
+  nameSource: "derived",
+  tmux: "mt-s-1:@0.%0",
+  updatedAt: 10,
+  ...over,
+});
+
+async function write(claudeHome: string, file: string, body: string): Promise<void> {
+  const dir = path.join(claudeHome, "sessions");
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(path.join(dir, file), body);
+}
+
+const alive = (pid: number): boolean => pid !== 99;
+
+beforeEach(async () => {
+  home = await fs.mkdtemp(path.join(os.tmpdir(), "mt-claude-peers-"));
+  vi.spyOn(os, "homedir").mockReturnValue(home);
+  setAccountsProvider(() => []);
+  forgetClaudePeers();
+});
+
+afterEach(async () => {
+  vi.restoreAllMocks();
+  setAccountsProvider(() => []);
+  forgetClaudePeers();
+  await fs.rm(home, { recursive: true, force: true });
+});
+
+describe("readPeersIn", () => {
+  it("reads the live entries, and skips a dead process, a half-written file and the key files", async () => {
+    await write(defaultHome(), "4321.json", JSON.stringify(entry({})));
+    await write(defaultHome(), "99.json", JSON.stringify(entry({ pid: 99, name: "gone" })));
+    await write(defaultHome(), "77.json", "{ not json");
+    await write(defaultHome(), "4321.abcdef.key", "secret");
+    const names = (await readPeersIn(defaultHome(), alive)).map((peer) => peer.name);
+    expect(names).toEqual(["proj-ab"]);
+  });
+
+  it("answers none where there is no registry", async () => {
+    expect(await readPeersIn(defaultHome(), alive)).toEqual([]);
+  });
+});
+
+describe("readClaudePeers", () => {
+  it("reads the default home's registry and each account's", async () => {
+    const second = path.join(home, "second-login");
+    setAccountsProvider(() => [{ id: "second", label: "Second", agent: "claude", home: second }]);
+    await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "on-default" })));
+    await write(second, "2.json", JSON.stringify(entry({ pid: 2, name: "on-second" })));
+    const names = (await readClaudePeers(alive, 0)).map((peer) => peer.name).sort();
+    expect(names).toEqual(["on-default", "on-second"]);
+  });
+
+  it("answers one read for a short while, then reads again", async () => {
+    await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "first" })));
+    expect((await readClaudePeers(alive, 1000)).map((peer) => peer.name)).toEqual(["first"]);
+    await write(defaultHome(), "2.json", JSON.stringify(entry({ pid: 2, name: "second" })));
+    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS - 1)).map((peer) => peer.name)).toEqual(["first"]);
+    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS)).map((peer) => peer.name).sort()).toEqual(["first", "second"]);
+  });
+});
+
+describe("isProcessAlive", () => {
+  it("knows this process is running and that nothing runs on an unused pid", () => {
+    expect(isProcessAlive(process.pid)).toBe(true);
+    expect(isProcessAlive(2147483647)).toBe(false);
+  });
+});

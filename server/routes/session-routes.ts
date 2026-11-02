@@ -73,6 +73,7 @@ import { clearedTranscripts } from "../session/transcript/cleared-transcripts.js
 import { parseTranscriptCursor, sessionTranscriptPage } from "../session/transcript/transcript-view-read.js";
 import type { SessionAgent } from "../../common/sessionAgent.js";
 import { requestBody } from "./requestBody.js";
+import { claudePeerName } from "../agents/claude/claude-peer-registry.js";
 
 // Only the most-recent N sessions are listed in the sidebar; older ones aren't
 // read or parsed, keeping /api/sessions cheap for projects with many sessions.
@@ -194,12 +195,16 @@ async function sessionDetail(req: Request<{ id: string }>, res: Response, freshe
   // change. `null` rather than an absent key, so a cell that switches session clears the mark it
   // was wearing instead of keeping the previous one (#2020).
   const collection = sessionCollections.get(id) ?? null;
+  // Claude's only: the registry is Claude Code's. Outside `view` like the collection, since the name
+  // belongs to the PROCESS, which `/clear` does not change (#3237).
+  const peerName = agent === "claude" ? await claudePeerName(id) : null;
   res.json({
     id,
     cwd,
     ...view,
     ...titleFields,
     collection,
+    peerName,
     usage: badges.usage,
     context: badges.context,
     workPhase: claudeSummary.workPhase,

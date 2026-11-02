@@ -49,7 +49,7 @@ describe("header chips, one entry at a time", () => {
     const { post, onDisk } = await mountWith({});
     const res = await post("/api/config/chips/remove", { index: 0, chip: "git" });
     expect(res.status).toBe(200);
-    expect(onDisk().chips).toEqual(["work", "diff", "ctx", "usage", "env"]);
+    expect(onDisk().chips).toEqual(["work", "diff", "ctx", "usage", "env", "peer"]);
   });
 
   it("refuses a stale remove with the list as it now is, and writes nothing", async () => {

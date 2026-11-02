@@ -96,6 +96,8 @@ export interface SessionMetaView {
   aiTitle: string | null;
   /** The name the person gave with Claude Code's `/rename`; null for every other agent and for a cleared session. */
   customTitle: string | null;
+  /** What the other Claude Code sessions on this machine call this one (#3237); null for every other agent. */
+  peerName: string | null;
   /** What the agent's OWN store calls this session — its history-list title (#2123). Null for
    *  claude, which has `aiTitle`, and for the agents whose store cannot answer it for one id. */
   agentTitle: string | null;
@@ -113,6 +115,7 @@ export const EMPTY_SESSION_META: SessionMetaView = {
   lastPrompt: null,
   aiTitle: null,
   customTitle: null,
+  peerName: null,
   agentTitle: null,
   agentTitleKind: null,
   lastResponse: null,
@@ -131,6 +134,7 @@ const stringOrNull = (value: unknown): string | null | undefined => (typeof valu
 export function mergeSessionMeta(previous: SessionMetaView, fetched: Record<string, unknown>): SessionMetaView {
   const aiTitle = stringOrNull(fetched.aiTitle);
   const customTitle = stringOrNull(fetched.customTitle);
+  const peerName = stringOrNull(fetched.peerName);
   const agentTitle = stringOrNull(fetched.agentTitle);
   // Read once rather than inside the merge, so the "keep the previous" branch stays one decision.
   const fetchedKind = isAgentTitleKind(fetched.agentTitleKind) ? fetched.agentTitleKind : null;
@@ -153,6 +157,7 @@ export function mergeSessionMeta(previous: SessionMetaView, fetched: Record<stri
     aiTitle: aiTitle !== undefined ? aiTitle : previous.aiTitle,
     // An explicit null wins (a cleared name, a cleared session); only an absent field keeps it.
     customTitle: customTitle !== undefined ? customTitle : previous.customTitle,
+    peerName: peerName !== undefined ? peerName : previous.peerName,
     lastResponse: stringOrNull(fetched.lastResponse) ?? previous.lastResponse,
     memo: memo !== undefined ? memo : previous.memo,
     workPhase: isWorkPhase(fetched.workPhase) ? fetched.workPhase : null,

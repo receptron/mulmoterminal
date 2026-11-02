@@ -34,6 +34,7 @@ import CellLaunchForm from "./CellLaunchForm.vue";
 import GitBranchChip from "./GitBranchChip.vue";
 import WorkItemChip from "./WorkItemChip.vue";
 import WorktreeEnvChip from "./WorktreeEnvChip.vue";
+import PeerNameChip from "./PeerNameChip.vue";
 import CellTidyPrompt from "./CellTidyPrompt.vue";
 import WorkCommentNotice from "./WorkCommentNotice.vue";
 import ModelContextBadge from "./ModelContextBadge.vue";
@@ -276,6 +277,7 @@ const aiTitle = ref<string | null>(null);
 // The name the person gave with Claude Code's `/rename`. It outranks the AI title, and arrives with the
 // detail fetch rather than the live push, so a push that omits it leaves it standing.
 const customTitle = ref<string | null>(null);
+const peerName = ref<string | null>(null);
 // The user's own one-line note on this session (#1084). It outranks both of the above in the
 // header: they say what the agent said, this says what the cell is FOR — the question six open
 // cells stop answering. Null until the server pushes one.
@@ -447,6 +449,13 @@ function applyCustomTitle(data: Record<string, unknown>) {
   if (data.customTitle === null || typeof data.customTitle === "string") customTitle.value = data.customTitle;
 }
 
+// What the other Claude Code sessions on this machine call this one (#3237), read off Claude Code's
+// own registry by the route. It belongs to the PROCESS, which `/clear` leaves running, so it is
+// applied whatever the clear generation says; an explicit null means no claude answers to this id.
+function applyPeerName(data: Record<string, unknown>) {
+  if (data.peerName === null || typeof data.peerName === "string") peerName.value = data.peerName;
+}
+
 async function loadInitial(id: string) {
   const seedId = ++latestSeed;
   const badgeReq = ++latestBadgeReq;
@@ -465,6 +474,7 @@ async function loadInitial(id: string) {
     // The name is read off the transcript like the badges, and can change between two reads, so it
     // follows their token: an older read resolving late must not put a name back.
     if (clearGen === clearGenBeforeFetch) applyCustomTitle(data);
+    applyPeerName(data);
   }
   // Not guarded by either token: it is a fact about how the session began, so every answer for
   // this id carries the same one and there is no older-vs-newer to lose.
@@ -482,6 +492,7 @@ async function refreshUsage() {
   if (!data || badgeReq !== latestBadgeReq) return;
   applyBadges(data);
   if (clearGen === clearGenBeforeFetch) applyCustomTitle(data);
+  applyPeerName(data);
 }
 
 // Canvas output this cell has produced that nobody has looked at. The grid is a TRIAGE board,
@@ -817,6 +828,7 @@ function teardown() {
   lastPrompt.value = null;
   aiTitle.value = null;
   customTitle.value = null;
+  peerName.value = null;
   // The memo belongs to the SESSION, not to the cell — it stays on disk and comes back when that
   // session is resumed. What must not survive is showing it against whatever this cell runs next.
   memo.value = null;
@@ -1538,6 +1550,7 @@ onUnmounted(() => document.removeEventListener("keydown", onDiffKey));
                 <GitBranchChip v-if="chip.builtin === 'git'" :status="gitStatus" :hide-dirty="isWorktreeCell" />
                 <WorkItemChip v-else-if="chip.builtin === 'work'" :item="workItem" />
                 <WorktreeEnvChip v-else-if="chip.builtin === 'env'" :values="worktreeEnv" />
+                <PeerNameChip v-else-if="chip.builtin === 'peer'" :name="peerName" />
                 <button
                   v-else-if="chip.builtin === 'diff' && showDiffBadge && diff"
                   type="button"

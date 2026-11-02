@@ -120,6 +120,7 @@ const rosterRow = (uid: number, over: Partial<CockpitRow> = {}): CockpitRow => (
   agent: "claude",
   status: "idle",
   memo: null,
+  peerName: null,
   summary: null,
   prompt: null,
   response: null,

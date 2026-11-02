@@ -116,6 +116,7 @@ describe("mergeSessionMeta", () => {
     lastPrompt: "fix the login bug",
     aiTitle: "Login fix",
     customTitle: null,
+    peerName: null,
     agentTitle: null,
     agentTitleKind: null,
     lastResponse: "done",
@@ -130,6 +131,7 @@ describe("mergeSessionMeta", () => {
       lastPrompt: "new task",
       aiTitle: "New",
       customTitle: null,
+      peerName: null,
       agentTitle: null,
       agentTitleKind: null,
       lastResponse: "ok",
@@ -192,6 +194,15 @@ describe("mergeSessionMeta", () => {
     expect([merged.lastPrompt, merged.aiTitle, merged.lastResponse]).toEqual(["fix the login bug", "Renamed", "done"]);
   });
 
+  // The name the other Claude Code sessions message this one by (#3237) rides on the same fetch:
+  // an explicit null (no running claude answers to the id) clears it, an absent field keeps it.
+  it("carries the peer name, cleared only by an explicit null", () => {
+    const named = mergeSessionMeta(shown, { peerName: "proj-7f" });
+    expect(named.peerName).toBe("proj-7f");
+    expect(mergeSessionMeta(named, { aiTitle: "x" }).peerName).toBe("proj-7f");
+    expect(mergeSessionMeta(named, { peerName: 7 }).peerName).toBe("proj-7f");
+    expect(mergeSessionMeta(named, { peerName: null }).peerName).toBeNull();
+  });
   it("keeps the /rename name when the fetch omits it, and drops it on an explicit null", () => {
     const renamed = mergeSessionMeta(shown, { customTitle: "Parser rewrite" });
     expect(renamed.customTitle).toBe("Parser rewrite");
@@ -205,6 +216,7 @@ describe("mergeSessionMeta", () => {
       lastPrompt: "first",
       aiTitle: null,
       customTitle: null,
+      peerName: null,
       agentTitle: null,
       agentTitleKind: null,
       lastResponse: null,
