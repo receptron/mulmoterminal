@@ -82,6 +82,8 @@ export function isLauncherPathEntry(entry: string, platform: NodeJS.Platform = p
 // `…\tools\image\node\24.21.0` on Windows. A cell that keeps it runs that `node`/`npm` directly, past
 // the shim and so past a project's `volta` pin. It goes only beside Volta's own shim dir
 // (`<volta>/bin`), which still finds a `node`; without one the image dir may be the only way to it.
+// Lexical on purpose: a pure function of PATH cannot see VOLTA_HOME or the disk, so a user dir with exactly this
+// shape beside its own `bin` is dropped too, and spellings that differ (`.`, symlinks) are kept, as before.
 const VOLTA_IMAGE_TOOLS = new Set(["node", "npm", "yarn", "pnpm"]);
 
 // A leading "" stays: it is the root, and `/tools/bin` is not `tools/bin`. POSIX splits on "/" only —
