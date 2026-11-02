@@ -18,9 +18,9 @@
 import type { Terminal, ILinkProvider, ILink } from "@xterm/xterm";
 import { SOURCE_CODE_EXTENSIONS } from "../../common/sourceExtensions";
 import { browserDisplays } from "../../common/rawContentType";
-import { findFilePathLinks } from "./terminalFilePathLinks";
+import { findFilePathLinks, type FilePathLinkOptions } from "./terminalFilePathLinks";
 import type { FileLocation } from "./filePathLocation";
-import { pathWithinCwd, rebaseOutsideCwd } from "./pathWithinCwd";
+import { isWindowsRoot, pathWithinCwd, rebaseOutsideCwd } from "./pathWithinCwd";
 import { joinedPath } from "./grantedTab";
 import { grantKind } from "../../common/fileGrant";
 import { fileMediaKind, filePreviewKind } from "../components/filePreviewKind";
@@ -41,7 +41,7 @@ export interface ColumnLink {
 
 // Wide glyphs occupy two columns (a width-2 cell followed by a width-0 continuation cell);
 // map every UTF-16 unit to the column it starts and ends in, then linkify the joined text.
-export function computeFilePathLinks(cells: TerminalCell[]): ColumnLink[] {
+export function computeFilePathLinks(cells: TerminalCell[], options: FilePathLinkOptions = {}): ColumnLink[] {
   const units: string[] = [];
   const colStart: number[] = [];
   const colEnd: number[] = [];
@@ -55,7 +55,7 @@ export function computeFilePathLinks(cells: TerminalCell[]): ColumnLink[] {
       colEnd.push(col + cell.width - 1);
     }
   }
-  return findFilePathLinks(units.join("")).map((hit) => ({
+  return findFilePathLinks(units.join(""), options).map((hit) => ({
     text: hit.text,
     startX: (colStart[hit.start] ?? 0) + 1,
     endX: (colEnd[hit.end - 1] ?? 0) + 1,
@@ -189,7 +189,8 @@ export function createFilePathLinkProvider(
       const cwd = getCwd();
       const cells = cwd ? readCells(term, bufferLineNumber) : null;
       if (!cwd || !cells) return callback(undefined);
-      const links: ILink[] = computeFilePathLinks(cells).map((link) => ({
+      // A Windows cell prints `\`-separated paths; anywhere else `\` can be part of a file name.
+      const links: ILink[] = computeFilePathLinks(cells, { windowsPaths: isWindowsRoot(cwd) }).map((link) => ({
         text: link.text,
         range: { start: { x: link.startX, y: bufferLineNumber }, end: { x: link.endX, y: bufferLineNumber } },
         decorations: { pointerCursor: true, underline: true },

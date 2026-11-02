@@ -11,20 +11,32 @@
 // A trailing `.` (a sentence period clinging to the token) is trimmed off the end.
 // A location right after the path (`:42`, `:42:7`, `(12,5)`) joins the link's range and is
 // reported beside it, so the click can open the file at that line.
+//
+// With `windowsPaths`, `\` separates too and a one-letter drive (`C:\x\a.md`, `D:/w/b.ts`) stays on
+// the token. It is opt-in because on macOS and Linux `\` is an ordinary character in a file name.
 
 import { locationAfterPath, type FileLocation } from "./filePathLocation";
 
 export interface FilePathLink {
   start: number; // inclusive UTF-16 index
   end: number; // exclusive UTF-16 index — past the location when there is one
-  text: string; // the path alone
+  text: string; // the path alone; with `windowsPaths`, `/`-separated even where the line printed `\`
   location?: FileLocation;
 }
 
-const PATH_TOKEN = /[^\s"'`()[\]{}<>（）「」【】:,;、。]+/g;
+export interface FilePathLinkOptions {
+  windowsPaths?: boolean;
+}
+
+const PATH_CHARS = "[^\\s\"'`()[\\]{}<>（）「」【】:,;、。]+";
+const PATH_TOKEN = new RegExp(PATH_CHARS, "g");
+// A run never starts mid-word, so the drive is a lone letter: `ab:/x.ts` and `a.ts:12` still split at `:`.
+const WINDOWS_PATH_TOKEN = new RegExp(`(?:[A-Za-z]:(?=[\\\\/]))?${PATH_CHARS}`, "g");
 // A trailing file extension: a dot then 1-10 alnum at end-of-string.
 const TRAILING_EXTENSION = /\.([A-Za-z0-9]{1,10})$/;
 const HAS_LETTER = /[A-Za-z]/;
+const SLASH_ONLY = /\//;
+const SLASH_OR_BACKSLASH = /[\\/]/;
 
 // True when `text` ends in a file extension holding at least one letter — so `hero.gif`
 // / `a.tar.gz` qualify but a fraction like `1/2.5` does not.
@@ -33,24 +45,33 @@ function endsInFileExtension(text: string): boolean {
   return ext?.[1] !== undefined && HAS_LETTER.test(ext[1]);
 }
 
-export function findFilePathLinks(line: string): FilePathLink[] {
+// A sentence period clinging to the token is not part of the path.
+function withoutTrailingPeriods(text: string): string {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === ".") end -= 1;
+  return text.slice(0, end);
+}
+
+// A leading `\\` on Windows is a UNC share, which nothing that opens a clicked path can address.
+function isUrlLike(text: string, before: string | undefined, windowsPaths: boolean): boolean {
+  return text.startsWith("//") || (windowsPaths && text.startsWith("\\\\")) || before === ":";
+}
+
+export function findFilePathLinks(line: string, options: FilePathLinkOptions = {}): FilePathLink[] {
+  const windowsPaths = options.windowsPaths === true;
+  const separator = windowsPaths ? SLASH_OR_BACKSLASH : SLASH_ONLY;
+  const token = windowsPaths ? WINDOWS_PATH_TOKEN : PATH_TOKEN;
   const links: FilePathLink[] = [];
-  for (const match of line.matchAll(PATH_TOKEN)) {
+  for (const match of line.matchAll(token)) {
     // No `undefined` guard: matchAll requires a global regex and the spec sets `index` on every
     // match it yields, which is why the type is `number` rather than `number | undefined`.
     const start = match.index;
-    let text = match[0];
-    let end = start + text.length;
-    while (text.endsWith(".")) {
-      text = text.slice(0, -1);
-      end -= 1;
-    }
-    if (text.startsWith("//")) continue; // protocol-relative URL, not a path
-    if (start > 0 && line[start - 1] === ":") continue; // scheme (`http:`) or `file:line`
-    if (!text.includes("/")) continue;
-    if (!endsInFileExtension(text)) continue;
+    const text = withoutTrailingPeriods(match[0]);
+    const end = start + text.length;
+    if (isUrlLike(text, line[start - 1], windowsPaths) || !separator.test(text) || !endsInFileExtension(text)) continue;
+    const path = windowsPaths ? text.replace(/\\/g, "/") : text;
     const located = locationAfterPath(line.slice(end));
-    links.push(located ? { start, end: end + located.length, text, location: located.location } : { start, end, text });
+    links.push(located ? { start, end: end + located.length, text: path, location: located.location } : { start, end, text: path });
   }
   return links;
 }

@@ -255,3 +255,34 @@ describe("createFilePathLinkProvider against real xterm", () => {
     term.dispose();
   });
 });
+
+// #3236. Which cell decides whether `\` separates: a Windows cwd does, anything else does not.
+describe("Windows paths against real xterm", () => {
+  const LINE = "edit C:\\w\\app\\src\\a.ts:12 and .claude\\e\\t.md";
+
+  it("links them in a Windows cell over the printed columns, handing the `/` form to the pane", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, LINE);
+    const openInPane = vi.fn(() => true);
+    const links = provideLinks(term, "C:\\w\\app", vi.fn(), () => {}, openInPane) ?? [];
+    expect(links.map((l) => [l.text, l.range.start.x, l.range.end.x])).toEqual([
+      ["C:/w/app/src/a.ts", 6, 25],
+      [".claude/e/t.md", 31, 44],
+    ]);
+    links.forEach((link) => link.activate(new MouseEvent("click"), link.text));
+    expect(openInPane.mock.calls).toEqual([
+      ["C:/w/app/src/a.ts", "C:\\w\\app", { line: 12, col: null }, false],
+      [".claude/e/t.md", "C:\\w\\app", undefined, false],
+    ]);
+    term.dispose();
+  });
+
+  it("leaves them alone in a macOS or Linux cell", async () => {
+    const term = new Terminal({ cols: 120, rows: 10, allowProposedApi: true });
+    term.open(document.createElement("div"));
+    await writeLine(term, LINE);
+    expect(provideLinks(term, "/Users/me/proj", vi.fn())).toBeUndefined();
+    term.dispose();
+  });
+});
