@@ -12,6 +12,7 @@ import {
   MAX_ENTRY_BYTES,
   MAX_SCANNED,
   PEERS_CACHE_MS,
+  processStartTimes,
   readClaudePeers,
   readPeersIn,
 } from "../../../../server/agents/claude/claude-peer-registry";
@@ -38,6 +39,8 @@ async function write(claudeHome: string, file: string, body: string): Promise<vo
 }
 
 const alive = (pid: number): boolean => pid !== 99;
+/** No OS answer about starts: the registry specs above are about the files. */
+const unknownStarts = async (): Promise<null> => null;
 
 beforeEach(async () => {
   home = await fs.mkdtemp(path.join(os.tmpdir(), "mt-claude-peers-"));
@@ -120,16 +123,65 @@ describe("readClaudePeers", () => {
     setAccountsProvider(() => [{ id: "second", label: "Second", agent: "claude", home: second }]);
     await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "on-default" })));
     await write(second, "2.json", JSON.stringify(entry({ pid: 2, name: "on-second" })));
-    const names = (await readClaudePeers(alive, 0)).map((peer) => peer.name).sort();
+    const names = (await readClaudePeers(alive, 0, unknownStarts)).map((peer) => peer.name).sort();
     expect(names).toEqual(["on-default", "on-second"]);
   });
 
   it("answers one read for a short while, then reads again", async () => {
     await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "first" })));
-    expect((await readClaudePeers(alive, 1000)).map((peer) => peer.name)).toEqual(["first"]);
+    expect((await readClaudePeers(alive, 1000, unknownStarts)).map((peer) => peer.name)).toEqual(["first"]);
     await write(defaultHome(), "2.json", JSON.stringify(entry({ pid: 2, name: "second" })));
-    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS - 1)).map((peer) => peer.name)).toEqual(["first"]);
-    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS)).map((peer) => peer.name).sort()).toEqual(["first", "second"]);
+    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS - 1, unknownStarts)).map((peer) => peer.name)).toEqual(["first"]);
+    expect((await readClaudePeers(alive, 1000 + PEERS_CACHE_MS, unknownStarts)).map((peer) => peer.name).sort()).toEqual(["first", "second"]);
+  });
+});
+
+describe("readClaudePeers — the process behind the entry", () => {
+  // A pid proves only that some process owns the number. The entry's own start has to agree with
+  // the OS's account of the process, so a crashed claude's file does not borrow a reused pid.
+  it("drops an entry whose pid belongs to a process that started at another time", async () => {
+    await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "reused", startedAt: 1_000_000 })));
+    await write(defaultHome(), "2.json", JSON.stringify(entry({ pid: 2, name: "genuine", startedAt: 5_000_000 })));
+    const starts = async (): Promise<Map<number, number>> =>
+      new Map([
+        [1, 9_000_000],
+        [2, 4_998_000],
+      ]);
+    expect((await readClaudePeers(alive, 0, starts)).map((peer) => peer.name)).toEqual(["genuine"]);
+  });
+
+  it("asks the OS about the live pids only, once", async () => {
+    await write(defaultHome(), "1.json", JSON.stringify(entry({ pid: 1, name: "live", startedAt: 5_000_000 })));
+    await write(defaultHome(), "99.json", JSON.stringify(entry({ pid: 99, name: "dead", startedAt: 5_000_000 })));
+    const asked: number[][] = [];
+    const starts = async (pids: readonly number[]): Promise<Map<number, number>> => {
+      asked.push([...pids]);
+      return new Map(pids.map((pid) => [pid, 5_000_000]));
+    };
+    expect((await readClaudePeers(alive, 0, starts)).map((peer) => peer.name)).toEqual(["live"]);
+    expect(asked).toEqual([[1]]);
+  });
+
+  // The real `ps`, on this process: the spec runner started well within the tolerance of "now".
+  it.skipIf(process.platform === "win32")("agrees with the OS about this process, and not about an entry claiming an old start", async () => {
+    const starts = await processStartTimes([process.pid]);
+    expect(starts?.get(process.pid)).toBeDefined();
+    await write(defaultHome(), `${String(process.pid)}.json`, JSON.stringify(entry({ pid: process.pid, name: "this-process", startedAt: Date.now() })));
+    expect((await readClaudePeers(() => true, 0)).map((peer) => peer.name)).toEqual(["this-process"]);
+    forgetClaudePeers();
+    await write(
+      defaultHome(),
+      `${String(process.pid)}.json`,
+      JSON.stringify(entry({ pid: process.pid, name: "an-old-start", startedAt: Date.now() - 86_400_000 })),
+    );
+    expect(await readClaudePeers(() => true, 0)).toEqual([]);
+  });
+
+  it("answers nothing about starts where there is nothing to ask, or where ps cannot answer", async () => {
+    expect(await processStartTimes([])).toBeNull();
+    // A number no process can have: ps refuses the whole call with nothing listed, which is "cannot
+    // be asked", not "none of them is running".
+    if (process.platform !== "win32") expect(await processStartTimes([2_147_483_647])).toBeNull();
   });
 });
 

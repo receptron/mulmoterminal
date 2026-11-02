@@ -23,7 +23,17 @@ let cwd = "";
 async function writeRegistryEntry(over: Record<string, unknown>): Promise<void> {
   const dir = path.join(home, ".claude", "sessions");
   await fs.mkdir(dir, { recursive: true });
-  const entry = { pid: process.pid, sessionId: "reissued-after-clear", cwd, name: "ws-7f", nameSource: "derived", updatedAt: 1, ...over };
+  // This process's pid, and a start the OS will agree with: the spec runner started moments ago.
+  const entry = {
+    pid: process.pid,
+    sessionId: "reissued-after-clear",
+    cwd,
+    name: "ws-7f",
+    nameSource: "derived",
+    startedAt: Date.now(),
+    updatedAt: 1,
+    ...over,
+  };
   await fs.writeFile(path.join(dir, `${String(entry.pid)}.json`), JSON.stringify(entry));
 }
 

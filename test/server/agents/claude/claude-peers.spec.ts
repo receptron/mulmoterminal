@@ -2,7 +2,16 @@
 // The name other Claude Code sessions message one of ours by (#3237): read from Claude Code's own
 // registry entry, and matched to a cell through the tmux session MulmoTerminal named for it.
 import { describe, it, expect } from "vitest";
-import { MAX_PEER_NAME_CHARS, parseClaudePeer, peerNameFor, tmuxSessionOf, type ClaudePeer } from "../../../../server/agents/claude/claude-peers";
+import {
+  MAX_PEER_NAME_CHARS,
+  parseClaudePeer,
+  parsePsStartTimes,
+  peerNameFor,
+  START_TOLERANCE_MS,
+  tmuxSessionOf,
+  withVerifiedStarts,
+  type ClaudePeer,
+} from "../../../../server/agents/claude/claude-peers";
 
 // One entry as Claude Code 2.1.292 writes it, the fields this reads and a few it does not.
 const ENTRY = {
@@ -19,7 +28,15 @@ const ENTRY = {
   updatedAt: 1793623857518,
 };
 
-const peer = (over: Partial<ClaudePeer>): ClaudePeer => ({ name: "proj-ab", pid: 1, sessionId: null, tmuxSession: null, updatedAt: 0, ...over });
+const peer = (over: Partial<ClaudePeer>): ClaudePeer => ({
+  name: "proj-ab",
+  pid: 1,
+  sessionId: null,
+  tmuxSession: null,
+  updatedAt: 0,
+  startedAt: null,
+  ...over,
+});
 
 describe("parseClaudePeer", () => {
   it("reads the name, the process, claude's id and the tmux session off an entry", () => {
@@ -29,6 +46,7 @@ describe("parseClaudePeer", () => {
       sessionId: "17190482-1062-4367-8085-6634d8738a46",
       tmuxSession: "mt-101256a4-131e-4921-b905-9f86e419928c",
       updatedAt: 1793623857518,
+      startedAt: 1793620670575,
     });
   });
 
@@ -60,7 +78,14 @@ describe("parseClaudePeer", () => {
   });
 
   it("has no tmux session and no id for a claude started outside both", () => {
-    expect(parseClaudePeer({ pid: 7, name: "proj-ab" })).toEqual({ name: "proj-ab", pid: 7, sessionId: null, tmuxSession: null, updatedAt: 0 });
+    expect(parseClaudePeer({ pid: 7, name: "proj-ab" })).toEqual({
+      name: "proj-ab",
+      pid: 7,
+      sessionId: null,
+      tmuxSession: null,
+      updatedAt: 0,
+      startedAt: null,
+    });
   });
 
   it("dates an entry by its last write, else by its start", () => {
@@ -119,5 +144,40 @@ describe("peerNameFor", () => {
     const newer = peer({ name: "newer", tmuxSession: "mt-s-1", updatedAt: 20 });
     expect(peerNameFor([newer, older], keys)).toBe("newer");
     expect(peerNameFor([older, newer], keys)).toBe("newer");
+  });
+});
+
+describe("parsePsStartTimes", () => {
+  it("reads pid and start off each line, local time, and skips what is not one", () => {
+    const starts = parsePsStartTimes("  7848 Mon Nov  2 20:57:38 2026    \n 14188 Mon Nov  2 20:57:49 2026\nps: process id too large: 999999\n\n");
+    expect([...starts.keys()]).toEqual([7848, 14188]);
+    expect(starts.get(7848)).toBe(Date.parse("Mon Nov  2 20:57:38 2026"));
+  });
+});
+
+describe("withVerifiedStarts", () => {
+  const startedAt = 1_793_620_661_697; // the entry's own clock, a few seconds into the process
+  const processStart = startedAt - 3_697; // what the OS says
+  const entry = peer({ pid: 7848, startedAt });
+
+  it("keeps a peer whose process started when its entry says, within the tolerance", () => {
+    expect(withVerifiedStarts([entry], new Map([[7848, processStart]]))).toEqual([entry]);
+    expect(withVerifiedStarts([entry], new Map([[7848, startedAt - START_TOLERANCE_MS]]))).toEqual([entry]);
+    expect(withVerifiedStarts([entry], new Map([[7848, startedAt + START_TOLERANCE_MS]]))).toEqual([entry]);
+  });
+
+  // The pid came round again: some unrelated process owns the number now and started at another time.
+  it("drops a peer whose number belongs to a process that started at another time", () => {
+    expect(withVerifiedStarts([entry], new Map([[7848, startedAt + START_TOLERANCE_MS + 1]]))).toEqual([]);
+    expect(withVerifiedStarts([entry], new Map([[7848, startedAt - START_TOLERANCE_MS - 1]]))).toEqual([]);
+  });
+
+  it("drops a peer the OS does not list, and one whose entry has no start of its own", () => {
+    expect(withVerifiedStarts([entry], new Map())).toEqual([]);
+    expect(withVerifiedStarts([peer({ pid: 7848, startedAt: null })], new Map([[7848, processStart]]))).toEqual([]);
+  });
+
+  it("keeps every live peer where the OS cannot say when a process started", () => {
+    expect(withVerifiedStarts([entry, peer({ pid: 9, startedAt: null })], null)).toHaveLength(2);
   });
 });

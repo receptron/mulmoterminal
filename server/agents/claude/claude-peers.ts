@@ -17,6 +17,8 @@ export interface ClaudePeer {
   tmuxSession: string | null;
   /** When Claude Code last wrote the entry, for choosing between two that claim one cell. */
   updatedAt: number;
+  /** When the claude registered itself, by its own clock, for checking the process against. */
+  startedAt: number | null;
 }
 
 const stringOrNull = (value: unknown): string | null => (typeof value === "string" && value !== "" ? value : null);
@@ -54,7 +56,38 @@ export function parseClaudePeer(value: unknown): ClaudePeer | null {
     sessionId: stringOrNull(value.sessionId),
     tmuxSession: tmuxSessionOf(value.tmux),
     updatedAt: finiteOr(value.updatedAt, finiteOr(value.startedAt, 0)),
+    startedAt: typeof value.startedAt === "number" && Number.isFinite(value.startedAt) ? value.startedAt : null,
   };
+}
+
+/** How far a process's start, by the OS's account, may sit from the entry's own `startedAt`: the
+ *  registration runs a few seconds into the process, never a minute. */
+export const START_TOLERANCE_MS = 60_000;
+
+/** `ps -o pid=,lstart=` lines (`  7848 Mon Nov  2 20:57:38 2026`) as pid → start, epoch ms. A line
+ *  that is not one is skipped. */
+export function parsePsStartTimes(stdout: string): Map<number, number> {
+  const starts = new Map<number, number>();
+  stdout.split("\n").forEach((line) => {
+    const [pid, ...start] = line.trim().split(/\s+/);
+    if (pid === undefined || !/^\d+$/.test(pid)) return;
+    const startedAt = Date.parse(start.join(" "));
+    if (Number.isFinite(startedAt)) starts.set(Number(pid), startedAt);
+  });
+  return starts;
+}
+
+/** The peers whose process is the one that wrote the entry. A pid proves only that SOME process owns
+ *  the number: a claude that crashed leaves its file, and the number can come round again to a
+ *  process that is nothing of the kind. So where the OS can say when the process started, it has to
+ *  agree with the entry; a pid the OS does not list, or an entry with no start of its own, is
+ *  dropped. Where the OS cannot say (`starts` is null), liveness is all there is. */
+export function withVerifiedStarts(peers: readonly ClaudePeer[], starts: ReadonlyMap<number, number> | null): ClaudePeer[] {
+  if (starts === null) return [...peers];
+  return peers.filter((peer) => {
+    const osStart = starts.get(peer.pid);
+    return osStart !== undefined && peer.startedAt !== null && Math.abs(osStart - peer.startedAt) <= START_TOLERANCE_MS;
+  });
 }
 
 export interface PeerKeys {

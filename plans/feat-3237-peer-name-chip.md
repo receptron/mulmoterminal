@@ -17,8 +17,11 @@ Claude Code 自身が `<Claude のホーム>/sessions/<pid>.json` に書いて�
 - `sessionId`: Claude 自身のセッション ID。起動時は MulmoTerminal の ID と同じで、`/clear` や
   `/compact` で変わる。tmux の欄が無い項目（tmux なしの起動）だけの予備。別の tmux セッションを名指す
   項目は、ID が同じでも別のセル（同じ会話を別のセルで再開したもの）なので採らない。
-- `pid`、`updatedAt`: 生きていない pid の項目は読まない。同じセルを名乗る項目が複数あれば
-  `updatedAt` の新しい方。
+- `pid`、`startedAt`、`updatedAt`: 生きていない pid の項目は読まない。pid は「その番号を持つプロセスが
+  ある」ことしか示さず、落ちた Claude のファイルが残ったまま番号が別のプロセスに回ることがあるので、
+  OS がプロセスの開始時刻を言える所（POSIX の `ps -o lstart=`）では項目の `startedAt` と
+  `START_TOLERANCE_MS` 以内で一致するものだけを残す（第 4 ラウンド）。言えない所（Windows）は生存だけ。
+  同じセルを名乗る項目が複数あれば `updatedAt` の新しい方。
 
 ## 決めたこと（ユーザーと）
 

@@ -2143,7 +2143,7 @@ name in `MULMOTERMINAL_HOST` / `MULMOTERMINAL_ALLOWED_ORIGINS`, against DNS rebi
 
 | Endpoint | Purpose |
 | -------- | ------- |
-| `GET /api/session/:id?cwd=` | One session's summary — cumulative `usage` and `context` (model + last-turn context tokens). Backs the cell token & ctx% badges. |
+| `GET /api/session/:id?cwd=` | One session's summary — cumulative `usage` and `context` (model + last-turn context tokens), and for a Claude session `peerName`, the name other Claude Code sessions on this machine message it by (`null` when no running claude answers to the id). Backs the cell token & ctx% badges and the `peer` chip. |
 | `GET /api/codex/sessions?cwd=` | Codex sessions for the project (from `~/.codex` rollouts), newest first. |
 | `GET /api/antigravity/sessions?cwd=` | Antigravity conversations for the project, newest first. agy does record a workspace, but never as a complete conversation-to-workspace map (`cache/last_conversations.json` keeps one conversation per directory and is written at exit; `history.jsonl` carries no conversation id), so the project comes from MulmoTerminal's own `~/.mulmoterminal/antigravity-conversations.jsonl`; agy's transcript supplies the title. |
 | `GET /api/grok/sessions?cwd=` | Grok conversations for the project, newest first. `~/.grok/sessions` is partitioned by working directory (percent-encoded), so this is a directory listing; each conversation's `summary.json` supplies the title and the last-active time, falling back to the directory's `prompt_history.jsonl`. |

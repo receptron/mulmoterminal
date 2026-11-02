@@ -1,13 +1,14 @@
 // Claude Code's registry of the sessions running on this machine, read for the name each one
 // answers to (#3237): `<claude home>/sessions/<pid>.json`, in every home a claude session may be
 // on. The `.key` beside each entry is that session's messaging secret and is never opened.
+import { spawn } from "node:child_process";
 import { constants, promises as fs } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import path from "node:path";
 import { hasErrnoCode } from "../../errors.js";
 import { agentHomeChoices } from "../../session/session-home.js";
 import { tmuxSessionName } from "../../infra/process/tmux.js";
-import { parseClaudePeer, peerNameFor, type ClaudePeer } from "./claude-peers.js";
+import { parseClaudePeer, parsePsStartTimes, peerNameFor, withVerifiedStarts, type ClaudePeer } from "./claude-peers.js";
 
 const SESSIONS_DIR = "sessions";
 /** The registry's own naming: one `<pid>.json` per process. Anything else in the folder — the
@@ -103,12 +104,47 @@ export async function readPeersIn(home: string, alive: (pid: number) => boolean,
   return peers;
 }
 
+/** How long `ps` may take before its answer is treated as unavailable. */
+const PS_TIMEOUT_MS = 3000;
+/** By its fixed path, not through PATH: macOS, glibc and busybox systems all keep it here, and a
+ *  box that does not answers nothing, which is the "cannot be asked" case below. */
+const PS = "/bin/ps";
+
+/** When each of `pids` started, by the OS's account: one `ps` for all of them, read whatever its
+ *  exit code (a pid gone meanwhile makes it non-zero while the others still print). Null where the
+ *  OS cannot be asked — Windows has no `ps`, and a box without one answers nothing. */
+export function processStartTimes(pids: readonly number[]): Promise<Map<number, number> | null> {
+  if (process.platform === "win32" || pids.length === 0) return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const chunks: Buffer[] = [];
+    const ps = spawn(PS, ["-o", "pid=,lstart=", "-p", pids.join(",")], { stdio: ["ignore", "pipe", "ignore"], timeout: PS_TIMEOUT_MS });
+    ps.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
+    ps.on("error", () => resolve(null));
+    ps.on("close", (code, signal) => {
+      const stdout = Buffer.concat(chunks).toString("utf8");
+      // Killed by the timeout, or failed with nothing to show (a `ps` that does not know `lstart`,
+      // every asked pid gone meanwhile): the OS could not be asked. A non-zero exit WITH output is a
+      // pid or two gone meanwhile, and the rest were answered.
+      resolve(signal !== null || (code !== 0 && stdout.trim() === "") ? null : parsePsStartTimes(stdout));
+    });
+  });
+}
+
+export type StartTimes = (pids: readonly number[]) => Promise<Map<number, number> | null>;
+
 let cached: { at: number; peers: Promise<ClaudePeer[]> } | null = null;
 
-/** Every live claude peer on this machine: the default home's and each account's. */
-export function readClaudePeers(alive: (pid: number) => boolean = isProcessAlive, now: number = Date.now()): Promise<ClaudePeer[]> {
+/** Every live claude peer on this machine: the default home's and each account's, each one's
+ *  process checked against its entry where the OS can say when it started. */
+export function readClaudePeers(
+  alive: (pid: number) => boolean = isProcessAlive,
+  now: number = Date.now(),
+  starts: StartTimes = processStartTimes,
+): Promise<ClaudePeer[]> {
   if (cached !== null && now - cached.at < PEERS_CACHE_MS) return cached.peers;
-  const peers = Promise.all(agentHomeChoices("claude").map(({ home }) => readPeersIn(home, alive))).then((perHome) => perHome.flat());
+  const peers = Promise.all(agentHomeChoices("claude").map(({ home }) => readPeersIn(home, alive)))
+    .then((perHome) => perHome.flat())
+    .then(async (live) => withVerifiedStarts(live, await starts(live.map((peer) => peer.pid))));
   cached = { at: now, peers };
   return peers;
 }
