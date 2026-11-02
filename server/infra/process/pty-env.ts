@@ -84,10 +84,12 @@ export function isLauncherPathEntry(entry: string, platform: NodeJS.Platform = p
 // (`<volta>/bin`), which still finds a `node`; without one the image dir may be the only way to it.
 const VOLTA_IMAGE_TOOLS = new Set(["node", "npm", "yarn", "pnpm"]);
 
+// A leading "" stays: it is the root, and `/tools/bin` is not `tools/bin`. POSIX splits on "/" only —
+// a backslash is a legal character in a directory name there.
 const pathSegments = (entry: string, platform: NodeJS.Platform): string[] =>
   asSearched(entry, platform)
-    .split(/[\\/]/)
-    .filter((segment) => segment !== "");
+    .split(platform === "win32" ? /[\\/]/ : "/")
+    .filter((segment, index) => segment !== "" || index === 0);
 
 // Segments joined, case folded where the platform folds it, so two spellings of one dir compare equal.
 const pathKey = (segments: readonly string[], platform: NodeJS.Platform): string => {

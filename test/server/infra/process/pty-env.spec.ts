@@ -102,6 +102,19 @@ describe("sanitizePathEntries", () => {
   describe("Volta's image dirs", () => {
     const VOLTA = "/home/u/.volta";
 
+    it("does not take a relative entry for the absolute one beside the shim dir", () => {
+      const relative = "volta/tools/image/node/24.21.0/bin";
+      expect(sanitizePathEntries([relative, "/volta/bin"].join(":"), ":", "linux")).toBe([relative, "/volta/bin"].join(":"));
+      expect(sanitizePathEntries(["/volta/tools/image/node/24.21.0/bin", "volta/bin"].join(":"), ":", "linux")).toBe(
+        ["/volta/tools/image/node/24.21.0/bin", "volta/bin"].join(":"),
+      );
+    });
+
+    it("treats a backslash as part of a name on POSIX, not as a separator", () => {
+      const literal = "/home/u/tools\\image\\node\\24.21.0";
+      expect(sanitizePathEntries([literal, "/home/u/bin"].join(":"), ":", "linux")).toBe([literal, "/home/u/bin"].join(":"));
+    });
+
     it("drops every tool's image dir beside Volta's shim dir", () => {
       const dirty = [
         `${VOLTA}/tools/image/node/24.21.0/bin`,
