@@ -15,6 +15,10 @@ and links one whole when its text reads as ONE path:
 - it is anchored: `/` (not `//`), `~/`, `./`, `../`, and with `windowsPaths` a drive or `\` forms,
 - it ends in an extension, optionally followed by a location (`:12:3`, `(12,5)`),
 - no earlier space-separated word ends in an extension (`./a.md and ./b.md` is two paths),
+- no later word starts an argument (`-`, `/`, `~/`, `./`), so a command line is not joined,
+- the last word holds a separator: a space in the FILE name (`/usr/bin/grep foo.md`) reads the same
+  as a command, so only a space in a folder name joins,
+- a location printed after the closer (`Read(…):12`) joins the range,
 - it does not contain its own opener (a nested bracket is not one span).
 
 Token links that start inside an accepted span are dropped; everything else is the token rule as before.
@@ -23,6 +27,9 @@ Token links that start inside an accepted span are dropped; everything else is t
 
 - An unenclosed path with a space still links only its tail. Telling it apart needs a guess about
   the word before (`ls /tmp src/a.ts` is two arguments), and a wrong guess removes a correct link.
+- A file name holding a space (`"/x/My File.md"`): indistinguishable from a command; not linked, as on main.
+- Prose in brackets that starts with a path and ends in one (`(/tmp has out/a.md)`) is still joined:
+  nothing in the text tells it apart from a folder named `tmp has out`.
 - An unanchored enclosed path (`"My Docs/a.md"`): the words before the first separator are as likely
   to be prose.
 
