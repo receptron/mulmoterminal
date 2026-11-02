@@ -73,14 +73,18 @@ describe.skipIf(!ENABLED)("a cell under `volta run`", () => {
       expect(report.trim().split("\n")).toHaveLength(2);
     }));
 
-  it("runs a project's pinned yarn through Volta's shim, and sees no marker", () =>
-    withScratchDir(async (dir) => {
-      const project = path.join(dir, "project");
-      mkdirSync(project);
-      writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "volta-cell", volta: { node: process.versions.node, yarn: PINNED_YARN } }));
-      const report = await runInCell(dir, project, 'yarn -v; echo "yarn=$?"; echo "marker=${_VOLTA_TOOL_RECURSION:-unset}"');
-      expect(report.split("\n")).toContain(PINNED_YARN);
-      expect(report).toContain("yarn=0");
-      expect(report).toContain("marker=unset");
-    }, TEST_TIMEOUT_MS));
+  it(
+    "runs a project's pinned yarn through Volta's shim, and sees no marker",
+    () =>
+      withScratchDir(async (dir) => {
+        const project = path.join(dir, "project");
+        mkdirSync(project);
+        writeFileSync(path.join(project, "package.json"), JSON.stringify({ name: "volta-cell", volta: { node: process.versions.node, yarn: PINNED_YARN } }));
+        const report = await runInCell(dir, project, 'yarn -v; echo "yarn=$?"; echo "marker=${_VOLTA_TOOL_RECURSION:-unset}"');
+        expect(report.split("\n")).toContain(PINNED_YARN);
+        expect(report).toContain("yarn=0");
+        expect(report).toContain("marker=unset");
+      }),
+    TEST_TIMEOUT_MS,
+  );
 });
