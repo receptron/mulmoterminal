@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // A psmux server outlives this process, so one started before Volta's marker was kept off its client
-// still hands it to every new pane. The startup scrub has to take it from there too — and only there.
+// still hands it to every new pane. The startup scrub takes it from there, on the shared rule.
 // tmux itself is replaced by a recorder.
 import { describe, it, expect, vi, afterAll, beforeEach } from "vitest";
 import { readFileSync, rmSync } from "node:fs";

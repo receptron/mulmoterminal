@@ -16,7 +16,6 @@ vi.mock("../../../../server/infra/process/tmux.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../../server/infra/process/tmux.js")>()),
   tmuxAvailable: () => tmuxOn,
   tmuxPsmuxVtInput: () => psmuxVtInput,
-  tmuxPsmuxScrubbedNames: () => (psmuxOn ? ["_VOLTA_TOOL_RECURSION"] : []),
   tmuxHasSession: (id: string) => liveTmuxSessions.has(id),
   // The real one turns `env` into `-e KEY=VALUE` pairs, which is the only way a variable
   // reaches a tmux PANE — so the fake has to carry it or the #1367 assertions below prove nothing.
@@ -50,7 +49,6 @@ vi.mock("../../../../server/config/worktree/worktree-env.js", () => ({ reservedW
 
 let tmuxOn = false;
 let psmuxVtInput = false;
-let psmuxOn = false;
 // What ptySpawn handed tmuxNewSessionArgs as the PANE's directory (the `-c` the real one builds).
 let newSessionCwd = "";
 // ...and as the pane's program: the words after `--` and the `-e` environment.
@@ -84,7 +82,6 @@ beforeEach(() => {
   newSessionProgram = null;
   tmuxOn = false;
   psmuxVtInput = false;
-  psmuxOn = false;
   reserved = {};
   liveTmuxSessions.clear();
   process.env.ANTHROPIC_API_KEY = "sk-ant-leftover";
@@ -405,21 +402,13 @@ describe("ptySpawn — Volta's marker", () => {
   beforeEach(() => vi.stubEnv("_VOLTA_TOOL_RECURSION", "1"));
   afterEach(() => vi.unstubAllEnvs());
 
-  it("keeps it off a psmux client", () => {
-    tmuxOn = true;
-    psmuxOn = true;
-    ptySpawn(S1, "claude", [], EXISTING_CWD, true);
-    expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
-  });
-
-  it("keeps it off a real tmux client too, which hands it to the server and every pane (#3233)", () => {
+  it("keeps it off a tmux client, which hands it to the server and every pane (#3233)", () => {
     tmuxOn = true;
     ptySpawn(S1, "claude", [], EXISTING_CWD, true);
     expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
   });
 
   it("keeps it off a spawn without tmux", () => {
-    psmuxOn = true;
     ptySpawn(S1, "claude", [], EXISTING_CWD, true);
     expect(envOf()).not.toHaveProperty("_VOLTA_TOOL_RECURSION");
   });
