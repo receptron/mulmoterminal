@@ -198,7 +198,7 @@ description: MulmoTerminal のヘッダー設定を書くときに引くペー�
 { "chips": ["git", "ctx", { "label": "Which environment this project deploys to", "text": "env staging" }] }
 ```
 
-### 効くのは 6 つだけ {#builtin-chips}
+### 効くのは 7 つだけ {#builtin-chips}
 
 | id | 出るもの | `chips` で制御できるか |
 |---|---|---|
@@ -208,6 +208,7 @@ description: MulmoTerminal のヘッダー設定を書くときに引くペー�
 | `ctx` | モデルとコンテキスト使用率 | できます（エージェントが報告してから） |
 | `usage` | レート制限の消費率 | できます（同上） |
 | `env` | このワーキングツリーに配られた値。ポートは `:3010` でクリックでき、それ以外はそのまま表示 | できます（[プロジェクトが `worktreeEnv` を宣言しているときだけ](config.html#worktree-env)） |
+| `peer` | 同じマシンの他の Claude Code セッションがこのセッションに送るときの名前（`myrepo-66`、相手の `ListAgents` に並ぶもの）。アイコンで、押すとコピー | できます（Claude のセルだけ） |
 | `dir` / `status` / `tools` | プロジェクトバッジ / 状態ドット / ツール履歴 | **できません** —— 構造なので、書いても効かず、書かなくても消えません |
 
 `dir` / `status` / `tools` を書いてもエラーにはならず、黙って無視されます。

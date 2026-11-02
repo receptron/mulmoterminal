@@ -205,7 +205,7 @@ open terminals pick the change up at once. A project's own `.mulmoterminal.json`
 { "chips": ["git", "ctx", { "label": "Which environment this project deploys to", "text": "env staging" }] }
 ```
 
-### Only six of them actually respond {#builtin-chips}
+### Only seven of them actually respond {#builtin-chips}
 
 | id | Shows | Controlled by `chips`? |
 |---|---|---|
@@ -215,6 +215,7 @@ open terminals pick the change up at once. A project's own `.mulmoterminal.json`
 | `ctx` | model and context usage | yes (once the agent reports it) |
 | `usage` | rate-limit consumption | yes (same) |
 | `env` | the values this working tree was reserved — a port shows as a clickable `:3010`, anything else as its text | yes ([only where the project declares `worktreeEnv`](config.html#worktree-env)) |
+| `peer` | the name the other Claude Code sessions on this machine message this one by (`myrepo-66`, what their `ListAgents` lists), as an icon that copies it | yes (Claude cells only) |
 | `dir` / `status` / `tools` | project badge / status dot / tool timeline | **no** — structural: listing them does nothing, omitting them hides nothing |
 
 Writing `dir` / `status` / `tools` is not an error; it is silently ignored.

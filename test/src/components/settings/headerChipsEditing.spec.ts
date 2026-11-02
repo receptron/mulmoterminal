@@ -16,7 +16,7 @@ describe("chipRows", () => {
 describe("addableBuiltins", () => {
   it("offers what the list does not show, reading unconfigured as the default set", () => {
     expect(addableBuiltins(null)).toEqual([]);
-    expect(addableBuiltins([])).toEqual(["git", "work", "diff", "ctx", "usage", "env"]);
-    expect(addableBuiltins(["ctx", { label: "git", text: "x" }])).toEqual(["git", "work", "diff", "usage", "env"]);
+    expect(addableBuiltins([])).toEqual(["git", "work", "diff", "ctx", "usage", "env", "peer"]);
+    expect(addableBuiltins(["ctx", { label: "git", text: "x" }])).toEqual(["git", "work", "diff", "usage", "env", "peer"]);
   });
 });

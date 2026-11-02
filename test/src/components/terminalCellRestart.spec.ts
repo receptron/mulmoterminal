@@ -93,6 +93,40 @@ const mountCell = (initialSessionId: string | null) =>
 const term = (w: ReturnType<typeof mountCell>) => w.findComponent({ name: "TerminalView" });
 
 describe("restarting the agent in a cell", () => {
+  // The name other Claude Code sessions message the cell by belongs to the PROCESS (#3237), and a
+  // restart replaces the process. The old name goes the moment the cell reconnects, and the cell asks
+  // again for the replacement's, with a fresh cell's tries.
+  it("forgets the old process's name on restart and asks for the replacement's", async () => {
+    const base = globalThis.fetch;
+    let detailCalls = 0;
+    let releaseSecond: () => void = () => {};
+    const secondHeld = new Promise<void>((r) => (releaseSecond = r));
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (/\/api\/session\/sess-1\?/.test(u)) {
+        detailCalls++;
+        if (detailCalls === 2) await secondHeld;
+        return { ok: true, json: async () => ({ working: false, waiting: false, lastPrompt: null, peerName: detailCalls === 1 ? "old-7f" : "new-7f" }) };
+      }
+      return base(url, init);
+    }) as unknown as typeof fetch;
+
+    const w = mountCell("sess-1");
+    await flushPromises();
+    expect(w.get('[data-testid="cell-peer-chip"]').attributes("data-tip")).toContain("old-7f");
+
+    expect(requestCellAction("cell-7", "terminal-restart")).toBe(true);
+    await flushPromises();
+    terminate.resolve();
+    await flushPromises();
+    expect(w.find('[data-testid="cell-peer-chip"]').exists()).toBe(false); // gone with the process
+    expect(detailCalls).toBe(2); // and asked again at once
+
+    releaseSecond();
+    await flushPromises();
+    expect(w.get('[data-testid="cell-peer-chip"]').attributes("data-tip")).toContain("new-7f");
+  });
+
   it("reaps the session and only THEN reconnects the same id — the tmux race (#1918)", async () => {
     const w = mountCell("sess-1");
     await flushPromises();

@@ -20,6 +20,7 @@ const META: SessionMetaView = {
   lastPrompt: "fix the parser",
   aiTitle: "Parser fix",
   customTitle: null,
+  peerName: null,
   agentTitle: null,
   agentTitleKind: null,
   lastResponse: "done",
@@ -28,6 +29,14 @@ const META: SessionMetaView = {
   collection: { slug: "invoices", icon: "receipt_long", title: "Invoices" },
 };
 const CHROME: RowChrome = { headerColor: "#111", headerTextColor: "#fff", iconUrl: "/logo.png" };
+
+describe("rosterRow — the peer name (#3237)", () => {
+  it("carries the name other Claude Code sessions message the cell by, or null", () => {
+    expect(rosterRow(cell(), lookups({ meta: () => ({ ...META, peerName: "proj-7f" }) })).peerName).toBe("proj-7f");
+    expect(rosterRow(cell(), lookups({ meta: () => META })).peerName).toBeNull();
+    expect(rosterRow(cell(), lookups()).peerName).toBeNull();
+  });
+});
 
 describe("rosterRow — the summary line (#2123)", () => {
   it("shows the /rename name over the AI title", () => {
@@ -150,6 +159,7 @@ describe("rosterRow", () => {
       agent: "claude",
       status: "working",
       memo: "before the demo",
+      peerName: null,
       summary: "Parser fix",
       prompt: "fix the parser",
       response: "done",
