@@ -18,6 +18,7 @@ import { losslessText } from "./editableText.js";
 import { containedPath, expandTilde, namedBase, resolveBase, resolveContained } from "./pathContainment.js";
 import { servedImageSrc, type ServedDoc } from "./mdImageSrc.js";
 import { listProjectFiles } from "./project-files.js";
+import { browseEntryOf, type BrowseEntry } from "./browseEntry.js";
 import { answered, modeFromProbe, parseSearchOutput, searchArgv, SEARCH_TIMEOUT_MS } from "./file-search.js";
 import { CONTEXT_RADIUS_LINES, isSearchable, lineWindow, type SearchRequest, type SearchResult } from "../../common/fileSearch.js";
 import { git } from "../git/worktrees.js";
@@ -47,12 +48,6 @@ export const MAX_EDIT_BYTES = 2 * 1024 * 1024;
 /** Wrap marked's HTML output in the shared self-contained document (served sandboxed). */
 export const mdToHtmlDoc = (bodyHtml: string, title: string): string => htmlDoc(bodyHtml, title);
 
-export interface BrowseEntry {
-  name: string;
-  dir: boolean;
-  size: number;
-}
-
 // A file's version token, handed to the editor with its text and handed back on save so a
 // write that would clobber someone else's is refused instead (the agent running in that very
 // directory is the someone else). Content, not mtime: a one-second-resolution filesystem or
@@ -75,24 +70,21 @@ export function currentVersion(abs: string): string | null {
   }
 }
 
+const followedStat = (abs: string): fs.Stats | null => {
+  try {
+    return fs.statSync(abs);
+  } catch {
+    return null;
+  }
+};
+
 // Directory listing, directories first then files, each alphabetical. Dotfiles are
 // kept (a project's config often lives in them) but node_modules/.git are noisy —
 // still listed; the UI can collapse them.
 export function listEntries(absDir: string): BrowseEntry[] {
   return fs
     .readdirSync(absDir, { withFileTypes: true })
-    .map((d) => {
-      const dir = d.isDirectory();
-      let size = 0;
-      if (!dir) {
-        try {
-          size = fs.statSync(path.join(absDir, d.name)).size;
-        } catch {
-          size = 0;
-        }
-      }
-      return { name: d.name, dir, size };
-    })
+    .map((d) => browseEntryOf(d.name, d.isDirectory(), () => followedStat(path.join(absDir, d.name))))
     .sort((a, b) => {
       if (a.dir !== b.dir) return a.dir ? -1 : 1; // directories first
       return a.name.localeCompare(b.name);
