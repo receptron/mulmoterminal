@@ -3,6 +3,7 @@
 // registry entry, and matched to a cell through the tmux session MulmoTerminal named for it.
 import { describe, it, expect } from "vitest";
 import {
+  INTERACTIVE_ENTRYPOINT,
   MAX_PEER_NAME_CHARS,
   parseClaudePeer,
   parsePsStartTimes,
@@ -21,6 +22,7 @@ const ENTRY = {
   startedAt: 1793620670575,
   version: "2.1.292",
   kind: "interactive",
+  entrypoint: "cli",
   tmux: "mt-101256a4-131e-4921-b905-9f86e419928c:@0.%0",
   name: "mulmoclaude-c4",
   nameSource: "derived",
@@ -33,6 +35,7 @@ const peer = (over: Partial<ClaudePeer>): ClaudePeer => ({
   pid: 1,
   sessionId: null,
   tmuxSession: null,
+  entrypoint: null,
   updatedAt: 0,
   startedAt: null,
   ...over,
@@ -45,6 +48,7 @@ describe("parseClaudePeer", () => {
       pid: 14188,
       sessionId: "17190482-1062-4367-8085-6634d8738a46",
       tmuxSession: "mt-101256a4-131e-4921-b905-9f86e419928c",
+      entrypoint: "cli",
       updatedAt: 1793623857518,
       startedAt: 1793620670575,
     });
@@ -83,6 +87,7 @@ describe("parseClaudePeer", () => {
       pid: 7,
       sessionId: null,
       tmuxSession: null,
+      entrypoint: null,
       updatedAt: 0,
       startedAt: null,
     });
@@ -144,6 +149,30 @@ describe("peerNameFor", () => {
     const newer = peer({ name: "newer", tmuxSession: "mt-s-1", updatedAt: 20 });
     expect(peerNameFor([newer, older], keys)).toBe("newer");
     expect(peerNameFor([older, newer], keys)).toBe("newer");
+  });
+
+  // A program run from inside the cell (a plugin's `claude -p` over stream-json) inherits the pane
+  // and registers on it, and rewrites its entry more often than an idle terminal does. What rules
+  // it out is how it says it was started, not its age (#3244).
+  it("passes over the sessions a program drove from inside the cell, however recently written", () => {
+    const terminal = peer({ name: "terminal", tmuxSession: "mt-s-1", entrypoint: INTERACTIVE_ENTRYPOINT, updatedAt: 10 });
+    const driven = [20, 30, 40].map((updatedAt) => peer({ name: `driven-${String(updatedAt)}`, tmuxSession: "mt-s-1", entrypoint: "sdk-cli", updatedAt }));
+    expect(peerNameFor([...driven, terminal], keys)).toBe("terminal");
+    expect(peerNameFor([terminal, ...driven], keys)).toBe("terminal");
+  });
+
+  // A driven session is a live claude a peer could message, but it is not the one in the cell, so
+  // a cell that has only those shows nothing rather than one of them.
+  it("is nothing when only driven sessions claim the cell", () => {
+    expect(peerNameFor([peer({ tmuxSession: "mt-s-1", entrypoint: "sdk-cli" })], keys)).toBeNull();
+    expect(peerNameFor([peer({ sessionId: "s-1", entrypoint: "sdk-cli" })], keys)).toBeNull();
+  });
+
+  // A Claude Code that does not write the field is read as it was before the field was known.
+  it("keeps an entry that does not say how it was started", () => {
+    const unsaid = peer({ name: "unsaid", tmuxSession: "mt-s-1", updatedAt: 10 });
+    const driven = peer({ name: "driven", tmuxSession: "mt-s-1", entrypoint: "sdk-cli", updatedAt: 20 });
+    expect(peerNameFor([driven, unsaid], keys)).toBe("unsaid");
   });
 });
 
