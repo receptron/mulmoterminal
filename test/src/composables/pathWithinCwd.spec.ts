@@ -48,9 +48,7 @@ describe("pathWithinCwd", () => {
     expect(pathWithinCwd("src/main.ts", "")).toBeNull();
   });
 
-  // A Windows cwd arrives with backslashes even though the linkified token cannot: the
-  // tokenizer splits on `:` and requires a `/`, so `C:\...` never becomes a link. A relative
-  // token against a drive-letter cwd is therefore the case that actually happens.
+  // A Windows cwd arrives with backslashes; a clicked token arrives `/`-separated (#3236).
   describe("a Windows cwd", () => {
     const WIN = "C:\\Users\\me\\proj";
 

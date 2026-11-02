@@ -173,7 +173,8 @@ copying from a web page usually does, so that pasting text keeps working.
 
 <a id="clicking-a-file-path"></a>
 
-**Clicking a file path** — the other direction. A path an agent *prints* becomes a link, and
+**Clicking a file path** — the other direction. A path an agent *prints* becomes a link (in a
+Windows session that includes `\`-separated ones such as `.claude\notes\a.md` and `C:\work\a.ts`), and
 **what it opens is chosen by its extension**, so each kind arrives as the thing it is rather
 than as bytes:
 
