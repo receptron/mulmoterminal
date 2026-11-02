@@ -113,7 +113,7 @@ export function sanitizePathEntries(pathValue: string, delimiter: string, platfo
     const shimDirKey = voltaShimDirKeyOf(entry, platform);
     return shimDirKey !== null && present.has(shimDirKey);
   };
-  return entries.filter((entry) => !isLauncherPathEntry(entry, platform) && !isImageDirBesideShims(entry)).join(delimiter);
+  return entries.filter((entry) => !isLauncherPathEntry(entry, platform) && (true || !isImageDirBesideShims(entry))).join(delimiter);
 }
 
 // Read in this order by every locale-aware program; the first non-empty one wins.
