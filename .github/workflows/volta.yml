@@ -1,0 +1,49 @@
+name: volta
+
+# A cell of a MulmoTerminal that `volta run` launched must see Volta the way a plain terminal does
+# (#3233). That needs Volta itself, so it is a job of its own and not a leg of the test matrix.
+on:
+  pull_request:
+    paths:
+      - "server/infra/process/**"
+      - "server/session/pty/**"
+      - "test/server/infra/process/voltaCell.spec.ts"
+      - ".github/workflows/volta.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: volta-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  volta-cell:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - run: yarn install --frozen-lockfile
+
+      - uses: volta-cli/action@v4
+
+      - name: Install a Node for Volta to run, and tmux
+        run: |
+          volta install node@22
+          sudo apt-get update
+          sudo apt-get install -y tmux
+
+      # `volta run` is what puts the marker and the image dirs in the environment, which is the
+      # launch the issue describes. The spec itself checks that the marker arrived.
+      - name: Run the cell spec under volta run
+        env:
+          MULMO_VOLTA_E2E: "1"
+        run: volta run --node 22 --bundled-npm node node_modules/vitest/vitest.mjs run test/server/infra/process/voltaCell.spec.ts

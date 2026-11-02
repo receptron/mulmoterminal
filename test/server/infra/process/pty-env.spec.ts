@@ -41,6 +41,12 @@ describe("isLauncherEnvVar", () => {
   // NODE_ENV stays on this list on purpose. It reached PTYs as "production" until #955, which
   // was the launcher exporting it — fixed there. Adding it here instead would take away the
   // NODE_ENV of a user who exports one, which is a different bug with the same shape.
+  // Volta marks the node it launches; a shim that sees it skips Volta's own version choice, so
+  // `yarn` fails with "Node is not available" in a cell under `volta run` (#3233).
+  it("flags the marker `volta run` sets on the process it launches", () => {
+    expect(isLauncherEnvVar("_VOLTA_TOOL_RECURSION")).toBe(true);
+  });
+
   it("keeps real user environment, including other *_PREFIX vars", () => {
     for (const name of ["HOMEBREW_PREFIX", "CONDA_PREFIX", "HOME", "SHELL", "PATH", "NVM_DIR", "NODE_ENV", "NODE_OPTIONS"]) {
       expect(isLauncherEnvVar(name), name).toBe(false);
@@ -122,6 +128,13 @@ describe("sanitizePtyEnv", () => {
     expect(out.PATH).toBe("/Users/u/.nvm/versions/node/v22.18.0/bin:/usr/bin");
     expect(env.PREFIX).toBe("/opt/homebrew");
     expect(env.PATH).toContain("/repo/node_modules/.bin");
+  });
+
+  it("drops Volta's recursion marker but keeps the user's other VOLTA_ settings (#3233)", () => {
+    const out = sanitizePtyEnv({ _VOLTA_TOOL_RECURSION: "1", VOLTA_HOME: "/home/u/.volta", VOLTA_FEATURE_PNPM: "1" }, ":");
+    expect(out._VOLTA_TOOL_RECURSION).toBeUndefined();
+    expect(out.VOLTA_HOME).toBe("/home/u/.volta");
+    expect(out.VOLTA_FEATURE_PNPM).toBe("1");
   });
 
   it("cleans a windows-cased Path key", () => {
